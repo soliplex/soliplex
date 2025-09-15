@@ -80,3 +80,12 @@ class Installation(pydantic.BaseModel):
             completions_paths=installation_config.completions_paths,
             quizzes_paths=installation_config.quizzes_paths,
         )
+
+#=============================================================================
+#   API interaction models
+#=============================================================================
+
+class SearchResult(pydantic.BaseModel):
+    content: str
+    score: float
+    document_uri: str | None = None

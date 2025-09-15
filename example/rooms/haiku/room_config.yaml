@@ -8,9 +8,9 @@ agent:
   model_name: "gpt-oss:20b"
 tools:
   - tool_name: "soliplex.tools.get_current_datetime"
-  #- tool_name: "soliplex.tools.search_documents"
-  #  rag_sqlite_override_path: "/path/to/rag.sqlite"
-  #  return_citations: true
-  #  expand_context_radius: 3
-  #  search_documents_limit: 7
-  #- tool_name: "<yourapp>.tools.get_current_user"
+  - tool_name: "soliplex.tools.search_documents"
+    rag_lancedb_override_path: "/path/to/rag.lancedb"
+    return_citations: true
+    expand_context_radius: 3
+    search_documents_limit: 7
+# - tool_name: "<yourapp>.tools.get_current_user"
