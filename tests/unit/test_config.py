@@ -213,88 +213,6 @@ system_prompt: "{SYSTEM_PROMPT}"
 model_name: "{MODEL_NAME}"
 """
 
-W_TOOLS_AGENT_CONFIG_KW = dict(
-    id=AGENT_ID,
-    system_prompt=SYSTEM_PROMPT,
-    model_name=MODEL_NAME,
-    tool_configs={
-        "get_current_datetime": config.ToolConfig(
-            kind="get_current_datetime",
-            tool_name="soliplex.tools.get_current_datetime",
-            allow_mcp=True,
-        ),
-        "search_documents": config.SearchDocumentsToolConfig(
-            search_documents_limit=1,
-            rag_lancedb_override_path="/dev/null",
-            allow_mcp=True,
-        ),
-    },
-)
-W_TOOLS_AGENT_CONFIG_YAML = f"""\
-id: "{AGENT_ID}"
-system_prompt: "{SYSTEM_PROMPT}"
-model_name: "{MODEL_NAME}"
-tools:
-    - tool_name: "soliplex.tools.get_current_datetime"
-      allow_mcp: true
-    - tool_name: "soliplex.tools.search_documents"
-      rag_lancedb_override_path: /dev/null
-      search_documents_limit: 1
-      allow_mcp: true
-"""
-
-W_MCP_SERVERS_AGENT_CONFIG_KW = dict(
-    id=AGENT_ID,
-    system_prompt=SYSTEM_PROMPT,
-    model_name=MODEL_NAME,
-    mcp_client_toolset_configs=
-      # [
-        {
-            "test_1": config.Stdio_MCP_ClientToolsetConfig(
-                #id="test_1",
-                command="cat",
-                args=[
-                    "-",
-                ],
-                env={
-                    "foo": "bar",
-                }
-            ),
-            "test_2": config.HTTP_MCP_ClientToolsetConfig(
-                #id="test_2",
-                url=HTTP_MCP_URL,
-                headers={
-                    "Authorization": f"Bearer {HTTP_MCP_BEARER_TOKEN}",
-                },
-                query_params=HTTP_MCP_QUERY_PARAMS,
-            ),
-        },
-      # ],
-)
-W_MCP_SERVERS_AGENT_CONFIG_YAML = f"""\
-id: "{AGENT_ID}"
-system_prompt: "{SYSTEM_PROMPT}"
-model_name: "{MODEL_NAME}"
-mcp_client_toolsets:
-  # - id: "test_1"
-    test_1:
-      type: "stdio"
-      command: "cat"
-      args:
-        - "-"
-      env:
-        foo: "bar"
-  # - id: "test_2"
-    test_2:
-      type: "http"
-      url: "{HTTP_MCP_URL}"
-      headers:
-        Authorization: "Bearer {HTTP_MCP_BEARER_TOKEN}"
-      query_params:
-        {HTTP_MCP_QP_KEY}: "{HTTP_MCP_QP_VALUE}"
-"""
-
-
 W_PROMPT_FILE_AGENT_CONFIG_KW = dict(
     id=AGENT_ID,
     _system_prompt_path="./prompt.txt",
@@ -374,6 +292,36 @@ FULL_ROOM_CONFIG_KW = {
         ),
     ],
     "allow_mcp": True,
+    "tool_configs" : {
+        "get_current_datetime": config.ToolConfig(
+            kind="get_current_datetime",
+            tool_name="soliplex.tools.get_current_datetime",
+            allow_mcp=True,
+        ),
+        "search_documents": config.SearchDocumentsToolConfig(
+            search_documents_limit=1,
+            rag_lancedb_override_path="/dev/null",
+            allow_mcp=True,
+        ),
+    },
+    "mcp_client_toolset_configs": {
+        "test_1": config.Stdio_MCP_ClientToolsetConfig(
+            command="cat",
+            args=[
+                "-",
+            ],
+            env={
+                "foo": "bar",
+            }
+        ),
+        "test_2": config.HTTP_MCP_ClientToolsetConfig(
+            url=HTTP_MCP_URL,
+            headers={
+                "Authorization": f"Bearer {HTTP_MCP_BEARER_TOKEN}",
+            },
+            query_params=HTTP_MCP_QUERY_PARAMS,
+        ),
+    },
 }
 FULL_ROOM_CONFIG_YAML = f"""\
 id: "{ROOM_ID}"
@@ -386,6 +334,28 @@ enable_attachments: true
 logo_image: "./{IMAGE_FILENAME}"
 agent:
     system_prompt: "{SYSTEM_PROMPT}"
+tools:
+    - tool_name: "soliplex.tools.get_current_datetime"
+      allow_mcp: true
+    - tool_name: "soliplex.tools.search_documents"
+      rag_lancedb_override_path: /dev/null
+      search_documents_limit: 1
+      allow_mcp: true
+mcp_client_toolsets:
+    test_1:
+      type: "stdio"
+      command: "cat"
+      args:
+        - "-"
+      env:
+        foo: "bar"
+    test_2:
+      type: "http"
+      url: "{HTTP_MCP_URL}"
+      headers:
+        Authorization: "Bearer {HTTP_MCP_BEARER_TOKEN}"
+      query_params:
+        {HTTP_MCP_QP_KEY}: "{HTTP_MCP_QP_VALUE}"
 quizzes:
   - id: "{TEST_QUIZ_ID}"
     question_file: "{TEST_QUIZ_OVR}"
@@ -951,8 +921,6 @@ def test_agentconfig_ctor(kw):
     [
         (EMPTY_AGENT_CONFIG_YAML, EMPTY_AGENT_CONFIG_KW),
         (BARE_AGENT_CONFIG_YAML, BARE_AGENT_CONFIG_KW),
-        (W_TOOLS_AGENT_CONFIG_YAML, W_TOOLS_AGENT_CONFIG_KW),
-        (W_MCP_SERVERS_AGENT_CONFIG_YAML, W_MCP_SERVERS_AGENT_CONFIG_KW),
         (W_PROMPT_FILE_AGENT_CONFIG_YAML, W_PROMPT_FILE_AGENT_CONFIG_KW),
     ],
 )
@@ -961,10 +929,6 @@ def test_agentconfig_from_yaml(
 ):
     yaml_file = temp_dir / "test.yaml"
     yaml_file.write_text(config_yaml)
-
-    if len(expected_kw.get("tool_configs", ())) > 0:
-        sdtc = expected_kw["tool_configs"]["search_documents"]
-        sdtc._config_path = yaml_file
 
     expected = config.AgentConfig(**expected_kw)
 
@@ -982,7 +946,6 @@ def test_agentconfig_from_yaml(
 @pytest.mark.parametrize("agent_config_kw", [
     EMPTY_AGENT_CONFIG_KW,
     BARE_AGENT_CONFIG_KW,
-    W_TOOLS_AGENT_CONFIG_KW,
     W_PROMPT_FILE_AGENT_CONFIG_KW,
 ])
 def test_agentconfig_get_system_prompt(
@@ -1297,6 +1260,11 @@ def test_roomconfig_from_yaml(temp_dir, config_yaml, expected_kw):
     expected.agent_config = dataclasses.replace(
         expected.agent_config, _config_path=yaml_file,
     )
+
+    if len(expected_kw.get("tool_configs", ())) > 0:
+        sdtc = expected_kw["tool_configs"]["search_documents"]
+        sdtc._config_path = yaml_file
+
     if "quizzes" in config_yaml:
         expected.quizzes = [
             dataclasses.replace(quiz, _config_path=yaml_file)

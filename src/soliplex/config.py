@@ -282,6 +282,25 @@ TOOL_CONFIG_CLASSES_BY_TOOL_NAME = {
     ]
 }
 
+def extract_tool_configs(config_path: pathlib.Path, config: dict):
+    tool_configs = {}
+
+    for t_config in config.pop("tools", ()):
+        tool_name = t_config.pop("tool_name")
+        tc_class = TOOL_CONFIG_CLASSES_BY_TOOL_NAME.get(tool_name)
+
+        if tc_class is None:
+            _, kind = tool_name.rsplit(".", 1)
+            tool_config = ToolConfig(
+                kind=kind, tool_name=tool_name, **t_config,
+            )
+            tool_configs[kind] = tool_config
+        else:
+            tool_config = tc_class.from_yaml(config_path, t_config)
+            tool_configs[tool_config.kind] = tool_config
+
+    return tool_configs
+
 
 @dataclasses.dataclass
 class Stdio_MCP_ClientToolsetConfig:
@@ -316,6 +335,22 @@ MCP_CONFIG_CLASSES_BY_TYPE = {
     "http": HTTP_MCP_ClientToolsetConfig,
 }
 
+def extract_mcp_client_toolset_configs(
+    config_path: pathlib.Path, config: dict,
+):
+    mcp_client_toolset_configs = {}
+
+    for mcp_name, mcp_client_toolset_config in config.pop(
+        "mcp_client_toolsets", {}
+    ).items():
+        type_ = mcp_client_toolset_config.pop("type")
+        mcp_config_klass = MCP_CONFIG_CLASSES_BY_TYPE[type_]
+        mcp_client_toolset_configs[mcp_name] = mcp_config_klass(
+            **mcp_client_toolset_config,
+        )
+
+    return mcp_client_toolset_configs
+
 
 #=============================================================================
 #   Agent-related configuration types
@@ -342,13 +377,6 @@ class AgentConfig:
     provider_base_url: str = None  # defaults to OLLAMA_BASE_URL envvar
     provider_key_envvar: str = None  # envvar name containing API key
 
-    tool_configs: dict[str, ToolConfig] = dataclasses.field(
-        default_factory=dict,
-    )
-    mcp_client_toolset_configs: dict[
-        str, Stdio_MCP_ClientToolsetConfig | HTTP_MCP_ClientToolsetConfig
-    ] = dataclasses.field(default_factory=dict)
-
     # Set by `from_yaml` factory
     _config_path: pathlib.Path = None
 
@@ -370,37 +398,6 @@ class AgentConfig:
                 config["_system_prompt_path"] = system_prompt
             else:
                 config["system_prompt"] = system_prompt
-
-        tool_configs = {}
-
-        for t_config in config.pop("tools", ()):
-            tool_name = t_config.pop("tool_name")
-            tc_class = TOOL_CONFIG_CLASSES_BY_TOOL_NAME.get(tool_name)
-
-            if tc_class is None:
-                _, kind = tool_name.rsplit(".", 1)
-                tool_config = ToolConfig(
-                    kind=kind, tool_name=tool_name, **t_config,
-                )
-                tool_configs[kind] = tool_config
-            else:
-                tool_config = tc_class.from_yaml(config_path, t_config)
-                tool_configs[tool_config.kind] = tool_config
-
-        config["tool_configs"] = tool_configs
-
-        mcp_client_toolset_configs = {}
-
-        for mcp_name, mcp_client_toolset_config in config.pop(
-            "mcp_client_toolsets", {}
-        ).items():
-            type_ = mcp_client_toolset_config.pop("type")
-            mcp_config_klass = MCP_CONFIG_CLASSES_BY_TYPE[type_]
-            mcp_client_toolset_configs[mcp_name] = mcp_config_klass(
-                **mcp_client_toolset_config,
-            )
-
-        config["mcp_client_toolset_configs"] = mcp_client_toolset_configs
 
         return cls(**config)
 
@@ -589,6 +586,16 @@ class RoomConfig:
     enable_attachments: bool = False
 
     #
+    # Tool options
+    #
+    tool_configs: dict[str, ToolConfig] = dataclasses.field(
+        default_factory=dict,
+    )
+    mcp_client_toolset_configs: dict[
+        str, Stdio_MCP_ClientToolsetConfig | HTTP_MCP_ClientToolsetConfig
+    ] = dataclasses.field(default_factory=dict)
+
+    #
     # MCP options
     #
     allow_mcp: bool = False
@@ -622,6 +629,12 @@ class RoomConfig:
         config["agent_config"] = AgentConfig.from_yaml(
             config_path,
             agent_config_yaml,
+        )
+
+        config["tool_configs"] = extract_tool_configs(config_path, config)
+
+        config["mcp_client_toolset_configs"] = (
+            extract_mcp_client_toolset_configs(config_path, config)
         )
 
         quizzes_config_yaml = config.pop("quizzes", None)
@@ -676,6 +689,16 @@ class CompletionsConfig:
 
     name: str = None
 
+    #
+    # Tool options
+    #
+    tool_configs: dict[str, ToolConfig] = dataclasses.field(
+        default_factory=dict,
+    )
+    mcp_client_toolset_configs: dict[
+        str, Stdio_MCP_ClientToolsetConfig | HTTP_MCP_ClientToolsetConfig
+    ] = dataclasses.field(default_factory=dict)
+
     # Set by `from_yaml` factory
     _config_path: pathlib.Path = None
 
@@ -694,6 +717,12 @@ class CompletionsConfig:
         config["agent_config"] = AgentConfig.from_yaml(
             config_path,
             agent_config_yaml,
+        )
+
+        config["tool_configs"] = extract_tool_configs(config_path, config)
+
+        config["mcp_client_toolset_configs"] = (
+            extract_mcp_client_toolset_configs(config_path, config)
         )
 
         return cls(**config)
