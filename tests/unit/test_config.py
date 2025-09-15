@@ -361,33 +361,33 @@ quizzes:
 allow_mcp: true
 """
 
-COMPLETIONS_ID = "test-completions"
-COMPLETIONS_NAME = "Test Completions"
+COMPLETION_ID = "test-completion"
+COMPLETION_NAME = "Test Completions"
 
-BARE_COMPLETIONS_CONFIG_KW = {
-    "id": COMPLETIONS_ID,
+BARE_COMPLETION_CONFIG_KW = {
+    "id": COMPLETION_ID,
     "agent_config": config.AgentConfig(
-        id=f"completions-{COMPLETIONS_ID}",
+        id=f"completion-{COMPLETION_ID}",
         system_prompt=SYSTEM_PROMPT,
     ),
 }
-BARE_COMPLETIONS_CONFIG_YAML = f"""\
-id: "{COMPLETIONS_ID}"
+BARE_COMPLETION_CONFIG_YAML = f"""\
+id: "{COMPLETION_ID}"
 agent:
     system_prompt: "{SYSTEM_PROMPT}"
 """
 
-W_NAME_COMPLETIONS_CONFIG_KW = {
-    "id": COMPLETIONS_ID,
-    "name": COMPLETIONS_NAME,
+W_NAME_COMPLETION_CONFIG_KW = {
+    "id": COMPLETION_ID,
+    "name": COMPLETION_NAME,
     "agent_config": config.AgentConfig(
-        id=f"completions-{COMPLETIONS_ID}",
+        id=f"completion-{COMPLETION_ID}",
         system_prompt=SYSTEM_PROMPT,
     ),
 }
-W_NAME_COMPLETIONS_CONFIG_YAML = f"""\
-id: "{COMPLETIONS_ID}"
-name: "{COMPLETIONS_NAME}"
+W_NAME_COMPLETION_CONFIG_YAML = f"""\
+id: "{COMPLETION_ID}"
+name: "{COMPLETION_NAME}"
 agent:
     system_prompt: "{SYSTEM_PROMPT}"
 """
@@ -484,21 +484,21 @@ room_paths:
     - "{ROOM_PATH_2}"
 """
 
-COMPLETIONS_PATH_1 = "./completions"
-COMPLETIONS_PATH_2 = "/path/to/other/completions"
+COMPLETION_PATH_1 = "./completions"
+COMPLETION_PATH_2 = "/path/to/other/completions"
 
-W_COMPLETIONS_PATHS_INSTALLATION_CONFIG_KW = {
+W_COMPLETION_PATHS_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "completions_paths": [
-        COMPLETIONS_PATH_1,
-        COMPLETIONS_PATH_2,
+    "completion_paths": [
+        COMPLETION_PATH_1,
+        COMPLETION_PATH_2,
     ],
 }
-W_COMPLETIONS_PATHS_INSTALLATION_CONFIG_YAML = f"""\
+W_COMPLETION_PATHS_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
-completions_paths:
-    - "{COMPLETIONS_PATH_1}"
-    - "{COMPLETIONS_PATH_2}"
+completion_paths:
+    - "{COMPLETION_PATH_1}"
+    - "{COMPLETION_PATH_2}"
 """
 
 QUIZZES_PATH_1 = "./quizzes"
@@ -1373,16 +1373,16 @@ def test_roomconfig_get_logo_image(temp_dir, room_config_kw, w_config_path):
 @pytest.mark.parametrize(
     "config_yaml, expected_kw",
     [
-        (BARE_COMPLETIONS_CONFIG_YAML, BARE_COMPLETIONS_CONFIG_KW),
-        (W_NAME_COMPLETIONS_CONFIG_YAML, W_NAME_COMPLETIONS_CONFIG_KW),
+        (BARE_COMPLETION_CONFIG_YAML, BARE_COMPLETION_CONFIG_KW),
+        (W_NAME_COMPLETION_CONFIG_YAML, W_NAME_COMPLETION_CONFIG_KW),
     ],
 )
-def test_completionsconfig_from_yaml(temp_dir, config_yaml, expected_kw):
+def test_completionconfig_from_yaml(temp_dir, config_yaml, expected_kw):
     if "name" not in expected_kw:
         expected_kw = expected_kw.copy()
         expected_kw["name"] = expected_kw["id"]
 
-    expected = config.CompletionsConfig(**expected_kw)
+    expected = config.CompletionConfig(**expected_kw)
 
     yaml_file = temp_dir / "test.yaml"
     yaml_file.write_text(config_yaml)
@@ -1394,7 +1394,7 @@ def test_completionsconfig_from_yaml(temp_dir, config_yaml, expected_kw):
     with yaml_file.open() as stream:
         yaml_dict = yaml.safe_load(stream)
 
-    found = config.CompletionsConfig.from_yaml(yaml_file, yaml_dict)
+    found = config.CompletionConfig.from_yaml(yaml_file, yaml_dict)
 
     assert found == expected
 
@@ -1496,8 +1496,8 @@ def test__find_configs_w_multiple(temp_dir):
         W_ROOM_PATHS_INSTALLATION_CONFIG_KW,
     ),
     (
-        W_COMPLETIONS_PATHS_INSTALLATION_CONFIG_YAML,
-        W_COMPLETIONS_PATHS_INSTALLATION_CONFIG_KW,
+        W_COMPLETION_PATHS_INSTALLATION_CONFIG_YAML,
+        W_COMPLETION_PATHS_INSTALLATION_CONFIG_KW,
     ),
     (
         W_QUIZZES_PATHS_INSTALLATION_CONFIG_YAML,
@@ -1680,78 +1680,78 @@ def test_installationconfig_room_configs_w_existing():
     assert found["room_2"] == RC_2
 
 
-def test_installationconfig_completions_configs_wo_existing(temp_dir):
-    COMPLETIONS_IDS = ["foo", "bar"]
+def test_installationconfig_completion_configs_wo_existing(temp_dir):
+    COMPLETION_IDS = ["foo", "bar"]
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_config_path"] = temp_dir / "installation.yaml"
     completions = temp_dir / "completions"
     completions.mkdir()
 
-    for completions_id in COMPLETIONS_IDS:
-        completions_path = completions / completions_id
-        completions_path.mkdir()
-        completions_config = completions_path / "completions_config.yaml"
-        completions_config.write_text(
-            BARE_COMPLETIONS_CONFIG_YAML.replace(
-                f'id: "{COMPLETIONS_ID}"', f'id: "{completions_id}"', 1,
+    for completion_id in COMPLETION_IDS:
+        completion_path = completions / completion_id
+        completion_path.mkdir()
+        completion_config = completion_path / "completion_config.yaml"
+        completion_config.write_text(
+            BARE_COMPLETION_CONFIG_YAML.replace(
+                f'id: "{COMPLETION_ID}"', f'id: "{completion_id}"', 1,
             ),
         )
 
     i_config = config.InstallationConfig(**kw)
 
-    found = i_config.completions_configs
+    found = i_config.completion_configs
 
     assert found["foo"].id == "foo"
     assert found["bar"].id == "bar"
 
 
-def test_installationconfig_completions_configs_wo_existing_w_conflict(
+def test_installationconfig_completion_configs_wo_existing_w_conflict(
     temp_dir,
 ):
-    COMPLETIONS_PATHS = ["./foo", "./bar"]
+    COMPLETION_PATHS = ["./foo", "./bar"]
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_config_path"] = temp_dir / "installation.yaml"
-    kw["completions_paths"] = COMPLETIONS_PATHS
+    kw["completion_paths"] = COMPLETION_PATHS
 
-    for completions_path in COMPLETIONS_PATHS:
-        completions_path = temp_dir / completions_path
-        completions_path.mkdir()
-        completions_config = completions_path / "completions_config.yaml"
-        completions_config.write_text(
-            W_NAME_COMPLETIONS_CONFIG_YAML.replace(
-                #f'id: "{COMPLETIONS_ID}"',
-                #f'id: "{completions_id}"',
+    for completion_path in COMPLETION_PATHS:
+        completion_path = temp_dir / completion_path
+        completion_path.mkdir()
+        completion_config = completion_path / "completion_config.yaml"
+        completion_config.write_text(
+            W_NAME_COMPLETION_CONFIG_YAML.replace(
+                #f'id: "{COMPLETION_ID}"',
+                #f'id: "{completion_id}"',
                 #1, # conflict on ID
-                f'name: "{COMPLETIONS_NAME}"',
-                f'name: "{completions_path.name}"',
+                f'name: "{COMPLETION_NAME}"',
+                f'name: "{completion_path.name}"',
                 1,
             )
         )
 
     i_config = config.InstallationConfig(**kw)
 
-    found = i_config.completions_configs
+    found = i_config.completion_configs
 
-    assert found[COMPLETIONS_ID].id == COMPLETIONS_ID
-    # order of 'completions_paths' governs who wins
-    assert found[COMPLETIONS_ID].name == "foo"
+    assert found[COMPLETION_ID].id == COMPLETION_ID
+    # order of 'completion_paths' governs who wins
+    assert found[COMPLETION_ID].name == "foo"
 
 
-def test_installationconfig_completions_configs_w_existing():
+def test_installationconfig_completion_configs_w_existing():
     CC_1, CC_2 = object(), object()
-    existing = {"completions_1": CC_1, "completions_2": CC_2}
+    existing = {"completion_1": CC_1, "completion_2": CC_2}
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
-    kw["_completions_configs"] = existing
+    kw["_completion_configs"] = existing
 
     i_config = config.InstallationConfig(**kw)
 
-    found = i_config.completions_configs
+    found = i_config.completion_configs
 
-    assert found["completions_1"] == CC_1
-    assert found["completions_2"] == CC_2
+    assert found["completion_1"] == CC_1
+    assert found["completion_2"] == CC_2
 
 
 def test_installationconfig_reload_configurations():
@@ -1760,14 +1760,14 @@ def test_installationconfig_reload_configurations():
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_oidc_auth_system_configs"] = existing
     kw["_room_configs"] = existing
-    kw["_completions_configs"] = existing
+    kw["_completion_configs"] = existing
     i_config = config.InstallationConfig(**kw)
 
     with mock.patch.multiple(
         i_config,
         _load_oidc_auth_system_configs=mock.DEFAULT,
         _load_room_configs=mock.DEFAULT,
-        _load_completions_configs=mock.DEFAULT,
+        _load_completion_configs=mock.DEFAULT,
     ) as patched:
         i_config.reload_configurations()
 
@@ -1781,8 +1781,8 @@ def test_installationconfig_reload_configurations():
     )
 
     assert (
-        i_config._completions_configs is
-        patched["_load_completions_configs"].return_value
+        i_config._completion_configs is
+        patched["_load_completion_configs"].return_value
     )
 
 

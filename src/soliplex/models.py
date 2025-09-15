@@ -117,7 +117,7 @@ class Installation(pydantic.BaseModel):
     environment: dict[str, str] = {}
     oidc_paths: list[pathlib.Path] = []
     room_paths: list[pathlib.Path] = []
-    completions_paths: list[pathlib.Path] = []
+    completion_paths: list[pathlib.Path] = []
     quizzes_paths: list[pathlib.Path] = []
 
     @classmethod
@@ -128,7 +128,7 @@ class Installation(pydantic.BaseModel):
             environment=installation_config.environment,
             oidc_paths=installation_config.oidc_paths,
             room_paths=installation_config.room_paths,
-            completions_paths=installation_config.completions_paths,
+            completion_paths=installation_config.completion_paths,
             quizzes_paths=installation_config.quizzes_paths,
         )
 

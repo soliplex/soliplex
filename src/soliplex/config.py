@@ -689,8 +689,8 @@ class RoomConfig:
 #=============================================================================
 
 @dataclasses.dataclass
-class CompletionsConfig:
-    """Configuration for a completions endpoint."""
+class CompletionConfig:
+    """Configuration for a completion endpoint."""
 
     #
     # Required metadata
@@ -717,13 +717,13 @@ class CompletionsConfig:
     def from_yaml(cls, config_path: pathlib.Path, config: dict):
         config["_config_path"] = config_path
 
-        completions_id = config["id"]
+        completion_id = config["id"]
 
         if "name" not in config:
-            config["name"] = completions_id
+            config["name"] = completion_id
 
         agent_config_yaml = config.pop("agent")
-        agent_config_yaml["id"] = f"completions-{completions_id}"
+        agent_config_yaml["id"] = f"completion-{completion_id}"
 
         config["agent_config"] = AgentConfig.from_yaml(
             config_path,
@@ -802,14 +802,14 @@ _find_room_configs = functools.partial(
     _find_configs, filename_yaml="room_config.yaml",
 )
 
-_find_completions_configs = functools.partial(
-    _find_configs, filename_yaml="completions_config.yaml",
+_find_completion_configs = functools.partial(
+    _find_configs, filename_yaml="completion_config.yaml",
 )
 
 
 @dataclasses.dataclass
 class InstallationConfig:
-    """Configuration for a set of rooms, completions, etc."""
+    """Configuration for a set of rooms, completion, etc."""
     #
     # Required metadata
     #
@@ -850,17 +850,17 @@ class InstallationConfig:
     _room_configs: dict[str, RoomConfig] = None
 
     #
-    # Path(s) to completions configs:  each item can be either a single
+    # Path(s) to completion configs:  each item can be either a single
     # completion config (a directory containing its own
-    # 'completions_config.yaml' file), or a directory containing such
-    # completions configs.
+    # 'completion_config.yaml' file), or a directory containing such
+    # completion configs.
     #
-    # Defaults to one path: './completions' (set in '__post_init__'), which is
-    # normally a "container" directory for completions config directories.
+    # Defaults to one path: './completion' (set in '__post_init__'), which is
+    # normally a "container" directory for completion config directories.
     #
-    completions_paths: list[pathlib.Path] = None
+    completion_paths: list[pathlib.Path] = None
 
-    _completions_configs: dict[str, CompletionsConfig] = None
+    _completion_configs: dict[str, CompletionConfig] = None
 
     #
     # Path(s) to quiz data:  each item must be a single directory containing
@@ -894,8 +894,8 @@ class InstallationConfig:
         if self.room_paths is None:
             self.room_paths = ["./rooms"]
 
-        if self.completions_paths is None:
-            self.completions_paths = ["./completions"]
+        if self.completion_paths is None:
+            self.completion_paths = ["./completions"]
 
         if self.quizzes_paths is None:
             self.quizzes_paths = ["./quizzes"]
@@ -914,9 +914,9 @@ class InstallationConfig:
                 for room_path in self.room_paths
             ]
 
-            self.completions_paths = [
-                parent_dir / completions_path
-                for completions_path in self.completions_paths
+            self.completion_paths = [
+                parent_dir / completion_path
+                for completion_path in self.completion_paths
             ]
 
             self.quizzes_paths = [
@@ -980,29 +980,29 @@ class InstallationConfig:
 
         return self._room_configs.copy()
 
-    def _load_completions_configs(self) -> dict[str, RoomConfig]:
-        completions_configs = {}
+    def _load_completion_configs(self) -> dict[str, RoomConfig]:
+        completion_configs = {}
 
-        for completions_path in self.completions_paths:
-            for config_path, config_yaml in _find_completions_configs(
-                completions_path
+        for completion_path in self.completion_paths:
+            for config_path, config_yaml in _find_completion_configs(
+                completion_path
             ):
-                # XXX  order of 'completions_paths' controls
-                #      first-past-the-post for any conflict on completions ID.
+                # XXX  order of 'completion_paths' controls
+                #      first-past-the-post for any conflict on completion ID.
                 config_id = config_yaml["id"]
-                if config_id not in completions_configs:
-                    completions_configs[config_id] = (
-                        CompletionsConfig.from_yaml(config_path, config_yaml)
+                if config_id not in completion_configs:
+                    completion_configs[config_id] = (
+                        CompletionConfig.from_yaml(config_path, config_yaml)
                     )
 
-        return completions_configs
+        return completion_configs
 
     @property
-    def completions_configs(self) -> dict[str, RoomConfig]:
-        if self._completions_configs is None:
-            self._completions_configs = self._load_completions_configs()
+    def completion_configs(self) -> dict[str, RoomConfig]:
+        if self._completion_configs is None:
+            self._completion_configs = self._load_completion_configs()
 
-        return self._completions_configs.copy()
+        return self._completion_configs.copy()
 
     def reload_configurations(self):
         """Load all dependent configuration sets"""
@@ -1010,7 +1010,7 @@ class InstallationConfig:
             self._load_oidc_auth_system_configs()
         )
         self._room_configs = self._load_room_configs()
-        self._completions_configs = self._load_completions_configs()
+        self._completion_configs = self._load_completion_configs()
 
 
 def load_installation(config_path: pathlib.Path) -> InstallationConfig:

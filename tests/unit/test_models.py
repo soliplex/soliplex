@@ -32,7 +32,7 @@ INSTALLATION_ENVVAR_NAME = "TEST_ENVVAR"
 INSTALLATION_ENVVAR_VALUE = "Test Envvar"
 INSTALLATION_OIDC_PATH = pathlib.Path("/path/to/oidc")
 INSTALLATION_ROOM_PATH = pathlib.Path("/path/to/rooms")
-INSTALLATION_COMPLETIONS_PATH = pathlib.Path("/path/to/completions")
+INSTALLATION_COMPLETION_PATH = pathlib.Path("/path/to/completions")
 INSTALLATION_QUIZZES_PATH = pathlib.Path("/path/to/quizzes")
 
 
@@ -206,6 +206,7 @@ def room_agent():
         system_prompt=AGENT_PROMPT,
     )
 
+
 def test_room_from_config(
     room_agent, room_welcome, room_suggestions, room_tools, room_quizzes,
 ):
@@ -239,6 +240,14 @@ def test_room_from_config(
         assert room_model.suggestions == room_suggestions["suggestions"]
     else:
         assert room_model.suggestions == []
+
+    if room_tools:
+        assert room_model.tools == {
+            key: models.Tool.from_config(tool_config)
+            for (key, tool_config) in room_tools["tool_configs"].items()
+        }
+    else:
+        assert room_model.tools == {}
 
     if room_quizzes:
         assert room_model.quizzes == {
@@ -275,9 +284,9 @@ def installation_room_paths(request):
     return _from_param(request, "room_paths")
 
 
-@pytest.fixture(scope="module", params=[None, [INSTALLATION_COMPLETIONS_PATH]])
-def installation_completions_paths(request):
-    return _from_param(request, "completions_paths")
+@pytest.fixture(scope="module", params=[None, [INSTALLATION_COMPLETION_PATH]])
+def installation_completion_paths(request):
+    return _from_param(request, "completion_paths")
 
 
 @pytest.fixture(scope="module", params=[None, [INSTALLATION_QUIZZES_PATH]])
@@ -290,7 +299,7 @@ def test_installation_from_config(
     installation_environment,
     installation_oidc_paths,
     installation_room_paths,
-    installation_completions_paths,
+    installation_completion_paths,
     installation_quizzes_paths,
 ):
     installation_config = config.InstallationConfig(
@@ -299,7 +308,7 @@ def test_installation_from_config(
         **installation_environment,
         **installation_oidc_paths,
         **installation_room_paths,
-        **installation_completions_paths,
+        **installation_completion_paths,
         **installation_quizzes_paths,
     )
 
@@ -336,14 +345,14 @@ def test_installation_from_config(
     else:
         assert installation_model.room_paths == [pathlib.Path("rooms")]
 
-    if installation_completions_paths:
+    if installation_completion_paths:
         assert (
-            installation_model.completions_paths ==
-            installation_completions_paths["completions_paths"]
+            installation_model.completion_paths ==
+            installation_completion_paths["completion_paths"]
         )
     else:
         assert (
-            installation_model.completions_paths ==
+            installation_model.completion_paths ==
             [pathlib.Path("completions")]
         )
 

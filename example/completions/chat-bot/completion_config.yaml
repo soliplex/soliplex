@@ -2,7 +2,7 @@ id: "chat-bot"
 agent:
   system_prompt: "./prompt.txt"
   model_name: "gpt-oss:20b"
-# tools: 
-#    - tool_name: "<yourapp>.tools.get_current_datetime"
-#    - tool_name: "<yourapp>.tools.search_documents"
+tools: 
+  - tool_name: "soliplex.tools.get_current_datetime"
+#  - tool_name: "<yourapp>.tools.search_documents"
 #      search_path: "/path/to/documents"
