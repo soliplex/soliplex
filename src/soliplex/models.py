@@ -1,4 +1,5 @@
 import pathlib
+import typing
 
 import pydantic
 
@@ -30,6 +31,28 @@ class Quiz(pydantic.BaseModel):
 ConfiguredQuizzes = dict[str, Quiz]
 
 
+class Tool(pydantic.BaseModel):
+    kind: str
+    tool_name: str
+    tool_description: str
+    tool_requires: config.ToolRequires
+    allow_mcp: bool
+    extra_parameters: dict[str, typing.Any]
+
+    @classmethod
+    def from_config(cls, tool_config: config.ToolConfig):
+        return cls(
+            kind=tool_config.kind,
+            tool_name=tool_config.tool_name,
+            tool_description=tool_config.tool_description,
+            tool_requires=tool_config.tool_requires,
+            allow_mcp=tool_config.allow_mcp,
+            extra_parameters=tool_config.get_extra_parameters(),
+        )
+
+ConfiguredTools = dict[str, Tool]
+
+
 class Room(pydantic.BaseModel):
     id: str
     name: str
@@ -37,6 +60,7 @@ class Room(pydantic.BaseModel):
     welcome_message: str
     suggestions: list[str]
     enable_attachments: bool
+    tools: ConfiguredTools
     quizzes: ConfiguredQuizzes
 
     @classmethod
@@ -50,6 +74,10 @@ class Room(pydantic.BaseModel):
             ),
             suggestions=room_config.suggestions,
             enable_attachments=room_config.enable_attachments,
+            tools={
+                key: Tool.from_config(tool_config)
+                for (key, tool_config) in room_config.tool_configs.items()
+            },
             quizzes={
                 quiz.id: Quiz.from_config(quiz)
                 for quiz in room_config.quizzes

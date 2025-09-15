@@ -1,14 +1,18 @@
 import pathlib
+from unittest import mock
 
 import pytest
 
 from soliplex import config
 from soliplex import models
+from soliplex import tools
 
 QUIZ_ID = "test_quiz"
 QUIZ_TITLE = "Test Quiz"
 QUIZ_MAX_QUESTIONS = 14
 QUIZ_PATH_OVERRIDE = "/dev/null"
+
+SDTC_RAG_LANCE_DB_PATH = "/path/to/db/rag"
 
 ROOM_ID = "test_room"
 ROOM_NAME = "Test Room"
@@ -72,6 +76,54 @@ def test_quiz_from_config(quiz_randomize, quiz_max_questions):
         assert quiz_model.max_questions is None
 
 
+
+def test_tool_from_toolconfig():
+    def test_tool():
+        """This is a test tool"""
+
+    tool_config = config.ToolConfig(
+        kind="testing",
+        tool_name="soliplex.tools.test_tool",
+    )
+
+    with mock.patch.dict("soliplex.tools.__dict__", test_tool=test_tool):
+        tool_model = models.Tool.from_config(tool_config)
+
+    assert tool_model.kind == "testing"
+    assert tool_model.tool_name == "soliplex.tools.test_tool"
+    assert tool_model.tool_description == test_tool.__doc__.strip()
+    assert tool_model.tool_requires == config.ToolRequires.BARE
+    assert tool_model.allow_mcp is False
+    assert tool_model.extra_parameters == {}
+
+
+
+def test_tool_from_sdtc():
+
+    tool_config = config.SearchDocumentsToolConfig(
+        rag_lancedb_override_path=SDTC_RAG_LANCE_DB_PATH,
+        expand_context_radius=3,
+        search_documents_limit=7,
+        return_citations=True,
+        allow_mcp=True,
+    )
+
+    tool_model = models.Tool.from_config(tool_config)
+
+    assert tool_model.kind == "search_documents"
+    assert tool_model.tool_name == "soliplex.tools.search_documents"
+    assert (
+        tool_model.tool_description == tools.search_documents.__doc__.strip()
+    )
+    assert tool_model.tool_requires == config.ToolRequires.TOOL_CONFIG
+    assert tool_model.allow_mcp is True
+    assert tool_model.extra_parameters == dict(
+        rag_lancedb_path=pathlib.Path(SDTC_RAG_LANCE_DB_PATH),
+        expand_context_radius=3,
+        search_documents_limit=7,
+        return_citations=True,
+    )
+
 @pytest.fixture(scope="module", params=[None, ROOM_WELCOME])
 def room_welcome(request):
     return _from_param(request, "welcome_message")
@@ -80,6 +132,20 @@ def room_welcome(request):
 @pytest.fixture(scope="module", params=[None, [ROOM_SUGGESTION]])
 def room_suggestions(request):
     return _from_param(request, "suggestions")
+
+
+@pytest.fixture(scope="module", params=[False, True])
+def room_tools(request):
+    kw = {}
+    if request.param:
+        kw["tool_configs"] = {
+            "get_current_datetime":
+                config.ToolConfig(
+                    kind="testing",
+                    tool_name="soliplex.tools.get_current_datetime",
+                ),
+        }
+    return kw
 
 
 @pytest.fixture(scope="module", params=[False, True])
@@ -104,7 +170,7 @@ def room_agent():
     )
 
 def test_room_from_config(
-    room_agent, room_welcome, room_suggestions, room_quizzes,
+    room_agent, room_welcome, room_suggestions, room_tools, room_quizzes,
 ):
     room_config = config.RoomConfig(
         id=ROOM_ID,
@@ -113,6 +179,7 @@ def test_room_from_config(
         agent_config=room_agent,
         **room_welcome,
         **room_suggestions,
+        **room_tools,
         **room_quizzes,
     )
 
