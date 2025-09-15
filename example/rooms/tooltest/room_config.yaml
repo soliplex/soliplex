@@ -1,0 +1,16 @@
+id: "haiku"
+name: "Haiku-RAG search"
+description: "Search documents using Haiku-RAG"
+suggestions:
+- "Which way is up?"
+agent:
+  system_prompt: "./prompt.txt"
+  model_name: "gpt-oss:20b"
+  #tools:
+    #- tool_name: "<yourapp>.tools.get_current_datetime"
+    #- tool_name: "<yourapp>.tools.search_documents"
+    #  rag_sqlite_override_path: "/path/to/rag.sqlite"
+    #  return_citations: true
+    #  expand_context_radius: 3
+    #  search_documents_limit: 7 
+    #- tool_name: "<yourapp>.tools.get_current_user"

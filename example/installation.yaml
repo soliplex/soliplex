@@ -1,0 +1,85 @@
+#==========================================================================
+# Secrets
+#==========================================================================
+#
+# Kept in an external store, such as ASW secret store, Github secrets, or
+# the secrets store managed by `devenv`'s `secrets` script, secrets are
+# expected to be injected into the environment separately.
+#
+# They are named here to allow pulling them into a Docker environment as
+# value-free references in a file formated to be used by
+# 'docker run --env-file <filename>'
+#==========================================================================
+id: "soliplex-conf-example"
+
+secrets:
+
+  # Pydantic AI logging / debugging
+  - "LOGFIRE_TOKEN"
+
+  # Public AI models
+  - "OPENAI_API_KEY"
+
+  # MCP tool registry
+  - "SMITHERY_AI_API_KEY"
+  - "SMITHERY_AI_PROFILE"
+
+  # API to fetch docs from 'docs{.test}.josce.mil'
+  - "DADS_API_CLIENT_SECRET_KEY"
+  - "DADS_API_PASSWORD"
+  - "DADS_API_USERNAME"
+
+#==========================================================================
+# Environment Variables
+#==========================================================================
+#
+# Unlike secrets, environment variables are configured explicitly as part
+# of an installation.
+#==========================================================================
+environment:
+  # Don't set this in development:  should only be set by the script whih
+  # is starting a container
+  #
+  #- name: "CONTAINER_IS_RUNNING"
+  #  value: "1"
+
+  # Used by both 'haiku.rag' and 'ragserver'
+  # Don't set this in development:  let devenv do it.
+  #
+  # - name: "OLLAMA_BASE_URL"
+  #   value: "http://localhost:11434"
+
+  #------------------------------------------------------------------------
+  # 'haiku.rag' config vars
+  #------------------------------------------------------------------------
+  - name: "EMBEDDINGS_PROVIDER"
+    value: "ollama"
+  - name: "EMBEDDINGS_MODEL"
+    value: "mxbai-embed-large"
+  - name: "EMBEDDINGS_VECTOR_DIM"
+    value: "1024"
+  - name: "QA_PROVIDER"
+    value: "ollama"
+  - name: "QA_MODEL"
+    value: "qwen3:latest"
+  - name: "RERANK"
+    value: "false"
+
+  #------------------------------------------------------------------------
+  # 'ragserver': on-disk configuration locations
+  #------------------------------------------------------------------------
+  - name: "INSTALLATION_PATH"
+    value: "file:."
+  - name: "RAG_LANCE_DB_PATH"
+    value: "file:../db/rag"
+  # Comment out the following entry to turn on 'no-auth' mode.
+  - name: "OIDC_CONFIG_PATH"
+    value: "file:./oidc"
+
+  #------------------------------------------------------------------------
+  # Non-secret configuration for Logfire
+  #------------------------------------------------------------------------
+  - name: "LOGFIRE_ENVIRONMENT"
+    value: "container"
+  - name: "LOGFIRE_SERVICE_NAME"
+    value: "ragserver"
