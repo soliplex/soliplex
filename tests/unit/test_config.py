@@ -4,7 +4,6 @@ import inspect
 import json
 import os
 import pathlib
-import tempfile
 from unittest import mock
 
 import pytest
@@ -518,12 +517,6 @@ quizzes_paths:
     - "{QUIZZES_PATH_1}"
     - "{QUIZZES_PATH_2}"
 """
-
-
-@pytest.fixture
-def temp_dir() -> pathlib.Path:
-    with tempfile.TemporaryDirectory() as td:
-        yield pathlib.Path(td)
 
 
 @pytest.mark.parametrize("w_config", [

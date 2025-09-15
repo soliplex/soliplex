@@ -1,16 +1,8 @@
-import pathlib
-import tempfile
 from unittest import mock
 
 import pytest
 
 from soliplex import util
-
-
-@pytest.fixture
-def temp_dir() -> pathlib.Path:
-    with tempfile.TemporaryDirectory() as td:
-        yield pathlib.Path(td)
 
 
 @pytest.mark.parametrize("to_scrub, expected", [
