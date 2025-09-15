@@ -16,7 +16,7 @@ from soliplex import util
 
 def curry_lifespan(installation_path: pathlib.Path=None):
     if installation_path is None:
-        installation_path = os.environ.get("INSTALLATION_PATH")
+        installation_path = os.environ.get("SOLIPLEX_INSTALLATION_PATH")
 
         if installation_path is None:
             installation_path = "./example"

@@ -20,7 +20,7 @@ def inst_path_kwargs(request):
 
 @pytest.mark.parametrize("env_patch", [
     {},
-    {"INSTALLATION_PATH": ENVIRON_INST_PATH},
+    {"SOLIPLEX_INSTALLATION_PATH": ENVIRON_INST_PATH},
 ])
 def test_curry_lifespan(inst_path_kwargs, env_patch):
 
