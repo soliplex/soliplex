@@ -9,6 +9,7 @@ import uvicorn
 from fastapi.middleware import cors as fastapi_mw_cors
 from starlette.middleware import sessions as starlette_mw_sessions
 
+from soliplex import completions
 from soliplex import installation
 from soliplex import rooms
 from soliplex import util
@@ -55,6 +56,7 @@ def create_app(installation_path: pathlib.Path=None):  # pragma: NO COVER
         response.headers["X-Git-Hash"] = current_git_hash
         return response
 
+    app.include_router(completions.router, prefix="/api")
     app.include_router(installation.router, prefix="/api")
     app.include_router(rooms.router, prefix="/api")
 

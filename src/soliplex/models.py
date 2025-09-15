@@ -110,6 +110,28 @@ class Room(pydantic.BaseModel):
 ConfiguredRooms = dict[str, Room]
 
 
+class Completion(pydantic.BaseModel):
+    id: str
+    name: str
+    tools: ConfiguredTools
+    agent: Agent
+
+    @classmethod
+    def from_config(cls, completion_config: config.CompletionConfig):
+        return cls(
+            id=completion_config.id,
+            name=completion_config.name,
+            tools={
+                key: Tool.from_config(tool_config)
+                for (key, tool_config)
+                    in completion_config.tool_configs.items()
+            },
+            agent=Agent.from_config(completion_config.agent_config),
+        )
+
+ConfiguredCompletions = dict[str, Completion]
+
+
 class Installation(pydantic.BaseModel):
     """Configuration for a set of rooms, completions, etc."""
     id: str

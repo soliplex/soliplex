@@ -20,6 +20,9 @@ ROOM_DESCRIPTION = "This room is made for testing"
 ROOM_WELCOME = "Welcome!"
 ROOM_SUGGESTION = "Why is the sky blue?"
 
+COMPLETION_ID = "test_room"
+COMPLETION_NAME = "Test Room"
+
 AGENT_ID = "test_agent"
 AGENT_MODEL = "test_model"
 AGENT_PROMPT = "You are a test"
@@ -256,6 +259,34 @@ def test_room_from_config(
         }
     else:
         assert room_model.quizzes == {}
+
+
+def test_completion_from_config(
+    room_agent, room_tools,
+):
+    completion_config = config.CompletionConfig(
+        id=COMPLETION_ID,
+        name=COMPLETION_NAME,
+        agent_config=room_agent,
+        **room_tools,
+    )
+
+    completion_model = models.Completion.from_config(completion_config)
+
+    assert completion_model.id == ROOM_ID
+    assert completion_model.name == ROOM_NAME
+
+    assert completion_model.agent.id == AGENT_ID
+    assert completion_model.agent.model_name == AGENT_MODEL
+    assert completion_model.agent.system_prompt == AGENT_PROMPT
+
+    if room_tools:
+        assert completion_model.tools == {
+            key: models.Tool.from_config(tool_config)
+            for (key, tool_config) in room_tools["tool_configs"].items()
+        }
+    else:
+        assert completion_model.tools == {}
 
 
 @pytest.fixture(scope="module", params=[None, [INSTALLATION_SECRET]])
