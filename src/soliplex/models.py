@@ -53,6 +53,27 @@ class Tool(pydantic.BaseModel):
 ConfiguredTools = dict[str, Tool]
 
 
+class Agent(pydantic.BaseModel):
+    id: str
+    model_name: str
+    system_prompt: str
+    provider_type: config.LLMProviderType
+    provider_base_url: str
+    provider_key_envvar: str
+
+    @classmethod
+    def from_config(cls, agent_config: config.AgentConfig):
+        llm_provider_kw = agent_config.llm_provider_kw
+        return cls(
+            id=agent_config.id,
+            model_name=agent_config.model_name,
+            system_prompt=agent_config.get_system_prompt(),
+            provider_type=agent_config.provider_type,
+            provider_base_url=llm_provider_kw["base_url"],
+            provider_key_envvar=agent_config.provider_key_envvar or "dummy",
+        )
+
+
 class Room(pydantic.BaseModel):
     id: str
     name: str
@@ -62,6 +83,7 @@ class Room(pydantic.BaseModel):
     enable_attachments: bool
     tools: ConfiguredTools
     quizzes: ConfiguredQuizzes
+    agent: Agent
 
     @classmethod
     def from_config(cls, room_config: config.RoomConfig):
@@ -82,6 +104,7 @@ class Room(pydantic.BaseModel):
                 quiz.id: Quiz.from_config(quiz)
                 for quiz in room_config.quizzes
             },
+            agent=Agent.from_config(room_config.agent_config),
         )
 
 ConfiguredRooms = dict[str, Room]

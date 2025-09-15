@@ -23,6 +23,8 @@ ROOM_SUGGESTION = "Why is the sky blue?"
 AGENT_ID = "test_agent"
 AGENT_MODEL = "test_model"
 AGENT_PROMPT = "You are a test"
+AGENT_BASE_URL = "https://provider.example.com/base"
+OLLAMA_BASE_URL = "https://ollama.example.com/base"
 
 INSTALLATION_ID = "test-installation"
 INSTALLATION_SECRET = "Seeeeeekrit!"
@@ -77,7 +79,7 @@ def test_quiz_from_config(quiz_randomize, quiz_max_questions):
 
 
 
-def test_tool_from_toolconfig():
+def test_tool_from_config_w_toolconfig():
     def test_tool():
         """This is a test tool"""
 
@@ -97,8 +99,7 @@ def test_tool_from_toolconfig():
     assert tool_model.extra_parameters == {}
 
 
-
-def test_tool_from_sdtc():
+def test_tool_from_config_w_sdtc():
 
     tool_config = config.SearchDocumentsToolConfig(
         rag_lancedb_override_path=SDTC_RAG_LANCE_DB_PATH,
@@ -123,6 +124,42 @@ def test_tool_from_sdtc():
         search_documents_limit=7,
         return_citations=True,
     )
+
+
+@pytest.fixture(scope="module", params=[*config.LLMProviderType])
+def agent_provider_type(request):
+    return _from_param(request, "provider_type")
+
+
+@pytest.fixture(scope="module", params=[None, AGENT_BASE_URL])
+def agent_provider_base_url(request):
+    return _from_param(request, "provider_base_url")
+
+
+def test_agent_from_config(agent_provider_type, agent_provider_base_url):
+    agent_config = config.AgentConfig(
+        id=AGENT_ID,
+        model_name=AGENT_MODEL,
+        system_prompt=AGENT_PROMPT,
+        **agent_provider_type,
+        **agent_provider_base_url,
+    )
+
+    env_patch = {}
+    if not agent_provider_base_url:
+        env_patch["OLLAMA_BASE_URL"] = OLLAMA_BASE_URL
+        exp_base = f"{OLLAMA_BASE_URL}/v1"
+    else:
+        exp_base = f"{AGENT_BASE_URL}/v1"
+
+    with mock.patch.dict("os.environ", clear=True, **env_patch):
+        agent_model = models.Agent.from_config(agent_config)
+
+    assert agent_model.id == AGENT_ID
+    assert agent_model.model_name == AGENT_MODEL
+    assert agent_model.system_prompt == AGENT_PROMPT
+    assert agent_model.provider_base_url == exp_base
+
 
 @pytest.fixture(scope="module", params=[None, ROOM_WELCOME])
 def room_welcome(request):
@@ -188,6 +225,10 @@ def test_room_from_config(
     assert room_model.id == ROOM_ID
     assert room_model.name == ROOM_NAME
     assert room_model.description == ROOM_DESCRIPTION
+
+    assert room_model.agent.id == AGENT_ID
+    assert room_model.agent.model_name == AGENT_MODEL
+    assert room_model.agent.system_prompt == AGENT_PROMPT
 
     if room_welcome:
         assert room_model.welcome_message == room_welcome["welcome_message"]
