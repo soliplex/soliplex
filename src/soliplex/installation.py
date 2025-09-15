@@ -15,6 +15,9 @@ class Installation:
     def get_room_configs(self, _user):
         return self._config.room_configs
 
+    def get_completion_configs(self, _user):
+        return self._config.completion_configs
+
 
 async def get_the_installation(
     request: fastapi.Request,

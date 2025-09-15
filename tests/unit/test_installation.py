@@ -19,6 +19,18 @@ def test_installation_get_room_configs():
     assert the_installation.get_room_configs(test_user) == r_configs
 
 
+def test_installation_get_completion_configs():
+    c_config = mock.create_autospec(config.CompletionConfig)
+    c_configs = {"completion_id": c_config}
+    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config.completion_configs = c_configs
+    test_user = {"name": "test"}
+
+    the_installation = installation.Installation(i_config)
+
+    assert the_installation.get_completion_configs(test_user) == c_configs
+
+
 @pytest.mark.anyio
 async def test_get_the_installation():
     i_config = mock.create_autospec(config.InstallationConfig)
