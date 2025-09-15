@@ -820,6 +820,15 @@ def test_toolconfig_tool_with_config(test_tool, exp_wrapped):
         assert found is test_tool
 
 
+def test_toolconfig_get_extra_parameters():
+    tool_config = config.ToolConfig(
+        kind="testing",
+        tool_name="soliplex.tools.test_tool",
+    )
+
+    assert tool_config.get_extra_parameters() == {}
+
+
 @pytest.mark.parametrize("stem, override, which", [
     (None, None, None),
     ("testing", "/dev/null", None),
@@ -853,6 +862,15 @@ def test_sdtc_ctor(temp_dir, stem, override, which):
 
             assert sdt_config._config_path is None
             assert sdt_config.rag_lancedb_path == expected
+
+            expected_ep = {
+                "rag_lancedb_path": expected,
+                "expand_context_radius": 2,
+                "search_documents_limit": 5,
+                "return_citations": False,
+            }
+
+            assert sdt_config.get_extra_parameters() == expected_ep
 
 
 @pytest.mark.parametrize("stem, override, which", [

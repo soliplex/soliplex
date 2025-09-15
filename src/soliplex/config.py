@@ -214,6 +214,9 @@ class ToolConfig:
         else:
             return self.tool
 
+    def get_extra_parameters(self) -> dict:
+        return {}
+
 
 @dataclasses.dataclass
 class SearchDocumentsToolConfig(ToolConfig):
@@ -273,6 +276,14 @@ class SearchDocumentsToolConfig(ToolConfig):
             rspdb = (db_rag_dir / f"{self.rag_lancedb_stem}.lancedb").resolve()
 
             return rspdb
+
+    def get_extra_parameters(self) -> dict:
+        return {
+            "expand_context_radius": self.expand_context_radius,
+            "search_documents_limit": self.search_documents_limit,
+            "return_citations": self.return_citations,
+            "rag_lancedb_path": self.rag_lancedb_path,
+        }
 
 
 TOOL_CONFIG_CLASSES_BY_TOOL_NAME = {
