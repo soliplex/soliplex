@@ -68,3 +68,54 @@ async def test_get_room(fc, room_configs):
 
         assert found is fc.return_value
         fc.assert_called_once_with(room_configs[ROOM_ID])
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("w_image", [False, True])
+async def test_get_room_bg_image(temp_dir, w_image, room_configs):
+    ROOM_ID = "foo"
+    IMAGE_FILENAME = "logo.svg"
+
+    image_path = temp_dir / IMAGE_FILENAME
+
+    request = mock.create_autospec(fastapi.Request)
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.get_room_configs.return_value = room_configs
+
+    if ROOM_ID in room_configs:
+        if w_image:
+            room_configs[ROOM_ID].get_logo_image.return_value = image_path
+        else:
+            room_configs[ROOM_ID].get_logo_image.return_value = None
+
+
+    if ROOM_ID not in room_configs:
+        with pytest.raises(fastapi.HTTPException) as exc:
+            await rooms.get_room_bg_image(
+                request,
+                room_id=ROOM_ID,
+                the_installation=the_installation,
+            )
+
+        assert exc.value.status_code == 404
+        assert exc.value.detail == "No such room: foo"
+    else:
+        if w_image:
+            found = await rooms.get_room_bg_image(
+                request,
+                room_id=ROOM_ID,
+                the_installation=the_installation,
+            )
+            # Actual image data is marshalled by fastapi framework
+            assert found == str(image_path)
+        else:
+            with pytest.raises(fastapi.HTTPException) as exc:
+                await rooms.get_room_bg_image(
+                    request,
+                    room_id=ROOM_ID,
+                    the_installation=the_installation,
+                )
+
+            assert exc.value.status_code == 404
+            assert exc.value.detail == "No image for room"
