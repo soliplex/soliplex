@@ -4,6 +4,8 @@ import subprocess
 import traceback
 import typing
 
+from starlette import datastructures
+
 
 def scrub_private_keys(
     json_dict: dict[str, typing.Any]
@@ -57,3 +59,29 @@ def get_git_hash_for_file(file_path: str):
     except Exception:
         traceback.print_exc()
         return 'unknown'
+
+
+def strip_default_port(url: datastructures.URL) -> datastructures.URL:
+    """
+    Returns a new URL instance with the default port removed
+    for http (80) and https (443).
+    """
+    if (url.scheme == "http" and url.port == 80) or (
+            url.scheme == "https" and url.port == 443):
+        # Build userinfo if present
+        userinfo = ""
+        if url.username:
+            userinfo = url.username
+            if url.password:
+                userinfo += f":{url.password}"
+            userinfo += "@"
+        # Rebuild the URL without the port
+        return datastructures.URL(
+            f"{url.scheme}://"
+            f"{userinfo}"
+            f"{url.hostname}"
+            f"{url.path or ''}"
+            f"{f'?{url.query}' if url.query else ''}"
+            f"{f'#{url.fragment}' if url.fragment else ''}"
+        )
+    return url

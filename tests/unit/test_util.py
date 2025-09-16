@@ -1,6 +1,7 @@
 from unittest import mock
 
 import pytest
+from starlette import datastructures
 
 from soliplex import util
 
@@ -87,3 +88,109 @@ def test_get_git_hash_for_file_w_subprocess_hit(sp):
     found = util.get_git_hash_for_file(__file__)
 
     assert found == HASH
+
+
+@pytest.mark.parametrize("start_url, expected", [
+    # HTTP default port
+    (
+        "http://localhost:80/foo/bar",
+        "http://localhost/foo/bar",
+    ),
+    # HTTPS default port
+    (
+        "https://localhost:443/foo/bar",
+        "https://localhost/foo/bar",
+    ),
+    # HTTP non-default port
+    (
+        "http://localhost:8080/foo/bar",
+        "http://localhost:8080/foo/bar",
+    ),
+    # HTTPS non-default port
+    (
+        "https://localhost:4443/foo/bar",
+        "https://localhost:4443/foo/bar",
+    ),
+    # no port
+    (
+        "http://localhost/foo/bar",
+        "http://localhost/foo/bar",
+    ),
+    # username / password
+    (
+        "http://user:pass@localhost:80/foo/bar",
+        "http://user:pass@localhost/foo/bar",
+    ),
+    (
+        "https://user:pass@localhost:443/foo/bar",
+        "https://user:pass@localhost/foo/bar",
+    ),
+    (
+        "http://user:pass@localhost:8080/foo/bar",
+        "http://user:pass@localhost:8080/foo/bar",
+    ),
+    (
+        "https://user:pass@localhost:4443/foo/bar",
+        "https://user:pass@localhost:4443/foo/bar",
+    ),
+    # Only username
+    (
+        "http://user@localhost:80/foo/bar",
+        "http://user@localhost/foo/bar",
+    ),
+    (
+        "https://user@localhost:443/foo/bar",
+        "https://user@localhost/foo/bar",
+    ),
+    (
+        "http://user@localhost:8080/foo/bar",
+        "http://user@localhost:8080/foo/bar",
+    ),
+    (
+        "https://user@localhost:4443/foo/bar",
+        "https://user@localhost:4443/foo/bar",
+    ),
+    # Query string
+    (
+        "http://localhost:80/foo/bar?baz=1&qux=2",
+        "http://localhost/foo/bar?baz=1&qux=2",
+    ),
+    (
+        "https://localhost:443/foo/bar?baz=1",
+        "https://localhost/foo/bar?baz=1",
+    ),
+    (
+        "http://localhost:8080/foo/bar?baz=1",
+        "http://localhost:8080/foo/bar?baz=1",
+    ),
+    # Anchor fragment
+    (
+        "http://localhost:80/foo/bar#frag",
+        "http://localhost/foo/bar#frag",
+    ),
+    (
+        "https://localhost:443/foo/bar#frag",
+        "https://localhost/foo/bar#frag",
+    ),
+    (
+        "http://localhost:8080/foo/bar#frag",
+        "http://localhost:8080/foo/bar#frag",
+    ),
+    # Query string + anchor fragment
+    (
+        "http://localhost:80/foo/bar?baz=1#frag",
+        "http://localhost/foo/bar?baz=1#frag",
+    ),
+    (
+        "https://localhost:443/foo/bar?baz=1#frag",
+        "https://localhost/foo/bar?baz=1#frag",
+    ),
+    (
+        "http://localhost:8080/foo/bar?baz=1#frag",
+        "http://localhost:8080/foo/bar?baz=1#frag",
+    ),
+])
+def test_strip_default_port(start_url, expected):
+    found = util.strip_default_port(datastructures.URL(start_url))
+
+    assert found == expected
