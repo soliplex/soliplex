@@ -980,7 +980,7 @@ class InstallationConfig:
 
         return self._room_configs.copy()
 
-    def _load_completion_configs(self) -> dict[str, RoomConfig]:
+    def _load_completion_configs(self) -> dict[str, CompletionConfig]:
         completion_configs = {}
 
         for completion_path in self.completion_paths:
@@ -998,7 +998,7 @@ class InstallationConfig:
         return completion_configs
 
     @property
-    def completion_configs(self) -> dict[str, RoomConfig]:
+    def completion_configs(self) -> dict[str, CompletionConfig]:
         if self._completion_configs is None:
             self._completion_configs = self._load_completion_configs()
 
