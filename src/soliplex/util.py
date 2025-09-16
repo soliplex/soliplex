@@ -1,10 +1,18 @@
+import asyncio
+import contextlib
+import functools
+import logging
 import os
 import pathlib
 import subprocess
 import traceback
 import typing
 
+import logfire
 from starlette import datastructures
+
+# import to log
+logger = logging.getLogger("uvicorn.error")
 
 
 def scrub_private_keys(
@@ -85,3 +93,31 @@ def strip_default_port(url: datastructures.URL) -> datastructures.URL:
             f"{f'#{url.fragment}' if url.fragment else ''}"
         )
     return url
+
+
+@contextlib.contextmanager
+def noop(*arg, **kw):
+    yield
+
+
+def logfire_span(span_name):
+    def decorator(func):
+        if asyncio.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                start_span = getattr(logfire, "start_span", None)
+                if start_span is None: # true in tests
+                    start_span = noop
+                with start_span(span_name):
+                    return await func(*args, **kwargs)
+            return async_wrapper
+        else:
+            @functools.wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                start_span = getattr(logfire, "start_span", None)
+                if start_span is None: # true in tests
+                    start_span = noop # pragma: no cover
+                with start_span(span_name):
+                    return func(*args, **kwargs)
+            return sync_wrapper
+    return decorator

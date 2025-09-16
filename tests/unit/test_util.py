@@ -1,5 +1,6 @@
 from unittest import mock
 
+import logfire
 import pytest
 from starlette import datastructures
 
@@ -194,3 +195,47 @@ def test_strip_default_port(start_url, expected):
     found = util.strip_default_port(datastructures.URL(start_url))
 
     assert found == expected
+
+@pytest.fixture
+def mock_span():
+    with mock.patch.object(
+        logfire, "start_span", mock.MagicMock(), create=True
+    ) as patched:
+        yield patched
+
+
+@pytest.mark.anyio
+def test_logfile_span_w_sync_function(mock_span):
+    @util.logfire_span("test_span")
+    def foo(x):
+        return x + 1
+
+    result = foo(3)
+    assert result == 4
+    mock_span.assert_called_once_with("test_span")
+    # Check that the context manager was entered and exited
+    assert mock_span.return_value.__enter__.called
+    assert mock_span.return_value.__exit__.called
+
+
+@pytest.mark.anyio
+async def test_logfile_span_w_async_function(mock_span):
+    @util.logfire_span("test_async_span")
+    async def bar(x):
+        return x * 2
+
+    result = await bar(4)
+    assert result == 8
+    mock_span.assert_called_once_with("test_async_span")
+    # Check that the context manager was entered and exited
+    assert mock_span.return_value.__enter__.called
+    assert mock_span.return_value.__exit__.called
+
+
+def test_logfile_span_preserves_function_metadata(mock_span):
+    @util.logfire_span("meta_span")
+    def baz():
+        """A test docstring."""
+
+    assert baz.__name__ == "baz"
+    assert baz.__doc__ == "A test docstring."
