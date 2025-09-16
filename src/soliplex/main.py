@@ -9,6 +9,7 @@ import uvicorn
 from fastapi.middleware import cors as fastapi_mw_cors
 from starlette.middleware import sessions as starlette_mw_sessions
 
+from soliplex import auth
 from soliplex import completions
 from soliplex import installation
 from soliplex import rooms
@@ -45,7 +46,7 @@ def create_app(installation_path: pathlib.Path=None):  # pragma: NO COVER
     app.add_middleware(
         starlette_mw_sessions.SessionMiddleware,
         # Deliberately not an envvar
-        secret_key=os.urandom(16).hex(),
+        secret_key=auth._get_session_secret_key(),
     )
 
     current_git_hash = util.get_git_hash_for_file(__file__)
