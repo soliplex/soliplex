@@ -12,10 +12,16 @@ router = fastapi.APIRouter()
 class Installation:
     _config: config.InstallationConfig
 
-    def get_room_configs(self, _user):
+    @property
+    def oidc_auth_system_configs(self) -> list[config.OIDCAuthSystemConfig]:
+        return self._config.oidc_auth_system_configs
+
+    def get_room_configs(self, _user) -> dict[str, config.RoomConfig]:
         return self._config.room_configs
 
-    def get_completion_configs(self, _user):
+    def get_completion_configs(
+        self, _user
+    ) -> dict[str, config.CompletionConfig]:
         return self._config.completion_configs
 
 

@@ -7,6 +7,16 @@ from soliplex import config
 from soliplex import installation
 
 
+def test_installation_oidc_auth_system_configs():
+    i_config = mock.create_autospec(config.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    assert (
+        the_installation.oidc_auth_system_configs is
+        i_config.oidc_auth_system_configs
+    )
+
+
 def test_installation_get_room_configs():
     r_config = mock.create_autospec(config.RoomConfig)
     r_configs = {"room_id": r_config}
