@@ -57,6 +57,7 @@ def create_app(installation_path: pathlib.Path=None):  # pragma: NO COVER
         response.headers["X-Git-Hash"] = current_git_hash
         return response
 
+    app.include_router(auth.router, prefix="/api")
     app.include_router(completions.router, prefix="/api")
     app.include_router(installation.router, prefix="/api")
     app.include_router(rooms.router, prefix="/api")
