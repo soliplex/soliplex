@@ -4,8 +4,6 @@ import fastapi
 
 from soliplex import config
 
-router = fastapi.APIRouter()
-
 
 @dataclasses.dataclass
 class Installation:

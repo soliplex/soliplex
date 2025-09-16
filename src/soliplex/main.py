@@ -60,7 +60,6 @@ def create_app(installation_path: pathlib.Path=None):  # pragma: NO COVER
 
     app.include_router(auth.router, prefix="/api")
     app.include_router(completions.router, prefix="/api")
-    app.include_router(installation.router, prefix="/api")
     app.include_router(rooms.router, prefix="/api")
     app.include_router(views.router, prefix="/api")
 
