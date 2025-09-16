@@ -6,10 +6,12 @@ from fastapi import security
 from . import auth
 from . import installation
 from . import models
+from . import util
 
 router = fastapi.APIRouter()
 
 
+@util.logfire_span("GET /v1/rooms")
 @router.get("/v1/rooms")
 async def get_rooms(
     request: fastapi.Request,
@@ -33,6 +35,7 @@ async def get_rooms(
     }
 
 
+@util.logfire_span("GET /v1/rooms/{room_id}")
 @router.get("/v1/rooms/{room_id}")
 async def get_room(
     request: fastapi.Request,
@@ -55,6 +58,7 @@ async def get_room(
     return models.Room.from_config(room_config)
 
 
+@util.logfire_span("GET /v1/rooms/{room_id}/bg_image")
 @router.get(
     "/v1/rooms/{room_id}/bg_image",
     response_class=responses.FileResponse,

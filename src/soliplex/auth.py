@@ -117,6 +117,7 @@ async def get_login(
     }
 
 
+@util.logfire_span("GET /login/{system}")
 @router.get("/login/{system}")
 async def get_login_system(
     request: fastapi.Request,
@@ -141,6 +142,7 @@ async def get_login_system(
     return found
 
 
+@util.logfire_span("GET /auth/{system}")
 @router.get("/auth/{system}")
 async def get_auth_system(
     request: fastapi.Request,

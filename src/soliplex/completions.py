@@ -4,6 +4,7 @@ from fastapi import security
 from soliplex import auth
 from soliplex import installation
 from soliplex import models
+from soliplex import util
 
 #------------------------------------------------------------------------------
 #   '/api/v1/completions/{completion_id}' endpoint
@@ -12,6 +13,7 @@ from soliplex import models
 router = fastapi.APIRouter()
 
 
+@util.logfire_span("GET /v1/chat/completions")
 @router.get("/v1/chat/completions")
 async def get_chat_completions(
     request: fastapi.Request,
@@ -28,6 +30,7 @@ async def get_chat_completions(
     }
 
 
+@util.logfire_span("GET /v1/chat/completions/{completion_id}")
 @router.get("/v1/chat/completions/{completion_id}")
 async def get_chat_completion(
     request: fastapi.Request,

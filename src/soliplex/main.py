@@ -5,6 +5,7 @@ import pathlib
 import sys
 
 import fastapi
+import logfire
 import uvicorn
 from fastapi.middleware import cors as fastapi_mw_cors
 from starlette.middleware import sessions as starlette_mw_sessions
@@ -31,6 +32,11 @@ def curry_lifespan(installation_path: pathlib.Path=None):
     )
 
 def create_app(installation_path: pathlib.Path=None):  # pragma: NO COVER
+
+    # 'if-token-present' means nothing will be sent (and the example will work)
+    # if you don't have logfire configured
+    logfire.configure(send_to_logfire="if-token-present")
+
     curried_lifespan = curry_lifespan(installation_path)
     acm_lifespan = contextlib.asynccontextmanager(curried_lifespan)
     app = fastapi.FastAPI(lifespan=acm_lifespan)

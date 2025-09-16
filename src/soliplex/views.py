@@ -5,16 +5,19 @@ from fastapi import security
 from soliplex import auth
 from soliplex import installation
 from soliplex import models
+from soliplex import util
 
 router = fastapi.APIRouter()
 
 #   'process_control' canary
+@util.logfire_span("GET /ok")
 @router.get("/ok", response_class=responses.PlainTextResponse)
 async def health_check():
     return "OK"
 
 
 # testing and validation
+@util.logfire_span("GET /check-headers")
 @router.get("/check-headers")
 async def check_headers(request: fastapi.Request):  # pragma: NO COVER
     return_to="https://google.com"
@@ -33,6 +36,7 @@ async def check_headers(request: fastapi.Request):  # pragma: NO COVER
     }
 
 
+@util.logfire_span("GET /v1/installation")
 @router.get("/v1/installation", response_model=models.Installation)
 async def get_installation(
     request: fastapi.Request,
