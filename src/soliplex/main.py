@@ -14,6 +14,7 @@ from soliplex import completions
 from soliplex import installation
 from soliplex import rooms
 from soliplex import util
+from soliplex import views
 
 
 def curry_lifespan(installation_path: pathlib.Path=None):
@@ -61,6 +62,7 @@ def create_app(installation_path: pathlib.Path=None):  # pragma: NO COVER
     app.include_router(completions.router, prefix="/api")
     app.include_router(installation.router, prefix="/api")
     app.include_router(rooms.router, prefix="/api")
+    app.include_router(views.router, prefix="/api")
 
     return app
 

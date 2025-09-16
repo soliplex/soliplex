@@ -1,11 +1,8 @@
 import dataclasses
 
 import fastapi
-from fastapi import security
 
-from soliplex import auth
 from soliplex import config
-from soliplex import models
 
 router = fastapi.APIRouter()
 
@@ -45,14 +42,3 @@ async def lifespan(app: fastapi.FastAPI, installation_path):
     }
 
     yield context
-
-
-@router.get("/v1/installation", response_model=models.Installation)
-async def get_installation(
-    request: fastapi.Request,
-    the_installation: Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials =
-        auth.oauth2_predicate,
-):
-    auth.authenticate(the_installation, token)
-    return models.Installation.from_config(the_installation._config)
