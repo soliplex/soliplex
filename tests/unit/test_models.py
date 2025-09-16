@@ -38,6 +38,22 @@ INSTALLATION_ROOM_PATH = pathlib.Path("/path/to/rooms")
 INSTALLATION_COMPLETION_PATH = pathlib.Path("/path/to/completions")
 INSTALLATION_QUIZZES_PATH = pathlib.Path("/path/to/quizzes")
 
+INSTALLATION_OIDC_AUTH_SYSTEM_ID = "oidc-test"
+INSTALLATION_OIDC_AUTH_SYSTEM_TITLE = "OIDC Test"
+INSTALLATION_OIDC_AUTH_SYSTEM_SERVER_URL = "https://oidc.example.com/"
+INSTALLATION_OIDC_AUTH_SYSTEM_TOKEN_VALIDATION_PEM = "PEM GOES HERE"
+INSTALLATION_OIDC_AUTH_SYSTEM_CLIENT_ID = "oicd-client-test"
+INSTALLATION_OIDC_AUTH_SYSTEM_SCOPE = "oicd-client-scope"
+INSTALLATION_OIDC_AUTH_SYSTEM_CONFIG = config.OIDCAuthSystemConfig(
+    id=INSTALLATION_OIDC_AUTH_SYSTEM_ID,
+    title=INSTALLATION_OIDC_AUTH_SYSTEM_TITLE,
+    server_url=INSTALLATION_OIDC_AUTH_SYSTEM_SERVER_URL,
+    token_validation_pem=INSTALLATION_OIDC_AUTH_SYSTEM_TOKEN_VALIDATION_PEM,
+    client_id=INSTALLATION_OIDC_AUTH_SYSTEM_CLIENT_ID,
+    client_secret="SHHHHHHH! DON't SHOW ME",
+    scope=INSTALLATION_OIDC_AUTH_SYSTEM_SCOPE,
+)
+
 
 def _from_param(request, key):
     kw = {}
@@ -325,6 +341,18 @@ def installation_quizzes_paths(request):
     return _from_param(request, "quizzes_paths")
 
 
+@pytest.fixture(scope="module", params=[
+        None,
+        [INSTALLATION_OIDC_AUTH_SYSTEM_CONFIG],
+    ],
+)
+def installation_oidc_auth_system_configs(request):
+    kwargs = _from_param(request, "_oidc_auth_system_configs")
+    if not kwargs:
+        kwargs["_oidc_auth_system_configs"] = []
+    return kwargs
+
+
 def test_installation_from_config(
     installation_secrets,
     installation_environment,
@@ -332,6 +360,7 @@ def test_installation_from_config(
     installation_room_paths,
     installation_completion_paths,
     installation_quizzes_paths,
+    installation_oidc_auth_system_configs,
 ):
     installation_config = config.InstallationConfig(
         id=INSTALLATION_ID,
@@ -341,6 +370,7 @@ def test_installation_from_config(
         **installation_room_paths,
         **installation_completion_paths,
         **installation_quizzes_paths,
+        **installation_oidc_auth_system_configs,
     )
 
     installation_model = models.Installation.from_config(installation_config)
@@ -394,3 +424,11 @@ def test_installation_from_config(
         )
     else:
         assert installation_model.quizzes_paths == [pathlib.Path("quizzes")]
+
+    for found, expected in zip(
+        installation_model.oidc_auth_systems,
+        installation_oidc_auth_system_configs[
+            "_oidc_auth_system_configs"
+        ],
+        strict=True):
+        assert found.id == expected.id

@@ -1,3 +1,4 @@
+import dataclasses
 import pathlib
 import typing
 
@@ -35,7 +36,7 @@ class Tool(pydantic.BaseModel):
     kind: str
     tool_name: str
     tool_description: str
-    tool_requires: config.ToolRequires
+    tool_requires: config.ToolRequires  # enum, not dataclass
     allow_mcp: bool
     extra_parameters: dict[str, typing.Any]
 
@@ -57,7 +58,7 @@ class Agent(pydantic.BaseModel):
     id: str
     model_name: str
     system_prompt: str
-    provider_type: config.LLMProviderType
+    provider_type: config.LLMProviderType  # enum, not dataclass
     provider_base_url: str
     provider_key_envvar: str
 
@@ -132,6 +133,21 @@ class Completion(pydantic.BaseModel):
 ConfiguredCompletions = dict[str, Completion]
 
 
+class OIDCAuthSystem(pydantic.BaseModel):
+    id: str
+    title: str
+    server_url: str
+    token_validation_pem: str
+    client_id: str
+    scope: str = None
+    oidc_client_pem_path: pathlib.Path | None = None
+
+    @classmethod
+    def from_config(cls, oas_config: config.OIDCAuthSystemConfig):
+        kwargs = dataclasses.asdict(oas_config)
+        return cls(**kwargs)
+
+
 class Installation(pydantic.BaseModel):
     """Configuration for a set of rooms, completions, etc."""
     id: str
@@ -141,9 +157,14 @@ class Installation(pydantic.BaseModel):
     room_paths: list[pathlib.Path] = []
     completion_paths: list[pathlib.Path] = []
     quizzes_paths: list[pathlib.Path] = []
+    oidc_auth_systems: list[OIDCAuthSystem] = []
 
     @classmethod
     def from_config(cls, installation_config: config.InstallationConfig):
+        oidc_auth_systems = [
+            OIDCAuthSystem.from_config(oas_config)
+            for oas_config in installation_config.oidc_auth_system_configs
+        ]
         return cls(
             id=installation_config.id,
             secrets=installation_config.secrets,
@@ -152,6 +173,7 @@ class Installation(pydantic.BaseModel):
             room_paths=installation_config.room_paths,
             completion_paths=installation_config.completion_paths,
             quizzes_paths=installation_config.quizzes_paths,
+            oidc_auth_systems=oidc_auth_systems,
         )
 
 #=============================================================================
