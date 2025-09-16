@@ -934,7 +934,7 @@ class InstallationConfig:
             oidc_client_pem_path = config_yaml.get("oidc_client_pem_path")
             if oidc_client_pem_path is not None:
                 oidc_client_pem_path = (
-                    oidc_config / oidc_client_pem_path
+                    oidc_path / oidc_client_pem_path
                 )
 
             for auth_system_yaml in config_yaml["auth_systems"]:

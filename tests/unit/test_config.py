@@ -27,7 +27,8 @@ jbVPyMXk2bi6vmfpfjCtio7RjDqi38wTf38RuD7mhPYyDOzGFcfSr4yNnORRKyYH
 """
 AUTHSYSTEM_CLIENT_ID = "testing-oidc"
 
-OIDC_CLIENT_PEM_PATH = "/path/to/cacert.pem"
+ABSOLUTE_OIDC_CLIENT_PEM_PATH = "/path/to/cacert.pem"
+RELATIVE_OIDC_CLIENT_PEM_PATH = "./cacert.pem"
 BARE_AUTHSYSTEM_CONFIG_KW = {
     "id": AUTHSYSTEM_ID,
     "title": AUTHSYSTEM_TITLE,
@@ -62,10 +63,12 @@ W_SCOPE_AUTHSYSTEM_CONFIG_YAML=f"""
 """
 
 W_PEM_AUTHSYSTEM_CONFIG_KW = BARE_AUTHSYSTEM_CONFIG_KW.copy()
-W_PEM_AUTHSYSTEM_CONFIG_KW["oidc_client_pem_path"] = OIDC_CLIENT_PEM_PATH
+W_PEM_AUTHSYSTEM_CONFIG_KW["oidc_client_pem_path"] = (
+    ABSOLUTE_OIDC_CLIENT_PEM_PATH
+)
 W__AUTHSYSTEM_CONFIG_YAML=f"""
 {BARE_AUTHSYSTEM_CONFIG_YAML}
-    oidc_client_pem_path: "{OIDC_CLIENT_PEM_PATH}"
+    oidc_client_pem_path: "{ABSOLUTE_OIDC_CLIENT_PEM_PATH}"
 """
 
 AUTHSYSTEM_CLIENT_SECRET_LIT = "REALLY BIG SECRET"
@@ -1539,12 +1542,19 @@ def test_installationconfig_from_yaml(temp_dir, config_yaml, expected_kw):
     assert found == expected
 
 
+@pytest.mark.parametrize("w_pem_path", [
+    ABSOLUTE_OIDC_CLIENT_PEM_PATH,
+    RELATIVE_OIDC_CLIENT_PEM_PATH,
+])
 @pytest.mark.parametrize("w_pem", [False, "bare_top", "bare_authsys"])
 @mock.patch("soliplex.config._load_config_yaml")
 def test_installationconfig_oidc_auth_system_configs_wo_existing(
-    lcy, temp_dir, w_pem,
+    lcy, temp_dir, w_pem, w_pem_path,
 ):
-    exp_oidc_client_pem_path = pathlib.Path(OIDC_CLIENT_PEM_PATH)
+    if w_pem_path.startswith("."):
+        exp_oidc_client_pem_path = temp_dir / "oidc_bare" / w_pem_path
+    else:
+        exp_oidc_client_pem_path = pathlib.Path(w_pem_path)
 
     bare_config_yaml = {
         "auth_systems": [
@@ -1553,10 +1563,10 @@ def test_installationconfig_oidc_auth_system_configs_wo_existing(
     }
 
     if w_pem == "bare_top":
-        bare_config_yaml["oidc_client_pem_path"] = OIDC_CLIENT_PEM_PATH
+        bare_config_yaml["oidc_client_pem_path"] = w_pem_path
     elif w_pem == "bare_authsys":
         authsys = bare_config_yaml["auth_systems"][0]
-        authsys["oidc_client_pem_path"] = OIDC_CLIENT_PEM_PATH
+        authsys["oidc_client_pem_path"] = w_pem_path
     else:
         assert not w_pem
         exp_oidc_client_pem_path = None
