@@ -1,4 +1,7 @@
 import os
+import pathlib
+import subprocess
+import traceback
 import typing
 
 
@@ -37,3 +40,20 @@ def interpolate_env_vars(source: str) -> str:
     stripped = source[len("env:"):]
 
     return stripped.format(**os.environ)
+
+
+def get_git_hash_for_file(file_path: str):
+    file_path = pathlib.Path(file_path)
+    repo_dir = file_path.parent
+    hash_path = repo_dir / "git-hash.txt"
+
+    if hash_path.is_file():
+        return hash_path.read_text().strip()
+
+    try:
+        return subprocess.check_output(
+            ['git', '-C', repo_dir, 'rev-parse', 'HEAD']
+        ).decode('utf-8').strip()
+    except Exception:
+        traceback.print_exc()
+        return 'unknown'

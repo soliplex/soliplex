@@ -1,0 +1,12 @@
+id: "quiztest"
+name: "Quiz testing"
+description: "Quiz testing."
+logo_image: "./jeopardy.png"
+agent:
+  system_prompt: "UNUSED, see quiz config"
+quizzes:
+  - id: "test_quiz"
+    question_file: "test_quiz"
+    title: "Test Quiz"
+    randomize: True
+    max_questions: 20

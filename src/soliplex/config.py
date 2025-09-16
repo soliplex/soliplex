@@ -214,6 +214,9 @@ class ToolConfig:
         else:
             return self.tool
 
+    def get_extra_parameters(self) -> dict:
+        return {}
+
 
 @dataclasses.dataclass
 class SearchDocumentsToolConfig(ToolConfig):
@@ -274,6 +277,14 @@ class SearchDocumentsToolConfig(ToolConfig):
 
             return rspdb
 
+    def get_extra_parameters(self) -> dict:
+        return {
+            "expand_context_radius": self.expand_context_radius,
+            "search_documents_limit": self.search_documents_limit,
+            "return_citations": self.return_citations,
+            "rag_lancedb_path": self.rag_lancedb_path,
+        }
+
 
 TOOL_CONFIG_CLASSES_BY_TOOL_NAME = {
     klass.tool_name: klass
@@ -281,6 +292,25 @@ TOOL_CONFIG_CLASSES_BY_TOOL_NAME = {
         SearchDocumentsToolConfig,
     ]
 }
+
+def extract_tool_configs(config_path: pathlib.Path, config: dict):
+    tool_configs = {}
+
+    for t_config in config.pop("tools", ()):
+        tool_name = t_config.pop("tool_name")
+        tc_class = TOOL_CONFIG_CLASSES_BY_TOOL_NAME.get(tool_name)
+
+        if tc_class is None:
+            _, kind = tool_name.rsplit(".", 1)
+            tool_config = ToolConfig(
+                kind=kind, tool_name=tool_name, **t_config,
+            )
+            tool_configs[kind] = tool_config
+        else:
+            tool_config = tc_class.from_yaml(config_path, t_config)
+            tool_configs[tool_config.kind] = tool_config
+
+    return tool_configs
 
 
 @dataclasses.dataclass
@@ -316,6 +346,22 @@ MCP_CONFIG_CLASSES_BY_TYPE = {
     "http": HTTP_MCP_ClientToolsetConfig,
 }
 
+def extract_mcp_client_toolset_configs(
+    config_path: pathlib.Path, config: dict,
+):
+    mcp_client_toolset_configs = {}
+
+    for mcp_name, mcp_client_toolset_config in config.pop(
+        "mcp_client_toolsets", {}
+    ).items():
+        type_ = mcp_client_toolset_config.pop("type")
+        mcp_config_klass = MCP_CONFIG_CLASSES_BY_TYPE[type_]
+        mcp_client_toolset_configs[mcp_name] = mcp_config_klass(
+            **mcp_client_toolset_config,
+        )
+
+    return mcp_client_toolset_configs
+
 
 #=============================================================================
 #   Agent-related configuration types
@@ -342,13 +388,6 @@ class AgentConfig:
     provider_base_url: str = None  # defaults to OLLAMA_BASE_URL envvar
     provider_key_envvar: str = None  # envvar name containing API key
 
-    tool_configs: dict[str, ToolConfig] = dataclasses.field(
-        default_factory=dict,
-    )
-    mcp_client_toolset_configs: dict[
-        str, Stdio_MCP_ClientToolsetConfig | HTTP_MCP_ClientToolsetConfig
-    ] = dataclasses.field(default_factory=dict)
-
     # Set by `from_yaml` factory
     _config_path: pathlib.Path = None
 
@@ -370,37 +409,6 @@ class AgentConfig:
                 config["_system_prompt_path"] = system_prompt
             else:
                 config["system_prompt"] = system_prompt
-
-        tool_configs = {}
-
-        for t_config in config.pop("tools", ()):
-            tool_name = t_config.pop("tool_name")
-            tc_class = TOOL_CONFIG_CLASSES_BY_TOOL_NAME.get(tool_name)
-
-            if tc_class is None:
-                _, kind = tool_name.rsplit(".", 1)
-                tool_config = ToolConfig(
-                    kind=kind, tool_name=tool_name, **t_config,
-                )
-                tool_configs[kind] = tool_config
-            else:
-                tool_config = tc_class.from_yaml(config_path, t_config)
-                tool_configs[tool_config.kind] = tool_config
-
-        config["tool_configs"] = tool_configs
-
-        mcp_client_toolset_configs = {}
-
-        for mcp_name, mcp_client_toolset_config in config.pop(
-            "mcp_client_toolsets", {}
-        ).items():
-            type_ = mcp_client_toolset_config.pop("type")
-            mcp_config_klass = MCP_CONFIG_CLASSES_BY_TYPE[type_]
-            mcp_client_toolset_configs[mcp_name] = mcp_config_klass(
-                **mcp_client_toolset_config,
-            )
-
-        config["mcp_client_toolset_configs"] = mcp_client_toolset_configs
 
         return cls(**config)
 
@@ -589,6 +597,16 @@ class RoomConfig:
     enable_attachments: bool = False
 
     #
+    # Tool options
+    #
+    tool_configs: dict[str, ToolConfig] = dataclasses.field(
+        default_factory=dict,
+    )
+    mcp_client_toolset_configs: dict[
+        str, Stdio_MCP_ClientToolsetConfig | HTTP_MCP_ClientToolsetConfig
+    ] = dataclasses.field(default_factory=dict)
+
+    #
     # MCP options
     #
     allow_mcp: bool = False
@@ -622,6 +640,12 @@ class RoomConfig:
         config["agent_config"] = AgentConfig.from_yaml(
             config_path,
             agent_config_yaml,
+        )
+
+        config["tool_configs"] = extract_tool_configs(config_path, config)
+
+        config["mcp_client_toolset_configs"] = (
+            extract_mcp_client_toolset_configs(config_path, config)
         )
 
         quizzes_config_yaml = config.pop("quizzes", None)
@@ -665,8 +689,8 @@ class RoomConfig:
 #=============================================================================
 
 @dataclasses.dataclass
-class CompletionsConfig:
-    """Configuration for a completions endpoint."""
+class CompletionConfig:
+    """Configuration for a completion endpoint."""
 
     #
     # Required metadata
@@ -676,6 +700,16 @@ class CompletionsConfig:
 
     name: str = None
 
+    #
+    # Tool options
+    #
+    tool_configs: dict[str, ToolConfig] = dataclasses.field(
+        default_factory=dict,
+    )
+    mcp_client_toolset_configs: dict[
+        str, Stdio_MCP_ClientToolsetConfig | HTTP_MCP_ClientToolsetConfig
+    ] = dataclasses.field(default_factory=dict)
+
     # Set by `from_yaml` factory
     _config_path: pathlib.Path = None
 
@@ -683,17 +717,23 @@ class CompletionsConfig:
     def from_yaml(cls, config_path: pathlib.Path, config: dict):
         config["_config_path"] = config_path
 
-        completions_id = config["id"]
+        completion_id = config["id"]
 
         if "name" not in config:
-            config["name"] = completions_id
+            config["name"] = completion_id
 
         agent_config_yaml = config.pop("agent")
-        agent_config_yaml["id"] = f"completions-{completions_id}"
+        agent_config_yaml["id"] = f"completion-{completion_id}"
 
         config["agent_config"] = AgentConfig.from_yaml(
             config_path,
             agent_config_yaml,
+        )
+
+        config["tool_configs"] = extract_tool_configs(config_path, config)
+
+        config["mcp_client_toolset_configs"] = (
+            extract_mcp_client_toolset_configs(config_path, config)
         )
 
         return cls(**config)
@@ -762,14 +802,14 @@ _find_room_configs = functools.partial(
     _find_configs, filename_yaml="room_config.yaml",
 )
 
-_find_completions_configs = functools.partial(
-    _find_configs, filename_yaml="completions_config.yaml",
+_find_completion_configs = functools.partial(
+    _find_configs, filename_yaml="completion_config.yaml",
 )
 
 
 @dataclasses.dataclass
 class InstallationConfig:
-    """Configuration for a set of rooms, completions, etc."""
+    """Configuration for a set of rooms, completion, etc."""
     #
     # Required metadata
     #
@@ -810,17 +850,17 @@ class InstallationConfig:
     _room_configs: dict[str, RoomConfig] = None
 
     #
-    # Path(s) to completions configs:  each item can be either a single
+    # Path(s) to completion configs:  each item can be either a single
     # completion config (a directory containing its own
-    # 'completions_config.yaml' file), or a directory containing such
-    # completions configs.
+    # 'completion_config.yaml' file), or a directory containing such
+    # completion configs.
     #
-    # Defaults to one path: './completions' (set in '__post_init__'), which is
-    # normally a "container" directory for completions config directories.
+    # Defaults to one path: './completion' (set in '__post_init__'), which is
+    # normally a "container" directory for completion config directories.
     #
-    completions_paths: list[pathlib.Path] = None
+    completion_paths: list[pathlib.Path] = None
 
-    _completions_configs: dict[str, CompletionsConfig] = None
+    _completion_configs: dict[str, CompletionConfig] = None
 
     #
     # Path(s) to quiz data:  each item must be a single directory containing
@@ -854,8 +894,8 @@ class InstallationConfig:
         if self.room_paths is None:
             self.room_paths = ["./rooms"]
 
-        if self.completions_paths is None:
-            self.completions_paths = ["./completions"]
+        if self.completion_paths is None:
+            self.completion_paths = ["./completions"]
 
         if self.quizzes_paths is None:
             self.quizzes_paths = ["./quizzes"]
@@ -874,9 +914,9 @@ class InstallationConfig:
                 for room_path in self.room_paths
             ]
 
-            self.completions_paths = [
-                parent_dir / completions_path
-                for completions_path in self.completions_paths
+            self.completion_paths = [
+                parent_dir / completion_path
+                for completion_path in self.completion_paths
             ]
 
             self.quizzes_paths = [
@@ -940,29 +980,29 @@ class InstallationConfig:
 
         return self._room_configs.copy()
 
-    def _load_completions_configs(self) -> dict[str, RoomConfig]:
-        completions_configs = {}
+    def _load_completion_configs(self) -> dict[str, RoomConfig]:
+        completion_configs = {}
 
-        for completions_path in self.completions_paths:
-            for config_path, config_yaml in _find_completions_configs(
-                completions_path
+        for completion_path in self.completion_paths:
+            for config_path, config_yaml in _find_completion_configs(
+                completion_path
             ):
-                # XXX  order of 'completions_paths' controls
-                #      first-past-the-post for any conflict on completions ID.
+                # XXX  order of 'completion_paths' controls
+                #      first-past-the-post for any conflict on completion ID.
                 config_id = config_yaml["id"]
-                if config_id not in completions_configs:
-                    completions_configs[config_id] = (
-                        CompletionsConfig.from_yaml(config_path, config_yaml)
+                if config_id not in completion_configs:
+                    completion_configs[config_id] = (
+                        CompletionConfig.from_yaml(config_path, config_yaml)
                     )
 
-        return completions_configs
+        return completion_configs
 
     @property
-    def completions_configs(self) -> dict[str, RoomConfig]:
-        if self._completions_configs is None:
-            self._completions_configs = self._load_completions_configs()
+    def completion_configs(self) -> dict[str, RoomConfig]:
+        if self._completion_configs is None:
+            self._completion_configs = self._load_completion_configs()
 
-        return self._completions_configs.copy()
+        return self._completion_configs.copy()
 
     def reload_configurations(self):
         """Load all dependent configuration sets"""
@@ -970,7 +1010,7 @@ class InstallationConfig:
             self._load_oidc_auth_system_configs()
         )
         self._room_configs = self._load_room_configs()
-        self._completions_configs = self._load_completions_configs()
+        self._completion_configs = self._load_completion_configs()
 
 
 def load_installation(config_path: pathlib.Path) -> InstallationConfig:

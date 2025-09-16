@@ -1,0 +1,23 @@
+#
+# OIDC Auth Systems
+#
+oidc_client_pem_path: "./cacert.pem"
+
+auth_systems:
+
+  - id: "pydio"
+    title: "Authenticate with Enfold"
+    server_url: "https://pydio-kc.enfoldsystems.net/realms/pydio"
+    client_id: "pydio-token-service"
+    client_secret: ""  # "env:{PYDIO_CLIENT_SECRET}"
+    scope: "openid email profile"
+    token_validation_pem: |
+        -----BEGIN PUBLIC KEY-----
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAutt7XlnN7OtFx7p6WMif
+        SlUYMQ62RO/7x5hwWsvYhdHejd9KDBP8EZxIWk3vsMD0JhVl2cMNwMEqyU0CqHrS
+        E13+79lpG9trpfM674JyE9LwuGYX0YCkwtWA5zwlXjbHObr7WgziDP4+Nfs/1mtv
+        qERlvChBX6pyz/bgFtA9a0eZlXZbXSP5XwiHtHhMTil4MWBihLiN7nU7r0goduyf
+        eB7WiOJQ/p6kl/Y+FKdnVt8KHAudA2iErJ8mlPKaWLob5MipNsCB7WVTn16qq/O/
+        PYiyk134+YXSMfWM8GxRb8/WtfwYlkaXXCB1YAj5M0O3RJLhTEvXMo2KUilOhKXX
+        DQIDAQAB
+        -----END PUBLIC KEY-----
