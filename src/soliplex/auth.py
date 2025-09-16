@@ -1,10 +1,8 @@
 import os
-import pathlib
 
 import fastapi
 import jwt
 import starlette.config
-import yaml
 from authlib.integrations import starlette_client
 from fastapi import responses
 from fastapi import security
@@ -35,7 +33,7 @@ def _get_session_secret_key() -> bytes:
 _oauth = None
 
 def get_oauth(
-    the_installation: installation.Installation
+    the_installation: installation.Installation,
 ) -> starlette_client.OAuth:
     global _oauth
 
@@ -59,11 +57,16 @@ def get_oauth(
     return _oauth
 
 
-def auth_disabled(the_installation: installation.Installation) -> bool:
+def auth_disabled(
+    the_installation: installation.Installation
+) -> bool:
     return len(the_installation.oidc_auth_system_configs) == 0
 
 
-def authenticate(the_installation: installation.Installation, token: str):
+def authenticate(
+    the_installation: installation.Installation,
+    token: str,
+):
     # See #316
     if auth_disabled(the_installation):
         return {"name": "Phreddy Phlyntstone", "email": "phreddy@example.com"}
@@ -101,7 +104,8 @@ def validate_access_token(token, token_validation_pem):
 
 @router.get("/login")
 async def get_login(
-    the_installation: installation.Installation,
+    the_installation: installation.Installation=
+        installation.depend_the_installation,
 ):
     return {
         "systems": [
@@ -117,7 +121,8 @@ async def get_login(
 async def get_login_system(
     request: fastapi.Request,
     system: str,
-    the_installation: installation.Installation,
+    the_installation: installation.Installation=
+        installation.depend_the_installation,
 ):
     if auth_disabled(the_installation):
         raise fastapi.HTTPException(
@@ -129,7 +134,7 @@ async def get_login_system(
     redirect_uri = redirect_uri.replace_query_params(return_to=return_to)
     redirect_uri = util.strip_default_port(redirect_uri)
 
-    oauth = get_oauth()
+    oauth = get_oauth(the_installation)
     oauth_app = oauth.create_client(system)
 
     found = await oauth_app.authorize_redirect(request, redirect_uri)
@@ -140,7 +145,8 @@ async def get_login_system(
 async def get_auth_system(
     request: fastapi.Request,
     system: str,
-    the_installation: installation.Installation,
+    the_installation: installation.Installation=
+        installation.depend_the_installation,
 ):
     if auth_disabled(the_installation):
         raise fastapi.HTTPException(
@@ -148,7 +154,7 @@ async def get_auth_system(
             detail="system in no-auth mode",
         )
 
-    oauth = get_oauth()
+    oauth = get_oauth(the_installation)
     oauth_app = oauth.create_client(system)
 
     try:

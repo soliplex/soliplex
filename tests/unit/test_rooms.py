@@ -19,16 +19,18 @@ def room_configs(request):
 
 
 @pytest.mark.anyio
+@mock.patch("soliplex.auth.authenticate")
 @mock.patch("soliplex.models.Room.from_config")
-async def test_get_rooms(fc, room_configs):
+async def test_get_rooms(fc, auth_fn, room_configs):
 
     request = mock.create_autospec(fastapi.Request)
 
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_room_configs.return_value = room_configs
+    token = object()
 
     found = await rooms.get_rooms(
-        request, the_installation=the_installation,
+        request, the_installation=the_installation, token=token,
     )
 
     for (found_key, found_room), room_id, fc_call in zip(
@@ -41,21 +43,31 @@ async def test_get_rooms(fc, room_configs):
         assert found_room is fc.return_value
         assert fc_call == mock.call(room_configs[room_id])
 
+    the_installation.get_room_configs.assert_called_once_with(
+        auth_fn.return_value,
+    )
+    auth_fn.assert_called_once_with(the_installation, token)
+
 
 @pytest.mark.anyio
+@mock.patch("soliplex.auth.authenticate")
 @mock.patch("soliplex.models.Room.from_config")
-async def test_get_room(fc, room_configs):
+async def test_get_room(fc, auth_fn, room_configs):
     ROOM_ID = "foo"
 
     request = mock.create_autospec(fastapi.Request)
 
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_room_configs.return_value = room_configs
+    token = object()
 
     if ROOM_ID not in room_configs:
         with pytest.raises(fastapi.HTTPException) as exc:
             await rooms.get_room(
-                request, ROOM_ID, the_installation=the_installation,
+                request,
+                ROOM_ID,
+                the_installation=the_installation,
+                token=token,
             )
 
         assert exc.value.status_code == 404
@@ -63,16 +75,25 @@ async def test_get_room(fc, room_configs):
 
     else:
         found = await rooms.get_room(
-            request, ROOM_ID, the_installation=the_installation,
+            request,
+            ROOM_ID,
+            the_installation=the_installation,
+            token=token,
         )
 
         assert found is fc.return_value
         fc.assert_called_once_with(room_configs[ROOM_ID])
 
+    the_installation.get_room_configs.assert_called_once_with(
+        auth_fn.return_value,
+    )
+    auth_fn.assert_called_once_with(the_installation, token)
+
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_image", [False, True])
-async def test_get_room_bg_image(temp_dir, w_image, room_configs):
+@mock.patch("soliplex.auth.authenticate")
+async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
     ROOM_ID = "foo"
     IMAGE_FILENAME = "logo.svg"
 
@@ -82,6 +103,7 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
 
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_room_configs.return_value = room_configs
+    token = object()
 
     if ROOM_ID in room_configs:
         if w_image:
@@ -96,6 +118,7 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
                 request,
                 room_id=ROOM_ID,
                 the_installation=the_installation,
+                token=token,
             )
 
         assert exc.value.status_code == 404
@@ -106,6 +129,7 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
                 request,
                 room_id=ROOM_ID,
                 the_installation=the_installation,
+                token=token,
             )
             # Actual image data is marshalled by fastapi framework
             assert found == str(image_path)
@@ -115,7 +139,13 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
                     request,
                     room_id=ROOM_ID,
                     the_installation=the_installation,
+                    token=token,
                 )
 
             assert exc.value.status_code == 404
             assert exc.value.detail == "No image for room"
+
+    the_installation.get_room_configs.assert_called_once_with(
+        auth_fn.return_value,
+    )
+    auth_fn.assert_called_once_with(the_installation, token)

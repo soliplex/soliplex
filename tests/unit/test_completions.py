@@ -18,17 +18,19 @@ def completion_configs(request):
 
 
 @pytest.mark.anyio
+@mock.patch("soliplex.auth.authenticate")
 @mock.patch("soliplex.models.Completion.from_config")
-async def test_get_chat_completions(fc, completion_configs):
+async def test_get_chat_completions(fc, auth_fn, completion_configs):
     request = mock.create_autospec(fastapi.Request)
 
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_completion_configs.return_value = (
         completion_configs
     )
+    token = object()
 
     found = await completions.get_chat_completions(
-        request, the_installation=the_installation,
+        request, the_installation=the_installation, token=token,
     )
 
     for (found_key, found_completion), completion_id, fc_call in zip(
@@ -41,10 +43,16 @@ async def test_get_chat_completions(fc, completion_configs):
         assert found_completion is fc.return_value
         assert fc_call == mock.call(completion_configs[completion_id])
 
+    the_installation.get_completion_configs.assert_called_once_with(
+        auth_fn.return_value,
+    )
+    auth_fn.assert_called_once_with(the_installation, token)
+
 
 @pytest.mark.anyio
+@mock.patch("soliplex.auth.authenticate")
 @mock.patch("soliplex.models.Completion.from_config")
-async def test_get_chat_completion(fc, completion_configs):
+async def test_get_chat_completion(fc, auth_fn, completion_configs):
     COMPLETION_ID = "foo"
 
     request = mock.create_autospec(fastapi.Request)
@@ -53,11 +61,15 @@ async def test_get_chat_completion(fc, completion_configs):
     the_installation.get_completion_configs.return_value = (
         completion_configs
     )
+    token = object()
 
     if COMPLETION_ID not in completion_configs:
         with pytest.raises(fastapi.HTTPException) as exc:
             await completions.get_chat_completion(
-                request, COMPLETION_ID, the_installation=the_installation,
+                request,
+                COMPLETION_ID,
+                the_installation=the_installation,
+                token=token,
             )
 
         assert exc.value.status_code == 404
@@ -65,8 +77,16 @@ async def test_get_chat_completion(fc, completion_configs):
 
     else:
         found = await completions.get_chat_completion(
-            request, COMPLETION_ID, the_installation=the_installation,
+            request,
+            COMPLETION_ID,
+            the_installation=the_installation,
+            token=token,
         )
 
         assert found is fc.return_value
         fc.assert_called_once_with(completion_configs[COMPLETION_ID])
+
+    the_installation.get_completion_configs.assert_called_once_with(
+        auth_fn.return_value,
+    )
+    auth_fn.assert_called_once_with(the_installation, token)

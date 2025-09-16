@@ -1,6 +1,3 @@
-import os
-import pathlib
-import tempfile
 from unittest import mock
 
 import fastapi
@@ -48,9 +45,22 @@ oidc_client_pem_path: "{OIDC_CLIENT_PEM_PATH}"
 {WO_OIDC_PEM_OIDC_CONFIG_YAML}
 """
 
-URL_SAFE_TOKEN_SALT = "testing"
-URL_SAFE_TOKEN_SECRET_KEY = "really, seriously seekrit"
+EXISTING = object()
 
+
+@pytest.mark.parametrize("w_before", [None, EXISTING])
+@mock.patch("os.urandom")
+def test__get_session_secret_key(urandom, w_before):
+
+    with mock.patch.multiple(auth, _session_secret_key=w_before):
+        found = auth._get_session_secret_key()
+
+    if w_before is None:
+        assert found is urandom.return_value.hex.return_value
+        urandom.assert_called_once_with(16)
+    else:
+        assert found is EXISTING
+        urandom.assert_not_called()
 
 
 def _auth_systems(n_auth_systems):
@@ -128,7 +138,6 @@ def test_authenticate_w_token_none(ad, w_auth_disabled):
     }
     the_installation = mock.create_autospec(installation.Installation)
     ad.return_value = w_auth_disabled
-    session = {}
 
     if w_auth_disabled:
         found = auth.authenticate(the_installation, None)
@@ -157,8 +166,6 @@ def test_authenticate(vat, with_auth_systems, w_hit):
     }
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.oidc_auth_system_configs = with_auth_systems
-
-    session = {}
     token = object()
 
     no_auth = len(with_auth_systems) == 0

@@ -1,5 +1,7 @@
 import fastapi
+from fastapi import security
 
+from soliplex import auth
 from soliplex import installation
 from soliplex import models
 
@@ -15,8 +17,10 @@ async def get_chat_completions(
     request: fastapi.Request,
     the_installation: installation.Installation =
         installation.depend_the_installation,
+    token: security.HTTPAuthorizationCredentials =
+        auth.oauth2_predicate,
 ) -> models.ConfiguredCompletions:
-    user = {"name": "test"}
+    user = auth.authenticate(the_installation, token)
     completion_configs = the_installation.get_completion_configs(user)
     return {
         key: models.Completion.from_config(completion_config)
@@ -30,9 +34,10 @@ async def get_chat_completion(
     completion_id: str,
     the_installation: installation.Installation =
         installation.depend_the_installation,
+    token: security.HTTPAuthorizationCredentials =
+        auth.oauth2_predicate,
 ) -> models.Completion:
-    # TODO: add authn check
-    user = {"name": "test"}
+    user = auth.authenticate(the_installation, token)
     completion_configs = the_installation.get_completion_configs(user)
     try:
         completion_config = completion_configs[completion_id]

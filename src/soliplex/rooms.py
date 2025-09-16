@@ -1,7 +1,9 @@
 
 import fastapi
 from fastapi import responses
+from fastapi import security
 
+from . import auth
 from . import installation
 from . import models
 
@@ -13,9 +15,10 @@ async def get_rooms(
     request: fastapi.Request,
     the_installation: installation.Installation =
         installation.depend_the_installation,
+    token: security.HTTPAuthorizationCredentials =
+        auth.oauth2_predicate,
 ) -> models.ConfiguredRooms:
-    # TODO: add authn check
-    user = {"name": "test"}
+    user = auth.authenticate(the_installation, token)
     room_configs = the_installation.get_room_configs(user)
 
     def _key(item):
@@ -36,8 +39,10 @@ async def get_room(
     room_id: str,
     the_installation: installation.Installation =
         installation.depend_the_installation,
+    token: security.HTTPAuthorizationCredentials =
+        auth.oauth2_predicate,
 ) -> models.Room:
-    user = {"name": "test"}
+    user = auth.authenticate(the_installation, token)
     room_configs = the_installation.get_room_configs(user)
 
     try:
@@ -59,8 +64,10 @@ async def get_room_bg_image(
     room_id: str,
     the_installation: installation.Installation =
         installation.depend_the_installation,
+    token: security.HTTPAuthorizationCredentials =
+        auth.oauth2_predicate,
 ):
-    user = {"name": "test"}
+    user = auth.authenticate(the_installation, token)
     room_configs = the_installation.get_room_configs(user)
 
     try:
