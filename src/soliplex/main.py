@@ -17,6 +17,7 @@ from soliplex import quizzes
 from soliplex import rooms
 from soliplex import util
 from soliplex import views
+from soliplex.views import auth as auth_views
 from soliplex.views import convos as convos_views
 from soliplex.views import installation as installation_views
 
@@ -67,7 +68,7 @@ def create_app(installation_path: pathlib.Path=None):  # pragma: NO COVER
         response.headers["X-Git-Hash"] = current_git_hash
         return response
 
-    app.include_router(auth.router, prefix="/api")
+    app.include_router(auth_views.router, prefix="/api")
     app.include_router(completions.router, prefix="/api")
     app.include_router(quizzes.router, prefix="/api")
     app.include_router(rooms.router, prefix="/api")
