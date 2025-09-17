@@ -133,6 +133,55 @@ def test_installation_get_agent_for_room(gafc, w_room_id, raises):
         gafc.assert_called_once_with(a_config, t_configs, mcp_configs)
 
 
+@pytest.mark.parametrize("w_completion_id, raises", [
+    ("completion_id", False),
+    ("nonesuch", True)
+])
+@mock.patch("soliplex.agents.get_agent_from_configs")
+def test_installation_get_agent_for_completion(gafc, w_completion_id, raises):
+    a_config = mock.create_autospec(config.AgentConfig)
+
+    tc_config = mock.create_autospec(config.ToolConfig)
+    sdtc_config = mock.create_autospec(config.SearchDocumentsToolConfig)
+
+    mcp_stdio_config = mock.create_autospec(
+        config.Stdio_MCP_ClientToolsetConfig
+    )
+    mcp_http_streaming_config = mock.create_autospec(
+        config.HTTP_MCP_ClientToolsetConfig
+    )
+
+    r_config = mock.create_autospec(config.RoomConfig)
+    r_config.agent_config = a_config
+    t_configs = r_config.tool_configs = {
+        "test_tool": tc_config,
+        "test_sdtc": sdtc_config,
+    }
+    mcp_configs = r_config.mcp_client_toolset_configs = {
+        "test_stdio": mcp_stdio_config,
+        "test_http": mcp_http_streaming_config,
+    }
+
+    r_configs = {"completion_id": r_config}
+    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config.completion_configs = r_configs
+    test_user = {"name": "test"}
+
+    the_installation = installation.Installation(i_config)
+
+    if raises:
+        with pytest.raises(KeyError):
+            the_installation.get_agent_for_completion(
+                w_completion_id, test_user,
+            )
+    else:
+        found = the_installation.get_agent_for_completion(
+            w_completion_id, test_user,
+        )
+        assert found is gafc.return_value
+        gafc.assert_called_once_with(a_config, t_configs, mcp_configs)
+
+
 @pytest.mark.anyio
 async def test_get_the_installation():
     i_config = mock.create_autospec(config.InstallationConfig)

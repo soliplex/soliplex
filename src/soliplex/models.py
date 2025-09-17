@@ -251,3 +251,28 @@ class QuizLLMJudgeResponse(pydantic.BaseModel):
 class QuizQuestionResponse(pydantic.BaseModel):
     correct: str  # client expects 'true' or 'false'
     expected_output: str = None
+
+
+#-----------------------------------------------------------------------------
+#   Completion-related models
+#-----------------------------------------------------------------------------
+
+
+class ChatMessage(pydantic.BaseModel):
+    role: str
+    content: str
+
+
+class ChatCompletionRequest(pydantic.BaseModel):
+    model: str
+    messages: list[ChatMessage]
+    temperature: float | None = 1.0
+    top_p: float | None = 1.0
+    n: int | None = 1
+    stream: bool | None = False
+    stop: list[str] | None = None
+    max_tokens: int | None = None
+    presence_penalty: float | None = 0.0
+    frequency_penalty: float | None = 0.0
+    user: str | None = None
+    Config: dict[str, str] = {"extra": "allow"}
