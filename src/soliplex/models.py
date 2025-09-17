@@ -54,6 +54,22 @@ class Tool(pydantic.BaseModel):
 ConfiguredTools = dict[str, Tool]
 
 
+class MCPClientToolset(pydantic.BaseModel):
+    kind: str
+    allowed_tools: list[str] | None
+    toolset_params: dict[str, typing.Any]
+
+    @classmethod
+    def from_config(cls, mcp_ct_config):
+        return cls(
+            kind=mcp_ct_config.kind,
+            allowed_tools=mcp_ct_config.allowed_tools,
+            toolset_params=mcp_ct_config.toolset_params,
+        )
+
+ConfiguredMCPClientToolsets = dict[str, MCPClientToolset]
+
+
 class Agent(pydantic.BaseModel):
     id: str
     model_name: str
@@ -83,6 +99,7 @@ class Room(pydantic.BaseModel):
     suggestions: list[str]
     enable_attachments: bool
     tools: ConfiguredTools
+    mcp_client_toolsets: ConfiguredMCPClientToolsets
     quizzes: ConfiguredQuizzes
     agent: Agent
 
@@ -100,6 +117,11 @@ class Room(pydantic.BaseModel):
             tools={
                 key: Tool.from_config(tool_config)
                 for (key, tool_config) in room_config.tool_configs.items()
+            },
+            mcp_client_toolsets={
+                key: MCPClientToolset.from_config(mcp_ct_config)
+                for (key, mcp_ct_config)
+                    in room_config.mcp_client_toolset_configs.items()
             },
             quizzes={
                 quiz.id: Quiz.from_config(quiz)

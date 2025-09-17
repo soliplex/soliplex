@@ -153,6 +153,49 @@ def test_tool_from_config_w_sdtc():
     )
 
 
+
+def test_mcp_client_toolset_from_config_w_toolconfig():
+    def test_tool():
+        """This is a test tool"""
+
+    mcp_ct_config = config.Stdio_MCP_ClientToolsetConfig(
+        command="cat",
+        args=["-"],
+        env={"foo": "env:not_in_my_environment_really"},
+    )
+
+    toolset_model = models.MCPClientToolset.from_config(mcp_ct_config)
+
+    assert toolset_model.kind == mcp_ct_config.kind
+    assert toolset_model.allowed_tools == mcp_ct_config.allowed_tools
+
+    params = toolset_model.toolset_params
+    assert params["command"] == mcp_ct_config.command
+    assert params["args"] == mcp_ct_config.args
+    # No interpolation!
+    assert params["env"] == mcp_ct_config.env
+
+
+def test_mcp_client_toolset_from_config_w_sdtc():
+
+    mcp_ct_config = config.HTTP_MCP_ClientToolsetConfig(
+        url="https://example.com/mcp",
+        headers={"Authorization": "Bearer env:{BEARER_TOKEN}"},
+        query_params={"foo": "env:not_in_my_environment_really"},
+    )
+
+    toolset_model = models.MCPClientToolset.from_config(mcp_ct_config)
+
+    assert toolset_model.kind == mcp_ct_config.kind
+    assert toolset_model.allowed_tools == mcp_ct_config.allowed_tools
+
+    params = toolset_model.toolset_params
+    assert params["url"] == mcp_ct_config.url
+    # No interpolation on either of these!
+    assert params["headers"] == mcp_ct_config.headers
+    assert params["query_params"] == mcp_ct_config.query_params
+
+
 @pytest.fixture(scope="module", params=[*config.LLMProviderType])
 def agent_provider_type(request):
     return _from_param(request, "provider_type")

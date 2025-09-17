@@ -920,10 +920,25 @@ def test_sdtc_from_yaml(temp_dir, stem, override, which):
 
 
 @pytest.mark.parametrize("w_env", [{}, {"foo": "bar"}])
+def test_stdio_mctc_toolset_params(w_env):
+    stdio_mctc = config.Stdio_MCP_ClientToolsetConfig(
+        command="cat",
+        args=["-"],
+        env=w_env,
+    )
+
+    found = stdio_mctc.toolset_params
+
+    assert found["command"] == stdio_mctc.command
+    assert found["args"] == stdio_mctc.args
+    assert found["env"] == stdio_mctc.env
+    assert found["allowed_tools"] == stdio_mctc.allowed_tools
+
+
+@pytest.mark.parametrize("w_env", [{}, {"foo": "bar"}])
 @mock.patch("soliplex.util.interpolate_env_vars")
 def test_stdio_mctc_tool_kwargs(iev, w_env):
     iev.return_value = "<interpolated>"
-
     stdio_mctc = config.Stdio_MCP_ClientToolsetConfig(
         command="cat",
         args=["-"],
@@ -944,6 +959,23 @@ def test_stdio_mctc_tool_kwargs(iev, w_env):
         assert f_key == cfg_key
         assert f_val is iev.return_value
         assert mock.call(cfg_value) in iev.call_args_list
+
+
+@pytest.mark.parametrize("w_headers", [{}, HTTP_MCP_AUTH_HEADER])
+@pytest.mark.parametrize("w_query_params", [{}, HTTP_MCP_QUERY_PARAMS])
+def test_http_mctc_toolset_params(w_query_params, w_headers):
+    http_mctc = config.HTTP_MCP_ClientToolsetConfig(
+        url=HTTP_MCP_URL,
+        headers=w_headers,
+        query_params=w_query_params,
+    )
+
+    found = http_mctc.toolset_params
+
+    assert found["url"] == http_mctc.url
+    assert found["query_params"] == http_mctc.query_params
+    assert found["headers"] == http_mctc.headers
+    assert found["allowed_tools"] == http_mctc.allowed_tools
 
 
 @pytest.mark.parametrize("w_headers", [{}, HTTP_MCP_AUTH_HEADER])

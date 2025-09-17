@@ -332,6 +332,15 @@ class Stdio_MCP_ClientToolsetConfig:
     allowed_tools: list[str] = None
 
     @property
+    def toolset_params(self) -> dict:
+        return {
+            "command": self.command,
+            "args": self.args,
+            "env": self.env,
+            "allowed_tools": self.allowed_tools,
+        }
+
+    @property
     def tool_kwargs(self) -> dict:
         env_map = {
             key: util.interpolate_env_vars(value)
@@ -358,6 +367,15 @@ class HTTP_MCP_ClientToolsetConfig:
         default_factory=dict,
     )
     allowed_tools: list[str] = None
+
+    @property
+    def toolset_params(self) -> dict:
+        return {
+            "url": self.url,
+            "headers": self.headers,
+            "query_params": self.query_params,
+            "allowed_tools": self.allowed_tools,
+        }
 
     @property
     def tool_kwargs(self) -> dict:
