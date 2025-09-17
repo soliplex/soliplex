@@ -17,6 +17,7 @@ from soliplex import quizzes
 from soliplex import rooms
 from soliplex import util
 from soliplex import views
+from soliplex.views import convos as convos_views
 
 
 def curry_lifespan(installation_path: pathlib.Path=None):
@@ -70,6 +71,7 @@ def create_app(installation_path: pathlib.Path=None):  # pragma: NO COVER
     app.include_router(quizzes.router, prefix="/api")
     app.include_router(rooms.router, prefix="/api")
     app.include_router(views.router, prefix="/api")
+    app.include_router(convos_views.router, prefix="/api")
 
     return app
 
