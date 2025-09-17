@@ -11,13 +11,13 @@ from fastapi.middleware import cors as fastapi_mw_cors
 from starlette.middleware import sessions as starlette_mw_sessions
 
 from soliplex import auth
-from soliplex import completions
 from soliplex import installation
 from soliplex import quizzes
 from soliplex import rooms
 from soliplex import util
 from soliplex import views
 from soliplex.views import auth as auth_views
+from soliplex.views import completions as completions_views
 from soliplex.views import convos as convos_views
 from soliplex.views import installation as installation_views
 
@@ -69,7 +69,7 @@ def create_app(installation_path: pathlib.Path=None):  # pragma: NO COVER
         return response
 
     app.include_router(auth_views.router, prefix="/api")
-    app.include_router(completions.router, prefix="/api")
+    app.include_router(completions_views.router, prefix="/api")
     app.include_router(quizzes.router, prefix="/api")
     app.include_router(rooms.router, prefix="/api")
     app.include_router(views.router, prefix="/api")

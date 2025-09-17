@@ -3,9 +3,9 @@ from unittest import mock
 import fastapi
 import pytest
 
-from soliplex import completions
 from soliplex import config
 from soliplex import installation
+from soliplex.views import completions as completions_views
 
 COMPLETION_IDS = ["foo", "bar", "baz"]
 
@@ -29,7 +29,7 @@ async def test_get_chat_completions(fc, auth_fn, completion_configs):
     )
     token = object()
 
-    found = await completions.get_chat_completions(
+    found = await completions_views.get_chat_completions(
         request, the_installation=the_installation, token=token,
     )
 
@@ -72,7 +72,7 @@ async def test_get_chat_completion(fc, auth_fn, completion_configs):
 
     if COMPLETION_ID not in completion_configs:
         with pytest.raises(fastapi.HTTPException) as exc:
-            await completions.get_chat_completion(
+            await completions_views.get_chat_completion(
                 request,
                 COMPLETION_ID,
                 the_installation=the_installation,
@@ -83,7 +83,7 @@ async def test_get_chat_completion(fc, auth_fn, completion_configs):
         assert exc.value.detail == "No such completion: foo"
 
     else:
-        found = await completions.get_chat_completion(
+        found = await completions_views.get_chat_completion(
             request,
             COMPLETION_ID,
             the_installation=the_installation,
