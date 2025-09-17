@@ -6,6 +6,7 @@ from pydantic_ai import tools as ai_tools
 
 from soliplex import agents
 from soliplex import config
+from soliplex import mcp_client
 from soliplex import models
 from soliplex import tools
 
@@ -53,13 +54,27 @@ def tool_configs_tools(request):
             yield [(tc, ai_tool)]
 
 
+STDIO_MCTC = config.Stdio_MCP_ClientToolsetConfig(
+    command="cat", args=["-"],
+)
+STDIO_TOOL = mcp_client.Stdio_MCP_Client_Toolset(
+    command="cat", args=["-"], env={},
+)
+
+HTTP_MCTC = config.HTTP_MCP_ClientToolsetConfig(
+    url="https://example.com/mcp",
+)
+HTTP_TOOL = mcp_client.HTTP_MCP_Client_Toolset(
+    url="https://example.com/mcp", headers={},
+)
+
 @pytest.fixture(scope="module", params=[
     [],
+    [(STDIO_MCTC,STDIO_TOOL)],
+    [(HTTP_MCTC, HTTP_TOOL)],
 ])
 def mcp_ct_configs_tools(request):
-    # Ensure that 'soliplex.tools.test_tool' can be found.
-    with mock.patch.dict(tools.__dict__, test_tool=test_tool):
-        yield request.param
+    return request.param
 
 
 @pytest.mark.parametrize("llm_provider_kw, w_oai", [
@@ -99,7 +114,7 @@ def test_get_agent_from_configs_wo_hit(
     exp_tools = [tool for (_, tool) in tool_configs_tools]
 
     mcp_tc_configs = {
-        f"MCTC_{mctc_id:03}": mctc.mctc.mctc
+        f"MCTC_{mctc_id:03}": mctc
         for mctc_id, (mctc, _) in enumerate(mcp_ct_configs_tools)
     }
     exp_toolsets = [tool for (_, tool) in mcp_ct_configs_tools]
@@ -132,10 +147,10 @@ def test_get_agent_from_configs_wo_hit(
         else:
             assert akc_tool.function is exp_tool.function
 
-    for _akc_toolset, _exp_toolset in zip(
+    for akc_toolset, exp_toolset in zip(
         akc_kw["toolsets"], exp_toolsets, strict=True,
     ):
-        pass  # TODO
+        assert akc_toolset._params == exp_toolset._params
 
     assert akc_kw["deps_type"] is models.AgentDependencies
 

@@ -9,6 +9,7 @@ import pathlib
 import random
 import typing
 from collections import abc
+from urllib import parse as url_parse
 
 import yaml
 
@@ -319,6 +320,7 @@ ToolConfigMap = dict[str, ToolConfig]
 @dataclasses.dataclass
 class Stdio_MCP_ClientToolsetConfig:
     """Configure an MCP client toolset which runs as a subprocess"""
+    kind: typing.ClassVar[str] = "stdio"
     command: str
     args: list[str] = dataclasses.field(
         default_factory=list,
@@ -329,10 +331,24 @@ class Stdio_MCP_ClientToolsetConfig:
     )
     allowed_tools: list[str] = None
 
+    @property
+    def tool_kwargs(self) -> dict:
+        env_map = {
+            key: util.interpolate_env_vars(value)
+            for (key, value) in self.env.items()
+        }
+        return {
+            "command": self.command,
+            "args": self.args,
+            "env": env_map,
+            "allowed_tools": self.allowed_tools,
+        }
+
 
 @dataclasses.dataclass
 class HTTP_MCP_ClientToolsetConfig:
     """Configure an MCP client toolset which makes calls over streaming HTTP"""
+    kind: typing.ClassVar[str] = "http"
     url: str
     headers: dict[str, typing.Any] = dataclasses.field(
         default_factory=dict,
@@ -342,6 +358,29 @@ class HTTP_MCP_ClientToolsetConfig:
         default_factory=dict,
     )
     allowed_tools: list[str] = None
+
+    @property
+    def tool_kwargs(self) -> dict:
+        url = self.url
+
+        headers = {
+            key: util.interpolate_env_vars(value)
+            for (key, value) in self.headers.items()
+        }
+
+        if self.query_params:
+            qp = {
+                key: util.interpolate_env_vars(value)
+                for (key, value) in self.query_params.items()
+            }
+            qs = url_parse.urlencode(qp)
+            url = f"{url}?{qs}"
+
+        return {
+            "url": url,
+            "headers": headers,
+            "allowed_tools": self.allowed_tools,
+        }
 
 
 MCP_CONFIG_CLASSES_BY_TYPE = {

@@ -5,6 +5,7 @@ from pydantic_ai.providers import ollama as ollama_providers
 from pydantic_ai.providers import openai as openai_providers
 
 from soliplex import config
+from soliplex import mcp_client
 from soliplex import models
 
 # Cache for agents to avoid recreating them
@@ -19,6 +20,11 @@ def make_ai_tool(tool_config) -> ai_tools.Tool:
         tool_func,
         name=tool_config.tool_id,
     )
+
+
+def make_mcp_client_toolset(toolset_config):
+    toolset_klass = mcp_client.TOOLSET_CLASS_BY_KIND[toolset_config.kind]
+    return toolset_klass(**toolset_config.tool_kwargs)
 
 
 def get_agent_from_configs(
@@ -41,7 +47,11 @@ def get_agent_from_configs(
             make_ai_tool(tool_config)
             for tool_config in tool_configs.values()
         ]
-        toolsets = [] # TOOD build from mcp_client_toolsets
+        toolsets = [
+            make_mcp_client_toolset(mcp_client_toolset_config)
+            for mcp_client_toolset_config
+                in mcp_client_toolset_configs.values()
+        ]
 
         _agent_cache[agent_config.id] = pydantic_ai.Agent(
             model=openai_models.OpenAIChatModel(

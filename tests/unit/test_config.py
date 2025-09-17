@@ -5,6 +5,7 @@ import json
 import os
 import pathlib
 from unittest import mock
+from urllib import parse as url_parse
 
 import pytest
 import yaml
@@ -165,6 +166,7 @@ HTTP_MCP_QP_KEY = "frob"
 HTTP_MCP_QP_VALUE = "bazquyth"
 HTTP_MCP_QUERY_PARAMS = {HTTP_MCP_QP_KEY: HTTP_MCP_QP_VALUE}
 HTTP_MCP_BEARER_TOKEN = "FACEDACE"
+HTTP_MCP_AUTH_HEADER = {"Authorization": "Bearer {HTTP_MCP_BEARER_TOKEN}"}
 QUIZ_ID = "test_quiz"
 
 DADS_BASE_URL = "https://docs.stage.josce.mil/dev/"
@@ -307,7 +309,7 @@ FULL_ROOM_CONFIG_KW = {
         ),
     },
     "mcp_client_toolset_configs": {
-        "test_1": config.Stdio_MCP_ClientToolsetConfig(
+        "stdio_test": config.Stdio_MCP_ClientToolsetConfig(
             command="cat",
             args=[
                 "-",
@@ -316,7 +318,7 @@ FULL_ROOM_CONFIG_KW = {
                 "foo": "bar",
             }
         ),
-        "test_2": config.HTTP_MCP_ClientToolsetConfig(
+        "http_test": config.HTTP_MCP_ClientToolsetConfig(
             url=HTTP_MCP_URL,
             headers={
                 "Authorization": f"Bearer {HTTP_MCP_BEARER_TOKEN}",
@@ -344,14 +346,14 @@ tools:
       search_documents_limit: 1
       allow_mcp: true
 mcp_client_toolsets:
-    test_1:
+    stdio_test:
       type: "stdio"
       command: "cat"
       args:
         - "-"
       env:
         foo: "bar"
-    test_2:
+    http_test:
       type: "http"
       url: "{HTTP_MCP_URL}"
       headers:
@@ -915,6 +917,76 @@ def test_sdtc_from_yaml(temp_dir, stem, override, which):
 
             assert sdt_config._config_path == config_path
             assert sdt_config.rag_lancedb_path.resolve() == expected.resolve()
+
+
+@pytest.mark.parametrize("w_env", [{}, {"foo": "bar"}])
+@mock.patch("soliplex.util.interpolate_env_vars")
+def test_stdio_mctc_tool_kwargs(iev, w_env):
+    iev.return_value = "<interpolated>"
+
+    stdio_mctc = config.Stdio_MCP_ClientToolsetConfig(
+        command="cat",
+        args=["-"],
+        env=w_env,
+    )
+
+    found = stdio_mctc.tool_kwargs
+
+    assert found["command"] == stdio_mctc.command
+    assert found["args"] == stdio_mctc.args
+    assert found["allowed_tools"] == stdio_mctc.allowed_tools
+
+    for (f_key, f_val), (cfg_key, cfg_value) in zip(
+        found["env"].items(),
+        w_env.items(),
+        strict=True,
+    ):
+        assert f_key == cfg_key
+        assert f_val is iev.return_value
+        assert mock.call(cfg_value) in iev.call_args_list
+
+
+@pytest.mark.parametrize("w_headers", [{}, HTTP_MCP_AUTH_HEADER])
+@pytest.mark.parametrize("w_query_params", [{}, HTTP_MCP_QUERY_PARAMS])
+@mock.patch("soliplex.util.interpolate_env_vars")
+def test_http_mctc_tool_kwargs(iev, w_query_params, w_headers):
+    iev.return_value = "<interpolated>"
+    http_mctc = config.HTTP_MCP_ClientToolsetConfig(
+        url=HTTP_MCP_URL,
+        headers=w_headers,
+        query_params=w_query_params,
+    )
+
+    found = http_mctc.tool_kwargs
+
+    assert found["allowed_tools"] == http_mctc.allowed_tools
+
+    if w_query_params:
+        base, qs = found["url"].split("?")
+        assert base == http_mctc.url
+
+        qp_dict = dict(url_parse.parse_qsl(qs))
+
+        for (f_key, f_val), (cfg_key, cfg_value) in zip(
+            qp_dict.items(),
+            w_query_params.items(),
+            strict=True,
+        ):
+            assert f_key == cfg_key
+            assert f_val == iev.return_value
+            assert mock.call(cfg_value) in iev.call_args_list
+
+    else:
+        assert found["url"] == http_mctc.url
+
+    for (f_key, f_val), (cfg_key, cfg_value) in zip(
+        found["headers"].items(),
+        w_headers.items(),
+        strict=True,
+    ):
+        assert f_key == cfg_key
+        assert f_val is iev.return_value
+        assert mock.call(cfg_value) in iev.call_args_list
 
 
 @pytest.mark.parametrize("kw", [EMPTY_AGENT_CONFIG_KW, BARE_AGENT_CONFIG_KW])
