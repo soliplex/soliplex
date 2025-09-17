@@ -20,17 +20,11 @@ def make_ai_tool(tool_config) -> ai_tools.Tool:
         name=tool_config.tool_id,
     )
 
-MCP_ClientToolsetConfig = (
-    config.Stdio_MCP_ClientToolsetConfig |
-    config.HTTP_MCP_ClientToolsetConfig
-)
-
-MCP_ClientToolsetConfigMap = dict[str, MCP_ClientToolsetConfig]
 
 def get_agent_from_configs(
     agent_config: config.AgentConfig,
-    tool_configs: list[config.ToolConfig],
-    mcp_client_toolset_configs: MCP_ClientToolsetConfigMap,
+    tool_configs: config.ToolConfigMap,
+    mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap,
 ) -> pydantic_ai.Agent:
     """Get or create an agent from the specified agent and tool configs."""
 
@@ -44,7 +38,8 @@ def get_agent_from_configs(
             provider = openai_providers.OpenAIProvider(**provider_kw)
 
         tools = [
-            make_ai_tool(tool_config) for tool_config in tool_configs
+            make_ai_tool(tool_config)
+            for tool_config in tool_configs.values()
         ]
         toolsets = [] # TOOD build from mcp_client_toolsets
 

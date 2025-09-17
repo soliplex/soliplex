@@ -199,3 +199,17 @@ class SearchResult(pydantic.BaseModel):
     content: str
     score: float
     document_uri: str | None = None
+
+
+#-----------------------------------------------------------------------------
+#   Convos-related models
+#-----------------------------------------------------------------------------
+
+
+class UserPromptClientMessage(pydantic.BaseModel):
+    text: str
+
+
+class NewConvoClientMessage(pydantic.BaseModel):
+    text: str
+    room_id: str

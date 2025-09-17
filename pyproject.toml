@@ -32,6 +32,7 @@ dependencies = [
     "ruff",
     "sqlmodel",
     "starlette",
+    "trio",
     "uvicorn[standard]",
 ]
 

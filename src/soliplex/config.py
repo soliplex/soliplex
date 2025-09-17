@@ -313,6 +313,9 @@ def extract_tool_configs(config_path: pathlib.Path, config: dict):
     return tool_configs
 
 
+ToolConfigMap = dict[str, ToolConfig]
+
+
 @dataclasses.dataclass
 class Stdio_MCP_ClientToolsetConfig:
     """Configure an MCP client toolset which runs as a subprocess"""
@@ -361,6 +364,13 @@ def extract_mcp_client_toolset_configs(
         )
 
     return mcp_client_toolset_configs
+
+
+MCP_ClientToolsetConfig = (
+    Stdio_MCP_ClientToolsetConfig | HTTP_MCP_ClientToolsetConfig
+)
+
+MCP_ClientToolsetConfigMap = dict[str, MCP_ClientToolsetConfig]
 
 
 #=============================================================================
@@ -599,12 +609,12 @@ class RoomConfig:
     #
     # Tool options
     #
-    tool_configs: dict[str, ToolConfig] = dataclasses.field(
-        default_factory=dict,
+    tool_configs: ToolConfigMap = (
+        dataclasses.field(default_factory=dict)
     )
-    mcp_client_toolset_configs: dict[
-        str, Stdio_MCP_ClientToolsetConfig | HTTP_MCP_ClientToolsetConfig
-    ] = dataclasses.field(default_factory=dict)
+    mcp_client_toolset_configs: MCP_ClientToolsetConfigMap = (
+        dataclasses.field(default_factory=dict)
+    )
 
     #
     # MCP options

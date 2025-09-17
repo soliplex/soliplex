@@ -4,6 +4,7 @@ import fastapi
 import pytest
 
 from soliplex import config
+from soliplex import convos
 from soliplex import installation
 
 
@@ -98,9 +99,23 @@ def test_installation_get_agent_for_room(gafc, w_room_id, raises):
     tc_config = mock.create_autospec(config.ToolConfig)
     sdtc_config = mock.create_autospec(config.SearchDocumentsToolConfig)
 
+    mcp_stdio_config = mock.create_autospec(
+        config.Stdio_MCP_ClientToolsetConfig
+    )
+    mcp_http_streaming_config = mock.create_autospec(
+        config.HTTP_MCP_ClientToolsetConfig
+    )
+
     r_config = mock.create_autospec(config.RoomConfig)
     r_config.agent_config = a_config
-    t_configs = r_config.tool_configs = [tc_config, sdtc_config]
+    t_configs = r_config.tool_configs = {
+        "test_tool": tc_config,
+        "test_sdtc": sdtc_config,
+    }
+    mcp_configs = r_config.mcp_client_toolset_configs = {
+        "test_stdio": mcp_stdio_config,
+        "test_http": mcp_http_streaming_config,
+    }
 
     r_configs = {"room_id": r_config}
     i_config = mock.create_autospec(config.InstallationConfig)
@@ -115,7 +130,7 @@ def test_installation_get_agent_for_room(gafc, w_room_id, raises):
     else:
         found = the_installation.get_agent_for_room(w_room_id, test_user)
         assert found is gafc.return_value
-        gafc.assert_called_once_with(a_config, t_configs)
+        gafc.assert_called_once_with(a_config, t_configs, mcp_configs)
 
 
 @pytest.mark.anyio
@@ -151,3 +166,6 @@ async def test_lifespan(lc):
     i_config.reload_configurations.assert_called_once_with()
 
     lc.assert_called_once_with(INSTALLATION_PATH)
+
+    the_convos = found[0]["the_convos"]
+    assert isinstance(the_convos, convos.Conversations)

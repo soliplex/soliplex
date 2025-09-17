@@ -55,6 +55,14 @@ INSTALLATION_OIDC_AUTH_SYSTEM_CONFIG = config.OIDCAuthSystemConfig(
 )
 
 
+@pytest.fixture(scope="module")
+def ollama_base_url():
+    with mock.patch.dict(
+        "os.environ", clear=True, OLLAMA_BASE_URL=OLLAMA_BASE_URL,
+    ):
+        yield
+
+
 def _from_param(request, key):
     kw = {}
     if request.param is not None:
@@ -227,7 +235,12 @@ def room_agent():
 
 
 def test_room_from_config(
-    room_agent, room_welcome, room_suggestions, room_tools, room_quizzes,
+    ollama_base_url,
+    room_agent,
+    room_welcome,
+    room_suggestions,
+    room_tools,
+    room_quizzes,
 ):
     room_config = config.RoomConfig(
         id=ROOM_ID,
@@ -278,7 +291,7 @@ def test_room_from_config(
 
 
 def test_completion_from_config(
-    room_agent, room_tools,
+    ollama_base_url, room_agent, room_tools,
 ):
     completion_config = config.CompletionConfig(
         id=COMPLETION_ID,

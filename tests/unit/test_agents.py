@@ -92,10 +92,16 @@ def test_get_agent_from_configs_wo_hit(
 
     agent_config.llm_provider_kw = llm_provider_kw
 
-    tool_configs = [tc for (tc, _) in tool_configs_tools]
+    tool_configs = {
+        tc.tool_id: tc
+        for (tc, _) in tool_configs_tools
+    }
     exp_tools = [tool for (_, tool) in tool_configs_tools]
 
-    mcp_tc_configs = [mctc for (mctc, _) in mcp_ct_configs_tools]
+    mcp_tc_configs = {
+        f"MCTC_{mctc_id:03}": mctc.mctc.mctc
+        for mctc_id, (mctc, _) in enumerate(mcp_ct_configs_tools)
+    }
     exp_toolsets = [tool for (_, tool) in mcp_ct_configs_tools]
 
     with (
