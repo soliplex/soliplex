@@ -3,10 +3,10 @@ import fastapi
 from fastapi import responses
 from fastapi import security
 
-from . import auth
-from . import installation
-from . import models
-from . import util
+from soliplex import auth
+from soliplex import installation
+from soliplex import models
+from soliplex import util
 
 router = fastapi.APIRouter()
 

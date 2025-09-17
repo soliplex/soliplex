@@ -12,7 +12,6 @@ from starlette.middleware import sessions as starlette_mw_sessions
 
 from soliplex import auth
 from soliplex import installation
-from soliplex import rooms
 from soliplex import util
 from soliplex import views
 from soliplex.views import auth as auth_views
@@ -20,6 +19,7 @@ from soliplex.views import completions as completions_views
 from soliplex.views import convos as convos_views
 from soliplex.views import installation as installation_views
 from soliplex.views import quizzes as quizzes_views
+from soliplex.views import rooms as rooms_views
 
 
 def curry_lifespan(installation_path: pathlib.Path=None):
@@ -73,7 +73,7 @@ def create_app(installation_path: pathlib.Path=None):  # pragma: NO COVER
     app.include_router(convos_views.router, prefix="/api")
     app.include_router(installation_views.router, prefix="/api")
     app.include_router(quizzes_views.router, prefix="/api")
-    app.include_router(rooms.router, prefix="/api")
+    app.include_router(rooms_views.router, prefix="/api")
     app.include_router(views.router, prefix="/api")
 
     return app

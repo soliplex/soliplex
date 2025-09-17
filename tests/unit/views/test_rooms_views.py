@@ -5,7 +5,7 @@ import pytest
 
 from soliplex import config
 from soliplex import installation
-from soliplex import rooms
+from soliplex.views import rooms as rooms_views
 
 ROOM_IDS = ["foo", "bar", "baz"]
 
@@ -29,7 +29,7 @@ async def test_get_rooms(fc, auth_fn, room_configs):
     the_installation.get_room_configs.return_value = room_configs
     token = object()
 
-    found = await rooms.get_rooms(
+    found = await rooms_views.get_rooms(
         request, the_installation=the_installation, token=token,
     )
 
@@ -68,7 +68,7 @@ async def test_get_room(fc, auth_fn, room_configs):
 
     if ROOM_ID not in room_configs:
         with pytest.raises(fastapi.HTTPException) as exc:
-            await rooms.get_room(
+            await rooms_views.get_room(
                 request,
                 ROOM_ID,
                 the_installation=the_installation,
@@ -79,7 +79,7 @@ async def test_get_room(fc, auth_fn, room_configs):
         assert exc.value.detail == "No such room: foo"
 
     else:
-        found = await rooms.get_room(
+        found = await rooms_views.get_room(
             request,
             ROOM_ID,
             the_installation=the_installation,
@@ -124,7 +124,7 @@ async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
 
     if ROOM_ID not in room_configs:
         with pytest.raises(fastapi.HTTPException) as exc:
-            await rooms.get_room_bg_image(
+            await rooms_views.get_room_bg_image(
                 request,
                 room_id=ROOM_ID,
                 the_installation=the_installation,
@@ -135,7 +135,7 @@ async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
         assert exc.value.detail == "No such room: foo"
     else:
         if w_image:
-            found = await rooms.get_room_bg_image(
+            found = await rooms_views.get_room_bg_image(
                 request,
                 room_id=ROOM_ID,
                 the_installation=the_installation,
@@ -145,7 +145,7 @@ async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
             assert found == str(image_path)
         else:
             with pytest.raises(fastapi.HTTPException) as exc:
-                await rooms.get_room_bg_image(
+                await rooms_views.get_room_bg_image(
                     request,
                     room_id=ROOM_ID,
                     the_installation=the_installation,
