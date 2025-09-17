@@ -499,6 +499,8 @@ class QuizConfig:
     randomize: bool = False
     max_questions: int = None
 
+    judge_agent_model: str = "gpt-oss:20b"
+
     def __post_init__(self, question_file):
         if question_file is not None:
             if "/" in question_file:

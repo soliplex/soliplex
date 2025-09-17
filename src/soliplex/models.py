@@ -213,3 +213,17 @@ class UserPromptClientMessage(pydantic.BaseModel):
 class NewConvoClientMessage(pydantic.BaseModel):
     text: str
     room_id: str
+
+
+#-----------------------------------------------------------------------------
+#   Quiz-related models
+#-----------------------------------------------------------------------------
+
+
+class QuizLLMJudgeResponse(pydantic.BaseModel):
+    equivalent: bool
+
+
+class QuizQuestionResponse(pydantic.BaseModel):
+    correct: str  # client expects 'true' or 'false'
+    expected_output: str = None

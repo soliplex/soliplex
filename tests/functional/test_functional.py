@@ -105,3 +105,47 @@ def test_post_convos_new_rooms(auth_fn, client):
         assert last_llm_msg["role"] == "model"  # why is this not "origin"
 
         time.sleep(5)
+
+
+@mock.patch("soliplex.auth.authenticate")
+def test_get_quiz_post_quiz_question(auth_fn, client):
+
+    auth_fn.return_value = {
+        "name": "Phreddy Phlyntstone",
+        "email": "phreddy@example.com",
+    }
+
+    get_room_response = client.get("/api/v1/rooms/quiztest")
+    assert get_room_response.status_code == 200
+    room_info = get_room_response.json()
+
+    quiz_id, *_ = room_info["quizzes"].keys()
+
+    get_quiz_response = client.get(f"/api/v1/rooms/quiztest/quiz/{quiz_id}")
+    assert get_quiz_response.status_code == 200
+    quiz_info = get_quiz_response.json()
+
+    for question in quiz_info["questions"]:
+        uuid = question["metadata"]["uuid"]
+
+        if "QA" in question["inputs"]:
+            answer = "orange"
+            expected = False
+        elif "false" in question["metadata"]["options"]:
+            answer = "orange"
+            expected = False
+        else:
+            answer = "blue"
+            expected = True
+
+        post_question_response = client.post(
+            f"/api/v1/rooms/quiztest/quiz/{quiz_id}/{uuid}",
+            json={"text": answer},
+        )
+        assert post_question_response.status_code == 200
+        answer_info = post_question_response.json()
+        assert answer_info["correct"] == expected and "true" or "false"
+        if not expected:
+            assert (
+                answer_info["expected_output"] == question["expected_output"]
+            )
