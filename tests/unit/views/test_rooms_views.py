@@ -159,3 +159,61 @@ async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
         ROOM_ID, auth_fn.return_value,
     )
     auth_fn.assert_called_once_with(the_installation, token)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("w_error", [False, True])
+@mock.patch("soliplex.mcp_auth.generate_url_safe_token")
+@mock.patch("soliplex.auth.authenticate")
+async def test_get_room_mcp_token(
+    auth_fn, gust, w_error
+):
+    ROOM_ID = "test-room"
+    ROOM_CONFIG = object()
+    MCP_TOKEN = gust.return_value = "DEADBEEF"
+
+    request = fastapi.Request(scope={"type": "http"})
+
+    the_installation = mock.create_autospec(installation.Installation)
+
+    token = object()
+    wylma = auth_fn.return_value = {
+        "full_name": "Wylma Phlyntstone", "email": "wylma@exmple.com",
+    }
+
+    if w_error:
+        the_installation.get_room_config.side_effect = ValueError("testing")
+    else:
+        the_installation.get_room_config.return_value = ROOM_CONFIG
+
+    if w_error:
+        with pytest.raises(fastapi.HTTPException) as exc:
+            await rooms_views.get_room_mcp_token(
+                request,
+                room_id=ROOM_ID,
+                the_installation=the_installation,
+                token=token,
+            )
+
+        assert exc.value.status_code == 404
+
+    else:
+        found = await rooms_views.get_room_mcp_token(
+            request,
+            room_id=ROOM_ID,
+            the_installation=the_installation,
+            token=token,
+        )
+
+        expected = {
+            "room_id": ROOM_ID,
+            "mcp_token": MCP_TOKEN,
+        }
+        assert found.model_dump() == expected
+
+        gust.assert_called_once_with(ROOM_ID, **wylma)
+
+    the_installation.get_room_config.assert_called_once_with(
+        ROOM_ID, user=auth_fn.return_value,
+    )
+    auth_fn.assert_called_once_with(the_installation, token)

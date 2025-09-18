@@ -5,6 +5,7 @@ from fastapi import security
 
 from soliplex import auth
 from soliplex import installation
+from soliplex import mcp_auth
 from soliplex import models
 from soliplex import util
 
@@ -87,3 +88,26 @@ async def get_room_bg_image(
         )
 
     return str(logo_image)
+
+
+@util.logfire_span("GET /v1/rooms/{room_id}/mcp_token")
+@router.get("/v1/rooms/{room_id}/mcp_token", response_model=models.MCPToken)
+async def get_room_mcp_token(
+    request: fastapi.Request,
+    room_id: str,
+    the_installation: installation.Installation =
+        installation.depend_the_installation,
+    token: security.HTTPAuthorizationCredentials =
+        auth.oauth2_predicate,
+):
+    user = auth.authenticate(the_installation, token)
+
+    try:
+        the_installation.get_room_config(room_id, user=user)
+    except ValueError as e:
+        raise fastapi.HTTPException(
+            status_code=404, detail=str(e),
+        ) from None
+
+    token = mcp_auth.generate_url_safe_token(room_id, **user)
+    return models.MCPToken(room_id=room_id, mcp_token=token)
