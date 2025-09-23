@@ -46,6 +46,16 @@ class Installation:
             room_config.mcp_client_toolset_configs,
         )
 
+    def get_agent_for_completion(
+        self, completion_id: str, user: dict,
+    ) -> pydantic_ai.Agent:
+        completion_config = self.get_completion_config(completion_id, user)
+        return agents.get_agent_from_configs(
+            completion_config.agent_config,
+            completion_config.tool_configs,
+            completion_config.mcp_client_toolset_configs,
+        )
+
 
 async def get_the_installation(
     request: fastapi.Request,
