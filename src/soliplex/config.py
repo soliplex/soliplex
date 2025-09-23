@@ -902,7 +902,7 @@ class InstallationConfig:
     #
     # Defaults to one path: './oidc' (set in '__post_init__')
     #
-    oidc_paths: list[pathlib.Path] = None
+    oidc_paths: list[pathlib.Path | None] = None
 
     _oidc_auth_system_configs: list[OIDCAuthSystemConfig] = None
 
@@ -976,21 +976,25 @@ class InstallationConfig:
             self.oidc_paths = [
                 parent_dir / oidc_path
                 for oidc_path in self.oidc_paths
+                if oidc_path is not None
             ]
 
             self.room_paths = [
                 parent_dir / room_path
                 for room_path in self.room_paths
+                if room_path is not None
             ]
 
             self.completion_paths = [
                 parent_dir / completion_path
                 for completion_path in self.completion_paths
+                if completion_path is not None
             ]
 
             self.quizzes_paths = [
                 parent_dir / quizzes_path
                 for quizzes_path in self.quizzes_paths
+                if quizzes_path is not None
             ]
 
     def _load_oidc_auth_system_configs(self) -> list[OIDCAuthSystemConfig]:

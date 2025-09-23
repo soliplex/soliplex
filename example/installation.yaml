@@ -31,7 +31,7 @@ secrets:
 # Unlike secrets, environment variables are configured explicitly as part
 # of an installation.
 #==========================================================================
-#
+
 environment:
   # Don't set this in development:  should only be set by the script whih
   # is starting a container
@@ -90,3 +90,107 @@ environment:
 
   - name: "LOGFIRE_SERVICE_NAME"
     value: "soliplex"
+
+
+#==========================================================================
+# OIDC authentication provider configuration
+#==========================================================================
+# Specify one or more filesystem paths to search for OIDC provider configs.
+#
+# Non-absolute paths will be evaluated relative to the installation directory.
+#
+# If the 'oidc_paths' key is not found, load provider configurations found
+# under the path './oidc'.
+#
+# To disable authentication, list a single, "null" path, e.g.:
+#
+# oidc_paths:
+#   -
+#==========================================================================
+
+
+#==========================================================================
+# Rooms configuration
+#==========================================================================
+# Specify one or more filesystem paths to search for room configs.
+#
+# Each path can be either:
+#
+# - a directory containing its own 'room_config.yaml' file:  this directory
+#   will be mapped as a single room.
+#
+# - a directory whose immediate subdirectories will be treated as rooms
+#   IFF they contain a `room_config.yaml` file.
+#
+# Non-absolute paths will be evaluated relative to the installation directory.
+#
+# The order of 'room_paths' in this list controls which room configuration
+# is used for any conflict on room ID:  rooms found earlier in the list
+# "win" over later ones with the same ID.
+#
+# If the 'room_paths' key is not found, load room configurations found
+# under the path './rooms'.
+#
+# To disable all rooms, list a single, "null" path, e.g.:
+#
+# room_paths:
+#   -
+#==========================================================================
+
+
+#==========================================================================
+# Completions configuration
+#==========================================================================
+# Specify one or more filesystem paths to search for completion configs.
+#
+# Each path can be either:
+#
+# - a directory containing its own 'room_config.yaml' file:  this directory
+#   will be mapped as a single completion.
+#
+# - a directory whose immediate subdirectories will be treated as rooms
+#   IFF they contain a `room_config.yaml` file.
+#
+# Non-absolute paths will be evaluated relative to the installation directory.
+#
+# The order of 'room_paths' in this list controls which completion
+# configuration is used for any conflict on completion ID:  completions
+# found earlier in the list "win" over later ones with the same ID.
+#
+# If the 'completions_paths' key is not found, load completion configurations
+# found under the path './completions'.
+#
+# To disable all completions, list a single, "null" path, e.g.:
+#
+# completion_paths:
+#   -
+#==========================================================================
+
+
+#==========================================================================
+# Quizes configuration
+#==========================================================================
+# Specify one or more filesystem paths to search for quiz question files.
+#
+# Each path should be a directory containing one or more '<quiz_id>.json'
+# files.
+#
+# Non-absolute paths will be evaluated relative to the installation directory.
+#
+# The order of 'quiz_paths' in this list controls which question file
+# configuration is used for any conflict on quiz name:  question files
+# found earlier in the list "win" over later ones with the same name.
+#
+# If the 'quizzes_paths' key is not found, search quiz for question files
+# found under the path './quizzes'.
+#
+# To disable all quizzes, list a single, "null" path, e.g.:
+#
+# quizzes_paths:
+#   -
+#
+# TODO:  update 'soliplex.config.RoomConfig._load_questions_file' to implement
+#        the non-default search of the configured path, rather than using
+#        the 'INSTALLATION_PATH' environment variable.
+#        See issue #13.
+#==========================================================================
