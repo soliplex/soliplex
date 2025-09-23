@@ -38,7 +38,6 @@ W_TOOLS_CONFIG = config.CompletionConfig(
     ),
     tool_configs={
         "get_current_datetime": config.ToolConfig(
-            kind="get_current_datetime",
             tool_name="soliplex.tools.get_current_datetime",
         ),
         "search_documents": config.SearchDocumentsToolConfig(

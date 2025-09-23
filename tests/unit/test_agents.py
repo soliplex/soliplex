@@ -27,7 +27,6 @@ ROOM_ID = "test-room"
 RAG_LANCEDB_OVERRIDE_PATH = "/path/to/db/rag"
 
 TC_TOOL_CONFIG = config.ToolConfig(
-    kind="test_tool",
     tool_name="soliplex.tools.test_tool"
 )
 
