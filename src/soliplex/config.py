@@ -1,3 +1,5 @@
+from __future__ import annotations  # forward refs in typing decls
+
 import dataclasses
 import enum
 import functools
@@ -93,12 +95,17 @@ class OIDCAuthSystemConfig:
     oidc_client_pem_path: pathlib.Path = None
 
     # Set in 'from_yaml' below
-    _config_path: pathlib.Path | None = None
+    _installation_config: InstallationConfig = None
+    _config_path: pathlib.Path = None
 
     @classmethod
     def from_yaml(
-        cls, config_path: pathlib.Path, config: dict[str, typing.Any],
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config: dict[str, typing.Any],
     ):
+        config["_installation_config"] = installation_config
         config["_config_path"] = config_path
 
         client_secret = config.pop("client_secret", "")
@@ -156,17 +163,35 @@ class ToolRequires(enum.StrEnum):
 
 @dataclasses.dataclass
 class ToolConfig:
-    kind: str
     tool_name: str
 
     allow_mcp: bool = False
 
     _tool: abc.Callable[..., typing.Any] = None
 
+    # Set in 'from_yaml' below
+    _installation_config: InstallationConfig = None
+    _config_path: pathlib.Path = None
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config: dict[str, typing.Any],
+    ):
+        config["_installation_config"] = installation_config
+        config["_config_path"] = config_path
+        return cls(**config)
+
+    @property
+    def kind(self):
+        _, kind = self.tool_name.rsplit(".", 1)
+        return kind
+
     @property
     def tool_id(self):
-        _, tool_id = self.tool_name.rsplit(".", 1)
-        return tool_id
+        return self.kind
 
     @property
     def tool(self):
@@ -236,18 +261,23 @@ class SearchDocumentsToolConfig(ToolConfig):
     return_citations: bool = False
 
     # Set in 'from_yaml' below
-    _config_path: pathlib.Path | None = None
+    _installation_config: InstallationConfig = None
+    _config_path: pathlib.Path = None
 
     @classmethod
     def from_yaml(
-        cls, config_path: pathlib.Path, config: dict[str, typing.Any],
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config: dict[str, typing.Any],
     ):
+        config["_installation_config"] = installation_config
+        config["_config_path"] = config_path
         try:
             instance = cls(**config)
         except RagDbExactlyOneOfStemOrOverride as exc:
             raise FromYamlException(config_path) from exc
 
-        instance._config_path = config_path
         return instance
 
     def __post_init__(self):
@@ -294,22 +324,21 @@ TOOL_CONFIG_CLASSES_BY_TOOL_NAME = {
     ]
 }
 
-def extract_tool_configs(config_path: pathlib.Path, config: dict):
+def extract_tool_configs(
+    installation_config: InstallationConfig,
+    config_path: pathlib.Path,
+    config: dict,
+):
     tool_configs = {}
 
     for t_config in config.pop("tools", ()):
-        tool_name = t_config.pop("tool_name")
-        tc_class = TOOL_CONFIG_CLASSES_BY_TOOL_NAME.get(tool_name)
+        tool_name = t_config.get("tool_name")
+        tc_class = TOOL_CONFIG_CLASSES_BY_TOOL_NAME.get(tool_name, ToolConfig)
 
-        if tc_class is None:
-            _, kind = tool_name.rsplit(".", 1)
-            tool_config = ToolConfig(
-                kind=kind, tool_name=tool_name, **t_config,
-            )
-            tool_configs[kind] = tool_config
-        else:
-            tool_config = tc_class.from_yaml(config_path, t_config)
-            tool_configs[tool_config.kind] = tool_config
+        tool_config = tc_class.from_yaml(
+            installation_config, config_path, t_config,
+        )
+        tool_configs[tool_config.kind] = tool_config
 
     return tool_configs
 
@@ -330,6 +359,21 @@ class Stdio_MCP_ClientToolsetConfig:
         default_factory=dict,
     )
     allowed_tools: list[str] = None
+
+    # set in 'from_yaml' class factory
+    _installation_config: InstallationConfig = None
+    _config_path: pathlib.Path = None
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config: dict[str, typing.Any],
+    ):
+        config["_installation_config"] = installation_config
+        config["_config_path"] = config_path
+        return cls(**config)
 
     @property
     def toolset_params(self) -> dict:
@@ -367,6 +411,21 @@ class HTTP_MCP_ClientToolsetConfig:
         default_factory=dict,
     )
     allowed_tools: list[str] = None
+
+    # set in 'from_yaml' class factory
+    _installation_config: InstallationConfig = None
+    _config_path: pathlib.Path = None
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config: dict[str, typing.Any],
+    ):
+        config["_installation_config"] = installation_config
+        config["_config_path"] = config_path
+        return cls(**config)
 
     @property
     def toolset_params(self) -> dict:
@@ -407,7 +466,9 @@ MCP_CONFIG_CLASSES_BY_TYPE = {
 }
 
 def extract_mcp_client_toolset_configs(
-    config_path: pathlib.Path, config: dict,
+    installation_config: InstallationConfig,
+    config_path: pathlib.Path,
+    config: dict,
 ):
     mcp_client_toolset_configs = {}
 
@@ -416,8 +477,10 @@ def extract_mcp_client_toolset_configs(
     ).items():
         type_ = mcp_client_toolset_config.pop("type")
         mcp_config_klass = MCP_CONFIG_CLASSES_BY_TYPE[type_]
-        mcp_client_toolset_configs[mcp_name] = mcp_config_klass(
-            **mcp_client_toolset_config,
+        mcp_client_toolset_configs[mcp_name] = mcp_config_klass.from_yaml(
+            installation_config=installation_config,
+            config_path=config_path,
+            config=mcp_client_toolset_config,
         )
 
     return mcp_client_toolset_configs
@@ -456,6 +519,7 @@ class AgentConfig:
     provider_key_envvar: str = None  # envvar name containing API key
 
     # Set by `from_yaml` factory
+    _installation_config: InstallationConfig = None
     _config_path: pathlib.Path = None
 
     def __post_init__(self, system_prompt):
@@ -466,7 +530,13 @@ class AgentConfig:
             self._system_prompt_text = system_prompt
 
     @classmethod
-    def from_yaml(cls, config_path: pathlib.Path, config: dict):
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config: dict,
+    ):
+        config["_installation_config"] = installation_config
         config["_config_path"] = config_path
 
         if "system_prompt" in config:
@@ -577,10 +647,17 @@ class QuizConfig:
             raise RCQExactlyOneOfStemOrOverride()
 
     # Set by `from_yaml` factory
+    _installation_config: InstallationConfig = None
     _config_path: pathlib.Path = None
 
     @classmethod
-    def from_yaml(cls, config_path: pathlib.Path, config: dict):
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config: dict,
+    ):
+        config["_installation_config"] = installation_config
         config["_config_path"] = config_path
 
         try:
@@ -689,6 +766,7 @@ class RoomConfig:
     _quiz_map: dict[str, QuizConfig] = None
 
     # Set by `from_yaml` factory
+    _installation_config: InstallationConfig = None
     _config_path: pathlib.Path = None
 
     logo_image: dataclasses.InitVar[str] = None
@@ -699,7 +777,13 @@ class RoomConfig:
             self._logo_image = logo_image
 
     @classmethod
-    def from_yaml(cls, config_path: pathlib.Path, config: dict):
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config: dict,
+    ):
+        config["_installation_config"] = installation_config
         config["_config_path"] = config_path
 
         room_id = config["id"]
@@ -707,20 +791,29 @@ class RoomConfig:
         agent_config_yaml["id"] = f"room-{room_id}"
 
         config["agent_config"] = AgentConfig.from_yaml(
+            installation_config,
             config_path,
             agent_config_yaml,
         )
 
-        config["tool_configs"] = extract_tool_configs(config_path, config)
+        config["tool_configs"] = extract_tool_configs(
+            installation_config, config_path, config,
+        )
 
         config["mcp_client_toolset_configs"] = (
-            extract_mcp_client_toolset_configs(config_path, config)
+            extract_mcp_client_toolset_configs(
+                installation_config, config_path, config,
+            )
         )
 
         quizzes_config_yaml = config.pop("quizzes", None)
         if quizzes_config_yaml is not None:
             config["quizzes"] = [
-                QuizConfig.from_yaml(config_path, quiz_config_yaml)
+                QuizConfig.from_yaml(
+                    installation_config,
+                    config_path,
+                    quiz_config_yaml,
+                )
                 for quiz_config_yaml in quizzes_config_yaml
             ]
 
@@ -780,10 +873,17 @@ class CompletionConfig:
     ] = dataclasses.field(default_factory=dict)
 
     # Set by `from_yaml` factory
+    _installation_config: InstallationConfig = None
     _config_path: pathlib.Path = None
 
     @classmethod
-    def from_yaml(cls, config_path: pathlib.Path, config: dict):
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config: dict,
+    ):
+        config["_installation_config"] = installation_config
         config["_config_path"] = config_path
 
         completion_id = config["id"]
@@ -795,14 +895,19 @@ class CompletionConfig:
         agent_config_yaml["id"] = f"completion-{completion_id}"
 
         config["agent_config"] = AgentConfig.from_yaml(
+            installation_config,
             config_path,
             agent_config_yaml,
         )
 
-        config["tool_configs"] = extract_tool_configs(config_path, config)
+        config["tool_configs"] = extract_tool_configs(
+            installation_config, config_path, config,
+        )
 
         config["mcp_client_toolset_configs"] = (
-            extract_mcp_client_toolset_configs(config_path, config)
+            extract_mcp_client_toolset_configs(
+                installation_config, config_path, config,
+            )
         )
 
         return cls(**config)
@@ -1016,7 +1121,7 @@ class InstallationConfig:
                         oidc_client_pem_path
                     )
                 oas_config = OIDCAuthSystemConfig.from_yaml(
-                    oidc_config, auth_system_yaml,
+                    self, oidc_config, auth_system_yaml,
                 )
                 oas_configs.append(oas_config)
 
@@ -1041,7 +1146,7 @@ class InstallationConfig:
                 config_id = config_yaml["id"]
                 if config_id not in room_configs:
                     room_configs[config_id] = RoomConfig.from_yaml(
-                        config_path, config_yaml,
+                        self, config_path, config_yaml,
                     )
 
         return room_configs
@@ -1065,7 +1170,9 @@ class InstallationConfig:
                 config_id = config_yaml["id"]
                 if config_id not in completion_configs:
                     completion_configs[config_id] = (
-                        CompletionConfig.from_yaml(config_path, config_yaml)
+                        CompletionConfig.from_yaml(
+                            self, config_path, config_yaml,
+                        )
                     )
 
         return completion_configs

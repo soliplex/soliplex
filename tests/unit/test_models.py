@@ -111,14 +111,13 @@ def test_tool_from_config_w_toolconfig():
         """This is a test tool"""
 
     tool_config = config.ToolConfig(
-        kind="testing",
         tool_name="soliplex.tools.test_tool",
     )
 
     with mock.patch.dict("soliplex.tools.__dict__", test_tool=test_tool):
         tool_model = models.Tool.from_config(tool_config)
 
-    assert tool_model.kind == "testing"
+    assert tool_model.kind == "test_tool"
     assert tool_model.tool_name == "soliplex.tools.test_tool"
     assert tool_model.tool_description == test_tool.__doc__.strip()
     assert tool_model.tool_requires == config.ToolRequires.BARE
@@ -248,7 +247,6 @@ def room_tools(request):
         kw["tool_configs"] = {
             "get_current_datetime":
                 config.ToolConfig(
-                    kind="testing",
                     tool_name="soliplex.tools.get_current_datetime",
                 ),
         }

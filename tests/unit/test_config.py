@@ -298,7 +298,6 @@ FULL_ROOM_CONFIG_KW = {
     "allow_mcp": True,
     "tool_configs" : {
         "get_current_datetime": config.ToolConfig(
-            kind="get_current_datetime",
             tool_name="soliplex.tools.get_current_datetime",
             allow_mcp=True,
         ),
@@ -568,13 +567,20 @@ quizzes_paths:
 """
 
 
+@pytest.fixture
+def installation_config():
+    return mock.create_autospec(config.InstallationConfig)
+
+
 @pytest.mark.parametrize("w_config", [
-    BARE_AUTHSYSTEM_CONFIG_KW,
-    W_SCOPE_AUTHSYSTEM_CONFIG_KW,
-    W_PEM_AUTHSYSTEM_CONFIG_KW,
+    BARE_AUTHSYSTEM_CONFIG_KW.copy(),
+    W_SCOPE_AUTHSYSTEM_CONFIG_KW.copy(),
+    W_PEM_AUTHSYSTEM_CONFIG_KW.copy(),
 ])
-def test_authsystem_from_yaml(temp_dir, w_config):
-    expected = config.OIDCAuthSystemConfig(**w_config)
+def test_authsystem_from_yaml(installation_config, temp_dir, w_config):
+    expected = config.OIDCAuthSystemConfig(
+        _installation_config=installation_config, **w_config,
+    )
 
     oidc_client_pem_path = w_config.get("oidc_client_pem_path")
 
@@ -586,7 +592,9 @@ def test_authsystem_from_yaml(temp_dir, w_config):
 
     expected._config_path = temp_dir
 
-    found = config.OIDCAuthSystemConfig.from_yaml(temp_dir, w_config)
+    found = config.OIDCAuthSystemConfig.from_yaml(
+        installation_config, temp_dir, w_config,
+    )
 
     assert found == expected
 
@@ -604,14 +612,18 @@ def test_authsystem_from_yaml(temp_dir, w_config):
     ),
 ])
 def test_authsystem_from_yaml_w_client_secret(
-    temp_dir, w_config, exp_secret, env_patch,
+    installation_config, temp_dir, w_config, exp_secret, env_patch,
 ):
-    expected = config.OIDCAuthSystemConfig(**w_config)
+    expected = config.OIDCAuthSystemConfig(
+        _installation_config=installation_config, **w_config,
+    )
     expected.client_secret = AUTHSYSTEM_CLIENT_SECRET_LIT
     expected._config_path = temp_dir
 
     with mock.patch.dict("os.environ", clear=True, **env_patch):
-        found = config.OIDCAuthSystemConfig.from_yaml(temp_dir, w_config)
+        found = config.OIDCAuthSystemConfig.from_yaml(
+            installation_config, temp_dir, w_config,
+        )
 
     assert found == expected
 
@@ -626,8 +638,12 @@ def test_authsystem_from_yaml_w_client_secret(
         AUTHSYSTEM_OIDC_CLIENT_PEM_PATH_ABS,
     )
 ])
-def test_authsystem_from_yaml_w_oid_cpp(temp_dir, w_config, exp_path):
-    expected = config.OIDCAuthSystemConfig(**w_config)
+def test_authsystem_from_yaml_w_oid_cpp(
+    installation_config, temp_dir, w_config, exp_path,
+):
+    expected = config.OIDCAuthSystemConfig(
+        _installation_config=installation_config, **w_config,
+    )
     config_path = expected._config_path = temp_dir / "config.yaml"
 
     if exp_path.startswith("{"):
@@ -639,7 +655,9 @@ def test_authsystem_from_yaml_w_oid_cpp(temp_dir, w_config, exp_path):
 
     expected.oidc_client_pem_path = pathlib.Path(exp_path)
 
-    found = config.OIDCAuthSystemConfig.from_yaml(config_path, w_config)
+    found = config.OIDCAuthSystemConfig.from_yaml(
+        installation_config, config_path, w_config,
+    )
 
     assert found == expected
 
@@ -653,7 +671,7 @@ def test_authsystem_server_metadata_url():
 
 
 @pytest.mark.parametrize("w_config, exp_client_kwargs, exp_secret", [
-    (BARE_AUTHSYSTEM_CONFIG_KW, {}, ""),
+    (BARE_AUTHSYSTEM_CONFIG_KW.copy(), {}, ""),
     (
         W_CLIENT_SECRET_LIT_AUTHSYSTEM_CONFIG_KW,
         {},
@@ -679,9 +697,39 @@ def test_authsystem_oauth_client_args(
     assert found["client_kwargs"] ==  exp_client_kwargs
 
 
-def test_toolconfig_id():
+def test_toolconfig_from_yaml(installation_config, temp_dir):
+    tool_name = "soliplex.tools.test_tool"
+    config_path = temp_dir / "thing_config.yaml"
+
+    expected = config.ToolConfig(
+        _installation_config=installation_config,
+        _config_path=config_path,
+        tool_name=tool_name,
+        allow_mcp=True,
+    )
+
+    tool_config = config.ToolConfig.from_yaml(
+        installation_config=installation_config,
+        config_path=config_path,
+        config={
+            "tool_name": tool_name,
+            "allow_mcp": True,
+        },
+    )
+
+    assert tool_config == expected
+
+
+def test_toolconfig_kind():
     tool_config = config.ToolConfig(
-        kind="testing",
+        tool_name="soliplex.tools.test_tool",
+    )
+
+    assert tool_config.kind == "test_tool"
+
+
+def test_toolconfig_tool_id():
+    tool_config = config.ToolConfig(
         tool_name="soliplex.tools.test_tool",
     )
 
@@ -699,13 +747,11 @@ def test_toolconfig_tool(w_existing):
 
     if w_existing:
         tool_config = config.ToolConfig(
-            kind="testing",
             tool_name="no.such.animal.exists",
         )
         tool_config._tool = existing
     else:
         tool_config = config.ToolConfig(
-            kind="testing",
             tool_name="soliplex.tools.test_tool",
         )
 
@@ -778,7 +824,6 @@ def TEST_TOOL_WO_CTX_W_PARAM_W_TC(
 def test_toolconfig_tool_requires_w_conflict(test_tool):
 
     tool_config = config.ToolConfig(
-        kind="testing",
         tool_name="soliplex.tools.test_tool",
     )
 
@@ -798,7 +843,6 @@ def test_toolconfig_tool_requires_w_conflict(test_tool):
 def test_toolconfig_tool_description(test_tool):
 
     tool_config = config.ToolConfig(
-        kind="testing",
         tool_name="soliplex.tools.test_tool",
     )
 
@@ -819,7 +863,6 @@ def test_toolconfig_tool_description(test_tool):
 def test_toolconfig_tool_requires(test_tool, expected):
 
     tool_config = config.ToolConfig(
-        kind="testing",
         tool_name="soliplex.tools.test_tool",
     )
 
@@ -840,7 +883,6 @@ def test_toolconfig_tool_requires(test_tool, expected):
 def test_toolconfig_tool_with_config(test_tool, exp_wrapped):
 
     tool_config = config.ToolConfig(
-        kind="testing",
         tool_name="soliplex.tools.test_tool",
     )
 
@@ -864,7 +906,6 @@ def test_toolconfig_tool_with_config(test_tool, exp_wrapped):
 
 def test_toolconfig_get_extra_parameters():
     tool_config = config.ToolConfig(
-        kind="testing",
         tool_name="soliplex.tools.test_tool",
     )
 
@@ -922,7 +963,7 @@ def test_sdtc_ctor(temp_dir, stem, override, which):
     (None, "/dev/null", "override"),
     (None, "./foo.lancedb", "override"),
 ])
-def test_sdtc_from_yaml(temp_dir, stem, override, which):
+def test_sdtc_from_yaml(installation_config, temp_dir, stem, override, which):
     kw = {}
 
     if stem is not None:
@@ -941,14 +982,18 @@ def test_sdtc_from_yaml(temp_dir, stem, override, which):
         if which is None:
             with pytest.raises(config.FromYamlException) as exc:
                 config.SearchDocumentsToolConfig.from_yaml(
-                    config_path=config_path, config=kw,
+                    installation_config=installation_config,
+                    config_path=config_path,
+                    config=kw,
                 )
 
             assert exc.value.config_path == config_path
 
         else:
             sdt_config = config.SearchDocumentsToolConfig.from_yaml(
-                config_path=config_path, config=kw,
+                installation_config=installation_config,
+                config_path=config_path,
+                config=kw,
             )
 
             if which == "stem":
@@ -959,6 +1004,7 @@ def test_sdtc_from_yaml(temp_dir, stem, override, which):
                 else:
                     expected = pathlib.Path(override)
 
+            assert sdt_config._installation_config == installation_config
             assert sdt_config._config_path == config_path
             assert sdt_config.rag_lancedb_path.resolve() == expected.resolve()
 
@@ -1087,19 +1133,25 @@ def test_agentconfig_ctor(kw):
     ],
 )
 def test_agentconfig_from_yaml(
-    temp_dir, config_yaml, expected_kw,
+    installation_config, temp_dir, config_yaml, expected_kw,
 ):
     yaml_file = temp_dir / "test.yaml"
     yaml_file.write_text(config_yaml)
 
     expected = config.AgentConfig(**expected_kw)
 
-    expected = dataclasses.replace(expected, _config_path=yaml_file)
+    expected = dataclasses.replace(
+        expected,
+        _installation_config=installation_config,
+        _config_path=yaml_file,
+    )
 
     with yaml_file.open() as stream:
         yaml_dict = yaml.safe_load(stream)
 
-    found = config.AgentConfig.from_yaml(yaml_file, yaml_dict)
+    found = config.AgentConfig.from_yaml(
+        installation_config, yaml_file, yaml_dict,
+    )
 
     assert found == expected
 
@@ -1276,7 +1328,7 @@ def test_quiz_ctor_w_question_file(
         assert found == pathlib.Path(exp_ovr)
 
 
-def test_quiz_from_yaml_exceptions(temp_dir):
+def test_quiz_from_yaml_exceptions(installation_config, temp_dir):
 
     config_kw = {
         "id": TEST_QUIZ_ID,
@@ -1286,7 +1338,9 @@ def test_quiz_from_yaml_exceptions(temp_dir):
     config_path = temp_dir / "test.yaml"
 
     with pytest.raises(config.FromYamlException) as exc:
-        config.QuizConfig.from_yaml(config_path, config_kw)
+        config.QuizConfig.from_yaml(
+            installation_config, config_path, config_kw,
+        )
 
     assert exc.value.config_path == config_path
 
@@ -1298,17 +1352,25 @@ def test_quiz_from_yaml_exceptions(temp_dir):
         (TEST_QUIZ_W_OVR_YAML, TEST_QUIZ_W_OVR_KW),
     ],
 )
-def test_quiz_from_yaml(temp_dir, config_yaml, expected_kw):
+def test_quiz_from_yaml(
+    installation_config, temp_dir, config_yaml, expected_kw,
+):
     expected = config.QuizConfig(**expected_kw)
 
     yaml_file = temp_dir / "test.yaml"
     yaml_file.write_text(config_yaml)
-    expected = dataclasses.replace(expected, _config_path=yaml_file)
+    expected = dataclasses.replace(
+        expected,
+        _installation_config=installation_config,
+        _config_path=yaml_file,
+    )
 
     with yaml_file.open() as stream:
         yaml_dict = yaml.safe_load(stream)
 
-    found = config.QuizConfig.from_yaml(yaml_file, yaml_dict)
+    found = config.QuizConfig.from_yaml(
+        installation_config, yaml_file, yaml_dict,
+    )
 
     assert found == expected
 
@@ -1413,30 +1475,52 @@ def test_quiz_get_question(w_loaded, w_miss):
         (FULL_ROOM_CONFIG_YAML, FULL_ROOM_CONFIG_KW),
     ],
 )
-def test_roomconfig_from_yaml(temp_dir, config_yaml, expected_kw):
+def test_roomconfig_from_yaml(
+    installation_config, temp_dir, config_yaml, expected_kw,
+):
     expected = config.RoomConfig(**expected_kw)
 
     yaml_file = temp_dir / "test.yaml"
     yaml_file.write_text(config_yaml)
-    expected = dataclasses.replace(expected, _config_path=yaml_file)
-    expected.agent_config = dataclasses.replace(
-        expected.agent_config, _config_path=yaml_file,
+
+    expected = dataclasses.replace(
+        expected,
+        _installation_config=installation_config,
+        _config_path=yaml_file,
     )
 
-    if len(expected_kw.get("tool_configs", ())) > 0:
-        sdtc = expected_kw["tool_configs"]["search_documents"]
-        sdtc._config_path = yaml_file
+    expected.agent_config = dataclasses.replace(
+        expected.agent_config,
+        _installation_config=installation_config,
+        _config_path=yaml_file,
+    )
+
+    if len(expected_kw.get("tool_configs", {})) > 0:
+        for tool_config in expected_kw["tool_configs"].values():
+            tool_config._installation_config = installation_config
+            tool_config._config_path = yaml_file
+
+    if len(expected_kw.get("mcp_client_toolset_configs", {})) > 0:
+        for mcts_config in expected_kw["mcp_client_toolset_configs"].values():
+            mcts_config._installation_config = installation_config
+            mcts_config._config_path = yaml_file
 
     if "quizzes" in config_yaml:
         expected.quizzes = [
-            dataclasses.replace(quiz, _config_path=yaml_file)
+            dataclasses.replace(
+                quiz,
+                _installation_config=installation_config,
+                _config_path=yaml_file,
+            )
             for quiz in expected.quizzes
         ]
 
     with yaml_file.open() as stream:
         yaml_dict = yaml.safe_load(stream)
 
-    found = config.RoomConfig.from_yaml(yaml_file, yaml_dict)
+    found = config.RoomConfig.from_yaml(
+        installation_config, yaml_file, yaml_dict,
+    )
 
     assert found == expected
 
@@ -1528,7 +1612,9 @@ def test_roomconfig_get_logo_image(temp_dir, room_config_kw, w_config_path):
         (W_NAME_COMPLETION_CONFIG_YAML, W_NAME_COMPLETION_CONFIG_KW),
     ],
 )
-def test_completionconfig_from_yaml(temp_dir, config_yaml, expected_kw):
+def test_completionconfig_from_yaml(
+    installation_config, temp_dir, config_yaml, expected_kw,
+):
     if "name" not in expected_kw:
         expected_kw = expected_kw.copy()
         expected_kw["name"] = expected_kw["id"]
@@ -1537,15 +1623,33 @@ def test_completionconfig_from_yaml(temp_dir, config_yaml, expected_kw):
 
     yaml_file = temp_dir / "test.yaml"
     yaml_file.write_text(config_yaml)
-    expected = dataclasses.replace(expected, _config_path=yaml_file)
-    expected.agent_config = dataclasses.replace(
-        expected.agent_config, _config_path=yaml_file,
+    expected = dataclasses.replace(
+        expected,
+        _installation_config=installation_config,
+        _config_path=yaml_file,
     )
+    expected.agent_config = dataclasses.replace(
+        expected.agent_config,
+        _installation_config=installation_config,
+        _config_path=yaml_file,
+    )
+
+    if len(expected_kw.get("tool_configs", {})) > 0:
+        for tool_config in expected_kw["tool_configs"].values():
+            tool_config._installation_config = installation_config
+            tool_config._config_path = yaml_file
+
+    if len(expected_kw.get("mcp_client_toolset_configs", {})) > 0:
+        for mcts_config in expected_kw["mcp_client_toolset_configs"].values():
+            mcts_config._installation_config = installation_config
+            mcts_config._config_path = yaml_file
 
     with yaml_file.open() as stream:
         yaml_dict = yaml.safe_load(stream)
 
-    found = config.CompletionConfig.from_yaml(yaml_file, yaml_dict)
+    found = config.CompletionConfig.from_yaml(
+        installation_config, yaml_file, yaml_dict,
+    )
 
     assert found == expected
 
@@ -1671,12 +1775,16 @@ def test__find_configs_w_multiple(temp_dir):
         W_QUIZZES_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW,
     ),
 ])
-def test_installationconfig_from_yaml(temp_dir, config_yaml, expected_kw):
+def test_installationconfig_from_yaml(
+    installation_config, temp_dir, config_yaml, expected_kw,
+):
     expected = config.InstallationConfig(**expected_kw)
 
     yaml_file = temp_dir / "installation.yaml"
     yaml_file.write_text(config_yaml)
-    expected = dataclasses.replace(expected, _config_path=yaml_file)
+    expected = dataclasses.replace(
+        expected, _config_path=yaml_file,
+    )
 
     if "oidc_paths" in expected_kw:
         exp_oidc_paths = [
@@ -1757,15 +1865,21 @@ def test_installationconfig_oidc_auth_system_configs_wo_existing(
     oidc_w_scope_kw["oidc_client_pem_path"] = None
     oidc_w_scope_kw["_config_path"] = oidc_w_scope_config
 
-    expected = [
-        config.OIDCAuthSystemConfig(**oidc_bare_kw),
-        config.OIDCAuthSystemConfig(**oidc_w_scope_kw),
-    ]
-
     i_config_kw = BARE_INSTALLATION_CONFIG_KW.copy()
     i_config_kw["oidc_paths"] = [oidc_bare_path, oidc_w_scope_path]
 
     i_config = config.InstallationConfig(**i_config_kw)
+
+    expected = [
+        config.OIDCAuthSystemConfig(
+            _installation_config=i_config,
+            **oidc_bare_kw,
+        ),
+        config.OIDCAuthSystemConfig(
+            _installation_config=i_config,
+            **oidc_w_scope_kw,
+        ),
+    ]
 
     found = i_config.oidc_auth_system_configs
 
