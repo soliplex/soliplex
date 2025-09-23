@@ -472,6 +472,17 @@ oidc_paths:
     - "{OIDC_PATH_2}"
 """
 
+W_OIDC_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "oidc_paths": [
+    ],
+}
+W_OIDC_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+oidc_paths:
+    -
+"""
+
 ROOM_PATH_1 = "./rooms"
 ROOM_PATH_2 = "/path/to/other/rooms"
 
@@ -487,6 +498,17 @@ id: "{INSTALLATION_ID}"
 room_paths:
     - "{ROOM_PATH_1}"
     - "{ROOM_PATH_2}"
+"""
+
+W_ROOM_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "room_paths": [
+    ],
+}
+W_ROOM_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+room_paths:
+    -
 """
 
 COMPLETION_PATH_1 = "./completions"
@@ -506,6 +528,17 @@ completion_paths:
     - "{COMPLETION_PATH_2}"
 """
 
+W_COMPLETION_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "completion_paths": [
+    ],
+}
+W_COMPLETION_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+completion_paths:
+    -
+"""
+
 QUIZZES_PATH_1 = "./quizzes"
 QUIZZES_PATH_2 = "/path/to/other/quizzes"
 
@@ -521,6 +554,17 @@ id: "{INSTALLATION_ID}"
 quizzes_paths:
     - "{QUIZZES_PATH_1}"
     - "{QUIZZES_PATH_2}"
+"""
+
+W_QUIZZES_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "quizzes_paths": [
+    ],
+}
+W_QUIZZES_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+quizzes_paths:
+    -
 """
 
 
@@ -1599,16 +1643,32 @@ def test__find_configs_w_multiple(temp_dir):
         W_OIDC_PATHS_INSTALLATION_CONFIG_KW,
     ),
     (
+        W_OIDC_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML,
+        W_OIDC_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW,
+    ),
+    (
         W_ROOM_PATHS_INSTALLATION_CONFIG_YAML,
         W_ROOM_PATHS_INSTALLATION_CONFIG_KW,
+    ),
+    (
+        W_ROOM_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML,
+        W_ROOM_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW,
     ),
     (
         W_COMPLETION_PATHS_INSTALLATION_CONFIG_YAML,
         W_COMPLETION_PATHS_INSTALLATION_CONFIG_KW,
     ),
     (
+        W_COMPLETION_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML,
+        W_COMPLETION_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW,
+    ),
+    (
         W_QUIZZES_PATHS_INSTALLATION_CONFIG_YAML,
         W_QUIZZES_PATHS_INSTALLATION_CONFIG_KW,
+    ),
+    (
+        W_QUIZZES_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML,
+        W_QUIZZES_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW,
     ),
 ])
 def test_installationconfig_from_yaml(temp_dir, config_yaml, expected_kw):
