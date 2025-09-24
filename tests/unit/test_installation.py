@@ -1,3 +1,4 @@
+import contextlib
 from unittest import mock
 
 import fastapi
@@ -6,6 +7,30 @@ import pytest
 from soliplex import config
 from soliplex import convos
 from soliplex import installation
+
+KEY = "test-key"
+VALUE = "test-value"
+DEFAULT = "test-default"
+
+
+@pytest.mark.parametrize("w_default", [False, True])
+def test_installation_get_environment(w_default):
+    i_config = mock.create_autospec(config.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    kwargs = {}
+
+    if w_default:
+        kwargs["default"] = DEFAULT
+
+    found = the_installation.get_environment(KEY, **kwargs)
+
+    assert found is i_config.get_environment.return_value
+
+    if w_default:
+        i_config.get_environment.assert_called_once_with(KEY, DEFAULT)
+    else:
+        i_config.get_environment.assert_called_once_with(KEY, None)
 
 
 @pytest.mark.parametrize("w_oidc_configs", [[], [object()]])

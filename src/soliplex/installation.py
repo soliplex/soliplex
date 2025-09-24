@@ -12,6 +12,9 @@ from soliplex import convos
 class Installation:
     _config: config.InstallationConfig
 
+    def get_environment(self, key, default=None) -> str:
+        return self._config.get_environment(key, default)
+
     @property
     def auth_disabled(self):
         return len(self._config.oidc_auth_system_configs) == 0
