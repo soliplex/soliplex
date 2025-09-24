@@ -155,7 +155,7 @@ def test_setup_mcp_for_rooms(fmcp_klass, fmtp_klass, rmt, w_max_age):
     the_installation.get_environment.return_value = w_max_age
 
     if w_max_age is not None:
-        exp_max_age = str(w_max_age)
+        exp_max_age = int(w_max_age)
     else:
         exp_max_age = None
 

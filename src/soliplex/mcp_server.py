@@ -94,6 +94,9 @@ def setup_mcp_for_rooms(the_installation: installation.Installation):
     available_rooms = the_installation._config.room_configs
     max_age = the_installation.get_environment("MCP_TOKEN_MAX_AGE")
 
+    if max_age is not None:
+        max_age = int(max_age)
+
     for key, room_config in available_rooms.items():
         if room_config.allow_mcp:
 
