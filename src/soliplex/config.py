@@ -524,7 +524,12 @@ class AgentConfig:
 
     def __post_init__(self, system_prompt):
         if self.model_name is None:
-            self.model_name = os.getenv("DEFAULT_AGENT_MODEL")
+            if self._installation_config is not None:
+                self.model_name = (
+                    self._installation_config.get_environment(
+                        "DEFAULT_AGENT_MODEL",
+                    )
+                )
 
         if system_prompt is not None:
             self._system_prompt_text = system_prompt
@@ -1001,6 +1006,10 @@ class InstallationConfig:
     environment: dict[str, str] = dataclasses.field(
         default_factory=dict,
     )
+
+    def get_environment(self, key, default=None):
+        """Find the configured value for a given quasi-envvar"""
+        return self.environment.get(key, default)
 
     #
     # Path(s) to OIDC Authentication System configs
