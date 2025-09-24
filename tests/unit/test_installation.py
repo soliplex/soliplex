@@ -8,6 +8,16 @@ from soliplex import convos
 from soliplex import installation
 
 
+@pytest.mark.parametrize("w_oidc_configs", [[], [object()]])
+def test_installation_auth_disabled(w_oidc_configs):
+    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config.oidc_auth_system_configs = w_oidc_configs
+
+    the_installation = installation.Installation(i_config)
+
+    assert the_installation.auth_disabled == (not w_oidc_configs)
+
+
 def test_installation_oidc_auth_system_configs():
     i_config = mock.create_autospec(config.InstallationConfig)
     the_installation = installation.Installation(i_config)

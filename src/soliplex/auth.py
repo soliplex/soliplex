@@ -52,18 +52,12 @@ def get_oauth(
     return _oauth
 
 
-def auth_disabled(
-    the_installation: installation.Installation
-) -> bool:
-    return len(the_installation.oidc_auth_system_configs) == 0
-
-
 def authenticate(
     the_installation: installation.Installation,
     token: str,
 ):
     # See #316
-    if auth_disabled(the_installation):
+    if the_installation.auth_disabled:
         return {"name": "Phreddy Phlyntstone", "email": "phreddy@example.com"}
 
     if token is None:
