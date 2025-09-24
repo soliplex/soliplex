@@ -36,13 +36,11 @@ async def test_get_login(with_auth_systems):
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_auth_disabled", [False, True])
 @pytest.mark.parametrize("w_return_to", [False, True])
-@mock.patch("soliplex.auth.auth_disabled")
 @mock.patch("soliplex.auth.get_oauth")
-async def test_get_login_system(get_oauth, ad, w_return_to, w_auth_disabled):
+async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
     system = "test_oauth_appname"
     the_installation = mock.create_autospec(installation.Installation)
-
-    ad.return_value = w_auth_disabled
+    the_installation.auth_disabled = w_auth_disabled
 
     cc = get_oauth.return_value.create_client
     oidc = cc.return_value
@@ -95,15 +93,13 @@ async def test_get_login_system(get_oauth, ad, w_return_to, w_auth_disabled):
 @pytest.mark.parametrize("w_return_to", [False, True])
 @pytest.mark.parametrize("w_error", [None, "aat", "authenticate"])
 @mock.patch("soliplex.auth.get_oauth")
-@mock.patch("soliplex.auth.auth_disabled")
 @mock.patch("soliplex.auth.authenticate")
 async def test_get_auth_system(
-    auth_fn, ad, get_oauth, w_error, w_return_to, w_auth_disabled,
+    auth_fn, get_oauth, w_error, w_return_to, w_auth_disabled,
 ):
     system = "test_oauth_appname"
     the_installation = mock.create_autospec(installation.Installation)
-
-    ad.return_value = w_auth_disabled
+    the_installation.auth_disabled = w_auth_disabled
 
     cc = get_oauth.return_value.create_client
     oidc = cc.return_value
@@ -203,14 +199,11 @@ async def test_get_auth_system(
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_auth_disabled", [False, True])
 @mock.patch("soliplex.auth.authenticate")
-@mock.patch("soliplex.auth.auth_disabled")
-async def test_get_user_info(
-    auth_disabled, authenticate, w_auth_disabled,
-):
-    auth_disabled.return_value = w_auth_disabled
+async def test_get_user_info(authenticate, w_auth_disabled):
     authenticate.return_value = AUTH_USER
 
     the_installation = mock.create_autospec(installation.Installation)
+    the_installation.auth_disabled = w_auth_disabled
     token = object()
 
     if w_auth_disabled:

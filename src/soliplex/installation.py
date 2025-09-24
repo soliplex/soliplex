@@ -13,6 +13,10 @@ class Installation:
     _config: config.InstallationConfig
 
     @property
+    def auth_disabled(self):
+        return len(self._config.oidc_auth_system_configs) == 0
+
+    @property
     def oidc_auth_system_configs(self) -> list[config.OIDCAuthSystemConfig]:
         return self._config.oidc_auth_system_configs
 

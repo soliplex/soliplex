@@ -34,7 +34,7 @@ async def get_login_system(
     the_installation: installation.Installation=
         installation.depend_the_installation,
 ):
-    if auth.auth_disabled(the_installation):
+    if the_installation.auth_disabled:
         raise fastapi.HTTPException(
             status_code=404,
             detail="system in no-auth mode",
@@ -59,7 +59,7 @@ async def get_auth_system(
     the_installation: installation.Installation=
         installation.depend_the_installation,
 ):
-    if auth.auth_disabled(the_installation):
+    if the_installation.auth_disabled:
         raise fastapi.HTTPException(
             status_code=404,
             detail="system in no-auth mode",
@@ -99,7 +99,7 @@ async def get_user_info(
         installation.depend_the_installation,
     token: security.HTTPAuthorizationCredentials=auth.oauth2_predicate,
 ) -> models.UserInfo:
-    if auth.auth_disabled():
+    if the_installation.auth_disabled:
         raise fastapi.HTTPException(
             status_code=404,
             detail="system in no-auth mode",

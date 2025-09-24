@@ -103,23 +103,13 @@ def test_get_oauth_w_initialized():
     assert found is expected
 
 
-def test_auth_disabled(with_auth_systems):
-    the_installation = mock.create_autospec(installation.Installation)
-    the_installation.oidc_auth_system_configs = with_auth_systems
-
-    found = auth.auth_disabled(the_installation)
-
-    assert found == (len(with_auth_systems) == 0)
-
-
 @pytest.mark.parametrize("w_auth_disabled", [False, True])
-@mock.patch("soliplex.auth.auth_disabled")
-def test_authenticate_w_token_none(ad, w_auth_disabled):
+def test_authenticate_w_token_none(w_auth_disabled):
     DUMMY_USER = {
         "name": "Phreddy Phlyntstone", "email": "phreddy@example.com",
     }
     the_installation = mock.create_autospec(installation.Installation)
-    ad.return_value = w_auth_disabled
+    the_installation.auth_disabled = w_auth_disabled
 
     if w_auth_disabled:
         found = auth.authenticate(the_installation, None)
@@ -142,6 +132,7 @@ def test_authenticate(vat, with_auth_systems, w_hit):
         "name": "Phreddy Phlyntstone", "email": "phreddy@example.com",
     }
     the_installation = mock.create_autospec(installation.Installation)
+    the_installation.auth_disabled = len(with_auth_systems) == 0
     the_installation.oidc_auth_system_configs = with_auth_systems
     token = object()
 
