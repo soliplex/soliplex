@@ -229,12 +229,33 @@ async def test_get_the_installation():
     assert found is the_installation
 
 
+def _mock_mcp_app(key):
+    async def _mock_lifespan(_ignored):
+        yield None
+
+    result = mock.MagicMock(spec_set=["lifespan"])
+    result.lifespan = contextlib.asynccontextmanager(_mock_lifespan)
+    return result
+
+
+@pytest.fixture
+def mcp_apps():
+    return {
+        key: _mock_mcp_app(key)
+        for key in ["room1", "room2"]
+    }
+
+
 @pytest.mark.anyio
+@mock.patch("soliplex.mcp_server.setup_mcp_for_rooms")
 @mock.patch("soliplex.config.load_installation")
-async def test_lifespan(lc):
+async def test_lifespan(load_installation, smfr, mcp_apps):
     INSTALLATION_PATH = "/path/to/installation"
+
+    smfr.return_value = mcp_apps
+
     i_config = mock.create_autospec(config.InstallationConfig)
-    lc.return_value = i_config
+    load_installation.return_value = i_config
     app = mock.create_autospec(fastapi.FastAPI)
 
     found = [
@@ -249,7 +270,14 @@ async def test_lifespan(lc):
 
     i_config.reload_configurations.assert_called_once_with()
 
-    lc.assert_called_once_with(INSTALLATION_PATH)
+    load_installation.assert_called_once_with(INSTALLATION_PATH)
 
     the_convos = found[0]["the_convos"]
     assert isinstance(the_convos, convos.Conversations)
+
+    for f_call, (key, mcp_app) in zip(
+        app.mount.call_args_list, mcp_apps.items(), strict=True,
+    ):
+        assert f_call.args == ("/mcp/" + key, mcp_app)
+
+    smfr.assert_called_once_with(the_installation)

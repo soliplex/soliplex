@@ -1,3 +1,4 @@
+import contextlib
 import dataclasses
 
 import fastapi
@@ -6,6 +7,7 @@ import pydantic_ai
 from soliplex import agents
 from soliplex import config
 from soliplex import convos
+from soliplex import mcp_server
 
 
 @dataclasses.dataclass
@@ -83,4 +85,13 @@ async def lifespan(app: fastapi.FastAPI, installation_path):
         "the_convos": the_convos,
     }
 
-    yield context
+    async with contextlib.AsyncExitStack() as stack:
+
+        mcp_apps = mcp_server.setup_mcp_for_rooms(the_installation)
+
+        for mcp_name, mcp_app in mcp_apps.items():
+            mcp_lifespan = mcp_app.lifespan(app)
+            await stack.enter_async_context(mcp_lifespan)
+            app.mount(f"/mcp/{mcp_name}", mcp_app, name=f"mcp_{mcp_name}")
+
+        yield context
