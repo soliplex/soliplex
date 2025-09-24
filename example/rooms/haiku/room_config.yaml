@@ -5,12 +5,14 @@ suggestions:
 - "Which way is up?"
 agent:
   system_prompt: "./prompt.txt"
-  model_name: "gpt-oss:20b"
+allow_mcp: true
 tools:
   - tool_name: "soliplex.tools.get_current_datetime"
+    allow_mcp: true
   - tool_name: "soliplex.tools.search_documents"
     rag_lancedb_override_path: "/path/to/rag.lancedb"
     return_citations: true
     expand_context_radius: 3
     search_documents_limit: 7
+    allow_mcp: true
 # - tool_name: "<yourapp>.tools.get_current_user"
