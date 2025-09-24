@@ -2,7 +2,6 @@ import dataclasses
 import functools
 import inspect
 import json
-import os
 import pathlib
 from unittest import mock
 from urllib import parse as url_parse
@@ -117,6 +116,11 @@ PROVIDER_BASE_URL = "https://provider.example.com/api"
 PROVIDER_KEY_ENVVAR = "TEST_API_KEY"
 PROVIDER_KEY_VALUE = "DEADBEEF"
 OLLAMA_BASE_URL = "https://example.com:12345"
+
+BARE_INSTALLATION_CONFIG_ENVIRONMENT = {
+    "OLLAMA_BASE_URL": PROVIDER_BASE_URL,
+    "DEFAULT_AGENT_MODEL": MODEL_NAME,
+}
 
 TEST_QUIZ_ID = "test_quiz"
 TEST_QUIZ_TITLE = "Test Quiz"
@@ -1111,25 +1115,33 @@ def test_http_mctc_tool_kwargs(iev, w_query_params, w_headers):
         assert mock.call(cfg_value) in iev.call_args_list
 
 
-@pytest.mark.parametrize("kw", [EMPTY_AGENT_CONFIG_KW, BARE_AGENT_CONFIG_KW])
-def test_agentconfig_ctor(kw):
-    with mock.patch.dict(
-        os.environ, clear=True, DEFAULT_AGENT_MODEL="env-model",
-    ):
-        found = config.AgentConfig(**kw)
+@pytest.mark.parametrize("kw", [
+    EMPTY_AGENT_CONFIG_KW.copy(),
+    BARE_AGENT_CONFIG_KW.copy(),
+])
+def test_agentconfig_ctor(installation_config, kw):
+    kw["_installation_config"] = installation_config
+
+    found = config.AgentConfig(**kw)
 
     if "model_name" in kw:
         assert found.model_name == kw["model_name"]
     else:
-        assert found.model_name == "env-model"
+        assert (
+            found.model_name is
+                installation_config.get_environment.return_value
+        )
 
 
 @pytest.mark.parametrize(
     "config_yaml, expected_kw",
     [
-        (EMPTY_AGENT_CONFIG_YAML, EMPTY_AGENT_CONFIG_KW),
-        (BARE_AGENT_CONFIG_YAML, BARE_AGENT_CONFIG_KW),
-        (W_PROMPT_FILE_AGENT_CONFIG_YAML, W_PROMPT_FILE_AGENT_CONFIG_KW),
+        (EMPTY_AGENT_CONFIG_YAML, EMPTY_AGENT_CONFIG_KW.copy()),
+        (BARE_AGENT_CONFIG_YAML, BARE_AGENT_CONFIG_KW.copy()),
+        (
+            W_PROMPT_FILE_AGENT_CONFIG_YAML,
+            W_PROMPT_FILE_AGENT_CONFIG_KW.copy(),
+        ),
     ],
 )
 def test_agentconfig_from_yaml(
@@ -1158,9 +1170,9 @@ def test_agentconfig_from_yaml(
 
 @pytest.mark.parametrize("w_config_path", [False, True])
 @pytest.mark.parametrize("agent_config_kw", [
-    EMPTY_AGENT_CONFIG_KW,
-    BARE_AGENT_CONFIG_KW,
-    W_PROMPT_FILE_AGENT_CONFIG_KW,
+    EMPTY_AGENT_CONFIG_KW.copy(),
+    BARE_AGENT_CONFIG_KW.copy(),
+    W_PROMPT_FILE_AGENT_CONFIG_KW.copy(),
 ])
 def test_agentconfig_get_system_prompt(
     temp_dir, agent_config_kw, w_config_path,
@@ -1731,6 +1743,34 @@ def test__find_configs_w_multiple(temp_dir):
         assert f_thing == e_thing
 
 
+@pytest.mark.parametrize("w_default", [False, True])
+@pytest.mark.parametrize("w_hit", [False, True])
+def test_installationconfig_get_environment(w_hit, w_default):
+    KEY = "test-key"
+    VALUE = "test-value"
+    DEFAULT = "test-default"
+
+    kwargs = {}
+
+    if w_default:
+        kwargs["default"] = DEFAULT
+
+    i_config = config.InstallationConfig(id="test-ic")
+
+    if w_hit:
+        i_config.environment[KEY] = VALUE
+
+    found = i_config.get_environment(KEY, **kwargs)
+
+    if w_hit:
+        assert found == VALUE
+    elif w_default:
+        assert found == DEFAULT
+    else:
+        assert found is None
+
+
+
 @pytest.mark.parametrize("config_yaml, expected_kw", [
     (BARE_INSTALLATION_CONFIG_YAML, BARE_INSTALLATION_CONFIG_KW),
     (W_SECRETS_INSTALLATION_CONFIG_YAML, W_SECRETS_INSTALLATION_CONFIG_KW),
@@ -1905,6 +1945,8 @@ def test_installationconfig_room_configs_wo_existing(temp_dir):
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_config_path"] = temp_dir / "installation.yaml"
+    kw["environment"] = BARE_INSTALLATION_CONFIG_ENVIRONMENT
+
     rooms = temp_dir / "rooms"
     rooms.mkdir()
 
@@ -1931,6 +1973,7 @@ def test_installationconfig_room_configs_wo_existing_w_conflict(temp_dir):
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_config_path"] = temp_dir / "installation.yaml"
+    kw["environment"] = BARE_INSTALLATION_CONFIG_ENVIRONMENT
     kw["room_paths"] = ROOM_PATHS
 
     for room_path in ROOM_PATHS:
@@ -1973,6 +2016,8 @@ def test_installationconfig_completion_configs_wo_existing(temp_dir):
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_config_path"] = temp_dir / "installation.yaml"
+    kw["environment"] = BARE_INSTALLATION_CONFIG_ENVIRONMENT
+
     completions = temp_dir / "completions"
     completions.mkdir()
 
@@ -2001,6 +2046,7 @@ def test_installationconfig_completion_configs_wo_existing_w_conflict(
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_config_path"] = temp_dir / "installation.yaml"
+    kw["environment"] = BARE_INSTALLATION_CONFIG_ENVIRONMENT
     kw["completion_paths"] = COMPLETION_PATHS
 
     for completion_path in COMPLETION_PATHS:
