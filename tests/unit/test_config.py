@@ -1308,12 +1308,12 @@ def populated_quiz(temp_dir, quiz_json):
 
 
 def test_quizconfig_ctor_defaults():
-    with pytest.raises(config.RCQExactlyOneOfStemOrOverride):
+    with pytest.raises(config.QCExactlyOneOfStemOrOverride):
         config.QuizConfig(id=TEST_QUIZ_ID)
 
 
 def test_quizconfig_ctor_exclusive():
-    with pytest.raises(config.RCQExactlyOneOfStemOrOverride):
+    with pytest.raises(config.QCExactlyOneOfStemOrOverride):
         config.QuizConfig(
             id=TEST_QUIZ_ID,
             _question_file_stem="question_file.json",
@@ -1416,6 +1416,33 @@ def test_quizconfig_provider_url(installation_config):
     )
 
     assert qc.provider_base_url == OLLAMA_BASE_URL
+
+
+def test_quizconfig__load_questions_file_miss_w_stem(
+    installation_config, temp_dir,
+):
+    installation_config.quizzes_paths = [temp_dir]
+    qc = config.QuizConfig(
+        id=TEST_QUIZ_ID,
+        question_file="nonesuch",
+        _installation_config=installation_config,
+    )
+
+    with pytest.raises(config.QuestionFileNotFoundWithStem):
+        qc._load_questions_file()
+
+
+def test_quizconfig__load_questions_file_miss_w_override(
+    installation_config, temp_dir,
+):
+    qc = config.QuizConfig(
+        id=TEST_QUIZ_ID,
+        question_file=str(temp_dir / "nonesuch.json"),
+        _installation_config=installation_config,
+    )
+
+    with pytest.raises(config.QuestionFileNotFoundWithOverride):
+        qc._load_questions_file()
 
 
 def test_quizconfig__load_questions_file(temp_dir, populated_quiz, quiz_json):

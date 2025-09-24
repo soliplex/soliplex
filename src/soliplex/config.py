@@ -67,12 +67,28 @@ class RagDbExactlyOneOfStemOrOverride(TypeError):
         )
 
 
-class RCQExactlyOneOfStemOrOverride(TypeError):
+class QCExactlyOneOfStemOrOverride(TypeError):
     def __init__(self):
         super().__init__(
             "Configure exactly one of '_question_file_stem' or "
             "'_question_file_override_path'"
         )
+
+
+class QuestionFileNotFoundWithStem(ValueError):
+    def __init__(self, stem, quizzes_paths):
+        self.stem = stem
+        self.quizzes_paths = quizzes_paths
+        super().__init__(
+            f"'{stem}.json' file not found on paths: "
+            f"{','.join([str(qp) for qp in quizzes_paths])}"
+        )
+
+
+class QuestionFileNotFoundWithOverride(ValueError):
+    def __init__(self, override):
+        self.override = override
+        super().__init__(f"'{override}' file not found")
 
 
 #=============================================================================
@@ -652,7 +668,7 @@ class QuizConfig:
             self._question_file_stem is not None and
             self._question_file_path_override is not None
         ):
-            raise RCQExactlyOneOfStemOrOverride()
+            raise QCExactlyOneOfStemOrOverride()
 
     # Set by `from_yaml` factory
     _installation_config: InstallationConfig = None
@@ -670,7 +686,7 @@ class QuizConfig:
 
         try:
             return cls(**config)
-        except RCQExactlyOneOfStemOrOverride as exc:
+        except QCExactlyOneOfStemOrOverride as exc:
             raise FromYamlException(config_path) from exc
 
     @property
@@ -705,6 +721,19 @@ class QuizConfig:
         )
 
     def _load_questions_file(self) -> dict[str, QuizQuestion]:
+        question_file = self.question_file_path
+
+        if question_file is None:
+            raise QuestionFileNotFoundWithStem(
+                self._question_file_stem,
+                self._installation_config.quizzes_paths,
+            )
+
+        if not question_file.is_file():
+            raise QuestionFileNotFoundWithOverride(
+                self._question_file_path_override,
+            )
+
         quiz_json = json.loads(self.question_file_path.read_text())
         return {
             q_dict["metadata"]["uuid"]: self._make_question(q_dict)
