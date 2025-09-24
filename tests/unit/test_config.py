@@ -1323,21 +1323,38 @@ def test_quizconfig_ctor_exclusive():
 
 @pytest.mark.parametrize("qf, exp_stem, exp_ovr", [
     ("foo.json", "foo", None),
-    ("foo", "foo", None),
+    ("bar", "bar", None),
     ("/path/to/foo.json", None, "/path/to/foo.json"),
 ])
 def test_quizconfig_ctor_w_question_file(
-    temp_dir, qf, exp_stem, exp_ovr,
+    installation_config, temp_dir, qf, exp_stem, exp_ovr,
 ):
-    qc = config.QuizConfig(id=TEST_QUIZ_ID, question_file=qf)
+    qp_1 = temp_dir / "qp_1"
+    qp_1.mkdir()
+
+    qp_2 = temp_dir / "qp_2"
+    qp_2.mkdir()
+
+    if exp_stem == "foo":
+        qf_in_qp2 = qp_2 / "foo.json"
+        qf_in_qp2.write_text("{}")
+
+    installation_config.quizzes_paths = [qp_1, qp_2]
+
+    qc = config.QuizConfig(
+        id=TEST_QUIZ_ID,
+        question_file=qf,
+        _installation_config=installation_config,
+    )
     assert qc._question_file_stem == exp_stem
     assert qc._question_file_path_override == exp_ovr
 
-    with mock.patch.dict("os.environ", INSTALLATION_PATH=str(temp_dir)):
-        found = qc.question_file_path
+    found = qc.question_file_path
 
-    if exp_stem is not None:
-        assert found == temp_dir / "quizzes" / f"{exp_stem}.json"
+    if exp_stem == "foo":
+        assert found == qf_in_qp2
+    elif exp_stem == "bar":
+        assert found is None
     else:
         assert found == pathlib.Path(exp_ovr)
 

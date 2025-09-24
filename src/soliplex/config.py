@@ -684,9 +684,11 @@ class QuizConfig:
         if self._question_file_path_override is not None:
             return pathlib.Path(self._question_file_path_override)
         else:
-            installation_path = pathlib.Path(os.environ["INSTALLATION_PATH"])
-            quizzes_path = installation_path / "quizzes"
-            return quizzes_path / f"{self._question_file_stem}.json"
+            for quizzes_path in self._installation_config.quizzes_paths:
+                qf_path = quizzes_path / f"{self._question_file_stem}.json"
+
+                if qf_path.is_file():
+                    return qf_path
 
     @staticmethod
     def _make_question(question: dict) -> QuizQuestion:
