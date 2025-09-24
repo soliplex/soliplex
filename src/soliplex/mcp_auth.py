@@ -1,6 +1,12 @@
+from __future__ import annotations  # forward refs
+
 import os
 
+from fastmcp.server.auth import auth as fmcp_server_auth
 from itsdangerous import url_safe as id_url_safe
+from mcp.server.auth import provider as mcp_auth_provider
+
+from soliplex import installation
 
 URL_SAFE_TOKEN_SECRET_ENV = "SOLIPLEX_URL_SAFE_TOKEN_SECRET"
 
@@ -58,3 +64,39 @@ def validate_url_safe_token(salt: str, token: str, max_age: int=None) -> dict:
 
     if ok:
         return found
+
+
+class FastMCPTokenProvider(fmcp_server_auth.TokenVerifier):
+
+    room_id: str
+    max_age: int = None
+
+    def __init__(
+        self,
+        room_id: str,
+        the_installation: installation.Installation,
+        max_age: int = None,
+    ):
+        self.room_id = room_id
+        self.max_age = max_age
+        self.auth_disabled = the_installation.auth_disabled
+
+        super().__init__()
+
+    async def verify_token(
+        self, token: str,
+    ) -> mcp_auth_provider.AccessToken | None:
+
+        if self.auth_disabled:
+            validated = token
+        else:
+            validated = validate_url_safe_token(
+                self.room_id, token, max_age=self.max_age,
+            )
+
+        if validated is not None:
+            return mcp_auth_provider.AccessToken(
+                token=token,
+                client_id=self.room_id,
+                scopes=(),
+            )
