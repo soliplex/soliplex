@@ -515,7 +515,7 @@ class AgentConfig:
     _system_prompt_path: pathlib.Path = None
 
     provider_type: LLMProviderType = LLMProviderType.OLLAMA
-    provider_base_url: str = None  # defaults to OLLAMA_BASE_URL envvar
+    provider_base_url: str = None  # installation config provides default
     provider_key_envvar: str = None  # envvar name containing API key
 
     # Set by `from_yaml` factory
@@ -573,7 +573,9 @@ class AgentConfig:
     @property
     def llm_provider_kw(self) -> dict:
         if self.provider_base_url is None:
-            provider_base_url = os.environ["OLLAMA_BASE_URL"]
+            provider_base_url = self._installation_config.get_environment(
+                "OLLAMA_BASE_URL"
+            )
         else:
             provider_base_url = self.provider_base_url
 
@@ -582,6 +584,7 @@ class AgentConfig:
         }
 
         if self.provider_key_envvar is not None:
+            # TODO: replace with _installation_config.secrets lookup
             provider_key = os.getenv(self.provider_key_envvar)
 
             if provider_key is None:
@@ -669,6 +672,12 @@ class QuizConfig:
             return cls(**config)
         except RCQExactlyOneOfStemOrOverride as exc:
             raise FromYamlException(config_path) from exc
+
+    @property
+    def provider_base_url(self):
+        return self._installation_config.get_environment(
+            "OLLAMA_BASE_URL"
+        )
 
     @property
     def question_file_path(self) -> pathlib.Path:

@@ -1212,18 +1212,20 @@ def test_agentconfig_get_system_prompt(
 
 @pytest.mark.parametrize("w_pke", [False, True, None])
 @pytest.mark.parametrize("w_pbu", [False, True])
-def test_agentconfig_llm_provider_kw(w_pbu, w_pke):
-    kw = {}
+def test_agentconfig_llm_provider_kw(installation_config, w_pbu, w_pke):
+    ic_environ = {"OLLAMA_BASE_URL": OLLAMA_BASE_URL}
+    installation_config.get_environment = ic_environ.get
+
+    kw = {"_installation_config": installation_config}
 
     if w_pbu:
         kw["provider_base_url"] = PROVIDER_BASE_URL
 
-    env_patch = {
-        "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
-    }
+    env_patch = {}
 
     if w_pke:
         kw["provider_key_envvar"] = PROVIDER_KEY_ENVVAR
+        # TODO: use installation_config secrets
         env_patch[PROVIDER_KEY_ENVVAR] = PROVIDER_KEY_VALUE
 
     elif w_pke is None: # no envvar set, should raise
@@ -1288,7 +1290,7 @@ def quiz_questions(qa_question, mc_question):
 
 
 @pytest.fixture
-def test_quiz_json(quiz_questions):
+def quiz_json(quiz_questions):
     return {
         "cases": [
             dataclasses.asdict(question)
@@ -1297,20 +1299,20 @@ def test_quiz_json(quiz_questions):
     }
 
 @pytest.fixture
-def populated_quiz(temp_dir, test_quiz_json):
+def populated_quiz(temp_dir, quiz_json):
     quizzes_path = temp_dir / "quizzes"
     quizzes_path.mkdir()
     populated_quiz = quizzes_path / f"{TEST_QUIZ_ID}.json"
-    populated_quiz.write_text(json.dumps(test_quiz_json))
+    populated_quiz.write_text(json.dumps(quiz_json))
     return populated_quiz
 
 
-def test_quiz_ctor_defaults():
+def test_quizconfig_ctor_defaults():
     with pytest.raises(config.RCQExactlyOneOfStemOrOverride):
         config.QuizConfig(id=TEST_QUIZ_ID)
 
 
-def test_quiz_ctor_exclusive():
+def test_quizconfig_ctor_exclusive():
     with pytest.raises(config.RCQExactlyOneOfStemOrOverride):
         config.QuizConfig(
             id=TEST_QUIZ_ID,
@@ -1324,15 +1326,15 @@ def test_quiz_ctor_exclusive():
     ("foo", "foo", None),
     ("/path/to/foo.json", None, "/path/to/foo.json"),
 ])
-def test_quiz_ctor_w_question_file(
+def test_quizconfig_ctor_w_question_file(
     temp_dir, qf, exp_stem, exp_ovr,
 ):
-    quiz = config.QuizConfig(id=TEST_QUIZ_ID, question_file=qf)
-    assert quiz._question_file_stem == exp_stem
-    assert quiz._question_file_path_override == exp_ovr
+    qc = config.QuizConfig(id=TEST_QUIZ_ID, question_file=qf)
+    assert qc._question_file_stem == exp_stem
+    assert qc._question_file_path_override == exp_ovr
 
     with mock.patch.dict("os.environ", INSTALLATION_PATH=str(temp_dir)):
-        found = quiz.question_file_path
+        found = qc.question_file_path
 
     if exp_stem is not None:
         assert found == temp_dir / "quizzes" / f"{exp_stem}.json"
@@ -1340,7 +1342,7 @@ def test_quiz_ctor_w_question_file(
         assert found == pathlib.Path(exp_ovr)
 
 
-def test_quiz_from_yaml_exceptions(installation_config, temp_dir):
+def test_quizconfig_from_yaml_exceptions(installation_config, temp_dir):
 
     config_kw = {
         "id": TEST_QUIZ_ID,
@@ -1364,7 +1366,7 @@ def test_quiz_from_yaml_exceptions(installation_config, temp_dir):
         (TEST_QUIZ_W_OVR_YAML, TEST_QUIZ_W_OVR_KW),
     ],
 )
-def test_quiz_from_yaml(
+def test_quizconfig_from_yaml(
     installation_config, temp_dir, config_yaml, expected_kw,
 ):
     expected = config.QuizConfig(**expected_kw)
@@ -1386,15 +1388,27 @@ def test_quiz_from_yaml(
 
     assert found == expected
 
+def test_quizconfig_provider_url(installation_config):
+    ic_environ = {"OLLAMA_BASE_URL": OLLAMA_BASE_URL}
+    installation_config.get_environment = ic_environ.get
 
-def test_quiz__load_questions_file(temp_dir, populated_quiz, test_quiz_json):
-    expected_questions = test_quiz_json["cases"]
+    qc = config.QuizConfig(
+        id=TEST_QUIZ_ID,
+        question_file="/dev/null",
+        _installation_config=installation_config,
+    )
 
-    quiz = config.QuizConfig(
+    assert qc.provider_base_url == OLLAMA_BASE_URL
+
+
+def test_quizconfig__load_questions_file(temp_dir, populated_quiz, quiz_json):
+    expected_questions = quiz_json["cases"]
+
+    qc = config.QuizConfig(
         id=TEST_QUIZ_ID, question_file=str(populated_quiz),
     )
 
-    found = quiz.get_questions()
+    found = qc.get_questions()
 
     for f_question, e_question in zip(
         found, expected_questions, strict=True,
@@ -1414,7 +1428,7 @@ def test_quiz__load_questions_file(temp_dir, populated_quiz, test_quiz_json):
 
 @pytest.mark.parametrize("w_max_questions", [None, 1])
 @pytest.mark.parametrize("w_loaded", [False, True])
-def test_quiz_get_questions(quiz_questions, w_loaded, w_max_questions):
+def test_quizconfig_get_questions(quiz_questions, w_loaded, w_max_questions):
     expected_questions = quiz_questions
 
     kwargs = {"id": TEST_QUIZ_ID, "question_file": "ignored.json"}
@@ -1427,55 +1441,55 @@ def test_quiz_get_questions(quiz_questions, w_loaded, w_max_questions):
         question.metadata.uuid: question for question in expected_questions
     }
 
-    quiz = config.QuizConfig(**kwargs)
+    qc = config.QuizConfig(**kwargs)
 
     if w_loaded:
-        quiz._questions_map = q_map
+        qc._questions_map = q_map
     else:
-        quiz._load_questions_file = mock.Mock(spec_set=(), return_value=q_map)
+        qc._load_questions_file = mock.Mock(spec_set=(), return_value=q_map)
 
-    found = quiz.get_questions()
+    found = qc.get_questions()
 
     assert found == list(q_map.values())
 
 
 @mock.patch("random.shuffle")
-def test_quiz_get_questions_w_randomize(
-    shuffle, temp_dir, populated_quiz, test_quiz_json,
+def test_quizconfig_get_questions_w_randomize(
+    shuffle, temp_dir, populated_quiz, quiz_json,
 ):
-    quiz = config.QuizConfig(
+    qc = config.QuizConfig(
         id=TEST_QUIZ_ID, question_file=str(populated_quiz), randomize=True,
     )
 
-    found = quiz.get_questions()
+    found = qc.get_questions()
 
     shuffle.assert_called_once_with(found)
 
 
 @pytest.mark.parametrize("w_miss", [False, True])
 @pytest.mark.parametrize("w_loaded", [False, True])
-def test_quiz_get_question(w_loaded, w_miss):
+def test_quizconfig_get_question(w_loaded, w_miss):
     UUID = "DEADBEEF"
     expected = object()
 
-    quiz = config.QuizConfig(
+    qc = config.QuizConfig(
         id=TEST_QUIZ_ID, question_file="ignored.json",
     )
     q_map = {}
 
     if w_loaded:
-        quiz._questions_map = q_map
+        qc._questions_map = q_map
     else:
-        quiz._load_questions_file = mock.Mock(spec_set=(), return_value=q_map)
+        qc._load_questions_file = mock.Mock(spec_set=(), return_value=q_map)
 
     if w_miss:
         with pytest.raises(KeyError):
-            quiz.get_question(UUID)
+            qc.get_question(UUID)
 
     else:
         q_map[UUID] = expected
 
-        found = quiz.get_question(UUID)
+        found = qc.get_question(UUID)
 
         assert found is expected
 
@@ -1520,11 +1534,11 @@ def test_roomconfig_from_yaml(
     if "quizzes" in config_yaml:
         expected.quizzes = [
             dataclasses.replace(
-                quiz,
+                qc,
                 _installation_config=installation_config,
                 _config_path=yaml_file,
             )
-            for quiz in expected.quizzes
+            for qc in expected.quizzes
         ]
 
     with yaml_file.open() as stream:
