@@ -44,11 +44,20 @@ def mc_question():
 
 
 @pytest.fixture
-def test_quiz(qa_question, mc_question):
+def installation_config():
+    environ = {"OLLAMA_BASE_URL": OLLAMA_BASE_URL}
+    installation = mock.create_autospec(config.InstallationConfig)
+    installation.get_environment = environ.get
+    return installation
+
+
+@pytest.fixture
+def a_quiz(qa_question, mc_question, installation_config):
     quiz = config.QuizConfig(
         id="testing",
         question_file="ignored.json",
         judge_agent_model=QUIZ_JUDGE_AGENT_MODEL,
+        _installation_config=installation_config,
     )
     quiz._questions_map = {
         question.metadata.uuid: question
@@ -61,20 +70,12 @@ def test_quiz(qa_question, mc_question):
 @mock.patch("pydantic_ai.models.openai.OpenAIChatModel")
 @mock.patch("pydantic_ai.Agent")
 def test_get_quiz_judge_agent(
-    agent_klass, model_klass, provider_klass, test_quiz,
+    agent_klass, model_klass, provider_klass, a_quiz,
 ):
-    env_patch = {
-        "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
-    }
-    expected_provider_kw = {
-        "base_url": OLLAMA_BASE_URL + "/v1",
-        "api_key": "dummy",
-    }
-
-    with mock.patch.dict("os.environ", clear=True, **env_patch):
-        found = quizzes.get_quiz_judge_agent(test_quiz)
+    found = quizzes.get_quiz_judge_agent(a_quiz)
 
     assert found is agent_klass.return_value
+
     agent_klass.assert_called_once_with(
         model=model_klass.return_value,
         output_type=models.QuizLLMJudgeResponse,
@@ -82,22 +83,24 @@ def test_get_quiz_judge_agent(
     )
 
     model_klass.assert_called_once_with(
-        model_name=test_quiz.judge_agent_model,
+        model_name=a_quiz.judge_agent_model,
         provider=provider_klass.return_value,
     )
 
-    provider_klass.assert_called_once_with(**expected_provider_kw)
+    provider_klass.assert_called_once_with(
+        base_url=OLLAMA_BASE_URL + "/v1", api_key="dummy",
+    )
 
 
 @pytest.mark.anyio
 @mock.patch("soliplex.quizzes.get_quiz_judge_agent")
-async def test_check_answer_with_agent(gqja, qa_question, test_quiz):
+async def test_check_answer_with_agent(gqja, qa_question, a_quiz):
     agent = gqja.return_value
     a_run = agent.run = mock.AsyncMock()
     answer = "Who knows?"
 
     found = await quizzes.check_answer_with_agent(
-        test_quiz, qa_question, answer,
+        a_quiz, qa_question, answer,
     )
 
     assert found is a_run.return_value.output.equivalent
@@ -109,13 +112,13 @@ async def test_check_answer_with_agent(gqja, qa_question, test_quiz):
     assert f"ANSWER: {answer}" in lines
     assert f"EXPECTED ANSWER: {EXPECTED_ANSWER}" in lines
 
-    gqja.assert_called_once_with(test_quiz)
+    gqja.assert_called_once_with(a_quiz)
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_correct", [None, False, True])
 @mock.patch("soliplex.quizzes.check_answer_with_agent")
-async def test_check_answer_w_mc(cawa, test_quiz, w_correct):
+async def test_check_answer_w_mc(cawa, a_quiz, w_correct):
     if w_correct is None:  # invalid question ID
         question_uuid = "nonesuch"
         answer = "doesn't matter"
@@ -129,10 +132,10 @@ async def test_check_answer_w_mc(cawa, test_quiz, w_correct):
 
     if w_correct is None:
         with pytest.raises(quizzes.QuestionNotFound):
-            await quizzes.check_answer(test_quiz, question_uuid, answer)
+            await quizzes.check_answer(a_quiz, question_uuid, answer)
 
     else:
-        found = await quizzes.check_answer(test_quiz, question_uuid, answer)
+        found = await quizzes.check_answer(a_quiz, question_uuid, answer)
 
         if w_correct:
             assert found["correct"] == "true"
@@ -146,7 +149,7 @@ async def test_check_answer_w_mc(cawa, test_quiz, w_correct):
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_correct", [None, False, True])
 @mock.patch("soliplex.quizzes.check_answer_with_agent")
-async def test_check_answer_w_qa(cawa, test_quiz, qa_question, w_correct):
+async def test_check_answer_w_qa(cawa, a_quiz, qa_question, w_correct):
     if w_correct is None:  # invalid question ID
         question_uuid = "nonesuch"
         answer = "doesn't matter"
@@ -162,10 +165,10 @@ async def test_check_answer_w_qa(cawa, test_quiz, qa_question, w_correct):
 
     if w_correct is None:
         with pytest.raises(quizzes.QuestionNotFound):
-            await quizzes.check_answer(test_quiz, question_uuid, answer)
+            await quizzes.check_answer(a_quiz, question_uuid, answer)
 
     else:
-        found = await quizzes.check_answer(test_quiz, question_uuid, answer)
+        found = await quizzes.check_answer(a_quiz, question_uuid, answer)
 
         if w_correct:
             assert found["correct"] == "true"
@@ -173,4 +176,4 @@ async def test_check_answer_w_qa(cawa, test_quiz, qa_question, w_correct):
             assert found["correct"] == "false"
             assert found["expected_output"] == EXPECTED_ANSWER
 
-        cawa.assert_awaited_once_with(test_quiz, qa_question, answer)
+        cawa.assert_awaited_once_with(a_quiz, qa_question, answer)

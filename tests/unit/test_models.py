@@ -205,24 +205,32 @@ def agent_provider_base_url(request):
     return _from_param(request, "provider_base_url")
 
 
-def test_agent_from_config(agent_provider_type, agent_provider_base_url):
+@pytest.fixture
+def installation_config():
+    environ = {"OLLAMA_BASE_URL": OLLAMA_BASE_URL}
+    installation = mock.create_autospec(config.InstallationConfig)
+    installation.get_environment = environ.get
+    return installation
+
+
+def test_agent_from_config(
+    agent_provider_type, agent_provider_base_url, installation_config,
+):
     agent_config = config.AgentConfig(
         id=AGENT_ID,
         model_name=AGENT_MODEL,
         system_prompt=AGENT_PROMPT,
+        _installation_config=installation_config,
         **agent_provider_type,
         **agent_provider_base_url,
     )
 
-    env_patch = {}
     if not agent_provider_base_url:
-        env_patch["OLLAMA_BASE_URL"] = OLLAMA_BASE_URL
         exp_base = f"{OLLAMA_BASE_URL}/v1"
     else:
         exp_base = f"{AGENT_BASE_URL}/v1"
 
-    with mock.patch.dict("os.environ", clear=True, **env_patch):
-        agent_model = models.Agent.from_config(agent_config)
+    agent_model = models.Agent.from_config(agent_config)
 
     assert agent_model.id == AGENT_ID
     assert agent_model.model_name == AGENT_MODEL
@@ -267,11 +275,12 @@ def room_quizzes(request):
     return kw
 
 @pytest.fixture
-def room_agent():
+def room_agent(installation_config):
     return config.AgentConfig(
         id=AGENT_ID,
         model_name=AGENT_MODEL,
         system_prompt=AGENT_PROMPT,
+        _installation_config=installation_config,
     )
 
 
