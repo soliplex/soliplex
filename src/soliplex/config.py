@@ -67,6 +67,13 @@ class RagDbExactlyOneOfStemOrOverride(TypeError):
         )
 
 
+class RagDbFileNotFound(ValueError):
+    _config_path = None
+    def __init__(self, rag_db_filename):
+        self.rag_db_filename = rag_db_filename
+        super().__init__(f"RAG DB file not found: {rag_db_filename}")
+
+
 class QCExactlyOneOfStemOrOverride(TypeError):
     def __init__(self):
         super().__init__(
@@ -291,8 +298,8 @@ class SearchDocumentsToolConfig(ToolConfig):
         config["_config_path"] = config_path
         try:
             instance = cls(**config)
-        except RagDbExactlyOneOfStemOrOverride as exc:
-            raise FromYamlException(config_path) from exc
+        except RagDbExactlyOneOfStemOrOverride as exactly_one:
+            raise FromYamlException(config_path) from exactly_one
 
         return instance
 
@@ -317,10 +324,20 @@ class SearchDocumentsToolConfig(ToolConfig):
             else:
                 rsop = pathlib.Path(rsop).resolve()
 
+            if not rsop.is_file():
+                raise RagDbFileNotFound(rsop)
+
             return rsop
         else:
-            db_rag_dir = pathlib.Path(os.environ["RAG_LANCE_DB_PATH"])
+            db_rag_dir = pathlib.Path(
+                self._installation_config.get_environment(
+                    "RAG_LANCE_DB_PATH",
+                )
+            )
             rspdb = (db_rag_dir / f"{self.rag_lancedb_stem}.lancedb").resolve()
+
+            if not rspdb.is_file():
+                raise RagDbFileNotFound(rspdb)
 
             return rspdb
 

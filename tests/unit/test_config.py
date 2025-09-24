@@ -1,3 +1,4 @@
+import contextlib
 import dataclasses
 import functools
 import inspect
@@ -920,10 +921,30 @@ def test_toolconfig_get_extra_parameters():
     (None, None, None),
     ("testing", "/dev/null", None),
     ("testing", None, "stem"),
-    (None, "/dev/null", "override"),
+    (None, "./override", "override"),
 ])
-def test_sdtc_ctor(temp_dir, stem, override, which):
-    kw = {}
+def test_sdtc_ctor(installation_config, temp_dir, stem, override, which):
+    db_rag_path = temp_dir / "db" / "rag"
+    db_rag_path.mkdir(parents=True)
+
+    if which is None:
+        expectation = pytest.raises(config.RagDbExactlyOneOfStemOrOverride)
+    else:
+        expectation = contextlib.nullcontext()
+
+    if stem is not None:
+        from_stem = db_rag_path / f"{stem}.lancedb"
+        from_stem.touch()
+
+    if override is not None:
+        override = temp_dir / override
+        from_override = pathlib.Path(override)
+        from_override.touch()
+
+    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_path)}
+    installation_config.get_environment = ic_environ.get
+
+    kw = {"_installation_config": installation_config}
 
     if stem is not None:
         kw["rag_lancedb_stem"] = stem
@@ -931,86 +952,100 @@ def test_sdtc_ctor(temp_dir, stem, override, which):
     if override is not None:
         kw["rag_lancedb_override_path"] = override
 
-    if which is None:
-        with pytest.raises(config.RagDbExactlyOneOfStemOrOverride):
-            config.SearchDocumentsToolConfig(**kw)
+    with expectation:
+        sdt_config = config.SearchDocumentsToolConfig(**kw)
 
-    else:
-        db_rag_path = temp_dir / "db" / "rag"
-        with mock.patch.dict(
-            "os.environ", RAG_LANCE_DB_PATH=str(db_rag_path), clear=True
-        ):
-            sdt_config = config.SearchDocumentsToolConfig(**kw)
+    if which is not None and stem != "nonesuch":
 
-            if which == "stem":
-                expected = db_rag_path / f"{stem}.lancedb"
-            else:
-                expected = pathlib.Path(override)
+        if which == "stem":
+            expected = from_stem
+        else:
+            expected = from_override
 
-            assert sdt_config._config_path is None
-            assert sdt_config.rag_lancedb_path == expected
+        assert sdt_config._config_path is None
 
-            expected_ep = {
-                "rag_lancedb_path": expected,
-                "expand_context_radius": 2,
-                "search_documents_limit": 5,
-                "return_citations": False,
-            }
+        found = sdt_config.rag_lancedb_path
+        assert found.resolve() == expected.resolve()
 
-            assert sdt_config.get_extra_parameters() == expected_ep
+        expected_ep = {
+            "rag_lancedb_path": expected,
+            "expand_context_radius": 2,
+            "search_documents_limit": 5,
+            "return_citations": False,
+        }
+
+        assert sdt_config.get_extra_parameters() == expected_ep
 
 
 @pytest.mark.parametrize("stem, override, which", [
     (None, None, None),
     ("testing", "/dev/null", None),
     ("testing", None, "stem"),
-    (None, "/dev/null", "override"),
+    ("nonesuch", None, "stem"),
     (None, "./foo.lancedb", "override"),
+    (None, "./nonesuch", "override"),
 ])
 def test_sdtc_from_yaml(installation_config, temp_dir, stem, override, which):
-    kw = {}
+
+    db_rag_path = temp_dir / "db" / "rag"
+    db_rag_path.mkdir(parents=True)
+
+    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_path)}
+    installation_config.get_environment = ic_environ.get
+
+    kw = {"_installation_config": installation_config}
 
     if stem is not None:
         kw["rag_lancedb_stem"] = stem
+        from_stem = db_rag_path / f"{stem}.lancedb"
+        if stem != "nonesuch":
+            from_stem.touch()
+            expected = from_stem
+            expectation = contextlib.nullcontext()
+        else:
+            expectation = pytest.raises(config.RagDbFileNotFound)
+            expected = None
 
     if override is not None:
+        override = str(temp_dir / override)
         kw["rag_lancedb_override_path"] = override
+        from_override = pathlib.Path(override)
+        if "nonesuch" not in override:
+            expectation = contextlib.nullcontext()
+            from_override.touch()
+            expected = from_override
+        else:
+            expectation = pytest.raises(config.RagDbFileNotFound)
+            expected = None
 
-    db_rag_path = temp_dir / "db" / "rag"
     room_dir = temp_dir / "rooms" / "testroom"
     config_path = room_dir / "room_config.yaml"
 
-    with mock.patch.dict(
-        "os.environ", RAG_LANCE_DB_PATH=str(db_rag_path), clear=True
-    ):
-        if which is None:
-            with pytest.raises(config.FromYamlException) as exc:
-                config.SearchDocumentsToolConfig.from_yaml(
-                    installation_config=installation_config,
-                    config_path=config_path,
-                    config=kw,
-                )
-
-            assert exc.value.config_path == config_path
-
-        else:
-            sdt_config = config.SearchDocumentsToolConfig.from_yaml(
+    if which is None:
+        with pytest.raises(config.FromYamlException) as exc:
+            config.SearchDocumentsToolConfig.from_yaml(
                 installation_config=installation_config,
                 config_path=config_path,
                 config=kw,
             )
 
-            if which == "stem":
-                expected = db_rag_path / f"{stem}.lancedb"
-            else:
-                if override.startswith("."):
-                    expected = (room_dir / override).resolve()
-                else:
-                    expected = pathlib.Path(override)
+        assert exc.value.config_path == config_path
 
-            assert sdt_config._installation_config == installation_config
-            assert sdt_config._config_path == config_path
-            assert sdt_config.rag_lancedb_path.resolve() == expected.resolve()
+    else:
+        sdt_config = config.SearchDocumentsToolConfig.from_yaml(
+            installation_config=installation_config,
+            config_path=config_path,
+            config=kw,
+        )
+
+        assert sdt_config._installation_config == installation_config
+        assert sdt_config._config_path == config_path
+
+        with expectation:
+            found = sdt_config.rag_lancedb_path
+
+        if expected is not None:
+            assert found.resolve() == expected.resolve()
 
 
 @pytest.mark.parametrize("w_env", [{}, {"foo": "bar"}])

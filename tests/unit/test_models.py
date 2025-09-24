@@ -12,8 +12,6 @@ QUIZ_TITLE = "Test Quiz"
 QUIZ_MAX_QUESTIONS = 14
 QUIZ_PATH_OVERRIDE = "/dev/null"
 
-SDTC_RAG_LANCE_DB_PATH = "/path/to/db/rag"
-
 ROOM_ID = "test_room"
 ROOM_NAME = "Test Room"
 ROOM_DESCRIPTION = "This room is made for testing"
@@ -125,10 +123,12 @@ def test_tool_from_config_w_toolconfig():
     assert tool_model.extra_parameters == {}
 
 
-def test_tool_from_config_w_sdtc():
+def test_tool_from_config_w_sdtc(temp_dir):
+    sdtc_rag_lance_db_path = temp_dir / "rag.lancedb"
+    sdtc_rag_lance_db_path.touch()
 
     tool_config = config.SearchDocumentsToolConfig(
-        rag_lancedb_override_path=SDTC_RAG_LANCE_DB_PATH,
+        rag_lancedb_override_path=str(sdtc_rag_lance_db_path),
         expand_context_radius=3,
         search_documents_limit=7,
         return_citations=True,
@@ -145,7 +145,7 @@ def test_tool_from_config_w_sdtc():
     assert tool_model.tool_requires == config.ToolRequires.TOOL_CONFIG
     assert tool_model.allow_mcp is True
     assert tool_model.extra_parameters == dict(
-        rag_lancedb_path=pathlib.Path(SDTC_RAG_LANCE_DB_PATH),
+        rag_lancedb_path=sdtc_rag_lance_db_path,
         expand_context_radius=3,
         search_documents_limit=7,
         return_citations=True,
