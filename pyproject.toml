@@ -113,3 +113,6 @@ force-single-line = true
 
 [tool.ruff.lint.flake8-pytest-style]
 parametrize-names-type = "csv"
+
+[tool.pip-tools]
+verbose = true

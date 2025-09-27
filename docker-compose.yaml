@@ -1,0 +1,119 @@
+# ------------------------------------------------------------------------------
+#   Development compose environment
+# ------------------------------------------------------------------------------
+name: soliplex-${USER}
+
+services:
+
+    #------------------------------------------------------------------------
+    #   Common config for containers using 'soliplex' code
+    #
+    #   The image used here has all the MSSQL tools and ODBC drivers, along
+    #   with the Python libraries specified in 'requirements.txt'.
+    #------------------------------------------------------------------------
+    base:
+
+        image: soliplex-prereqs
+
+        build:
+            context: .
+            target: prereqs
+
+        volumes:
+
+            #
+            #   Mount the local worktree over the Docker workdir.
+            #
+            - type: bind
+              source: "./"
+              target: "/soliplex/"
+
+      # secrets:
+      #     - source: dot_env
+      #       target: "/soliplex/.env"
+
+        #
+        #   Set the command to the empty list to have the service exit
+        #   immediately.
+        #
+        #   We would really rather not have it be a service at all, but
+        #   that is how DC seems to encourage us to factor out the common
+        #   bits.
+        #
+        command: []
+
+    #------------------------------------------------------------------------
+    #   Python 'soliplex' web application (devel version)
+    #------------------------------------------------------------------------
+    soliplex:
+
+        extends: base
+
+        image: soliplex-devel
+
+        build:
+            context: .
+            target: devel
+
+        environment:
+            SOLIPLEX_INSTALLATION_PATH: "/installation/composed.yaml"
+
+        volumes:
+
+            - type: bind
+              source: "./"
+              target: "/soliplex/"
+
+            - type: bind
+              source: "./example"
+              target: "/installation/"
+
+            - type: bind
+              source: "./db"
+              target: "/db"
+
+        #
+        #   Use container's default command ('base' overrides it above).
+        #
+        command: soliplex-cli serve --host 0.0.0.0
+
+        healthcheck:
+            test: "curl -f http://localhost:8000/api/ok"
+            interval: 10s
+            retries: 10
+            start_period: 10s
+            timeout: 3s
+
+        ports:
+            - name: soliplex-http
+              target: 8000
+              published: "${WEBAPP_PORT:-8000}"
+              host_ip: 127.0.0.1
+              protocol: tcp
+              app_protocol: http
+
+
+#secrets:
+#    dot_env:
+#        file: "./composed.env"
+
+
+
+# ------------------------------------------------------------------------------
+# Cheat sheet
+# -----------
+#
+# - To start the development environment:
+#
+#   $ docker compose up
+#
+# - To stop the development environment:
+#
+#   $ docker compose down
+#
+# - To run the soliplex app manually for debugging (e.g., using 'pdb'):
+#
+#   $ docker compose run --rm --service-ports soliplex
+#
+# ------------------------------------------------------------------------------
+

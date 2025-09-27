@@ -14,9 +14,16 @@ __pycache__/
 # database files
 db/
 
+# download cache for container builds
+pip-download/
+
 # misc
 tmp/
 
 # osx
 .DS_Store
 ._*
+
+# Temporary: used to generate 'requirements.txt' during
+# a container build.  "This is not the lock file you are looking for."
+pylock.toml
