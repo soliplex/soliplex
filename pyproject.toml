@@ -37,8 +37,8 @@ dependencies = [
     "uvicorn[standard]",
 ]
 
-[project.optional-dependencies]
-test = [
+[dependency-groups]
+dev = [
     "pytest",
     "pytest-cov",
     "pytest-asyncio",
