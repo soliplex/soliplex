@@ -43,3 +43,7 @@ def test_curry_lifespan(inst_path_kwargs, env_patch):
     assert found.keywords == {
         "installation_path": pathlib.Path(expected),
     }
+
+
+def test_slack_notification_on_failed_pr_check():
+    assert 0
