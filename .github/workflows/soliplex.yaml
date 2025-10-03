@@ -1,4 +1,4 @@
-name: Run soliples unit tests / linting
+name: Run soliplex unit tests / linting
 
 on:
   push:
@@ -43,8 +43,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools
-          # Install this first with the "CPU-only" index, to avoid installing
-          # the huge NVidia / CUDA deps we won't use.
+          #
+          # Install 'docling' first using the "CPU-only" index:
+          # avoids installing the huge NVidia / CUDA deps we won't use.
+          #
           pip install docling \
             --extra-index-url https://download.pytorch.org/whl/cpu
           pip install -e . --group dev
@@ -54,4 +56,4 @@ jobs:
           py.test
       - name: Run ruff linter
         run: |
-          ruff check --diff
+          ruff check
