@@ -1,4 +1,5 @@
 import fastapi
+from fastapi import Depends
 from fastapi import responses
 from fastapi import security
 
@@ -22,9 +23,8 @@ depend_the_installation = installation.depend_the_installation
 async def get_chat_completions(
     request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    user=Depends(auth.get_current_user),
 ) -> models.ConfiguredCompletions:
-    user = auth.authenticate(the_installation, token)
     completion_configs = the_installation.get_completion_configs(user)
 
     return {
@@ -39,9 +39,8 @@ async def get_chat_completion(
     request: fastapi.Request,
     completion_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    user=Depends(auth.get_current_user),
 ) -> models.Completion:
-    user = auth.authenticate(the_installation, token)
     try:
         completion_config = the_installation.get_completion_config(
             completion_id,
@@ -62,9 +61,8 @@ async def post_chat_completion(
     completion_id: str,
     chat_request: models.ChatCompletionRequest,
     the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    user=Depends(auth.get_current_user),
 ) -> responses.StreamingResponse:
-    user = auth.authenticate(the_installation, token)
     user_profile = models.UserProfile(
         given_name=user.get("given_name", "<unknown>"),
         family_name=user.get("family_name", "<unknown>"),

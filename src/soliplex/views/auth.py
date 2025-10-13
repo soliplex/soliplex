@@ -2,6 +2,7 @@ import dataclasses
 
 import fastapi
 from authlib.integrations import starlette_client
+from datetime import datetime, timedelta
 from fastapi import responses
 from fastapi import security
 
@@ -43,13 +44,18 @@ async def get_login_system(
             status_code=404,
             detail="system in no-auth mode",
         )
-    return_to = request.query_params.get("return_to", "/")
-    redirect_uri = request.url_for("get_auth_system", system=system)
-    redirect_uri = redirect_uri.replace_query_params(return_to=return_to)
-    redirect_uri = util.strip_default_port(redirect_uri)
 
     oauth = auth.get_oauth(the_installation)
     oauth_app = oauth.create_client(system)
+
+    redirect_uri = request.url_for("get_auth_system", system=system)
+
+    for auth_system in the_installation.oidc_auth_system_configs:
+        if auth_system.id == system and auth_system.include_return_to:
+            return_to = request.query_params.get("return_to", "/")
+            redirect_uri = redirect_uri.replace_query_params(return_to=return_to)
+
+    redirect_uri = util.strip_default_port(redirect_uri)
 
     found = await oauth_app.authorize_redirect(request, redirect_uri)
     return found
@@ -78,20 +84,34 @@ async def get_auth_system(
             status_code=401, detail=f"JWT validation failed {e}"
         ) from None
 
-    access_token = tokendict["access_token"]
-    auth.authenticate(the_installation, access_token)
+    try:
+        id_token = await oauth_app.parse_id_token(request, tokendict)
+    except Exception:
+        id_token = None
 
-    refresh_token = tokendict["refresh_token"]
-    expires_in = tokendict["expires_in"]
-    refresh_expires_in = tokendict["refresh_expires_in"]
+    try:
+        userinfo = await oauth_app.userinfo(token=tokendict)
+    except Exception:
+        userinfo = {}
 
-    # NB: explicitly putting the "query parameters" after the URL,
-    # even if the url ends with an anchor tag (support GoRouter)
+    profile = userinfo or id_token or tokendict.get("userinfo", {})
+
+    request.session["user"] = {
+        "sub": profile.get("sub"),
+        "email": profile.get("email"),
+        "name": profile.get("name"),
+    }
+
+    request.session["token"] = {
+        "system": system,
+        "access_token": tokendict["access_token"],
+        "refresh_token": tokendict.get("refresh_token"),
+        "expires_at": tokendict.get("expires_at") or (
+            datetime.utcnow() + timedelta(seconds=tokendict.get("expires_in", 3600))
+        ).isoformat()
+    }
+
     return_to = request.query_params.get("return_to", "/")
-    return_to += f"?token={access_token}"
-    return_to += f"&refresh_token={refresh_token}"
-    return_to += f"&expires_in={expires_in}"
-    return_to += f"&refresh_expires_in={refresh_expires_in}"
     return responses.RedirectResponse(return_to)
 
 
@@ -107,4 +127,4 @@ async def get_user_info(
             detail="system in no-auth mode",
         )
 
-    return auth.authenticate(the_installation, token)
+    return await auth.authenticate(the_installation, token)

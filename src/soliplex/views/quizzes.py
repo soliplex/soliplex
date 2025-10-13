@@ -1,4 +1,5 @@
 import fastapi
+from fastapi import Depends
 from fastapi import security
 
 from soliplex import auth
@@ -17,9 +18,8 @@ async def get_quiz(
     room_id: str,
     quiz_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    user=Depends(auth.get_current_user),
 ) -> models.Quiz:
-    user = auth.authenticate(the_installation, token)
 
     try:
         room_config = the_installation.get_room_config(room_id, user=user)
@@ -48,9 +48,8 @@ async def post_quiz_question(
     question_uuid: str,
     answer: models.UserPromptClientMessage,
     the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    user=Depends(auth.get_current_user),
 ) -> models.QuizQuestionResponse:
-    user = auth.authenticate(the_installation, token)
 
     try:
         room_config = the_installation.get_room_config(room_id, user=user)

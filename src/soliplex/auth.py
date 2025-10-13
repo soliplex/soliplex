@@ -3,10 +3,20 @@ import os
 import fastapi
 import jwt
 import starlette.config
+
 from authlib.integrations import starlette_client
+from authlib.integrations.httpx_client import AsyncOAuth2Client
+from datetime import datetime, timedelta, timezone
+from fastapi import HTTPException, Request
 from fastapi import security
 
 from soliplex import installation
+
+TOKEN_CHECK_INTERVAL = timedelta(minutes=15)
+
+
+depend_the_installation = installation.depend_the_installation
+
 
 oauth2_scheme = security.OAuth2PasswordBearer(
     tokenUrl="token",
@@ -90,3 +100,56 @@ def validate_access_token(token, token_validation_pem):
         )
     except jwt.InvalidTokenError:
         return None
+
+
+async def refresh_token(oauth_app, refresh_token: str):
+    # Load provider metadata to get token_endpoint
+    metadata = await oauth_app.load_server_metadata()
+    token_endpoint = metadata["token_endpoint"]
+
+    async with AsyncOAuth2Client(
+        client_id=oauth_app.client_id,
+        client_secret=oauth_app.client_secret,
+    ) as client:
+        new_token = await client.refresh_token(
+            token_endpoint,
+            refresh_token=refresh_token,
+        )
+    return new_token
+
+
+async def get_current_user(
+        request: Request,
+        the_installation: installation.Installation = depend_the_installation):
+    """Retrieve current user, refreshing token if needed"""
+
+    if the_installation.auth_disabled:
+        return {"name": "Phreddy Phlyntstone", "email": "phreddy@example.com"}
+
+    user = request.session.get("user")
+    token = request.session.get("token")
+    if not user or not token:
+        raise HTTPException(401, "Not authenticated")
+
+    now = datetime.now(timezone.utc)
+    expires_at = datetime.fromtimestamp(token["expires_at"], tz=timezone.utc)
+
+    # If token expired → refresh
+    if now >= expires_at:
+        if not token.get("refresh_token"):
+            request.session.clear()
+            raise HTTPException(401, "Session expired; please re-login")
+
+        oauth = get_oauth(the_installation)
+        system = token.get("system")
+        oauth_app = oauth.create_client(system)
+
+        new_token = await refresh_token(oauth_app, token["refresh_token"])
+
+        # update session
+        token["access_token"] = new_token["access_token"]
+        token["expires_at"] = new_token["expires_at"]
+        token["refresh_token"] = new_token.get("refresh_token", token["refresh_token"])
+        request.session["token"] = token
+
+    return user

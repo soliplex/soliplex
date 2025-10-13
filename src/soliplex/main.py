@@ -21,6 +21,12 @@ from soliplex.views import installation as installation_views
 from soliplex.views import quizzes as quizzes_views
 from soliplex.views import rooms as rooms_views
 
+try:
+    import debugpy
+    debugpy.listen(("localhost", 5678))
+except:
+    pass
+
 
 def curry_lifespan(installation_path: pathlib.Path = None):
     if installation_path is None:

@@ -1,4 +1,5 @@
 import fastapi
+from fastapi import Depends
 from fastapi import security
 
 from soliplex import auth
@@ -16,7 +17,6 @@ depend_the_installation = installation.depend_the_installation
 async def get_installation(
     request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    user=Depends(auth.get_current_user),
 ) -> models.Installation:
-    auth.authenticate(the_installation, token)
     return models.Installation.from_config(the_installation._config)

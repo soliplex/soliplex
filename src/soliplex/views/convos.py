@@ -3,6 +3,7 @@ import json
 import uuid
 
 import fastapi
+from fastapi import Depends
 from fastapi import responses
 from fastapi import security
 from pydantic_ai import messages as ai_messages
@@ -29,10 +30,9 @@ async def post_convos_new(
     convo_msg: models.NewConvoClientMessage,
     the_installation: installation.Installation = depend_the_installation,
     the_convos: convos.Conversations = convos.depend_the_convos,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    user=Depends(auth.get_current_user),
 ) -> models.Conversation:
     """Create a new convo, including room ID and URI with UUID"""
-    user = auth.authenticate(the_installation, token)
     user_profile = models.UserProfile(
         given_name=user.get("given_name", "<unknown>"),
         family_name=user.get("family_name", "<unknown>"),
@@ -84,10 +84,9 @@ async def post_convos_new_room(
     convo_msg: models.UserPromptClientMessage,
     the_installation: installation.Installation = depend_the_installation,
     the_convos: convos.Conversations = convos.depend_the_convos,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    user=Depends(auth.get_current_user),
 ) -> models.Conversation:
     """Create a new convo, including room ID and URI with UUID"""
-    user = auth.authenticate(the_installation, token)
     user_profile = models.UserProfile(
         given_name=user.get("given_name", "<unknown>"),
         family_name=user.get("family_name", "<unknown>"),
@@ -137,10 +136,9 @@ async def get_convos(
     request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
     the_convos: convos.Conversations = convos.depend_the_convos,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    user=Depends(auth.get_current_user),
 ) -> models.ConversationMap:
     """Return a map of conversations by UUID, including name and room ID"""
-    user = auth.authenticate(the_installation, token)
     user_name = user.get("preferred_username", "<unknown>")
     user_convos = await the_convos.user_conversations(user_name)
     return {
@@ -156,13 +154,12 @@ async def get_convo(
     convo_uuid: uuid.UUID,
     the_installation: installation.Installation = depend_the_installation,
     the_convos: convos.Conversations = convos.depend_the_convos,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    user=Depends(auth.get_current_user),
 ) -> models.Conversation:
     """Return the conversation, by id
 
     Include the message history for the conversation, along with room ID, etc.
     """
-    user = auth.authenticate(the_installation, token)
     user_name = user.get("preferred_username", "<unknown>")
     info = await the_convos.get_conversation_info(user_name, convo_uuid)
     return models.Conversation.from_convos_info(info)
@@ -176,14 +173,12 @@ async def post_convo(
     convo_msg: models.UserPromptClientMessage,
     the_installation: installation.Installation = depend_the_installation,
     the_convos: convos.Conversations = convos.depend_the_convos,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    user=Depends(auth.get_current_user),
 ) -> responses.StreamingResponse:
     """Send another query to an existing convo.
 
     Return the final response message.
     """
-    user = auth.authenticate(the_installation, token)
-
     user_profile = models.UserProfile(
         given_name=user.get("given_name", "<unknown>"),
         family_name=user.get("family_name", "<unknown>"),
@@ -269,10 +264,9 @@ async def delete_convo(
     convo_uuid: uuid.UUID,
     the_installation: installation.Installation = depend_the_installation,
     the_convos: convos.Conversations = convos.depend_the_convos,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    user=Depends(auth.get_current_user),
 ):
     """Delete an existing convo."""
-    user = auth.authenticate(the_installation, token)
     user_name = user.get("preferred_username", "<unknown>")
 
     await the_convos.delete_conversation(user_name, convo_uuid)

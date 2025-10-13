@@ -152,11 +152,12 @@ class OIDCAuthSystemConfig:
     title: str
 
     server_url: str
-    token_validation_pem: str
     client_id: str
+    token_validation_pem: str = None
     scope: str = None
     client_secret: str = ""  # "env:{JOSCE_CLIENT_SECRET}"
     oidc_client_pem_path: pathlib.Path = None
+    include_return_to: bool = True
 
     # Set in 'from_yaml' below
     _installation_config: InstallationConfig = None
