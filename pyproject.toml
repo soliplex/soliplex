@@ -8,7 +8,7 @@ version = "0.11"
 description = "<ALAN FILL THIS IN>"
 authors = [{ name = "Enfold", email = "info@enfoldsystems.net" }]
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<4.0"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
@@ -43,6 +43,7 @@ dev = [
     "pytest-cov",
     "pytest-asyncio",
     "coverage",
+    "debugpy",
     "anyio",
     "trio",
     "ruff",
