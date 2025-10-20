@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import functools
+from importlib import metadata
 import logging
 import pathlib
 import re
@@ -47,6 +48,13 @@ def get_git_hash_for_file(file_path: str):
         return hash_path.read_text().strip()
 
     try:
+        #check for a git url install
+        dist=metadata.distribution("soliplex")
+        if hasattr(dist,'origin')  :
+            if hasattr(dist.origin,'vcs_info'):
+                return dist.origin.vcs_info.commit_id
+        elif hasattr(dist,'version'):
+            return dist.version
         return (
             subprocess.check_output(
                 ["git", "-C", repo_dir, "rev-parse", "HEAD"]
@@ -54,8 +62,7 @@ def get_git_hash_for_file(file_path: str):
             .decode("utf-8")
             .strip()
         )
-    except Exception:
-        traceback.print_exc()
+    except Exception:        
         return "unknown"
 
 
