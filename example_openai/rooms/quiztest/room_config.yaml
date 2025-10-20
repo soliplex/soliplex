@@ -1,0 +1,23 @@
+id: "quiztest"
+name: "Quiz testing"
+description: "Quiz testing."
+logo_image: "./jeopardy.png"
+agent:
+  system_prompt: "UNUSED, see quiz config"
+  provider_type: "openai"
+  model_name: "gpt-4o-mini"
+  provider_base_url: "https://api.openai.com"
+  provider_key: "secret:OPENAI_API_KEY"
+
+quizzes:
+  - id: "test_quiz"
+    question_file: "test_quiz"
+    title: "Test Quiz"
+    randomize: True
+    max_questions: 20
+    judge_agent:
+      id: "test_quiz_judge"
+      provider_type: "openai"
+      model_name: "gpt-4o-mini"
+      provider_base_url: "https://api.openai.com"
+      provider_key: "secret:OPENAI_API_KEY"

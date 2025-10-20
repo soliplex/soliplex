@@ -1,0 +1,115 @@
+#==========================================================================
+# Minimal Soliplex installation configuration
+#
+# Please See the corresponding sections 'example/installation.yaml' for
+# descriptions of the defaults for sections not configured here.
+#==========================================================================
+
+id: "soliplex-conf-minimal-openai"
+
+#==========================================================================
+# Meta-configuration
+#==========================================================================
+
+#==========================================================================
+# Secrets
+#
+# NOTE This configuration does not wire up any external APIs / MCP client
+# tools, and therefore requires no secrets beyond the one defined below,
+# which gets auto-populated at startup if it is not found in the environment.
+#==========================================================================
+
+secrets:
+
+  # ----------------------------------------------------------------------
+  # MCP room token generation / validation secret
+  #
+  # If not set in the environment, we generate a random value at startup,
+  # which will invalidate any previously-generated MCP room tokens.
+  # ----------------------------------------------------------------------
+  - secret_name: "URL_SAFE_TOKEN_SECRET"
+    sources:
+      - kind: "env_var"
+        env_var_name: "SOLIPLEX_URL_SAFE_TOKEN_SECRET"
+      - kind: "random_chars"
+  - secret_name: "OPENAI_API_KEY"
+    sources:
+      - kind: "env_var"
+        env_var_name: "OPENAI_API_KEY"
+      - kind: "random_chars"      
+
+#==========================================================================
+# Environment Variables
+#==========================================================================
+
+environment:
+  # set ollama base url to bogus value to make sure it is not used
+  - name: "OLLAMA_BASE_URL"
+    value: "http://localhost:9999"
+
+  - name: "DEFAULT_AGENT_MODEL"
+    value: "gpt-4o-mini"
+
+  #------------------------------------------------------------------------
+  # 'haiku.rag' config vars
+  #------------------------------------------------------------------------
+
+  - name: "EMBEDDINGS_PROVIDER"
+    value: "openai"
+
+  - name: "EMBEDDINGS_MODEL"
+    value: "text-embedding-3-small"
+
+  - name: "EMBEDDINGS_VECTOR_DIM"
+    value: "1536"
+
+  - name: "QA_PROVIDER"
+    value: "openai"
+
+  - name: "QA_MODEL"
+    value: "gpt-4o-mini"
+
+  - name: "RERANK"
+    value: "false"
+
+  #------------------------------------------------------------------------
+  # 'soliplex': on-disk configuration locations
+  #------------------------------------------------------------------------
+
+  - name: "INSTALLATION_PATH"
+    value: "file:."
+
+  - name: "RAG_LANCE_DB_PATH"
+    value: "file:./db/rag"
+
+
+#==========================================================================
+# Agent configurations
+#==========================================================================
+agent_configs:
+  - id: "openai_gpt"
+    model_name: "gpt-4o-mini"
+    provider_type: "openai"
+    system_prompt: ""
+
+#==========================================================================
+# OIDC authentication provider configuration
+#==========================================================================
+
+#==========================================================================
+# Rooms configuration
+#
+# We avoid the default here, because the 'mcptest' room uses the SmitheryAI
+# registry, and hence requires additional secrets
+#==========================================================================
+room_paths:
+  - "./rooms/haiku"
+  - "./rooms/quiztest"
+
+#==========================================================================
+# Completions configuration
+#==========================================================================
+
+#==========================================================================
+# Quizes configuration
+#==========================================================================

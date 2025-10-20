@@ -1,0 +1,46 @@
+{
+    "$schema": "https://schema.pydantic.dev/evals/dataset.json",
+    "cases": [
+        {
+            "inputs": "What color is the sky? (QA)",
+            "expected_output": "blue",
+            "metadata": {
+                "uuid": "58cd4636-9934-427e-b4b7-1678f2e92751",
+                "type": "qa"
+            }
+        },
+        {
+            "inputs": "The color of the sky is _____",
+            "expected_output": "blue",
+            "metadata": {
+                "uuid": "48ee5a26-8d3e-4032-b910-44912b7f13c2",
+                "type": "fill-blank"
+            }
+        },
+        {
+            "inputs": "Is the sky blue?",
+            "expected_output": "true",
+            "metadata": {
+                "uuid": "7230e2f7-126e-4d2a-9544-a7d7817bca21",
+                "type": "multiple-choice",
+                "options": [
+                    "true",
+                    "false"
+                ]
+            }
+        },
+        {
+            "inputs": "What color is the sky? (MC)",
+            "expected_output": "blue",
+            "metadata": {
+                "uuid": "8ae8d35a-cab7-4537-a915-2f67b3152a3c",
+                "type": "multiple-choice",
+                "options": [
+                    "red",
+                    "green",
+                    "blue"
+                ]
+            }
+        }
+    ]
+}
