@@ -7,7 +7,7 @@ from soliplex import installation
 from soliplex import models
 from soliplex import quizzes
 
-router = fastapi.APIRouter()
+router = fastapi.APIRouter(tags=["quizzes"])
 
 depend_the_installation = installation.depend_the_installation
 
@@ -20,7 +20,7 @@ async def get_quiz(
     the_installation: installation.Installation = depend_the_installation,
     user=Depends(auth.get_current_user),
 ) -> models.Quiz:
-
+    """Return a quiz as configured from a room"""
     try:
         room_config = the_installation.get_room_config(room_id, user=user)
     except ValueError as e:
@@ -50,7 +50,7 @@ async def post_quiz_question(
     the_installation: installation.Installation = depend_the_installation,
     user=Depends(auth.get_current_user),
 ) -> models.QuizQuestionResponse:
-
+    """Check a user's response to a quiz question."""
     try:
         room_config = the_installation.get_room_config(room_id, user=user)
     except ValueError as e:

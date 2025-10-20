@@ -17,6 +17,7 @@ def tool_for_testing():
 TOOL_CONFIG_WO_MCP = mock.create_autospec(
     config.ToolConfig,
     kind="testing",
+    tool_name="soliplex.config.testing",
     tool=tool_for_testing,
     tool_id="mcp_false_bare",
     allow_mcp=False,
@@ -25,6 +26,7 @@ TOOL_CONFIG_WO_MCP = mock.create_autospec(
 TOOL_CONFIG_W_MCP_WO_REQ_CTX = mock.create_autospec(
     config.ToolConfig,
     kind="testing",
+    tool_name="soliplex.tools.testing",
     tool=tool_for_testing,
     allow_mcp=True,
     tool_id="mcp_true_bare",
@@ -33,6 +35,7 @@ TOOL_CONFIG_W_MCP_WO_REQ_CTX = mock.create_autospec(
 TOOL_CONFIG_W_MCP_W_REQ_CTX = mock.create_autospec(
     config.ToolConfig,
     kind="testing",
+    tool_name="soliplex.tools.testing",
     tool=tool_for_testing,
     tool_id="mcp_true_w_ctx",
     allow_mcp=True,
@@ -42,6 +45,7 @@ TOOL_CONFIG_W_MCP_W_REQ_CTX = mock.create_autospec(
 SDTC_WO_MCP = mock.create_autospec(
     config.SearchDocumentsToolConfig,
     kind="search_documents",
+    tool_name="soliplex.tools.search_documents",
     tool=tool_for_testing,
     allow_mcp=False,
     tool_id="mcp_false_sdtc",
@@ -50,6 +54,7 @@ SDTC_WO_MCP = mock.create_autospec(
 SDTC_W_MCP = mock.create_autospec(
     config.SearchDocumentsToolConfig,
     kind="search_documents",
+    tool_name="soliplex.tools.search_documents",
     tool=tool_for_testing,
     allow_mcp=True,
     tool_id="mcp_true_sdtc",

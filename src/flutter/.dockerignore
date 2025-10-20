@@ -1,0 +1,35 @@
+# Build outputs
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Platform specific
+android/
+ios/
+linux/
+macos/
+windows/
+
+# Docker
+docker/
+Dockerfile
+.dockerignore
+
+# Misc
+.metadata
+*.log
+*.iml
+.DS_Store

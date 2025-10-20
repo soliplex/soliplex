@@ -5,11 +5,11 @@ oidc_client_pem_path: "./cacert.pem"
 
 auth_systems:
 
-  - id: "pydio"
-    title: "Authenticate with Enfold"
-    server_url: "https://pydio-kc.enfoldsystems.net/realms/pydio"
-    client_id: "pydio-token-service"
-    client_secret: ""  # "secret:{PYDIO_CLIENT_SECRET}"
+  - id: "keycloak"
+    title: "Authenticate with Keycloak"
+    server_url: "https://sso.domain.net/realms/soliplex"
+    client_id: "soliplex-service"
+    client_secret: ""  # "secret:{SOLIPLEX_CLIENT_SECRET}"
     scope: "openid email profile"
     token_validation_pem: |
         -----BEGIN PUBLIC KEY-----

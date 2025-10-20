@@ -29,7 +29,7 @@ Example response format:
 [Your answer here]
 
 Citations:
-- /path/to/document1.pdf: "This document explains that AFMAN stands for Air Force Manual..."
-- /path/to/document2.pdf: "The manual provides guidance on military procedures and..."
+- /path/to/document1.pdf: "This document explains that RTFM stands for Read the Fine Manual..."
+- /path/to/document2.pdf: "The manual provides guidance on business procedures and..."
 
 Be concise, and always maintain accuracy over completeness. Prefer short, direct answers that are well-supported by the documents.

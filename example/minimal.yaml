@@ -1,0 +1,104 @@
+#==========================================================================
+# Minimal Soliplex installation configuration
+#
+# Please See the corresponding sections 'example/installation.yaml' for
+# descriptions of the defaults for sections not configured here.
+#==========================================================================
+
+id: "soliplex-conf-minimal"
+
+#==========================================================================
+# Meta-configuration
+#==========================================================================
+
+#==========================================================================
+# Secrets
+#
+# NOTE This configuration does not wire up any external APIs / MCP client
+# tools, and therefore requires no secrets beyond the one defined below,
+# which gets auto-populated at startup if it is not found in the environment.
+#==========================================================================
+
+secrets:
+
+  # ----------------------------------------------------------------------
+  # MCP room token generation / validation secret
+  #
+  # If not set in the environment, we generate a random value at startup,
+  # which will invalidate any previously-generated MCP room tokens.
+  # ----------------------------------------------------------------------
+  - secret_name: "URL_SAFE_TOKEN_SECRET"
+    sources:
+      - kind: "env_var"
+        env_var_name: "SOLIPLEX_URL_SAFE_TOKEN_SECRET"
+      - kind: "random_chars"
+
+#==========================================================================
+# Environment Variables
+#==========================================================================
+
+environment:
+
+  - "OLLAMA_BASE_URL"
+
+  - name: "DEFAULT_AGENT_MODEL"
+    value: "qwen3:latest"
+
+  #------------------------------------------------------------------------
+  # 'haiku.rag' config vars
+  #------------------------------------------------------------------------
+
+  - name: "EMBEDDINGS_PROVIDER"
+    value: "ollama"
+
+  - name: "EMBEDDINGS_MODEL"
+    value: "mxbai-embed-large"
+
+  - name: "EMBEDDINGS_VECTOR_DIM"
+    value: "1024"
+
+  - name: "QA_PROVIDER"
+    value: "ollama"
+
+  - name: "QA_MODEL"
+    value: "qwen3:latest"
+
+  - name: "RERANK"
+    value: "false"
+
+  #------------------------------------------------------------------------
+  # 'soliplex': on-disk configuration locations
+  #------------------------------------------------------------------------
+
+  - name: "INSTALLATION_PATH"
+    value: "file:."
+
+  - name: "RAG_LANCE_DB_PATH"
+    value: "file:../db/rag"
+
+
+#==========================================================================
+# Agent configurations
+#==========================================================================
+
+#==========================================================================
+# OIDC authentication provider configuration
+#==========================================================================
+
+#==========================================================================
+# Rooms configuration
+#
+# We avoid the default here, because the 'mcptest' room uses the SmitheryAI
+# registry, and hence requires additional secrets
+#==========================================================================
+room_paths:
+  - "./rooms/haiku"
+  - "./rooms/quiztest"
+
+#==========================================================================
+# Completions configuration
+#==========================================================================
+
+#==========================================================================
+# Quizes configuration
+#==========================================================================

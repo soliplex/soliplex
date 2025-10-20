@@ -15,8 +15,8 @@ def mcp_tool(tool_config: config.ToolConfig) -> fmcp_tools.Tool | None:
         tool_config.allow_mcp
         and tool_config.tool_requires != config.ToolRequires.FASTAPI_CONTEXT
     ):
-        wrapper_type = config.MCP_TOOL_CONFIG_WRAPPERS_BY_KIND.get(
-            tool_config.kind,
+        wrapper_type = config.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME.get(
+            tool_config.tool_name,
         )
 
         if wrapper_type is not None:

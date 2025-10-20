@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "soliplex"
-version = "0.11"
+version = "0.12"
 description = "<ALAN FILL THIS IN>"
 authors = [{ name = "Enfold", email = "info@enfoldsystems.net" }]
 readme = "README.md"
@@ -19,7 +19,7 @@ dependencies = [
     "python-dotenv",
     "fastapi",
     "fastmcp>=2.12.3,<2.13",
-    "haiku.rag >= 0.11.3",
+    "haiku.rag >= 0.12.1",
     "httpx",
     "itsdangerous",
     "jwcrypto",
@@ -37,6 +37,11 @@ dependencies = [
     "uvicorn[standard]",
 ]
 
+[project.scripts]
+soliplex-cli = "soliplex.cli:the_cli"
+soliplex-tui = "soliplex.tui.cli:the_cli"
+soliplex-tui-serve = "soliplex.tui.serve:main"
+
 [dependency-groups]
 dev = [
     "pytest",
@@ -47,6 +52,17 @@ dev = [
     "anyio",
     "trio",
     "ruff",
+]
+docs = [
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.6.19",
+    # See https://github.com/mkdocs/mkdocs/issues/4032
+    "click != 8.2.2, != 8.3.0",
+]
+tui = [
+    "textual",
+    "textual-serve",
+    "typer",
 ]
 
 [tool.pytest.ini_options]

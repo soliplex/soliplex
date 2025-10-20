@@ -76,25 +76,6 @@ def test_installation_resolve_secrets(srs, secret_configs, expectation):
     srs.assert_called_once_with(secret_configs)
 
 
-def test_installation_configure_haiku_rag():
-    from haiku.rag import config as hr_config
-
-    copied = hr_config.Config.model_copy()
-
-    i_config = mock.create_autospec(
-        config.InstallationConfig,
-        environment={"OLLAMA_BASE_URL": OLLAMA_BASE_URL},
-    )
-    the_installation = installation.Installation(i_config)
-
-    with mock.patch("haiku.rag.config.Config", copied):
-        the_installation.configure_haiku_rag()
-
-    # Check that the 'haiku.rag.config.Config' object was reconfigured
-    # using our config's environment.
-    assert copied.OLLAMA_BASE_URL == OLLAMA_BASE_URL
-
-
 @pytest.mark.parametrize("w_default", [False, True])
 def test_installation_get_environment(w_default):
     i_config = mock.create_autospec(config.InstallationConfig)
@@ -113,6 +94,49 @@ def test_installation_get_environment(w_default):
         i_config.get_environment.assert_called_once_with(KEY, DEFAULT)
     else:
         i_config.get_environment.assert_called_once_with(KEY, None)
+
+
+@pytest.mark.parametrize("w_raise", [False, True])
+def test_installation_resolve_environment(w_raise):
+    i_config = mock.create_autospec(config.InstallationConfig)
+
+    if w_raise:
+        i_config.resolve_environment.side_effect = config.MissingEnvVars(
+            "test1,test2",
+            [
+                config.MissingEnvVar("test1"),
+                config.MissingEnvVar("test2"),
+            ],
+        )
+    else:
+        i_config.resolve_environment.return_value = None
+
+    the_installation = installation.Installation(i_config)
+
+    if w_raise:
+        with pytest.raises(config.MissingEnvVars):
+            the_installation.resolve_environment()
+    else:
+        the_installation.resolve_environment()
+
+
+def test_installation_configure_haiku_rag():
+    from haiku.rag import config as hr_config
+
+    copied = hr_config.Config.model_copy()
+
+    i_config = mock.create_autospec(
+        config.InstallationConfig,
+        environment={"OLLAMA_BASE_URL": OLLAMA_BASE_URL},
+    )
+    the_installation = installation.Installation(i_config)
+
+    with mock.patch("haiku.rag.config.Config", copied):
+        the_installation.configure_haiku_rag()
+
+    # Check that the 'haiku.rag.config.Config' object was reconfigured
+    # using our config's environment.
+    assert copied.OLLAMA_BASE_URL == OLLAMA_BASE_URL
 
 
 @pytest.mark.parametrize("w_oidc_configs", [[], [object()]])
@@ -346,6 +370,14 @@ def mcp_apps():
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_no_auth_mode, exp_oidc_paths",
+    [
+        (None, ["oidc"]),
+        (False, ["oidc"]),
+        (True, []),
+    ],
+)
 @mock.patch("soliplex.secrets.resolve_secrets")
 @mock.patch("soliplex.mcp_server.setup_mcp_for_rooms")
 @mock.patch("soliplex.config.load_installation")
@@ -354,6 +386,8 @@ async def test_lifespan(
     smfr,
     srs,
     mcp_apps,
+    w_no_auth_mode,
+    exp_oidc_paths,
 ):
     from haiku.rag import config as hr_config
 
@@ -366,10 +400,15 @@ async def test_lifespan(
     i_config = mock.create_autospec(
         config.InstallationConfig,
         secrets=(),
+        oidc_paths=["oidc"],
         environment={"OLLAMA_BASE_URL": OLLAMA_BASE_URL},
     )
     load_installation.return_value = i_config
     app = mock.create_autospec(fastapi.FastAPI)
+
+    kwargs = {}
+    if w_no_auth_mode is not None:
+        kwargs["no_auth_mode"] = w_no_auth_mode
 
     with mock.patch("haiku.rag.config.Config", copied):
         found = [
@@ -377,6 +416,7 @@ async def test_lifespan(
             async for item in installation.lifespan(
                 app,
                 INSTALLATION_PATH,
+                **kwargs,
             )
         ]
 
@@ -389,6 +429,8 @@ async def test_lifespan(
     the_installation = found[0]["the_installation"]
     assert isinstance(the_installation, installation.Installation)
     assert the_installation._config is i_config
+
+    assert i_config.oidc_paths == exp_oidc_paths
 
     i_config.reload_configurations.assert_called_once_with()
 

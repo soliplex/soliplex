@@ -9,18 +9,19 @@ from soliplex import mcp_auth
 from soliplex import models
 from soliplex import util
 
-router = fastapi.APIRouter()
+router = fastapi.APIRouter(tags=["rooms"])
 
 depend_the_installation = installation.depend_the_installation
 
 
 @util.logfire_span("GET /v1/rooms")
-@router.get("/v1/rooms")
+@router.get("/v1/rooms", summary="Get available rooms")
 async def get_rooms(
     request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
     user=Depends(auth.get_current_user),
 ) -> models.ConfiguredRooms:
+    """Return a manifest of the rooms available to the user"""
     room_configs = the_installation.get_room_configs(user)
 
     def _key(item):
@@ -42,7 +43,7 @@ async def get_room(
     the_installation: installation.Installation = depend_the_installation,
     user=Depends(auth.get_current_user),
 ) -> models.Room:
-
+    """Return a single room's configuration"""
     try:
         room_config = the_installation.get_room_config(room_id, user)
     except KeyError:
@@ -65,6 +66,7 @@ async def get_room_bg_image(
     the_installation: installation.Installation = depend_the_installation,
     user=Depends(auth.get_current_user),
 ):
+    """Return a room's background image"""
     try:
         room_config = the_installation.get_room_config(room_id, user)
     except KeyError:
@@ -85,13 +87,14 @@ async def get_room_bg_image(
 
 
 @util.logfire_span("GET /v1/rooms/{room_id}/mcp_token")
-@router.get("/v1/rooms/{room_id}/mcp_token", response_model=models.MCPToken)
+@router.get("/v1/rooms/{room_id}/mcp_token")
 async def get_room_mcp_token(
     request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
     user=Depends(auth.get_current_user),
 ):
+    """Return a token for use in an MCP client addressing the room"""
     try:
         the_installation.get_room_config(room_id, user=user)
     except ValueError as e:

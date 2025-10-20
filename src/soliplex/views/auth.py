@@ -11,15 +11,16 @@ from soliplex import installation
 from soliplex import models
 from soliplex import util
 
-router = fastapi.APIRouter()
+router = fastapi.APIRouter(tags=["authentication"])
 
 depend_the_installation = installation.depend_the_installation
 
 
-@router.get("/login")
+@router.get("/login", summary="Get available OIDC auth providers")
 async def get_login(
     the_installation: installation.Installation = depend_the_installation,
 ) -> models.ConfiguredOIDCAuthSystems:
+    """Describe configured OIDC Authentiaction providers"""
     # Remove `_installation_config` to avoid infinite recursion
     auth_system_copies = [
         dataclasses.replace(auth_system, _installation_config=None)
@@ -33,12 +34,16 @@ async def get_login(
 
 
 @util.logfire_span("GET /login/{system}")
-@router.get("/login/{system}")
+@router.get(
+    "/login/{system}",
+    summary="Initiate OIDC token auth flow with a provider",
+)
 async def get_login_system(
     request: fastapi.Request,
     system: str,
     the_installation: installation.Installation = depend_the_installation,
 ):
+    """Initiate token auth flow with the specified OIDC auth provider"""
     if the_installation.auth_disabled:
         raise fastapi.HTTPException(
             status_code=404,
@@ -62,12 +67,19 @@ async def get_login_system(
 
 
 @util.logfire_span("GET /auth/{system}")
-@router.get("/auth/{system}")
+@router.get(
+    "/auth/{system}",
+    summary="Complete token auth flow with an auth provider",
+)
 async def get_auth_system(
     request: fastapi.Request,
     system: str,
     the_installation: installation.Installation = depend_the_installation,
 ):
+    """Complete the OIDC token auth flow with the specified provider
+
+    On success, redirect to client-specified URL.
+    """
     if the_installation.auth_disabled:
         raise fastapi.HTTPException(
             status_code=404,
@@ -116,11 +128,12 @@ async def get_auth_system(
 
 
 @util.logfire_span("GET /user_info")
-@router.get("/user_info")
+@router.get("/user_info", summary="Get user profile")
 async def get_user_info(
     the_installation: installation.Installation = depend_the_installation,
     token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
 ) -> models.UserInfo:
+    """Return the profile of the authenticated user"""
     if the_installation.auth_disabled:
         raise fastapi.HTTPException(
             status_code=404,

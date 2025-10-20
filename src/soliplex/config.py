@@ -139,6 +139,10 @@ class MissingEnvVars(ExceptionGroup, ValueError):
         )
 
 
+def _dotted_name(type_or_func) -> str:
+    return f"{type_or_func.__module__}.{type_or_func.__name__}"
+
+
 # ============================================================================
 #   OIDC Authentication system configuration types
 # ============================================================================
@@ -618,8 +622,8 @@ class WithQueryMCPWrapper:
         return self._func(query, tool_config=self._tool_config)
 
 
-MCP_TOOL_CONFIG_WRAPPERS_BY_KIND = {
-    SearchDocumentsToolConfig.kind: WithQueryMCPWrapper,
+MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME = {
+    SearchDocumentsToolConfig.tool_name: WithQueryMCPWrapper,
 }
 
 
@@ -721,6 +725,29 @@ class AgentConfig:
             )
 
         return provider_kw
+
+    @property
+    def as_yaml(self) -> dict:
+        prompt = (
+            self._system_prompt_path
+            if self._system_prompt_text is None
+            else self._system_prompt_text
+        )
+        if self.provider_base_url is None:
+            provider_base_url = self._installation_config.get_environment(
+                "OLLAMA_BASE_URL"
+            )
+        else:
+            provider_base_url = self.provider_base_url
+
+        return {
+            "id": self.id,
+            "model_name": self.model_name,
+            "system_prompt": prompt,
+            "provider_type": self.provider_type.value,
+            "provider_base_url": provider_base_url,
+            "provider_key": self.provider_key,  # 'secret:SECRET_NAME"
+        }
 
 
 # ============================================================================
@@ -1108,6 +1135,14 @@ class _BaseSecretSource:
         config["_config_path"] = config_path
         return cls(**config)
 
+    @property
+    def as_yaml(self) -> dict:
+        return {
+            "kind": self.kind,
+            "secret_name": self.secret_name,
+            **self.extra_arguments,
+        }
+
 
 @dataclasses.dataclass
 class EnvVarSecretSource(_BaseSecretSource):
@@ -1153,6 +1188,15 @@ class SubprocessSecretSource(_BaseSecretSource):
     @property
     def extra_arguments(self) -> dict[str, typing.Any]:
         return {"command_line": self.command_line}
+
+    @property
+    def as_yaml(self) -> dict:
+        return {
+            "kind": self.kind,
+            "secret_name": self.secret_name,
+            "command": self.command,
+            "args": list(self.args),
+        }
 
 
 @dataclasses.dataclass
@@ -1227,6 +1271,13 @@ class SecretConfig:
         config["sources"] = sources
 
         return cls(**config)
+
+    @property
+    def as_yaml(self) -> dict:
+        return {
+            "secret_name": self.secret_name,
+            "sources": [source.as_yaml for source in self.sources],
+        }
 
     @property
     def resolved(self) -> str | None:
@@ -1315,29 +1366,26 @@ def strip_secret_prefix(config_str: str) -> str:
 def resolve_file_prefix(config_str: str, config_path: pathlib.Path) -> str:
     if config_str.startswith(FILE_PREFIX):
         config_str = config_path.parent / config_str[len(FILE_PREFIX) :]
+        config_str = config_str.resolve()
 
     return str(config_str)
 
 
-def fill_missing_environment_entry(
-    environment_config: dict | str,
+def resolve_environment_entry(
+    env_name: str,
+    env_value: str,
     dotenv_env: dict[str, str],
 ) -> dict:
-    if isinstance(environment_config, str):
-        environment_config = {"name": environment_config}
+    if env_name in dotenv_env:
+        return dotenv_env[env_name]
 
-    name = environment_config["name"]
-
-    if name in dotenv_env:
-        environment_config["value"] = dotenv_env[name]
-
-    if environment_config.get("value") is None:
+    if env_value is None:
         try:
-            environment_config["value"] = os.environ[name]
+            return os.environ[env_name]
         except KeyError:
-            raise MissingEnvVar(name) from None
+            raise MissingEnvVar(env_name) from None
 
-    return environment_config
+    return env_value
 
 
 @dataclasses.dataclass
@@ -1481,14 +1529,49 @@ class InstallationConfigMeta:
         self.mcp_server_tool_wrappers = list(self.mcp_server_tool_wrappers)
         for mstw_meta in self.mcp_server_tool_wrappers:
             config_klass = mstw_meta.config_klass
+            tool_name = config_klass.tool_name
             wrapper_klass = mstw_meta.wrapper_klass
-            MCP_TOOL_CONFIG_WRAPPERS_BY_KIND[config_klass.kind] = wrapper_klass
+            MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME[tool_name] = wrapper_klass
 
         self.secret_sources = list(self.secret_sources)
-        for ss_meta in self.mcp_server_tool_wrappers:
+        for ss_meta in self.secret_sources:
             config_klass = ss_meta.config_klass
             registered_func = ss_meta.registered_func
             SECRET_GETTERS_BY_KIND[config_klass.kind] = registered_func
+
+    @property
+    def as_yaml(self) -> dict:
+        tool_config_entries = [
+            _dotted_name(klass)
+            for klass in TOOL_CONFIG_CLASSES_BY_TOOL_NAME.values()
+        ]
+        mcp_toolset_config_entries = [
+            _dotted_name(klass)
+            for klass in MCP_TOOLSET_CONFIG_CLASSES_BY_KIND.values()
+        ]
+        mcptcw_items = MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME.items()
+        mcp_server_tool_wrapper_entries = [
+            {
+                "config_klass": _dotted_name(
+                    TOOL_CONFIG_CLASSES_BY_TOOL_NAME[tool_name],
+                ),
+                "wrapper_klass": _dotted_name(wrapper_klass),
+            }
+            for tool_name, wrapper_klass in mcptcw_items
+        ]
+        secret_source_entries = [
+            {
+                "config_klass": _dotted_name(SourceClassesByKind[kind]),
+                "registered_func": _dotted_name(r_func),
+            }
+            for kind, r_func in SECRET_GETTERS_BY_KIND.items()
+        ]
+        return {
+            "tool_configs": tool_config_entries,
+            "mcp_toolset_configs": mcp_toolset_config_entries,
+            "mcp_server_tool_wrappers": mcp_server_tool_wrapper_entries,
+            "secret_sources": secret_source_entries,
+        }
 
 
 @dataclasses.dataclass
@@ -1547,6 +1630,38 @@ class InstallationConfig:
     def get_environment(self, key, default=None):
         """Find the configured value for a given quasi-envvar"""
         return self.environment.get(key, default)
+
+    def resolve_environment(self):
+        dotenv_file = self._config_path.parent / ".env"
+
+        if dotenv_file.is_file():
+            with dotenv_file.open() as stream:
+                dotenv_env = dotenv.dotenv_values(stream=stream)
+        else:
+            dotenv_env = {}
+
+        resolved = {}
+        failed = []
+        excs = []
+
+        for key, value in self.environment.items():
+            try:
+                resolved[key] = resolve_environment_entry(
+                    key,
+                    value,
+                    dotenv_env,
+                )
+            except MissingEnvVar as exc:
+                excs.append(exc)
+                failed.append(exc.env_var)
+
+        if excs:
+            raise MissingEnvVars(",".join(failed), excs)  # noqa: TRY301
+
+        self.environment = {
+            key: resolve_file_prefix(value, self._config_path)
+            for key, value in resolved.items()
+        }
 
     #
     # Agent configurations not bound to a room or completion.
@@ -1628,45 +1743,19 @@ class InstallationConfig:
             ]
             config["secrets"] = secret_configs
 
-            dotenv_file = config_path.parent / ".env"
-
-            if dotenv_file.is_file():
-                with dotenv_file.open() as stream:
-                    dotenv_env = dotenv.dotenv_values(stream=stream)
-            else:
-                dotenv_env = {}
-
             environment = config.get("environment", {})
 
-            if isinstance(environment, dict):
+            if isinstance(environment, list):
                 environment = [
-                    {"name": key, "value": value}
-                    for key, value in environment.items()
+                    {"name": entry} if isinstance(entry, str) else entry
+                    for entry in environment
                 ]
 
-            resolved = []
-            failed = []
-            excs = []
-
-            for entry in environment:
-                try:
-                    resolved.append(
-                        fill_missing_environment_entry(entry, dotenv_env),
-                    )
-                except MissingEnvVar as exc:
-                    excs.append(exc)
-                    failed.append(exc.env_var)
-
-            if excs:
-                raise MissingEnvVars(",".join(failed), excs)  # noqa: TRY301
-
-            else:
-                config["environment"] = {
-                    item["name"]: resolve_file_prefix(
-                        item["value"], config_path
-                    )
-                    for item in resolved
+                environment = {
+                    entry["name"]: entry.get("value") for entry in environment
                 }
+
+            config["environment"] = environment
 
             agent_configs = config.pop("agent_configs", ())
             agent_configs = [
@@ -1738,6 +1827,20 @@ class InstallationConfig:
                 for quizzes_path in self.quizzes_paths
                 if quizzes_path is not None
             ]
+
+    @property
+    def as_yaml(self) -> dict:
+        return {
+            "id": self.id,
+            "meta": self.meta.as_yaml,
+            "secrets": [secret.as_yaml for secret in self.secrets],
+            "environment": self.environment,
+            "agent_configs": [ac.as_yaml for ac in self.agent_configs],
+            "oidc_paths": [str(path) for path in self.oidc_paths],
+            "room_paths": [str(path) for path in self.room_paths],
+            "completion_paths": [str(path) for path in self.completion_paths],
+            "quizzes_paths": [str(path) for path in self.quizzes_paths],
+        }
 
     def _load_oidc_auth_system_configs(self) -> list[OIDCAuthSystemConfig]:
         oas_configs = []

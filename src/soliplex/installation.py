@@ -1,5 +1,6 @@
 import contextlib
 import dataclasses
+import pathlib
 
 import fastapi
 import pydantic_ai
@@ -23,6 +24,12 @@ class Installation:
     def resolve_secrets(self):
         secrets.resolve_secrets(self._config.secrets)
 
+    def get_environment(self, key, default=None) -> str:
+        return self._config.get_environment(key, default)
+
+    def resolve_environment(self):
+        self._config.resolve_environment()
+
     def configure_haiku_rag(self):
         app_config = hr_config.AppConfig.model_validate(
             self._config.environment
@@ -30,9 +37,6 @@ class Installation:
         for field in app_config.model_fields_set:
             our_value = getattr(app_config, field)
             setattr(hr_config.Config, field, our_value)
-
-    def get_environment(self, key, default=None) -> str:
-        return self._config.get_environment(key, default)
 
     @property
     def auth_disabled(self):
@@ -112,11 +116,20 @@ async def get_the_installation(
 depend_the_installation = fastapi.Depends(get_the_installation)
 
 
-async def lifespan(app: fastapi.FastAPI, installation_path):
+async def lifespan(
+    app: fastapi.FastAPI,
+    installation_path: pathlib.Path,
+    no_auth_mode: bool = False,
+):
     i_config = config.load_installation(installation_path)
+
+    if no_auth_mode:
+        del i_config.oidc_paths[:]
+
     i_config.reload_configurations()
     the_installation = Installation(i_config)
     the_installation.resolve_secrets()
+    the_installation.resolve_environment()
     the_installation.configure_haiku_rag()
     the_convos = convos.Conversations()
 

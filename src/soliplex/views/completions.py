@@ -13,18 +13,19 @@ from soliplex import util
 #   Completions endpoints
 # -----------------------------------------------------------------------------
 
-router = fastapi.APIRouter()
+router = fastapi.APIRouter(tags=["completions"])
 
 depend_the_installation = installation.depend_the_installation
 
 
 @util.logfire_span("GET /v1/chat/completions")
-@router.get("/v1/chat/completions")
+@router.get("/v1/chat/completions", summary="Get available completions")
 async def get_chat_completions(
     request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
     user=Depends(auth.get_current_user),
 ) -> models.ConfiguredCompletions:
+    """Return the completions available to the user"""
     completion_configs = the_installation.get_completion_configs(user)
 
     return {
@@ -34,13 +35,17 @@ async def get_chat_completions(
 
 
 @util.logfire_span("GET /v1/chat/completions/{completion_id}")
-@router.get("/v1/chat/completions/{completion_id}")
+@router.get(
+    "/v1/chat/completions/{completion_id}",
+    summary="Get a completion",
+)
 async def get_chat_completion(
     request: fastapi.Request,
     completion_id: str,
     the_installation: installation.Installation = depend_the_installation,
     user=Depends(auth.get_current_user),
 ) -> models.Completion:
+    """Return an individual completion"""
     try:
         completion_config = the_installation.get_completion_config(
             completion_id,
@@ -55,7 +60,10 @@ async def get_chat_completion(
 
 
 @util.logfire_span("POST /v1/chat/completions/{completion_id}")
-@router.post("/v1/chat/completions/{completion_id}")
+@router.post(
+    "/v1/chat/completions/{completion_id}",
+    summary="Post to a completion",
+)
 async def post_chat_completion(
     request: fastapi.Request,
     completion_id: str,

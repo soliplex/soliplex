@@ -1,0 +1,25 @@
+services:
+  soliplex_web:
+    build:
+      context: ./src/flutter
+      dockerfile: Dockerfile
+    #network_mode: "host" # only works on linux
+    ports:
+      - "9000:9000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  soliplex_backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    #network_mode: "host" # only works on linux
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - .env
+    volumes:
+      - ./installation:/app/installation
+      - ./db:/app/db

@@ -28,7 +28,10 @@ except:
     pass
 
 
-def curry_lifespan(installation_path: pathlib.Path = None):
+def curry_lifespan(
+    installation_path: pathlib.Path = None,
+    no_auth_mode: bool = False,
+):
     if installation_path is None:
         installation_path = os.environ.get("SOLIPLEX_INSTALLATION_PATH")
 
@@ -40,15 +43,19 @@ def curry_lifespan(installation_path: pathlib.Path = None):
     return functools.partial(
         installation.lifespan,
         installation_path=installation_path,
+        no_auth_mode=no_auth_mode,
     )
 
 
-def create_app(installation_path: pathlib.Path = None):  # pragma: NO COVER
-    # 'if-token-present' means nothing will be sent (and the example will work)
-    # if you don't have logfire configured
-    logfire.configure(send_to_logfire="if-token-present")
+def create_app(
+    installation_path: pathlib.Path = None,
+    no_auth_mode: bool = None,
+):  # pragma: NO COVER
 
-    curried_lifespan = curry_lifespan(installation_path)
+    if no_auth_mode is None:
+        no_auth_mode = os.environ.get("SOLIPLEX_NO_AUTH_MODE") == "Y"
+
+    curried_lifespan = curry_lifespan(installation_path, no_auth_mode)
     acm_lifespan = contextlib.asynccontextmanager(curried_lifespan)
     app = fastapi.FastAPI(lifespan=acm_lifespan)
 
@@ -82,6 +89,13 @@ def create_app(installation_path: pathlib.Path = None):  # pragma: NO COVER
     app.include_router(quizzes_views.router, prefix="/api")
     app.include_router(rooms_views.router, prefix="/api")
     app.include_router(views.router, prefix="/api")
+
+    # pragma: NO COVER
+    # 'if-token-present' means nothing will be sent (and the example will work)
+    # if you don't have logfire configured
+    logfire.configure(send_to_logfire="if-token-present")
+    logfire.instrument_pydantic_ai()
+    logfire.instrument_fastapi(app, capture_headers=True)
 
     return app
 

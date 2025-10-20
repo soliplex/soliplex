@@ -2,7 +2,7 @@
 # Soliplex installation configuration
 #==========================================================================
 
-id: "soliplex-conf-example"
+id: "soliplex-conf-default"
 
 #==========================================================================
 # Meta-configuration
@@ -14,62 +14,91 @@ id: "soliplex-conf-example"
 
 meta:
 
-  tool_configs:
+  #------------------------------------------------------------------------
+  # Register tool configuration types so that they can be referenced by
+  # their 'tool_name'
+  #
+  # 'soliplex.config.SearchDocumentsToolConfig' is registered by default,
+  # just as if we configured here:
+  #
+  # tool_configs:
+  # - "soliplex.config.SearchDocumentsToolConfig"
+  #------------------------------------------------------------------------
 
-    - "soliplex.config.SearchDocumentsToolConfig"
+  #------------------------------------------------------------------------
+  # Register MCP client toolset configuration types so that they can be
+  # referenced by their 'kind'.
+  #
+  # 'soliplex.config.Stdio_MCP_ClientToolsetConfig' and
+  # 'soliplex.config.HTTP_MCP_ClientToolsetConfig' are registered by default,
+  # just as if we configured here:
+  #
+  # mcp_toolset_configs:
+  # - "soliplex.config.Stdio_MCP_ClientToolsetConfig"
+  # - "soliplex.config.HTTP_MCP_ClientToolsetConfig"
+  #------------------------------------------------------------------------
 
-  mcp_toolset_configs:
+  #------------------------------------------------------------------------
+  # Register MCP server tool wrapper types so that they can be used to
+  # wrap tools from a given tool configuration class.
+  #
+  # By default, 'soliplex.config.WithQueryMCPWrapper' is configured as
+  # the wrapper for 'soliplex.config.SearchDocumentsToolConfig',
+  # just as if we configured here:
+  #
+  # mcp_server_tool_wrappers:
+  # - config_klass: "soliplex.config.SearchDocumentsToolConfig"
+  #   wrapper_klass: "soliplex.config.WithQueryMCPWrapper"
+  #------------------------------------------------------------------------
 
-    - "soliplex.config.Stdio_MCP_ClientToolsetConfig"
-
-    - "soliplex.config.HTTP_MCP_ClientToolsetConfig"
-
-  mcp_server_tool_wrappers:
-
-    - config_klass: "soliplex.config.SearchDocumentsToolConfig"
-      wrapper_klass: "soliplex.config.WithQueryMCPWrapper"
-
-  secret_sources:
-
-    - config_klass: "soliplex.config.EnvVarSecretSource"
-      registered_func: "soliplex.secrets.get_env_var_secret"
-
-    - config_klass: "soliplex.config.FilePathSecretSource"
-      registered_func: "soliplex.secrets.get_file_path_secret"
-
-    - config_klass: "soliplex.config.SubprocessSecretSource"
-      registered_func: "soliplex.secrets.get_subprocess_secret"
-
-    - config_klass: "soliplex.config.RandomCharsSecretSource"
-      registered_func: "soliplex.secrets.get_random_chars_secret"
+  #------------------------------------------------------------------------
+  # Register implementation functions for different secret source classes
+  #
+  # By default, these classes are configured to use the corresponding
+  # functions in 'soliplex.secrets', just as if we configured here:
+  #
+  # secret_sources:
+  # - config_klass: "soliplex.config.EnvVarSecretSource"
+  #   registered_func: "soliplex.secrets.get_env_var_secret"
+  # - config_klass: "soliplex.config.FilePathSecretSource"
+  #   registered_func: "soliplex.secrets.get_file_path_secret"
+  # - config_klass: "soliplex.config.SubprocessSecretSource"
+  #   registered_func: "soliplex.secrets.get_subprocess_secret"
+  # - config_klass: "soliplex.config.RandomCharsSecretSource"
+  #   registered_func: "soliplex.secrets.get_random_chars_secret"
+  #------------------------------------------------------------------------
 
 #==========================================================================
 # Secrets
 #==========================================================================
 #
-# Kept in an external store, such as ASW secret store, Github secrets, or
+# Kept in an external store, such as ASW secret store, Github secrets,
+# files created by the 'docker compose' 'secrets:' configuration, or
 # the secrets store managed by `devenv`'s `secrets` script, secrets are
 # expected to be injected into the environment separately.
-#
-# They are named here to allow pulling them into a Docker environment as
-# value-free references in a file formated to be used by
-# 'docker run --env-file <filename>'
 #==========================================================================
 
 secrets:
 
-  # Pydantic AI logging / debugging
+  # ----------------------------------------------------------------------
+  # API key for Pydantic AI logging / debugging
+  # ----------------------------------------------------------------------
   - "LOGFIRE_TOKEN"
 
-  # Public AI models
-  - "OPENAI_API_KEY"
-
-  # MCP tool registry (these are required in order to test the
-  # example/room/mcp_test tooling).
+  # ----------------------------------------------------------------------
+  # Credentials for the Smithery.AI MCP tool registry
+  #
+  # (required in order to test the 'example/room/mcp_test' tooling).
+  # ----------------------------------------------------------------------
   - "SMITHERY_AI_API_KEY"
   - "SMITHERY_AI_PROFILE"
 
+  # ----------------------------------------------------------------------
   # MCP room token generation / validation secret
+  #
+  # If not set in the environment, we generate a random value at startup,
+  # which will invalidate any previously-generated MCP room tokens.
+  # ----------------------------------------------------------------------
   - secret_name: "URL_SAFE_TOKEN_SECRET"
     sources:
       - kind: "env_var"
@@ -85,12 +114,36 @@ secrets:
 #==========================================================================
 
 environment:
-  # Don't set this in development:  should only be set by the script whih
-  # is starting a container
-  #
-  #- name: "CONTAINER_IS_RUNNING"
-  #  value: "1"
 
+  #------------------------------------------------------------------------
+  # OLLAMA provider URL
+  #
+  # Because this value needs to be locally configured, often even for
+  # members of a team working on the same project, this is the *one*
+  # environment variable which defaults to pulling its value from the
+  # actual shell environment
+  #
+  # Possible configurations:
+  #
+  # This version pulls the value from 'os.environ':
+  # - "OLLAMA_BASE_URL"
+  #
+  # You can achieve the same effect by spelling it:
+  # - name: "OLLAMA_BASE_URL"
+
+  # This version configures the value explicitly:
+  # - name: "OLLAMA_BASE_URL"
+  #   value: "http://localhost:11434"
+  #------------------------------------------------------------------------
+
+  - "OLLAMA_BASE_URL"
+
+  #------------------------------------------------------------------------
+  # Default LLM model name for agents configured by Soliplex
+  #------------------------------------------------------------------------
+
+  - name: "DEFAULT_AGENT_MODEL"
+    value: "qwen3:latest"
 
   #------------------------------------------------------------------------
   # 'haiku.rag' config vars
@@ -100,10 +153,10 @@ environment:
     value: "ollama"
 
   - name: "EMBEDDINGS_MODEL"
-    value: "mxbai-embed-large"
+    value: "qwen3-embedding"
 
   - name: "EMBEDDINGS_VECTOR_DIM"
-    value: "1024"
+    value: "4096"
 
   - name: "QA_PROVIDER"
     value: "ollama"
@@ -121,23 +174,6 @@ environment:
   - name: "INSTALLATION_PATH"
     value: "file:."
 
-  - name: "DEFAULT_AGENT_MODEL"
-    value: "qwen3:latest"
-
-#   This version pulls the value from 'os.environ':
-  - "OLLAMA_BASE_URL"
-
-#   It can also be spelled:
-#  - name: "OLLAMA_BASE_URL"
-
-#   This version configures the value explicitly:
-#  - name: "OLLAMA_BASE_URL"
-#    value: "http://localhost:11434"
-
-# Uncomment this to expire MCP room server tokens after one hour.
-# - name: "MCP_TOKEN_MAX_AGE"
-#   value: 3600
-
   - name: "RAG_LANCE_DB_PATH"
     value: "file:../db/rag"
 
@@ -151,18 +187,23 @@ environment:
   - name: "LOGFIRE_SERVICE_NAME"
     value: "soliplex"
 
+  #------------------------------------------------------------------------
+  # Uncomment this stanza to expire MCP room server tokens after one hour.
+  # (by default they do not expire):
+  #
+  # - name: "MCP_TOKEN_MAX_AGE"
+  #   value: 3600
+  #------------------------------------------------------------------------
+
 #==========================================================================
 # Agent configurations
-#==========================================================================
-# Specify agent configurations which are not bound to rooms / completions
+#
+# Agent configurations which are not bound to rooms / completions, but
+# findable by ID from Python code using 'the_installation.get_agent_by_id'
 #==========================================================================
 
 agent_configs:
 
-  #
-  # Application code can get the agent for this config via:
-  # 'the_installation.get_agent_by_id("ollama_gpt_oss")'
-  #
   - id: "ollama_gpt_oss"
     model_name: "gpt-oss:20b"
     system_prompt: |
@@ -179,14 +220,22 @@ agent_configs:
 #
 # Non-absolute paths will be evaluated relative to the installation directory.
 #
-# If the 'oidc_paths' key is not found, load provider configurations found
-# under the path './oidc'.
+# By default, load provider configurations found under the path './oicd',
+# just as though we had configured here:
+#
+# oidc_paths:
+# - "./oidc"
 #
 # To disable authentication, list a single, "null" path, e.g.:
 #
 # oidc_paths:
 #   -
+#
+# Or run 'soliplex-cli serve --no-auth-mode'
 #==========================================================================
+
+oidc_paths:
+  -
 
 
 #==========================================================================
@@ -208,8 +257,11 @@ agent_configs:
 # is used for any conflict on room ID:  rooms found earlier in the list
 # "win" over later ones with the same ID.
 #
-# If the 'room_paths' key is not found, load room configurations found
-# under the path './rooms'.
+# By default, load room configurations found under the path './rooms',
+# just as though we had configured here:
+#
+# room_paths:
+# - "./rooms"
 #
 # To disable all rooms, list a single, "null" path, e.g.:
 #
@@ -237,8 +289,11 @@ agent_configs:
 # configuration is used for any conflict on completion ID:  completions
 # found earlier in the list "win" over later ones with the same ID.
 #
-# If the 'completions_paths' key is not found, load completion configurations
-# found under the path './completions'.
+# By default, load completion configurations found under the path
+# './completions', just as though we had configured here:
+#
+# completion_paths:
+# - "./completions"
 #
 # To disable all completions, list a single, "null" path, e.g.:
 #
@@ -261,16 +316,14 @@ agent_configs:
 # configuration is used for any conflict on quiz name:  question files
 # found earlier in the list "win" over later ones with the same name.
 #
-# If the 'quizzes_paths' key is not found, search quiz for question files
-# found under the path './quizzes'.
+# By default, load quizzes found under the path './quizzes',
+# just as though we had configured here:
+#
+# quizzes_paths:
+# - "./quizzes"
 #
 # To disable all quizzes, list a single, "null" path, e.g.:
 #
 # quizzes_paths:
 #   -
-#
-# TODO:  update 'soliplex.config.RoomConfig._load_questions_file' to implement
-#        the non-default search of the configured path, rather than using
-#        the 'INSTALLATION_PATH' environment variable.
-#        See issue #13.
 #==========================================================================

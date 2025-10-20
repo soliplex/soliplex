@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 from soliplex import config
+from soliplex import secrets
 
 AUTHSYSTEM_ID = "testing"
 AUTHSYSTEM_TITLE = "Testing OIDC"
@@ -646,7 +647,7 @@ W_SECRET_SOURCE_ICMETA_KW = {
     "mcp_server_tool_wrappers": [],
     "secret_sources": [
         config.ConfigMeta(
-            config_klass=config.SearchDocumentsToolConfig,
+            config_klass=config.EnvVarSecretSource,
             registered_func=SECRET_SOURCE_FUNC,
         ),
     ],
@@ -654,8 +655,8 @@ W_SECRET_SOURCE_ICMETA_KW = {
 W_SECRET_SOURCE_ICMETA_YAML = """\
 meta:
   secret_sources:
-    - "config_klass": "soliplex.config.SearchDocumentsToolConfig"
-      "registered_func": "soliplex.config.TestSecretSource"
+    - "config_klass": "soliplex.config.EnvVarSecretSource"
+      "registered_func": "soliplex.config.test_secret_func"
 """
 
 
@@ -673,7 +674,7 @@ FULL_ICMETA_KW = {
     ],
     "secret_sources": [
         config.ConfigMeta(
-            config_klass=config.SearchDocumentsToolConfig,
+            config_klass=config.EnvVarSecretSource,
             registered_func=SECRET_SOURCE_FUNC,
         ),
     ],
@@ -689,8 +690,8 @@ meta:
     - "config_klass": "soliplex.config.SearchDocumentsToolConfig"
       "wrapper_klass": "soliplex.config.WithQueryMCPWrapper"
   secret_sources:
-    - "config_klass": "soliplex.config.SearchDocumentsToolConfig"
-      "registered_func": "soliplex.config.TestSecretSource"
+    - "config_klass": "soliplex.config.EnvVarSecretSource"
+      "registered_func": "soliplex.config.test_secret_func"
 """
 
 INSTALLATION_ID = "test-installation"
@@ -706,10 +707,7 @@ id: "{INSTALLATION_ID}"
 
 W_BARE_META_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "meta": config.InstallationConfigMeta(
-        tool_configs=[],
-        mcp_toolset_configs=[],
-    ),
+    "meta": copy.deepcopy(BARE_ICMETA_KW),
 }
 W_BARE_META_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
@@ -718,7 +716,7 @@ meta:
 
 W_FULL_META_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "meta": config.InstallationConfigMeta(**FULL_ICMETA_KW),
+    "meta": FULL_ICMETA_KW,
 }
 W_FULL_META_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
@@ -781,7 +779,7 @@ CONFIG_VAL_2 = "val_2"
 W_ENVIRONMENT_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
     "environment": {
-        CONFIG_KEY_0: "<temp_dir>",
+        CONFIG_KEY_0: CONFIG_VAL_0,
         CONFIG_KEY_1: CONFIG_VAL_1,
         CONFIG_KEY_2: CONFIG_VAL_2,
     },
@@ -1964,6 +1962,65 @@ def test_agentconfig_llm_provider_kw(
         installation_config.get_secret.assert_not_called()
 
 
+@pytest.mark.parametrize("has_pk", [False, True])
+@pytest.mark.parametrize("has_base_url", [False, True])
+@pytest.mark.parametrize(
+    "agent_config_kw",
+    [
+        EMPTY_AGENT_CONFIG_KW.copy(),
+        BARE_AGENT_CONFIG_KW.copy(),
+        W_PROMPT_FILE_AGENT_CONFIG_KW.copy(),
+    ],
+)
+def test_agentconfig_as_yaml(
+    installation_config,
+    agent_config_kw,
+    has_base_url,
+    has_pk,
+):
+    agent_config_kw = copy.deepcopy(agent_config_kw)
+
+    ic_environ = {
+        "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+        "DEFAULT_AGENT_MODEL": MODEL_NAME,
+    }
+    installation_config.get_environment = ic_environ.get
+    agent_config_kw["_installation_config"] = installation_config
+
+    system_prompt = (
+        agent_config_kw.get("system_prompt")
+        or agent_config_kw.get("_system_prompt_text")
+        or agent_config_kw.get("_system_prompt_path")
+    )
+    model_name = agent_config_kw.get("model_name") or MODEL_NAME
+    expected = {
+        "id": AGENT_ID,
+        "system_prompt": system_prompt,
+        "model_name": model_name,
+        "provider_type": "ollama",
+    }
+
+    if has_base_url:
+        agent_config_kw["provider_base_url"] = PROVIDER_BASE_URL
+        expected["provider_base_url"] = PROVIDER_BASE_URL
+    else:
+        expected["provider_base_url"] = OLLAMA_BASE_URL
+
+    if has_pk:
+        agent_config_kw["provider_key"] = "secret:SECRET_NAME"
+        expected["provider_key"] = "secret:SECRET_NAME"
+    else:
+        expected["provider_key"] = None
+
+    aconfig = config.AgentConfig(**agent_config_kw)
+
+    found = aconfig.as_yaml
+
+    assert found == expected
+
+    installation_config.get_secret.assert_not_called()
+
+
 @pytest.fixture
 def qa_question():
     return config.QuizQuestion(
@@ -2514,6 +2571,26 @@ def test_envvarsecretsource_from_yaml(temp_dir, yaml_config):
     assert source.extra_arguments == {"env_var_name": exp_env_var_name}
 
 
+@pytest.mark.parametrize("has_ev", [False, True])
+def test_envvarsecretsource_as_yaml(has_ev):
+    config_kw = {"secret_name": SECRET_NAME}
+
+    if has_ev:
+        config_kw["env_var_name"] = ENV_VAR_NAME
+
+    source = config.EnvVarSecretSource(**config_kw)
+
+    expected = {
+        "kind": config.EnvVarSecretSource.kind,
+        "secret_name": SECRET_NAME,
+        "env_var_name": ENV_VAR_NAME if has_ev else SECRET_NAME,
+    }
+
+    found = source.as_yaml
+
+    assert found == expected
+
+
 @pytest.mark.parametrize("file_path", ["/path/to/file", "./file"])
 def test_filepathsecretsource_from_yaml(temp_dir, file_path):
     config_path = temp_dir / "installation.yaml"
@@ -2525,6 +2602,25 @@ def test_filepathsecretsource_from_yaml(temp_dir, file_path):
     assert source.secret_name == SECRET_NAME
     assert source.file_path == file_path
     assert source.extra_arguments == {"file_path": file_path}
+
+
+def test_filepathsecretsource_as_yaml():
+    config_kw = {
+        "secret_name": SECRET_NAME,
+        "file_path": SECRET_FILE_PATH,
+    }
+
+    source = config.FilePathSecretSource(**config_kw)
+
+    expected = {
+        "kind": config.FilePathSecretSource.kind,
+        "secret_name": SECRET_NAME,
+        "file_path": SECRET_FILE_PATH,
+    }
+
+    found = source.as_yaml
+
+    assert found == expected
 
 
 @pytest.mark.parametrize(
@@ -2541,16 +2637,65 @@ def test_subprocess_secret_source_command_line(w_args, exp_command_line):
 
 
 @pytest.mark.parametrize(
+    "w_args",
+    [
+        (),
+        ["-a", "foo"],
+    ],
+)
+def test_subprocesssecretsource_as_yaml(w_args):
+    config_kw = {
+        "secret_name": SECRET_NAME,
+        "command": COMMAND,
+        "args": w_args,
+    }
+
+    source = config.SubprocessSecretSource(**config_kw)
+
+    expected = {
+        "kind": config.SubprocessSecretSource.kind,
+        "secret_name": SECRET_NAME,
+        "command": COMMAND,
+        "args": list(w_args),
+    }
+
+    found = source.as_yaml
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
     "kwargs, exp_nc",
     [
         ({}, 32),
         ({"n_chars": 17}, 17),
     ],
 )
-def test_random_chars_secret_source_extra_args(kwargs, exp_nc):
+def test_randomcharssecretsource_extra_args(kwargs, exp_nc):
     source = config.RandomCharsSecretSource(SECRET_NAME, **kwargs)
 
     assert source.extra_arguments == {"n_chars": exp_nc}
+
+
+@pytest.mark.parametrize(
+    "kwargs, exp_nc",
+    [
+        ({}, 32),
+        ({"n_chars": 17}, 17),
+    ],
+)
+def test_randomcharssecretsource_as_yaml(kwargs, exp_nc):
+    source = config.RandomCharsSecretSource(secret_name=SECRET_NAME, **kwargs)
+
+    expected = {
+        "kind": config.RandomCharsSecretSource.kind,
+        "secret_name": SECRET_NAME,
+        "n_chars": exp_nc,
+    }
+
+    found = source.as_yaml
+
+    assert found == expected
 
 
 @pytest.mark.parametrize(
@@ -2568,6 +2713,23 @@ def test_secretconfig_ctor(w_sources, exp_sources):
 
     assert secret.secret_name == SECRET_NAME
     assert secret.sources == exp_sources
+
+
+def test_secretconfig_as_yaml():
+    source_1 = mock.Mock(spec_set=["as_yaml"])
+    source_2 = mock.Mock(spec_set=["as_yaml"])
+    secret = config.SecretConfig(SECRET_NAME, [source_1, source_2])
+
+    expected = {
+        "secret_name": SECRET_NAME,
+        "sources": [
+            source_1.as_yaml,
+            source_2.as_yaml,
+        ],
+    }
+    found = secret.as_yaml
+
+    assert found == expected
 
 
 def test_secretconfig_resolved():
@@ -2697,64 +2859,63 @@ def test_resolve_file_prefix(temp_dir, config_str, expected):
 
 
 @pytest.mark.parametrize(
-    "entry, dotenv_env, osenv_patch, expectation",
+    "env_name, env_value, dotenv_env, osenv_patch, expectation",
     [
-        ("ENVVAR", {}, {}, pytest.raises(config.MissingEnvVar)),
-        ("ENVVAR", {"ENVVAR": "dotenv"}, {}, contextlib.nullcontext("dotenv")),
-        ("ENVVAR", {}, {"ENVVAR": "osenv"}, contextlib.nullcontext("osenv")),
+        ("ENVVAR", None, {}, {}, pytest.raises(config.MissingEnvVar)),
         (
             "ENVVAR",
-            {"ENVVAR": "dotenv"},
-            {"ENVVAR": "osenv"},
-            contextlib.nullcontext("dotenv"),  # dotenv_env wins
-        ),
-        ({"name": "ENVVAR"}, {}, {}, pytest.raises(config.MissingEnvVar)),
-        (
-            {"name": "ENVVAR"},
+            None,
             {"ENVVAR": "dotenv"},
             {},
             contextlib.nullcontext("dotenv"),
         ),
         (
-            {"name": "ENVVAR"},
+            "ENVVAR",
+            None,
             {},
             {"ENVVAR": "osenv"},
             contextlib.nullcontext("osenv"),
         ),
         (
-            {"name": "ENVVAR"},
+            "ENVVAR",
+            None,
             {"ENVVAR": "dotenv"},
             {"ENVVAR": "osenv"},
             contextlib.nullcontext("dotenv"),  # dotenv_env wins
         ),
         (
-            {"name": "ENVVAR", "value": "baz"},
+            "ENVVAR",
+            "baz",
             {},
             {},
             contextlib.nullcontext("baz"),
         ),
         (
-            {"name": "ENVVAR", "value": "baz"},
+            "ENVVAR",
+            "baz",
             {"ENVVAR": "dotenv"},
             {},
             contextlib.nullcontext("dotenv"),  # dotenv wins
         ),
         (
-            {"name": "ENVVAR", "value": "baz"},
+            "ENVVAR",
+            "baz",
             {},
             {"ENVVAR": "osenv"},
             contextlib.nullcontext("baz"),
         ),
         (
-            {"name": "ENVVAR", "value": "baz"},
+            "ENVVAR",
+            "baz",
             {"ENVVAR": "dotenv"},
             {"ENVVAR": "osenv"},
             contextlib.nullcontext("dotenv"),  # dotenv wins
         ),
     ],
 )
-def test_fill_missing_environment_entry(
-    entry,
+def test_resolve_environment_entry(
+    env_name,
+    env_value,
     dotenv_env,
     osenv_patch,
     expectation,
@@ -2763,11 +2924,14 @@ def test_fill_missing_environment_entry(
         mock.patch.dict("os.environ", **osenv_patch),
         expectation as expected,
     ):
-        found = config.fill_missing_environment_entry(entry, dotenv_env)
+        found = config.resolve_environment_entry(
+            env_name,
+            env_value,
+            dotenv_env,
+        )
 
     if isinstance(expected, str):
-        assert found["name"] == "ENVVAR"
-        assert found["value"] == expected
+        assert found == expected
 
     else:
         assert expected.value.env_var == "ENVVAR"
@@ -2851,7 +3015,11 @@ def test_configmeta_dottedname():
 @pytest.fixture
 def patched_soliplex_config():
     with mock.patch.dict(config.__dict__) as patched:
-        patched["TestSecretSource"] = SECRET_SOURCE_FUNC
+        patched["test_secret_func"] = SECRET_SOURCE_FUNC
+        patched["TOOL_CONFIG_CLASSES_BY_TOOL_NAME"] = {}
+        patched["MCP_TOOLSET_CONFIG_CLASSES_BY_KIND"] = {}
+        patched["MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME"] = {}
+        patched["SECRET_GETTERS_BY_KIND"] = {}
 
         yield patched
 
@@ -2880,17 +3048,21 @@ def test_installationconfigmeta_from_yaml(
     config_yaml,
     expected_kw,
 ):
+    expected_kw = copy.deepcopy(expected_kw)
+
     yaml_file = temp_dir / "config.yaml"
     yaml_file.write_text(config_yaml)
 
     with yaml_file.open() as fp:
         config_dict = yaml.safe_load(fp)
 
+    config_meta = config_dict["meta"]
+
     if expected_kw is None:
         with pytest.raises(config.FromYamlException) as exc:
             config.InstallationConfigMeta.from_yaml(
                 yaml_file,
-                config_dict["meta"],
+                config_meta,
             )
         assert exc.value._config_path == yaml_file
 
@@ -2902,10 +3074,124 @@ def test_installationconfigmeta_from_yaml(
 
         ic_meta = config.InstallationConfigMeta.from_yaml(
             yaml_file,
-            config_dict["meta"],
+            config_meta.copy() if config_meta is not None else None,
         )
 
         assert ic_meta == expected
+
+        if config_meta and "tool_configs" in config_dict["meta"]:
+            tcs_by_tool_name = patched_soliplex_config[
+                "TOOL_CONFIG_CLASSES_BY_TOOL_NAME"
+            ]
+            tcs_by_class_name = {
+                f"{klass.__module__}.{klass.__name__}": klass
+                for klass in tcs_by_tool_name.values()
+            }
+            for klass_name in config_meta["tool_configs"]:
+                tool_name = tcs_by_class_name[klass_name].tool_name
+                assert tool_name in tcs_by_tool_name
+
+        if config_meta and "mcp_toolset_configs" in config_meta:
+            tcs_by_kind = patched_soliplex_config[
+                "MCP_TOOLSET_CONFIG_CLASSES_BY_KIND"
+            ]
+            tcs_by_class_name = {
+                f"{klass.__module__}.{klass.__name__}": klass
+                for klass in tcs_by_kind.values()
+            }
+            for klass_name in config_meta["mcp_toolset_configs"]:
+                assert tcs_by_class_name[klass_name].kind in tcs_by_kind
+
+        if config_meta and "mcp_toolset_configs" in config_meta:
+            tcs_by_kind = patched_soliplex_config[
+                "MCP_TOOLSET_CONFIG_CLASSES_BY_KIND"
+            ]
+            tcs_by_class_name = {
+                f"{klass.__module__}.{klass.__name__}": klass
+                for klass in tcs_by_kind.values()
+            }
+            for klass_name in config_meta["mcp_toolset_configs"]:
+                assert tcs_by_class_name[klass_name].kind in tcs_by_kind
+
+        if config_meta and "mcp_server_tool_wrappers" in config_meta:
+            mtcw_by_tool_name = patched_soliplex_config[
+                "MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME"
+            ]
+            SDTC = config.SearchDocumentsToolConfig
+            assert SDTC.tool_name in mtcw_by_tool_name
+
+            wcs_by_class_name = {
+                f"{klass.__module__}.{klass.__name__}": klass
+                for klass in mtcw_by_tool_name.values()
+            }
+            for wrapper_cfg in config_meta["mcp_server_tool_wrappers"]:
+                wrapper_klass = wrapper_cfg["wrapper_klass"]
+                assert (
+                    mtcw_by_tool_name[SDTC.tool_name]
+                    is wcs_by_class_name[wrapper_klass]
+                )
+
+        if config_meta and "secret_sources" in config_meta:
+            sg_by_kind = patched_soliplex_config["SECRET_GETTERS_BY_KIND"]
+            assert sg_by_kind == {
+                config.EnvVarSecretSource.kind: SECRET_SOURCE_FUNC
+            }
+
+
+@pytest.mark.parametrize("w_secret_reg", [False, True])
+@pytest.mark.parametrize("w_sdtc", [False, True])
+@pytest.mark.parametrize("w_mcp_toolsets", [False, True])
+def test_installationconfigmeta_as_yaml(
+    patched_soliplex_config,
+    w_sdtc,
+    w_mcp_toolsets,
+    w_secret_reg,
+):
+    icmeta_kw = {}
+    expected_dict = copy.deepcopy(BARE_ICMETA_KW)
+    icmeta_kw = icmeta_kw.copy()
+
+    if w_sdtc:
+        config.TOOL_CONFIG_CLASSES_BY_TOOL_NAME[
+            config.SearchDocumentsToolConfig.tool_name
+        ] = config.SearchDocumentsToolConfig
+        expected_dict["tool_configs"].append(
+            "soliplex.config.SearchDocumentsToolConfig",
+        )
+        config.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME[
+            config.SearchDocumentsToolConfig.tool_name
+        ] = config.WithQueryMCPWrapper
+        expected_dict["mcp_server_tool_wrappers"].append(
+            {
+                "config_klass": "soliplex.config.SearchDocumentsToolConfig",
+                "wrapper_klass": "soliplex.config.WithQueryMCPWrapper",
+            }
+        )
+
+    if w_mcp_toolsets:
+        config.MCP_TOOLSET_CONFIG_CLASSES_BY_KIND[
+            config.Stdio_MCP_ClientToolsetConfig.kind
+        ] = config.Stdio_MCP_ClientToolsetConfig
+        expected_dict["mcp_toolset_configs"].append(
+            "soliplex.config.Stdio_MCP_ClientToolsetConfig",
+        )
+
+    if w_secret_reg:
+        config.SECRET_GETTERS_BY_KIND[config.EnvVarSecretSource.kind] = (
+            secrets.get_env_var_secret
+        )
+        expected_dict["secret_sources"].append(
+            {
+                "config_klass": "soliplex.config.EnvVarSecretSource",
+                "registered_func": "soliplex.secrets.get_env_var_secret",
+            }
+        )
+
+    icmeta = config.InstallationConfigMeta(**icmeta_kw)
+
+    found = icmeta.as_yaml
+
+    assert found == expected_dict
 
 
 def test_installationconfig_secrets_map_wo_existing():
@@ -3032,6 +3318,93 @@ def test_installationconfig_get_environment(w_hit, w_default):
         assert found == DEFAULT
     else:
         assert found is None
+
+
+UNRESOLVED = {"name": "UNRESOLVED"}
+UNRESOLVED_MOAR = {"name": "UNRESOLVED_MOAR"}
+RESOLVED = {"name": "RESOLVED", "value": "resolved"}
+
+
+@pytest.mark.parametrize(
+    "env_entries, dotenv_text, expectation, exp_missing, exp_env",
+    [
+        (
+            [],
+            None,
+            contextlib.nullcontext(None),
+            None,
+            {},
+        ),
+        (
+            [RESOLVED],
+            None,
+            contextlib.nullcontext(None),
+            None,
+            {"RESOLVED": "resolved"},
+        ),
+        (
+            [UNRESOLVED],
+            None,
+            pytest.raises(config.MissingEnvVars),
+            "UNRESOLVED",
+            None,
+        ),
+        (
+            [UNRESOLVED, UNRESOLVED_MOAR],
+            None,
+            pytest.raises(config.MissingEnvVars),
+            "UNRESOLVED,UNRESOLVED_MOAR",
+            None,
+        ),
+        (
+            [UNRESOLVED, UNRESOLVED_MOAR],
+            "UNRESOLVED=via_dotenv",
+            pytest.raises(config.MissingEnvVars),
+            "UNRESOLVED_MOAR",
+            None,
+        ),
+        (
+            [UNRESOLVED],
+            "UNRESOLVED=via_dotenv",
+            contextlib.nullcontext(None),
+            None,
+            {"UNRESOLVED": "via_dotenv"},
+        ),
+        (
+            [RESOLVED],
+            "RESOLVED=via_dotenv",
+            contextlib.nullcontext(None),
+            None,
+            {"RESOLVED": "via_dotenv"},  # dotenv wins
+        ),
+    ],
+)
+def test_installation_resolve_environment(
+    temp_dir,
+    env_entries,
+    dotenv_text,
+    expectation,
+    exp_missing,
+    exp_env,
+):
+    environment = {entry["name"]: entry.get("value") for entry in env_entries}
+    if dotenv_text is not None:
+        dotenv_file = temp_dir / ".env"
+        dotenv_file.write_text(dotenv_text)
+
+    i_config = config.InstallationConfig(
+        id="test-ic",
+        _config_path=temp_dir / "installation.yaml",
+        environment=environment,
+    )
+
+    with expectation as expected:
+        i_config.resolve_environment()
+
+    if expected is not None:
+        assert expected.value.env_vars == exp_missing
+    else:
+        assert i_config.environment == exp_env
 
 
 def test_installationconfig_agent_configs_map_wo_existing():
@@ -3163,21 +3536,21 @@ def test_installationconfig_from_yaml(
         assert exc.value._config_path == config_path
 
     else:
-        for env_key, env_val in expected_kw.get("environment", {}).items():
-            if env_val == "<temp_dir>":
-                expected_kw["environment"][env_key] = str(temp_dir)
+        if "meta" in expected_kw:
+            icmeta_kw = expected_kw.pop("meta")
+            expected_kw["meta"] = config.InstallationConfigMeta(
+                **icmeta_kw,
+                _config_path=config_path,
+            )
+        else:
+            expected_kw["meta"] = config.InstallationConfigMeta(
+                _config_path=config_path,
+            )
 
-        expected = config.InstallationConfig(**expected_kw)
-        expected = dataclasses.replace(
-            expected,
+        expected = config.InstallationConfig(
+            **expected_kw,
             _config_path=config_path,
         )
-
-        replaced_meta = dataclasses.replace(
-            expected.meta,
-            _config_path=config_path,
-        )
-        expected = dataclasses.replace(expected, meta=replaced_meta)
 
         if "secrets" in expected_kw:
             replaced_secrets = []
@@ -3245,26 +3618,6 @@ environment:
 """
 
 
-@mock.patch("soliplex.config.fill_missing_environment_entry")
-def test_installationconfig_from_yaml_environ_w_miss(fmee, temp_dir):
-    fmee.side_effect = config.MissingEnvVar("TEST_ENVVAR")
-
-    config_yaml = W_ENVIRONMENT_LIST_ONLY_STR_INSTALLATION_CONFIG_YAML
-
-    yaml_file = temp_dir / "installation.yaml"
-    yaml_file.write_text(config_yaml)
-
-    with yaml_file.open() as stream:
-        config_dict = yaml.safe_load(stream)
-
-    with pytest.raises(config.FromYamlException) as exc:
-        config.InstallationConfig.from_yaml(yaml_file, config_dict)
-
-    context = exc.value.__context__
-    assert isinstance(context, config.MissingEnvVars)
-    assert context.env_vars == "TEST_ENVVAR"
-
-
 @pytest.mark.parametrize(
     "config_yaml",
     [
@@ -3280,7 +3633,7 @@ def test_installationconfig_from_yaml_environ_wo_value(temp_dir, config_yaml):
     yaml_file.write_text(config_yaml)
 
     expected_kw = copy.deepcopy(BARE_INSTALLATION_CONFIG_KW)
-    expected_kw["environment"] = {"TEST_ENVVAR": TEST_VALUE}
+    expected_kw["environment"] = {"TEST_ENVVAR": None}
     expected = config.InstallationConfig(**expected_kw)
     expected = dataclasses.replace(
         expected,
@@ -3304,44 +3657,54 @@ def test_installationconfig_from_yaml_environ_wo_value(temp_dir, config_yaml):
     assert found == expected
 
 
-def test_installationconfig_from_yaml_w_dotenv(temp_dir):
-    REPLACEMENT = "other value"
-    DOTENV_TEXT = f"""
-{CONFIG_KEY_1}={REPLACEMENT}
-IGNORED=bogus
-"""
-    dotenv_file = temp_dir / ".env"
-    dotenv_file.write_text(DOTENV_TEXT)
-
-    config_yaml = W_ENVIRONMENT_MAPPING_INSTALLATION_CONFIG_YAML
-    yaml_file = temp_dir / "installation.yaml"
-    yaml_file.write_text(config_yaml)
-
-    expected_kw = copy.deepcopy(W_ENVIRONMENT_INSTALLATION_CONFIG_KW)
-
-    for env_key, env_val in expected_kw.get("environment", {}).items():
-        if env_val == "<temp_dir>":
-            expected_kw["environment"][env_key] = str(temp_dir)
-
-    expected_kw["environment"][CONFIG_KEY_1] = REPLACEMENT
-    expected = config.InstallationConfig(**expected_kw)
-    expected = dataclasses.replace(
-        expected,
-        _config_path=yaml_file,
-        meta=dataclasses.replace(
-            expected.meta,
-            _config_path=yaml_file,
-        ),
-        oidc_paths=[temp_dir / "oidc"],
-        room_paths=[temp_dir / "rooms"],
-        completion_paths=[temp_dir / "completions"],
-        quizzes_paths=[temp_dir / "quizzes"],
+def test_installationconfig_as_yaml():
+    meta = mock.create_autospec(config.InstallationConfigMeta)
+    secret_1 = mock.create_autospec(config.SecretConfig)
+    secret_2 = mock.create_autospec(config.SecretConfig)
+    agent_config = config.AgentConfig(
+        id="test-agent",
+        system_prompt="You are a test",
+        model_name=MODEL_NAME,
+        provider_base_url=PROVIDER_BASE_URL,
     )
 
-    with yaml_file.open() as stream:
-        config_dict = yaml.safe_load(stream)
+    installation_config = config.InstallationConfig(
+        id=INSTALLATION_ID,
+        meta=meta,
+        secrets=[secret_1, secret_2],
+        environment={
+            "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+        },
+        agent_configs=[agent_config],
+        oidc_paths=[pathlib.Path("./oidc-test")],
+        room_paths=[
+            pathlib.Path("/path/to/rooms"),
+            pathlib.Path("./other/rooms"),
+        ],
+        completion_paths=[pathlib.Path("/path/to/completions")],
+        quizzes_paths=[pathlib.Path("./other/quizzes")],
+    )
 
-    found = config.InstallationConfig.from_yaml(yaml_file, config_dict)
+    expected = {
+        "id": INSTALLATION_ID,
+        "meta": meta.as_yaml,
+        "secrets": [
+            secret_1.as_yaml,
+            secret_2.as_yaml,
+        ],
+        "environment": {
+            "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+        },
+        "agent_configs": [
+            agent_config.as_yaml,
+        ],
+        "oidc_paths": ["oidc-test"],
+        "room_paths": ["/path/to/rooms", "other/rooms"],
+        "completion_paths": ["/path/to/completions"],
+        "quizzes_paths": ["other/quizzes"],
+    }
+
+    found = installation_config.as_yaml
 
     assert found == expected
 
