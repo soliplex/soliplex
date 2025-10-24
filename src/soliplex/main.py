@@ -23,7 +23,7 @@ from soliplex.views import rooms as rooms_views
 
 try:
     import debugpy
-    debugpy.listen(("localhost", 5678))
+    debugpy.listen(("0.0.0.0", 5678))
 except:
     pass
 

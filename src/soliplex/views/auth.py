@@ -3,6 +3,7 @@ import dataclasses
 import fastapi
 from authlib.integrations import starlette_client
 from datetime import datetime, timedelta
+from fastapi import Depends
 from fastapi import responses
 from fastapi import security
 
@@ -130,14 +131,8 @@ async def get_auth_system(
 @util.logfire_span("GET /user_info")
 @router.get("/user_info", summary="Get user profile")
 async def get_user_info(
-    the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    user=Depends(auth.get_current_user),
 ) -> models.UserInfo:
     """Return the profile of the authenticated user"""
-    if the_installation.auth_disabled:
-        raise fastapi.HTTPException(
-            status_code=404,
-            detail="system in no-auth mode",
-        )
 
-    return await auth.authenticate(the_installation, token)
+    return user

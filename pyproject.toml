@@ -16,6 +16,7 @@ classifiers = [
 dependencies = [
     "authlib",
     "docling",
+    "docker",
     "python-dotenv",
     "fastapi",
     "fastmcp>=2.12.3,<2.13",

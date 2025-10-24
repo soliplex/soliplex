@@ -208,9 +208,9 @@ class OIDCAuthSystem(pydantic.BaseModel):
     id: str
     title: str
     server_url: str
-    token_validation_pem: str
     client_id: str
     include_return_to: bool
+    token_validation_pem: str | None = None
     scope: str | None = None
 
     @classmethod
