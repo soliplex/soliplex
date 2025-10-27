@@ -430,6 +430,8 @@ def config_as_yaml(
 
     exported_yaml = yaml.dump(the_installation._config.as_yaml)
 
+    the_console.print(f"# Source: {installation_path}")
+    the_console.line()
     the_console.print(exported_yaml)
 
 
