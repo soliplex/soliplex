@@ -49,7 +49,7 @@ def get_git_hash_for_file(file_path: str):
 
     try:
         #check for a git url install
-        dist=metadata.distribution("soliplex")
+        dist = metadata.distribution("soliplex")
         if hasattr(dist,'origin')  :
             if hasattr(dist.origin,'vcs_info'):
                 return dist.origin.vcs_info.commit_id
