@@ -23,8 +23,9 @@ from soliplex.views import rooms as rooms_views
 
 try:  # pragma: NO COVER
     import debugpy
+
     debugpy.listen(("0.0.0.0", 5678))
-except:  # pragma: NO COVER
+except ImportError:  # pragma: NO COVER
     pass
 
 
