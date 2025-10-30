@@ -1,0 +1,14 @@
+id: "plonemcp"
+name: "Plone MCP Test"
+description: "Test MCP tool interaction with Plone"
+suggestions:
+  - "Connect to Plone"
+  - "Create new content"
+  - "Update existing content"
+  - "Change workflow state"
+agent:
+  system_prompt: "./prompt.txt"
+mcp_client_toolsets:
+  plone_stdio:
+    kind: "docker"
+    image: "plone-mcp:1"

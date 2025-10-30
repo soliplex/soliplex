@@ -1,0 +1,16 @@
+id: "uvx_example"
+name: "SQLite MCP Server"
+description: "Test SQLite MCP Server"
+suggestions:
+  - "Get a list of all tables in the database"
+  - "Show a demonstration prompt"
+agent:
+  system_prompt: "./prompt.txt"
+mcp_client_toolsets:
+  sqlite_mcp:
+    kind: "docker"
+    image: "ghcr.io/astral-sh/uv:debian"
+    volumes:
+      - "/tmp/test.db:/tmp/test.db:rw"
+      - "/tmp/uv_cache:/root/.cache/uv:rw"
+    command: "uvx mcp-server-sqlite --db-path /tmp/test.db"

@@ -1,0 +1,15 @@
+id: "npx_example"
+name: "Knowledge Graph Memory Server"
+description: "Test Knowledge Graph Memory Server"
+suggestions:
+  - "Hello, my name is Bob"
+  - "I enjoy hiking and reading books."
+agent:
+  system_prompt: "./prompt.txt"
+mcp_client_toolsets:
+  server_memory:
+    kind: "docker"
+    image: "node:22"
+    volumes:
+      - "/tmp/npm_cache:/root/.npm:rw"
+    command: "npx -y @modelcontextprotocol/server-memory"

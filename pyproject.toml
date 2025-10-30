@@ -16,6 +16,7 @@ classifiers = [
 dependencies = [
     "authlib",
     "docling",
+    "docker",
     "python-dotenv",
     "fastapi",
     "fastmcp>=2.13.0.2,<2.14",
@@ -51,6 +52,7 @@ dev = [
     "pytest-cov",
     "pytest-asyncio",
     "coverage",
+    "debugpy",
     "anyio",
     "trio",
     "ruff",

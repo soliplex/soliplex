@@ -15,11 +15,14 @@ RUN \
     vim \
     jq \
     && \
-  pip3 install --upgrade pip
+  pip3 install --upgrade pip && \
+  rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml /app/pyproject.toml
 COPY src/soliplex /app/src/soliplex
 
-RUN pip3 install -e .
+RUN pip3 install -e . --group dev
+
+EXPOSE 8000 5678
 
 CMD ["/usr/local/bin/soliplex-cli", "serve", "--host=0.0.0.0", "/app/installation"]
