@@ -486,6 +486,7 @@ class Docker_MCP_ClientToolsetConfig:
         return {
             "image": self.image,
             "command": self.command,
+            "volumes": self.volumes,
             "env": self.env,
             "allowed_tools": self.allowed_tools,
         }
@@ -499,6 +500,7 @@ class Docker_MCP_ClientToolsetConfig:
         return {
             "image": self.image,
             "command": self.command,
+            "volumes": self.volumes,
             "env": env_map,
             "allowed_tools": self.allowed_tools,
         }

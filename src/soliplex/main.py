@@ -21,10 +21,10 @@ from soliplex.views import installation as installation_views
 from soliplex.views import quizzes as quizzes_views
 from soliplex.views import rooms as rooms_views
 
-try:
+try:  # pragma: NO COVER
     import debugpy
     debugpy.listen(("0.0.0.0", 5678))
-except:
+except:  # pragma: NO COVER
     pass
 
 
