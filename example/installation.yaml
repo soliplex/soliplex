@@ -94,6 +94,13 @@ secrets:
   - "SMITHERY_AI_PROFILE"
 
   # ----------------------------------------------------------------------
+  # Secrets for the PlantUML and Gitea MCP toolsets used in the
+  # 'example/rooms/plantuml' room.
+  # ----------------------------------------------------------------------
+  - "PLANTUML_SERVER_URL"
+  - "GITEA_ACCESS_TOKEN"
+
+  # ----------------------------------------------------------------------
   # MCP room token generation / validation secret
   #
   # If not set in the environment, we generate a random value at startup,
