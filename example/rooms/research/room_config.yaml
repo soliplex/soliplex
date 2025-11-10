@@ -1,0 +1,27 @@
+id: "research"
+name: "Research Assistant"
+description: "Deep research using multi-agent graph (Plan → Search → Analyze → Synthesize)"
+
+agent:
+  kind: factory
+  factory_name: "soliplex.examples.research_graph_agent_factory"
+  with_agent_config: true
+  extra_config:
+    max_iterations: 3
+    confidence_threshold: 0.8
+    max_concurrency: 1
+
+tools:
+  - tool_name: "soliplex.tools.search_documents"
+    rag_lancedb_stem: "rag"
+    expand_context_radius: 2
+    search_documents_limit: 10
+
+allow_mcp: false
+
+welcome_message: "I'm your research assistant. I'll decompose complex questions into sub-questions, search for answers, analyze insights, and synthesize comprehensive reports."
+
+suggestions:
+  - "What are the main architectural patterns in Soliplex?"
+  - "How does the configuration system work across rooms and agents?"
+  - "Explain the relationship between tools, agents, and MCP in this system"
