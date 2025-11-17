@@ -1,0 +1,22 @@
+id: "plantuml"
+name: "PlantUML MCP Test"
+description: "Test MCP tool interaction with PlantUML"
+agent:
+  system_prompt: "./prompt.txt"
+mcp_client_toolsets:
+  plantuml_stdio:
+    kind: "docker"
+    env:
+      PLANTUML_SERVER_URL: "secret:PLANTUML_SERVER_URL"
+    image: "enfoldsystems/plantuml-mcp-server:1"
+  gitea_stdio:
+    kind: "docker"
+    env:
+      GITEA_ACCESS_TOKEN: "secret:GITEA_ACCESS_TOKEN"
+    image: "gitea/gitea-mcp-server:0.5.0"
+    allowed_tools:
+      - "get_file_content"
+      - "create_file"
+      - "update_file"
+      - "get_dir_content"
+      - "delete_file"
