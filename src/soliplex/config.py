@@ -664,7 +664,9 @@ def extract_mcp_client_toolset_configs(
 
 
 MCP_ClientToolsetConfig = (
-    Stdio_MCP_ClientToolsetConfig | HTTP_MCP_ClientToolsetConfig | Docker_MCP_ClientToolsetConfig
+    Stdio_MCP_ClientToolsetConfig |
+    HTTP_MCP_ClientToolsetConfig |
+    Docker_MCP_ClientToolsetConfig
 )
 
 MCP_ClientToolsetConfigMap = dict[str, MCP_ClientToolsetConfig]
@@ -1259,7 +1261,10 @@ class CompletionConfig:
         default_factory=dict,
     )
     mcp_client_toolset_configs: dict[
-        str, Stdio_MCP_ClientToolsetConfig | HTTP_MCP_ClientToolsetConfig | Docker_MCP_ClientToolsetConfig
+        str,
+        (Stdio_MCP_ClientToolsetConfig |
+         HTTP_MCP_ClientToolsetConfig |
+         Docker_MCP_ClientToolsetConfig)
     ] = dataclasses.field(default_factory=dict)
 
     # Set by `from_yaml` factory

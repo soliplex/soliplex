@@ -1,26 +1,28 @@
-import anyio
 import asyncio
-import docker
 import json
 import logging
 import os
 import struct
 import sys
 import typing
-import anyio.lowlevel
-from anyio import get_cancelled_exc_class
-from anyio.to_thread import run_sync
-from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
-from docker.errors import ImageNotFound
-from docker.models.containers import Container
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+
+import anyio
+import anyio.lowlevel
+import docker
+from anyio import get_cancelled_exc_class
+from anyio.streams.memory import MemoryObjectReceiveStream
+from anyio.streams.memory import MemoryObjectSendStream
+from anyio.to_thread import run_sync
+from docker.errors import ImageNotFound
+from docker.models.containers import Container
 from mcp import types as mcp_types
 from mcp.shared.message import SessionMessage
 from pydantic import BaseModel
 from pydantic_ai import mcp as ai_mcp
-from pydantic_core import CoreSchema, core_schema
-
+from pydantic_core import CoreSchema
+from pydantic_core import core_schema
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +88,10 @@ class DockerServerParameters(BaseModel):  # pragma: NO COVER
     """The executable to run when starting the container."""
 
     volumes: list[str] = []
-    """A list of volume bindings for the container. Format is '/path/on/host:/app/data:rw'."""
+    """
+    A list of volume bindings for the container.
+    Format is '/path/on/host:/app/data:rw'.
+    """
 
     env: dict[str, str] | None = None
     """
@@ -100,7 +105,9 @@ class DockerServerParameters(BaseModel):  # pragma: NO COVER
     defaults to utf-8
     """
 
-    encoding_error_handler: typing.Literal["strict", "ignore", "replace"] = "strict"
+    encoding_error_handler: (
+        typing.Literal["strict", "ignore", "replace"]
+    ) = "strict"
     """
     The text encoding error handler.
     See https://docs.python.org/3/library/codecs.html#codec-base-classes for
@@ -111,7 +118,10 @@ PROCESS_TERMINATION_TIMEOUT = 10.0
 
 
 @asynccontextmanager
-async def docker_stdio_client(server: DockerServerParameters, errlog: typing.TextIO = sys.stderr):  # pragma: NO COVER
+async def docker_stdio_client(
+    server: DockerServerParameters,
+    errlog: typing.TextIO = sys.stderr
+):  # pragma: NO COVER
     """
     Client transport for stdio over a Docker container: this will start a
     container and communicate with it over stdin/stdout.
@@ -129,21 +139,30 @@ async def docker_stdio_client(server: DockerServerParameters, errlog: typing.Tex
     container: Container | None = None
     raw_socket = None
 
-    # Ensure the image is available locally; if not, pull it from the registry.
+    # Ensure the image is available locally; if not, pull it
+    # from the registry.
     try:
         # docker-py blocking calls are executed in a worker thread to avoid
         # blocking the async event loop.
         await run_sync(client.images.get, server.image)
         logger.debug("Found Docker image %s locally", server.image)
     except ImageNotFound:
-        logger.info("Docker image %s not found locally; pulling...", server.image)
+        logger.info(
+            "Docker image %s not found locally; pulling...",
+            server.image
+        )
         try:
             await run_sync(client.images.pull, server.image)
         except Exception as e:
-            raise RuntimeError(f"Failed to pull Docker image {server.image}: {e}") from e
-    except Exception as e:
-        # Non-fatal: log and proceed; the subsequent run() will surface errors if the image is invalid
-        logger.warning("Error while checking for Docker image %s: %s", server.image, e)
+            err = f"Failed to pull Docker image {server.image}: {e}"
+            logger.exception(err)
+            raise RuntimeError(err) from e
+    except Exception:
+        # Non-fatal: log and proceed; the subsequent run() will surface
+        # errors if the image is invalid
+        logger.exception(
+            f"Error while checking for Docker image {server.image}"
+        )
 
     try:
         container = client.containers.run(
@@ -171,17 +190,25 @@ async def docker_stdio_client(server: DockerServerParameters, errlog: typing.Tex
         await write_stream.aclose()
         await read_stream_writer.aclose()
         await write_stream_reader.aclose()
-        raise RuntimeError(f"Failed to start Docker container or attach socket: {e}") from e
+        err = f"Failed to start Docker container or attach socket: {e}"
+        logger.exception(err)
+        raise RuntimeError(err) from e
 
     async def stdout_reader_task():  # pragma: NO COVER
         try:
+            mvj = mcp_types.JSONRPCMessage.model_validate_json
             async with read_stream_writer:
                 buffer = ""
-                async for stream_type, data in read_multiplexed_stream_async(raw_socket):
+                async for stream_type, data in read_multiplexed_stream_async(
+                    raw_socket
+                ):
                     if not data:
                         continue
                     if stream_type == 1:  # stdout
-                        text_chunk = data.decode(server.encoding, errors=server.encoding_error_handler)
+                        text_chunk = data.decode(
+                            server.encoding,
+                            errors=server.encoding_error_handler
+                        )
                         lines = (buffer + text_chunk).split("\n")
                         buffer = lines.pop()
 
@@ -189,30 +216,41 @@ async def docker_stdio_client(server: DockerServerParameters, errlog: typing.Tex
                             if not line:
                                 continue
                             try:
-                                message = mcp_types.JSONRPCMessage.model_validate_json(line)
+                                message = mvj(line)
                             except Exception as exc:
-                                logger.exception("Failed to parse JSONRPC message from server")
+                                logger.exception(
+                                    "Failed to parse JSONRPC "
+                                    "message from server"
+                                )
                                 await read_stream_writer.send(exc)
                                 continue
                             session_message = SessionMessage(message)
                             await read_stream_writer.send(session_message)
         except anyio.ClosedResourceError:
             await anyio.lowlevel.checkpoint()
-        except Exception as e:
-            logger.error(f"Error in stdout_reader: {e}")
+        except Exception:
+            logger.exception("Error in stdout_reader")
 
     async def stdin_writer_task():  # pragma: NO COVER
         async with write_stream_reader:
             async for session_message in write_stream_reader:
-                json_data = session_message.message.model_dump_json(by_alias=True, exclude_none=True)
-                encoded_data = (json_data + "\n").encode(server.encoding, errors=server.encoding_error_handler)
+                json_data = session_message.message.model_dump_json(
+                    by_alias=True,
+                    exclude_none=True
+                )
+                encoded_data = (
+                    json_data + "\n"
+                ).encode(
+                    server.encoding,
+                    errors=server.encoding_error_handler
+                )
 
                 try:
                     await run_sync(os.write, raw_socket.fileno(), encoded_data)
                 except anyio.ClosedResourceError:
                     await anyio.lowlevel.checkpoint()
-                except Exception as e:
-                    logger.error(f"Error writing to stdin: {e}")
+                except Exception:
+                    logger.exception("Error writing to stdin")
                     break
 
     async with anyio.create_task_group() as tg:
@@ -226,7 +264,9 @@ async def docker_stdio_client(server: DockerServerParameters, errlog: typing.Tex
                 if container_id:
                     try:
                         with anyio.fail_after(PROCESS_TERMINATION_TIMEOUT):
-                            while client.containers.get(container_id).status != 'exited':
+                            while client.containers.get(
+                                container_id
+                            ).status != 'exited':
                                 await anyio.sleep(0.1)
                     except TimeoutError:
                         container.stop(timeout=1)
@@ -246,9 +286,9 @@ class Docker_MCP_Client_Toolset(ai_mcp.MCPServer):
     def __init__(
         self,
         image: str,
-        env: dict[str, str] = {},
+        env: dict[str, str] = None,
         command: str = None,
-        volumes: list[str] = [],
+        volumes: list[str] = None,
         allowed_tools: list[str] = None,
     ):  # pragma: NO COVER
         super().__init__()
@@ -285,15 +325,28 @@ class Docker_MCP_Client_Toolset(ai_mcp.MCPServer):
 
 
     @classmethod
-    def __get_pydantic_core_schema__(cls, _: typing.Any, __: typing.Any) -> CoreSchema:  # pragma: NO COVER
+    def __get_pydantic_core_schema__(
+        cls,
+        _: typing.Any,
+        __: typing.Any
+    ) -> CoreSchema:  # pragma: NO COVER
         return core_schema.no_info_after_validator_function(
             lambda dct: Docker_MCP_Client_Toolset(**dct),
             core_schema.typed_dict_schema(
                 {
-                    'image': core_schema.typed_dict_field(core_schema.list_schema(core_schema.str_schema())),
-                    'command': core_schema.typed_dict_field(core_schema.str_schema()),
+                    'image': core_schema.typed_dict_field(
+                        core_schema.list_schema(
+                            core_schema.str_schema()
+                        )
+                    ),
+                    'command': core_schema.typed_dict_field(
+                        core_schema.str_schema()
+                    ),
                     'env': core_schema.typed_dict_field(
-                        core_schema.dict_schema(core_schema.str_schema(), core_schema.str_schema()),
+                        core_schema.dict_schema(
+                            core_schema.str_schema(),
+                            core_schema.str_schema()
+                        ),
                         required=False,
                     ),
                 }
@@ -309,8 +362,15 @@ class Docker_MCP_Client_Toolset(ai_mcp.MCPServer):
             MemoryObjectSendStream[SessionMessage],
         ]
     ]:  # pragma: NO COVER
-        server = DockerServerParameters(image=self.image, command=self.command, env=self.env)
-        async with docker_stdio_client(server=server) as (read_stream, write_stream):
+        server = DockerServerParameters(
+            image=self.image,
+            command=self.command,
+            env=self.env
+        )
+        async with docker_stdio_client(server=server) as (
+            read_stream,
+            write_stream
+        ):
             yield read_stream, write_stream
 
     def __repr__(self) -> str:  # pragma: NO COVER
