@@ -444,6 +444,70 @@ def extract_tool_configs(
 
 
 @dataclasses.dataclass
+class Docker_MCP_ClientToolsetConfig:
+    """Configure an MCP client toolset which runs as a docker container"""
+
+    kind: typing.ClassVar[str] = "docker"
+    image: str
+
+    command: str | None = None
+
+    volumes: list[str] = None
+
+    env: dict[str, str] = dataclasses.field(
+        default_factory=dict,
+    )
+    allowed_tools: list[str] = None
+
+    # set in 'from_yaml' class factory
+    _installation_config: InstallationConfig = None
+    _config_path: pathlib.Path = None
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config: dict[str, typing.Any],
+    ):
+        try:
+            config["_installation_config"] = installation_config
+            config["_config_path"] = config_path
+
+            return cls(**config)
+        except Exception as exc:
+            raise FromYamlException(
+                config_path,
+                "docker_mcptc",
+                config,
+            ) from exc
+
+    @property
+    def toolset_params(self) -> dict:
+        return {
+            "image": self.image,
+            "command": self.command,
+            "volumes": self.volumes,
+            "env": self.env,
+            "allowed_tools": self.allowed_tools,
+        }
+
+    @property
+    def tool_kwargs(self) -> dict:
+        env_map = {
+            key: self._installation_config.get_secret(value)
+            for (key, value) in self.env.items()
+        }
+        return {
+            "image": self.image,
+            "command": self.command,
+            "volumes": self.volumes,
+            "env": env_map,
+            "allowed_tools": self.allowed_tools,
+        }
+
+
+@dataclasses.dataclass
 class Stdio_MCP_ClientToolsetConfig:
     """Configure an MCP client toolset which runs as a subprocess"""
 
@@ -573,6 +637,7 @@ class HTTP_MCP_ClientToolsetConfig:
 
 MCP_TOOLSET_CONFIG_CLASSES_BY_KIND = {
     "stdio": Stdio_MCP_ClientToolsetConfig,
+    "docker": Docker_MCP_ClientToolsetConfig,
     "http": HTTP_MCP_ClientToolsetConfig,
 }
 
@@ -599,7 +664,7 @@ def extract_mcp_client_toolset_configs(
 
 
 MCP_ClientToolsetConfig = (
-    Stdio_MCP_ClientToolsetConfig | HTTP_MCP_ClientToolsetConfig
+    Stdio_MCP_ClientToolsetConfig | HTTP_MCP_ClientToolsetConfig | Docker_MCP_ClientToolsetConfig
 )
 
 MCP_ClientToolsetConfigMap = dict[str, MCP_ClientToolsetConfig]
@@ -1194,7 +1259,7 @@ class CompletionConfig:
         default_factory=dict,
     )
     mcp_client_toolset_configs: dict[
-        str, Stdio_MCP_ClientToolsetConfig | HTTP_MCP_ClientToolsetConfig
+        str, Stdio_MCP_ClientToolsetConfig | HTTP_MCP_ClientToolsetConfig | Docker_MCP_ClientToolsetConfig
     ] = dataclasses.field(default_factory=dict)
 
     # Set by `from_yaml` factory

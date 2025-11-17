@@ -16,6 +16,7 @@ classifiers = [
 dependencies = [
     "ag-ui-protocol",
     "authlib",
+    "docker",
     "fastapi",
     "fastmcp >= 2.13.0.2, < 2.14",
     "haiku.rag >= 0.15",
