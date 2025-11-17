@@ -149,6 +149,38 @@ W_OVERRIDE_STDC_CONFIG_YAML = """
 """
 
 # This one raises
+BOGUS_DOCKER_MCTC_CONFIG_YAML = ""
+
+BARE_DOCKER_MCTC_CONFIG_KW = {
+    "image": "some-image:1",
+}
+BARE_DOCKER_MCTC_CONFIG_YAML = """
+    image: "some-image:1"
+"""
+
+FULL_DOCKER_MCTC_CONFIG_KW = {
+    "image": "some-image:1",
+    "command": "cat -a",
+    "volumes": [
+        "/tmp:/tmp:rw",
+    ],
+    "env": {"FOO": "BAR"},
+    "allowed_tools": [
+        "some_tool",
+    ],
+}
+FULL_DOCKER_MCTC_CONFIG_YAML = """
+    image: "some-image:1"
+    command: "cat -a"
+    volumes:
+       - "/tmp:/tmp:rw"
+    env:
+        FOO: "BAR"
+    allowed_tools:
+      - "some_tool"
+"""
+
+# This one raises
 BOGUS_STDIO_MCTC_CONFIG_YAML = ""
 
 BARE_STDIO_MCTC_CONFIG_KW = {
@@ -1553,6 +1585,101 @@ def test_sdtc_ctor(installation_config, temp_dir, stem, override, which):
         }
 
         assert sdt_config.get_extra_parameters() == expected_ep
+
+
+@pytest.mark.parametrize(
+    "config_yaml, exp_config",
+    [
+        (BOGUS_DOCKER_MCTC_CONFIG_YAML, None),
+        (BARE_DOCKER_MCTC_CONFIG_YAML, BARE_DOCKER_MCTC_CONFIG_KW),
+        (FULL_DOCKER_MCTC_CONFIG_YAML, FULL_DOCKER_MCTC_CONFIG_KW),
+    ],
+)
+def test_docker_mctc_from_yaml(
+    installation_config,
+    temp_dir,
+    config_yaml,
+    exp_config,
+):
+    config_dir = temp_dir / "rooms" / "test_room"
+    config_dir.mkdir(parents=True)
+
+    config_path = config_dir / "room_config.yaml"
+    config_path.write_text(config_yaml)
+
+    with config_path.open() as stream:
+        config_dict = yaml.safe_load(stream)
+
+    if exp_config is None:
+        with pytest.raises(config.FromYamlException) as exc:
+            config.Docker_MCP_ClientToolsetConfig.from_yaml(
+                installation_config=installation_config,
+                config_path=config_path,
+                config=config_dict,
+            )
+
+        assert exc.value._config_path == config_path
+
+    else:
+        docker_mctc = config.Docker_MCP_ClientToolsetConfig.from_yaml(
+            installation_config=installation_config,
+            config_path=config_path,
+            config=config_dict,
+        )
+        expected = config.Docker_MCP_ClientToolsetConfig(
+            _installation_config=installation_config,
+            _config_path=config_path,
+            **exp_config,
+        )
+        assert docker_mctc == expected
+
+
+@pytest.mark.parametrize("w_env", [{}, {"foo": "bar"}])
+def test_docker_mctc_toolset_params(w_env):
+    docker_mctc = config.Docker_MCP_ClientToolsetConfig(
+        image="some-image:1",
+        command="cat -a",
+        volumes=["/host/path:/container/path:rw",],
+        env=w_env,
+    )
+
+    found = docker_mctc.toolset_params
+
+    assert found["image"] == docker_mctc.image
+    assert found["command"] == docker_mctc.command
+    assert found["volumes"] == docker_mctc.volumes
+    assert found["env"] == docker_mctc.env
+    assert found["allowed_tools"] == docker_mctc.allowed_tools
+
+
+@pytest.mark.parametrize("w_env", [{}, {"FOO_KEY": "secret:FOO_KEY"}])
+def test_docker_mctc_tool_kwargs(installation_config, w_env):
+    docker_mctc = config.Docker_MCP_ClientToolsetConfig(
+        image="some-image:1",
+        command="cat -a",
+        volumes=["/host/path:/container/path:rw",],
+        env=w_env,
+        _installation_config=installation_config,
+    )
+
+    found = docker_mctc.tool_kwargs
+
+    assert found["image"] == docker_mctc.image
+    assert found["command"] == docker_mctc.command
+    assert found["volumes"] == docker_mctc.volumes
+    assert found["allowed_tools"] == docker_mctc.allowed_tools
+
+    for (f_key, f_val), (cfg_key, cfg_value) in zip(
+        found["env"].items(),
+        w_env.items(),
+        strict=True,
+    ):
+        assert f_key == cfg_key
+        assert f_val is installation_config.get_secret.return_value
+        assert (
+            mock.call(cfg_value)
+            in installation_config.get_secret.call_args_list
+        )
 
 
 @pytest.mark.parametrize(

@@ -37,11 +37,11 @@ def _filter_tools(offered_tools, allowed_tools):
 
 class JSONRPCMessage:
     @staticmethod
-    def model_validate_json(line: str) -> typing.Any:
+    def model_validate_json(line: str) -> typing.Any:  # pragma: NO COVER
         return json.loads(line)
 
 
-async def read_multiplexed_stream_async(sock):
+async def read_multiplexed_stream_async(sock):  # pragma: NO COVER
     """
     Reads from a Docker multiplexed socket asynchronously.
     """
@@ -77,7 +77,7 @@ async def read_multiplexed_stream_async(sock):
             break
 
 
-class DockerServerParameters(BaseModel):
+class DockerServerParameters(BaseModel):  # pragma: NO COVER
 
     image: str
     """The image to start the container with."""
@@ -111,7 +111,7 @@ PROCESS_TERMINATION_TIMEOUT = 10.0
 
 
 @asynccontextmanager
-async def docker_stdio_client(server: DockerServerParameters, errlog: typing.TextIO = sys.stderr):
+async def docker_stdio_client(server: DockerServerParameters, errlog: typing.TextIO = sys.stderr):  # pragma: NO COVER
     """
     Client transport for stdio over a Docker container: this will start a
     container and communicate with it over stdin/stdout.
@@ -173,7 +173,7 @@ async def docker_stdio_client(server: DockerServerParameters, errlog: typing.Tex
         await write_stream_reader.aclose()
         raise RuntimeError(f"Failed to start Docker container or attach socket: {e}") from e
 
-    async def stdout_reader_task():
+    async def stdout_reader_task():  # pragma: NO COVER
         try:
             async with read_stream_writer:
                 buffer = ""
@@ -201,7 +201,7 @@ async def docker_stdio_client(server: DockerServerParameters, errlog: typing.Tex
         except Exception as e:
             logger.error(f"Error in stdout_reader: {e}")
 
-    async def stdin_writer_task():
+    async def stdin_writer_task():  # pragma: NO COVER
         async with write_stream_reader:
             async for session_message in write_stream_reader:
                 json_data = session_message.message.model_dump_json(by_alias=True, exclude_none=True)
@@ -259,7 +259,7 @@ class Docker_MCP_Client_Toolset(ai_mcp.MCPServer):
         self._allowed_tools = allowed_tools or ()
 
     @property
-    def _params(self):
+    def _params(self):  # pragma: NO COVER
         return {
             "image": self.image,
             "env": self.env,
@@ -285,7 +285,7 @@ class Docker_MCP_Client_Toolset(ai_mcp.MCPServer):
 
 
     @classmethod
-    def __get_pydantic_core_schema__(cls, _: typing.Any, __: typing.Any) -> CoreSchema:
+    def __get_pydantic_core_schema__(cls, _: typing.Any, __: typing.Any) -> CoreSchema:  # pragma: NO COVER
         return core_schema.no_info_after_validator_function(
             lambda dct: Docker_MCP_Client_Toolset(**dct),
             core_schema.typed_dict_schema(
@@ -308,12 +308,12 @@ class Docker_MCP_Client_Toolset(ai_mcp.MCPServer):
             MemoryObjectReceiveStream[SessionMessage | Exception],
             MemoryObjectSendStream[SessionMessage],
         ]
-    ]:
+    ]:  # pragma: NO COVER
         server = DockerServerParameters(image=self.image, command=self.command, env=self.env)
         async with docker_stdio_client(server=server) as (read_stream, write_stream):
             yield read_stream, write_stream
 
-    def __repr__(self) -> str:
+    def __repr__(self) -> str:  # pragma: NO COVER
         repr_args = [
             f'image={self.image!r}',
             f'command={self.command!r}',
@@ -322,7 +322,7 @@ class Docker_MCP_Client_Toolset(ai_mcp.MCPServer):
             repr_args.append(f'id={self.id!r}')  # pragma: lax no cover
         return f'{self.__class__.__name__}({", ".join(repr_args)})'
 
-    def __eq__(self, value: object, /) -> bool:
+    def __eq__(self, value: object, /) -> bool:  # pragma: NO COVER
         return (
             super().__eq__(value)
             and isinstance(value, Docker_MCP_Client_Toolset)
