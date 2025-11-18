@@ -652,8 +652,8 @@ class AgentConfig:
     # Agent-specific options
     #
     id: str  # set as 'room-{room_id}' or 'completion-{completion_id}'
+    model_name: str
     kind: typing.ClassVar[str] = "default"
-    model_name: str = None
     retries: int = 3
 
     system_prompt: dataclasses.InitVar[str] = None
@@ -673,12 +673,6 @@ class AgentConfig:
     _template_id: str = None
 
     def __post_init__(self, system_prompt):
-        if self.model_name is None:
-            if self._installation_config is not None:
-                self.model_name = self._installation_config.get_environment(
-                    "DEFAULT_AGENT_MODEL",
-                )
-
         if system_prompt is not None:
             self._system_prompt_text = system_prompt
 

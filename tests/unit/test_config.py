@@ -224,7 +224,6 @@ OLLAMA_BASE_URL = "https://example.com:12345"
 
 BARE_INSTALLATION_CONFIG_ENVIRONMENT = {
     "OLLAMA_BASE_URL": PROVIDER_BASE_URL,
-    "DEFAULT_AGENT_MODEL": MODEL_NAME,
 }
 
 TEST_QUIZ_ID = "test_quiz"
@@ -327,9 +326,11 @@ BOGUS_AGENT_CONFIG_YAML = ""
 
 EMPTY_AGENT_CONFIG_KW = dict(
     id=AGENT_ID,
+    model_name=MODEL_NAME,
 )
 EMPTY_AGENT_CONFIG_YAML = f"""
 id: "{AGENT_ID}"
+model_name: "{MODEL_NAME}"
 """
 
 EMPTY_W_KIND_AGENT_CONFIG_KW = dict(
@@ -355,10 +356,12 @@ model_name: "{MODEL_NAME}"
 AGENT_RETRIES = 7
 W_RETRIES_AGENT_CONFIG_KW = dict(
     id=AGENT_ID,
+    model_name=MODEL_NAME,
     retries=AGENT_RETRIES,
 )
 W_RETRIES_AGENT_CONFIG_YAML = f"""
 id: "{AGENT_ID}"
+model_name: "{MODEL_NAME}"
 retries: {AGENT_RETRIES}
 """
 
@@ -449,6 +452,7 @@ BARE_ROOM_CONFIG_KW = {
     "agent_config": config.AgentConfig(
         id=f"room-{ROOM_ID}",
         system_prompt=SYSTEM_PROMPT,
+        model_name=MODEL_NAME,
     ),
 }
 BARE_ROOM_CONFIG_YAML = f"""\
@@ -457,6 +461,7 @@ name: "{ROOM_NAME}"
 description: "{ROOM_DESCRIPTION}"
 agent:
     system_prompt: "{SYSTEM_PROMPT}"
+    model_name: "{MODEL_NAME}"
 """
 
 FULL_ROOM_CONFIG_KW = {
@@ -472,6 +477,7 @@ FULL_ROOM_CONFIG_KW = {
     "agent_config": config.AgentConfig(
         id=f"room-{ROOM_ID}",
         system_prompt=SYSTEM_PROMPT,
+        model_name=MODEL_NAME,
     ),
     "quizzes": [
         config.QuizConfig(
@@ -526,6 +532,7 @@ enable_attachments: true
 logo_image: "./{IMAGE_FILENAME}"
 agent:
     system_prompt: "{SYSTEM_PROMPT}"
+    model_name: "{MODEL_NAME}"
 tools:
     - tool_name: "soliplex.tools.get_current_datetime"
       allow_mcp: true
@@ -566,12 +573,14 @@ BARE_COMPLETION_CONFIG_KW = {
     "agent_config": config.AgentConfig(
         id=f"completion-{COMPLETION_ID}",
         system_prompt=SYSTEM_PROMPT,
+        model_name=MODEL_NAME,
     ),
 }
 BARE_COMPLETION_CONFIG_YAML = f"""\
 id: "{COMPLETION_ID}"
 agent:
     system_prompt: "{SYSTEM_PROMPT}"
+    model_name: "{MODEL_NAME}"
 """
 
 FULL_COMPLETION_CONFIG_KW = {
@@ -580,6 +589,7 @@ FULL_COMPLETION_CONFIG_KW = {
     "agent_config": config.AgentConfig(
         id=f"completion-{COMPLETION_ID}",
         system_prompt=SYSTEM_PROMPT,
+        model_name=MODEL_NAME,
     ),
     "tool_configs": {
         "get_current_datetime": config.ToolConfig(
@@ -614,6 +624,7 @@ id: "{COMPLETION_ID}"
 name: "{COMPLETION_NAME}"
 agent:
     system_prompt: "{SYSTEM_PROMPT}"
+    model_name: "{MODEL_NAME}"
 tools:
     - tool_name: "soliplex.tools.get_current_datetime"
     - tool_name: "soliplex.tools.search_documents"
@@ -1917,13 +1928,7 @@ def test_agentconfig_ctor(installation_config, kw):
 
     found = config.AgentConfig(**kw)
 
-    if "model_name" in kw:
-        assert found.model_name == kw["model_name"]
-    else:
-        assert (
-            found.model_name
-            is installation_config.get_environment.return_value
-        )
+    assert found.model_name == kw["model_name"]
 
 
 @pytest.mark.parametrize(
@@ -2068,7 +2073,10 @@ def test_agentconfig_llm_provider_kw(
         expected["api_key"] = installation_config.get_secret.return_value
 
     aconfig = config.AgentConfig(
-        id="test-agent", system_prompt="You are a test", **kw
+        id="test-agent",
+        system_prompt="You are a test",
+        model_name=MODEL_NAME,
+        **kw,
     )
 
     found = aconfig.llm_provider_kw
@@ -2104,7 +2112,6 @@ def test_agentconfig_as_yaml(
 
     ic_environ = {
         "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
-        "DEFAULT_AGENT_MODEL": MODEL_NAME,
     }
     installation_config.get_environment = ic_environ.get
     agent_config_kw["_installation_config"] = installation_config
@@ -3768,6 +3775,7 @@ def test_installationconfig_agent_configs_map_wo_existing():
     agent_configs = [
         config.AgentConfig(
             id=f"agent-config-{i_agent_config}",
+            model_name=MODEL_NAME,
         )
         for i_agent_config in range(5)
     ]

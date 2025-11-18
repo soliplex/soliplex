@@ -50,7 +50,6 @@ $ soliplex-cli list-environment example/installation.yaml
 ─────────────────────── Configured environment variables ───────────────────────
 
 - OLLAMA_BASE_URL          : MISSING
-- DEFAULT_AGENT_MODEL      : qwen3:latest
 - INSTALLATION_PATH        : file:.
 - RAG_LANCE_DB_PATH        : file:../db/rag
 - LOGFIRE_ENVIRONMENT      : container

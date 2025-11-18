@@ -70,7 +70,10 @@ on how to configure the `haiku.rag` client used by Soliplex.
 
 An installation can declare agent configurations (which are normally bound
 to rooms / completions) at the top-level, such that they can be
-looked up by ID from Python code using `the_installation.get_agent_by_id`.
+looked up by ID from Python code using `the_installation.get_agent_by_id`,
+These top-level agent configurations are alos available as "templates" for
+agents defined in rooms / completions.
+
 
 ```yaml
 agent_configs:

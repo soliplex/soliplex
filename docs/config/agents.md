@@ -21,10 +21,15 @@ agent:
   If it starts with a `./`, it will be treated as a filename in the
   same directory, whose contents will be read in its place.
 
+- `model_name`: a string, should be the identifier of an LLM model for the
+  agent.
+
+
 A minimal configuration, without an external prompt file:
 
 ```yaml
 agent:
+    model_name: "mistral:7b"
     system_prompt: |
         You are a knowledgeable assistant that helps users find information from a document knowledge base.
 
@@ -37,18 +42,16 @@ A minimal configuration, but with the prompt stored in external file:
 
 ```yaml
 agent:
+    model_name: "mistral:7b"
     system_prompt: "./prompt.txt"
 ```
 
 ## Optional Agent Elements
 
-- `model_name`: a string, defaulting to the value configured in
-  the installation environment as `DEFAULT_AGENT_MODEL`, should be the
-  identifier of an alternate model for the agent.  E.g.:
-
-  ```yaml
-  model_name: "mistral:7b"
-  ```
+- `template_id`: at string.  It must match the ID of one of the agents
+  configured in the top-level `installation.agent_configs` mapping.
+  If it is present, then any fields not set in the local configuration
+  will be copied from the template.
 
 - `provider_base_url`: a string, defaulting to the value configured in
   the installation environment as `OLLAMA_BASE_URL` is the base API URL for the agent's
