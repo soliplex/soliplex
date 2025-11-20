@@ -137,6 +137,7 @@ def serve(
         "-p",
         "--port",
         help="Port number",
+        envvar="SOLIPLEX_PORT",
     ),
     uds: str = typer.Option(
         None,
