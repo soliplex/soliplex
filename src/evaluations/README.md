@@ -39,6 +39,14 @@ uv venv
 uv sync
 ```
 
+### Logfire Integration
+
+Optional: Set `LOGFIRE_TOKEN` in a `.env` file to log evaluation runs to [Logfire](https://logfire.pydantic.dev/) for observability (QA cases, LLM judge reasoning, metrics, errors). Evaluations run without it but won't send telemetry.
+
+```bash
+LOGFIRE_TOKEN=your_token_here
+```
+
 ## Usage
 
 After installation, you can run the evaluations using the `evaluations` command:
