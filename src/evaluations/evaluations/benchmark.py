@@ -162,7 +162,7 @@ async def evaluate_dataset(
 app = typer.Typer(help="Run QA benchmarks for configured datasets.")
 
 
-@app.command()
+@app.command(name="run")
 def run(
     dataset: str = typer.Argument(..., help="Dataset key to evaluate."),
     config: Path | None = typer.Option(
@@ -212,5 +212,9 @@ def run(
     )
 
 
-if __name__ == "__main__":
+def main() -> None:
     app()
+
+
+if __name__ == "__main__":
+    main()
