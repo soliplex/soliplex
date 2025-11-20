@@ -5,7 +5,7 @@ from typing import Any, cast
 from datasets import Dataset, DatasetDict, load_dataset
 from pydantic_evals import Case
 
-from evaluations.config import DatasetSpec, DocumentPayload, RetrievalSample
+from evaluations.config import DatasetSpec, DocumentPayload
 
 
 def load_wix_corpus() -> Dataset:
@@ -37,18 +37,6 @@ def load_wix_qa() -> Dataset:
     return cast(Dataset, dataset_dict["train"])
 
 
-def map_wix_retrieval(doc: Mapping[str, Any]) -> RetrievalSample | None:
-    article_ids: Iterable[int | str] | None = doc.get("article_ids")
-    if not article_ids:
-        return None
-
-    expected_uris = tuple(str(article_id) for article_id in article_ids)
-    return RetrievalSample(
-        question=doc["question"],
-        expected_uris=expected_uris,
-    )
-
-
 def build_wix_case(
     index: int, doc: Mapping[str, Any]
 ) -> Case[str, str, dict[str, str]]:
@@ -76,6 +64,4 @@ WIX_SPEC = DatasetSpec(
     document_mapper=map_wix_document,
     qa_loader=load_wix_qa,
     qa_case_builder=build_wix_case,
-    retrieval_loader=load_wix_qa,
-    retrieval_mapper=map_wix_retrieval,
 )

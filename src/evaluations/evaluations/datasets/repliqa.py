@@ -4,7 +4,7 @@ from typing import Any, cast
 from datasets import Dataset, DatasetDict, load_dataset
 from pydantic_evals import Case
 
-from evaluations.config import DatasetSpec, DocumentPayload, RetrievalSample
+from evaluations.config import DatasetSpec, DocumentPayload
 
 
 def load_repliqa_corpus() -> Dataset:
@@ -17,16 +17,6 @@ def map_repliqa_document(doc: Mapping[str, Any]) -> DocumentPayload:
     return DocumentPayload(
         uri=str(doc["document_id"]),
         content=doc["document_extracted"],
-    )
-
-
-def map_repliqa_retrieval(doc: Mapping[str, Any]) -> RetrievalSample | None:
-    expected_answer = doc["answer"]
-    if expected_answer == "The answer is not found in the document.":
-        return None
-    return RetrievalSample(
-        question=doc["question"],
-        expected_uris=(str(doc["document_id"]),),
     )
 
 
@@ -53,6 +43,4 @@ REPLIQ_SPEC = DatasetSpec(
     document_mapper=map_repliqa_document,
     qa_loader=load_repliqa_corpus,
     qa_case_builder=build_repliqa_case,
-    retrieval_loader=load_repliqa_corpus,
-    retrieval_mapper=map_repliqa_retrieval,
 )

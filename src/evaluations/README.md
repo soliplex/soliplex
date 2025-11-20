@@ -124,8 +124,6 @@ MY_SPEC = DatasetSpec(
     document_mapper=map_my_document,     # Document mapper function
     qa_loader=load_my_qa,                # QA loader function
     qa_case_builder=build_my_case,       # Case builder function
-    retrieval_loader=None,               # Optional retrieval evaluation
-    retrieval_mapper=None,               # Optional retrieval mapper
     document_limit=None,                 # Optional corpus size limit
 )
 ```
@@ -157,6 +155,4 @@ evaluations my_dataset --config example/haiku.rag.yaml
 - **document_mapper**: Function that converts dataset rows to `DocumentPayload` (uri, content, title, metadata)
 - **qa_loader**: Function that returns a `Dataset` containing question-answer pairs
 - **qa_case_builder**: Function that converts QA rows to pydantic-evals `Case` objects
-- **retrieval_loader**: Optional function for retrieval-only evaluation (can reuse qa_loader)
-- **retrieval_mapper**: Optional function to map rows to `RetrievalSample` for retrieval testing
 - **document_limit**: Optional integer to limit corpus size for faster testing
