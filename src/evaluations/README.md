@@ -47,6 +47,38 @@ Optional: Set `LOGFIRE_TOKEN` in a `.env` file to log evaluation runs to [Logfir
 LOGFIRE_TOKEN=your_token_here
 ```
 
+### Disk Space Management
+
+⚠️ **Warning**: Populating evaluation databases creates massive disk usage due to LanceDB versioning. Each document update creates new table versions that consume disk space.
+
+**Recommended configuration** in your `haiku.rag.yaml`:
+
+```yaml
+storage:
+  vacuum_retention_seconds: 0  # Aggressive cleanup for evaluations
+```
+
+This removes old table versions immediately. Default is 86400 (1 day).
+
+**Run vacuum while populating databases**:
+
+```bash
+# In one terminal, start evaluation
+evaluations wix --config haiku.rag.yaml
+
+# In another terminal, periodically vacuum during population
+haiku-rag vacuum --db evaluations/data/wix.lancedb
+```
+
+**Clean up after evaluation runs**:
+
+```bash
+haiku-rag vacuum --db evaluations/data/wix.lancedb
+haiku-rag vacuum --db evaluations/data/repliqa.lancedb
+```
+
+The `vacuum` command optimizes tables and permanently deletes old versions to reclaim disk space. Run it periodically during long database population tasks.
+
 ## Usage
 
 After installation, you can run the evaluations using the `evaluations` command:
