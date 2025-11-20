@@ -6,7 +6,7 @@ suggestions:
 - "Who am I?"
 - "What is a Soliplex installation?"
 agent:
-  template_id: "ollama_qwen3"
+  template_id: "template_qwen3"
   system_prompt: "./prompt.txt"
 allow_mcp: true
 tools:

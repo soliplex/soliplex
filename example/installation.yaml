@@ -200,7 +200,7 @@ haiku_rag_config_file: "./haiku.rag.yaml"
 
 agent_configs:
 
-  - id: "ollama_qwen3"
+  - id: "template_qwen3"
     model_name: "qwen3:latest"
     system_prompt: |
       You are an expert AI assistant specializing in information retrieval.
@@ -209,7 +209,7 @@ agent_configs:
 
       Always provide code or examples in Markdown blocks.
 
-  - id: "ollama_gpt_oss"
+  - id: "template_gpt_oss"
     model_name: "gpt-oss:20b"
     system_prompt: |
       You are an expert AI assistant specializing in information retrieval.

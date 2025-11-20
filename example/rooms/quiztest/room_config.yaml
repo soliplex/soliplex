@@ -3,6 +3,7 @@ name: "Quiz testing"
 description: "Quiz testing."
 logo_image: "./jeopardy.png"
 agent:
+  template_id: "template_qwen3"
   system_prompt: "UNUSED, see quiz config"
 quizzes:
   - id: "test_quiz"
@@ -12,4 +13,4 @@ quizzes:
     max_questions: 20
     judge_agent:
       id: "test_quiz_judge"
-      model_name: "qwen3"
+      template_id: "template_gpt_oss"

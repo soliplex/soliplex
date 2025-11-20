@@ -1,8 +1,9 @@
 id: "chat-bot"
 agent:
   system_prompt: "./prompt.txt"
-  model_name: "qwen3:latest"
+  template_id: "template_qwen3"
 tools:
   - tool_name: "soliplex.tools.get_current_datetime"
+  - tool_name: "soliplex.tools.get_current_user"
 # - tool_name: "<yourapp>.tools.search_documents"
 #     search_path: "/path/to/documents"

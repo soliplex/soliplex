@@ -83,13 +83,23 @@ environment:
 
 agent_configs:
 
-  - id: "ollama_qwen3"
+  - id: "template_qwen3"
     model_name: "qwen3:latest"
-    # No prompt:  this config is just a template
+    system_prompt: |
+      You are an expert AI assistant specializing in information retrieval.
 
-  - id: "ollama_gpt_oss"
+      Your answers should be clear, concise, and ready for production use.
+
+      Always provide code or examples in Markdown blocks.
+
+  - id: "template_gpt_oss"
     model_name: "gpt-oss:20b"
-    # No prompt:  this config is just a template
+    system_prompt: |
+      You are an expert AI assistant specializing in information retrieval.
+
+      Your answers should be clear, concise, and ready for production use.
+
+      Always provide code or examples in Markdown blocks.
 
 #==========================================================================
 # OIDC authentication provider configuration
