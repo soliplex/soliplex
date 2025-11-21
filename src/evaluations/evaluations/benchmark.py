@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.ollama import OllamaProvider
 from pydantic_evals import Dataset as EvalDataset
-from pydantic_evals.evaluators import IsInstance, LLMJudge
+from pydantic_evals.evaluators import LLMJudge
 from pydantic_evals.reporting import ReportCaseFailure
 from rich.console import Console
 from rich.progress import Progress
@@ -68,7 +68,10 @@ async def populate_db(spec: DatasetSpec, config: AppConfig) -> None:
 
 
 async def run_qa_benchmark(
-    spec: DatasetSpec, config: AppConfig, qa_limit: int | None = None
+    spec: DatasetSpec,
+    config: AppConfig,
+    qa_limit: int | None = None,
+    name: str | None = None,
 ) -> ReportCaseFailure[str, str, dict[str, str]] | None:
     corpus = spec.qa_loader()
     if qa_limit is not None:
@@ -85,9 +88,9 @@ async def run_qa_benchmark(
     )
 
     evaluation_dataset = EvalDataset[str, str, dict[str, str]](
+        name=spec.key,
         cases=cases,
         evaluators=[
-            IsInstance(type_name="str"),
             LLMJudge(
                 rubric=ANSWER_EQUIVALENCE_RUBRIC,
                 include_input=True,
@@ -108,9 +111,10 @@ async def run_qa_benchmark(
         async def answer_question(question: str) -> str:
             return await qa.answer(question)
 
+        eval_name = name if name is not None else f"{spec.key}_qa_evaluation"
         report = await evaluation_dataset.evaluate(
             answer_question,
-            name=f"{spec.key}_qa_evaluation",
+            name=eval_name,
             max_concurrency=1,
             progress=True,
         )
@@ -149,6 +153,7 @@ async def evaluate_dataset(
     skip_db: bool,
     skip_qa: bool,
     qa_limit: int | None,
+    name: str | None = None,
 ) -> None:
     if not skip_db:
         console.print(f"Using dataset: {spec.key}", style="bold magenta")
@@ -175,6 +180,7 @@ def run(
     qa_limit: int | None = typer.Option(
         None, "--qa-limit", help="Limit number of QA cases."
     ),
+    name: str | None = typer.Option(None, "--name", help="Override evaluation name."),
 ) -> None:
     spec = DATASETS.get(dataset.lower())
     if spec is None:
@@ -208,6 +214,7 @@ def run(
             skip_db=skip_db,
             skip_qa=skip_qa,
             qa_limit=qa_limit,
+            name=name,
         )
     )
 
