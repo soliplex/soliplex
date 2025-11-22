@@ -1,5 +1,6 @@
 import contextlib
 import dataclasses
+import datetime
 import uuid
 from unittest import mock
 
@@ -10,10 +11,11 @@ from ag_ui import core as agui_core
 from soliplex.agui import thread as agui_thread
 
 UUID4 = uuid.uuid4()
+NOW = datetime.datetime.now(datetime.UTC)
+
+TEST_THREAD_ROOMID = "test-room"
 TEST_THREAD_ID = str(UUID4)
 OTHER_THREAD_ID = "thread-123"
-TEST_RUN_ID = "run-345"
-TEST_THREAD_ROOMID = "test-room"
 TEST_THREAD = agui_thread.Thread(
     thread_id=TEST_THREAD_ID,
     room_id=TEST_THREAD_ROOMID,
@@ -21,6 +23,22 @@ TEST_THREAD = agui_thread.Thread(
 TEST_THREADS = {
     TEST_THREAD_ID: TEST_THREAD,
 }
+TEST_PARENT_RUN_ID = "run-012"
+OTHER_PARENT_RUN_ID = "run-789"
+TEST_PARENT_RUN = agui_thread.Run(
+    run_id=TEST_PARENT_RUN_ID,
+)
+TEST_RUN_ID = "run-345"
+OTHER_RUN_ID = "run-567"
+TEST_RUN = agui_thread.Run(
+    run_id=TEST_RUN_ID,
+)
+TEST_RUN_LABEL = "label"
+TEST_RUN_METADATA = agui_thread.RunMetadata(
+    label=TEST_RUN_LABEL,
+)
+
+no_error = contextlib.nullcontext
 
 
 @pytest.fixture
@@ -37,46 +55,180 @@ def run_input():
 
 
 @mock.patch("uuid.uuid4")
-def test__make_thread_id(uu4):
+def test__make_uuid_str(uu4):
     uu4.return_value = UUID4
 
-    assert agui_thread._make_thread_id() == str(UUID4)
+    assert agui_thread._make_uuid_str() == str(UUID4)
+
+
+@pytest.mark.parametrize(
+    "w_run_input, expected",
+    [
+        (False, None),
+        (True, TEST_THREAD_ID),
+    ],
+)
+def test_run_thread_id(run_input, w_run_input, expected):
+    if w_run_input:
+        run = dataclasses.replace(
+            TEST_RUN,
+            run_input=run_input,
+        )
+    else:
+        run = TEST_RUN
+
+    found = run.thread_id
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "w_run_input, expected",
+    [
+        (False, None),
+        (True, TEST_PARENT_RUN_ID),
+    ],
+)
+def test_run_parent_run_id(run_input, w_run_input, expected):
+    if w_run_input:
+        run_input = run_input.model_copy(
+            update={"parent_run_id": TEST_PARENT_RUN_ID},
+        )
+        run = dataclasses.replace(
+            TEST_RUN,
+            run_input=run_input,
+        )
+    else:
+        run = TEST_RUN
+
+    found = run.parent_run_id
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "w_run_input, expected",
+    [
+        (False, None),
+        (True, TEST_RUN_LABEL),
+    ],
+)
+def test_run_label(run_input, w_run_input, expected):
+    if w_run_input:
+        run = dataclasses.replace(
+            TEST_RUN,
+            metadata=TEST_RUN_METADATA,
+        )
+    else:
+        run = TEST_RUN
+
+    found = run.label
+
+    assert found == expected
+
+
+def test_run_created():
+    run = dataclasses.replace(TEST_RUN, _created=NOW)
+
+    assert run.created == NOW
+
+
+mismatch = pytest.raises(agui_thread.RunInputMismatch)
+
+
+@pytest.mark.parametrize(
+    "ri_kwargs, expectation",
+    [
+        ({}, no_error()),
+        ({"thread_id": OTHER_THREAD_ID}, mismatch),
+        ({"run_id": OTHER_RUN_ID}, mismatch),
+        ({"parent_run_id": OTHER_PARENT_RUN_ID}, mismatch),
+    ],
+)
+def test_run_check_run_input(run_input, ri_kwargs, expectation):
+    run = dataclasses.replace(TEST_RUN, run_input=run_input)
+    to_compare = run_input.model_copy(update=ri_kwargs)
+
+    with expectation as expectation:
+        run.check_run_input(to_compare)
+
+
+def test_thread_created():
+    thread = dataclasses.replace(TEST_THREAD, _created=NOW)
+
+    assert thread.created == NOW
 
 
 @pytest.mark.anyio
-async def test_thread_new_run_w_mismatched_thread_id(run_input):
-    thread = dataclasses.replace(TEST_THREAD, thread_id=OTHER_THREAD_ID)
+@pytest.mark.parametrize(
+    "w_parent_id, expectation",
+    [
+        ("BOGUS", pytest.raises(agui_thread.MissingParentRunId)),
+        (None, no_error()),
+        (TEST_PARENT_RUN_ID, no_error()),
+    ],
+)
+@pytest.mark.parametrize(
+    "w_metadata, exp_label",
+    [
+        (None, None),
+        (TEST_RUN_METADATA, TEST_RUN_LABEL),
+    ],
+)
+@mock.patch("soliplex.agui.thread._make_uuid_str")
+async def test_thread_new_run(
+    mus,
+    w_parent_id,
+    expectation,
+    w_metadata,
+    exp_label,
+):
+    mus.return_value = TEST_RUN_ID
 
-    with pytest.raises(agui_thread.WrongThreadId):
-        await thread.new_run(run_input)
+    thread = dataclasses.replace(
+        TEST_THREAD,
+        runs={TEST_PARENT_RUN_ID: TEST_PARENT_RUN},
+    )
+
+    kwargs = {}
+
+    if w_parent_id is not None:
+        kwargs["parent_run_id"] = w_parent_id
+
+    if w_metadata is not None:
+        kwargs["metadata"] = w_metadata
+
+    with expectation as expected:
+        found = await thread.new_run(**kwargs)
+
+    if expected is None:
+        assert found.thread_id == TEST_THREAD_ID
+        assert found.run_id == TEST_RUN_ID
+        assert found.parent_run_id == w_parent_id
+        assert found.label == exp_label
+
+        assert found is thread.runs[TEST_RUN_ID]
 
 
 @pytest.mark.anyio
-async def test_thread_new_run_w_duplicate_run_id(run_input):
-    thread = dataclasses.replace(TEST_THREAD, runs={TEST_RUN_ID: object()})
+@pytest.mark.parametrize(
+    "w_run_id, expectation",
+    [
+        ("BOGUS", pytest.raises(agui_thread.UnknownRunId)),
+        (TEST_RUN_ID, no_error()),
+    ],
+)
+async def test_thread_get_run(w_run_id, expectation):
+    thread = dataclasses.replace(
+        TEST_THREAD,
+        runs={TEST_RUN_ID: TEST_RUN},
+    )
 
-    with pytest.raises(agui_thread.DuplicateRunId):
-        await thread.new_run(run_input)
+    with expectation as expected:
+        found = await thread.get_run(w_run_id)
 
-
-@pytest.mark.anyio
-async def test_thread_new_run_w_missing_parent_run_id(run_input):
-    run_input.parent_run_id = "BOGUS"
-    thread = dataclasses.replace(TEST_THREAD, runs={})
-
-    with pytest.raises(agui_thread.MissingParentRunId):
-        await thread.new_run(run_input)
-
-
-@pytest.mark.anyio
-async def test_thread_new_run(run_input):
-    thread = dataclasses.replace(TEST_THREAD, runs={})
-
-    run = await thread.new_run(run_input)
-
-    assert run.run_input is run_input
-    assert run.events == []
-    assert thread.runs[TEST_RUN_ID] == run
+    if expected is None:
+        assert found is TEST_RUN
 
 
 @pytest.mark.anyio
@@ -104,7 +256,7 @@ async def test_threads_user_threads(w_threads, expected):
         ({"testing": {}}, pytest.raises(agui_thread.UnknownThread)),
         (
             {"testing": TEST_THREADS},
-            contextlib.nullcontext(TEST_THREAD),
+            no_error(TEST_THREAD),
         ),
     ],
 )
@@ -123,23 +275,15 @@ async def test_threads_get_thread(w_threads, expectation):
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("w_thread_id", [False, True])
 @pytest.mark.parametrize("w_user", [False, True])
-@mock.patch("uuid.uuid4")
-async def test_threads_new_thread(uu4, w_user, w_thread_id):
-    uu4.return_value = UUID4
+@mock.patch("soliplex.agui.thread._make_uuid_str")
+async def test_threads_new_thread(mus, w_user):
+    mus.return_value = TEST_THREAD_ID
     the_threads = agui_thread.Threads()
 
     user_threads_patch = {}
     if w_user:
         before = user_threads_patch["testing"] = {"already": object()}
-
-    kwargs = {}
-
-    if w_thread_id:
-        exp_thread_id = kwargs["thread_id"] = OTHER_THREAD_ID
-    else:
-        exp_thread_id = TEST_THREAD_ID
 
     with (
         mock.patch.dict(the_threads._threads, **user_threads_patch),
@@ -147,14 +291,13 @@ async def test_threads_new_thread(uu4, w_user, w_thread_id):
         found = await the_threads.new_thread(
             user_name="testing",
             room_id=TEST_THREAD_ROOMID,
-            **kwargs,
         )
         if w_user:
             assert the_threads._threads["testing"] is before
 
-        assert the_threads._threads["testing"][exp_thread_id] is found
+        assert the_threads._threads["testing"][TEST_THREAD_ID] is found
 
-    assert found.thread_id == exp_thread_id
+    assert found.thread_id == TEST_THREAD_ID
     assert found.room_id == TEST_THREAD_ROOMID
 
 
@@ -164,7 +307,7 @@ async def test_threads_new_thread(uu4, w_user, w_thread_id):
     [
         ({}, pytest.raises(agui_thread.UnknownThread)),
         ({"testing": {}}, pytest.raises(agui_thread.UnknownThread)),
-        ({"testing": TEST_THREADS}, contextlib.nullcontext(None)),
+        ({"testing": TEST_THREADS}, no_error(None)),
     ],
 )
 async def test_threads_delete_thread(w_threads, expectation):

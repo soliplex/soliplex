@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import dataclasses
+import datetime
 import pathlib
 import typing
 import uuid
 
 import pydantic
+from ag_ui import core as agui_core
 
 from soliplex import config
 from soliplex import convos
+
+KW_ONLY = pydantic.Field(kw_only=True)
+KW_ONLY_NONE = pydantic.Field(kw_only=True, default=None)
 
 # ============================================================================
 #   Public config models
@@ -366,6 +371,64 @@ class SearchResult(pydantic.BaseModel):
 
 
 UserInfo = dict[str, typing.Any]
+
+# ----------------------------------------------------------------------------
+#   AG-UI-related models
+# ----------------------------------------------------------------------------
+
+AGUI_Events = list[agui_core.BaseEvent]
+
+
+class AGUI_RunMetadata(pydantic.BaseModel):
+    label: str = KW_ONLY
+
+
+class AGUI_NewRunRequest(pydantic.BaseModel):
+    parent_run_id: str = KW_ONLY_NONE
+    metadata: AGUI_RunMetadata = KW_ONLY_NONE
+
+
+class AGUI_Run(pydantic.BaseModel):
+    room_id: str = KW_ONLY
+    thread_id: str = KW_ONLY
+    run_id: str = KW_ONLY
+
+    parent_run_id: str | None = KW_ONLY_NONE
+
+    run_input: agui_core.RunAgentInput = KW_ONLY_NONE
+    created: datetime.datetime = KW_ONLY_NONE
+
+    events: AGUI_Events = pydantic.Field(
+        kw_only=True,
+        default_factory=list,
+    )
+    metadata: AGUI_RunMetadata | None = KW_ONLY_NONE
+
+
+AGUI_Runs = dict[str, AGUI_Run]
+
+
+class AGUI_ThreadMetadata(pydantic.BaseModel):
+    name: str = KW_ONLY_NONE
+    description: str = KW_ONLY_NONE
+
+
+class AGUI_NewThreadRequest(pydantic.BaseModel):
+    metadata: AGUI_ThreadMetadata = KW_ONLY_NONE
+
+
+class AGUI_Thread(pydantic.BaseModel):
+    room_id: str = KW_ONLY
+    thread_id: str = KW_ONLY
+
+    runs: AGUI_Runs = pydantic.Field(
+        kw_only=True,
+        default_factory=dict,
+    )
+
+    created: datetime.datetime | None = KW_ONLY_NONE
+    metadata: AGUI_ThreadMetadata | None = KW_ONLY_NONE
+
 
 # ----------------------------------------------------------------------------
 #   Convos-related models

@@ -6,6 +6,7 @@ that choice away from the rest of the system.
 
 import asyncio
 import dataclasses
+import datetime
 import uuid
 
 import fastapi
@@ -14,20 +15,18 @@ from ag_ui import core as agui_core
 AGUI_Events = list[agui_core.BaseEvent]
 
 
-class WrongThreadId(ValueError):
-    def __init__(self, thread_id: str, expected_thread_id: str):
+class UnknownThread(fastapi.HTTPException):
+    def __init__(self, user_name: str, thread_id: str):
+        self.user_name = user_name
         self.thread_id = thread_id
-        self.expected_thread_id = expected_thread_id
-        super().__init__(
-            f"Run input thread ID {thread_id} "
-            f"does not match thread's ID {expected_thread_id}"
-        )
+        message = f"Unknown thread: UUID {thread_id} for user {user_name}"
+        super().__init__(status_code=404, detail=message)
 
 
-class DuplicateRunId(ValueError):
+class UnknownRunId(ValueError):
     def __init__(self, run_id: str):
         self.run_id = run_id
-        super().__init__(f"Run input run ID {run_id} already exists in thread")
+        super().__init__(f"Run input run ID {run_id} does not exist in thread")
 
 
 class MissingParentRunId(ValueError):
@@ -38,58 +37,147 @@ class MissingParentRunId(ValueError):
         )
 
 
+class RunInputMismatch(ValueError):
+    def __init__(self, which: str):
+        self.which = which
+        super().__init__(f"Run input field does not match run: {which}")
+
+
+def _make_uuid_str() -> str:
+    return str(uuid.uuid4())
+
+
+def _timestamp() -> datetime.datetime:
+    return datetime.datetime.now(datetime.UTC)
+
+
+timestamp = dataclasses.field(default_factory=_timestamp)
+
+
+@dataclasses.dataclass(frozen=True)
+class RunMetadata:
+    label: str
+
+
 @dataclasses.dataclass(frozen=True)
 class Run:
     """Hold original input data and events for an AGUI run"""
 
-    run_input: agui_core.RunAgentInput
+    run_id: str = dataclasses.field(default_factory=_make_uuid_str)
+
+    _: dataclasses.KW_ONLY
+
+    metadata: RunMetadata = None
+    _created: datetime.datetime = timestamp
+
+    run_input: agui_core.RunAgentInput = None
+
     events: AGUI_Events = dataclasses.field(
         default_factory=list,
     )
 
+    @property
+    def thread_id(self) -> str | None:
+        if self.run_input is not None:
+            return self.run_input.thread_id
 
-def _make_thread_id() -> str:
-    return str(uuid.uuid4())
+    @property
+    def parent_run_id(self) -> str | None:
+        if self.run_input is not None:
+            return self.run_input.parent_run_id
+
+    @property
+    def label(self) -> str | None:
+        if self.metadata is not None:
+            return self.metadata.label
+
+    @property
+    def created(self) -> datetime.datetime:
+        return self._created
+
+    def check_run_input(self, other_run_input: agui_core.RunAgentInput):
+        """Raise if 'other_run_input' IDs do not match"""
+        if self.thread_id != other_run_input.thread_id:
+            raise RunInputMismatch("thread_id")
+        if self.run_id != other_run_input.run_id:
+            raise RunInputMismatch("run_id")
+        if self.parent_run_id != other_run_input.parent_run_id:
+            raise RunInputMismatch("parent_run_id")
+
+
+RunMap = dict[str, Run]
+
+
+@dataclasses.dataclass(frozen=True)
+class ThreadMetadata:
+    name: str
+    description: str = None
 
 
 @dataclasses.dataclass(frozen=True)
 class Thread:
     """Hold a set of AGUI runs sharing the same 'thread_id'"""
 
-    thread_id: str = dataclasses.field(default_factory=_make_thread_id)
-    room_id: str = dataclasses.field(kw_only=True)
-    name: str | None = dataclasses.field(default=None, kw_only=True)
-    runs: dict[Run] = dataclasses.field(default_factory=dict)
+    room_id: str
+
+    thread_id: str = dataclasses.field(default_factory=_make_uuid_str)
 
     _: dataclasses.KW_ONLY
+
+    metadata: ThreadMetadata = None
+    runs: RunMap = dataclasses.field(default_factory=dict)
+
     _lock: asyncio.Lock = dataclasses.field(default_factory=asyncio.Lock)
+    _created: datetime.datetime = timestamp
 
-    async def new_run(self, run_input: agui_core.RunAgentInput) -> Run:
+    @property
+    def created(self) -> datetime.datetime:
+        return self._created
+
+    async def new_run(
+        self,
+        *,
+        metadata: RunMetadata = None,
+        parent_run_id: str = None,
+    ) -> Run:
+        """Create a new run for the thread
+
+        If 'parent_run_id' is passed, ensure it is valid.
+        """
+        if parent_run_id is not None and parent_run_id not in self.runs:
+            raise MissingParentRunId(parent_run_id)
+
+        run_id = _make_uuid_str()
+
         async with self._lock:
-            if run_input.thread_id != self.thread_id:
-                raise WrongThreadId(run_input.thread_id, self.thread_id)
+            assert run_id not in self.runs
 
-            if run_input.run_id in self.runs:
-                raise DuplicateRunId(run_input.run_id)
+            run = self.runs[run_id] = Run(
+                run_id=run_id,
+                metadata=metadata,
+                run_input=agui_core.RunAgentInput(
+                    thread_id=self.thread_id,
+                    run_id=run_id,
+                    parent_run_id=parent_run_id,
+                    state=None,
+                    messages=[],
+                    tools=[],
+                    context=[],
+                    forwarded_props=None,
+                ),
+            )
 
-            parent_run_id = run_input.parent_run_id
+        return run
 
-            if parent_run_id is not None and parent_run_id not in self.runs:
-                raise MissingParentRunId(parent_run_id)
-
-            run = self.runs[run_input.run_id] = Run(run_input)
-            return run
+    async def get_run(self, run_id: str) -> Run:
+        async with self._lock:
+            try:
+                return self.runs[run_id]
+            except KeyError:
+                raise UnknownRunId(run_id) from None
 
 
 ThreadsByID = dict[str, Thread]
-
-
-class UnknownThread(fastapi.HTTPException):
-    def __init__(self, user_name: str, thread_id: str):
-        self.user_name = user_name
-        self.thread_id = thread_id
-        message = f"Unknown thread: UUID {thread_id} for user {user_name}"
-        super().__init__(status_code=404, detail=message)
 
 
 class Threads:
@@ -148,20 +236,22 @@ class Threads:
         *,
         user_name: str,
         room_id: str,
-        thread_id: str = None,
+        metadata: ThreadMetadata = None,
     ) -> Thread:
         """Create a new thread"""
-        if thread_id is None:
-            thread_id = _make_thread_id()
+        thread_id = _make_uuid_str()
 
         thread = Thread(
             thread_id=thread_id,
             room_id=room_id,
+            metadata=metadata,
         )
 
         async with self._lock:
             user_threads = self._threads.setdefault(user_name, {})
-            user_threads[thread.thread_id] = thread
+            assert thread_id not in user_threads
+
+            user_threads[thread_id] = thread
 
         return thread
 

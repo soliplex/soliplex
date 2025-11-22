@@ -131,14 +131,38 @@ class SoliplexTUI(t_app.App):
         """Get the AG-UI response in a thread."""
         self.run_count += 1
         response_content = ""
+        room_agui_url_base = (
+            f"{self.soliplex_url}/api/v1/rooms/{self.room_id}/agui"
+        )
 
         if self.run_agent_input is None:
             print("X" * 50)
             print("New thread")
             print("X" * 50)
+
+            new_thread_request_url = room_agui_url_base
+            new_thread_request_json = {
+                "name": f"{self.room_id}: {prompt}",
+            }
+            new_thread = requests.post(
+                new_thread_request_url,
+                json=new_thread_request_json,
+            ).json()
+            thread_id = new_thread["thread_id"]
+            print(f"New thread ID: {thread_id}")
+
+            new_run_request_url = f"{new_thread_request_url}/{thread_id}"
+            new_run_request_json = {}
+            new_run = requests.post(
+                new_run_request_url,
+                json=new_run_request_json,
+            ).json()
+            run_id = new_run["run_id"]
+            print(f"New run ID: {run_id}")
+
             self.run_agent_input = agui_core.RunAgentInput(
-                thread_id="testing",
-                run_id=f"soliplex-tui:{self.run_count}",
+                thread_id=thread_id,
+                run_id=run_id,
                 state={},
                 messages=[
                     {"id": "user_001", "role": "user", "content": prompt}
@@ -148,10 +172,21 @@ class SoliplexTUI(t_app.App):
                 forwarded_props={},
             )
         else:
+            thread_id = self.run_agent_input.thread_id
             print("X" * 50)
-            print(f"Existing thread, run #{self.run_count}")
+            print(f"Existing thread: {thread_id}")
             print("X" * 50)
-            self.run_agent_input.run_id = f"soliplex-tui:{self.run_count}"
+            new_run_request_url = f"{room_agui_url_base}/{thread_id}"
+            new_run_request_json = {}
+            new_run = requests.post(
+                new_run_request_url,
+                json=new_run_request_json,
+            ).json()
+            run_id = new_run["run_id"]
+            print(f"New run ID: {run_id}")
+            self.run_agent_input.parent_run_id = new_run["parent_run_id"]
+            self.run_agent_input.run_id = run_id
+
             self.run_agent_input.messages.append(
                 agui_core.UserMessage(
                     id=f"user_{self.run_count:03}",
@@ -166,7 +201,7 @@ class SoliplexTUI(t_app.App):
         )
         request_json = self.run_agent_input.model_dump()
 
-        request_url = f"{self.soliplex_url}/api/v1/rooms/{self.room_id}/agui"
+        request_url = f"{room_agui_url_base}/{thread_id}/{run_id}"
         streaming_response = requests.post(
             request_url,
             json=request_json,
