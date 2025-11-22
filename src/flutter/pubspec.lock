@@ -610,6 +610,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.9.0"
+  json_patch:
+    dependency: "direct main"
+    description:
+      name: json_patch
+      sha256: "1b0c2a9cae3bb4e59b8fbc7705b223ee43a6eb08ffc0fbe9b7ecb45957059341"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.0"
   json_serializable:
     dependency: "direct dev"
     description:
