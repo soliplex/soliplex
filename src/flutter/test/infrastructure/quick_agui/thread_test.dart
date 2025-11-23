@@ -4,23 +4,21 @@ import 'package:soliplex_client/infrastructure/quick_agui/thread.dart';
 
 void main() {
   final config = ag_ui.AgUiClientConfig(baseUrl: 'https://foo.com');
+  final client = ag_ui.AgUiClient(config: config);
 
   group('Initialised Thread', () {
     test('exposes an empty iterable of Run objects', () {
-      // Arrange
       const testId = 'thread-456';
-      final thread = Thread(id: testId, config: config);
+      final thread = Thread(id: testId, client: client);
 
-      // Act
       final runs = thread.runs;
 
-      // Assert
       expect(runs, isNotNull);
       expect(runs, isA<Iterable<ag_ui.Run>>());
     });
 
     test('will create the first Run given a run id and a User message', () {
-      final thread = Thread(id: '--irrelevant-thread-id--', config: config);
+      final thread = Thread(id: '--irrelevant-thread-id--', client: client);
       const id = '--irrelevant-run-id--';
       const message = ag_ui.UserMessage(
         id: '--irrelevant-msg-id--',
