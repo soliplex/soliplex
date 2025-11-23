@@ -2,9 +2,10 @@ import 'package:ag_ui/ag_ui.dart' as ag_ui;
 
 class Thread {
   final String id;
+  final ag_ui.AgUiClientConfig config;
   final List<ag_ui.Run> _runs = [];
 
-  Thread({required this.id});
+  Thread({required this.id, required this.config});
 
   Iterable<ag_ui.Run> get runs => _runs;
 

@@ -3,23 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_client/infrastructure/quick_agui/thread.dart';
 
 void main() {
+  final config = ag_ui.AgUiClientConfig(baseUrl: 'https://foo.com');
+
   group('Initialised Thread', () {
-    test('is constructed with a thread id', () {
-      // Arrange
-      const testId = 'thread-123';
-
-      // Act
-      final thread = Thread(id: testId);
-
-      // Assert
-      expect(thread, isNotNull);
-      expect(thread, isA<Thread>());
-    });
-
     test('exposes an empty iterable of Run objects', () {
       // Arrange
       const testId = 'thread-456';
-      final thread = Thread(id: testId);
+      final thread = Thread(id: testId, config: config);
 
       // Act
       final runs = thread.runs;
@@ -30,7 +20,7 @@ void main() {
     });
 
     test('will create the first Run given a run id and a User message', () {
-      final thread = Thread(id: '--irrelevant-thread-id--');
+      final thread = Thread(id: '--irrelevant-thread-id--', config: config);
       const id = '--irrelevant-run-id--';
       const message = ag_ui.UserMessage(
         id: '--irrelevant-msg-id--',
