@@ -3,8 +3,8 @@ import 'package:soliplex_client/infrastructure/quick_agui/run.dart';
 import 'package:soliplex_client/infrastructure/quick_agui/thread.dart';
 
 void main() {
-  group('Thread class', () {
-    test('should accept an ID parameter in constructor', () {
+  group('Initialised Thread', () {
+    test('is constructed with a thread id', () {
       // Arrange
       const testId = 'thread-123';
 
@@ -16,7 +16,7 @@ void main() {
       expect(thread, isA<Thread>());
     });
 
-    test('should expose an iterable of Run objects', () {
+    test('exposes an empty iterable of Run objects', () {
       // Arrange
       const testId = 'thread-456';
       final thread = Thread(id: testId);
