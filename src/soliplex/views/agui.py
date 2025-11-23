@@ -28,6 +28,8 @@ async def post_room_agui(
 ) -> models.AGUI_Thread:
     """Create a new AGUI thread within the given room
 
+    Add the initial AGUI run to the thread.
+
     Body of request, if passed, must validate to 'models.AGUI_ThreadMetadata'.
     """
     user = auth.authenticate(the_installation, token)
@@ -54,10 +56,23 @@ async def post_room_agui(
         metadata=t_metadata,
     )
 
+    run = await thread.new_run()
+
     return models.AGUI_Thread(
         room_id=room_id,
         thread_id=thread.thread_id,
-        runs={},
+        runs={
+            run.run_id: models.AGUI_Run(
+                room_id=room_id,
+                thread_id=thread.thread_id,
+                run_id=run.run_id,
+                created=run.created,
+                parent_run_id=None,
+                run_input=run.run_input,
+                events=run.events,
+                metadata=None,
+            ),
+        },
         created=thread.created,
         metadata=new_thread_request.metadata,
     )
@@ -127,7 +142,7 @@ async def post_room_agui_thread_id(
         created=run.created,
         parent_run_id=parent_run_id,
         run_input=run.run_input,
-        events=[],
+        events=run.events,
         metadata=new_run_request.metadata,
     )
 

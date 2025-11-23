@@ -1,3 +1,4 @@
+import dataclasses
 from unittest import mock
 
 import fastapi
@@ -138,7 +139,10 @@ async def test_post_room_agui(
 
     the_installation = mock.create_autospec(installation.Installation)
     the_threads = mock.create_autospec(agui_thread.Threads)
-    the_threads.new_thread.return_value = TEST_THREAD
+    exp_thread = the_threads.new_thread.return_value = dataclasses.replace(
+        TEST_THREAD,
+        runs={},
+    )
 
     found = await agui_views.post_room_agui(
         request,
@@ -152,6 +156,13 @@ async def test_post_room_agui(
     assert found.room_id == TEST_ROOM_ID
     assert found.thread_id == TEST_THREAD_ID
     assert found.metadata == new_thread_request.metadata
+
+    ((first_run_id, first_run),) = list(exp_thread.runs.items())
+
+    m_run = found.runs[first_run_id]
+    assert m_run.room_id == TEST_ROOM_ID
+    assert m_run.thread_id == TEST_THREAD_ID
+    assert m_run.parent_run_id is None
 
     the_threads.new_thread.assert_called_once_with(
         room_id=TEST_ROOM_ID,
@@ -270,6 +281,7 @@ async def test_post_room_agui_thread_id(
         agui_thread.Run,
         run_id=TEST_RUN_ID,
         run_input=run_input,
+        events=[],
     )
 
     found = await agui_views.post_room_agui_thread_id(

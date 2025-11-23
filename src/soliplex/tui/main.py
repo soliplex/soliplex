@@ -149,16 +149,9 @@ class SoliplexTUI(t_app.App):
                 json=new_thread_request_json,
             ).json()
             thread_id = new_thread["thread_id"]
+            (run_id,) = new_thread["runs"].keys()
             print(f"New thread ID: {thread_id}")
-
-            new_run_request_url = f"{new_thread_request_url}/{thread_id}"
-            new_run_request_json = {}
-            new_run = requests.post(
-                new_run_request_url,
-                json=new_run_request_json,
-            ).json()
-            run_id = new_run["run_id"]
-            print(f"New run ID: {run_id}")
+            print(f"New run ID: {thread_id}")
 
             self.run_agent_input = agui_core.RunAgentInput(
                 thread_id=thread_id,
