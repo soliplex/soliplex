@@ -33,6 +33,7 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   json_serializable: ^6.10.0
+  mocktail: ^0.3.0
 
 dependency_overrides:
   meta: 1.16.0
