@@ -5,11 +5,13 @@ import uuid
 from unittest import mock
 
 import pytest
+from ag_ui import core as agui_core
 
 from soliplex import config
 from soliplex import convos
 from soliplex import models
 from soliplex import tools
+from soliplex.agui import thread as agui_thread
 
 QUIZ_ID = "test_quiz"
 QUIZ_TITLE = "Test Quiz"
@@ -76,12 +78,51 @@ CONVO_NAME = USER_TEXT
 CONVO_ROOM_ID = "test-room"
 TIMESTAMP = "2025-09-30T18:18:27Z"
 
+AGUI_THREAD_ID = "test-thread"
+AGUI_RUN_ID = "test-run"
+
+EMPTY_AGUI_RUN_INPUT = agui_core.RunAgentInput(
+    thread_id=AGUI_THREAD_ID,
+    run_id=AGUI_RUN_ID,
+    state={},
+    messages=[],
+    tools=[],
+    context=[],
+    forwarded_props=None,
+)
+
+E_RUN_STARTED = agui_core.RunStartedEvent(
+    thread_id=AGUI_THREAD_ID,
+    run_id=AGUI_RUN_ID,
+)
+E_RUN_FINISHED = agui_core.RunFinishedEvent(
+    thread_id=AGUI_THREAD_ID,
+    run_id=AGUI_RUN_ID,
+)
+AGUI_EVENTS = [
+    E_RUN_STARTED,
+    E_RUN_FINISHED,
+]
+AGUI_RUNS = {
+    AGUI_RUN_ID: agui_thread.Run(
+        run_id=AGUI_RUN_ID,
+        metadata=None,
+        run_input=EMPTY_AGUI_RUN_INPUT.model_copy(deep=True),
+        events=AGUI_EVENTS,
+    ),
+}
+
 
 def _from_param(request, key):
     kw = {}
     if request.param is not None:
         kw[key] = request.param
     return kw
+
+
+@pytest.fixture
+def run_input():
+    return EMPTY_AGUI_RUN_INPUT.model_copy(deep=True)
 
 
 @pytest.fixture
@@ -715,6 +756,180 @@ def test_installation_from_config(
         strict=True,
     ):
         assert found.id == expected.id
+
+
+@pytest.mark.parametrize(
+    "run_metadata, exp_label",
+    [
+        (None, None),
+        (agui_thread.RunMetadata(label="foo"), "foo"),
+    ],
+)
+def test_aguirunmetadata_from_run_metadata(run_metadata, exp_label):
+    found = models.AGUI_RunMetadata.from_run_meta(run_metadata)
+
+    if exp_label is None:
+        assert found is None
+    else:
+        assert found.label == exp_label
+
+
+@pytest.mark.parametrize(
+    "run_metadata, exp_label",
+    [
+        (None, None),
+        (agui_thread.RunMetadata(label="foo"), "foo"),
+    ],
+)
+@pytest.mark.parametrize("w_events", [False, True])
+@pytest.mark.parametrize("w_include_events", [False, True])
+def test_aguirun_from_run_and_thread(
+    run_input,
+    w_include_events,
+    w_events,
+    run_metadata,
+    exp_label,
+):
+    a_thread = agui_thread.Thread(
+        room_id=ROOM_ID,
+        thread_id=AGUI_THREAD_ID,
+    )
+
+    if w_events:
+        a_run = agui_thread.Run(
+            run_id=AGUI_RUN_ID,
+            metadata=run_metadata,
+            run_input=run_input,
+            events=AGUI_EVENTS,
+        )
+    else:
+        a_run = agui_thread.Run(
+            run_id=AGUI_RUN_ID,
+            metadata=run_metadata,
+            run_input=run_input,
+        )
+
+    kw = {}
+
+    if w_include_events:
+        kw["include_events"] = True
+
+    found = models.AGUI_Run.from_run_and_thread(
+        a_run=a_run,
+        a_thread=a_thread,
+        **kw,
+    )
+
+    assert found.room_id == ROOM_ID
+    assert found.thread_id == AGUI_THREAD_ID
+    assert found.run_id == AGUI_RUN_ID
+    assert found.created == a_run.created
+    assert found.parent_run_id == a_run.parent_run_id
+    assert found.run_input is run_input
+
+    if w_include_events:
+        if w_events:
+            assert found.events == AGUI_EVENTS
+        else:
+            assert found.events == []
+    else:
+        assert found.events is None
+
+    if exp_label is None:
+        assert found.metadata is None
+    else:
+        assert found.metadata.label == exp_label
+
+
+@pytest.mark.parametrize(
+    "thread_metadata, exp_name_desc",
+    [
+        (None, None),
+        (agui_thread.ThreadMetadata(name="foo"), ("foo", None)),
+        (
+            agui_thread.ThreadMetadata(name="foo", description="bar"),
+            ("foo", "bar"),
+        ),
+    ],
+)
+def test_aguithreadmetadata_from_run_metadata(thread_metadata, exp_name_desc):
+    found = models.AGUI_ThreadMetadata.from_thread_meta(thread_metadata)
+
+    if exp_name_desc is None:
+        assert found is None
+    else:
+        exp_name, exp_desc = exp_name_desc
+        assert found.name == exp_name
+        assert found.description == exp_desc
+
+
+@pytest.mark.parametrize(
+    "thread_metadata, exp_name_desc",
+    [
+        (None, None),
+        (agui_thread.ThreadMetadata(name="foo"), ("foo", None)),
+        (
+            agui_thread.ThreadMetadata(name="foo", description="bar"),
+            ("foo", "bar"),
+        ),
+    ],
+)
+@pytest.mark.parametrize("w_runs", [False, True])
+@pytest.mark.parametrize("w_include_runs", [None, False, True])
+def test_aguithread_from_thread(
+    run_input,
+    w_include_runs,
+    w_runs,
+    thread_metadata,
+    exp_name_desc,
+):
+    if w_runs:
+        a_thread = agui_thread.Thread(
+            room_id=ROOM_ID,
+            thread_id=AGUI_THREAD_ID,
+            metadata=thread_metadata,
+            runs=AGUI_RUNS,
+        )
+    else:
+        a_thread = agui_thread.Thread(
+            room_id=ROOM_ID,
+            thread_id=AGUI_THREAD_ID,
+            metadata=thread_metadata,
+        )
+
+    kw = {}
+
+    if w_include_runs is not None:
+        kw["include_runs"] = w_include_runs
+
+    found = models.AGUI_Thread.from_thread(a_thread=a_thread, **kw)
+
+    assert found.room_id == ROOM_ID
+    assert found.thread_id == AGUI_THREAD_ID
+    assert found.created == a_thread.created
+
+    exp_runs = {
+        run_id: models.AGUI_Run.from_run_and_thread(
+            a_run=a_run,
+            a_thread=a_thread,
+        )
+        for run_id, a_run in AGUI_RUNS.items()
+    }
+
+    if w_include_runs is False:
+        assert found.runs is None
+    else:
+        if w_runs:
+            assert found.runs == exp_runs
+        else:
+            assert found.runs == {}
+
+    if exp_name_desc is None:
+        assert found.metadata is None
+    else:
+        exp_name, exp_desc = exp_name_desc
+        assert found.metadata.name == exp_name
+        assert found.metadata.description == exp_desc
 
 
 def test_conversationhistorymessage_from_convos_message():
