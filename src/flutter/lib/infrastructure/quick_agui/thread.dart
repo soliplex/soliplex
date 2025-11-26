@@ -6,10 +6,12 @@ import 'package:ag_ui/ag_ui.dart' as ag_ui;
 
 import 'text_message_buffer.dart';
 import 'tool_call_reception_buffer.dart';
+import 'tool_call_registry.dart';
 
 class Thread {
   final String id;
   final ag_ui.AgUiClient client;
+  final List<ag_ui.Tool> _tools;
   final List<ag_ui.Run> _runs = [];
   final StreamController<ag_ui.Message> _messagesController;
   final StreamController<ag_ui.State> _statesController;
@@ -17,13 +19,18 @@ class Thread {
 
   var _textBuffer = TextMessageBuffer('');
 
-  Thread({required this.id, required this.client})
-    : _messagesController = StreamController.broadcast(),
-      _statesController = StreamController.broadcast();
+  Thread({
+    required this.id,
+    required this.client,
+    List<ag_ui.Tool> tools = const <ag_ui.Tool>[],
+  }) : _tools = tools,
+       _messagesController = StreamController.broadcast(),
+       _statesController = StreamController.broadcast();
 
   Iterable<ag_ui.Run> get runs => _runs;
 
   final Map<String, ToolCallReceptionBuffer> _toolCallReceptions = {};
+  final _toolRegistry = ToolCallRegistry();
 
   Stream<ag_ui.Message> get messageStream => _messagesController.stream;
 
@@ -90,7 +97,15 @@ class Thread {
 
           if (receivedToolCall == null) break;
 
-          _messagesController.add(receivedToolCall.toMessage);
+          _messagesController.add(receivedToolCall.message);
+
+          final toolCall = receivedToolCall.toolCall;
+          final isClientTool = _tools.any(
+            (t) => t.name == toolCall.function.name,
+          );
+          if (isClientTool) {
+            _toolRegistry.register(toolCall);
+          }
 
         case ag_ui.ToolCallResultEvent(
           messageId: final msgId,
@@ -100,6 +115,7 @@ class Thread {
           _messagesController.add(
             ag_ui.ToolMessage(id: msgId, toolCallId: id, content: content),
           );
+          _toolRegistry.markCompleted(id);
 
         default:
           debugPrint("Ignored $event");
