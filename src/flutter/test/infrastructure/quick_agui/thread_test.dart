@@ -238,14 +238,13 @@ void main() {
         ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
       ]);
       
-      final publishedMessages = thread.messageStream.take(3).toList();
-      thread.startRun(
+      await thread.startRun(
         endpoint: 'agent',
         runId: runId,
         message: ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!'),
       );
 
-      final [_, msg1, msg2] = await publishedMessages;
+      final [_, msg1, msg2] = thread.messageHistory;
       expect(
         msg1,
         isA<ag_ui.AssistantMessage>().having(

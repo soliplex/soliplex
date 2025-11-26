@@ -97,7 +97,7 @@ class Thread {
 
           if (receivedToolCall == null) break;
 
-          _messagesController.add(receivedToolCall.message);
+          messageHistory.add(receivedToolCall.message);
 
           final toolCall = receivedToolCall.toolCall;
           final isClientTool = _tools.any(
@@ -112,7 +112,7 @@ class Thread {
           toolCallId: final id,
           content: final content,
         ):
-          _messagesController.add(
+          messageHistory.add(
             ag_ui.ToolMessage(id: msgId, toolCallId: id, content: content),
           );
           _toolRegistry.markCompleted(id);
