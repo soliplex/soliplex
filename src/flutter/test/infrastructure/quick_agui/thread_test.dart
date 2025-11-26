@@ -201,6 +201,30 @@ void main() {
       expect(step1, equals('task a'));
       expect(step2, equals('task b'));
     }, timeout: Timeout(Duration(seconds: 2)));
+    
+    test('interleaving step events', () async {
+      when(() => client.runAgent(any(), any())).thenAnswer(
+        (_) => Stream.fromIterable([
+          ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
+          ag_ui.StepStartedEvent(stepName: 'task a'),
+          ag_ui.StepStartedEvent(stepName: 'task b'),
+          ag_ui.StepFinishedEvent(stepName: 'task a'),
+          ag_ui.StepFinishedEvent(stepName: 'task b'),
+          ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
+        ]),
+      );
+
+      final publishedStates = thread.stateStream.take(2).toList();
+      thread.startRun(
+        endpoint: 'agent',
+        runId: runId,
+        message: ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!'),
+      );
+
+      final [{'step': step1}, {'step': step2}] = await publishedStates;
+      expect(step1, equals('task a'));
+      expect(step2, equals('task b'));
+    }, timeout: Timeout(Duration(seconds: 2)));
 
     test('tool call events', () async {
       const toolCallId = 'tool-call-id';
