@@ -1,8 +1,8 @@
-class PendingToolCall {
+class ToolCallReceptionBuffer {
   final String name;
   final StringBuffer _argsBuffer;
 
-  PendingToolCall(this.name) : _argsBuffer = StringBuffer();
+  ToolCallReceptionBuffer(this.name) : _argsBuffer = StringBuffer();
 
   void appendArgs(String delta) {
     _argsBuffer.write(delta);

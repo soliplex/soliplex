@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart';
 
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
 
-import 'pending_tool_call.dart';
 import 'text_message_buffer.dart';
+import 'tool_call_reception_buffer.dart';
 
 class Thread {
   final String id;
@@ -23,7 +23,7 @@ class Thread {
 
   Iterable<ag_ui.Run> get runs => _runs;
 
-  final Map<String, PendingToolCall> _pendingToolCalls = {};
+  final Map<String, ToolCallReceptionBuffer> _toolCallReceptions = {};
 
   Stream<ag_ui.Message> get messageStream => _messagesController.stream;
 
@@ -80,15 +80,15 @@ class Thread {
           toolCallId: final id,
           toolCallName: final name,
         ):
-          _pendingToolCalls[id] = PendingToolCall(name);
+          _toolCallReceptions[id] = ToolCallReceptionBuffer(name);
 
         case ag_ui.ToolCallArgsEvent(toolCallId: final id, delta: final delta):
-          _pendingToolCalls[id]?.appendArgs(delta);
+          _toolCallReceptions[id]?.appendArgs(delta);
 
         case ag_ui.ToolCallEndEvent(toolCallId: final id):
-          final pending = _pendingToolCalls.remove(id);
+          final receivedToolCall = _toolCallReceptions.remove(id);
 
-          if (pending == null) break;
+          if (receivedToolCall == null) break;
 
           final toolCall = ag_ui.AssistantMessage(
             // TODO: may need to get msg some other way (generate it or retrieve it from server).
@@ -97,8 +97,10 @@ class Thread {
               ag_ui.ToolCall(
                 id: id,
                 function: ag_ui.FunctionCall(
-                  name: pending.name,
-                  arguments: pending.args.isEmpty ? '{}' : pending.args,
+                  name: receivedToolCall.name,
+                  arguments: receivedToolCall.args.isEmpty
+                      ? '{}'
+                      : receivedToolCall.args,
                 ),
               ),
             ],
