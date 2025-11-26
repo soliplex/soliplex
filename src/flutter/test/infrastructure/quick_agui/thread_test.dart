@@ -36,9 +36,7 @@ void main() {
 
     group('First run', () {
       test('startRun tracks the first run', () {
-        when(
-          () => client.runAgent(any(), any()),
-        ).thenAnswer((_) => Stream.empty());
+        clientWillReceive(client, []);
 
         thread.startRun(
           endpoint: 'agent',
@@ -51,16 +49,14 @@ void main() {
       });
 
       test('one text message chunk', () async {
-        when(() => client.runAgent(any(), any())).thenAnswer(
-          (_) => Stream.fromIterable([
-            ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
-            ag_ui.TextMessageChunkEvent(
-              messageId: 'msg-id-2',
-              delta: 'hi! What can I do?',
-            ),
-            ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
-          ]),
-        );
+        clientWillReceive(client, [
+          ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
+          ag_ui.TextMessageChunkEvent(
+            messageId: 'msg-id-2',
+            delta: 'hi! What can I do?',
+          ),
+          ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
+        ]);
 
         final publishedMessages = thread.messageStream.take(2).toList();
         thread.startRun(
@@ -85,24 +81,22 @@ void main() {
       }, timeout: Timeout(Duration(seconds: 2)));
 
       test('text message contents', () async {
-        when(() => client.runAgent(any(), any())).thenAnswer(
-          (_) => Stream.fromIterable([
-            ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
-            ag_ui.TextMessageStartEvent(messageId: 'msg-id-2'),
-            ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: 'he'),
-            ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: 'll'),
-            ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: 'o'),
-            ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: '!'),
-            ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: ' '),
-            ag_ui.TextMessageContentEvent(
-              messageId: 'msg-id-2',
-              delta: 'what can I',
-            ),
-            ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: ' do?'),
-            ag_ui.TextMessageEndEvent(messageId: 'msg-id-2'),
-            ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
-          ]),
-        );
+        clientWillReceive(client, [
+          ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
+          ag_ui.TextMessageStartEvent(messageId: 'msg-id-2'),
+          ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: 'he'),
+          ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: 'll'),
+          ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: 'o'),
+          ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: '!'),
+          ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: ' '),
+          ag_ui.TextMessageContentEvent(
+            messageId: 'msg-id-2',
+            delta: 'what can I',
+          ),
+          ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: ' do?'),
+          ag_ui.TextMessageEndEvent(messageId: 'msg-id-2'),
+          ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
+        ]);
 
         final publishedMessages = thread.messageStream.take(2).toList();
         thread.startRun(
@@ -179,16 +173,14 @@ void main() {
     });
 
     test('step events', () async {
-      when(() => client.runAgent(any(), any())).thenAnswer(
-        (_) => Stream.fromIterable([
-          ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
-          ag_ui.StepStartedEvent(stepName: 'task a'),
-          ag_ui.StepFinishedEvent(stepName: 'task a'),
-          ag_ui.StepStartedEvent(stepName: 'task b'),
-          ag_ui.StepFinishedEvent(stepName: 'task b'),
-          ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
-        ]),
-      );
+      clientWillReceive(client, [
+        ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
+        ag_ui.StepStartedEvent(stepName: 'task a'),
+        ag_ui.StepFinishedEvent(stepName: 'task a'),
+        ag_ui.StepStartedEvent(stepName: 'task b'),
+        ag_ui.StepFinishedEvent(stepName: 'task b'),
+        ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
+      ]);
 
       final publishedStates = thread.stateStream.take(2).toList();
       thread.startRun(
@@ -201,18 +193,16 @@ void main() {
       expect(step1, equals('task a'));
       expect(step2, equals('task b'));
     }, timeout: Timeout(Duration(seconds: 2)));
-    
+
     test('interleaving step events', () async {
-      when(() => client.runAgent(any(), any())).thenAnswer(
-        (_) => Stream.fromIterable([
-          ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
-          ag_ui.StepStartedEvent(stepName: 'task a'),
-          ag_ui.StepStartedEvent(stepName: 'task b'),
-          ag_ui.StepFinishedEvent(stepName: 'task a'),
-          ag_ui.StepFinishedEvent(stepName: 'task b'),
-          ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
-        ]),
-      );
+      clientWillReceive(client, [
+        ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
+        ag_ui.StepStartedEvent(stepName: 'task a'),
+        ag_ui.StepStartedEvent(stepName: 'task b'),
+        ag_ui.StepFinishedEvent(stepName: 'task a'),
+        ag_ui.StepFinishedEvent(stepName: 'task b'),
+        ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
+      ]);
 
       final publishedStates = thread.stateStream.take(2).toList();
       thread.startRun(
@@ -229,27 +219,25 @@ void main() {
     test('tool call events', () async {
       const toolCallId = 'tool-call-id';
       const toolCallName = 'add-numbers';
-      when(() => client.runAgent(any(), any())).thenAnswer(
-        (_) => Stream.fromIterable([
-          ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
-          ag_ui.ToolCallStartEvent(
-            toolCallId: toolCallId,
-            toolCallName: toolCallName,
-          ),
-          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: "{'arg1':"),
-          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: " 1, '"),
-          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: "arg2'"),
-          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: ": 2}"),
-          ag_ui.ToolCallEndEvent(toolCallId: toolCallId),
-          ag_ui.ToolCallResultEvent(
-            messageId: 'result_$toolCallId',
-            toolCallId: toolCallId,
-            content: "{'sum': 3}",
-          ),
-          ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
-        ]),
-      );
-
+      clientWillReceive(client, [
+        ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
+        ag_ui.ToolCallStartEvent(
+          toolCallId: toolCallId,
+          toolCallName: toolCallName,
+        ),
+        ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: "{'arg1':"),
+        ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: " 1, '"),
+        ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: "arg2'"),
+        ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: ": 2}"),
+        ag_ui.ToolCallEndEvent(toolCallId: toolCallId),
+        ag_ui.ToolCallResultEvent(
+          messageId: 'result_$toolCallId',
+          toolCallId: toolCallId,
+          content: "{'sum': 3}",
+        ),
+        ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
+      ]);
+      
       final publishedMessages = thread.messageStream.take(3).toList();
       thread.startRun(
         endpoint: 'agent',
