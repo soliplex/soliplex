@@ -16,7 +16,9 @@ class ToolCallReceptionBuffer {
   ag_ui.AssistantMessage get toMessage => ag_ui.AssistantMessage(
     // TODO: may need to get msg some other way (generate it or retrieve it from server).
     id: 'msg_$id',
-    toolCalls: [
+    toolCalls:
+        // TODO: handle cases when there are multiple tool calls in one message.
+        [
       ag_ui.ToolCall(
         id: id,
         function: ag_ui.FunctionCall(
