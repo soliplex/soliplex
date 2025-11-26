@@ -33,7 +33,8 @@ UNKNOWN_USER = {
 TEST_ROOM_ID = "test-room"
 OTHER_ROOM_ID = "other-room"
 TEST_THREAD_ID = "test-thread-123"
-TEST_THREAD_NAME = "Test threa #123"
+TEST_THREAD_NAME = "Test thread #123"
+TEST_THREAD_DESC = "Test thread description"
 TEST_THREAD = agui_thread.Thread(
     room_id=TEST_ROOM_ID,
     thread_id=TEST_THREAD_ID,
@@ -566,6 +567,53 @@ async def test_post_room_agui_thread_id(
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
+    "w_meta",
+    [
+        None,
+        {"name": TEST_THREAD_NAME},
+        {"name": TEST_THREAD_NAME, "description": TEST_THREAD_DESC},
+    ],
+)
+@mock.patch("soliplex.views.agui._check_user_in_room")
+async def test_post_room_agui_thread_id_meta(cuir, w_meta):
+    cuir.return_value = USER_NAME
+
+    request = fastapi.Request(scope={"type": "http"})
+
+    if w_meta is not None:
+        exp_t_meta = agui_thread.ThreadMetadata(**w_meta)
+        r_meta = models.AGUI_ThreadMetadata.model_validate(w_meta)
+    else:
+        exp_t_meta = None
+        r_meta = models.AGUI_ThreadMetadata()
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_threads = mock.create_autospec(agui_thread.Threads)
+    token = object()
+
+    found = await agui_views.post_room_agui_thread_id_meta(
+        request,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+        new_metadata=r_meta,
+        the_installation=the_installation,
+        the_threads=the_threads,
+        token=token,
+    )
+
+    assert isinstance(found, fastapi.Response)
+    assert found.status_code == 205
+
+    the_threads.update_thread.assert_called_once_with(
+        user_name=USER_NAME,
+        thread_id=TEST_THREAD_ID,
+        metadata=exp_t_meta,
+    )
+    cuir.assert_called_once_with(TEST_ROOM_ID, the_installation, token)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
     "bad_run_input, expectation",
     [
         (False, no_error()),
@@ -668,6 +716,64 @@ async def test_post_room_agui_thread_id_run_id(
             the_threads,
         )
         cura.assert_called_once_with(TEST_ROOM_ID, the_installation, token)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_meta",
+    [
+        None,
+        {"label": TEST_RUN_LABEL},
+    ],
+)
+@mock.patch("soliplex.views.agui._check_user_thread")
+@mock.patch("soliplex.views.agui._check_user_in_room")
+async def test_post_room_agui_thread_id_run_id_meta(cuir, cut, w_meta):
+    cuir.return_value = USER_NAME
+    exp_thread = mock.create_autospec(
+        agui_thread.Thread,
+        room_id=TEST_ROOM_ID,
+    )
+    cut.return_value = exp_thread
+
+    request = fastapi.Request(scope={"type": "http"})
+
+    if w_meta is not None:
+        exp_t_meta = agui_thread.RunMetadata(**w_meta)
+        r_meta = models.AGUI_RunMetadata.model_validate(w_meta)
+    else:
+        exp_t_meta = None
+        r_meta = models.AGUI_RunMetadata()
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_threads = mock.create_autospec(agui_thread.Threads)
+    token = object()
+
+    found = await agui_views.post_room_agui_thread_id_run_id_meta(
+        request,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+        new_metadata=r_meta,
+        the_installation=the_installation,
+        the_threads=the_threads,
+        token=token,
+    )
+
+    assert isinstance(found, fastapi.Response)
+    assert found.status_code == 205
+
+    exp_thread.update_run.assert_called_once_with(
+        run_id=TEST_RUN_ID,
+        metadata=exp_t_meta,
+    )
+    cut.assert_called_once_with(
+        TEST_ROOM_ID,
+        TEST_THREAD_ID,
+        USER_NAME,
+        the_threads,
+    )
+    cuir.assert_called_once_with(TEST_ROOM_ID, the_installation, token)
 
 
 @pytest.mark.anyio

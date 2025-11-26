@@ -311,6 +311,50 @@ async def post_room_agui_thread_id(
     )
 
 
+@util.logfire_span("POST /v1/rooms/{room_id}/agui/{thread_id}/meta")
+@router.post("/v1/rooms/{room_id}/agui/{thread_id}/meta")
+async def post_room_agui_thread_id_meta(
+    request: fastapi.Request,
+    room_id: str,
+    thread_id: str,
+    new_metadata: models.AGUI_ThreadMetadata,
+    the_installation: installation.Installation = depend_the_installation,
+    the_threads: agui_thread.Threads = depend_the_threads,
+    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+) -> fastapi.Response:
+    """Update metadata for a thread within the given room
+
+    Body of request, if passed, must validate to 'models.AGUI_ThreadMetadata'.
+
+    If an empty dict is passed, erase any existing metadata.
+
+    Returns an HTTP 205 (Reset Content) on success.
+    """
+    user_name = await _check_user_in_room(
+        room_id,
+        the_installation,
+        token,
+    )
+
+    new_md_dict = {
+        key: value
+        for key, value in new_metadata.model_dump().items()
+        if value is not None
+    }
+
+    if new_md_dict:
+        t_metadata = agui_thread.ThreadMetadata(**new_md_dict)
+    else:
+        t_metadata = None
+
+    await the_threads.update_thread(
+        user_name=user_name,
+        thread_id=thread_id,
+        metadata=t_metadata,
+    )
+    return fastapi.Response(status_code=205)
+
+
 @util.logfire_span("POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}")
 @router.post("/v1/rooms/{room_id}/agui/{thread_id}/{run_id}")
 async def post_room_agui_thread_id_run_id(
@@ -372,6 +416,56 @@ async def post_room_agui_thread_id_run_id(
         sse_stream,
         media_type=agui_adapter.accept,
     )
+
+
+@util.logfire_span("POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}/meta")
+@router.post("/v1/rooms/{room_id}/agui/{thread_id}/{run_id}/meta")
+async def post_room_agui_thread_id_run_id_meta(
+    request: fastapi.Request,
+    room_id: str,
+    thread_id: str,
+    run_id: str,
+    new_metadata: models.AGUI_RunMetadata,
+    the_installation: installation.Installation = depend_the_installation,
+    the_threads: agui_thread.Threads = depend_the_threads,
+    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+) -> fastapi.Response:
+    """Update metadata for a thread within the given room
+
+    Body of request, if passed, must validate to 'models.AGUI_ThreadMetadata'.
+
+    If an empty dict is passed, erase any existing metadata.
+
+    Returns an HTTP 205 (Reset Content) on success.
+    """
+    user_name = await _check_user_in_room(
+        room_id,
+        the_installation,
+        token,
+    )
+    thread = await _check_user_thread(
+        room_id,
+        thread_id,
+        user_name,
+        the_threads,
+    )
+
+    new_md_dict = {
+        key: value
+        for key, value in new_metadata.model_dump().items()
+        if value is not None
+    }
+
+    if new_md_dict:
+        t_metadata = agui_thread.RunMetadata(**new_md_dict)
+    else:
+        t_metadata = None
+
+    await thread.update_run(
+        run_id=run_id,
+        metadata=t_metadata,
+    )
+    return fastapi.Response(status_code=205)
 
 
 @util.logfire_span("DELETE /v1/rooms/{room_id}/agui/{thread_id}")
