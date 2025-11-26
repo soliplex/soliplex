@@ -134,6 +134,13 @@ class Thread:
     def created(self) -> datetime.datetime:
         return self._created
 
+    async def get_run(self, run_id: str) -> Run:
+        async with self._lock:
+            try:
+                return self.runs[run_id]
+            except KeyError:
+                raise UnknownRunId(run_id) from None
+
     async def new_run(
         self,
         *,
@@ -169,12 +176,23 @@ class Thread:
 
         return run
 
-    async def get_run(self, run_id: str) -> Run:
+    async def update_run(
+        self,
+        *,
+        run_id: str,
+        metadata: RunMetadata = None,
+    ) -> Run:
+        """Update run instance with the given metadata, or None"""
         async with self._lock:
             try:
-                return self.runs[run_id]
+                before = self.runs[run_id]
             except KeyError:
                 raise UnknownRunId(run_id) from None
+
+            after = dataclasses.replace(before, metadata=metadata)
+            self.runs[run_id] = after
+
+            return after
 
 
 ThreadsByID = dict[str, Thread]
@@ -254,6 +272,20 @@ class Threads:
             user_threads[thread_id] = thread
 
         return thread
+
+    async def update_thread(
+        self,
+        *,
+        user_name: str,
+        thread_id: str,
+        metadata: ThreadMetadata = None,
+    ) -> Thread:
+        """Update thread instance with the given metadata, or None"""
+        async with self._lock:
+            before = await self._find_thread(user_name, thread_id)
+            after = dataclasses.replace(before, metadata=metadata)
+            self._threads[user_name][thread_id] = after
+            return after
 
     async def delete_thread(
         self,
