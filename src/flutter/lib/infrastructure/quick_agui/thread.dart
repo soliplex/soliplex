@@ -80,7 +80,7 @@ class Thread {
           toolCallId: final id,
           toolCallName: final name,
         ):
-          _toolCallReceptions[id] = ToolCallReceptionBuffer(name);
+          _toolCallReceptions[id] = ToolCallReceptionBuffer(id, name);
 
         case ag_ui.ToolCallArgsEvent(toolCallId: final id, delta: final delta):
           _toolCallReceptions[id]?.appendArgs(delta);
@@ -90,22 +90,7 @@ class Thread {
 
           if (receivedToolCall == null) break;
 
-          final toolCall = ag_ui.AssistantMessage(
-            // TODO: may need to get msg some other way (generate it or retrieve it from server).
-            id: 'msg_$id',
-            toolCalls: [
-              ag_ui.ToolCall(
-                id: id,
-                function: ag_ui.FunctionCall(
-                  name: receivedToolCall.name,
-                  arguments: receivedToolCall.args.isEmpty
-                      ? '{}'
-                      : receivedToolCall.args,
-                ),
-              ),
-            ],
-          );
-          _messagesController.add(toolCall);
+          _messagesController.add(receivedToolCall.toMessage);
 
         case ag_ui.ToolCallResultEvent(
           messageId: final msgId,
