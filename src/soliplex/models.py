@@ -381,7 +381,12 @@ AGUI_Events = list[agui_core.BaseEvent]
 
 
 class AGUI_RunMetadata(pydantic.BaseModel):
-    label: str = KW_ONLY
+    """Metadata for a run
+
+    Set all fields to 'None' to erase existing metadata.
+    """
+
+    label: str | None = KW_ONLY_NONE
 
     @classmethod
     def from_run_meta(
@@ -439,7 +444,12 @@ AGUI_Runs = dict[str, AGUI_Run]
 
 
 class AGUI_ThreadMetadata(pydantic.BaseModel):
-    name: str = KW_ONLY_NONE
+    """Metadata for a thread
+
+    Set all fields to 'None' to erase existing metadata.
+    """
+
+    name: str | None = KW_ONLY_NONE
     description: str | None = KW_ONLY_NONE
 
     @classmethod
