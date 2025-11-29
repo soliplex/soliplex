@@ -152,10 +152,10 @@ void main() {
         );
 
         final captured = captureRunAgentInput(client);
-
-        expect(captured.messages![0], isUserMessage('msg-1'));
-        expect(captured.messages![1], isAssistantMessage('msg-2'));
-        expect(captured.messages![2], isUserMessage('msg-3'));
+        final [msg0, msg1, msg2, ...] = captured.messages!;
+        expect(msg0, isUserMsg(id: 'msg-1', msg: 'hi'));
+        expect(msg1, isAssistantMsg(id: 'msg-2', msg: 'hello'));
+        expect(msg2, isUserMsg(id: 'msg-3', msg: 'Thanks'));
       });
     });
   });
@@ -282,8 +282,16 @@ ag_ui.SimpleRunAgentInput captureRunAgentInput(ag_ui.AgUiClient client) {
       as ag_ui.SimpleRunAgentInput;
 }
 
-TypeMatcher<ag_ui.UserMessage> isUserMessage(String id) =>
-    isA<ag_ui.UserMessage>().having((m) => m.id, "id", equals(id));
+TypeMatcher<ag_ui.UserMessage> isUserMsg({
+  required String id,
+  required String msg,
+}) => isA<ag_ui.UserMessage>()
+    .having((m) => m.id, "id", equals(id))
+    .having((m) => m.content, 'content', equals(msg));
 
-TypeMatcher<ag_ui.AssistantMessage> isAssistantMessage(String id) =>
-    isA<ag_ui.AssistantMessage>().having((m) => m.id, "id", equals(id));
+TypeMatcher<ag_ui.AssistantMessage> isAssistantMsg({
+  required String id,
+  required String msg,
+}) => isA<ag_ui.AssistantMessage>()
+    .having((m) => m.id, "id", equals(id))
+    .having((m) => m.content, 'content', equals(msg));
