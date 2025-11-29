@@ -127,42 +127,35 @@ void main() {
 
     group('Second run starting with user message', () {
       test('sends message history along the new user message', () async {
-        final (msgId1, msgId2, msgId3, msgId4) = (
-          'msg-1',
-          'msg-2',
-          'msg-3',
-          'msg-4',
-        );
-
         clientWillReceive(client, [
           ag_ui.RunStartedEvent(threadId: threadId, runId: 'run-id-1'),
-          ag_ui.TextMessageChunkEvent(messageId: msgId2, delta: 'hello'),
+          ag_ui.TextMessageChunkEvent(messageId: 'msg-2', delta: 'hello'),
           ag_ui.RunFinishedEvent(threadId: threadId, runId: 'run-id-1'),
         ]);
 
         await thread.startRun(
           endpoint: 'agent',
           runId: 'run-id-1',
-          message: ag_ui.UserMessage(id: msgId1, content: "hi"),
+          message: ag_ui.UserMessage(id: 'msg-1', content: "hi"),
         );
 
         clientWillReceive(client, [
           ag_ui.RunStartedEvent(threadId: threadId, runId: 'run-id-2'),
-          ag_ui.TextMessageChunkEvent(messageId: msgId4, delta: 'No problem'),
+          ag_ui.TextMessageChunkEvent(messageId: 'msg-4', delta: 'No problem'),
           ag_ui.RunFinishedEvent(threadId: threadId, runId: 'run-id-2'),
         ]);
 
         await thread.startRun(
           endpoint: 'agent',
           runId: 'run-id-2',
-          message: ag_ui.UserMessage(id: msgId3, content: "Thanks"),
+          message: ag_ui.UserMessage(id: 'msg-3', content: "Thanks"),
         );
 
         final captured = captureRunAgentInput(client);
 
-        expect(captured.messages![0], isUserMessage(msgId1));
-        expect(captured.messages![1], isAssistantMessage(msgId2));
-        expect(captured.messages![2], isUserMessage(msgId3));
+        expect(captured.messages![0], isUserMessage('msg-1'));
+        expect(captured.messages![1], isAssistantMessage('msg-2'));
+        expect(captured.messages![2], isUserMessage('msg-3'));
       });
     });
   });
@@ -237,7 +230,7 @@ void main() {
         ),
         ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
       ]);
-      
+
       await thread.startRun(
         endpoint: 'agent',
         runId: runId,
