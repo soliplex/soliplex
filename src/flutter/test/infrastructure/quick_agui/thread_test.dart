@@ -66,18 +66,8 @@ void main() {
         );
 
         final [msg1, msg2] = await publishedMessages;
-        expect(
-          msg1,
-          isA<ag_ui.UserMessage>()
-              .having((m) => m.content, 'content', equals('hi!'))
-              .having((m) => m.id, 'message id', equals('msg-id-1')),
-        );
-        expect(
-          msg2,
-          isA<ag_ui.AssistantMessage>()
-              .having((m) => m.content, 'content', equals('hi! What can I do?'))
-              .having((m) => m.id, 'message id', equals('msg-id-2')),
-        );
+        expect(msg1, isUserMsg(id: 'msg-id-1', msg: 'hi!'));
+        expect(msg2, isAssistantMsg(id: 'msg-id-2', msg: 'hi! What can I do?'));
       }, timeout: Timeout(Duration(seconds: 2)));
 
       test('text message contents', () async {
@@ -106,21 +96,10 @@ void main() {
         );
 
         final [msg1, msg2] = await publishedMessages;
-        expect(
-          msg1,
-          isA<ag_ui.UserMessage>()
-              .having((m) => m.content, 'content', equals('hi!'))
-              .having((m) => m.id, 'message id', equals('msg-id-1')),
-        );
+        expect(msg1, isUserMsg(id: 'msg-id-1', msg: 'hi!'));
         expect(
           msg2,
-          isA<ag_ui.AssistantMessage>()
-              .having(
-                (m) => m.content,
-                'content',
-                equals('hello! what can I do?'),
-              )
-              .having((m) => m.id, 'message id', equals('msg-id-2')),
+          isAssistantMsg(id: 'msg-id-2', msg: 'hello! what can I do?'),
         );
       }, timeout: Timeout(Duration(seconds: 2)));
     });
