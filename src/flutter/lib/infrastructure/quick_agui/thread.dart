@@ -15,6 +15,7 @@ class Thread {
   final List<ag_ui.Run> _runs = [];
   final StreamController<ag_ui.Message> _messagesController;
   final StreamController<ag_ui.State> _statesController;
+  ag_ui.State? currentState;
   final List<ag_ui.Message> messageHistory = [];
 
   var _textBuffer = TextMessageBuffer('');
@@ -25,7 +26,9 @@ class Thread {
     List<ag_ui.Tool> tools = const <ag_ui.Tool>[],
   }) : _tools = tools,
        _messagesController = StreamController.broadcast(),
-       _statesController = StreamController.broadcast();
+       _statesController = StreamController.broadcast() {
+    stateStream.forEach((s) => currentState = s);
+  }
 
   Iterable<ag_ui.Run> get runs => _runs;
 
