@@ -1,7 +1,6 @@
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-
 import 'package:soliplex_client/infrastructure/quick_agui/thread.dart';
 
 class AgUiClientMock extends Mock implements ag_ui.AgUiClient {}
@@ -100,6 +99,32 @@ void main() {
         expect(
           msg2,
           isAssistantMsg(id: 'msg-id-2', msg: 'hello! what can I do?'),
+        );
+      }, timeout: Timeout(Duration(seconds: 2)));
+
+      test('one full state snapshot', () async {
+        clientWillReceive(client, [
+          ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
+          ag_ui.StateSnapshotEvent(
+            snapshot: {'firstName': 'Tony', 'lastName': 'Stark'},
+          ),
+          ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
+        ]);
+        final upcomingStateUpdate = thread.stateStream.first;
+        thread.startRun(
+          endpoint: 'agent',
+          runId: runId,
+          message: ag_ui.UserMessage(
+            id: '--irrelevant-msg-id--',
+            content: '--irrelevant-content--',
+          ),
+        );
+        final stateUpdate = await upcomingStateUpdate;
+        expect(
+          stateUpdate,
+          isMap
+              .having((m) => m['firstName'], 'firstName', 'Tony')
+              .having((m) => m['lastName'], 'lastName', 'Stark'),
         );
       }, timeout: Timeout(Duration(seconds: 2)));
     });

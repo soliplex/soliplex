@@ -117,6 +117,9 @@ class Thread {
           );
           _toolRegistry.markCompleted(id);
 
+        case ag_ui.StateSnapshotEvent(snapshot: final snapshot):
+          _statesController.add(snapshot);
+
         default:
           debugPrint("Ignored $event");
       }
