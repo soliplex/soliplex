@@ -48,14 +48,9 @@ void main() {
       });
 
       test('one text message chunk', () async {
-        clientWillReceive(client, [
-          ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
-          ag_ui.TextMessageChunkEvent(
-            messageId: 'msg-id-2',
-            delta: 'hi! What can I do?',
-          ),
-          ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
-        ]);
+        clientWillReceive(client, aRunWithEvents(threadId, runId, [
+          ag_ui.TextMessageChunkEvent(messageId: 'msg-id-2', delta: 'hi! What can I do?'),
+        ]));
 
         final publishedMessages = thread.messageStream.take(2).toList();
         thread.startRun(
@@ -70,8 +65,7 @@ void main() {
       }, timeout: Timeout(Duration(seconds: 2)));
 
       test('text message contents', () async {
-        clientWillReceive(client, [
-          ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
+        clientWillReceive(client, aRunWithEvents(threadId, runId, [
           ag_ui.TextMessageStartEvent(messageId: 'msg-id-2'),
           ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: 'he'),
           ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: 'll'),
@@ -84,8 +78,7 @@ void main() {
           ),
           ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: ' do?'),
           ag_ui.TextMessageEndEvent(messageId: 'msg-id-2'),
-          ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
-        ]);
+        ]));
 
         final publishedMessages = thread.messageStream.take(2).toList();
         thread.startRun(
@@ -103,13 +96,10 @@ void main() {
       }, timeout: Timeout(Duration(seconds: 2)));
 
       test('one full state snapshot', () async {
-        clientWillReceive(client, [
-          ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
-          ag_ui.StateSnapshotEvent(
-            snapshot: {'firstName': 'Tony', 'lastName': 'Stark'},
-          ),
-          ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
-        ]);
+        clientWillReceive(client, aRunWithEvents(threadId, runId, [
+          ag_ui.StateSnapshotEvent(snapshot: {'firstName': 'Tony', 'lastName': 'Stark'}),
+        ]));
+
         final upcomingStateUpdate = thread.stateStream.first;
         thread.startRun(
           endpoint: 'agent',
@@ -119,6 +109,7 @@ void main() {
             content: '--irrelevant-content--',
           ),
         );
+
         final stateUpdate = await upcomingStateUpdate;
         expect(
           stateUpdate,
@@ -129,13 +120,9 @@ void main() {
       }, timeout: Timeout(Duration(seconds: 2)));
 
       test('thread tracks last received state snapshot', () async {
-        clientWillReceive(client, [
-          ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
-          ag_ui.StateSnapshotEvent(
-            snapshot: {'firstName': 'Tony', 'lastName': 'Stark'},
-          ),
-          ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
-        ]);
+        clientWillReceive(client, aRunWithEvents(threadId, runId, [
+          ag_ui.StateSnapshotEvent(snapshot: {'firstName': 'Tony', 'lastName': 'Stark'}),
+        ]));
         final upcomingStateUpdate = thread.stateStream.first;
         thread.startRun(
           endpoint: 'agent',
@@ -152,11 +139,9 @@ void main() {
 
     group('Second run starting with user message', () {
       test('sends message history along the new user message', () async {
-        clientWillReceive(client, [
-          ag_ui.RunStartedEvent(threadId: threadId, runId: 'run-id-1'),
+        clientWillReceive(client, aRunWithEvents(threadId, 'run-id-1', [
           ag_ui.TextMessageChunkEvent(messageId: 'msg-2', delta: 'hello'),
-          ag_ui.RunFinishedEvent(threadId: threadId, runId: 'run-id-1'),
-        ]);
+        ]));
 
         await thread.startRun(
           endpoint: 'agent',
@@ -164,11 +149,9 @@ void main() {
           message: ag_ui.UserMessage(id: 'msg-1', content: "hi"),
         );
 
-        clientWillReceive(client, [
-          ag_ui.RunStartedEvent(threadId: threadId, runId: 'run-id-2'),
+        clientWillReceive(client, aRunWithEvents(threadId, 'run-id-2', [
           ag_ui.TextMessageChunkEvent(messageId: 'msg-4', delta: 'No problem'),
-          ag_ui.RunFinishedEvent(threadId: threadId, runId: 'run-id-2'),
-        ]);
+        ]));
 
         await thread.startRun(
           endpoint: 'agent',
@@ -191,14 +174,12 @@ void main() {
     });
 
     test('step events', () async {
-      clientWillReceive(client, [
-        ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
+      clientWillReceive(client, aRunWithEvents(threadId, runId, [
         ag_ui.StepStartedEvent(stepName: 'task a'),
         ag_ui.StepFinishedEvent(stepName: 'task a'),
         ag_ui.StepStartedEvent(stepName: 'task b'),
         ag_ui.StepFinishedEvent(stepName: 'task b'),
-        ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
-      ]);
+      ]));
 
       final publishedStates = thread.stateStream.take(2).toList();
       thread.startRun(
@@ -213,14 +194,12 @@ void main() {
     }, timeout: Timeout(Duration(seconds: 2)));
 
     test('interleaving step events', () async {
-      clientWillReceive(client, [
-        ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
+      clientWillReceive(client, aRunWithEvents(threadId, runId, [
         ag_ui.StepStartedEvent(stepName: 'task a'),
         ag_ui.StepStartedEvent(stepName: 'task b'),
         ag_ui.StepFinishedEvent(stepName: 'task a'),
         ag_ui.StepFinishedEvent(stepName: 'task b'),
-        ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
-      ]);
+      ]));
 
       final publishedStates = thread.stateStream.take(2).toList();
       thread.startRun(
@@ -237,8 +216,7 @@ void main() {
     test('tool call events', () async {
       const toolCallId = 'tool-call-id';
       const toolCallName = 'add-numbers';
-      clientWillReceive(client, [
-        ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
+      clientWillReceive(client, aRunWithEvents(threadId, runId, [
         ag_ui.ToolCallStartEvent(
           toolCallId: toolCallId,
           toolCallName: toolCallName,
@@ -253,8 +231,7 @@ void main() {
           toolCallId: toolCallId,
           content: "{'sum': 3}",
         ),
-        ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
-      ]);
+      ]));
 
       await thread.startRun(
         endpoint: 'agent',
@@ -301,6 +278,14 @@ void clientWillReceive(ag_ui.AgUiClient client, List<ag_ui.BaseEvent> events) {
     () => client.runAgent(any(), any()),
   ).thenAnswer((_) => Stream.fromIterable(events));
 }
+
+List<ag_ui.BaseEvent> aRunWithEvents(String threadId, String runId, List<ag_ui.BaseEvent> events) {
+    return [
+          ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
+          ...events,
+          ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
+    ];
+  }
 
 ag_ui.SimpleRunAgentInput captureRunAgentInput(ag_ui.AgUiClient client) {
   return verify(() => client.runAgent('agent', captureAny())).captured.last
