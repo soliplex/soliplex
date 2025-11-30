@@ -127,6 +127,27 @@ void main() {
               .having((m) => m['lastName'], 'lastName', 'Stark'),
         );
       }, timeout: Timeout(Duration(seconds: 2)));
+
+      test('thread tracks last received state snapshot', () async {
+        clientWillReceive(client, [
+          ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
+          ag_ui.StateSnapshotEvent(
+            snapshot: {'firstName': 'Tony', 'lastName': 'Stark'},
+          ),
+          ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
+        ]);
+        final upcomingStateUpdate = thread.stateStream.first;
+        thread.startRun(
+          endpoint: 'agent',
+          runId: runId,
+          message: ag_ui.UserMessage(
+            id: '--irrelevant-msg-id--',
+            content: '--irrelevant-content--',
+          ),
+        );
+        final stateUpdate = await upcomingStateUpdate;
+        expect(thread.currentState, equals(stateUpdate));
+        }, timeout: Timeout(Duration(seconds: 2)));
     });
 
     group('Second run starting with user message', () {
