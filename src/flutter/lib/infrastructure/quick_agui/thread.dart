@@ -47,13 +47,15 @@ class Thread {
   Future<List<ag_ui.ToolMessage>> startRun({
     required String endpoint,
     required String runId,
-    required ag_ui.UserMessage message,
+    required List<ag_ui.Message> messages,
   }) async {
     final run = ag_ui.Run(threadId: id, runId: runId);
     _runs.add(run);
 
-    messageHistory.add(message);
-    _messagesController.add(message);
+    messageHistory.addAll(messages);
+    for (final message in messages) {
+      _messagesController.add(message);
+    }
 
     final agentInput = ag_ui.SimpleRunAgentInput(
       threadId: id,
@@ -190,5 +192,13 @@ class Thread {
     } catch (e) {
       return 'ERROR: ${e.toString()}';
     }
+  }
+
+  Future<List<ag_ui.ToolMessage>> sendToolResults({
+    required String endpoint,
+    required String runId,
+    required List<ag_ui.ToolMessage> toolMessages,
+  }) async {
+    return startRun(endpoint: endpoint, runId: runId, messages: toolMessages);
   }
 }

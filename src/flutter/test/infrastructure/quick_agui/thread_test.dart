@@ -42,7 +42,7 @@ void main() {
         thread.startRun(
           endpoint: 'agent',
           runId: runId,
-          message: ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!'),
+          messages: [ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!')],
         );
 
         final [ag_ui.Run(runId: capturedRunId)] = thread.runs.toList();
@@ -64,7 +64,7 @@ void main() {
         thread.startRun(
           endpoint: 'agent',
           runId: runId,
-          message: ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!'),
+          messages: [ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!')],
         );
 
         final [msg1, msg2] = await publishedMessages;
@@ -95,7 +95,7 @@ void main() {
         thread.startRun(
           endpoint: 'agent',
           runId: runId,
-          message: ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!'),
+          messages: [ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!')],
         );
 
         final [msg1, msg2] = await publishedMessages;
@@ -120,10 +120,12 @@ void main() {
         thread.startRun(
           endpoint: 'agent',
           runId: runId,
-          message: ag_ui.UserMessage(
-            id: '--irrelevant-msg-id--',
-            content: '--irrelevant-content--',
-          ),
+          messages: [
+            ag_ui.UserMessage(
+              id: '--irrelevant-msg-id--',
+              content: '--irrelevant-content--',
+            ),
+          ],
         );
 
         final stateUpdate = await upcomingStateUpdate;
@@ -150,10 +152,12 @@ void main() {
           thread.startRun(
             endpoint: 'agent',
             runId: runId,
-            message: ag_ui.UserMessage(
-              id: '--irrelevant-msg-id--',
-              content: '--irrelevant-content--',
-            ),
+            messages: [
+              ag_ui.UserMessage(
+                id: '--irrelevant-msg-id--',
+                content: '--irrelevant-content--',
+              ),
+            ],
           );
           final stateUpdate = await upcomingStateUpdate;
           expect(thread.currentState, equals(stateUpdate));
@@ -174,7 +178,7 @@ void main() {
         await thread.startRun(
           endpoint: 'agent',
           runId: 'run-id-1',
-          message: ag_ui.UserMessage(id: 'msg-1', content: "hi"),
+          messages: [ag_ui.UserMessage(id: 'msg-1', content: "hi")],
         );
       });
 
@@ -192,7 +196,7 @@ void main() {
         await thread.startRun(
           endpoint: 'agent',
           runId: 'run-id-2',
-          message: ag_ui.UserMessage(id: 'msg-3', content: "Thanks"),
+          messages: [ag_ui.UserMessage(id: 'msg-3', content: "Thanks")],
         );
 
         final captured = captureRunAgentInput(client);
@@ -223,10 +227,12 @@ void main() {
           thread.startRun(
             endpoint: '--irrelevant--',
             runId: '--irrelevant--',
-            message: ag_ui.UserMessage(
-              id: '--irrelevant--',
-              content: '--irrelevant--',
-            ),
+            messages: [
+              ag_ui.UserMessage(
+                id: '--irrelevant--',
+                content: '--irrelevant--',
+              ),
+            ],
           );
 
           await upcomingStateUpdate;
@@ -258,7 +264,7 @@ void main() {
       thread.startRun(
         endpoint: 'agent',
         runId: runId,
-        message: ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!'),
+        messages: [ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!')],
       );
 
       final [{'step': step1}, {'step': step2}] = await publishedStates;
@@ -281,7 +287,7 @@ void main() {
       thread.startRun(
         endpoint: 'agent',
         runId: runId,
-        message: ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!'),
+        messages: [ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!')],
       );
 
       final [{'step': step1}, {'step': step2}] = await publishedStates;
@@ -315,7 +321,7 @@ void main() {
       await thread.startRun(
         endpoint: 'agent',
         runId: runId,
-        message: ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!'),
+        messages: [ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!')],
       );
 
       final [_, msg1, msg2] = thread.messageHistory;
@@ -418,7 +424,7 @@ void main() {
       final [result] = await thread.startRun(
         endpoint: 'agent',
         runId: runId,
-        message: ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!'),
+        messages: [ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!')],
       );
 
       expect(result.content, equals('{"sum":3}'));
