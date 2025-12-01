@@ -32,10 +32,12 @@ void main() {
       final registry = ToolCallRegistry();
 
       const toolCallId = 'tool-call-id';
+      const toolCallName = 'tool-call-name';
+
       final toolCall = ag_ui.ToolCall(
         id: toolCallId,
         function: ag_ui.FunctionCall(
-          name: 'tool-call-name',
+          name: toolCallName,
           arguments: 'any-argument',
         ),
       );
@@ -45,9 +47,39 @@ void main() {
       expect(registry.pendingCalls.length, equals(1));
       expect(registry.pendingCalls.first.toJson(), equals(toolCall.toJson()));
 
-      registry.markCompleted(toolCallId);
+      const resultMessageId = 'result-message-id';
+      const resultMessage = 'any-result';
+
+      final result = ag_ui.ToolMessage(
+        id: resultMessageId,
+        toolCallId: toolCall.id,
+        content: resultMessage,
+      );
+
+      registry.markCompleted(toolCallId, result);
 
       expect(registry.pendingCalls, isEmpty);
+
+      expect(registry.results.length, equals(1));
+      expect(
+        registry.results.first,
+        equals(
+          isToolResult(
+            id: resultMessageId,
+            toolCallId: toolCallId,
+            msg: resultMessage,
+          ),
+        ),
+      );
     });
   });
 }
+
+TypeMatcher<ag_ui.ToolMessage> isToolResult({
+  required String id,
+  required String toolCallId,
+  required String msg,
+}) => isA<ag_ui.ToolMessage>()
+    .having((m) => m.id, "id", equals(id))
+    .having((m) => m.toolCallId, "tool call id", equals(toolCallId))
+    .having((m) => m.content, 'content', equals(msg));
