@@ -48,9 +48,15 @@ void main() {
       });
 
       test('one text message chunk', () async {
-        clientWillReceive(client, aRunWithEvents(threadId, runId, [
-          ag_ui.TextMessageChunkEvent(messageId: 'msg-id-2', delta: 'hi! What can I do?'),
-        ]));
+        clientWillReceive(
+          client,
+          aRunWithEvents(threadId, runId, [
+            ag_ui.TextMessageChunkEvent(
+              messageId: 'msg-id-2',
+              delta: 'hi! What can I do?',
+            ),
+          ]),
+        );
 
         final publishedMessages = thread.messageStream.take(2).toList();
         thread.startRun(
@@ -65,20 +71,23 @@ void main() {
       }, timeout: Timeout(Duration(seconds: 2)));
 
       test('text message contents', () async {
-        clientWillReceive(client, aRunWithEvents(threadId, runId, [
-          ag_ui.TextMessageStartEvent(messageId: 'msg-id-2'),
-          ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: 'he'),
-          ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: 'll'),
-          ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: 'o'),
-          ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: '!'),
-          ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: ' '),
-          ag_ui.TextMessageContentEvent(
-            messageId: 'msg-id-2',
-            delta: 'what can I',
-          ),
-          ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: ' do?'),
-          ag_ui.TextMessageEndEvent(messageId: 'msg-id-2'),
-        ]));
+        clientWillReceive(
+          client,
+          aRunWithEvents(threadId, runId, [
+            ag_ui.TextMessageStartEvent(messageId: 'msg-id-2'),
+            ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: 'he'),
+            ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: 'll'),
+            ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: 'o'),
+            ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: '!'),
+            ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: ' '),
+            ag_ui.TextMessageContentEvent(
+              messageId: 'msg-id-2',
+              delta: 'what can I',
+            ),
+            ag_ui.TextMessageContentEvent(messageId: 'msg-id-2', delta: ' do?'),
+            ag_ui.TextMessageEndEvent(messageId: 'msg-id-2'),
+          ]),
+        );
 
         final publishedMessages = thread.messageStream.take(2).toList();
         thread.startRun(
@@ -96,9 +105,14 @@ void main() {
       }, timeout: Timeout(Duration(seconds: 2)));
 
       test('one full state snapshot', () async {
-        clientWillReceive(client, aRunWithEvents(threadId, runId, [
-          ag_ui.StateSnapshotEvent(snapshot: {'firstName': 'Tony', 'lastName': 'Stark'}),
-        ]));
+        clientWillReceive(
+          client,
+          aRunWithEvents(threadId, runId, [
+            ag_ui.StateSnapshotEvent(
+              snapshot: {'firstName': 'Tony', 'lastName': 'Stark'},
+            ),
+          ]),
+        );
 
         final upcomingStateUpdate = thread.stateStream.first;
         thread.startRun(
@@ -119,39 +133,59 @@ void main() {
         );
       }, timeout: Timeout(Duration(seconds: 2)));
 
-      test('thread tracks last received state snapshot', () async {
-        clientWillReceive(client, aRunWithEvents(threadId, runId, [
-          ag_ui.StateSnapshotEvent(snapshot: {'firstName': 'Tony', 'lastName': 'Stark'}),
-        ]));
-        final upcomingStateUpdate = thread.stateStream.first;
-        thread.startRun(
-          endpoint: 'agent',
-          runId: runId,
-          message: ag_ui.UserMessage(
-            id: '--irrelevant-msg-id--',
-            content: '--irrelevant-content--',
-          ),
-        );
-        final stateUpdate = await upcomingStateUpdate;
-        expect(thread.currentState, equals(stateUpdate));
-        }, timeout: Timeout(Duration(seconds: 2)));
+      test(
+        'thread tracks last received state snapshot',
+        () async {
+          clientWillReceive(
+            client,
+            aRunWithEvents(threadId, runId, [
+              ag_ui.StateSnapshotEvent(
+                snapshot: {'firstName': 'Tony', 'lastName': 'Stark'},
+              ),
+            ]),
+          );
+          final upcomingStateUpdate = thread.stateStream.first;
+          thread.startRun(
+            endpoint: 'agent',
+            runId: runId,
+            message: ag_ui.UserMessage(
+              id: '--irrelevant-msg-id--',
+              content: '--irrelevant-content--',
+            ),
+          );
+          final stateUpdate = await upcomingStateUpdate;
+          expect(thread.currentState, equals(stateUpdate));
+        },
+        timeout: Timeout(Duration(seconds: 2)),
+      );
     });
 
     group('Second run starting with user message', () {
-      test('sends message history along the new user message', () async {
-        clientWillReceive(client, aRunWithEvents(threadId, 'run-id-1', [
-          ag_ui.TextMessageChunkEvent(messageId: 'msg-2', delta: 'hello'),
-        ]));
+      setUp(() async {
+        clientWillReceive(
+          client,
+          aRunWithEvents(threadId, 'run-id-1', [
+            ag_ui.TextMessageChunkEvent(messageId: 'msg-2', delta: 'hello'),
+          ]),
+        );
 
         await thread.startRun(
           endpoint: 'agent',
           runId: 'run-id-1',
           message: ag_ui.UserMessage(id: 'msg-1', content: "hi"),
         );
+      });
 
-        clientWillReceive(client, aRunWithEvents(threadId, 'run-id-2', [
-          ag_ui.TextMessageChunkEvent(messageId: 'msg-4', delta: 'No problem'),
-        ]));
+      test('sends message history along the new user message', () async {
+        clientWillReceive(
+          client,
+          aRunWithEvents(threadId, 'run-id-2', [
+            ag_ui.TextMessageChunkEvent(
+              messageId: 'msg-4',
+              delta: 'No problem',
+            ),
+          ]),
+        );
 
         await thread.startRun(
           endpoint: 'agent',
@@ -165,6 +199,40 @@ void main() {
         expect(msg1, isAssistantMsg(id: 'msg-2', msg: 'hello'));
         expect(msg2, isUserMsg(id: 'msg-3', msg: 'Thanks'));
       });
+
+      test(
+        'patch current state upon receiving state delta event',
+        () async {
+          clientWillReceive(
+            client,
+            aRunWithEvents(threadId, runId, [
+              ag_ui.StateSnapshotEvent(
+                snapshot: {"firstName": "Tony", "lastName": "Stark"},
+              ),
+              ag_ui.StateDeltaEvent(
+                delta: [
+                  {"op": "replace", "path": "/lastName", "value": "Not Stark"},
+                ],
+              ),
+            ]),
+          );
+
+          final upcomingStateUpdate = thread.stateStream.take(2).last;
+          thread.startRun(
+            endpoint: '--irrelevant--',
+            runId: '--irrelevant--',
+            message: ag_ui.UserMessage(
+              id: '--irrelevant--',
+              content: '--irrelevant--',
+            ),
+          );
+
+          await upcomingStateUpdate;
+          expect(thread.currentState['firstName'], 'Tony');
+          expect(thread.currentState['lastName'], 'Not Stark');
+        },
+        timeout: Timeout(Duration(seconds: 2)),
+      );
     });
   });
 
@@ -174,12 +242,15 @@ void main() {
     });
 
     test('step events', () async {
-      clientWillReceive(client, aRunWithEvents(threadId, runId, [
-        ag_ui.StepStartedEvent(stepName: 'task a'),
-        ag_ui.StepFinishedEvent(stepName: 'task a'),
-        ag_ui.StepStartedEvent(stepName: 'task b'),
-        ag_ui.StepFinishedEvent(stepName: 'task b'),
-      ]));
+      clientWillReceive(
+        client,
+        aRunWithEvents(threadId, runId, [
+          ag_ui.StepStartedEvent(stepName: 'task a'),
+          ag_ui.StepFinishedEvent(stepName: 'task a'),
+          ag_ui.StepStartedEvent(stepName: 'task b'),
+          ag_ui.StepFinishedEvent(stepName: 'task b'),
+        ]),
+      );
 
       final publishedStates = thread.stateStream.take(2).toList();
       thread.startRun(
@@ -194,12 +265,15 @@ void main() {
     }, timeout: Timeout(Duration(seconds: 2)));
 
     test('interleaving step events', () async {
-      clientWillReceive(client, aRunWithEvents(threadId, runId, [
-        ag_ui.StepStartedEvent(stepName: 'task a'),
-        ag_ui.StepStartedEvent(stepName: 'task b'),
-        ag_ui.StepFinishedEvent(stepName: 'task a'),
-        ag_ui.StepFinishedEvent(stepName: 'task b'),
-      ]));
+      clientWillReceive(
+        client,
+        aRunWithEvents(threadId, runId, [
+          ag_ui.StepStartedEvent(stepName: 'task a'),
+          ag_ui.StepStartedEvent(stepName: 'task b'),
+          ag_ui.StepFinishedEvent(stepName: 'task a'),
+          ag_ui.StepFinishedEvent(stepName: 'task b'),
+        ]),
+      );
 
       final publishedStates = thread.stateStream.take(2).toList();
       thread.startRun(
@@ -216,22 +290,25 @@ void main() {
     test('tool call events', () async {
       const toolCallId = 'tool-call-id';
       const toolCallName = 'add-numbers';
-      clientWillReceive(client, aRunWithEvents(threadId, runId, [
-        ag_ui.ToolCallStartEvent(
-          toolCallId: toolCallId,
-          toolCallName: toolCallName,
-        ),
-        ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: "{'arg1':"),
-        ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: " 1, '"),
-        ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: "arg2'"),
-        ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: ": 2}"),
-        ag_ui.ToolCallEndEvent(toolCallId: toolCallId),
-        ag_ui.ToolCallResultEvent(
-          messageId: 'result_$toolCallId',
-          toolCallId: toolCallId,
-          content: "{'sum': 3}",
-        ),
-      ]));
+      clientWillReceive(
+        client,
+        aRunWithEvents(threadId, runId, [
+          ag_ui.ToolCallStartEvent(
+            toolCallId: toolCallId,
+            toolCallName: toolCallName,
+          ),
+          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: "{'arg1':"),
+          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: " 1, '"),
+          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: "arg2'"),
+          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: ": 2}"),
+          ag_ui.ToolCallEndEvent(toolCallId: toolCallId),
+          ag_ui.ToolCallResultEvent(
+            messageId: 'result_$toolCallId',
+            toolCallId: toolCallId,
+            content: "{'sum': 3}",
+          ),
+        ]),
+      );
 
       await thread.startRun(
         endpoint: 'agent',
@@ -279,13 +356,17 @@ void clientWillReceive(ag_ui.AgUiClient client, List<ag_ui.BaseEvent> events) {
   ).thenAnswer((_) => Stream.fromIterable(events));
 }
 
-List<ag_ui.BaseEvent> aRunWithEvents(String threadId, String runId, List<ag_ui.BaseEvent> events) {
-    return [
-          ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
-          ...events,
-          ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
-    ];
-  }
+List<ag_ui.BaseEvent> aRunWithEvents(
+  String threadId,
+  String runId,
+  List<ag_ui.BaseEvent> events,
+) {
+  return [
+    ag_ui.RunStartedEvent(threadId: threadId, runId: runId),
+    ...events,
+    ag_ui.RunFinishedEvent(threadId: threadId, runId: runId),
+  ];
+}
 
 ag_ui.SimpleRunAgentInput captureRunAgentInput(ag_ui.AgUiClient client) {
   return verify(() => client.runAgent('agent', captureAny())).captured.last

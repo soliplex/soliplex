@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
+import 'package:json_patch/json_patch.dart';
 
 import 'text_message_buffer.dart';
 import 'tool_call_reception_buffer.dart';
@@ -122,6 +123,11 @@ class Thread {
 
         case ag_ui.StateSnapshotEvent(snapshot: final snapshot):
           _statesController.add(snapshot);
+
+        case ag_ui.StateDeltaEvent(delta: final deltas):
+          _statesController.add(
+            JsonPatch.apply(currentState, deltas.cast<Map<String, dynamic>>()),
+          );
 
         default:
           debugPrint("Ignored $event");
