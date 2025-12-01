@@ -71,6 +71,7 @@ nav:
       - Agents: config/agents.md
       - Rooms: config/rooms.md
       - Completions: config/completions.md
+      - RAG: config/rag.md
       - Quizzes: config/quizzes.md
       - OIDC Authentication: config/oidc_providers.md
   - Usage: usage.md

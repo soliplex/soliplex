@@ -54,3 +54,8 @@ haiku-rag --config example/haiku.rag.yaml \
 ...
 17 documents added successfully.
 ```
+
+## Configuration of `haiku-rag` clients within Soliplex
+
+Please see [this page](config/rag.md) for notes on configuring
+the various `haiku-rag` clients used in a Soliplex installation.
