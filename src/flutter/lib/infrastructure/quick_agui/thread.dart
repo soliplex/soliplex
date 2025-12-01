@@ -116,10 +116,14 @@ class Thread {
           toolCallId: final id,
           content: final content,
         ):
-          messageHistory.add(
-            ag_ui.ToolMessage(id: msgId, toolCallId: id, content: content),
+          final result = ag_ui.ToolMessage(
+            id: msgId,
+            toolCallId: id,
+            content: content,
           );
-          _toolRegistry.markCompleted(id);
+
+          messageHistory.add(result);
+          _toolRegistry.markCompleted(id, result);
 
         case ag_ui.StateSnapshotEvent(snapshot: final snapshot):
           _statesController.add(snapshot);
