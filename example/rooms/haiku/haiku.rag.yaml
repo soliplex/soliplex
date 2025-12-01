@@ -1,0 +1,6 @@
+# Uncomment to test reranking for the 'search_documents' tool in this room
+#reranking:
+# model:
+#   name: "gpt-oss:20b"
+#   provider: "ollama"
+

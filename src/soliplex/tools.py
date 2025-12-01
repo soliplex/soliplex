@@ -36,9 +36,7 @@ async def search_documents(
 
     if tool_config is not None:
         hr_client_kw["db_path"] = tool_config.rag_lancedb_path
-        hr_client_kw["config"] = (
-            tool_config._installation_config.haiku_rag_config
-        )
+        hr_client_kw["config"] = tool_config.haiku_rag_config
     else:  # pragma: NO COVER
         pass
 

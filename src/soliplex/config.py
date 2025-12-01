@@ -386,6 +386,31 @@ class SearchDocumentsToolConfig(ToolConfig):
             raise RagDbExactlyOneOfStemOrOverride(self._config_path)
 
     @property
+    def haiku_rag_config(self) -> hr_config.AppConfig:
+        """Populate a haiku-rag config object w/ room-level overrides
+
+        Use installation's 'haiku_rag_config' as a base.  If the room
+        directory holds a 'haiku.rag.yaml' file, load it's mapping, and
+        treat it as overrides.
+        """
+        if self._config_path is None:
+            raise NoConfigPath()
+
+        base_config = self._installation_config.haiku_rag_config
+
+        hr_config_file = self._config_path.parent / "haiku.rag.yaml"
+
+        if hr_config_file.is_file():
+            base_config_yaml = base_config.model_dump()
+            room_config_yaml = hr_config.load_yaml_config(hr_config_file)
+
+            return hr_config.AppConfig.model_validate(
+                base_config_yaml | room_config_yaml
+            )
+        else:
+            return base_config
+
+    @property
     def rag_lancedb_path(self) -> pathlib.Path:
         """Compute the path for the room's RAG rag_lancedb_path database"""
         if self.rag_lancedb_override_path is not None:

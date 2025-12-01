@@ -19,6 +19,8 @@ from soliplex import secrets
 
 here = pathlib.Path(__file__).resolve().parent
 
+NoRaise = contextlib.nullcontext()
+
 AUTHSYSTEM_ID = "testing"
 AUTHSYSTEM_TITLE = "Testing OIDC"
 AUTHSYSTEM_SERVER_URL = "https://example.com/auth/realms/sso"
@@ -457,6 +459,13 @@ QUESTIONS = [
         ),
     ),
 ]
+
+HRC_OVERRIDE_KW = {
+    "testing": "override",
+}
+HRC_OVERRIDE_YAML = """\
+testing: "override"
+"""
 
 BOGUS_ROOM_CONFIG_YAML = ""
 
@@ -1530,7 +1539,7 @@ def test_sdtc_ctor(installation_config, temp_dir, stem, override, which):
     if which is None:
         expectation = pytest.raises(config.RagDbExactlyOneOfStemOrOverride)
     else:
-        expectation = contextlib.nullcontext()
+        expectation = NoRaise
 
     if stem is not None:
         from_stem = db_rag_path / f"{stem}.lancedb"
@@ -1631,6 +1640,78 @@ def test_sdtc_from_yaml(
 
 
 @pytest.mark.parametrize(
+    "hrc_override_yaml, hrc_override_kw",
+    [
+        (None, {}),
+        (HRC_OVERRIDE_YAML, HRC_OVERRIDE_KW),
+    ],
+)
+@pytest.mark.parametrize(
+    "w_config_path, expectation",
+    [
+        (False, pytest.raises(config.NoConfigPath)),
+        (True, NoRaise),
+    ],
+)
+@mock.patch("soliplex.config.hr_config")
+def test_sdt_haiku_rag_config(
+    hrc_module_mock,
+    installation_config,
+    temp_dir,
+    w_config_path,
+    expectation,
+    hrc_override_yaml,
+    hrc_override_kw,
+):
+    app_config_klass = hrc_module_mock.AppConfig
+    hrc_module_mock.load_yaml_config.return_value = HRC_OVERRIDE_KW
+
+    base_hr_config = mock.Mock(spec_set=["model_dump"])
+    base_hrc = base_hr_config.model_dump.return_value = {
+        "testing": "base",
+        "other": "base",
+    }
+    installation_config.haiku_rag_config = base_hr_config
+
+    room_dir = temp_dir / "rooms" / "testroom"
+    room_dir.mkdir(parents=True)
+    override_db = room_dir / "rag.lancedb"
+    config_path = room_dir / "room_config.yaml"
+
+    kw = {}
+
+    if w_config_path:
+        kw["_config_path"] = config_path
+
+    if hrc_override_yaml is not None:
+        hr_config_file = room_dir / "haiku.rag.yaml"
+        hr_config_file.write_text(hrc_override_yaml)
+
+    sdt_config = config.SearchDocumentsToolConfig(
+        _installation_config=installation_config,
+        rag_lancedb_override_path=override_db,
+        **kw,
+    )
+
+    with expectation as expected:
+        found = sdt_config.haiku_rag_config
+
+    if expected is None:
+        if hrc_override_yaml is not None:
+            assert found is app_config_klass.model_validate.return_value
+
+            app_config_klass.model_validate.assert_called_once_with(
+                base_hrc | hrc_override_kw
+            )
+            hrc_module_mock.load_yaml_config.assert_called_once_with(
+                hr_config_file,
+            )
+
+        else:
+            assert found is base_hr_config
+
+
+@pytest.mark.parametrize(
     "stem, override, which",
     [
         ("testing", None, "stem"),
@@ -1660,7 +1741,7 @@ def test_sdtc_rag_lance_db_path(
         if stem != "nonesuch":
             from_stem.mkdir()
             expected = from_stem
-            expectation = contextlib.nullcontext()
+            expectation = NoRaise
         else:
             expectation = pytest.raises(config.RagDbFileNotFound)
             expected = None
@@ -1670,7 +1751,7 @@ def test_sdtc_rag_lance_db_path(
         kw["rag_lancedb_override_path"] = override
         from_override = pathlib.Path(override)
         if "nonesuch" not in override:
-            expectation = contextlib.nullcontext()
+            expectation = NoRaise
             from_override.mkdir(exist_ok=True)
             expected = from_override
         else:
@@ -3148,7 +3229,6 @@ def test__find_configs_w_multiple(temp_dir):
         assert f_thing == e_thing
 
 
-NoRaise = contextlib.nullcontext()
 NotASecret = pytest.raises(config.NotASecret)
 
 
