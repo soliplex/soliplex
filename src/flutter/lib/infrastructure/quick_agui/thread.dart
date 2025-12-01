@@ -13,6 +13,7 @@ class Thread {
   final String id;
   final ag_ui.AgUiClient client;
   final List<ag_ui.Tool> _tools;
+  final Map<String, Future<String> Function(ag_ui.ToolCall)> _toolExecutors;
   final List<ag_ui.Run> _runs = [];
   final StreamController<ag_ui.Message> _messagesController;
   final StreamController<ag_ui.State> _statesController;
@@ -25,7 +26,10 @@ class Thread {
     required this.id,
     required this.client,
     List<ag_ui.Tool> tools = const <ag_ui.Tool>[],
+    Map<String, Future<String> Function(ag_ui.ToolCall)> toolExecutors =
+        const <String, Future<String> Function(ag_ui.ToolCall)>{},
   }) : _tools = tools,
+       _toolExecutors = toolExecutors,
        _messagesController = StreamController.broadcast(),
        _statesController = StreamController.broadcast() {
     stateStream.forEach((s) => currentState = s);
@@ -40,7 +44,7 @@ class Thread {
 
   Stream<ag_ui.State> get stateStream => _statesController.stream;
 
-  Future<void> startRun({
+  Future<List<ag_ui.ToolMessage>> startRun({
     required String endpoint,
     required String runId,
     required ag_ui.UserMessage message,
@@ -136,6 +140,55 @@ class Thread {
         default:
           debugPrint("Ignored $event");
       }
+    }
+
+    final pendingToolCalls = _toolRegistry.pendingCalls;
+    if (pendingToolCalls.isEmpty) {
+      return [];
+    }
+    final results = await _executeClientTools(pendingToolCalls.toList());
+    return results;
+  }
+
+  Future<List<ag_ui.ToolMessage>> _executeClientTools(
+    List<ag_ui.ToolCall> toolCalls,
+  ) async {
+    final results = await Future.wait(
+      toolCalls.map((toolCall) => _executeClientTool(toolCall)),
+    );
+
+    final toolMessages = <ag_ui.ToolMessage>[];
+    for (int i = 0; i < results.length; i++) {
+      final toolCallId = toolCalls[i].id;
+      final result = results[i];
+
+      toolMessages.add(
+        ag_ui.ToolMessage(
+          // TODO: may need to get msg some other way (generate it or retrieve it from server).
+          id: 'msg-$toolCallId',
+          toolCallId: toolCallId,
+          content: result,
+        ),
+      );
+    }
+
+    return toolMessages;
+  }
+
+  Future<String> _executeClientTool(ag_ui.ToolCall toolCall) async {
+    final executor = _toolExecutors[toolCall.function.name];
+
+    if (executor == null) {
+      throw StateError(
+        'No executor registered for client tool: ${toolCall.function.name}',
+      );
+    }
+
+    try {
+      final result = await executor(toolCall);
+      return result;
+    } catch (e) {
+      return 'ERROR: ${e.toString()}';
     }
   }
 }

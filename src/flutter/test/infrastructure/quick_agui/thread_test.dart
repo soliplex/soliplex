@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -297,10 +299,10 @@ void main() {
             toolCallId: toolCallId,
             toolCallName: toolCallName,
           ),
-          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: "{'arg1':"),
-          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: " 1, '"),
-          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: "arg2'"),
-          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: ": 2}"),
+          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: '{"arg1":'),
+          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: ' 1, "'),
+          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: 'arg2"'),
+          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: ': 2}'),
           ag_ui.ToolCallEndEvent(toolCallId: toolCallId),
           ag_ui.ToolCallResultEvent(
             messageId: 'result_$toolCallId',
@@ -338,7 +340,7 @@ void main() {
       final functionCall = toolCall.function;
 
       expect(functionCall.name, toolCallName);
-      expect(functionCall.arguments, "{'arg1': 1, 'arg2': 2}");
+      expect(functionCall.arguments, '{"arg1": 1, "arg2": 2}');
 
       expect(
         msg2,
@@ -347,6 +349,80 @@ void main() {
             .having((m) => m.id, 'message id', equals('result_$toolCallId')),
       );
     }, timeout: Timeout(Duration(seconds: 2)));
+  });
+
+  group('Tool call interactions', () {
+    const toolCallName = 'add-numbers';
+
+    setUp(() {
+      thread = Thread(
+        id: threadId,
+        client: client,
+        tools: [
+          ag_ui.Tool(
+            name: toolCallName,
+            parameters: {
+              'schema': 'json-schema.org',
+              'title': 'Two Integer Inputs',
+              'description':
+                  'A schema for an object containing two integer inputs.',
+              'type': 'object',
+              'required': ['input1', 'input2'],
+              'properties': {
+                'input1': {
+                  'type': 'integer',
+                  'description': 'The first integer input.',
+                  'minimum': -2147483648,
+                  'maximum': 2147483647,
+                },
+                'input2': {
+                  'type': 'integer',
+                  'description': 'The second integer input.',
+                  'minimum': -2147483648,
+                  'maximum': 2147483647,
+                },
+              },
+              'additionalProperties': false,
+            },
+            description: 'add two numbers',
+          ),
+        ],
+        toolExecutors: {
+          toolCallName: (toolCall) async {
+            final arguments = jsonDecode(toolCall.function.arguments);
+            return '{"sum":${arguments['input1'] + arguments['input2']}}';
+          },
+        },
+      );
+    });
+
+    test('Client side tool call', () async {
+      const toolCallId = 'tool-call-id';
+      const toolCallName = 'add-numbers';
+
+      clientWillReceive(
+        client,
+        aRunWithEvents(threadId, runId, [
+          ag_ui.ToolCallStartEvent(
+            toolCallId: toolCallId,
+            toolCallName: toolCallName,
+          ),
+          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: '{"input1":'),
+          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: ' 1, "'),
+          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: 'input2"'),
+          ag_ui.ToolCallArgsEvent(toolCallId: toolCallId, delta: ': 2}'),
+          ag_ui.ToolCallEndEvent(toolCallId: toolCallId),
+        ]),
+      );
+
+      final [result] = await thread.startRun(
+        endpoint: 'agent',
+        runId: runId,
+        message: ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!'),
+      );
+
+      expect(result.content, equals('{"sum":3}'));
+    });
   });
 }
 
