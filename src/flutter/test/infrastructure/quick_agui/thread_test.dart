@@ -166,81 +166,87 @@ void main() {
       );
     });
 
-    group('Second run starting with user message', () {
-      setUp(() async {
-        clientWillReceive(
-          client,
-          aRunWithEvents(threadId, 'run-id-1', [
-            ag_ui.TextMessageChunkEvent(messageId: 'msg-2', delta: 'hello'),
-          ]),
-        );
-
-        await thread.startRun(
-          endpoint: 'agent',
-          runId: 'run-id-1',
-          messages: [ag_ui.UserMessage(id: 'msg-1', content: "hi")],
-        );
-      });
-
-      test('sends message history along the new user message', () async {
-        clientWillReceive(
-          client,
-          aRunWithEvents(threadId, 'run-id-2', [
-            ag_ui.TextMessageChunkEvent(
-              messageId: 'msg-4',
-              delta: 'No problem',
-            ),
-          ]),
-        );
-
-        await thread.startRun(
-          endpoint: 'agent',
-          runId: 'run-id-2',
-          messages: [ag_ui.UserMessage(id: 'msg-3', content: "Thanks")],
-        );
-
-        final captured = captureRunAgentInput(client);
-        final [msg0, msg1, msg2, ...] = captured.messages!;
-        expect(msg0, isUserMsg(id: 'msg-1', msg: 'hi'));
-        expect(msg1, isAssistantMsg(id: 'msg-2', msg: 'hello'));
-        expect(msg2, isUserMsg(id: 'msg-3', msg: 'Thanks'));
-      });
-
-      test(
-        'patch current state upon receiving state delta event',
-        () async {
+    group('Second run', () {
+      group('starting with user message', () {
+        setUp(() async {
           clientWillReceive(
             client,
-            aRunWithEvents(threadId, runId, [
-              ag_ui.StateSnapshotEvent(
-                snapshot: {"firstName": "Tony", "lastName": "Stark"},
-              ),
-              ag_ui.StateDeltaEvent(
-                delta: [
-                  {"op": "replace", "path": "/lastName", "value": "Not Stark"},
-                ],
+            aRunWithEvents(threadId, 'run-id-1', [
+              ag_ui.TextMessageChunkEvent(messageId: 'msg-2', delta: 'hello'),
+            ]),
+          );
+
+          await thread.startRun(
+            endpoint: 'agent',
+            runId: 'run-id-1',
+            messages: [ag_ui.UserMessage(id: 'msg-1', content: "hi")],
+          );
+        });
+
+        test('sends message history along the new user message', () async {
+          clientWillReceive(
+            client,
+            aRunWithEvents(threadId, 'run-id-2', [
+              ag_ui.TextMessageChunkEvent(
+                messageId: 'msg-4',
+                delta: 'No problem',
               ),
             ]),
           );
 
-          final upcomingStateUpdate = thread.stateStream.take(2).last;
-          thread.startRun(
-            endpoint: '--irrelevant--',
-            runId: '--irrelevant--',
-            messages: [
-              ag_ui.UserMessage(
-                id: '--irrelevant--',
-                content: '--irrelevant--',
-              ),
-            ],
+          await thread.startRun(
+            endpoint: 'agent',
+            runId: 'run-id-2',
+            messages: [ag_ui.UserMessage(id: 'msg-3', content: "Thanks")],
           );
 
-          await upcomingStateUpdate;
-          expect(thread.currentState['firstName'], 'Tony');
-          expect(thread.currentState['lastName'], 'Not Stark');
-        },
-        timeout: Timeout(Duration(seconds: 2)),
-      );
+          final captured = captureRunAgentInput(client);
+          final [msg0, msg1, msg2, ...] = captured.messages!;
+          expect(msg0, isUserMsg(id: 'msg-1', msg: 'hi'));
+          expect(msg1, isAssistantMsg(id: 'msg-2', msg: 'hello'));
+          expect(msg2, isUserMsg(id: 'msg-3', msg: 'Thanks'));
+        });
+
+        test(
+          'patch current state upon receiving state delta event',
+          () async {
+            clientWillReceive(
+              client,
+              aRunWithEvents(threadId, runId, [
+                ag_ui.StateSnapshotEvent(
+                  snapshot: {"firstName": "Tony", "lastName": "Stark"},
+                ),
+                ag_ui.StateDeltaEvent(
+                  delta: [
+                    {
+                      "op": "replace",
+                      "path": "/lastName",
+                      "value": "Not Stark",
+                    },
+                  ],
+                ),
+              ]),
+            );
+
+            final upcomingStateUpdate = thread.stateStream.take(2).last;
+            thread.startRun(
+              endpoint: '--irrelevant--',
+              runId: '--irrelevant--',
+              messages: [
+                ag_ui.UserMessage(
+                  id: '--irrelevant--',
+                  content: '--irrelevant--',
+                ),
+              ],
+            );
+
+            await upcomingStateUpdate;
+            expect(thread.currentState['firstName'], 'Tony');
+            expect(thread.currentState['lastName'], 'Not Stark');
+          },
+          timeout: Timeout(Duration(seconds: 2)),
+        );
+      });
     });
   });
 
