@@ -13,7 +13,7 @@ import 'package:soliplex_client/views/quiz_page.dart';
 class Chatroom extends ConsumerStatefulWidget {
   const Chatroom({required this.llmProvider, this.quizId, super.key});
 
-  final LlmProvider llmProvider;
+  final Future<LlmProvider> llmProvider;
   final String? quizId;
 
   @override
@@ -25,8 +25,6 @@ class _ChatroomState extends ConsumerState<Chatroom> {
 
   @override
   Widget build(BuildContext context) {
-    child = buildChatroomChild();
-
     final chatroomController = ref.read(
       currentChatroomControllerProvider.notifier,
     );
@@ -35,59 +33,71 @@ class _ChatroomState extends ConsumerState<Chatroom> {
 
     final conversationUuid = ref.watch(currentChatroomControllerProvider);
 
-    return GestureDetector(
-      onHorizontalDragEnd: (details) async {
-        // Check if the swipe was to the right
-        if (details.velocity.pixelsPerSecond.dx > 0) {
-          if (context.mounted) {
-            context.go('/chat');
-          }
+    return FutureBuilder(
+      future: widget.llmProvider,
+      builder: (context, asyncSnapshot) {
+        final provider = asyncSnapshot.data;
+        if (provider == null) {
+          return Center(child: CircularProgressIndicator());
         }
-      },
-      child: BackgroundImageStack(
-        image: imageBytes != null
-            ? MemoryImage(imageBytes)
-            : AssetImage('assets/images/ic_launcher.png'),
-        child: Column(
-          children: [
-            Container(
-              alignment: Alignment.topRight,
-              padding: EdgeInsets.only(right: 4.0),
-              child: widget.quizId == null
-                  ? NewConversationButton(
-                      chatroomController: chatroomController,
-                      enabled: conversationUuid != null,
-                      prompt:
-                          'Would you like to start a new conversation?\n'
-                          'You can return to this conversation later.',
-                      onPressed: conversationUuid != null
-                          ? () async {
-                              widget.llmProvider.history = [];
-                              chatroomController.updateConversationUuid(null);
-                            }
-                          : null,
-                    )
-                  : NewConversationButton(
-                      chatroomController: chatroomController,
-                      prompt:
-                          'Would you like to restart?\n'
-                          'You will lose your current progress in the quiz.',
-                      enabled: true,
-                      onPressed: () async {
-                        setState(() {
-                          child = buildChatroomChild();
-                        });
-                      },
-                    ),
+        child = buildChatroomChild(provider);
+        return GestureDetector(
+          onHorizontalDragEnd: (details) async {
+            // Check if the swipe was to the right
+            if (details.velocity.pixelsPerSecond.dx > 0) {
+              if (context.mounted) {
+                context.go('/chat');
+              }
+            }
+          },
+          child: BackgroundImageStack(
+            image: imageBytes != null
+                ? MemoryImage(imageBytes)
+                : AssetImage('assets/images/ic_launcher.png'),
+            child: Column(
+              children: [
+                Container(
+                  alignment: Alignment.topRight,
+                  padding: EdgeInsets.only(right: 4.0),
+                  child: widget.quizId == null
+                      ? NewConversationButton(
+                          chatroomController: chatroomController,
+                          enabled: conversationUuid != null,
+                          prompt:
+                              'Would you like to start a new conversation?\n'
+                              'You can return to this conversation later.',
+                          onPressed: conversationUuid != null
+                              ? () async {
+                                  provider.history = [];
+                                  chatroomController.updateConversationUuid(
+                                    null,
+                                  );
+                                }
+                              : null,
+                        )
+                      : NewConversationButton(
+                          chatroomController: chatroomController,
+                          prompt:
+                              'Would you like to restart?\n'
+                              'You will lose your current progress in the quiz.',
+                          enabled: true,
+                          onPressed: () async {
+                            setState(() {
+                              child = buildChatroomChild(provider);
+                            });
+                          },
+                        ),
+                ),
+                Expanded(child: child ?? Container()),
+              ],
             ),
-            Expanded(child: child ?? Container()),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
-  Widget buildChatroomChild() {
+  Widget buildChatroomChild(LlmProvider provider) {
     final llmStyle = LlmChatViewStyle.resolve(
       LlmChatViewStyle(
         backgroundColor: Colors.transparent,
@@ -128,7 +138,7 @@ class _ChatroomState extends ConsumerState<Chatroom> {
     );
 
     return widget.quizId == null
-        ? ChatPage(llmProvider: widget.llmProvider, style: llmStyle)
+        ? ChatPage(llmProvider: provider, style: llmStyle)
         : QuizPage(quizId: widget.quizId!, style: llmStyle);
   }
 }

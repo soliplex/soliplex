@@ -62,6 +62,7 @@ class Thread {
       runId: runId,
       messages: messageHistory,
       state: state,
+      tools: _tools,      
     );
 
     await for (final event in client.runAgent(endpoint, agentInput)) {

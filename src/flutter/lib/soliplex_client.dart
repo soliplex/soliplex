@@ -22,12 +22,14 @@ class SoliplexClient extends ConsumerWidget {
   final Widget loginPage;
   final SecureTokenStorage secureTokenStorage;
   final String postAuthRedirectUrl;
+  final List<String> chatVariables;
 
   const SoliplexClient({
     required this.title,
     required this.loginPage,
     required this.secureTokenStorage,
     required this.postAuthRedirectUrl,
+    required this.chatVariables,
     super.key,
   });
 
@@ -114,12 +116,14 @@ class SoliplexClient extends ConsumerWidget {
                     initialHistory = state.extra as List<ChatMessage>;
                   }
 
-                  final provider = ref
+                  final providerFuture = ref
                       .read(pydanticProviderController)
                       .buildProvider(
                         chatroomController: chatroomController,
                         appStateController: appStateNotifier,
                         initialHistory: initialHistory,
+                        endpoint: 'v1/rooms/${state.pathParameters['roomId']!}',
+                        inquireInput: () => showInputDialog(context),
                       );
 
                   final appState = ref.read(appStateController);
@@ -127,7 +131,9 @@ class SoliplexClient extends ConsumerWidget {
                   appState.canNavigate = true;
 
                   return NoTransitionPage(
-                    child: Chatroom(llmProvider: provider),
+                    child: Chatroom(
+                      llmProvider: providerFuture,
+                    ),
                   );
                 },
                 redirect: (context, state) async {
@@ -184,12 +190,14 @@ class SoliplexClient extends ConsumerWidget {
                     appStateController.notifier,
                   );
 
-                  final provider = ref
+                  final providerFuture = ref
                       .read(pydanticProviderController)
                       .buildProvider(
                         chatroomController: chatroomController,
                         appStateController: appStateNotifier,
                         initialHistory: [],
+                        endpoint: 'v1/rooms/${state.pathParameters['roomId']!}',
+                        inquireInput: () => showInputDialog(context),
                       );
 
                   final appState = ref.read(appStateController);
@@ -201,7 +209,7 @@ class SoliplexClient extends ConsumerWidget {
 
                   return NoTransitionPage(
                     child: Chatroom(
-                      llmProvider: provider,
+                      llmProvider: providerFuture,
                       quizId: state.pathParameters['quizId']!,
                     ),
                   );
@@ -273,4 +281,51 @@ class SoliplexClient extends ConsumerWidget {
     }
     return positions;
   }
+}
+
+
+/// Displays a dialog with a text field and returns the entered String.
+/// Returns null if the dialog is dismissed without pressing "OK".
+Future<String?> showInputDialog(BuildContext context) {
+  // Controller to get the text from the TextField
+  final TextEditingController _textController = TextEditingController();
+
+  return showDialog<String>(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: const Text('Enter Text'),
+        content: TextField(
+          controller: _textController,
+          autofocus: true, // Focus on the field when the dialog opens
+          decoration: const InputDecoration(
+            hintText: 'Type something...',
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (value) {
+            // Optional: Dismiss the dialog and return value on pressing Enter/Done
+            Navigator.of(context).pop(value);
+          },
+        ),
+        actions: <Widget>[
+          // 1. Cancel button: dismisses the dialog and returns null
+          TextButton(
+            child: const Text('Cancel'),
+            onPressed: () {
+              // Pop the dialog and explicitly return null (or nothing)
+              Navigator.of(context).pop();
+            },
+          ),
+          // 2. OK button: dismisses the dialog and returns the text field's value
+          TextButton(
+            child: const Text('OK'),
+            onPressed: () {
+              // Pop the dialog and pass the text field's current value back
+              Navigator.of(context).pop(_textController.text);
+            },
+          ),
+        ],
+      );
+    },
+  );
 }

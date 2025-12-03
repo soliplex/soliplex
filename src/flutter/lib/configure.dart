@@ -2,11 +2,12 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+
 import 'package:soliplex_client/controllers.dart';
 import 'package:soliplex_client/controllers/app_state_controller.dart';
 import 'package:soliplex_client/controllers/current_chatroom_controller.dart';
@@ -247,6 +248,7 @@ Future<Widget> configure() async {
       loginPage: loginPage,
       secureTokenStorage: secureTokenStorage,
       postAuthRedirectUrl: webChatUrl,
+      chatVariables: validChatVariables,
     ),
   );
 }
