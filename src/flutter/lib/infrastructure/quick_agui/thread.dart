@@ -48,6 +48,7 @@ class Thread {
     required String endpoint,
     required String runId,
     List<ag_ui.Message>? messages,
+    dynamic state,
   }) async {
     final run = ag_ui.Run(threadId: id, runId: runId);
     _runs.add(run);
@@ -60,6 +61,7 @@ class Thread {
       threadId: id,
       runId: runId,
       messages: messageHistory,
+      state: state,
     );
 
     await for (final event in client.runAgent(endpoint, agentInput)) {

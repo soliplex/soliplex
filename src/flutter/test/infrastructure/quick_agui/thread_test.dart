@@ -247,6 +247,26 @@ void main() {
           timeout: Timeout(Duration(seconds: 2)),
         );
       });
+
+      group("starts with a patched state", () {
+        test("the patched state is sent to the agent", () async {
+          clientWillReceive(
+            client,
+            aRunWithEvents(threadId, '--irrelevant-run-id--', []),
+          );
+          thread.startRun(
+            endpoint: '--irrelevant-endpoint--',
+            runId: '--irrelevant-run-id--',
+            messages: [],
+            state: {'firstName': 'Tony', 'lastName': 'Stark'},
+          );
+          final submittedState = captureRunAgentInput(client).state;
+          expect(
+            submittedState,
+            equals({'firstName': 'Tony', 'lastName': 'Stark'}),
+          );
+        });
+      });
     });
   });
 
@@ -457,7 +477,7 @@ List<ag_ui.BaseEvent> aRunWithEvents(
 }
 
 ag_ui.SimpleRunAgentInput captureRunAgentInput(ag_ui.AgUiClient client) {
-  return verify(() => client.runAgent('agent', captureAny())).captured.last
+  return verify(() => client.runAgent(any(), captureAny())).captured.last
       as ag_ui.SimpleRunAgentInput;
 }
 
