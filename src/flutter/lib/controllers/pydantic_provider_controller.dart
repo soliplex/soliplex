@@ -1,8 +1,9 @@
+import 'package:ag_ui/ag_ui.dart' as ag_ui;
 import 'package:flutter_ai_toolkit/flutter_ai_toolkit.dart';
 
+import 'package:soliplex_client/agui_provider.dart';
 import 'package:soliplex_client/controllers/current_chatroom_controller.dart';
 import 'package:soliplex_client/oidc_client.dart';
-import 'package:soliplex_client/pydantic_provider.dart';
 import 'package:soliplex_client/pydantic_quiz_provider.dart';
 
 import 'app_state_controller.dart';
@@ -25,27 +26,31 @@ class PydanticProviderController {
       oidcClient = current.oidcClient,
       chatVariables = current.chatVariables;
 
+
   final String baseServiceUrl;
   final String destinationUrl;
   final String destinationQuizUrl;
   final OidcClient oidcClient;
   final List<String> chatVariables;
 
-  LlmProvider buildProvider({
+  Future<LlmProvider> buildProvider({
     required CurrentChatroomController chatroomController,
     required AppStateController appStateController,
+    required String endpoint,
+    required Future<String?> Function() inquireInput,
     List<ChatMessage>? initialHistory,
   }) {
-    final pydanticProvider = PydanticAIProvider(
-      destinationUrl,
-      oidcClient: oidcClient,
-      initialHistory: initialHistory,
-      chatroomController: chatroomController,
+    return AguiProvider.initialize(
+      client: ag_ui.AgUiClient(
+        httpClient: oidcClient,
+        config: ag_ui.AgUiClientConfig(baseUrl: baseServiceUrl),
+      ),      
+      baseUrl: baseServiceUrl,
+      endpoint: endpoint,
       appState: appStateController,
       chatVariables: chatVariables,
+      inquireInput: inquireInput,
     );
-
-    return pydanticProvider;
   }
 
   LlmProvider buildQuizProvider({
