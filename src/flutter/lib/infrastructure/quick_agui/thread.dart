@@ -47,15 +47,14 @@ class Thread {
   Future<List<ag_ui.ToolMessage>> startRun({
     required String endpoint,
     required String runId,
-    required List<ag_ui.Message> messages,
+    List<ag_ui.Message>? messages,
   }) async {
     final run = ag_ui.Run(threadId: id, runId: runId);
     _runs.add(run);
 
-    messageHistory.addAll(messages);
-    for (final message in messages) {
-      _messagesController.add(message);
-    }
+    // TODO: should we synchronise the `messageHistory` iterable by listening to the message stream?
+    messageHistory.addAll(messages ?? []);
+    (messages ?? []).forEach(_messagesController.add);
 
     final agentInput = ag_ui.SimpleRunAgentInput(
       threadId: id,
