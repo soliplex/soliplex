@@ -186,18 +186,11 @@ class SoliplexClient extends ConsumerWidget {
                     currentChatroomControllerProvider.notifier,
                   );
 
-                  final appStateNotifier = ref.read(
-                    appStateController.notifier,
-                  );
-
-                  final providerFuture = ref
+                  final provider = ref
                       .read(pydanticProviderController)
-                      .buildProvider(
+                      .buildQuizProvider(
                         chatroomController: chatroomController,
-                        appStateController: appStateNotifier,
                         initialHistory: [],
-                        endpoint: 'v1/rooms/${state.pathParameters['roomId']!}',
-                        inquireInput: () => showInputDialog(context),
                       );
 
                   final appState = ref.read(appStateController);
@@ -209,7 +202,7 @@ class SoliplexClient extends ConsumerWidget {
 
                   return NoTransitionPage(
                     child: Chatroom(
-                      llmProvider: providerFuture,
+                      llmProvider: Future.value(provider),
                       quizId: state.pathParameters['quizId']!,
                     ),
                   );
