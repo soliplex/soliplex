@@ -151,6 +151,8 @@ class AguiProvider extends LlmProvider with ChangeNotifier {
       id: '${_thread.id}_${runId}_user_message_id',
       content: finalPrompt,
     );
+    _thread.messageHistory.add(userMessage);
+    notifyListeners();
 
     debugPrint('initial run id: $runId');
     final toolCallsFuture = _thread.startRun(
@@ -160,7 +162,7 @@ class AguiProvider extends LlmProvider with ChangeNotifier {
         runId: runId,
       ),
       runId: runId,
-      messages: [userMessage],
+      messages: [],
     );
 
     final toolResults = await toolCallsFuture;
