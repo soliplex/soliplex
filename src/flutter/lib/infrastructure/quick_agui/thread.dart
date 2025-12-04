@@ -67,7 +67,7 @@ class Thread {
       runId: runId,
       messages: messageHistory,
       state: state,
-      tools: _tools,      
+      tools: _tools,
     );
 
     await for (final event in client.runAgent(endpoint, agentInput)) {
@@ -159,6 +159,9 @@ class Thread {
       return [];
     }
     final results = await _executeClientTools(pendingToolCalls.toList());
+    for (final result in results) {
+      _toolRegistry.markCompleted(result.toolCallId, result);
+    }
     return results;
   }
 
