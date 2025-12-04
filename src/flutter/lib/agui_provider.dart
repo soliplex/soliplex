@@ -14,18 +14,19 @@ class AguiProvider extends LlmProvider with ChangeNotifier {
   final String initialRunId;
   final String baseUrl;
   final String endpoint;
+  final http.Client httpClient;
   final AppStateController appState;
   final List<String> chatVariables;
 
   static Future<AguiProvider> initialize({
-    required ag_ui.AgUiClient client,
+    required ag_ui.AgUiClient aguiClient,
+    required http.Client httpClient,
     required String baseUrl,
     required String endpoint,
     required AppStateController appState,
     required List<String> chatVariables,
     required Future<String?> Function() inquireInput,
   }) async {
-    final httpClient = http.Client();
     debugPrint('body in initialize: ${jsonEncode({})}');
     final response = await httpClient.post(
       Uri.parse('$baseUrl/$endpoint/agui'),
@@ -39,7 +40,7 @@ class AguiProvider extends LlmProvider with ChangeNotifier {
     return AguiProvider._(
       Thread(
         id: jsonResponse['thread_id'],
-        client: client,
+        client: aguiClient,
         tools: [
           ag_ui.Tool(
             name: 'query_position',
@@ -59,6 +60,7 @@ class AguiProvider extends LlmProvider with ChangeNotifier {
       jsonResponse['runs'].keys.first,
       baseUrl,
       endpoint,
+      httpClient,
       appState,
       chatVariables,
     );
@@ -69,6 +71,7 @@ class AguiProvider extends LlmProvider with ChangeNotifier {
     this.initialRunId,
     this.baseUrl,
     this.endpoint,
+    this.httpClient,
     this.appState,
     this.chatVariables,
   );
@@ -92,9 +95,7 @@ class AguiProvider extends LlmProvider with ChangeNotifier {
       return initialRunId;
     }
     debugPrint('returning new run id');
-    final client = http.Client();
-
-    final response = await client.post(
+    final response = await httpClient.post(
       Uri.parse('$baseUrl/$endpoint/agui/${_thread.id}'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({}),

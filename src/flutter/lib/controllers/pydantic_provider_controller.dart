@@ -41,10 +41,11 @@ class PydanticProviderController {
     List<ChatMessage>? initialHistory,
   }) {
     return AguiProvider.initialize(
-      client: ag_ui.AgUiClient(
+      aguiClient: ag_ui.AgUiClient(
         httpClient: oidcClient,
         config: ag_ui.AgUiClientConfig(baseUrl: baseServiceUrl),
-      ),      
+      ),
+      httpClient: oidcClient,
       baseUrl: baseServiceUrl,
       endpoint: endpoint,
       appState: appStateController,
