@@ -79,8 +79,20 @@ class AguiProvider extends LlmProvider with ChangeNotifier {
   @override
   Iterable<ChatMessage> get history {
     return _thread.messageHistory
-        .map(_toFlutterToolkitMessage)
-        .where((msg) => msg.text?.isNotEmpty ?? false);
+        .where(
+          (msg) => !isToolCallingMessage(msg) && !isToolResponseMessage(msg),
+        )
+        .map(_toFlutterToolkitMessage);
+  }
+
+  bool isToolCallingMessage(ag_ui.Message message) {
+    return message is ag_ui.AssistantMessage &&
+        (message.toolCalls ?? []).isNotEmpty &&
+        (message.content ?? '').isEmpty;
+  }
+
+  bool isToolResponseMessage(ag_ui.Message message) {
+    return message is ag_ui.ToolMessage;
   }
 
   @override
