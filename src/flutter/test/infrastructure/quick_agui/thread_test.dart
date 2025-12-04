@@ -276,49 +276,46 @@ void main() {
     });
 
     test('step events', () async {
-      clientWillReceive(
-        client,
-        aRunWithEvents(threadId, runId, [
-          ag_ui.StepStartedEvent(stepName: 'task a'),
-          ag_ui.StepFinishedEvent(stepName: 'task a'),
-          ag_ui.StepStartedEvent(stepName: 'task b'),
-          ag_ui.StepFinishedEvent(stepName: 'task b'),
-        ]),
-      );
+      final steps = [
+        ag_ui.StepStartedEvent(stepName: 'task a'),
+        ag_ui.StepFinishedEvent(stepName: 'task a'),
+        ag_ui.StepStartedEvent(stepName: 'task b'),
+        ag_ui.StepFinishedEvent(stepName: 'task b'),
+      ];
+      clientWillReceive(client, aRunWithEvents(threadId, runId, steps));
 
-      final publishedStates = thread.stateStream.take(2).toList();
+      final upcomingSteps = thread.stepsStream.take(4).toList();
       thread.startRun(
         endpoint: 'agent',
         runId: runId,
         messages: [ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!')],
       );
 
-      final [{'step': step1}, {'step': step2}] = await publishedStates;
-      expect(step1, equals('task a'));
-      expect(step2, equals('task b'));
+      final publishedSteps = await upcomingSteps;
+      expect(publishedSteps, equals(steps));
     }, timeout: Timeout(Duration(seconds: 2)));
 
     test('interleaving step events', () async {
+      final interleavedSteps = [
+        ag_ui.StepStartedEvent(stepName: 'task a'),
+        ag_ui.StepStartedEvent(stepName: 'task b'),
+        ag_ui.StepFinishedEvent(stepName: 'task a'),
+        ag_ui.StepFinishedEvent(stepName: 'task b'),
+      ];
       clientWillReceive(
         client,
-        aRunWithEvents(threadId, runId, [
-          ag_ui.StepStartedEvent(stepName: 'task a'),
-          ag_ui.StepStartedEvent(stepName: 'task b'),
-          ag_ui.StepFinishedEvent(stepName: 'task a'),
-          ag_ui.StepFinishedEvent(stepName: 'task b'),
-        ]),
+        aRunWithEvents(threadId, runId, interleavedSteps),
       );
 
-      final publishedStates = thread.stateStream.take(2).toList();
+      final upcomingSteps = thread.stepsStream.take(4).toList();
       thread.startRun(
         endpoint: 'agent',
         runId: runId,
         messages: [ag_ui.UserMessage(id: 'msg-id-1', content: 'hi!')],
       );
 
-      final [{'step': step1}, {'step': step2}] = await publishedStates;
-      expect(step1, equals('task a'));
-      expect(step2, equals('task b'));
+      final publishedSteps = await upcomingSteps;
+      expect(publishedSteps, equals(interleavedSteps));
     }, timeout: Timeout(Duration(seconds: 2)));
 
     test('tool call events', () async {

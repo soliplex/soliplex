@@ -17,6 +17,8 @@ class Thread {
   final List<ag_ui.Run> _runs = [];
   final StreamController<ag_ui.Message> _messagesController;
   final StreamController<ag_ui.State> _statesController;
+  final StreamController<ag_ui.BaseEvent> _stepsController;
+
   ag_ui.State? currentState;
   final List<ag_ui.Message> messageHistory = [];
 
@@ -31,7 +33,8 @@ class Thread {
   }) : _tools = tools,
        _toolExecutors = toolExecutors,
        _messagesController = StreamController.broadcast(),
-       _statesController = StreamController.broadcast() {
+       _statesController = StreamController.broadcast(),
+       _stepsController = StreamController.broadcast() {
     stateStream.forEach((s) => currentState = s);
   }
 
@@ -43,6 +46,8 @@ class Thread {
   Stream<ag_ui.Message> get messageStream => _messagesController.stream;
 
   Stream<ag_ui.State> get stateStream => _statesController.stream;
+
+  Stream<ag_ui.BaseEvent> get stepsStream => _stepsController.stream;
 
   Future<List<ag_ui.ToolMessage>> startRun({
     required String endpoint,
@@ -92,8 +97,11 @@ class Thread {
           messageHistory.add(message);
           _messagesController.add(message);
 
-        case ag_ui.StepStartedEvent(stepName: final stepName):
-          _statesController.add({'step': stepName});
+        case ag_ui.StepStartedEvent():
+          _stepsController.add(event);
+
+        case ag_ui.StepFinishedEvent():
+          _stepsController.add(event);
 
         case ag_ui.ToolCallStartEvent(
           toolCallId: final id,
