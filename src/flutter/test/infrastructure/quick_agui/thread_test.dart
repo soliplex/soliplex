@@ -451,6 +451,23 @@ void main() {
       );
 
       expect(result.content, equals('{"sum":3}'));
+
+      clientWillReceive(
+        client,
+        aRunWithEvents(threadId, runId, [
+          ag_ui.TextMessageChunkEvent(
+            messageId: 'msg-3',
+            delta: 'The sum is 3.',
+          ),
+        ]),
+      );
+
+      final result2 = await thread.startRun(
+        endpoint: 'agent',
+        runId: '$runId-2',
+        messages: [result],
+      );
+      expect(result2, isEmpty);
     });
   });
 }
