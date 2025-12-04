@@ -150,9 +150,9 @@ class AguiProvider extends LlmProvider with ChangeNotifier {
       messages: [userMessage],
     );
 
-    final toolCalls = await toolCallsFuture;
+    final toolResults = await toolCallsFuture;
 
-    while (toolCalls.isNotEmpty) {
+    while (toolResults.isNotEmpty) {
       final newRunId = await _generateRunId();
       debugPrint('new run id: $runId');
       final innerToolCallsFuture = _thread.startRun(
@@ -162,12 +162,12 @@ class AguiProvider extends LlmProvider with ChangeNotifier {
           runId: newRunId,
         ),
         runId: newRunId,
-        messages: toolCalls,
+        messages: toolResults,
       );
 
-      toolCalls.clear();
-      final innerToolCalls = await innerToolCallsFuture;
-      toolCalls.addAll(innerToolCalls);
+      toolResults.clear();
+      final innerToolCallResults = await innerToolCallsFuture;
+      toolResults.addAll(innerToolCallResults);
     }
 
     // The framework handles event processing and emits messages via messageStream.
