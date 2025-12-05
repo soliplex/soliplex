@@ -53,9 +53,9 @@ class AguiProvider extends LlmProvider with ChangeNotifier {
         toolExecutors: {
           'query_position': (ag_ui.ToolCall call) async {
             debugPrint('call: ${call.toJsonString()}');
-            final result = await inquireInput() ?? '';
-            debugPrint('User entered: $result');
-            return result;
+            final position = await appState.currentPosition();
+            debugPrint('User position: ${position.toJson()}');
+            return jsonEncode(position.toJson());
           },
         },
       ),
