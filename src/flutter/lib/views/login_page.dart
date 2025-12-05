@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:soliplex_client/controllers.dart';
 import 'package:soliplex_client/controllers/pydantic_provider_controller.dart';
 import 'package:soliplex_client/controllers/service_url_controller.dart';
+import 'package:soliplex_client/shared.dart';
 import 'package:soliplex_client/sso_config.dart';
 import 'package:soliplex_client/views/browser_auth_page.dart';
 import 'package:soliplex_client/views/token_auth_page.dart';
@@ -15,6 +16,7 @@ class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({
     required this.title,
     required this.ssoConfigs,
+    required this.webAuthUrl,
     required this.redirectPathPostAuthentication,
     required this.setTokenCallback,
     required this.isLoggedInCallback,
@@ -23,6 +25,7 @@ class LoginPage extends ConsumerStatefulWidget {
 
   final String title;
   final List<SsoConfig> ssoConfigs;
+  final String webAuthUrl;
   final String redirectPathPostAuthentication;
   final Function(String) setTokenCallback;
   final Future<bool> Function(WidgetRef ref) isLoggedInCallback;
@@ -52,6 +55,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final chatroomController = ref.read(
       currentChatroomControllerProvider.notifier,
     );
+    final providerController = ref.read(pydanticProviderController);
 
     return FutureBuilder(
       future: chatroomController.requestLoginSystems(),
@@ -80,13 +84,41 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         } else if (snapshot.hasData) {
           final validSystemNames = snapshot.data ?? [];
 
-          final workingSso = ssoConfigs ?? widget.ssoConfigs;
+          final ssoConfigurations = <SsoConfig>[];
 
-          final validSso = workingSso.where((e) {
-            return validSystemNames.contains(e.id.toLowerCase());
-          }).toList();
+          for (final Map<String, dynamic> endpoint in validSystemNames) {
+            try {
+              final loginRedirectUri = Uri.parse(
+                appendUrl(
+                  providerController.baseServiceUrl,
+                  'login/${endpoint['id']!}',
+                ),
+              ).replace(queryParameters: {'return_to': widget.webAuthUrl});
 
-          if (validSso.isEmpty) {
+              final endpointConfig = SsoConfig(
+                id: endpoint['id']!,
+                title: endpoint['title']!,
+                endpoint: endpoint['server_url']!,
+                tokenEndpoint:
+                    '${endpoint['server_url']}/protocol/openid-connect/token',
+                loginUrl: loginRedirectUri,
+                clientId: endpoint['client_id']!,
+                // TODO: rename. mobile app re-entry link
+                redirectUrl: 'ai.soliplex.client:/',
+                scopes: ['openid', 'email', 'profile', 'offline_access'],
+              );
+              print('adding to ssoConfig from config: $endpoint');
+              ssoConfigurations.add(endpointConfig);
+            } catch (e) {
+              debugPrint(
+                'Exception occurred while extracting login endpoint: $endpoint'
+                '\n$e',
+              );
+              continue;
+            }
+          }
+
+          if (ssoConfigurations.isEmpty) {
             return Column(
               spacing: 16.0,
               children: [
@@ -99,7 +131,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 kIsWeb
                     ? Container()
                     : CustomUrlButton(
-                        ssoConfigs: validSso,
+                        ssoConfigs: ssoConfigurations,
                         onConfirm: (newConfigs) {
                           setSsoConfigs(newConfigs);
                         },
@@ -111,7 +143,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           ref.read(oidcAuthController).oidcAuthInteractor.useAuth = true;
 
           final customUriButton = CustomUrlButton(
-            ssoConfigs: validSso,
+            ssoConfigs: ssoConfigurations,
             onConfirm: (newConfigs) {
               setSsoConfigs(newConfigs);
             },
@@ -119,12 +151,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
           return kIsWeb
               ? BrowserAuthPage(
-                  validSso,
+                  ssoConfigurations,
                   title: widget.title,
                   customUriButton: customUriButton,
                 )
               : TokenAuthPage(
-                  ssoConfigs: validSso,
+                  ssoConfigs: ssoConfigurations,
                   setTokenCallback: widget.setTokenCallback,
                   title: widget.title,
                   customUriButton: customUriButton,

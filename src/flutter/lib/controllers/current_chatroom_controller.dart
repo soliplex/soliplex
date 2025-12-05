@@ -243,14 +243,13 @@ class CurrentChatroomController extends StateNotifier<String?> {
     return imageBytes;
   }
 
-  Future<List<String>> requestLoginSystems() async {
+  Future<List<dynamic>> requestLoginSystems() async {
     final loginSystems = await _chatroomProvider.getLoginSystems(
       _shortTimeoutDuration,
     );
 
-    final systems = List<String>.from(loginSystems.values.map((e) => e['id']));
-
-    return systems;
+    return loginSystems.values.toList();
+    
   }
 
   Future<String?> retrieveMcpToken(String roomId) async {

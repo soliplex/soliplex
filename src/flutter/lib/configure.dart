@@ -17,6 +17,7 @@ import 'package:soliplex_client/controllers/service_url_controller.dart';
 import 'package:soliplex_client/oidc_auth_interactor.dart';
 import 'package:soliplex_client/oidc_client.dart';
 import 'package:soliplex_client/secure_url_storage.dart';
+import 'package:soliplex_client/shared.dart';
 import 'package:soliplex_client/views/login_page.dart';
 
 import 'secure_sso_storage.dart';
@@ -115,6 +116,7 @@ Future<Widget> configure() async {
           redirectUrl: 'ai.soliplex.client:/',
           scopes: ['openid', 'email', 'profile', 'offline_access'],
         );
+        debugPrint('adding to ssoConfig from config: $endpoint');
         ssoConfigurations.add(endpointConfig);
       } catch (e) {
         debugPrint(
@@ -189,6 +191,7 @@ Future<Widget> configure() async {
   final Widget loginPage = LoginPage(
     title: appTitle,
     ssoConfigs: ssoConfigurations,
+    webAuthUrl: webAuthUrl,
     isLoggedInCallback: (WidgetRef ref) async {
       if (kIsWeb) {
         return false;
@@ -253,23 +256,3 @@ Future<Widget> configure() async {
   );
 }
 
-String appendUrl(String base, String path) {
-  // Check if the base URL ends with a slash
-  final bool baseEndsWithSlash = base.endsWith('/');
-
-  // Check if the path starts with a slash
-  final bool pathStartsWithSlash = path.startsWith('/');
-
-  if (baseEndsWithSlash && pathStartsWithSlash) {
-    // If both have slashes, remove one from the path
-    return base + path.substring(1);
-  } else if ((baseEndsWithSlash && !pathStartsWithSlash) ||
-      (!baseEndsWithSlash && pathStartsWithSlash)) {
-    // If one has a slash and the other doesn't, just join them
-    return base + path;
-  } else {
-    // if (!baseEndsWithSlash && !pathStartsWithSlash)
-    // If neither has a slash, add one in between
-    return '$base/$path';
-  }
-}
