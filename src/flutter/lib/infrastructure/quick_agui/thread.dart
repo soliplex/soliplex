@@ -150,6 +150,18 @@ class Thread {
             JsonPatch.apply(currentState, deltas.cast<Map<String, dynamic>>()),
           );
 
+        case ag_ui.RunErrorEvent(
+          message: final errorMessage,
+          code: final errorCode,
+        ):
+          final message = ag_ui.AssistantMessage(
+            id: 'run-event-error-${event.timestamp ?? DateTime.now()}',
+            content:
+                'Error${errorCode != null ? ' (Code $errorCode)' : ''}: $errorMessage',
+          );
+          messageHistory.add(message);
+          _messagesController.add(message);
+
         default:
           debugPrint("Ignored $event");
       }
