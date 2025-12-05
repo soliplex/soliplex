@@ -241,7 +241,11 @@ class CustomUrlButton extends ConsumerWidget {
                           color: Colors.blueGrey[800],
                         ),
                       ),
-                      TextField(controller: originController),
+                      TextField(
+                        controller: originController,
+                        onSubmitted: (value) =>
+                            context.pop(originController.text),
+                      ),
                     ],
                   ),
                 ),
