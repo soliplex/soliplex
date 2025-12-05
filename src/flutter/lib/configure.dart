@@ -39,6 +39,13 @@ Future<Widget> configure() async {
 
   const servicePortArg = String.fromEnvironment('SERVICE_PORT');
 
+  final secureStorage = SecureStorageGateway(FlutterSecureStorage());
+
+  final secureSsoStorage = SecureSsoStorage(secureStorage);
+  final secureTokenStorage = SecureTokenStorage(secureStorage);
+
+  final selectedConfig = await secureSsoStorage.getSsoConfig();
+  
   if (kIsWeb) {
     final baseUri = Uri.base;
 
@@ -55,7 +62,12 @@ Future<Widget> configure() async {
     }
 
     clientSiteUrl = '$scheme://$host${port == 0 ? '' : ':${baseUri.port}'}';
-    serviceUrl = '$scheme://$host${port == 0 ? '' : ':$port'}';
+    if (selectedConfig != null) {
+      final loginUri = selectedConfig.loginUrl;
+      serviceUrl = loginUri.origin;
+    } else {
+      serviceUrl = '$scheme://$host${port == 0 ? '' : ':$port'}';
+    }
   } else {
     clientSiteUrl = 'ai.soliplex.client';
 
@@ -70,7 +82,10 @@ Future<Widget> configure() async {
       );
     }
     final port = int.tryParse(servicePortArg);
-    if (servicePortArg.isEmpty || port == null) {
+    if (selectedConfig != null) {
+      final loginUri = selectedConfig.loginUrl;
+      serviceUrl = loginUri.origin;
+    } else if (servicePortArg.isEmpty || port == null) {
       serviceUrl = serviceUrlArg;
     } else {
       serviceUrl = '$serviceUrlArg${port == 0 ? '' : ':$port'}';
@@ -129,11 +144,6 @@ Future<Widget> configure() async {
   } catch (e) {
     debugPrint('Exception while fetching login systems from backend.\n$e');
   }
-
-  final secureStorage = SecureStorageGateway(FlutterSecureStorage());
-
-  final secureSsoStorage = SecureSsoStorage(secureStorage);
-  final secureTokenStorage = SecureTokenStorage(secureStorage);
 
   // How early before OIDC Auth token expiration to preform a refresh
   const tokenExpirationBuffer = Duration(seconds: 30);
@@ -255,4 +265,3 @@ Future<Widget> configure() async {
     ),
   );
 }
-
