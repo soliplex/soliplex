@@ -35,7 +35,7 @@ class ChatPage extends ConsumerWidget {
             final data = snapshot.data;
             return Padding(
               padding: EdgeInsetsGeometry.symmetric(horizontal: 8),
-              child: Text('Phase: ${data ?? ''}'),
+              child: Text('Step: ${data ?? 'idle'}'),
             );
           },
         ),
