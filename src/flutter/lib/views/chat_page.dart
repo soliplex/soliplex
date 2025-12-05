@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:soliplex_client/agui_provider.dart';
 import 'package:soliplex_client/controllers.dart';
 import 'package:soliplex_client/views/map_page.dart';
 
@@ -24,7 +25,20 @@ class ChatPage extends ConsumerWidget {
         .roomConfig;
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        StreamBuilder(
+          stream: (llmProvider as AguiProvider).stepsStream.map<String>(
+            (e) => e.eventType.name,
+          ),
+          builder: (context, snapshot) {
+            final data = snapshot.data;
+            return Padding(
+              padding: EdgeInsetsGeometry.symmetric(horizontal: 8),
+              child: Text('Phase: ${data ?? ''}'),
+            );
+          },
+        ),
         Expanded(
           child: LlmChatView(
             provider: llmProvider,

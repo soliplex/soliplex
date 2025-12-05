@@ -71,6 +71,7 @@ class Thread {
     );
 
     await for (final event in client.runAgent(endpoint, agentInput)) {
+      _stepsController.add(event);
       switch (event) {
         case ag_ui.TextMessageChunkEvent(
           messageId: final msgId,

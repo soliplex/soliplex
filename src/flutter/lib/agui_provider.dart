@@ -18,6 +18,8 @@ class AguiProvider extends LlmProvider with ChangeNotifier {
   final AppStateController appState;
   final List<String> chatVariables;
 
+  Stream<ag_ui.BaseEvent> get stepsStream => _thread.stepsStream;
+
   static Future<AguiProvider> initialize({
     required ag_ui.AgUiClient aguiClient,
     required http.Client httpClient,
