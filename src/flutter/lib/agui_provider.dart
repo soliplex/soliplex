@@ -47,7 +47,11 @@ class AguiProvider extends LlmProvider with ChangeNotifier {
           ag_ui.Tool(
             name: 'query_position',
             description: 'query current device position',
-            parameters: {},
+            parameters: {
+              'type': 'object',
+              'properties': {},
+              'additionalProperties': false,
+            },
           ),
         ],
         toolExecutors: {
