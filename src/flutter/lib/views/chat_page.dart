@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:ag_ui/ag_ui.dart' as ag_ui;
 import 'package:flutter/material.dart';
 
 import 'package:flutter_ai_toolkit/flutter_ai_toolkit.dart';
@@ -29,7 +30,9 @@ class ChatPage extends ConsumerWidget {
       children: [
         StreamBuilder(
           stream: (llmProvider as AguiProvider).stepsStream.map<String>(
-            (e) => e.eventType.name,
+            (e) => e is ag_ui.RawEvent
+                ? (e.event['activityType'] ?? e.eventType.name)
+                : e.eventType.name,
           ),
           builder: (context, snapshot) {
             final data = snapshot.data;
