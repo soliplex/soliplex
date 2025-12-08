@@ -34,9 +34,5 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>This app can access your location when viewing status information or specifying to use your location in a message to an LLM.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>This app can access your location when viewing status information or specifying to use your location in a message to an LLM.</string>
 </dict>
 </plist>
