@@ -70,7 +70,43 @@ class Thread {
       tools: _tools,
     );
 
-    await for (final event in client.runAgent(endpoint, agentInput)) {
+    final streamTransformer =
+        StreamTransformer<ag_ui.BaseEvent, ag_ui.BaseEvent>.fromHandlers(
+          handleData: (data, sink) {
+            sink.add(data);
+          },
+          handleError: (error, stackTrace, sink) {
+            debugPrint('error: $error');
+            if (error is ag_ui.DecodingError) {
+              final event = error.actualValue;
+
+              final rawEvent = ag_ui.RawEvent(
+                event: event,
+                timestamp: ag_ui.JsonDecoder.optionalField<int>(
+                  event,
+                  'timestamp',
+                ),
+                rawEvent: event['rawEvent'],
+                source: ag_ui.JsonDecoder.optionalField<String>(
+                  event,
+                  'source',
+                ),
+              );
+
+              debugPrint('raw event: ${rawEvent.toJson()}');
+
+              sink.add(rawEvent);
+            } else {
+              throw error;
+            }
+          },
+          handleDone: (sink) {
+            sink.close();
+          },
+        );
+
+    await for (final event
+        in client.runAgent(endpoint, agentInput).transform(streamTransformer)) {
       _stepsController.add(event);
       switch (event) {
         case ag_ui.TextMessageChunkEvent(
@@ -149,6 +185,18 @@ class Thread {
           _statesController.add(
             JsonPatch.apply(currentState, deltas.cast<Map<String, dynamic>>()),
           );
+
+        case ag_ui.RawEvent(
+          event: final eventData,
+          source: final source,
+          timestamp: final timestamp,
+          rawEvent: final rawEvent,
+        ):
+          debugPrint('event: ${eventData.toString()}');
+          debugPrint('source: $source');
+          debugPrint('timestamp: $timestamp');
+          debugPrint('rawEvent: $rawEvent');
+          _stepsController.add(event);
 
         case ag_ui.RunErrorEvent(
           message: final errorMessage,
