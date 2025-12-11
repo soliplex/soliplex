@@ -138,4 +138,5 @@ async def agui_state(
     ctx: pydantic_ai.RunContext[agents.AgentDependencies],
 ) -> agui.AGUI_State:
     """Return the AGUI state."""
+    print(ctx.deps.state)
     return ctx.deps.state

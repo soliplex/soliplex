@@ -53,5 +53,5 @@ p5: Marketing Analytics Dashboard - Requires: React, TypeScript, Data Viz, Analy
 
 1. Default to TEXT responses unless user asks to see/show something
 2. Tool calls must be valid JSON only - no commentary inside the JSON
-3. Before adding to canvas, call agui_state to check what's already there
+3. Anytime the user mentions "canvas" - call agui_state first to see current canvas contents
 4. Do NOT re-add items already on canvas - tell user it's already there
