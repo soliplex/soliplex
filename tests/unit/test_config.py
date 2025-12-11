@@ -137,14 +137,12 @@ BOGUS_SDTC_CONFIG_YAML = """
 W_STEM_SDTC_CONFIG_KW = {
     "rag_lancedb_stem": "rag",
     "return_citations": True,
-    "expand_context_radius": 3,
     "search_documents_limit": 7,
     "allow_mcp": True,
 }
 W_STEM_SDTC_CONFIG_YAML = """
     rag_lancedb_stem: "rag"
     return_citations: true
-    expand_context_radius: 3
     search_documents_limit: 7
     allow_mcp: true
 """
@@ -1731,7 +1729,6 @@ def test_sdtc_ctor(installation_config, temp_dir):
 
     expected_ep = {
         "rag_lancedb_path": from_stem,
-        "expand_context_radius": 2,
         "search_documents_limit": 5,
         "return_citations": False,
     }

@@ -70,26 +70,23 @@ async def search_documents(
             limit=tool_config.search_documents_limit,
         )
 
-        if tool_config.expand_context_radius > 0:
-            results = await rag.expand_context(
-                results,
-                radius=tool_config.expand_context_radius,
-            )
+        if hr_config.search.context_radius > 0:
+            results = await rag.expand_context(results)
 
-        def _search_results(doc, score):
+        def _search_result(sr):
             if tool_config.return_citations:
                 return models.SearchResult(
-                    content=doc.content,
-                    score=score,
-                    document_uri=doc.document_uri,
+                    content=sr.content,
+                    score=sr.score,
+                    document_uri=sr.document_uri,
                 )
             else:
                 return models.SearchResult(
-                    content=doc.content,
-                    score=score,
+                    content=sr.content,
+                    score=sr.score,
                 )
 
-        return [_search_results(doc, score) for doc, score in results]
+        return [_search_result(sr) for sr in results]
 
 
 async def research_report(
