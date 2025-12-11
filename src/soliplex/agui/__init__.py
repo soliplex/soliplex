@@ -9,7 +9,7 @@ from ag_ui import core as agui_core
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 AGUI_Events = list[agui_core.BaseEvent]
-AGUI_State = dict[str, typing.Any] | None
+AGUI_State = dict[str, typing.Any]
 
 
 class UnknownThread(fastapi.HTTPException):

@@ -59,6 +59,11 @@ jobs:
         run: |
           pip list
           py.test
+      - name: Run soliplex functional tests
+        run: |
+          pip list
+          # 'tests/functional/' is excluded by default
+          py.test --no-cov -m "not needs_llm" tests/functional/
       - name: Run ruff linter
         run: |
           ruff check

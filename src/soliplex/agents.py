@@ -10,6 +10,7 @@ from pydantic_ai.models import openai as openai_models
 from pydantic_ai.providers import ollama as ollama_providers
 from pydantic_ai.providers import openai as openai_providers
 
+from soliplex import agui
 from soliplex import config
 from soliplex import mcp_client
 from soliplex import models
@@ -24,11 +25,12 @@ class AgentDependencies:
     The `state` field is required by pydantic-ai's StateHandler protocol.
     AG-UI will inject the client's state into this field for each run.
     """
+
     the_installation: typing.Any  # installation.Installation
     user: models.UserProfile = None  # TBD make required
     tool_configs: ToolConfigMap = None
     agui_emitter: typing.Any = None
-    state: dict[str, typing.Any] = dataclasses.field(default_factory=dict)
+    state: agui.AGUI_State = dataclasses.field(default_factory=dict)
 
 
 SoliplexAgent = ai_agent.AbstractAgent[AgentDependencies, typing.Any]

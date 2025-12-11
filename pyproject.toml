@@ -69,6 +69,9 @@ addopts = "--cov=soliplex --cov=tests/unit --cov-branch --cov-fail-under=100"
 filterwarnings = [
     # "ignore::DeprecationWarning:<source-package>",
 ]
+markers = [
+    "needs_llm: functest requiring an LLM",
+]
 
 [tool.coverage.run]
 omit = []

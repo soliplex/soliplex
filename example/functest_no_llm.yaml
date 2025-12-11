@@ -1,0 +1,113 @@
+#==========================================================================
+# Minimal Soliplex installation configuration
+#
+# Please See the corresponding sections 'example/installation.yaml' for
+# descriptions of the defaults for sections not configured here.
+#==========================================================================
+
+id: "soliplex-conf-functest-no-llm"
+
+#==========================================================================
+# Meta-configuration
+#==========================================================================
+
+#==========================================================================
+# Secrets
+#
+# NOTE This configuration does not wire up any external APIs / MCP client
+# tools, and therefore requires no secrets beyond the one defined below,
+# which gets auto-populated at startup if it is not found in the environment.
+#==========================================================================
+
+secrets:
+
+  # ----------------------------------------------------------------------
+  # MCP room token generation / validation secret
+  #
+  # If not set in the environment, we generate a random value at startup,
+  # which will invalidate any previously-generated MCP room tokens.
+  # ----------------------------------------------------------------------
+  - secret_name: "URL_SAFE_TOKEN_SECRET"
+    sources:
+      - kind: "env_var"
+        env_var_name: "SOLIPLEX_URL_SAFE_TOKEN_SECRET"
+      - kind: "random_chars"
+
+#==========================================================================
+# Environment Variables
+#==========================================================================
+
+environment:
+
+  #------------------------------------------------------------------------
+  #  This profile explicitly avoids defining the 'OLLAMA_BASE_URL'
+  #  envvar, FBO running functests under CI without any LLM interaction.
+  #------------------------------------------------------------------------
+  #- "OLLAMA_BASE_URL"
+
+  #------------------------------------------------------------------------
+  # 'soliplex': on-disk configuration locations
+  #------------------------------------------------------------------------
+
+  - name: "INSTALLATION_PATH"
+    value: "file:."
+
+  - name: "RAG_LANCE_DB_PATH"
+    value: "file:../db/rag"
+
+
+#==========================================================================
+# Global 'haiku-rag' configuration
+#==========================================================================
+
+haiku_rag_config_file: "./haiku.rag.yaml"
+
+
+#==========================================================================
+# Agent configurations
+#==========================================================================
+
+agent_configs:
+
+  - id: "default_chat"
+    model_name: "qwen3:latest"
+    system_prompt: |
+      You are an expert AI assistant specializing in information retrieval.
+
+      Your answers should be clear, concise, and ready for production use.
+
+      Always provide code or examples in Markdown blocks.
+
+  - id: "alternate_chat"
+    model_name: "gpt-oss:20b"
+    system_prompt: |
+      You are an expert AI assistant specializing in information retrieval.
+
+      Your answers should be clear, concise, and ready for production use.
+
+      Always provide code or examples in Markdown blocks.
+
+#==========================================================================
+# OIDC authentication provider configuration
+#==========================================================================
+
+#==========================================================================
+# Rooms configuration
+#
+# We avoid the default here, because the 'mcptest' room uses the SmitheryAI
+# registry, and hence requires additional secrets
+#==========================================================================
+room_paths:
+  - "./rooms/haiku"
+  - "./rooms/joker"
+  - "./rooms/faux"
+  - "./rooms/quiztest"
+  - "./rooms/research"
+
+#==========================================================================
+# Completions configuration
+#==========================================================================
+
+#==========================================================================
+# Quizzes configuration
+#==========================================================================

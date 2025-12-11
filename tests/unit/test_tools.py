@@ -16,6 +16,11 @@ USER = {
 QUESTION = "What are postal regulations regarding lithium batteries?"
 
 
+@pytest.fixture
+def the_installation():
+    return mock.create_autospec(installation.Installation)
+
+
 @pytest.mark.anyio
 @mock.patch("soliplex.tools.datetime")
 async def test_get_current_datetime(dt_module):
@@ -31,8 +36,11 @@ async def test_get_current_datetime(dt_module):
 
 
 @pytest.mark.anyio
-async def test_get_current_user():
-    deps = mock.create_autospec(agents.AgentDependencies, user=USER)
+async def test_get_current_user(the_installation):
+    deps = agents.AgentDependencies(
+        the_installation=the_installation,
+        user=USER,
+    )
     ctx = mock.Mock(spec_set=(["deps"]), deps=deps)
 
     found = await tools.get_current_user(ctx)
@@ -115,10 +123,10 @@ async def test_search_documents(
 
 
 @pytest.mark.anyio
-async def test_rag_research_wo_tool_config():
+async def test_rag_research_wo_tool_config(the_installation):
     agui_emitter = mock.create_autospec(rag_agui.AGUIEmitter)
-    deps = mock.create_autospec(
-        agents.AgentDependencies,
+    deps = agents.AgentDependencies(
+        the_installation=the_installation,
         user=USER,
         tool_configs={},
         agui_emitter=agui_emitter,
@@ -136,7 +144,13 @@ async def test_rag_research_wo_tool_config():
 @mock.patch("soliplex.tools.rag_research_state")
 @mock.patch("soliplex.tools.rag_research_graph")
 @mock.patch("soliplex.tools.rag_research")
-async def test_rag_research(rr, rr_graph, rr_state, rag_client):
+async def test_rag_research(
+    rr,
+    rr_graph,
+    rr_state,
+    rag_client,
+    the_installation,
+):
     rc_class = rr.ResearchContext
 
     brg_func = rr_graph.build_research_graph = mock.Mock()
@@ -151,7 +165,6 @@ async def test_rag_research(rr, rr_graph, rr_state, rag_client):
     client = hr.__aenter__.return_value
 
     hr_config = mock.Mock(spec_set=())
-    the_installation = mock.create_autospec(installation.Installation)
     rrt_config = mock.create_autospec(
         config.RAGResearchToolConfig,
         haiku_rag_config=hr_config,
@@ -159,8 +172,7 @@ async def test_rag_research(rr, rr_graph, rr_state, rag_client):
     tool_configs = {"research_report": rrt_config}
 
     agui_emitter = mock.create_autospec(rag_agui.AGUIEmitter)
-    deps = mock.create_autospec(
-        agents.AgentDependencies,
+    deps = agents.AgentDependencies(
         the_installation=the_installation,
         user=USER,
         tool_configs=tool_configs,
@@ -204,7 +216,7 @@ async def test_rag_research(rr, rr_graph, rr_state, rag_client):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_state", [False, True])
-async def test_agui_state(w_state):
+async def test_agui_state(the_installation, w_state):
     state = {
         "foo": "Foo",
         "bar": {
@@ -212,21 +224,20 @@ async def test_agui_state(w_state):
         },
     }
     if w_state:
-        deps = mock.create_autospec(
-            agents.AgentDependencies,
+        deps = agents.AgentDependencies(
+            the_installation=the_installation,
             user=USER,
             tool_configs={},
             state=state,
         )
         expected = state
     else:
-        deps = mock.create_autospec(
-            agents.AgentDependencies,
+        deps = agents.AgentDependencies(
+            the_installation=the_installation,
             user=USER,
             tool_configs={},
-            state=None,
         )
-        expected = None
+        expected = {}
 
     ctx = mock.Mock(spec_set=(["deps"]), deps=deps)
 
