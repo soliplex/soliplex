@@ -105,6 +105,9 @@ secrets:
   - "SMITHERY_AI_API_KEY"
   - "SMITHERY_AI_PROFILE"
 
+  - "SLACK_SIGNING_SECRET"
+  - "SLACK_BOT_TOKEN"
+
   # ----------------------------------------------------------------------
   # MCP room token generation / validation secret
   #
