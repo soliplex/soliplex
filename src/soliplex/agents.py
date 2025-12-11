@@ -10,6 +10,7 @@ from pydantic_ai.models import openai as openai_models
 from pydantic_ai.providers import ollama as ollama_providers
 from pydantic_ai.providers import openai as openai_providers
 
+from soliplex import agui
 from soliplex import config
 from soliplex import mcp_client
 from soliplex import models
@@ -22,6 +23,7 @@ class AgentDependencies(pydantic.BaseModel):
     user: models.UserProfile = None  # TBD make required
     tool_configs: ToolConfigMap = None
     agui_emitter: typing.Any = None
+    state: agui.AGUI_State = None
 
 
 SoliplexAgent = ai_agent.AbstractAgent[AgentDependencies, typing.Any]

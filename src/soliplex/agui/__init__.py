@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import abc
 import datetime
+import typing
 
 import fastapi
 from ag_ui import core as agui_core
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 AGUI_Events = list[agui_core.BaseEvent]
+AGUI_State = dict[str, typing.Any] | None
 
 
 class UnknownThread(fastapi.HTTPException):

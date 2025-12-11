@@ -200,3 +200,36 @@ async def test_rag_research(rr, rr_graph, rr_state, rag_client):
         db_path=rrt_config.rag_lancedb_path,
         config=hr_config,
     )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("w_state", [False, True])
+async def test_agui_state(w_state):
+    state = {
+        "foo": "Foo",
+        "bar": {
+            "baz": "Baz",
+        },
+    }
+    if w_state:
+        deps = mock.create_autospec(
+            agents.AgentDependencies,
+            user=USER,
+            tool_configs={},
+            state=state,
+        )
+        expected = state
+    else:
+        deps = mock.create_autospec(
+            agents.AgentDependencies,
+            user=USER,
+            tool_configs={},
+            state=None,
+        )
+        expected = None
+
+    ctx = mock.Mock(spec_set=(["deps"]), deps=deps)
+
+    found = await tools.agui_state(ctx=ctx)
+
+    assert found == expected

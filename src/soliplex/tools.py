@@ -7,6 +7,7 @@ from haiku.rag.graph.research import graph as rag_research_graph
 from haiku.rag.graph.research import state as rag_research_state
 
 from soliplex import agents
+from soliplex import agui
 from soliplex import config
 from soliplex import models
 
@@ -131,3 +132,10 @@ async def research_report(
             agui_emitter=ctx.deps.agui_emitter,
         )
         return await graph.run(state=state, deps=graph_deps)
+
+
+async def agui_state(
+    ctx: pydantic_ai.RunContext[agents.AgentDependencies],
+) -> agui.AGUI_State:
+    """Return the AGUI state."""
+    return ctx.deps.state
