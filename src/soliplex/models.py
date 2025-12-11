@@ -401,7 +401,7 @@ UserInfo = dict[str, typing.Any]
 #   AG-UI-related models
 # ----------------------------------------------------------------------------
 
-AGUI_Events = list[agui_core.BaseEvent]
+AGUI_Events = list[agui_core.Event]
 
 
 class AGUI_RunMetadata(pydantic.BaseModel):

@@ -799,6 +799,52 @@ def the_engine():
     engine.dispose()
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("w_agui_events", [[], TEST_AGUI_RUN_EVENTS])
+async def test_threadstorage_save_run_events(
+    the_async_session,
+    w_agui_events,
+):
+    # Work around https://github.com/ag-ui-protocol/ag-ui/issues/752
+    exp_events = [
+        event
+        for event in w_agui_events
+        if event.type not in agui_persistence.SKIP_EVENT_TYPES
+    ]
+
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    thread = await ts.new_thread(user_name=USER_NAME, room_id=ROOM_ID)
+
+    thread_id = await thread.awaitable_attrs.thread_id
+
+    (run,) = await thread.list_runs()
+
+    run_id = await run.awaitable_attrs.run_id
+
+    await the_async_session.commit()
+
+    found_events = await ts.save_run_events(
+        user_name=USER_NAME,
+        thread_id=thread_id,
+        run_id=run_id,
+        events=w_agui_events,
+    )
+
+    await the_async_session.commit()
+
+    db_events = await run.list_events()
+
+    for found_event, exp_event, db_event in zip(
+        found_events,
+        exp_events,
+        db_events,
+        strict=True,
+    ):
+        assert found_event == exp_event
+        assert db_event == exp_event
+
+
 @pytest.fixture
 def the_session(the_engine):
     with the_engine.connect() as connection:

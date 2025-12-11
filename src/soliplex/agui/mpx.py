@@ -30,6 +30,17 @@ def multiplex_streams(*streams):
                 if raised:
                     raise event_or_exc
                 yield event_or_exc
+
+            while True:
+                try:
+                    raised, event_or_exc = queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+
+                if raised:
+                    raise event_or_exc
+
+                yield event_or_exc
         finally:
             cancel_tasks()
 

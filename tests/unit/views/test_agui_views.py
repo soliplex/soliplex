@@ -1,5 +1,6 @@
 import contextlib
 import datetime
+import functools
 from unittest import mock
 
 import fastapi
@@ -825,6 +826,31 @@ async def test_post_room_agui_thread_id_meta(cuir, the_threads, w_meta):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("w_event_count", [0, 1, 10])
+async def test_tee_events(w_event_count):
+    event_log = []
+    on_done = mock.AsyncMock(spec_set=())
+
+    async def event_iter():
+        for event in range(w_event_count):
+            yield event
+
+    expected = [
+        event
+        async for event in agui_views.tee_events(
+            event_iter(),
+            event_log,
+            on_done,
+        )
+    ]
+
+    assert len(event_log) == w_event_count
+    assert event_log == expected
+
+    on_done.assert_awaited_once_with(events=event_log)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "bad_run_input, expectation",
     [
@@ -839,7 +865,9 @@ async def test_post_room_agui_thread_id_meta(cuir, the_threads, w_meta):
 @mock.patch("soliplex.agui.util.check_run_input")
 @mock.patch("soliplex.views.agui._check_user_thread_run")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
+@mock.patch("soliplex.views.agui.tee_events")
 async def test_post_room_agui_thread_id_run_id(
+    tee,
     cura,
     cutr,
     cri,
@@ -892,7 +920,6 @@ async def test_post_room_agui_thread_id_run_id(
     exp_adapter.encode_stream = mock.MagicMock()
     exp_adapter.run_stream = mock.MagicMock()
     exp_agent_stream = exp_adapter.run_stream.return_value
-    exp_mpx = mpx.return_value
     exp_sse_stream = exp_adapter.encode_stream.return_value
 
     with expectation as expected:
@@ -914,7 +941,22 @@ async def test_post_room_agui_thread_id_run_id(
             media_type=exp_adapter.accept,
         )
 
-        exp_adapter.encode_stream.assert_called_once_with(exp_mpx)
+        exp_adapter.encode_stream.assert_called_once_with(tee.return_value)
+
+        tee.assert_called_once()
+        event_stream, event_list = tee.call_args_list[0].args
+
+        assert event_stream is mpx.return_value
+        assert event_list == []
+
+        on_done = tee.call_args_list[0].kwargs["on_done"]
+        assert isinstance(on_done, functools.partial)
+        assert on_done.func is the_threads.save_run_events
+        assert on_done.keywords == {
+            "user_name": USER_NAME,
+            "thread_id": TEST_THREAD_ID,
+            "run_id": TEST_RUN_ID,
+        }
 
         mpx.assert_called_once_with(
             exp_agent_stream,

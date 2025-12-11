@@ -141,6 +141,18 @@ class ThreadMetadata(Base):
     description: Mapped[str | None] = mapped_column()
 
 
+#
+#   Work around https://github.com/ag-ui-protocol/ag-ui/issues/752
+#
+SKIP_EVENT_TYPES = {
+    agui_core.EventType.THINKING_START,
+    agui_core.EventType.THINKING_TEXT_MESSAGE_START,
+    agui_core.EventType.THINKING_TEXT_MESSAGE_CONTENT,
+    agui_core.EventType.THINKING_TEXT_MESSAGE_END,
+    agui_core.EventType.THINKING_END,
+}
+
+
 class Run(Base):
     """Hold information about an AG-UI runs.
 
@@ -234,6 +246,8 @@ class Run(Base):
         return [
             event.to_agui_model()
             for event in await self.awaitable_attrs.events
+            # Work around https://github.com/ag-ui-protocol/ag-ui/issues/752
+            if event.type not in SKIP_EVENT_TYPES
         ]
 
 
@@ -680,6 +694,30 @@ class ThreadStorage(agui_package.ThreadStorage):
                 session.add(run_metadata)
 
             return run
+
+    async def save_run_events(
+        self,
+        *,
+        user_name: str,
+        thread_id: str,
+        run_id: str,
+        events: agui_package.AGUI_Events,
+    ) -> agui_package.AGUI_Events:
+        """Save the events for a gven run"""
+        await self._session.commit()
+
+        async with self.session as session:
+            run = await self._find_thread_run(
+                user_name=user_name,
+                thread_id=thread_id,
+                run_id=run_id,
+                session=session,
+            )
+
+            for event in events:
+                session.add(RunEvent(run=run, data=event.model_dump()))
+
+        return events
 
 
 def get_session(

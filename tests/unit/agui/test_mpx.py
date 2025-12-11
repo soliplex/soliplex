@@ -89,7 +89,10 @@ async def test_multiplex_streams(w_streams, expectation):
     merged = mpx.multiplex_streams(*streams)
 
     with expectation as expected:
-        found = [event async for event in merged]
+        found = []
+        async for event in merged:
+            found.append(event)
+            await asyncio.sleep(0.1)
 
     if isinstance(expected, list):
         assert set(found) == set(expected)

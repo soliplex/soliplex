@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import collections.abc
 import datetime
 import typing
 
@@ -8,7 +9,8 @@ import fastapi
 from ag_ui import core as agui_core
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
-AGUI_Events = list[agui_core.BaseEvent]
+AGUI_Events = list[agui_core.Event]
+AGUI_EventStream = collections.abc.AsyncIterator[agui_core.Event]
 AGUI_State = dict[str, typing.Any]
 
 
@@ -222,6 +224,17 @@ class ThreadStorage(abc.ABC):
         If 'run_metadata' is None, or an empty dict, remove any existing
         metadata on the run.
         """
+
+    @abc.abstractmethod
+    async def save_run_events(
+        self,
+        *,
+        user_name: str,
+        thread_id: str,
+        run_id: str,
+        events: AGUI_Events,
+    ) -> AGUI_Events:
+        """Save the events for a gven run"""
 
 
 async def get_the_threads(request: fastapi.Request) -> ThreadStorage:
