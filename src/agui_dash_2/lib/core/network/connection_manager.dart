@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
 import 'package:flutter/foundation.dart';
 
-import '../../infrastructure/quick_agui/tool_call_state.dart';
 import '../models/chat_models.dart';
 import '../services/local_tools_service.dart';
 import '../utils/debug_log.dart';
@@ -29,16 +28,19 @@ typedef LocalToolNotifier = void Function(
 
 /// Central hub managing all room sessions.
 ///
+/// Singleton for app lifetime - handles server changes internally via switchServer().
+///
 /// Handles:
 /// - Session pool (Map<roomId, RoomSession>)
+/// - Server switching (clears sessions on server change)
 /// - Room switching with state preservation
 /// - Run cancellation
 /// - Connection observability
 class ConnectionManager extends ChangeNotifier {
-  final String baseUrl;
-  final Map<String, String>? headers;
-  final HttpTransport _transport;
-  final UrlBuilder _urlBuilder;
+  String _baseUrl;
+  Map<String, String>? _headers;
+  HttpTransport _transport;
+  UrlBuilder _urlBuilder;
   ag_ui.AgUiClient? _agUiClient;
 
   /// All room sessions.
@@ -57,21 +59,74 @@ class ConnectionManager extends ChangeNotifier {
   /// Tools that should be handled by the UI layer.
   static const _uiTools = {'canvas_render', 'genui_render'};
 
+  /// Whether the manager has been configured with a server.
+  bool get isConfigured => _baseUrl.isNotEmpty;
+
+  /// Current server URL.
+  String get serverUrl => _urlBuilder.serverUrl;
+
   ConnectionManager({
-    required this.baseUrl,
-    this.headers,
+    String baseUrl = '',
+    Map<String, String>? headers,
     this.maxBackgroundedSessions = 5,
     HttpTransport? transport,
-  }) : _urlBuilder = UrlBuilder(baseUrl),
-       _transport = transport ?? HttpTransport(baseUrl: baseUrl, defaultHeaders: headers) {
+  }) : _baseUrl = baseUrl,
+       _headers = headers,
+       _urlBuilder = UrlBuilder(baseUrl.isNotEmpty ? baseUrl : 'http://localhost'),
+       _transport = transport ?? HttpTransport(baseUrl: baseUrl.isNotEmpty ? baseUrl : 'http://localhost', defaultHeaders: headers) {
+    if (baseUrl.isNotEmpty) {
+      _initializeClient();
+    }
+  }
+
+  void _initializeClient() {
     // Use serverUrl (not apiBaseUrl) because runEndpoint includes the api path.
     // The ag_ui client replaces the path instead of appending to it.
     _agUiClient = ag_ui.AgUiClient(
       config: ag_ui.AgUiClientConfig(
         baseUrl: _urlBuilder.serverUrl,
-        defaultHeaders: headers ?? {},
+        defaultHeaders: _headers ?? {},
       ),
     );
+  }
+
+  /// Switch to a different server.
+  ///
+  /// Disposes all existing sessions and reinitializes for the new server.
+  /// Call this when the user selects a different server.
+  void switchServer(String newBaseUrl, {Map<String, String>? headers}) {
+    if (_baseUrl == newBaseUrl && _headersEqual(headers)) {
+      DebugLog.network('ConnectionManager: Server unchanged, skipping switch');
+      return;
+    }
+
+    DebugLog.network('ConnectionManager: Switching server from $_baseUrl to $newBaseUrl');
+
+    // Dispose all existing sessions
+    for (final session in _sessions.values) {
+      session.dispose();
+    }
+    _sessions.clear();
+    _activeRoomId = null;
+
+    // Update configuration
+    _baseUrl = newBaseUrl;
+    _headers = headers;
+    _urlBuilder = UrlBuilder(newBaseUrl);
+    _transport = HttpTransport(baseUrl: newBaseUrl, defaultHeaders: headers);
+    _initializeClient();
+
+    notifyListeners();
+  }
+
+  bool _headersEqual(Map<String, String>? newHeaders) {
+    if (_headers == null && newHeaders == null) return true;
+    if (_headers == null || newHeaders == null) return false;
+    if (_headers!.length != newHeaders.length) return false;
+    for (final key in _headers!.keys) {
+      if (_headers![key] != newHeaders[key]) return false;
+    }
+    return true;
   }
 
   // Getters
@@ -96,7 +151,7 @@ class ConnectionManager extends ChangeNotifier {
     if (session == null) {
       session = RoomSession(
         roomId: roomId,
-        baseUrl: baseUrl,
+        baseUrl: _baseUrl,
         transport: _transport,
       );
       _sessions[roomId] = session;
@@ -106,8 +161,28 @@ class ConnectionManager extends ChangeNotifier {
         _eventController.add(event);
         notifyListeners();
       });
+
+      // Forward message updates
+      session.messageStream.listen((_) {
+        notifyListeners();
+      });
     }
     return session;
+  }
+
+  /// Get messages for a room (reads from RoomSession).
+  List<ChatMessage> getMessages(String roomId) {
+    return getSession(roomId).messages;
+  }
+
+  /// Get message stream for a room (for UI subscription).
+  Stream<List<ChatMessage>> getMessageStream(String roomId) {
+    return getSession(roomId).messageStream;
+  }
+
+  /// Check if agent is typing in a room.
+  bool isAgentTyping(String roomId) {
+    return _sessions[roomId]?.isAgentTyping ?? false;
   }
 
   /// Switch to a different room.
@@ -163,37 +238,55 @@ class ConnectionManager extends ChangeNotifier {
   /// Chat in a room.
   ///
   /// Handles the full conversation flow including tool execution.
+  /// Events are processed by RoomSession and messages are updated automatically.
+  /// Subscribe to getMessageStream(roomId) to receive message updates.
+  ///
+  /// [uiToolHandler] is called for canvas_render and genui_render tools
+  /// which need access to UI state.
+  ///
+  /// [onLocalToolExecution] is called when local tools start/complete.
   Future<void> chat({
     required String roomId,
     required String userMessage,
     required LocalToolsService localToolsService,
-    required void Function(ag_ui.BaseEvent event) onEvent,
     UiToolHandler? uiToolHandler,
     LocalToolNotifier? onLocalToolExecution,
-    void Function(ToolCallStateChange change)? onToolStateChange,
+    CanvasCallback? onCanvasUpdate,
+    ContextCallback? onContextUpdate,
+    ActivityCallback? onActivityUpdate,
     Map<String, dynamic>? state,
   }) async {
+    if (!isConfigured) {
+      throw StateError('ConnectionManager not configured. Call switchServer() first.');
+    }
+
     final session = getSession(roomId);
+
+    // Set up callbacks for side effects
+    session.onCanvasUpdate = onCanvasUpdate;
+    session.onContextUpdate = onContextUpdate;
+    session.onActivityUpdate = onActivityUpdate;
 
     // Initialize if needed
     if (session.threadId == null) {
       await initializeSession(roomId);
     }
 
+    // Add user message to session
+    session.addUserMessage(userMessage);
+
     // Register tools
     _registerTools(session, localToolsService, uiToolHandler, onLocalToolExecution);
 
-    // Listen to event streams
+    // Listen to event streams - session processes events internally
     StreamSubscription<ag_ui.BaseEvent>? stepsSub;
-    StreamSubscription<ToolCallStateChange>? toolStateSub;
 
     try {
-      stepsSub = session.stepsStream?.listen(onEvent);
-      if (onToolStateChange != null) {
-        toolStateSub = session.toolStateChanges?.listen(onToolStateChange);
-      }
+      stepsSub = session.stepsStream?.listen((event) {
+        session.processEvent(event);
+      });
 
-      // Create user message
+      // Create user message for AG-UI
       final userMsg = ag_ui.UserMessage(
         id: 'user-${DateTime.now().millisecondsSinceEpoch}',
         content: userMessage,
@@ -217,7 +310,6 @@ class ConnectionManager extends ChangeNotifier {
       }
     } finally {
       await stepsSub?.cancel();
-      await toolStateSub?.cancel();
     }
   }
 
@@ -233,22 +325,17 @@ class ConnectionManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Resume a thread for a room.
-  ///
-  /// Returns chat messages reconstructed from history.
-  Future<List<ChatMessage>> resumeThread(String roomId, String threadId) async {
-    final session = getSession(roomId);
-
-    // TODO: Fetch thread history from server
-    // For now, return preserved chat history
-    DebugLog.network('ConnectionManager: Resuming thread $threadId for room $roomId');
-    return session.chatHistory;
+  /// Clear messages for a room.
+  void clearMessages(String roomId) {
+    final session = _sessions[roomId];
+    session?.clearMessages();
+    notifyListeners();
   }
 
-  /// Save chat history for a room.
-  void saveChatHistory(String roomId, List<ChatMessage> messages) {
-    final session = _sessions[roomId];
-    session?.saveChatHistory(messages);
+  /// Load messages for a room (for history restoration).
+  void loadMessages(String roomId, List<ChatMessage> messages) {
+    final session = getSession(roomId);
+    session.loadMessages(messages);
   }
 
   /// Register tools with a session.
@@ -277,21 +364,21 @@ class ConnectionManager extends ChangeNotifier {
           DebugLog.network('ConnectionManager: Failed to parse tool args: $e');
         }
 
-        // UI tools
+        // UI tools (canvas_render, genui_render)
         if (_uiTools.contains(call.function.name) && uiToolHandler != null) {
-          onLocalToolExecution?.call(call.id, call.function.name, 'executing');
+          session.handleLocalToolExecution(call.id, call.function.name, 'executing');
           try {
             final result = await uiToolHandler(call.id, call.function.name, args);
-            onLocalToolExecution?.call(call.id, call.function.name, 'completed');
+            session.handleLocalToolExecution(call.id, call.function.name, 'completed');
             return jsonEncode(result);
           } catch (e) {
-            onLocalToolExecution?.call(call.id, call.function.name, 'error: $e');
+            session.handleLocalToolExecution(call.id, call.function.name, 'error: $e');
             return jsonEncode({'error': e.toString()});
           }
         }
 
         // Regular tools
-        onLocalToolExecution?.call(call.id, call.function.name, 'executing');
+        session.handleLocalToolExecution(call.id, call.function.name, 'executing');
         final result = await localToolsService.executeTool(
           call.id,
           call.function.name,
@@ -299,10 +386,10 @@ class ConnectionManager extends ChangeNotifier {
         );
 
         if (result.success) {
-          onLocalToolExecution?.call(call.id, call.function.name, 'completed');
+          session.handleLocalToolExecution(call.id, call.function.name, 'completed');
           return jsonEncode(result.result);
         } else {
-          onLocalToolExecution?.call(call.id, call.function.name, 'error');
+          session.handleLocalToolExecution(call.id, call.function.name, 'error');
           return jsonEncode({'error': result.error});
         }
       }, fireAndForget: isFireAndForget);

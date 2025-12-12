@@ -10,7 +10,6 @@ import '../../core/services/agui_service.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/feedback_service.dart';
 import '../../core/services/markdown_hooks.dart';
-import '../../core/services/room_chat_service.dart';
 import '../../core/services/rooms_service.dart';
 import '../../core/services/server_config_service.dart';
 import '../../core/utils/api_constants.dart';
@@ -27,7 +26,7 @@ import '../keyboard/keyboard_shortcuts_help_dialog.dart';
 /// Main chat screen widget - acts as app shell with layout switching.
 ///
 /// Manages:
-/// - Room selection and AG-UI configuration
+/// - Room selection and ConnectionManager configuration
 /// - Layout mode switching
 /// - App bar with controls
 class ChatScreen extends ConsumerStatefulWidget {
@@ -48,161 +47,162 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// Get the server URL (bare server, no /api path).
   String get _serverUrl => _urlBuilder.serverUrl;
 
+  /// Track the current server URL to detect changes.
+  String? _lastServerUrl;
+
   @override
   void initState() {
     super.initState();
-    // Fetch rooms and configure AG-UI service on startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeMarkdownHooks();
-      _fetchRoomsAndConfigure();
+      _initializeConnectionManager();
+      _fetchRoomsAndSelectDefault();
+      _setupServerChangeListener();
     });
   }
 
-  /// Initialize markdown hooks with default behaviors
+  /// Set up a listener for server changes.
+  ///
+  /// When the server changes (user switches to a different server):
+  /// 1. Clear the selected room (old room ID is invalid for new server)
+  /// 2. Reinitialize ConnectionManager with new server URL
+  /// 3. Fetch rooms from the new server
+  void _setupServerChangeListener() {
+    final server = ref.read(currentServerProvider);
+    _lastServerUrl = server?.url;
+
+    ref.listenManual(currentServerProvider, (previous, next) async {
+      if (next?.url != _lastServerUrl && next != null) {
+        debugPrint('Server changed: $_lastServerUrl -> ${next.url}');
+        _lastServerUrl = next.url;
+
+        // Clear selected room - old room ID is invalid for new server
+        ref.read(selectedRoomProvider.notifier).state = null;
+
+        // Reinitialize ConnectionManager immediately
+        _initializeConnectionManager();
+
+        // Wait for providers to settle before fetching rooms
+        // This prevents race conditions with provider invalidation
+        await Future.microtask(() {});
+
+        if (mounted) {
+          _fetchRoomsAndSelectDefault();
+        }
+      }
+    });
+  }
+
+  /// Initialize markdown hooks with default behaviors.
   void _initializeMarkdownHooks() {
     final hooks = ref.read(markdownHooksProvider);
 
-    // Default link handling: open in external browser
     hooks.onLinkTap ??= (href, text, messageId) {
       if (href != null) {
         launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication);
       }
     };
 
-    // Optional: Log image load states for debugging
     hooks.onImageLoad ??= (imageUrl, messageId, state) {
       debugPrint('Image load [$messageId]: $imageUrl -> ${state.name}');
     };
 
-    // Optional: Log when all images in a message are loaded
     hooks.onAllImagesLoaded ??= (messageId) {
       debugPrint('All images loaded for message: $messageId');
     };
 
-    // Optional: Log code copy events
     hooks.onCodeCopy ??= (code, language, messageId) {
       debugPrint('Code copied [$messageId]: ${language ?? 'unknown'} (${code.length} chars)');
     };
   }
 
-  Future<void> _fetchRoomsAndConfigure() async {
-    // Fetch available rooms
-    final roomsNotifier = ref.read(roomsProvider.notifier);
-    roomsNotifier.setServerUrl(_serverUrl);
-    await roomsNotifier.fetchRooms();
+  /// Initialize ConnectionManager with the current server.
+  Future<void> _initializeConnectionManager() async {
+    final server = ref.read(currentServerProvider);
+    if (server == null) return;
 
-    // Select first room by default if none selected
-    final rooms = ref.read(roomsProvider).rooms;
-    final selectedRoom = ref.read(selectedRoomProvider);
-    if (selectedRoom == null && rooms.isNotEmpty) {
-      ref.read(selectedRoomProvider.notifier).state = rooms.first.id;
-    }
-
-    // Configure AG-UI with selected room
-    await _updateAgUiConfig();
-  }
-
-  Future<void> _updateAgUiConfig() async {
-    if (!mounted) return;
-
-    final selectedRoom = ref.read(selectedRoomProvider);
-    if (selectedRoom == null) return;
-
-    // Get auth headers if available (this may trigger token refresh)
+    // Get auth headers if available
     Map<String, String>? headers;
     try {
       final authService = ref.read(authServiceProvider);
       headers = await authService.getAuthHeaders();
     } catch (e) {
       debugPrint('Failed to get auth headers: $e');
-      headers = null;
     }
 
-    // Check if widget is still mounted after async operation
     if (!mounted) return;
 
-    // Re-read selected room in case it changed during await
-    final currentRoom = ref.read(selectedRoomProvider);
-    if (currentRoom != selectedRoom) {
-      // Room changed during await, skip this configuration
+    // Configure ConnectionManager with server URL
+    final connectionManager = ref.read(connectionManagerProvider);
+    connectionManager.switchServer(server.url, headers: headers);
+  }
+
+  /// Fetch rooms and select the first one by default.
+  Future<void> _fetchRoomsAndSelectDefault() async {
+    if (!mounted) return;
+
+    // Set server URL and fetch rooms
+    // Note: We re-read the notifier after async operations because the provider
+    // may be invalidated during the fetch (e.g., during server switch).
+    ref.read(roomsProvider.notifier).setServerUrl(_serverUrl);
+
+    try {
+      await ref.read(roomsProvider.notifier).fetchRooms();
+    } catch (e) {
+      // Provider may have been disposed during fetch - this is expected during server switch
+      debugPrint('Rooms fetch interrupted (likely server switch): $e');
       return;
     }
 
-    final config = AgUiServiceConfig(
-      baseUrl: _serverUrl,
-      roomId: selectedRoom,
-      headers: headers?.isNotEmpty == true ? headers : null,
-    );
+    if (!mounted) return;
 
-    // Store config for other providers that need it
-    ref.read(agUiConfigProvider.notifier).state = config;
-
-    // Configure the service, retrying if provider was invalidated
-    for (var attempt = 0; attempt < 3; attempt++) {
-      if (!mounted) return;
-
-      try {
-        final service = ref.read(agUiServiceProvider);
-        service.configure(config);
-        break; // Success
-      } catch (e) {
-        debugPrint('Configure attempt ${attempt + 1} failed: $e');
-        if (attempt < 2) {
-          // Wait for provider to settle and retry
-          await Future.delayed(const Duration(milliseconds: 50));
-        }
-      }
+    final rooms = ref.read(roomsProvider).rooms;
+    final selectedRoom = ref.read(selectedRoomProvider);
+    if (selectedRoom == null && rooms.isNotEmpty) {
+      ref.read(selectedRoomProvider.notifier).state = rooms.first.id;
     }
 
-    // Initialize feedback service for this room
-    if (mounted) {
-      ref.read(feedbackProvider.notifier).initialize(selectedRoom);
+    // Initialize feedback service for selected room
+    final currentRoom = ref.read(selectedRoomProvider);
+    if (mounted && currentRoom != null) {
+      ref.read(feedbackProvider.notifier).initialize(currentRoom);
     }
   }
 
+  /// Handle room change from dropdown.
   Future<void> _onRoomChanged(String? roomId) async {
     if (roomId == null || !mounted) return;
-
-    final previousRoomId = ref.read(selectedRoomProvider);
 
     // Stop any active activity indicator from previous room
     ref.read(activityStatusProvider.notifier).stopActivity();
 
-    // Save current chat history to the per-room provider before switching
-    if (previousRoomId != null && previousRoomId != roomId) {
-      final currentMessages = ref.read(chatProvider).messages;
-      if (currentMessages.isNotEmpty) {
-        ref.read(roomChatProvider(previousRoomId).notifier).loadMessages(currentMessages);
-      }
-    }
+    // Switch room in ConnectionManager
+    final connectionManager = ref.read(connectionManagerProvider);
+    await connectionManager.switchRoom(roomId);
 
+    // Update selected room state
     ref.read(selectedRoomProvider.notifier).state = roomId;
-    ref.read(selectedRoomIdProvider.notifier).state = roomId;
-    await _updateAgUiConfig();
 
-    // Check mounted after async operation
-    if (!mounted) return;
-
-    // Restore chat history from per-room provider, or clear if empty
-    try {
-      final savedMessages = ref.read(roomChatProvider(roomId)).messages;
-      if (savedMessages.isNotEmpty) {
-        ref.read(chatProvider.notifier).loadMessages(savedMessages);
-      } else {
-        ref.read(chatProvider.notifier).clearMessages();
-      }
-    } catch (e) {
-      debugPrint('Failed to restore chat history: $e');
+    // Initialize feedback service for new room
+    if (mounted) {
+      ref.read(feedbackProvider.notifier).initialize(roomId);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final layoutMode = ref.watch(layoutModeProvider);
-    final agUiService = ref.watch(configuredAgUiServiceProvider);
+    final connectionManager = ref.watch(connectionManagerProvider);
     final roomsState = ref.watch(roomsProvider);
     final selectedRoom = ref.watch(selectedRoomProvider);
     final selectedRoomData = ref.watch(selectedRoomDataProvider);
+
+    // Determine connection state from ConnectionManager
+    final isConfigured = connectionManager.isConfigured;
+    final activeSession = selectedRoom != null
+        ? connectionManager.getSession(selectedRoom)
+        : null;
+    final isStreaming = activeSession?.isStreaming ?? false;
 
     return KeyboardShortcutsWidget(
       child: Scaffold(
@@ -210,7 +210,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildConnectionIndicator(agUiService.state),
+            _buildConnectionIndicator(isConfigured, isStreaming),
             const SizedBox(width: 8),
             Flexible(
               child: _buildRoomSelector(roomsState, selectedRoom),
@@ -246,8 +246,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             icon: const Icon(Icons.delete_outline),
             tooltip: 'Clear chat',
             onPressed: () {
-              ref.read(chatProvider.notifier).clearMessages();
-              ref.read(agUiServiceProvider).resetConversation();
+              if (selectedRoom != null) {
+                connectionManager.clearMessages(selectedRoom);
+              }
             },
           ),
           IconButton(
@@ -297,26 +298,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  Widget _buildConnectionIndicator(AgUiConnectionState state) {
+  Widget _buildConnectionIndicator(bool isConfigured, bool isStreaming) {
     Color color;
     String tooltip;
 
-    switch (state) {
-      case AgUiConnectionState.connected:
-        color = Colors.green;
-        tooltip = 'Connected';
-      case AgUiConnectionState.streaming:
-        color = Colors.blue;
-        tooltip = 'Streaming';
-      case AgUiConnectionState.connecting:
-        color = Colors.orange;
-        tooltip = 'Connecting...';
-      case AgUiConnectionState.error:
-        color = Colors.red;
-        tooltip = 'Error';
-      case AgUiConnectionState.disconnected:
-        color = Colors.grey;
-        tooltip = 'Disconnected';
+    if (isStreaming) {
+      color = Colors.blue;
+      tooltip = 'Streaming';
+    } else if (isConfigured) {
+      color = Colors.green;
+      tooltip = 'Connected';
+    } else {
+      color = Colors.grey;
+      tooltip = 'Not configured';
     }
 
     return Tooltip(
@@ -362,7 +356,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         borderRadius: BorderRadius.circular(8),
       ),
       child: DropdownButton<String>(
-        value: selectedRoom,  // Guaranteed valid by reactive provider chain
+        value: selectedRoom,
         hint: const Text('Select room'),
         underline: const SizedBox(),
         isDense: true,
@@ -393,7 +387,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       icon: const Icon(Icons.dns_outlined),
       tooltip: 'Server options',
       itemBuilder: (context) => [
-        // Show current server info
         PopupMenuItem<String>(
           enabled: false,
           child: Column(
@@ -423,7 +416,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
         ),
         const PopupMenuDivider(),
-        // Switch server option
         const PopupMenuItem<String>(
           value: 'switch',
           child: Row(
@@ -434,7 +426,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ],
           ),
         ),
-        // Logout option
         const PopupMenuItem<String>(
           value: 'logout',
           child: Row(
@@ -480,27 +471,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
     );
 
-    // Check if widget is still mounted after async dialog
     if (!mounted) return;
 
     if (confirmed == true) {
-      // Get references before any async operations that might dispose the widget
       final authService = ref.read(authServiceProvider);
       final serverConfig = ref.read(serverConfigProvider);
 
-      // Logout from auth service
       await authService.logout();
 
-      // Check mounted again after async operation
       if (!mounted) return;
 
-      // Clear server config to force re-setup
       await serverConfig.clearAll();
 
-      // Check mounted again after async operation
       if (!mounted) return;
 
-      // Reset app initialized state to show setup screen
       ref.read(appInitializedProvider.notifier).state = false;
     }
   }

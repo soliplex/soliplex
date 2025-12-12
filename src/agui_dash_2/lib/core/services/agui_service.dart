@@ -9,7 +9,6 @@ import 'package:http/http.dart' as http;
 import '../../infrastructure/quick_agui/tool_call_state.dart';
 import '../models/chat_models.dart';
 import '../network/connection_manager.dart';
-import '../utils/api_constants.dart';
 import '../utils/debug_log.dart';
 import '../utils/url_builder.dart';
 import 'local_tools_service.dart';
@@ -194,14 +193,14 @@ class AgUiService extends ChangeNotifier {
       _safeNotifyListeners();
 
       // Delegate to ConnectionManager
+      // Note: onEvent and onToolStateChange are deprecated - events are now
+      // processed by RoomSession internally. These parameters are ignored.
       await _connectionManager.chat(
         roomId: _config!.roomId,
         userMessage: userMessage,
         localToolsService: localToolsService,
-        onEvent: onEvent,
         uiToolHandler: uiToolHandler,
         onLocalToolExecution: onLocalToolExecution,
-        onToolStateChange: onToolStateChange,
         state: state,
       );
 
@@ -433,28 +432,44 @@ class AgUiService extends ChangeNotifier {
 // PROVIDERS
 // =============================================================================
 
-/// Provider for ConnectionManager (server-scoped).
+/// Provider for ConnectionManager (SINGLETON - app lifetime).
 ///
-/// Watches [currentServerProvider] - recreated when server changes.
-/// Does NOT watch agUiConfigProvider to avoid circular invalidation.
+/// Does NOT watch any reactive providers to avoid invalidation issues.
+/// Server changes are handled via connectionManager.switchServer().
 final connectionManagerProvider = ChangeNotifierProvider<ConnectionManager>((ref) {
-  final server = ref.watch(currentServerProvider);
-  final baseUrl = server?.url ?? ApiConstants.defaultServerUrl;
-
-  DebugLog.service('ConnectionManager: Created for server ${server?.id}');
-  final manager = ConnectionManager(baseUrl: baseUrl);
+  DebugLog.service('ConnectionManager: Created (singleton)');
+  final manager = ConnectionManager();
 
   ref.onDispose(() {
-    DebugLog.service('ConnectionManager: Disposed for server ${server?.id}');
+    DebugLog.service('ConnectionManager: Disposed');
     manager.dispose();
   });
 
   return manager;
 });
 
+/// Provider for room messages (reads from ConnectionManager).
+///
+/// This is a family provider - pass the roomId to get messages for that room.
+/// Use this instead of chatProvider for new code.
+final roomMessagesProvider = StreamProvider.family<List<ChatMessage>, String>((ref, roomId) {
+  final manager = ref.watch(connectionManagerProvider);
+  return manager.getMessageStream(roomId);
+});
+
+/// Provider for checking if agent is typing in a room.
+final isAgentTypingProvider = Provider.family<bool, String>((ref, roomId) {
+  final manager = ref.watch(connectionManagerProvider);
+  return manager.isAgentTyping(roomId);
+});
+
+// =============================================================================
+// LEGACY PROVIDERS (to be removed in Phase 6)
+// =============================================================================
+
 /// Provider for AgUiService.
 ///
-/// Depends on ConnectionManager for all networking operations.
+/// @deprecated Use connectionManagerProvider directly instead.
 final agUiServiceProvider = ChangeNotifierProvider<AgUiService>((ref) {
   final connectionManager = ref.watch(connectionManagerProvider);
   return AgUiService(connectionManager);
@@ -462,7 +477,7 @@ final agUiServiceProvider = ChangeNotifierProvider<AgUiService>((ref) {
 
 /// Provider for AG-UI configuration.
 ///
-/// Watches [currentServerProvider] - config resets when server changes.
+/// @deprecated ConnectionManager now handles server configuration internally.
 final agUiConfigProvider = StateProvider<AgUiServiceConfig?>((ref) {
   ref.watch(currentServerProvider);  // Reactive: resets on server change
   return null;
@@ -470,9 +485,7 @@ final agUiConfigProvider = StateProvider<AgUiServiceConfig?>((ref) {
 
 /// Provider for configured AgUiService.
 ///
-/// Simply returns the AgUiService. Configuration is managed explicitly
-/// by the UI layer via chat_screen.dart calling service.configure().
-/// This avoids lifecycle issues with auto-configuration.
+/// @deprecated Use connectionManagerProvider directly instead.
 final configuredAgUiServiceProvider = Provider<AgUiService>((ref) {
   return ref.watch(agUiServiceProvider);
 });

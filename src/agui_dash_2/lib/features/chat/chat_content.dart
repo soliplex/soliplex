@@ -1,20 +1,15 @@
-import 'package:ag_ui/ag_ui.dart' as ag_ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/chat_models.dart';
+import '../../core/network/room_session.dart';
 import '../../core/providers/panel_providers.dart';
 import '../../core/services/agui_service.dart';
 import '../../core/services/chat_search_service.dart';
-import '../../core/services/canvas_service.dart';
-import '../../core/services/chat_service.dart';
-import '../../core/services/context_pane_service.dart';
 import '../../core/services/local_tools_service.dart';
-import '../../core/services/room_chat_service.dart';
 import '../../core/services/rooms_service.dart';
 import '../../core/utils/debug_log.dart';
-import '../../infrastructure/quick_agui/tool_call_state.dart';
 import '../room/welcome_card.dart';
 import 'widgets/chat_input_area.dart';
 import 'widgets/chat_message_list.dart';
@@ -23,7 +18,7 @@ import 'widgets/chat_search_bar.dart';
 /// Chat content widget that can be embedded in various layouts.
 ///
 /// Contains the custom chat message list and handles message sending/receiving.
-/// Can be used standalone or within layout containers.
+/// Subscribes to RoomSession's message stream for updates.
 class ChatContent extends ConsumerStatefulWidget {
   const ChatContent({super.key});
 
@@ -37,10 +32,8 @@ class _ChatContentState extends ConsumerState<ChatContent> {
   final ScrollController _scrollController = ScrollController();
   String? _previousRoomId;
 
-  @override
-  void initState() {
-    super.initState();
-  }
+  // Track active search widgets and their callbacks
+  final Map<String, void Function(String, Map<String, dynamic>)> _searchCallbacks = {};
 
   @override
   void dispose() {
@@ -54,7 +47,6 @@ class _ChatContentState extends ConsumerState<ChatContent> {
   void _checkRoomChange(String? currentRoomId) {
     if (currentRoomId != null && currentRoomId != _previousRoomId) {
       _previousRoomId = currentRoomId;
-      // Schedule focus request after build
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _inputFocusNode.requestFocus();
@@ -63,40 +55,40 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     }
   }
 
-  /// Send a message (called from ChatInputArea).
+  /// Send a message.
   void _sendMessage() {
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
     _handleSendText(text);
   }
 
-  /// Core send logic.
+  /// Core send logic - simplified to use ConnectionManager directly.
   Future<void> _handleSendText(String text) async {
     if (text.isEmpty) return;
 
-    // Clear input immediately after capturing text
     _inputController.clear();
 
-    final chatNotifier = ref.read(chatProvider.notifier);
-    final agUiService = ref.read(configuredAgUiServiceProvider);
+    final connectionManager = ref.read(connectionManagerProvider);
     final localToolsService = ref.read(localToolsServiceProvider);
-    final contextNotifier = ref.read(contextPaneProvider.notifier);
-    final canvasNotifier = ref.read(canvasProvider.notifier);
+    final roomId = ref.read(selectedRoomProvider);
+
+    if (roomId == null) {
+      DebugLog.error('No room selected');
+      return;
+    }
 
     // Check for slash commands (handled locally, not sent to backend)
     if (text.startsWith('/')) {
-      final handled = _handleSlashCommand(text, chatNotifier, canvasNotifier);
+      final session = connectionManager.getSession(roomId);
+      final handled = _handleSlashCommand(text, session);
       if (handled) return;
     }
 
-    // Add user message
-    chatNotifier.addUserMessage(text);
-    contextNotifier.addTextMessage(text, isUser: true);
-
-    // Check if AG-UI is configured
-    if (!agUiService.isConfigured) {
-      chatNotifier.addServerError(
-        'AG-UI server not configured',
+    // Check if ConnectionManager is configured
+    if (!connectionManager.isConfigured) {
+      final session = connectionManager.getSession(roomId);
+      session.addErrorMessage(
+        'Server not configured',
         errorCode: 'NOT_CONFIGURED',
       );
       return;
@@ -106,367 +98,110 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     final canvasState = ref.read(canvasProvider);
 
     try {
-      // Use the chat() method which handles tool loop internally
-      await agUiService.chat(
-        text,
+      await connectionManager.chat(
+        roomId: roomId,
+        userMessage: text,
         localToolsService: localToolsService,
-        state: canvasState.toJson(),
-        onEvent: (event) {
-          if (!mounted) return;
-          // Get fresh references - notifiers may have been replaced during streaming
-          final freshChatNotifier = ref.read(chatProvider.notifier);
-          final freshContextNotifier = ref.read(contextPaneProvider.notifier);
-          final freshCanvasNotifier = ref.read(canvasProvider.notifier);
-          _processEvent(event, freshChatNotifier, freshContextNotifier, freshCanvasNotifier);
-        },
         uiToolHandler: (toolCallId, toolName, args) async {
-          // Skip if widget disposed
           if (!mounted) return {'skipped': true, 'reason': 'disposed'};
-
-          // Get session for deduplication tracking
-          final connectionManager = ref.read(connectionManagerProvider);
-          final roomId = agUiService.currentRoomId;
-          if (roomId == null) return {'skipped': true, 'reason': 'no_room'};
-
-          final session = connectionManager.getSession(roomId);
-
-          // Prevent duplicate execution of the same tool call (session-level tracking)
-          if (!session.markToolCallProcessed(toolCallId)) {
-            return {'skipped': true, 'reason': 'duplicate'};
-          }
-
-          // Get fresh references - notifiers may have been replaced during streaming
-          final freshChatNotifier = ref.read(chatProvider.notifier);
-          final freshContextNotifier = ref.read(contextPaneProvider.notifier);
-          final freshCanvasNotifier = ref.read(canvasProvider.notifier);
-
-          return _handleUiTool(
-            toolName,
-            args,
-            freshChatNotifier,
-            freshCanvasNotifier,
-            freshContextNotifier,
-          );
+          return _handleUiTool(toolCallId, toolName, args, roomId);
         },
-        onLocalToolExecution: (toolCallId, toolName, status) {
-          // Skip if widget disposed
+        onCanvasUpdate: (operation, widgetName, data) {
           if (!mounted) return;
-
-          // Get session for deduplication tracking
-          final connectionManager = ref.read(connectionManagerProvider);
-          final roomId = agUiService.currentRoomId;
-          if (roomId == null) return;
-
-          final session = connectionManager.getSession(roomId);
-
-          // Deduplicate by tool call ID - skip if we've already processed this execution
-          final trackingKey = '$toolCallId:$status';
-          if (!session.markToolNotificationProcessed(trackingKey)) {
-            return;
+          final canvasNotifier = ref.read(canvasProvider.notifier);
+          switch (operation) {
+            case 'clear':
+              canvasNotifier.clear();
+            case 'replace':
+              canvasNotifier.replaceAll(widgetName, data);
+            default:
+              canvasNotifier.addItem(widgetName, data);
           }
-
-          // Get fresh references - notifiers may have been replaced during streaming
-          final freshChatNotifier = ref.read(chatProvider.notifier);
-          final freshContextNotifier = ref.read(contextPaneProvider.notifier);
-
-          freshContextNotifier.addLocalToolExecution(toolName, status: status);
-
-          // Add or update tool call message in chat
-          if (status == 'executing') {
-            final messageId = freshChatNotifier.addToolCallMessage(toolName);
-            _toolCallMessageIds[toolCallId] = messageId;
-          } else {
-            final messageId = _toolCallMessageIds[toolCallId];
-            if (messageId != null) {
-              freshChatNotifier.updateToolCallStatus(messageId, status);
-              if (status == 'completed' || status.startsWith('error')) {
-                _toolCallMessageIds.remove(toolCallId);
+        },
+        onContextUpdate: (eventType, {String? summary, Map<String, dynamic>? data}) {
+          if (!mounted) return;
+          final contextNotifier = ref.read(contextPaneProvider.notifier);
+          switch (eventType) {
+            case 'userMessage':
+              contextNotifier.addTextMessage(summary ?? '', isUser: true);
+            case 'textMessage':
+              contextNotifier.addTextMessage(summary ?? '', isUser: false);
+            case 'runStarted':
+              contextNotifier.addAgUiEvent('Run Started', summary: summary);
+            case 'runFinished':
+              contextNotifier.addAgUiEvent('Run Finished');
+            case 'toolCall':
+              contextNotifier.addToolCall(summary ?? 'tool', summary: 'started');
+            case 'toolResult':
+              contextNotifier.addAgUiEvent('Tool Result');
+            case 'genUiRender':
+              contextNotifier.addGenUiRender(summary ?? 'Widget');
+            case 'stateSnapshot':
+              if (data != null) contextNotifier.updateState(data);
+            case 'stateDelta':
+              if (data != null) contextNotifier.applyDelta(data);
+            case 'thinking':
+              contextNotifier.addAgUiEvent('Thinking');
+            case 'error':
+              contextNotifier.addAgUiEvent('Error', summary: summary);
+            case 'localToolExecution':
+              final parts = summary?.split(': ') ?? [];
+              if (parts.length >= 2) {
+                contextNotifier.addLocalToolExecution(parts[0], status: parts[1]);
               }
-            }
           }
         },
-        onToolStateChange: (change) {
+        onActivityUpdate: (isActive, {String? eventType, String? toolName}) {
           if (!mounted) return;
-          // Get fresh reference - notifier may have been replaced during streaming
-          final freshContextNotifier = ref.read(contextPaneProvider.notifier);
-          _handleToolStateChange(change, freshContextNotifier);
+          final activityNotifier = ref.read(activityStatusProvider.notifier);
+          if (isActive) {
+            if (eventType != null) {
+              activityNotifier.handleEvent(eventType, toolName: toolName);
+            } else {
+              activityNotifier.startActivity();
+            }
+          } else {
+            activityNotifier.stopActivity();
+          }
         },
+        state: canvasState.toJson(),
       );
-      // Sync chat state to per-room provider after successful completion
-      _syncToRoomProvider();
     } catch (e) {
       DebugLog.error('Error sending message: $e');
       if (mounted) {
+        final session = connectionManager.getSession(roomId);
         final errorStr = e.toString().toLowerCase();
-        // Classify error based on exception content
         if (errorStr.contains('socket') ||
             errorStr.contains('connection') ||
             errorStr.contains('timeout') ||
             errorStr.contains('network')) {
-          chatNotifier.addNetworkError(e.toString());
+          session.addErrorMessage(e.toString());
         } else {
-          chatNotifier.addServerError(e.toString());
+          session.addErrorMessage(e.toString());
         }
-        // Sync even on error so state is preserved
-        _syncToRoomProvider();
       }
-    }
-  }
-
-  /// Sync current chat state to the per-room provider for session preservation.
-  void _syncToRoomProvider() {
-    if (!mounted) return;
-
-    final agUiService = ref.read(configuredAgUiServiceProvider);
-    final roomId = agUiService.currentRoomId;
-    if (roomId == null) return;
-
-    final messages = ref.read(chatProvider).messages;
-    if (messages.isNotEmpty) {
-      ref.read(roomChatProvider(roomId).notifier).loadMessages(messages);
-      DebugLog.network('Synced ${messages.length} messages to room $roomId');
-    }
-  }
-
-  /// Handle tool call state changes for context pane logging.
-  ///
-  /// Note: Tool call messages are added/updated via onLocalToolExecution callback.
-  /// This handler only updates the ContextPaneNotifier for debugging/visibility.
-  void _handleToolStateChange(
-    ToolCallStateChange change,
-    ContextPaneNotifier contextNotifier,
-  ) {
-    if (change.isStarting) {
-      contextNotifier.addToolExecution(change.toolName, isStarting: true);
-    } else if (change.isEnding) {
-      contextNotifier.addToolExecution(
-        change.toolName,
-        isStarting: false,
-        success: change.isSuccess,
-        error: change.error,
-      );
-    }
-  }
-
-  // State for tracking messages per AG-UI messageId
-  // Maps AG-UI event messageId -> our internal ChatMessage id
-  final Map<String, String> _messageIdMap = {};
-  final Map<String, StringBuffer> _textBuffers = {};
-
-  // Track tool call message IDs for updating status (key: toolCallId)
-  final Map<String, String> _toolCallMessageIds = {};
-
-  // Track active search widgets and their callbacks
-  final Map<String, void Function(String, Map<String, dynamic>)> _searchCallbacks = {};
-
-  // Track thinking message IDs (aguiThinkingId -> chatMessageId)
-  final Map<String, String> _thinkingMessageIds = {};
-
-  // Buffer for thinking text that arrives before message exists
-  StringBuffer? _pendingThinkingBuffer;
-  bool _hasPendingThinking = false;
-  bool _pendingThinkingFinalized = false;  // Track if ThinkingTextMessageEnd already fired
-
-  /// Process a single AG-UI event.
-  void _processEvent(
-    ag_ui.BaseEvent event,
-    ChatNotifier chatNotifier,
-    ContextPaneNotifier contextNotifier,
-    CanvasNotifier canvasNotifier,
-  ) {
-    final activityNotifier = ref.read(activityStatusProvider.notifier);
-
-    switch (event) {
-      case ag_ui.RunStartedEvent():
-        DebugLog.agui('RunStarted runId=${event.runId}');
-        DebugLog.mapping('=== NEW RUN === messageIdMap has ${_messageIdMap.length} entries');
-        contextNotifier.addAgUiEvent('Run Started', summary: event.runId);
-        activityNotifier.startActivity();
-        // Clear any stale thinking buffer from previous run
-        _pendingThinkingBuffer = null;
-        _hasPendingThinking = false;
-        _pendingThinkingFinalized = false;
-
-      case ag_ui.TextMessageStartEvent():
-        final aguiMessageId = event.messageId;
-        DebugLog.mapping('TextMessageStart aguiId=$aguiMessageId, current map: $_messageIdMap');
-        final chatMessageId = chatNotifier.startAgentMessage();
-        _messageIdMap[aguiMessageId] = chatMessageId;
-        _textBuffers[aguiMessageId] = StringBuffer();
-        DebugLog.mapping('TextMessageStart mapped: aguiId=$aguiMessageId -> chatId=$chatMessageId');
-        activityNotifier.handleEvent('TextMessageStart');
-
-        // Apply any pending thinking to this new message
-        if (_hasPendingThinking && _pendingThinkingBuffer != null) {
-          final thinkingText = _pendingThinkingBuffer.toString();
-          if (thinkingText.isNotEmpty) {
-            chatNotifier.startThinking(chatMessageId);
-            chatNotifier.appendThinking(chatMessageId, thinkingText);
-            // If thinking was already finalized (ThinkingTextMessageEnd came before TextMessageStart),
-            // finalize it now
-            if (_pendingThinkingFinalized) {
-              chatNotifier.finalizeThinking(chatMessageId);
-              DebugLog.agui('Applied and finalized buffered thinking (${thinkingText.length} chars) to chatId=$chatMessageId');
-            } else {
-              // Thinking still streaming - track for later finalization
-              _thinkingMessageIds['current'] = chatMessageId;
-              DebugLog.agui('Applied buffered thinking (${thinkingText.length} chars) to chatId=$chatMessageId, still streaming');
-            }
-          }
-          _pendingThinkingBuffer = null;
-          _hasPendingThinking = false;
-          _pendingThinkingFinalized = false;
-        }
-
-      case ag_ui.TextMessageContentEvent():
-        final aguiMessageId = event.messageId;
-        final chatMessageId = _messageIdMap[aguiMessageId];
-        if (chatMessageId != null) {
-          chatNotifier.appendToStreamingMessage(chatMessageId, event.delta);
-          _textBuffers[aguiMessageId]?.write(event.delta);
-        } else {
-          DebugLog.warn('TextMessageContent: NO MAPPING for aguiId=$aguiMessageId, map=$_messageIdMap');
-        }
-
-      case ag_ui.TextMessageEndEvent():
-        final aguiMessageId = event.messageId;
-        final chatMessageId = _messageIdMap[aguiMessageId];
-        DebugLog.mapping('TextMessageEnd aguiId=$aguiMessageId, chatId=$chatMessageId');
-        if (chatMessageId != null) {
-          chatNotifier.finalizeStreamingMessage(chatMessageId);
-          final text = _textBuffers[aguiMessageId]?.toString() ?? '';
-          DebugLog.chat('Finalized message: ${text.length} chars');
-          contextNotifier.addTextMessage(text, isUser: false);
-          _messageIdMap.remove(aguiMessageId);
-          _textBuffers.remove(aguiMessageId);
-        } else {
-          DebugLog.warn('TextMessageEnd: NO MAPPING for aguiId=$aguiMessageId');
-        }
-
-      case ag_ui.ToolCallStartEvent():
-        DebugLog.tool('ToolCallStart: ${event.toolCallName}');
-        contextNotifier.addToolCall(event.toolCallName, summary: 'started');
-        activityNotifier.handleEvent('ToolCallStart', toolName: event.toolCallName);
-
-      case ag_ui.ToolCallArgsEvent():
-        break; // Args handled by Thread class
-
-      case ag_ui.ToolCallEndEvent():
-        break;
-
-      case ag_ui.ToolCallResultEvent():
-        contextNotifier.addAgUiEvent('Tool Result');
-
-      case ag_ui.StateSnapshotEvent():
-        final stateData = event.snapshot as Map<String, dynamic>? ?? {};
-        contextNotifier.updateState(stateData);
-
-      case ag_ui.StateDeltaEvent():
-        final delta = event.delta as List<dynamic>? ?? [];
-        if (delta.isNotEmpty && delta.first is Map<String, dynamic>) {
-          contextNotifier.applyDelta(delta.first as Map<String, dynamic>);
-        }
-
-      case ag_ui.ActivitySnapshotEvent():
-        contextNotifier.addAgUiEvent(
-          'Activity Snapshot',
-          summary: '${event.activities.length} activities',
-        );
-
-      case ag_ui.ThinkingStartEvent():
-        contextNotifier.addAgUiEvent('Thinking');
-        activityNotifier.handleEvent('Thinking');
-
-      case ag_ui.ThinkingTextMessageStartEvent():
-        // Find the current streaming assistant message to attach thinking to
-        final chatMessages = ref.read(chatProvider).messages;
-        ChatMessage? targetMessage;
-        for (final m in chatMessages.reversed) {
-          if (m.user.id == ChatUser.agent.id && m.isStreaming) {
-            targetMessage = m;
-            break;
-          }
-        }
-        if (targetMessage != null) {
-          chatNotifier.startThinking(targetMessage.id);
-          _thinkingMessageIds['current'] = targetMessage.id;
-          DebugLog.agui('ThinkingTextMessageStart: attached to chatId=${targetMessage.id}');
-        } else {
-          // No message yet - buffer thinking until TextMessageStart arrives
-          _pendingThinkingBuffer = StringBuffer();
-          _hasPendingThinking = true;
-          DebugLog.agui('ThinkingTextMessageStart: buffering (no message yet)');
-        }
-
-      case ag_ui.ThinkingTextMessageContentEvent():
-        final chatMessageId = _thinkingMessageIds['current'];
-        if (chatMessageId != null) {
-          chatNotifier.appendThinking(chatMessageId, event.delta);
-        } else if (_hasPendingThinking) {
-          // Buffer thinking content until message exists
-          _pendingThinkingBuffer?.write(event.delta);
-        }
-
-      case ag_ui.ThinkingTextMessageEndEvent():
-        final chatMessageId = _thinkingMessageIds['current'];
-        if (chatMessageId != null) {
-          chatNotifier.finalizeThinking(chatMessageId);
-          _thinkingMessageIds.remove('current');
-          DebugLog.agui('ThinkingTextMessageEnd: finalized chatId=$chatMessageId');
-        } else if (_hasPendingThinking) {
-          // Thinking ended but message hasn't started - mark as finalized for when message arrives
-          _pendingThinkingFinalized = true;
-          DebugLog.agui('ThinkingTextMessageEnd: buffered ${_pendingThinkingBuffer?.length ?? 0} chars, marked finalized');
-        }
-
-      case ag_ui.ThinkingEndEvent():
-        // Cleanup any orphaned thinking
-        _thinkingMessageIds.remove('current');
-        break;
-
-      case ag_ui.RunFinishedEvent():
-        DebugLog.agui('RunFinished runId=${event.runId}');
-        DebugLog.mapping('=== RUN DONE === messageIdMap has ${_messageIdMap.length} entries remaining');
-        contextNotifier.addAgUiEvent('Run Finished');
-        activityNotifier.stopActivity();
-
-      case ag_ui.RunErrorEvent():
-        chatNotifier.addServerError(
-          event.message,
-          errorCode: event.code,
-        );
-        contextNotifier.addAgUiEvent('Error', summary: event.message);
-        DebugLog.error('RunError: ${event.code}: ${event.message}');
-        activityNotifier.stopActivity();
-
-      case ag_ui.CustomEvent():
-        _handleCustomEvent(
-          event,
-          chatNotifier,
-          contextNotifier,
-          canvasNotifier,
-        );
-
-      default:
-        DebugLog.warn('Unhandled event: ${event.runtimeType}');
     }
   }
 
   /// Handle UI tools (canvas_render, genui_render) that need Riverpod access.
   Map<String, dynamic> _handleUiTool(
+    String toolCallId,
     String toolName,
     Map<String, dynamic> args,
-    ChatNotifier chatNotifier,
-    CanvasNotifier canvasNotifier,
-    ContextPaneNotifier contextNotifier,
+    String roomId,
   ) {
+    final connectionManager = ref.read(connectionManagerProvider);
+    final session = connectionManager.getSession(roomId);
+    final canvasNotifier = ref.read(canvasProvider.notifier);
+    final contextNotifier = ref.read(contextPaneProvider.notifier);
+
     if (toolName == 'genui_render') {
       final widgetName = args['widget_name'] as String? ?? 'Widget';
       final data = args['data'] as Map<String, dynamic>? ?? {};
 
-      chatNotifier.addGenUiMessage(
+      session.addGenUiMessage(
         GenUiContent(
-          toolCallId: 'tool-${DateTime.now().millisecondsSinceEpoch}',
+          toolCallId: toolCallId,
           widgetName: widgetName,
           data: data,
         ),
@@ -481,10 +216,8 @@ class _ChatContentState extends ConsumerState<ChatContent> {
       switch (position) {
         case 'clear':
           canvasNotifier.clear();
-          break;
         case 'replace':
           canvasNotifier.replaceAll(widgetName, data);
-          break;
         default:
           canvasNotifier.addItem(widgetName, data);
       }
@@ -495,18 +228,9 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     return {'error': 'Unknown UI tool: $toolName'};
   }
 
-  /// Handle custom events (genui_render, canvas_render).
-  /// NOTE: These are now handled via uiToolHandler, so CustomEvents are ignored
-  /// to prevent double-rendering.
-  void _handleCustomEvent(
-    ag_ui.CustomEvent event,
-    ChatNotifier chatNotifier,
-    ContextPaneNotifier contextNotifier,
-    CanvasNotifier canvasNotifier,
-  ) {
-    // genui_render and canvas_render are handled via _handleUiTool
-    // CustomEvents for these are ignored to prevent double-rendering
-  }
+  // ===========================================================================
+  // SLASH COMMANDS (local handling)
+  // ===========================================================================
 
   /// Stubbed staff data for /search staff command
   static const List<Map<String, dynamic>> _stubbedStaffData = [
@@ -521,125 +245,6 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     {'id': 'u9', 'title': 'George Lucas', 'subtitle': 'Data Scientist'},
     {'id': 'u10', 'title': 'Hannah Montana', 'subtitle': 'Marketing Manager'},
   ];
-
-  /// Stubbed staff skills data (keyed by person ID)
-  static const Map<String, Map<String, dynamic>> _stubbedStaffSkills = {
-    'u1': {
-      'person_id': 'u1',
-      'name': 'John Smith',
-      'title': 'Engineering Lead',
-      'skills': [
-        {'name': 'Flutter', 'level': 5},
-        {'name': 'Dart', 'level': 5},
-        {'name': 'Python', 'level': 4},
-        {'name': 'AWS', 'level': 3},
-        {'name': 'Leadership', 'level': 4},
-      ],
-    },
-    'u2': {
-      'person_id': 'u2',
-      'name': 'Jane Doe',
-      'title': 'Product Manager',
-      'skills': [
-        {'name': 'Product Strategy', 'level': 5},
-        {'name': 'Agile', 'level': 4},
-        {'name': 'Data Analysis', 'level': 3},
-        {'name': 'UX Research', 'level': 4},
-      ],
-    },
-    'u3': {
-      'person_id': 'u3',
-      'name': 'Bob Wilson',
-      'title': 'Senior Developer',
-      'skills': [
-        {'name': 'Python', 'level': 5},
-        {'name': 'Django', 'level': 5},
-        {'name': 'PostgreSQL', 'level': 4},
-        {'name': 'Docker', 'level': 4},
-        {'name': 'AWS', 'level': 3},
-      ],
-    },
-    'u4': {
-      'person_id': 'u4',
-      'name': 'Alice Johnson',
-      'title': 'UX Designer',
-      'skills': [
-        {'name': 'Figma', 'level': 5},
-        {'name': 'User Research', 'level': 4},
-        {'name': 'Prototyping', 'level': 5},
-        {'name': 'CSS', 'level': 3},
-      ],
-    },
-    'u5': {
-      'person_id': 'u5',
-      'name': 'Charlie Brown',
-      'title': 'DevOps Engineer',
-      'skills': [
-        {'name': 'Kubernetes', 'level': 5},
-        {'name': 'Docker', 'level': 5},
-        {'name': 'AWS', 'level': 5},
-        {'name': 'Terraform', 'level': 4},
-        {'name': 'Python', 'level': 3},
-      ],
-    },
-    'u6': {
-      'person_id': 'u6',
-      'name': 'Diana Prince',
-      'title': 'QA Lead',
-      'skills': [
-        {'name': 'Test Automation', 'level': 5},
-        {'name': 'Selenium', 'level': 4},
-        {'name': 'Python', 'level': 4},
-        {'name': 'API Testing', 'level': 5},
-      ],
-    },
-    'u7': {
-      'person_id': 'u7',
-      'name': 'Edward Norton',
-      'title': 'Backend Developer',
-      'skills': [
-        {'name': 'Java', 'level': 5},
-        {'name': 'Spring Boot', 'level': 5},
-        {'name': 'PostgreSQL', 'level': 4},
-        {'name': 'Redis', 'level': 4},
-        {'name': 'Kafka', 'level': 3},
-      ],
-    },
-    'u8': {
-      'person_id': 'u8',
-      'name': 'Fiona Apple',
-      'title': 'Frontend Developer',
-      'skills': [
-        {'name': 'React', 'level': 5},
-        {'name': 'TypeScript', 'level': 5},
-        {'name': 'CSS', 'level': 4},
-        {'name': 'Flutter', 'level': 3},
-      ],
-    },
-    'u9': {
-      'person_id': 'u9',
-      'name': 'George Lucas',
-      'title': 'Data Scientist',
-      'skills': [
-        {'name': 'Python', 'level': 5},
-        {'name': 'Machine Learning', 'level': 5},
-        {'name': 'TensorFlow', 'level': 4},
-        {'name': 'SQL', 'level': 4},
-        {'name': 'Data Viz', 'level': 4},
-      ],
-    },
-    'u10': {
-      'person_id': 'u10',
-      'name': 'Hannah Montana',
-      'title': 'Marketing Manager',
-      'skills': [
-        {'name': 'Digital Marketing', 'level': 5},
-        {'name': 'SEO', 'level': 4},
-        {'name': 'Analytics', 'level': 4},
-        {'name': 'Content Strategy', 'level': 5},
-      ],
-    },
-  };
 
   /// Stubbed projects data for /list projects command
   static const List<Map<String, dynamic>> _stubbedProjectsData = [
@@ -664,20 +269,6 @@ class _ChatContentState extends ConsumerState<ChatContent> {
       'required_skills': ['Python', 'Machine Learning', 'TensorFlow', 'PostgreSQL'],
       'status': 'open',
     },
-    {
-      'id': 'p4',
-      'title': 'API Gateway Modernization',
-      'description': 'Replace monolithic API with microservices architecture',
-      'required_skills': ['Java', 'Spring Boot', 'Kubernetes', 'Kafka'],
-      'status': 'open',
-    },
-    {
-      'id': 'p5',
-      'title': 'Marketing Analytics Dashboard',
-      'description': 'Real-time dashboard for marketing campaign performance',
-      'required_skills': ['React', 'TypeScript', 'Data Viz', 'Analytics'],
-      'status': 'open',
-    },
   ];
 
   /// Demo definitions with walkthrough steps
@@ -689,62 +280,12 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         '1. Type: /list projects',
         '2. Pick a project (e.g., "Mobile App Redesign")',
         '3. Say: "Build me a team for the Mobile App Redesign project"',
-        '4. The LLM will show SkillsCards for recommended team members',
-        '5. Try: "Pin these to the canvas" to save them',
-      ],
-    },
-    'skill-match': {
-      'title': 'Skill Matching',
-      'description': 'Find the best project fit for selected staff members',
-      'steps': [
-        '1. Type: /search staff',
-        '2. Select 2-3 people (e.g., John Smith, Bob Wilson)',
-        '3. Complete the message: "Show their skills"',
-        '4. Then ask: "Which projects are these people best suited for?"',
-        '5. LLM shows ProjectCards with matched_skills highlighted',
-      ],
-    },
-    'gap-analysis': {
-      'title': 'Skill Gap Analysis',
-      'description': 'Identify missing skills for a project',
-      'steps': [
-        '1. Type: /list projects',
-        '2. Say: "What skills are we missing for the API Gateway project?"',
-        '3. LLM analyzes staff skills vs project requirements',
-        '4. Shows which required skills have no expert available',
-        '5. Try: "Who should we hire to fill these gaps?"',
-      ],
-    },
-    'compare': {
-      'title': 'Staff Comparison',
-      'description': 'Compare candidates for a specific role or project',
-      'steps': [
-        '1. Type: /search staff',
-        '2. Select 2 people to compare',
-        '3. Say: "Compare these two for the ML Recommendation Engine project"',
-        '4. LLM shows side-by-side skills with match percentages',
-        '5. Ask: "Who would you recommend and why?"',
-      ],
-    },
-    'coverage': {
-      'title': 'Project Coverage Ranking',
-      'description': 'Rank projects by how well current staff can cover them',
-      'steps': [
-        '1. Say: "Rank all projects by how well we can staff them"',
-        '2. LLM analyzes all staff skills vs all project requirements',
-        '3. Shows ProjectCards sorted by skill coverage percentage',
-        '4. Try: "What would it take to fully staff the bottom-ranked project?"',
       ],
     },
   };
 
-  /// Handle slash commands locally (not sent to backend).
-  /// Returns true if command was handled, false to send to backend.
-  bool _handleSlashCommand(
-    String text,
-    ChatNotifier chatNotifier,
-    CanvasNotifier canvasNotifier,
-  ) {
+  /// Handle slash commands locally.
+  bool _handleSlashCommand(String text, RoomSession session) {
     final parts = text.split(' ');
     final command = parts[0].toLowerCase();
     final args = parts.skip(1).toList();
@@ -752,25 +293,25 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     switch (command) {
       case '/search':
         final searchType = args.isNotEmpty ? args[0] : 'items';
-        _showSearchWidget(searchType, chatNotifier, canvasNotifier);
+        _showSearchWidget(searchType, session);
         return true;
 
       case '/list':
         final listType = args.isNotEmpty ? args[0] : 'items';
-        _showListWidget(listType, chatNotifier, canvasNotifier);
+        _showListWidget(listType, session);
         return true;
 
       case '/demo':
         final demoName = args.isNotEmpty ? args.join('-') : '';
-        _showDemo(demoName, chatNotifier);
+        _showDemo(demoName, session);
         return true;
 
       case '/canvas':
-        _showCanvasState(chatNotifier, canvasNotifier);
+        _showCanvasState(session);
         return true;
 
       case '/help':
-        chatNotifier.addSystemMessage(
+        session.addSystemMessage(
           'Available commands:\n'
           '• /search staff - Search and select staff members\n'
           '• /list projects - Show available projects\n'
@@ -782,21 +323,13 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         return true;
 
       default:
-        // Unknown command - let it go to backend
         return false;
     }
   }
 
-  /// Show a search widget in the chat for interactive selection.
-  void _showSearchWidget(
-    String searchType,
-    ChatNotifier chatNotifier,
-    CanvasNotifier canvasNotifier,
-  ) {
-    // Show user's command in chat
-    chatNotifier.addUserMessage('/search $searchType');
+  void _showSearchWidget(String searchType, RoomSession session) {
+    session.addUserMessage('/search $searchType');
 
-    // Determine items based on search type
     List<Map<String, dynamic>> items;
     String placeholder;
 
@@ -809,26 +342,21 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         placeholder = 'Search...';
     }
 
-    // Generate unique ID for this search widget
     final searchId = 'search-${DateTime.now().millisecondsSinceEpoch}';
 
-    // Store callback for this search widget
     _searchCallbacks[searchId] = (eventName, payload) {
-      _handleSearchWidgetEvent(eventName, payload, searchType, chatNotifier);
-      // Clean up callback after terminal events
+      _handleSearchWidgetEvent(eventName, payload, searchType, session);
       if (eventName == 'submit' || eventName == 'cancel') {
         _searchCallbacks.remove(searchId);
       }
     };
 
-    // Add SearchWidget as a GenUI message
-    // Include _toolCallId in data so widget can pass it back with events
-    chatNotifier.addGenUiMessage(
+    session.addGenUiMessage(
       GenUiContent(
         toolCallId: searchId,
         widgetName: 'SearchWidget',
         data: {
-          '_toolCallId': searchId,  // For event routing
+          '_toolCallId': searchId,
           'placeholder': placeholder,
           'multi_select': true,
           'items': items,
@@ -838,20 +366,13 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     );
   }
 
-  /// Show a list widget in the chat (e.g., projects, demos).
-  void _showListWidget(
-    String listType,
-    ChatNotifier chatNotifier,
-    CanvasNotifier canvasNotifier,
-  ) {
-    // Show user's command in chat
-    chatNotifier.addUserMessage('/list $listType');
+  void _showListWidget(String listType, RoomSession session) {
+    session.addUserMessage('/list $listType');
 
     switch (listType) {
       case 'projects':
-        // Show each project as a ProjectCard in chat
         for (final project in _stubbedProjectsData) {
-          chatNotifier.addGenUiMessage(
+          session.addGenUiMessage(
             GenUiContent(
               toolCallId: 'project-${project['id']}-${DateTime.now().millisecondsSinceEpoch}',
               widgetName: 'ProjectCard',
@@ -860,43 +381,39 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           );
         }
       case 'demos':
-        // Show available demos as a formatted list
         final demoList = _demos.entries.map((e) {
           final demo = e.value;
           return '• /demo ${e.key} - ${demo['title']}\n  ${demo['description']}';
         }).join('\n\n');
-        chatNotifier.addSystemMessage('Available Demos:\n\n$demoList');
+        session.addSystemMessage('Available Demos:\n\n$demoList');
       default:
-        chatNotifier.addSystemMessage('Unknown list type: $listType\nTry: /list projects or /list demos');
+        session.addSystemMessage('Unknown list type: $listType\nTry: /list projects or /list demos');
     }
   }
 
-  /// Show current canvas state.
-  void _showCanvasState(ChatNotifier chatNotifier, CanvasNotifier canvasNotifier) {
-    chatNotifier.addUserMessage('/canvas');
-
+  void _showCanvasState(RoomSession session) {
+    session.addUserMessage('/canvas');
     final canvasState = ref.read(canvasProvider);
-    chatNotifier.addSystemMessage(canvasState.toSummary());
+    session.addSystemMessage(canvasState.toSummary());
   }
 
-  /// Show a specific demo walkthrough.
-  void _showDemo(String demoName, ChatNotifier chatNotifier) {
-    chatNotifier.addUserMessage('/demo $demoName');
+  void _showDemo(String demoName, RoomSession session) {
+    session.addUserMessage('/demo $demoName');
 
     if (demoName.isEmpty) {
-      chatNotifier.addSystemMessage('Usage: /demo <name>\nType /list demos to see available demos.');
+      session.addSystemMessage('Usage: /demo <name>\nType /list demos to see available demos.');
       return;
     }
 
     final demo = _demos[demoName];
     if (demo == null) {
       final available = _demos.keys.join(', ');
-      chatNotifier.addSystemMessage('Unknown demo: $demoName\nAvailable: $available');
+      session.addSystemMessage('Unknown demo: $demoName\nAvailable: $available');
       return;
     }
 
     final steps = (demo['steps'] as List<dynamic>).join('\n');
-    chatNotifier.addSystemMessage(
+    session.addSystemMessage(
       '${demo['title']}\n'
       '${'-' * (demo['title'] as String).length}\n'
       '${demo['description']}\n\n'
@@ -904,38 +421,37 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     );
   }
 
-  /// Handle events from SearchWidget.
   void _handleSearchWidgetEvent(
     String eventName,
     Map<String, dynamic> payload,
     String searchType,
-    ChatNotifier chatNotifier,
+    RoomSession session,
   ) {
     switch (eventName) {
       case 'submit':
         final selected = payload['selected'] as List<dynamic>? ?? [];
         if (selected.isNotEmpty) {
-          // Format selection as text to pre-fill the input
           final names = selected.map((item) {
             final map = item as Map<String, dynamic>;
             return '${map['title']} (${map['subtitle']})';
           }).join(', ');
 
-          // Pre-fill the input with selection, let user complete the message
           final prefill = 'Selected $searchType: $names\n';
           _inputController.text = prefill;
-          // Move cursor to end so user can continue typing
           _inputController.selection = TextSelection.fromPosition(
             TextPosition(offset: prefill.length),
           );
         }
 
       case 'cancel':
-        chatNotifier.addSystemMessage('Search cancelled.');
+        session.addSystemMessage('Search cancelled.');
     }
   }
 
-  /// Paste from clipboard into input field.
+  // ===========================================================================
+  // UI HELPERS
+  // ===========================================================================
+
   Future<void> _pasteFromClipboard() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     if (data?.text != null) {
@@ -953,7 +469,6 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     }
   }
 
-  /// Handle GenUI events from message bubbles.
   void _handleGenUiEvent(String eventName, Map<String, Object?> arguments) {
     final toolCallId = arguments['_toolCallId'] as String?;
     if (toolCallId != null && _searchCallbacks.containsKey(toolCallId)) {
@@ -964,7 +479,6 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     }
   }
 
-  /// Handle quoting text from a message.
   void _handleQuote(String quotedText) {
     final currentText = _inputController.text;
     final newText = currentText.isEmpty
@@ -976,14 +490,34 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     );
   }
 
+  // ===========================================================================
+  // BUILD
+  // ===========================================================================
+
   @override
   Widget build(BuildContext context) {
-    final chatState = ref.watch(chatProvider);
+    final selectedRoomId = ref.watch(selectedRoomProvider);
+    final selectedRoom = ref.watch(selectedRoomDataProvider);
+    final searchState = ref.watch(chatSearchProvider);
+    final activityStatus = ref.watch(activityStatusProvider);
 
-    // Wrap with keyboard shortcut for paste (Alt+K)
-    // Note: Other shortcuts (search, room/layout switching) are handled by
-    // KeyboardShortcutsWidget at the ChatScreen level.
-    // Using Alt instead of Cmd/Ctrl to avoid browser shortcut conflicts on web.
+    // Get messages from ConnectionManager (the source of truth)
+    final connectionManager = ref.watch(connectionManagerProvider);
+    final messages = selectedRoomId != null
+        ? connectionManager.getMessages(selectedRoomId)
+        : <ChatMessage>[];
+    final isAgentTyping = selectedRoomId != null
+        ? connectionManager.isAgentTyping(selectedRoomId)
+        : false;
+
+    // Focus input when room changes
+    _checkRoomChange(selectedRoomId);
+
+    // Only count agent messages to prevent suggestion flash on user submit
+    final hasAgentMessages = messages.any(
+      (m) => m.user.id == ChatUser.agent.id,
+    );
+
     return Shortcuts(
       shortcuts: {
         const SingleActivator(LogicalKeyboardKey.keyK, alt: true):
@@ -1002,52 +536,41 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           autofocus: true,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              // Constrain message bubbles to 70% of available chat width
               final messageMaxWidth = constraints.maxWidth * 0.7;
-
-              final activityStatus = ref.watch(activityStatusProvider);
-              final searchState = ref.watch(chatSearchProvider);
-              final selectedRoom = ref.watch(selectedRoomDataProvider);
-              final selectedRoomId = ref.watch(selectedRoomProvider);
-              // Only count agent messages to prevent suggestion flash on user submit
-              final hasAgentMessages = chatState.messages.any(
-                (m) => m.user.id == ChatUser.agent.id,
-              );
-
-              // Focus input when room changes
-              _checkRoomChange(selectedRoomId);
 
               return Column(
                 children: [
                   // Search bar (when active)
                   if (searchState.isActive)
                     ChatSearchBar(
-                      messageIds: chatState.messages.map((m) => m.id).toList(),
+                      messageIds: messages.map((m) => m.id).toList(),
                       getMessageText: (id) {
                         try {
-                          final msg = chatState.messages.firstWhere((m) => m.id == id);
+                          final msg = messages.firstWhere((m) => m.id == id);
                           return msg.text ?? '';
                         } catch (_) {
                           return '';
                         }
                       },
                     ),
-                  // Chat messages area - using custom ChatMessageList
+                  // Chat messages area
                   Expanded(
                     child: ChatMessageList(
-                      messages: chatState.messages,
-                      isAgentTyping: chatState.isAgentTyping,
+                      messages: messages,
+                      isAgentTyping: isAgentTyping,
                       scrollController: _scrollController,
                       maxBubbleWidth: messageMaxWidth,
                       onQuote: _handleQuote,
                       onToggleThinking: (messageId) {
-                        ref.read(chatProvider.notifier).toggleThinkingExpanded(messageId);
+                        if (selectedRoomId != null) {
+                          connectionManager.getSession(selectedRoomId)
+                              .toggleThinkingExpanded(messageId);
+                        }
                       },
                       onToggleToolGroup: (messageId) {
-                        ref.read(chatProvider.notifier).toggleToolGroupExpanded(messageId);
+                        // Tool group toggle - handled by session if needed
                       },
                       onGenUiEvent: _handleGenUiEvent,
-                      // Show welcome card at top when no agent messages
                       welcomeWidget: !hasAgentMessages && selectedRoom != null
                           ? WelcomeCard(
                               room: selectedRoom,
@@ -1059,17 +582,14 @@ class _ChatContentState extends ConsumerState<ChatContent> {
                           : null,
                     ),
                   ),
-                  // Activity status bar OR custom input area
+                  // Activity status bar OR input area
                   if (activityStatus.isActive && activityStatus.currentMessage != null)
                     ActivityStatusBar(
                       message: activityStatus.currentMessage!,
                       onStop: () async {
-                        final agUiService = ref.read(configuredAgUiServiceProvider);
-                        final roomId = agUiService.currentRoomId;
-                        if (roomId != null) {
-                          DebugLog.network('Stop button: cancelling run for room $roomId');
-                          final connectionManager = ref.read(connectionManagerProvider);
-                          await connectionManager.cancelRun(roomId);
+                        if (selectedRoomId != null) {
+                          DebugLog.network('Stop button: cancelling run for room $selectedRoomId');
+                          await connectionManager.cancelRun(selectedRoomId);
                           ref.read(activityStatusProvider.notifier).stopActivity();
                         }
                       },
@@ -1082,7 +602,7 @@ class _ChatContentState extends ConsumerState<ChatContent> {
                       room: selectedRoom,
                       hasMessages: hasAgentMessages,
                       isLoading: activityStatus.isActive,
-                      showWelcome: false, // Welcome card now in ChatMessageList
+                      showWelcome: false,
                     ),
                 ],
               );

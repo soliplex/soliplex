@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/providers/panel_providers.dart';
 import '../../core/services/agui_service.dart';
+import '../../core/services/rooms_service.dart';
+import '../../core/services/server_config_service.dart';
 import '../../core/services/thread_history_service.dart';
 import '../chat/chat_content.dart';
 import '../context/context_pane.dart';
@@ -63,25 +64,31 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
   }
 
   void _fetchThreads() {
-    final config = ref.read(agUiConfigProvider);
-    if (config != null) {
-      final params = (baseUrl: config.baseUrl, roomId: config.roomId);
+    final server = ref.read(currentServerProvider);
+    final roomId = ref.read(selectedRoomProvider);
+    if (server != null && roomId != null) {
+      final params = (baseUrl: server.url, roomId: roomId);
       ref.read(threadHistoryProvider(params).notifier).fetchThreads();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final config = ref.watch(agUiConfigProvider);
-    final chatState = ref.watch(chatProvider);
-    final agUiService = ref.watch(agUiServiceProvider);
+    final server = ref.watch(currentServerProvider);
+    final roomId = ref.watch(selectedRoomProvider);
+    final connectionManager = ref.watch(connectionManagerProvider);
 
-    // If no config, show placeholder
-    if (config == null) {
+    // If no server or room, show placeholder
+    if (server == null || roomId == null) {
       return const Center(child: Text('Select a room'));
     }
 
-    final params = (baseUrl: config.baseUrl, roomId: config.roomId);
+    // Get messages from ConnectionManager
+    final messages = connectionManager.getMessages(roomId);
+    final session = connectionManager.getSession(roomId);
+    final currentThreadId = session.threadId;
+
+    final params = (baseUrl: server.url, roomId: roomId);
     final threadState = ref.watch(threadHistoryProvider(params));
 
     return Column(
@@ -104,8 +111,8 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
                 tooltip: 'New thread',
                 onPressed: () {
                   // Clear current conversation to start new
-                  ref.read(chatProvider.notifier).clearMessages();
-                  ref.read(agUiServiceProvider).resetConversation();
+                  connectionManager.clearMessages(roomId);
+                  connectionManager.disposeSession(roomId);
                   ref
                       .read(threadHistoryProvider(params).notifier)
                       .selectThread(null);
@@ -119,12 +126,10 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
         // Current session card - show when:
         // 1. We have messages AND
         // 2. Either no thread selected, OR current threadId is not in the fetched list
-        if (chatState.messages.isNotEmpty) ...[
+        if (messages.isNotEmpty) ...[
           Builder(builder: (context) {
-            final currentThreadId = agUiService.threadId;
             final isInList = currentThreadId != null &&
                 threadState.threads.any((t) => t.threadId == currentThreadId);
-            final isSelected = threadState.selectedThreadId == currentThreadId;
 
             // Only show if this is a new thread not yet in the list
             if (currentThreadId == null || !isInList) {
@@ -135,7 +140,7 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
                   child: ListTile(
                     leading: const Icon(Icons.chat_bubble),
                     title: const Text('Current Session'),
-                    subtitle: Text('${chatState.messages.length} messages'),
+                    subtitle: Text('${messages.length} messages'),
                     trailing: currentThreadId != null
                         ? const Icon(Icons.cloud_done, size: 16)
                         : const Icon(Icons.cloud_off, size: 16),
@@ -163,7 +168,7 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
               ? _buildErrorState(context, threadState.error!)
               : threadState.threads.isEmpty
               ? _buildEmptyState(context)
-              : _buildThreadList(context, ref, threadState, params),
+              : _buildThreadList(context, ref, threadState, params, roomId),
         ),
       ],
     );
@@ -235,16 +240,18 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
     WidgetRef ref,
     ThreadHistoryState threadState,
     ({String baseUrl, String roomId}) params,
+    String roomId,
   ) {
-    final agUiService = ref.watch(agUiServiceProvider);
-    final activeThreadId = agUiService.threadId;
+    final connectionManager = ref.watch(connectionManagerProvider);
+    final session = connectionManager.getSession(roomId);
+    final activeThreadId = session.threadId;
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: threadState.threads.length,
       itemBuilder: (context, index) {
         final thread = threadState.threads[index];
-        // Highlight if this is the active thread (from AgUiService)
+        // Highlight if this is the active thread
         final isSelected = thread.threadId == activeThreadId;
 
         return Padding(
@@ -286,18 +293,12 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
                     .read(threadHistoryProvider(params).notifier)
                     .selectThread(thread.threadId);
 
-                // Clear current chat messages
-                ref.read(chatProvider.notifier).clearMessages();
+                // Clear current messages
+                connectionManager.clearMessages(roomId);
 
-                // Resume the thread and load history
-                final messages = await ref
-                    .read(agUiServiceProvider)
-                    .resumeThread(thread.threadId);
-
-                // Load the historical messages into chat
-                if (messages.isNotEmpty) {
-                  ref.read(chatProvider.notifier).loadMessages(messages);
-                }
+                // TODO: Load thread history from server
+                // For now, thread switching is a placeholder - the session
+                // would need to be reinitialized with the selected thread
               },
             ),
           ),

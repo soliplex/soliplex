@@ -5,17 +5,28 @@ import 'package:ag_ui/ag_ui.dart' as ag_ui;
 import '../../infrastructure/quick_agui/thread.dart';
 import '../../infrastructure/quick_agui/tool_call_state.dart';
 import '../models/chat_models.dart';
+import '../models/error_types.dart';
 import '../utils/debug_log.dart';
 import '../utils/url_builder.dart';
 import 'cancel_token.dart';
 import 'connection_events.dart';
 import 'http_transport.dart';
 
+/// Callback for canvas operations from event processing.
+typedef CanvasCallback = void Function(String operation, String widgetName, Map<String, dynamic> data);
+
+/// Callback for context pane updates from event processing.
+typedef ContextCallback = void Function(String eventType, {String? summary, Map<String, dynamic>? data});
+
+/// Callback for activity status updates.
+typedef ActivityCallback = void Function(bool isActive, {String? eventType, String? toolName});
+
 /// Per-room session state container.
 ///
 /// Manages:
 /// - Thread lifecycle
-/// - Chat history preservation
+/// - Chat messages (THE source of truth)
+/// - Event processing (AG-UI events → ChatMessage)
 /// - Active run tracking
 /// - Cancellation support
 class RoomSession {
@@ -29,22 +40,63 @@ class RoomSession {
   CancelToken? _cancelToken;
   SessionState _state = SessionState.active;
 
-  /// Preserved chat history for room switching.
-  List<ChatMessage> _chatHistory = [];
+  // ==========================================================================
+  // MESSAGE STATE (THE source of truth for chat messages)
+  // ==========================================================================
 
-  /// Timestamp of last activity.
-  DateTime? _lastActivity;
+  /// The authoritative list of chat messages for this room.
+  final List<ChatMessage> _messages = [];
+
+  /// Stream controller for message updates (UI subscribes to this).
+  final StreamController<List<ChatMessage>> _messageController =
+      StreamController<List<ChatMessage>>.broadcast();
+
+  // ==========================================================================
+  // EVENT PROCESSING STATE
+  // ==========================================================================
+
+  /// Maps AG-UI event messageId → our internal ChatMessage id.
+  final Map<String, String> _messageIdMap = {};
+
+  /// Text buffers for streaming messages.
+  final Map<String, StringBuffer> _textBuffers = {};
+
+  /// Track tool call message IDs for updating status (toolCallId → chatMessageId).
+  final Map<String, String> _toolCallMessageIds = {};
+
+  /// Track thinking message IDs (aguiThinkingId → chatMessageId).
+  final Map<String, String> _thinkingMessageIds = {};
+
+  /// Buffer for thinking text that arrives before message exists.
+  StringBuffer? _pendingThinkingBuffer;
+  bool _hasPendingThinking = false;
+  bool _pendingThinkingFinalized = false;
+
+  // ==========================================================================
+  // DEDUPLICATION STATE
+  // ==========================================================================
 
   /// Processed tool calls for deduplication.
-  /// Used by UI layer to avoid processing the same tool call multiple times.
   final Set<String> _processedToolCalls = {};
 
   /// Processed tool notifications for deduplication.
   final Set<String> _processedToolNotifications = {};
 
+  // ==========================================================================
+  // SESSION STATE
+  // ==========================================================================
+
+  /// Timestamp of last activity.
+  DateTime? _lastActivity;
+
   /// Stream controller for session events.
   final StreamController<ConnectionEvent> _eventController =
       StreamController<ConnectionEvent>.broadcast();
+
+  /// Callbacks for side effects (canvas, context pane, activity).
+  CanvasCallback? onCanvasUpdate;
+  ContextCallback? onContextUpdate;
+  ActivityCallback? onActivityUpdate;
 
   RoomSession({
     required this.roomId,
@@ -59,8 +111,17 @@ class RoomSession {
   bool get isActive => _state == SessionState.active || _state == SessionState.streaming;
   bool get isStreaming => _state == SessionState.streaming;
   bool get isDisposed => _state == SessionState.disposed;
-  List<ChatMessage> get chatHistory => List.unmodifiable(_chatHistory);
   DateTime? get lastActivity => _lastActivity;
+
+  /// The authoritative list of messages for this room.
+  List<ChatMessage> get messages => List.unmodifiable(_messages);
+
+  /// Stream of message updates (UI subscribes to this).
+  Stream<List<ChatMessage>> get messageStream => _messageController.stream;
+
+  /// Whether the agent is currently typing (streaming a message).
+  bool get isAgentTyping => _messages.any((m) =>
+      m.user.id == ChatUser.agent.id && m.isStreaming);
 
   /// Stream of session events.
   Stream<ConnectionEvent> get events => _eventController.stream;
@@ -280,16 +341,374 @@ class RoomSession {
     }
   }
 
-  /// Save chat history for preservation.
-  void saveChatHistory(List<ChatMessage> messages) {
-    _chatHistory = List.from(messages);
-    DebugLog.network('RoomSession: Saved ${messages.length} messages for room $roomId');
+  // ==========================================================================
+  // MESSAGE MANIPULATION METHODS
+  // ==========================================================================
+
+  /// Notify listeners of message changes.
+  void _notifyMessageUpdate() {
+    if (!_messageController.isClosed) {
+      _messageController.add(List.unmodifiable(_messages));
+    }
   }
 
-  /// Clear chat history.
-  void clearChatHistory() {
-    _chatHistory = [];
+  /// Add a user message.
+  void addUserMessage(String text) {
+    _messages.add(ChatMessage.text(
+      user: ChatUser.user,
+      text: text,
+    ));
+    _notifyMessageUpdate();
+    onContextUpdate?.call('userMessage', summary: text);
   }
+
+  /// Start a new agent message (streaming).
+  String startAgentMessage() {
+    final message = ChatMessage.text(
+      user: ChatUser.agent,
+      text: '',
+      isStreaming: true,
+    );
+    _messages.add(message);
+    _notifyMessageUpdate();
+    return message.id;
+  }
+
+  /// Append text to a streaming message.
+  void appendToMessage(String messageId, String delta) {
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    if (index >= 0) {
+      final msg = _messages[index];
+      _messages[index] = msg.copyWith(text: (msg.text ?? '') + delta);
+      _notifyMessageUpdate();
+    }
+  }
+
+  /// Finalize a streaming message.
+  void finalizeMessage(String messageId) {
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    if (index >= 0) {
+      _messages[index] = _messages[index].copyWith(isStreaming: false);
+      _notifyMessageUpdate();
+    }
+  }
+
+  /// Add a GenUI message.
+  void addGenUiMessage(GenUiContent content) {
+    _messages.add(ChatMessage.genUi(
+      user: ChatUser.agent,
+      content: content,
+    ));
+    _notifyMessageUpdate();
+    onContextUpdate?.call('genUiRender', summary: content.widgetName);
+  }
+
+  /// Add an error message.
+  void addErrorMessage(String message, {String? errorCode, ChatErrorType? errorType}) {
+    final errorInfo = ChatErrorInfo(
+      type: errorType ?? ChatErrorType.server,
+      friendlyMessage: 'Something went wrong',
+      technicalDetails: message,
+      errorCode: errorCode,
+    );
+    _messages.add(ChatMessage.error(
+      user: ChatUser.system,
+      errorInfo: errorInfo,
+    ));
+    _notifyMessageUpdate();
+  }
+
+  /// Add a system message.
+  void addSystemMessage(String text) {
+    _messages.add(ChatMessage.text(
+      user: ChatUser.system,
+      text: text,
+    ));
+    _notifyMessageUpdate();
+  }
+
+  /// Add a tool call message and return its ID.
+  String addToolCallMessage(String toolName) {
+    final message = ChatMessage.toolCall(
+      user: ChatUser.agent,
+      toolName: toolName,
+      status: 'executing',
+    );
+    _messages.add(message);
+    _notifyMessageUpdate();
+    return message.id;
+  }
+
+  /// Update tool call status.
+  void updateToolCallStatus(String messageId, String status) {
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    if (index >= 0) {
+      _messages[index] = _messages[index].copyWith(toolCallStatus: status);
+      _notifyMessageUpdate();
+    }
+  }
+
+  /// Start thinking for a message.
+  void startThinking(String messageId) {
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    if (index >= 0) {
+      _messages[index] = _messages[index].copyWith(
+        thinkingText: '',
+        isThinkingStreaming: true,
+      );
+      _notifyMessageUpdate();
+    }
+  }
+
+  /// Append thinking text.
+  void appendThinking(String messageId, String delta) {
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    if (index >= 0) {
+      final msg = _messages[index];
+      _messages[index] = msg.copyWith(
+        thinkingText: (msg.thinkingText ?? '') + delta,
+      );
+      _notifyMessageUpdate();
+    }
+  }
+
+  /// Finalize thinking (stop streaming).
+  void finalizeThinking(String messageId) {
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    if (index >= 0) {
+      _messages[index] = _messages[index].copyWith(isThinkingStreaming: false);
+      _notifyMessageUpdate();
+    }
+  }
+
+  /// Toggle thinking expanded state.
+  void toggleThinkingExpanded(String messageId) {
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    if (index >= 0) {
+      final msg = _messages[index];
+      _messages[index] = msg.copyWith(isThinkingExpanded: !msg.isThinkingExpanded);
+      _notifyMessageUpdate();
+    }
+  }
+
+  /// Clear all messages.
+  void clearMessages() {
+    _messages.clear();
+    _messageIdMap.clear();
+    _textBuffers.clear();
+    _toolCallMessageIds.clear();
+    _thinkingMessageIds.clear();
+    _pendingThinkingBuffer = null;
+    _hasPendingThinking = false;
+    _pendingThinkingFinalized = false;
+    clearProcessedToolCalls();
+    _notifyMessageUpdate();
+  }
+
+  /// Load messages (for history restoration).
+  void loadMessages(List<ChatMessage> messages) {
+    _messages.clear();
+    _messages.addAll(messages);
+    _notifyMessageUpdate();
+    DebugLog.network('RoomSession: Loaded ${messages.length} messages for room $roomId');
+  }
+
+  // ==========================================================================
+  // EVENT PROCESSING
+  // ==========================================================================
+
+  /// Process a single AG-UI event and update messages.
+  void processEvent(ag_ui.BaseEvent event) {
+    switch (event) {
+      case ag_ui.RunStartedEvent():
+        DebugLog.agui('RunStarted runId=${event.runId}');
+        DebugLog.mapping('=== NEW RUN === messageIdMap has ${_messageIdMap.length} entries');
+        onContextUpdate?.call('runStarted', summary: event.runId);
+        onActivityUpdate?.call(true);
+        // Clear any stale thinking buffer from previous run
+        _pendingThinkingBuffer = null;
+        _hasPendingThinking = false;
+        _pendingThinkingFinalized = false;
+
+      case ag_ui.TextMessageStartEvent():
+        final aguiMessageId = event.messageId;
+        DebugLog.mapping('TextMessageStart aguiId=$aguiMessageId, current map: $_messageIdMap');
+        final chatMessageId = startAgentMessage();
+        _messageIdMap[aguiMessageId] = chatMessageId;
+        _textBuffers[aguiMessageId] = StringBuffer();
+        DebugLog.mapping('TextMessageStart mapped: aguiId=$aguiMessageId -> chatId=$chatMessageId');
+        onActivityUpdate?.call(true, eventType: 'TextMessageStart');
+
+        // Apply any pending thinking to this new message
+        if (_hasPendingThinking && _pendingThinkingBuffer != null) {
+          final thinkingText = _pendingThinkingBuffer.toString();
+          if (thinkingText.isNotEmpty) {
+            startThinking(chatMessageId);
+            appendThinking(chatMessageId, thinkingText);
+            if (_pendingThinkingFinalized) {
+              finalizeThinking(chatMessageId);
+              DebugLog.agui('Applied and finalized buffered thinking (${thinkingText.length} chars) to chatId=$chatMessageId');
+            } else {
+              _thinkingMessageIds['current'] = chatMessageId;
+              DebugLog.agui('Applied buffered thinking (${thinkingText.length} chars) to chatId=$chatMessageId, still streaming');
+            }
+          }
+          _pendingThinkingBuffer = null;
+          _hasPendingThinking = false;
+          _pendingThinkingFinalized = false;
+        }
+
+      case ag_ui.TextMessageContentEvent():
+        final aguiMessageId = event.messageId;
+        final chatMessageId = _messageIdMap[aguiMessageId];
+        if (chatMessageId != null) {
+          appendToMessage(chatMessageId, event.delta);
+          _textBuffers[aguiMessageId]?.write(event.delta);
+        } else {
+          DebugLog.warn('TextMessageContent: NO MAPPING for aguiId=$aguiMessageId, map=$_messageIdMap');
+        }
+
+      case ag_ui.TextMessageEndEvent():
+        final aguiMessageId = event.messageId;
+        final chatMessageId = _messageIdMap[aguiMessageId];
+        DebugLog.mapping('TextMessageEnd aguiId=$aguiMessageId, chatId=$chatMessageId');
+        if (chatMessageId != null) {
+          finalizeMessage(chatMessageId);
+          final text = _textBuffers[aguiMessageId]?.toString() ?? '';
+          DebugLog.chat('Finalized message: ${text.length} chars');
+          onContextUpdate?.call('textMessage', summary: text);
+          _messageIdMap.remove(aguiMessageId);
+          _textBuffers.remove(aguiMessageId);
+        } else {
+          DebugLog.warn('TextMessageEnd: NO MAPPING for aguiId=$aguiMessageId');
+        }
+
+      case ag_ui.ToolCallStartEvent():
+        DebugLog.tool('ToolCallStart: ${event.toolCallName}');
+        onContextUpdate?.call('toolCall', summary: event.toolCallName);
+        onActivityUpdate?.call(true, eventType: 'ToolCallStart', toolName: event.toolCallName);
+
+      case ag_ui.ToolCallArgsEvent():
+        break; // Args handled by Thread class
+
+      case ag_ui.ToolCallEndEvent():
+        break;
+
+      case ag_ui.ToolCallResultEvent():
+        onContextUpdate?.call('toolResult');
+
+      case ag_ui.StateSnapshotEvent():
+        final stateData = event.snapshot as Map<String, dynamic>? ?? {};
+        onContextUpdate?.call('stateSnapshot', data: stateData);
+
+      case ag_ui.StateDeltaEvent():
+        final delta = event.delta as List<dynamic>? ?? [];
+        if (delta.isNotEmpty && delta.first is Map<String, dynamic>) {
+          onContextUpdate?.call('stateDelta', data: delta.first as Map<String, dynamic>);
+        }
+
+      case ag_ui.ActivitySnapshotEvent():
+        onContextUpdate?.call('activitySnapshot', summary: '${event.activities.length} activities');
+
+      case ag_ui.ThinkingStartEvent():
+        onContextUpdate?.call('thinking');
+        onActivityUpdate?.call(true, eventType: 'Thinking');
+
+      case ag_ui.ThinkingTextMessageStartEvent():
+        // Find the current streaming assistant message to attach thinking to
+        ChatMessage? targetMessage;
+        for (final m in _messages.reversed) {
+          if (m.user.id == ChatUser.agent.id && m.isStreaming) {
+            targetMessage = m;
+            break;
+          }
+        }
+        if (targetMessage != null) {
+          startThinking(targetMessage.id);
+          _thinkingMessageIds['current'] = targetMessage.id;
+          DebugLog.agui('ThinkingTextMessageStart: attached to chatId=${targetMessage.id}');
+        } else {
+          _pendingThinkingBuffer = StringBuffer();
+          _hasPendingThinking = true;
+          DebugLog.agui('ThinkingTextMessageStart: buffering (no message yet)');
+        }
+
+      case ag_ui.ThinkingTextMessageContentEvent():
+        final chatMessageId = _thinkingMessageIds['current'];
+        if (chatMessageId != null) {
+          appendThinking(chatMessageId, event.delta);
+        } else if (_hasPendingThinking) {
+          _pendingThinkingBuffer?.write(event.delta);
+        }
+
+      case ag_ui.ThinkingTextMessageEndEvent():
+        final chatMessageId = _thinkingMessageIds['current'];
+        if (chatMessageId != null) {
+          finalizeThinking(chatMessageId);
+          _thinkingMessageIds.remove('current');
+          DebugLog.agui('ThinkingTextMessageEnd: finalized chatId=$chatMessageId');
+        } else if (_hasPendingThinking) {
+          _pendingThinkingFinalized = true;
+          DebugLog.agui('ThinkingTextMessageEnd: buffered ${_pendingThinkingBuffer?.length ?? 0} chars, marked finalized');
+        }
+
+      case ag_ui.ThinkingEndEvent():
+        _thinkingMessageIds.remove('current');
+        break;
+
+      case ag_ui.RunFinishedEvent():
+        DebugLog.agui('RunFinished runId=${event.runId}');
+        DebugLog.mapping('=== RUN DONE === messageIdMap has ${_messageIdMap.length} entries remaining');
+        onContextUpdate?.call('runFinished');
+        onActivityUpdate?.call(false);
+
+      case ag_ui.RunErrorEvent():
+        addErrorMessage(
+          event.message,
+          errorCode: event.code,
+          errorType: ChatErrorType.server,
+        );
+        onContextUpdate?.call('error', summary: event.message);
+        DebugLog.error('RunError: ${event.code}: ${event.message}');
+        onActivityUpdate?.call(false);
+
+      case ag_ui.CustomEvent():
+        // genui_render and canvas_render handled via uiToolHandler
+        break;
+
+      default:
+        DebugLog.warn('Unhandled event: ${event.runtimeType}');
+    }
+  }
+
+  /// Handle local tool execution notification.
+  void handleLocalToolExecution(String toolCallId, String toolName, String status) {
+    // Deduplicate by tool call ID
+    final trackingKey = '$toolCallId:$status';
+    if (!markToolNotificationProcessed(trackingKey)) {
+      return;
+    }
+
+    onContextUpdate?.call('localToolExecution', summary: '$toolName: $status');
+
+    // Add or update tool call message in chat
+    if (status == 'executing') {
+      final messageId = addToolCallMessage(toolName);
+      _toolCallMessageIds[toolCallId] = messageId;
+    } else {
+      final messageId = _toolCallMessageIds[toolCallId];
+      if (messageId != null) {
+        updateToolCallStatus(messageId, status);
+        if (status == 'completed' || status.startsWith('error')) {
+          _toolCallMessageIds.remove(toolCallId);
+        }
+      }
+    }
+  }
+
+  // ==========================================================================
+  // DEDUPLICATION
+  // ==========================================================================
 
   /// Mark a tool call as processed.
   ///
@@ -341,5 +760,6 @@ class RoomSession {
     ));
 
     _eventController.close();
+    _messageController.close();
   }
 }
