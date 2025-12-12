@@ -18,6 +18,12 @@ class SecureStorageGateway
 
   @override
   Future<void> write(String key, String? value) async {
+    // Delete first to avoid macOS Keychain duplicate item error (-25299)
+    try {
+      await _storage.delete(key: key);
+    } catch (_) {
+      // Ignore delete errors - key may not exist
+    }
     await _storage.write(key: key, value: value);
   }
 
