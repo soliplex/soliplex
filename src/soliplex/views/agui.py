@@ -407,7 +407,7 @@ async def post_room_agui_thread_id_meta(
         if value is not None
     }
 
-    await the_threads.update_thread(
+    await the_threads.update_thread_metadata(
         user_name=user_name,
         thread_id=thread_id,
         thread_metadata=new_md_dict,
@@ -542,7 +542,7 @@ async def post_room_agui_thread_id_run_id_meta(
         if value is not None
     }
 
-    await the_threads.update_run(
+    await the_threads.update_run_metadata(
         thread_id=thread_id,
         user_name=user_name,
         run_id=run_id,

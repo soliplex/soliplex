@@ -499,7 +499,7 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     await the_async_session.commit()
 
-    updated = await ts.update_thread(
+    updated = await ts.update_thread_metadata(
         user_name=USER_NAME,
         thread_id=thread_id,
         thread_metadata={
@@ -519,7 +519,7 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     await the_async_session.commit()
 
-    updated_again = await ts.update_thread(
+    updated_again = await ts.update_thread_metadata(
         user_name=USER_NAME,
         thread_id=thread_id,
         thread_metadata=agui_persistence.ThreadMetadata(
@@ -538,7 +538,7 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     await the_async_session.commit()
 
-    cleared = await ts.update_thread(
+    cleared = await ts.update_thread_metadata(
         user_name=USER_NAME,
         thread_id=thread_id,
         thread_metadata=None,
@@ -553,7 +553,7 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     await the_async_session.commit()
 
-    cleared_again = await ts.update_thread(
+    cleared_again = await ts.update_thread_metadata(
         user_name=USER_NAME,
         thread_id=thread_id,
         thread_metadata=None,
@@ -676,7 +676,7 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     await the_async_session.commit()
 
-    updated = await ts.update_run(
+    updated = await ts.update_run_metadata(
         user_name=USER_NAME,
         thread_id=thread_id,
         run_id=added_id,
@@ -692,7 +692,7 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     await the_async_session.commit()
 
-    updated_again = await ts.update_run(
+    updated_again = await ts.update_run_metadata(
         user_name=USER_NAME,
         thread_id=thread_id,
         run_id=added_id,
@@ -708,7 +708,7 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     await the_async_session.commit()
 
-    cleared = await ts.update_run(
+    cleared = await ts.update_run_metadata(
         user_name=USER_NAME,
         thread_id=thread_id,
         run_id=added_id,
@@ -721,7 +721,7 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     await the_async_session.commit()
 
-    cleared_again = await ts.update_run(
+    cleared_again = await ts.update_run_metadata(
         user_name=USER_NAME,
         thread_id=thread_id,
         run_id=added_id,

@@ -530,7 +530,7 @@ class ThreadStorage(agui_package.ThreadStorage):
 
             return thread
 
-    async def update_thread(
+    async def update_thread_metadata(
         self,
         *,
         user_name: str,
@@ -662,7 +662,7 @@ class ThreadStorage(agui_package.ThreadStorage):
 
             return run
 
-    async def update_run(
+    async def update_run_metadata(
         self,
         *,
         user_name: str,

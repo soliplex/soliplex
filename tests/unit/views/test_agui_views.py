@@ -813,7 +813,7 @@ async def test_post_room_agui_thread_id_meta(cuir, the_threads, w_meta):
     assert isinstance(found, fastapi.Response)
     assert found.status_code == 205
 
-    the_threads.update_thread.assert_called_once_with(
+    the_threads.update_thread_metadata.assert_called_once_with(
         user_name=USER_NAME,
         thread_id=TEST_THREAD_ID,
         thread_metadata=exp_t_meta,
@@ -1048,7 +1048,7 @@ async def test_post_room_agui_thread_id_run_id_meta(cuir, the_threads, w_meta):
     assert isinstance(found, fastapi.Response)
     assert found.status_code == 205
 
-    the_threads.update_run.assert_called_once_with(
+    the_threads.update_run_metadata.assert_called_once_with(
         user_name=USER_NAME,
         thread_id=TEST_THREAD_ID,
         run_id=TEST_RUN_ID,

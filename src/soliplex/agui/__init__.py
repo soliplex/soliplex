@@ -158,7 +158,7 @@ class ThreadStorage(abc.ABC):
         """
 
     @abc.abstractmethod
-    async def update_thread(
+    async def update_thread_metadata(
         self,
         *,
         user_name: str,
@@ -209,7 +209,7 @@ class ThreadStorage(abc.ABC):
         """Return an existing run for a thread"""
 
     @abc.abstractmethod
-    async def update_run(
+    async def update_run_metadata(
         self,
         *,
         user_name: str,
