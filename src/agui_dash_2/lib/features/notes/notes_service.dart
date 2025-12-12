@@ -1,13 +1,16 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
+
+// Conditional imports for file-based persistence (non-web only)
+import 'notes_service_io.dart' if (dart.library.html) 'notes_service_web.dart'
+    as platform;
 
 /// Service for persisting room notes to local markdown files.
 ///
-/// Notes are stored per-room in:
+/// On native platforms, notes are stored per-room in:
 /// `{documents}/soliplex_notes/{room_id}.md`
+///
+/// On web, notes are NOT supported - the UI is hidden via kIsWeb check.
 class NotesService {
   final String roomId;
   String _content = '';
@@ -21,17 +24,16 @@ class NotesService {
   /// Check if notes have been loaded.
   bool get isLoaded => _loaded;
 
-  /// Load notes from disk.
+  /// Check if notes feature is supported on this platform.
+  static bool get isSupported => platform.isNotesSupported;
+
+  /// Load notes from storage.
   Future<String> loadNotes() async {
     if (_loaded) return _content;
 
     try {
-      final file = await _getNotesFile();
-      if (await file.exists()) {
-        _content = await file.readAsString();
-      } else {
-        _content = '';
-      }
+      final content = await platform.loadNotesData(roomId);
+      _content = content ?? '';
       _loaded = true;
     } catch (e) {
       debugPrint('NotesService: Error loading notes: $e');
@@ -41,28 +43,15 @@ class NotesService {
     return _content;
   }
 
-  /// Save notes to disk.
+  /// Save notes to storage.
   Future<void> saveNotes(String content) async {
     _content = content;
     try {
-      final file = await _getNotesFile();
-      await file.writeAsString(content);
+      await platform.saveNotesData(roomId, content);
     } catch (e) {
       debugPrint('NotesService: Error saving notes: $e');
       rethrow;
     }
-  }
-
-  /// Get the notes file for this room.
-  Future<File> _getNotesFile() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final notesDir = Directory('${directory.path}/soliplex_notes');
-
-    if (!await notesDir.exists()) {
-      await notesDir.create(recursive: true);
-    }
-
-    return File('${notesDir.path}/$roomId.md');
   }
 }
 

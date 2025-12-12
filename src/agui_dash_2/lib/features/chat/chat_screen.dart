@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -184,7 +185,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               tooltip: 'Room info',
               onPressed: () => RoomInfoDrawer.show(context, selectedRoomData),
             ),
-          if (selectedRoom != null)
+          // Notes feature not available on web (uses local file storage)
+          if (selectedRoom != null && !kIsWeb)
             IconButton(
               icon: const Icon(Icons.note_alt_outlined),
               tooltip: 'Room notes',
