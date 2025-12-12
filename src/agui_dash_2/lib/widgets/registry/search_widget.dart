@@ -198,10 +198,13 @@ class _SearchWidgetState extends State<SearchWidget> {
                                   value: isSelected,
                                   onChanged: (_) => _toggleSelection(item),
                                 )
-                              : Radio<bool>(
-                                  value: true,
-                                  groupValue: isSelected,
-                                  onChanged: (_) => _toggleSelection(item),
+                              : Icon(
+                                  isSelected
+                                      ? Icons.radio_button_checked
+                                      : Icons.radio_button_unchecked,
+                                  color: isSelected
+                                      ? theme.colorScheme.primary
+                                      : null,
                                 ),
                           title: Text(item['title'] ?? ''),
                           subtitle: item['subtitle'] != null
@@ -209,7 +212,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                               : null,
                           selected: isSelected,
                           selectedTileColor:
-                              theme.colorScheme.primaryContainer.withOpacity(0.3),
+                              theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
                           onTap: () => _toggleSelection(item),
                         );
                       },

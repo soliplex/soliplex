@@ -283,7 +283,7 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
                   color: isSelected
                       ? Theme.of(
                           context,
-                        ).colorScheme.onPrimaryContainer.withOpacity(0.7)
+                        ).colorScheme.onPrimaryContainer.withValues(alpha: 0.7)
                       : null,
                 ),
               ),
