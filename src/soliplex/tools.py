@@ -5,6 +5,7 @@ from haiku.rag import client as rag_client
 from haiku.rag.graph import research as rag_research
 from haiku.rag.graph.research import graph as rag_research_graph
 from haiku.rag.graph.research import state as rag_research_state
+from haiku.rag.store.models.chunk import SearchResult
 
 from soliplex import agents
 from soliplex import agui
@@ -43,7 +44,7 @@ async def get_current_user(
 async def search_documents(
     query: str,
     tool_config: config.SearchDocumentsToolConfig = None,
-) -> list[models.SearchResult]:
+) -> list[SearchResult]:
     """
     Search the document knowledge base for relevant information based on the user's query.
 
@@ -51,20 +52,17 @@ async def search_documents(
         query (str): The search query derived from the user's question.
 
     Returns:
-        list[models.SearchResult]: A list of documents with their
-        relevance scores, and, optionally, document URIs.
+        list[SearchResult]: A list of search results with content, scores, and citations.
     """  # noqa: E501  The first line is important to the LLM.
     if tool_config is None:
         raise NoToolConfig()
 
     hr_config = tool_config.haiku_rag_config
 
-    hr_client_kw = {
-        "db_path": tool_config.rag_lancedb_path,
-        "config": hr_config,
-    }
-
-    async with rag_client.HaikuRAG(**hr_client_kw) as rag:
+    async with rag_client.HaikuRAG(
+        db_path=tool_config.rag_lancedb_path,
+        config=hr_config,
+    ) as rag:
         results = await rag.search(
             query,
             limit=tool_config.search_documents_limit,
@@ -73,20 +71,7 @@ async def search_documents(
         if hr_config.search.context_radius > 0:
             results = await rag.expand_context(results)
 
-        def _search_result(sr):
-            if tool_config.return_citations:
-                return models.SearchResult(
-                    content=sr.content,
-                    score=sr.score,
-                    document_uri=sr.document_uri,
-                )
-            else:
-                return models.SearchResult(
-                    content=sr.content,
-                    score=sr.score,
-                )
-
-        return [_search_result(sr) for sr in results]
+        return results
 
 
 async def research_report(

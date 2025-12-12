@@ -58,13 +58,10 @@ async def test_search_documents_wo_tool_config():
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_limit", [None, 2])
-@pytest.mark.parametrize("w_cites", [False, True])
 @pytest.mark.parametrize("w_radius", [0, 2])
 @pytest.mark.parametrize("n_docs", [0, 1, 10])
 @mock.patch("soliplex.tools.rag_client")
-async def test_search_documents(
-    rag_client, n_docs, w_radius, w_cites, w_limit
-):
+async def test_search_documents(rag_client, n_docs, w_radius, w_limit):
     hr_class = rag_client.HaikuRAG = mock.MagicMock()
     hr = hr_class.return_value
     client = hr.__aenter__.return_value
@@ -84,7 +81,6 @@ async def test_search_documents(
     search.return_value = expand_context.return_value = search_results
 
     sdt_config = mock.create_autospec(config.SearchDocumentsToolConfig)
-    sdt_config.return_citations = w_cites
     sdt_config.haiku_rag_config.search.context_radius = w_radius
 
     if w_limit is None:
@@ -98,14 +94,10 @@ async def test_search_documents(
         tool_config=sdt_config,
     )
 
-    for f_result, sr in zip(found, search_results, strict=True):
-        assert f_result.score == sr.score
-        assert f_result.content == sr.content
-
-        if w_cites:
-            assert f_result.document_uri == sr.document_uri
-        else:
-            assert f_result.document_uri is None
+    if w_radius > 0:
+        assert found is expand_context.return_value
+    else:
+        assert found is search_results
 
     search.assert_awaited_once_with(QUESTION, limit=exp_limit)
 

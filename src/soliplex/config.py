@@ -450,7 +450,6 @@ class SearchDocumentsToolConfig(ToolConfig, _RAGToolBase):
     tool_name: str = "soliplex.tools.search_documents"
 
     search_documents_limit: int = 5
-    return_citations: bool = False
 
     # Set in 'from_yaml' below
     _installation_config: InstallationConfig = _no_repr_none()
@@ -479,7 +478,6 @@ class SearchDocumentsToolConfig(ToolConfig, _RAGToolBase):
             | _RAGToolBase.get_extra_parameters(self)
             | {
                 "search_documents_limit": self.search_documents_limit,
-                "return_citations": self.return_citations,
             }
         )
 

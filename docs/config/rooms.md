@@ -142,20 +142,6 @@ Other, optional elements for the `search_documents` tool:
   search_documents_limit: 8
   ```
 
-- `return_citations` is a boolean (default `False`), which toggles whether
-   the `search_documents` tool returns document citations.  E.g.:
-
-  ```yaml
-  return_citations: true
-  ```
-
-- `expand_context_radius` is a positive integer (default `1`), used to
-  expand to context returned by the `search_documents` tool E.g.:
-
-  ```yaml
-  expand_context_radius: 2
-  ```
-
 Minimal `search_documents` configuration, with RAG database file found
 in the standard location:
 
@@ -184,8 +170,6 @@ agent:
     - tool_name: "soliplex.tools.search_documents"
       rag_lancedb_stem: "chat"
       search_documents_limit: 8
-      return_citations: true
-      expand_context_radius: 2
 ```
 
 ### Quiz-related elements
