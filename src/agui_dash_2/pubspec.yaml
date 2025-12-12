@@ -29,9 +29,6 @@ dependencies:
   ag_ui:
     path: ../../../ag-ui/sdks/community/dart
 
-  # Chat UI
-  dash_chat_2: ^0.0.21
-
   # State Management / DI
   flutter_riverpod: ^2.6.1
 

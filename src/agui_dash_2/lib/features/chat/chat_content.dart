@@ -1,5 +1,4 @@
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
-import 'package:dash_chat_2/dash_chat_2.dart' as dash;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,17 +16,13 @@ import '../../core/services/room_chat_service.dart';
 import '../../core/services/rooms_service.dart';
 import '../../core/utils/debug_log.dart';
 import '../../infrastructure/quick_agui/tool_call_state.dart';
-import 'builders/message_builder.dart';
 import 'widgets/chat_input_area.dart';
+import 'widgets/chat_message_list.dart';
 import 'widgets/chat_search_bar.dart';
-import 'widgets/collapsible_thinking_widget.dart';
-import 'widgets/message_feedback_chips.dart';
-import 'widgets/streaming_markdown_widget.dart';
-import 'widgets/tool_call_summary_widget.dart';
 
 /// Chat content widget that can be embedded in various layouts.
 ///
-/// Contains the DashChat widget and handles message sending/receiving.
+/// Contains the custom chat message list and handles message sending/receiving.
 /// Can be used standalone or within layout containers.
 class ChatContent extends ConsumerStatefulWidget {
   const ChatContent({super.key});
@@ -37,26 +32,21 @@ class ChatContent extends ConsumerStatefulWidget {
 }
 
 class _ChatContentState extends ConsumerState<ChatContent> {
-  late final MessageBuilder _messageBuilder;
   final TextEditingController _inputController = TextEditingController();
   final FocusNode _inputFocusNode = FocusNode();
+  final ScrollController _scrollController = ScrollController();
   String? _previousRoomId;
 
   @override
   void initState() {
     super.initState();
-    _messageBuilder = MessageBuilder(
-      onGenUiEvent: _handleGenUiEvent,
-      onToggleToolGroup: (messageId) {
-        ref.read(chatProvider.notifier).toggleToolGroupExpanded(messageId);
-      },
-    );
   }
 
   @override
   void dispose() {
     _inputController.dispose();
     _inputFocusNode.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -73,19 +63,6 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     }
   }
 
-  void _handleGenUiEvent(String eventName, Map<String, Object?> arguments) {
-    // Check if this event has a toolCallId that matches a registered callback
-    final toolCallId = arguments['_toolCallId'] as String?;
-    if (toolCallId != null && _searchCallbacks.containsKey(toolCallId)) {
-      final callback = _searchCallbacks[toolCallId];
-      final payload = Map<String, dynamic>.from(arguments);
-      payload.remove('_toolCallId');
-      callback?.call(eventName, payload);
-      return;
-    }
-    // Unhandled GenUI events are not shown to user
-  }
-
   /// Send a message (called from ChatInputArea).
   void _sendMessage() {
     final text = _inputController.text.trim();
@@ -93,14 +70,7 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     _handleSendText(text);
   }
 
-  /// Handle sending a message from DashChat's onSend callback.
-  Future<void> _handleSend(dash.ChatMessage dashMessage) async {
-    final text = dashMessage.text.trim();
-    if (text.isEmpty) return;
-    await _handleSendText(text);
-  }
-
-  /// Core send logic shared by both send methods.
+  /// Core send logic.
   Future<void> _handleSendText(String text) async {
     if (text.isEmpty) return;
 
@@ -914,14 +884,32 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     }
   }
 
+  /// Handle GenUI events from message bubbles.
+  void _handleGenUiEvent(String eventName, Map<String, Object?> arguments) {
+    final toolCallId = arguments['_toolCallId'] as String?;
+    if (toolCallId != null && _searchCallbacks.containsKey(toolCallId)) {
+      final callback = _searchCallbacks[toolCallId];
+      final payload = Map<String, dynamic>.from(arguments);
+      payload.remove('_toolCallId');
+      callback?.call(eventName, payload);
+    }
+  }
+
+  /// Handle quoting text from a message.
+  void _handleQuote(String quotedText) {
+    final currentText = _inputController.text;
+    final newText = currentText.isEmpty
+        ? '$quotedText\n\n'
+        : '$currentText\n\n$quotedText\n\n';
+    _inputController.text = newText;
+    _inputController.selection = TextSelection.collapsed(
+      offset: newText.length,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final chatState = ref.watch(chatProvider);
-
-    // Convert our messages to Dash Chat format
-    final dashMessages = chatState.messages.reversed
-        .map((m) => toDashChatMessage(m))
-        .toList();
 
     // Wrap with keyboard shortcuts (Cmd+K for paste, Cmd+F for search)
     return Shortcuts(
@@ -949,250 +937,78 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         child: Focus(
           autofocus: true,
           child: LayoutBuilder(
-      builder: (context, constraints) {
-        // Constrain message bubbles to 70% of available chat width
-        final messageMaxWidth = constraints.maxWidth * 0.7;
+            builder: (context, constraints) {
+              // Constrain message bubbles to 70% of available chat width
+              final messageMaxWidth = constraints.maxWidth * 0.7;
 
-        final activityStatus = ref.watch(activityStatusProvider);
-        final searchState = ref.watch(chatSearchProvider);
-        final selectedRoom = ref.watch(selectedRoomDataProvider);
-        final selectedRoomId = ref.watch(selectedRoomProvider);
-        final hasMessages = chatState.messages.isNotEmpty;
+              final activityStatus = ref.watch(activityStatusProvider);
+              final searchState = ref.watch(chatSearchProvider);
+              final selectedRoom = ref.watch(selectedRoomDataProvider);
+              final selectedRoomId = ref.watch(selectedRoomProvider);
+              final hasMessages = chatState.messages.isNotEmpty;
 
-        // Focus input when room changes
-        _checkRoomChange(selectedRoomId);
+              // Focus input when room changes
+              _checkRoomChange(selectedRoomId);
 
-        return Column(
-          children: [
-            // Search bar (when active)
-            if (searchState.isActive)
-              ChatSearchBar(
-                messageIds: chatState.messages.map((m) => m.id).toList(),
-                getMessageText: (id) {
-                  try {
-                    final msg = chatState.messages.firstWhere((m) => m.id == id);
-                    return msg.text ?? '';
-                  } catch (_) {
-                    return '';
-                  }
-                },
-              ),
-            // Chat messages area (with DashChat's input hidden)
-            Expanded(
-              child: Stack(
+              return Column(
                 children: [
-                  dash.DashChat(
-          currentUser: dash.ChatUser(
-            id: ChatUser.user.id,
-            firstName: ChatUser.user.firstName,
-          ),
-          onSend: _handleSend,
-          messages: dashMessages,
-          messageOptions: dash.MessageOptions(
-            showCurrentUserAvatar: false,
-            showOtherUsersAvatar: true,
-            messageDecorationBuilder: (message, previousMessage, nextMessage) {
-              final isUser = message.user.id == ChatUser.user.id;
-              return BoxDecoration(
-                color: isUser
-                    ? Theme.of(context).colorScheme.primaryContainer
-                    : Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-              );
-            },
-            // Constrain message width to 70% of actual available space
-            maxWidth: messageMaxWidth,
-            messageTextBuilder: (message, previousMessage, nextMessage) {
-          final customProps = message.customProperties;
-          final chatMessage = customProps?['chatMessage'] as ChatMessage?;
-          final isAgentMessage = message.user.id == ChatUser.agent.id;
-
-          // For non-text messages, build custom widget
-          if (chatMessage != null && chatMessage.type != MessageType.text) {
-            final customWidget = _messageBuilder.build(
-              message,
-              previousMessage: previousMessage,
-              nextMessage: nextMessage,
-              isAfterDateSeparator: false,
-              isBeforeDateSeparator: false,
-            );
-            if (customWidget != null) {
-              // Add feedback chips and copy for agent messages (not for tool calls/loading)
-              if (isAgentMessage &&
-                  chatMessage.type != MessageType.toolCall &&
-                  chatMessage.type != MessageType.loading) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    customWidget,
-                    _MessageActionsRow(
-                      messageId: chatMessage.id,
-                      messageText: message.text,
+                  // Search bar (when active)
+                  if (searchState.isActive)
+                    ChatSearchBar(
+                      messageIds: chatState.messages.map((m) => m.id).toList(),
+                      getMessageText: (id) {
+                        try {
+                          final msg = chatState.messages.firstWhere((m) => m.id == id);
+                          return msg.text ?? '';
+                        } catch (_) {
+                          return '';
+                        }
+                      },
                     ),
-                  ],
-                );
-              }
-              return customWidget;
-            }
-          }
-
-          // Default text rendering with feedback chips for agent messages
-          final textStyle = TextStyle(
-            color: message.user.id == ChatUser.user.id
-                ? Theme.of(context).colorScheme.onPrimaryContainer
-                : Theme.of(context).colorScheme.onSurface,
-          );
-          final textWidget = StreamingMarkdownWidget(
-            text: message.text,
-            messageId: chatMessage?.id ?? message.createdAt.toString(),
-            isStreaming: chatMessage?.isStreaming ?? false,
-            textStyle: textStyle,
-            onQuote: (quotedText) {
-              // Insert quoted text into input field
-              final currentText = _inputController.text;
-              final newText = currentText.isEmpty
-                  ? '$quotedText\n\n'
-                  : '$currentText\n\n$quotedText\n\n';
-              _inputController.text = newText;
-              _inputController.selection = TextSelection.collapsed(
-                offset: newText.length,
-              );
-            },
-          );
-
-          // Build thinking section if present
-          Widget? thinkingSection;
-          if (isAgentMessage &&
-              chatMessage != null &&
-              chatMessage.thinkingText != null &&
-              chatMessage.thinkingText!.isNotEmpty) {
-            thinkingSection = CollapsibleThinkingWidget(
-              thinkingText: chatMessage.thinkingText!,
-              isStreaming: chatMessage.isThinkingStreaming,
-              isExpanded: chatMessage.isThinkingExpanded || chatMessage.isThinkingStreaming,
-              onToggle: () {
-                ref.read(chatProvider.notifier).toggleThinkingExpanded(chatMessage.id);
-              },
-            );
-          }
-
-          // Build tool calls section if present (attached to message)
-          Widget? toolCallsSection;
-          if (isAgentMessage &&
-              chatMessage != null &&
-              chatMessage.toolCalls != null &&
-              chatMessage.toolCalls!.isNotEmpty) {
-            toolCallsSection = ToolCallSummaryWidget(
-              toolCalls: chatMessage.toolCalls!,
-              isExpanded: chatMessage.isToolGroupExpanded,
-              onToggle: () {
-                ref.read(chatProvider.notifier).toggleToolGroupExpanded(chatMessage.id);
-              },
-            );
-          }
-
-          // Add feedback chips and copy button for finalized agent text messages
-          if (isAgentMessage && chatMessage != null && !chatMessage.isStreaming) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (thinkingSection != null) thinkingSection,
-                textWidget,
-                if (toolCallsSection != null) toolCallsSection,
-                _MessageActionsRow(
-                  messageId: chatMessage.id,
-                  messageText: message.text,
-                ),
-              ],
-            );
-          }
-
-          // Streaming agent message with thinking
-          if (isAgentMessage && chatMessage != null && thinkingSection != null) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                thinkingSection,
-                textWidget,
-              ],
-            );
-          }
-
-          return textWidget;
-        },
-      ),
-      messageListOptions: dash.MessageListOptions(
-        onLoadEarlier: () async {
-          // TODO: Implement pagination if needed
-        },
-      ),
-      // Hide DashChat's input - we use ChatInputArea instead
-      inputOptions: dash.InputOptions(
-        textController: _inputController,
-        sendOnEnter: false,
-        alwaysShowSend: false,
-        inputDecoration: const InputDecoration(
-          // Make input invisible
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.zero,
-          isDense: true,
-          constraints: BoxConstraints(maxHeight: 0),
-        ),
-        inputToolbarPadding: EdgeInsets.zero,
-        sendButtonBuilder: (onSend) => const SizedBox.shrink(),
-      ),
-          typingUsers: chatState.isAgentTyping
-              ? [
-                  dash.ChatUser(
-                    id: ChatUser.agent.id,
-                    firstName: ChatUser.agent.firstName,
-                  ),
-                ]
-              : [],
-            ),
-                  // Cover DashChat's input area (it can't be fully hidden via InputOptions)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    height: 64,
-                    child: Container(
-                      color: Theme.of(context).colorScheme.surface,
+                  // Chat messages area - using custom ChatMessageList
+                  Expanded(
+                    child: ChatMessageList(
+                      messages: chatState.messages,
+                      isAgentTyping: chatState.isAgentTyping,
+                      scrollController: _scrollController,
+                      maxBubbleWidth: messageMaxWidth,
+                      onQuote: _handleQuote,
+                      onToggleThinking: (messageId) {
+                        ref.read(chatProvider.notifier).toggleThinkingExpanded(messageId);
+                      },
+                      onToggleToolGroup: (messageId) {
+                        ref.read(chatProvider.notifier).toggleToolGroupExpanded(messageId);
+                      },
+                      onGenUiEvent: _handleGenUiEvent,
                     ),
                   ),
+                  // Activity status bar OR custom input area
+                  if (activityStatus.isActive && activityStatus.currentMessage != null)
+                    ActivityStatusBar(
+                      message: activityStatus.currentMessage!,
+                      onStop: () async {
+                        final agUiService = ref.read(configuredAgUiServiceProvider);
+                        final roomId = agUiService.currentRoomId;
+                        if (roomId != null) {
+                          DebugLog.network('Stop button: cancelling run for room $roomId');
+                          final connectionManager = ref.read(connectionManagerProvider);
+                          await connectionManager.cancelRun(roomId);
+                          ref.read(activityStatusProvider.notifier).stopActivity();
+                        }
+                      },
+                    )
+                  else
+                    ChatInputArea(
+                      controller: _inputController,
+                      focusNode: _inputFocusNode,
+                      onSend: _sendMessage,
+                      room: selectedRoom,
+                      hasMessages: hasMessages,
+                      isLoading: activityStatus.isActive,
+                    ),
                 ],
-              ),
-            ),
-            // Activity status bar OR custom input area
-            if (activityStatus.isActive && activityStatus.currentMessage != null)
-              ActivityStatusBar(
-                message: activityStatus.currentMessage!,
-                onStop: () async {
-                  final agUiService = ref.read(configuredAgUiServiceProvider);
-                  final roomId = agUiService.currentRoomId;
-                  if (roomId != null) {
-                    DebugLog.network('Stop button: cancelling run for room $roomId');
-                    final connectionManager = ref.read(connectionManagerProvider);
-                    await connectionManager.cancelRun(roomId);
-                    ref.read(activityStatusProvider.notifier).stopActivity();
-                  }
-                },
-              )
-            else
-              ChatInputArea(
-                controller: _inputController,
-                focusNode: _inputFocusNode,
-                onSend: _sendMessage,
-                room: selectedRoom,
-                hasMessages: hasMessages,
-                isLoading: activityStatus.isActive,
-              ),
-          ],
-        );
-      },
+              );
+            },
           ),
         ),
       ),
@@ -1208,64 +1024,4 @@ class _PasteIntent extends Intent {
 /// Intent for search action.
 class _SearchIntent extends Intent {
   const _SearchIntent();
-}
-
-/// Row with feedback chips and copy button for messages.
-class _MessageActionsRow extends ConsumerStatefulWidget {
-  final String messageId;
-  final String messageText;
-
-  const _MessageActionsRow({
-    required this.messageId,
-    required this.messageText,
-  });
-
-  @override
-  ConsumerState<_MessageActionsRow> createState() => _MessageActionsRowState();
-}
-
-class _MessageActionsRowState extends ConsumerState<_MessageActionsRow> {
-  bool _copied = false;
-
-  Future<void> _copyToClipboard() async {
-    await Clipboard.setData(ClipboardData(text: widget.messageText));
-    setState(() => _copied = true);
-    // Reset after brief delay
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _copied = false);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Feedback chips
-          MessageFeedbackChips(messageId: widget.messageId),
-          const Spacer(),
-          // Copy button
-          Tooltip(
-            message: _copied ? 'Copied!' : 'Copy message',
-            child: InkWell(
-              onTap: _copyToClipboard,
-              borderRadius: BorderRadius.circular(16),
-              child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: Icon(
-                  _copied ? Icons.check : Icons.copy_outlined,
-                  size: 16,
-                  color: _copied
-                      ? Colors.green
-                      : Theme.of(context).colorScheme.outline,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
