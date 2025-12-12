@@ -402,6 +402,7 @@ async def test_get_room_agui_thread_id(
     cuir.return_value = USER_NAME
 
     test_thread.list_runs.return_value = [test_run]
+    test_run.list_events.return_value = []
 
     if w_thread_meta:
         thread_meta = test_thread.thread_metadata = _make_thread_metadata()
@@ -462,7 +463,7 @@ async def test_get_room_agui_thread_id(
         a_run=test_run,
         a_run_input=run_input,
         a_run_meta=test_run.run_metadata,
-        a_run_events=None,
+        a_run_events=[],
     )
     assert found.runs == {TEST_RUN_ID: exp_model_run}
 
