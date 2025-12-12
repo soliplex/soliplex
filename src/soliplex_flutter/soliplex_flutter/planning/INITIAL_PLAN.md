@@ -1,3 +1,11 @@
+---
+Best practices:
+I want initial bare minimum flutter app, that is fully cross platform.
+Following community best practices, strict lint.
+Automated testing framework.
+Analyzer configured in the pubspec to configured to lint for everything.
+---
+
 # Implementation Plan: Soliplex Flutter Client
 
 This plan provides an incremental, modular approach to building the Flutter frontend as described in CLAUDE.md.
@@ -9,7 +17,8 @@ Put heaviest weight to the planning files in the current directory, then the fil
 
 Build a Flutter client with 2 components:
 
-1. a dart client that interacts with the backend through http and agui protocols. (will refer to as `Soliplex Client` or `Client`)
+1. a client that interacts with the backend through http and agui protocols. (will refer to as `Soliplex Client` or `Client`)
+  1.a Want this to be as little flutter UI code as possible, so it will be possible to test in isolation
 2. a flutter frontend that utilizes all the features provided by the backend. (will refer to as `Soliplex Frontend` or `Frontend`)
 
 ## Backend features
