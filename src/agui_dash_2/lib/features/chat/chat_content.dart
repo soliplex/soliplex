@@ -114,7 +114,11 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         state: canvasState.toJson(),
         onEvent: (event) {
           if (!mounted) return;
-          _processEvent(event, chatNotifier, contextNotifier, canvasNotifier);
+          // Get fresh references - notifiers may have been replaced during streaming
+          final freshChatNotifier = ref.read(chatProvider.notifier);
+          final freshContextNotifier = ref.read(contextPaneProvider.notifier);
+          final freshCanvasNotifier = ref.read(canvasProvider.notifier);
+          _processEvent(event, freshChatNotifier, freshContextNotifier, freshCanvasNotifier);
         },
         uiToolHandler: (toolCallId, toolName, args) async {
           // Skip if widget disposed
@@ -126,12 +130,17 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           }
           _processedUiToolCalls.add(toolCallId);
 
+          // Get fresh references - notifiers may have been replaced during streaming
+          final freshChatNotifier = ref.read(chatProvider.notifier);
+          final freshContextNotifier = ref.read(contextPaneProvider.notifier);
+          final freshCanvasNotifier = ref.read(canvasProvider.notifier);
+
           return _handleUiTool(
             toolName,
             args,
-            chatNotifier,
-            canvasNotifier,
-            contextNotifier,
+            freshChatNotifier,
+            freshCanvasNotifier,
+            freshContextNotifier,
           );
         },
         onLocalToolExecution: (toolCallId, toolName, status) {
@@ -145,16 +154,20 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           }
           _processedToolNotifications.add(trackingKey);
 
-          contextNotifier.addLocalToolExecution(toolName, status: status);
+          // Get fresh references - notifiers may have been replaced during streaming
+          final freshChatNotifier = ref.read(chatProvider.notifier);
+          final freshContextNotifier = ref.read(contextPaneProvider.notifier);
+
+          freshContextNotifier.addLocalToolExecution(toolName, status: status);
 
           // Add or update tool call message in chat
           if (status == 'executing') {
-            final messageId = chatNotifier.addToolCallMessage(toolName);
+            final messageId = freshChatNotifier.addToolCallMessage(toolName);
             _toolCallMessageIds[toolCallId] = messageId;
           } else {
             final messageId = _toolCallMessageIds[toolCallId];
             if (messageId != null) {
-              chatNotifier.updateToolCallStatus(messageId, status);
+              freshChatNotifier.updateToolCallStatus(messageId, status);
               if (status == 'completed' || status.startsWith('error')) {
                 _toolCallMessageIds.remove(toolCallId);
               }
@@ -163,7 +176,9 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         },
         onToolStateChange: (change) {
           if (!mounted) return;
-          _handleToolStateChange(change, contextNotifier);
+          // Get fresh reference - notifier may have been replaced during streaming
+          final freshContextNotifier = ref.read(contextPaneProvider.notifier);
+          _handleToolStateChange(change, freshContextNotifier);
         },
       );
       // Sync chat state to per-room provider after successful completion
