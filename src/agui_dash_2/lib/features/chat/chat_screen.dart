@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../app_shell.dart';
 import '../../core/models/layout_mode.dart';
 import '../../core/services/activity_status_service.dart';
 import '../../core/services/agui_service.dart';
+import '../../core/services/auth_service.dart';
 import '../../core/services/chat_service.dart';
 import '../../core/services/feedback_service.dart';
 import '../../core/services/markdown_hooks.dart';
 import '../../core/services/room_chat_service.dart';
 import '../../core/services/rooms_service.dart';
+import '../../core/services/server_config_service.dart';
 import '../layouts/standard_layout.dart';
 import '../notes/notes_dialog.dart';
 import '../layouts/canvas_layout.dart';
@@ -183,6 +186,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ref.read(agUiServiceProvider).resetConversation();
             },
           ),
+          _buildServerMenu(),
         ],
       ),
       body: _buildLayout(layoutMode),
@@ -308,5 +312,112 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         onChanged: _onRoomChanged,
       ),
     );
+  }
+
+  Widget _buildServerMenu() {
+    final currentServer = ref.watch(currentServerProvider);
+    final authState = ref.watch(authStateProvider);
+
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.dns_outlined),
+      tooltip: 'Server options',
+      itemBuilder: (context) => [
+        // Show current server info
+        PopupMenuItem<String>(
+          enabled: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Connected to:',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                currentServer?.label ?? 'Unknown',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              if (authState.userName != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  authState.userName!,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        // Switch server option
+        const PopupMenuItem<String>(
+          value: 'switch',
+          child: Row(
+            children: [
+              Icon(Icons.swap_horiz, size: 20),
+              SizedBox(width: 12),
+              Text('Switch Server'),
+            ],
+          ),
+        ),
+        // Logout option
+        const PopupMenuItem<String>(
+          value: 'logout',
+          child: Row(
+            children: [
+              Icon(Icons.logout, size: 20),
+              SizedBox(width: 12),
+              Text('Logout'),
+            ],
+          ),
+        ),
+      ],
+      onSelected: (value) async {
+        switch (value) {
+          case 'switch':
+            context.showServerSetup();
+            break;
+          case 'logout':
+            await _handleLogout();
+            break;
+        }
+      },
+    );
+  }
+
+  Future<void> _handleLogout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text(
+          'Are you sure you want to logout? You will need to reconnect to a server.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      // Logout from auth service
+      await ref.read(authServiceProvider).logout();
+
+      // Clear server config to force re-setup
+      await ref.read(serverConfigProvider).clearAll();
+
+      // Reset app initialized state to show setup screen
+      ref.read(appInitializedProvider.notifier).state = false;
+    }
   }
 }

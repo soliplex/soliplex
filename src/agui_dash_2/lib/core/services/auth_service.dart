@@ -4,15 +4,17 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
-import 'package:url_launcher/url_launcher.dart';
 
+import '../auth/auth_providers.dart';
+import '../auth/oidc_auth_interactor.dart';
+import '../auth/sso_config.dart';
 import 'secure_storage_service.dart';
 import 'server_config_service.dart'; // exports server_models.dart
 
 /// Service for handling OIDC authentication flow.
 ///
 /// Handles:
-/// - Initiating OIDC login flow
+/// - Initiating OIDC login flow via flutter_appauth
 /// - Processing auth callbacks (tokens from redirect)
 /// - Token validation and refresh
 /// - User info retrieval
@@ -20,6 +22,7 @@ import 'server_config_service.dart'; // exports server_models.dart
 class AuthService extends ChangeNotifier {
   final SecureStorageService _storage;
   final ServerConfigService _serverConfig;
+  final OidcAuthInteractor _oidcInteractor;
   final http.Client _httpClient;
 
   AuthState _state = const AuthState.initial();
@@ -28,9 +31,11 @@ class AuthService extends ChangeNotifier {
   AuthService({
     required SecureStorageService storage,
     required ServerConfigService serverConfig,
+    required OidcAuthInteractor oidcInteractor,
     http.Client? httpClient,
   })  : _storage = storage,
         _serverConfig = serverConfig,
+        _oidcInteractor = oidcInteractor,
         _httpClient = httpClient ?? http.Client();
 
   // Getters
@@ -103,7 +108,7 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Start OIDC login flow with the specified provider
+  /// Start OIDC login flow with the specified provider using flutter_appauth
   Future<void> startLogin(OIDCAuthSystem provider) async {
     final server = _serverConfig.currentServer;
     if (server == null) {
@@ -113,49 +118,72 @@ class AuthService extends ChangeNotifier {
     _state = _state.copyWith(status: AuthStatus.authenticating);
     notifyListeners();
 
-    // Build the login URL
-    final returnTo = _getReturnUrl();
-    final loginUrl = Uri.parse(
-      '${server.url}/login/${provider.id}?return_to=$returnTo',
-    );
-
-    // Launch browser for OIDC flow
     try {
-      final launched = await launchUrl(
-        loginUrl,
-        mode: kIsWeb
-            ? LaunchMode.platformDefault
-            : LaunchMode.externalApplication,
+      // Build SsoConfig from OIDCAuthSystem
+      // serverUrl is the OIDC issuer URL (e.g., https://keycloak.example.com/realms/myrealm)
+      final issuerUrl = provider.serverUrl;
+      final scopes = provider.scope?.split(' ') ?? ['openid', 'profile', 'email'];
+
+      final ssoConfig = SsoConfig(
+        id: provider.id,
+        title: provider.title,
+        endpoint: issuerUrl,
+        tokenEndpoint: '$issuerUrl/protocol/openid-connect/token',
+        loginUrl: Uri.parse('$issuerUrl/protocol/openid-connect/auth'),
+        clientId: provider.clientId,
+        redirectUrl: _getRedirectUrl(),
+        scopes: scopes,
       );
 
-      if (!launched) {
-        _state = _state.copyWith(
-          status: AuthStatus.error,
-          error: 'Could not open login page',
-        );
-        notifyListeners();
-      }
+      // Enable auth on the interactor
+      _oidcInteractor.useAuth = true;
 
-      // Set up completer for waiting on callback
-      _authCompleter = Completer<TokenData?>();
+      // Use flutter_appauth for native OIDC flow
+      final tokenResponse = await _oidcInteractor.authorizeAndExchangeCode(ssoConfig);
+
+      // Store tokens using existing storage service
+      await _storage.storeTokens(
+        serverId: server.id,
+        accessToken: tokenResponse.accessToken,
+        refreshToken: tokenResponse.refreshToken,
+        expiresAt: tokenResponse.accessTokenExpiration,
+      );
+
+      // Fetch user info
+      final userInfo = await _fetchUserInfo(server.url, tokenResponse.accessToken);
+
+      _state = AuthState(
+        status: AuthStatus.authenticated,
+        currentServer: server.copyWith(tokenExpiry: tokenResponse.accessTokenExpiration),
+        userId: userInfo?['sub'] as String?,
+        userName: userInfo?['name'] as String?,
+        userEmail: userInfo?['email'] as String?,
+      );
+
+      // Update server with token expiry
+      await _serverConfig.updateServer(
+        server.copyWith(tokenExpiry: tokenResponse.accessTokenExpiration),
+      );
+
+      notifyListeners();
     } catch (e) {
+      debugPrint('AuthService: OIDC login failed: $e');
       _state = _state.copyWith(
         status: AuthStatus.error,
-        error: 'Failed to start login: $e',
+        error: 'Authentication failed: $e',
       );
       notifyListeners();
     }
   }
 
-  /// Get the return URL for OIDC callback
-  String _getReturnUrl() {
+  /// Get the redirect URL for OIDC callback
+  String _getRedirectUrl() {
     if (kIsWeb) {
       // On web, return to the current page with auth path
-      // The actual URL will be configured in the web app
       return Uri.base.replace(path: '/auth/callback').toString();
     } else {
-      // On mobile/desktop, use custom scheme
-      return 'soliplex://auth';
+      // On mobile/desktop, use custom scheme matching Info.plist
+      return 'ai.soliplex.client://callback';
     }
   }
 
@@ -230,23 +258,59 @@ class AuthService extends ChangeNotifier {
     return null;
   }
 
-  /// Try to refresh the token
+  /// Try to refresh the token using OidcAuthInteractor
   Future<bool> _tryRefreshToken(String serverId) async {
-    final refreshToken = await _storage.getRefreshToken(serverId);
-    if (refreshToken == null) return false;
+    try {
+      final ssoConfig = await _oidcInteractor.getSsoConfig();
+      if (ssoConfig == null) {
+        debugPrint('AuthService: No SSO config found for token refresh');
+        return false;
+      }
 
-    // Note: Server-side refresh implementation depends on the OIDC provider
-    // This is a placeholder for when refresh endpoint is available
-    debugPrint('AuthService: Token refresh not yet implemented');
-    return false;
+      final tokenResponse = await _oidcInteractor.refreshAccessToken(ssoConfig);
+      if (tokenResponse == null) {
+        debugPrint('AuthService: Token refresh returned null');
+        return false;
+      }
+
+      // Update stored tokens
+      await _storage.storeTokens(
+        serverId: serverId,
+        accessToken: tokenResponse.accessToken,
+        refreshToken: tokenResponse.refreshToken,
+        expiresAt: tokenResponse.accessTokenExpiration,
+      );
+
+      debugPrint('AuthService: Token refreshed successfully');
+      return true;
+    } catch (e) {
+      debugPrint('AuthService: Token refresh failed: $e');
+      return false;
+    }
   }
 
   /// Logout - clear tokens and reset state
   Future<void> logout() async {
     final server = _serverConfig.currentServer;
+
+    try {
+      // Try to logout via OIDC provider
+      final ssoConfig = await _oidcInteractor.getSsoConfig();
+      if (ssoConfig != null) {
+        await _oidcInteractor.logout(ssoConfig);
+      }
+    } catch (e) {
+      debugPrint('AuthService: OIDC logout failed: $e');
+      // Continue with local logout even if OIDC logout fails
+    }
+
+    // Clear local tokens
     if (server != null) {
       await _storage.clearTokens(server.id);
     }
+
+    // Disable auth on interactor
+    _oidcInteractor.useAuth = false;
 
     _state = AuthState(
       status: AuthStatus.unauthenticated,
@@ -293,9 +357,11 @@ class AuthService extends ChangeNotifier {
 final authServiceProvider = ChangeNotifierProvider<AuthService>((ref) {
   final storage = ref.watch(secureStorageProvider);
   final serverConfig = ref.watch(serverConfigProvider);
+  final oidcInteractor = ref.watch(oidcAuthInteractorProvider);
   return AuthService(
     storage: storage,
     serverConfig: serverConfig,
+    oidcInteractor: oidcInteractor,
   );
 });
 
