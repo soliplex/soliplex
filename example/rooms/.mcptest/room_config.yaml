@@ -1,0 +1,42 @@
+id: "mcptest"
+name: "MCP Test"
+description: "Test MCP tool interaction."
+suggestions:
+- "What is the weather in <your location>?"
+
+agent:
+  template_id: "default_chat"
+  system_prompt: "./prompt.txt"
+  model_name: "qwen3:4b"
+  #model_name: "gpt-4o"
+  provider_base_url: http://biggysmalls:11434
+  #provider_base_url: https://api.openai.com
+  #provider_key: secret:OPENAI_API_KEY
+
+tools:
+  - tool_name: "soliplex.tools.get_current_datetime"
+
+mcp_client_toolsets:
+
+  smithery_nws:
+    kind: "http"
+    url: "https://server.smithery.ai/@smithery-ai/national-weather-service/mcp"
+    allowed_tools:
+      - "get_current_weather"
+
+    query_params:
+      # This is bog stupid:  the SmitheryAI endpoint does not support
+      # passing an 'Authorization: Bearer <API KEY>' header, but instead
+      # expects to have the values passed in the query string (unless the
+      # client can do the full OAuth2 flow).
+      api_key: "secret:SMITHERY_AI_API_KEY"
+      profile: "secret:SMITHERY_AI_PROFILE"
+
+# google_maps:
+#   kind: "stdio"
+#   command: "npx"
+#   args: 
+#     - "-y"
+#     - "@modelcontextprotocol/server-google-maps"
+#   env: 
+#     GOOGLE_MAPS_API_KEY: GOOGLE_MAPS_API_KEY

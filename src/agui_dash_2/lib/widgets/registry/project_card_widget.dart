@@ -43,14 +43,8 @@ class ProjectCardWidget extends StatelessWidget {
     return buffer.toString();
   }
 
-  void _copyToClipboard(BuildContext context) {
+  void _copyToClipboard() {
     Clipboard.setData(ClipboardData(text: _copyableText()));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Copied to clipboard'),
-        duration: Duration(seconds: 2),
-      ),
-    );
   }
 
   factory ProjectCardWidget.fromData(
@@ -105,7 +99,7 @@ class ProjectCardWidget extends StatelessWidget {
                 _StatusChip(status: status),
                 IconButton(
                   icon: const Icon(Icons.copy, size: 18),
-                  onPressed: () => _copyToClipboard(context),
+                  onPressed: _copyToClipboard,
                   tooltip: 'Copy to clipboard',
                   visualDensity: VisualDensity.compact,
                 ),

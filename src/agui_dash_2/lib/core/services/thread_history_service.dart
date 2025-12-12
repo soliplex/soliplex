@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
+import '../utils/url_builder.dart';
+
 /// Information about a thread from the API.
 class ThreadInfo {
   final String threadId;
@@ -73,12 +75,14 @@ class ThreadHistoryNotifier extends StateNotifier<ThreadHistoryState> {
   final String baseUrl;
   final String roomId;
   final http.Client _client;
+  final UrlBuilder _urlBuilder;
 
   ThreadHistoryNotifier({
     required this.baseUrl,
     required this.roomId,
     http.Client? client,
   }) : _client = client ?? http.Client(),
+       _urlBuilder = UrlBuilder(baseUrl),
        super(const ThreadHistoryState());
 
   /// Fetch threads from the API.
@@ -86,7 +90,8 @@ class ThreadHistoryNotifier extends StateNotifier<ThreadHistoryState> {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
-      final uri = Uri.parse('$baseUrl/rooms/$roomId/agui');
+      // Use roomThreads() - threads are listed at /rooms/{roomId}/agui
+      final uri = _urlBuilder.roomThreads(roomId);
       debugPrint('ThreadHistory: Fetching threads from $uri');
 
       final response = await _client.get(

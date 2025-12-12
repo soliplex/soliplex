@@ -11,10 +11,6 @@ import '../../core/network/connection_manager.dart';
 import '../../core/services/feedback_service.dart';
 import '../../core/services/markdown_hooks.dart';
 import '../../core/services/rooms_service.dart';
-// Note: server_config_service.dart is deprecated, but still needed for serverHistoryProvider
-// Use currentServerFromAppStateProvider from app_providers.dart for current server
-import '../../core/utils/api_constants.dart';
-import '../../core/utils/url_builder.dart';
 import '../layouts/standard_layout.dart';
 import '../notes/notes_dialog.dart';
 import '../layouts/canvas_layout.dart';
@@ -38,16 +34,6 @@ class ChatScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
-  /// Get the URL builder for the current server.
-  UrlBuilder get _urlBuilder {
-    final server = ref.read(currentServerFromAppStateProvider);
-    final url = server?.url ?? ApiConstants.defaultServerUrl;
-    return UrlBuilder(url);
-  }
-
-  /// Get the server URL (bare server, no /api path).
-  String get _serverUrl => _urlBuilder.serverUrl;
-
   /// Track the current server URL to detect changes.
   String? _lastServerUrl;
 

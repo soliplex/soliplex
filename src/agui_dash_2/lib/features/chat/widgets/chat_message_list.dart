@@ -21,6 +21,10 @@ class ChatMessageList extends StatefulWidget {
   final void Function(String messageId)? onToggleToolGroup;
   final void Function(String eventName, Map<String, Object?> arguments)? onGenUiEvent;
 
+  /// Optional widget to show at the top of the list (e.g., welcome card).
+  /// This appears above all messages when the list is empty or has few messages.
+  final Widget? welcomeWidget;
+
   const ChatMessageList({
     super.key,
     required this.messages,
@@ -31,6 +35,7 @@ class ChatMessageList extends StatefulWidget {
     this.onToggleThinking,
     this.onToggleToolGroup,
     this.onGenUiEvent,
+    this.welcomeWidget,
   });
 
   @override
@@ -92,8 +97,10 @@ class _ChatMessageListState extends State<ChatMessageList> {
 
   @override
   Widget build(BuildContext context) {
-    // Calculate total item count: messages + typing indicator if active
-    final itemCount = widget.messages.length + (widget.isAgentTyping ? 1 : 0);
+    // Calculate total item count: messages + typing indicator + welcome widget
+    final hasWelcome = widget.welcomeWidget != null;
+    final baseCount = widget.messages.length + (widget.isAgentTyping ? 1 : 0);
+    final itemCount = baseCount + (hasWelcome ? 1 : 0);
 
     if (itemCount == 0) {
       return const Center(
@@ -113,6 +120,14 @@ class _ChatMessageListState extends State<ChatMessageList> {
           return const Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: ChatTypingIndicator(),
+          );
+        }
+
+        // Welcome widget appears at the top (highest index in reverse list)
+        if (hasWelcome && index == itemCount - 1) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: widget.welcomeWidget!,
           );
         }
 

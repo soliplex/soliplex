@@ -13,6 +13,9 @@ import '../../widgets/registry/gis_card_widget.dart';
 import '../../widgets/registry/search_widget.dart';
 import '../../widgets/registry/skills_card_widget.dart';
 import '../../widgets/registry/project_card_widget.dart';
+import '../../widgets/registry/note_card_widget.dart';
+import '../../widgets/registry/code_card_widget.dart';
+import '../../widgets/registry/markdown_card_widget.dart';
 
 /// Widget builder function signature.
 ///
@@ -111,6 +114,19 @@ void _registerDefaultWidgets(WidgetRegistry registry) {
 
   registry.register('ProjectCard', (context, data, onEvent) {
     return ProjectCardWidget.fromData(data, onEvent);
+  });
+
+  // Canvas content widgets (for send-to-canvas feature)
+  registry.register('NoteCard', (context, data, onEvent) {
+    return NoteCardWidget.fromData(data, onEvent);
+  });
+
+  registry.register('CodeCard', (context, data, onEvent) {
+    return CodeCardWidget.fromData(data, onEvent);
+  });
+
+  registry.register('MarkdownCard', (context, data, onEvent) {
+    return MarkdownCardWidget.fromData(data, onEvent);
   });
 }
 

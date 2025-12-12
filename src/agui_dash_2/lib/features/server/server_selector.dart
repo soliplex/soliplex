@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
-import '../../core/services/server_config_service.dart' show serverHistoryProvider;
 import 'server_history_widget.dart';
 
 /// Header widget showing current server with ability to switch.

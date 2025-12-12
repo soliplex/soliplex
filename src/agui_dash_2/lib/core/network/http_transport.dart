@@ -5,6 +5,7 @@ import 'package:ag_ui/ag_ui.dart' as ag_ui;
 import 'package:http/http.dart' as http;
 
 import '../utils/debug_log.dart';
+import '../utils/url_builder.dart';
 import 'cancel_token.dart';
 import 'network_transport.dart';
 
@@ -16,14 +17,18 @@ class HttpTransport implements NetworkTransport {
   final http.Client _httpClient;
   final ag_ui.AgUiClient _agUiClient;
   final Map<String, String>? defaultHeaders;
+  final UrlBuilder _urlBuilder;
 
   HttpTransport({
     required this.baseUrl,
     http.Client? httpClient,
     this.defaultHeaders,
   })  : _httpClient = httpClient ?? http.Client(),
+        _urlBuilder = UrlBuilder(baseUrl),
+        // Use serverUrl (not apiBaseUrl) because runEndpoint includes the api path.
+        // The ag_ui client replaces the path instead of appending to it.
         _agUiClient = ag_ui.AgUiClient(
-          config: ag_ui.AgUiClientConfig(baseUrl: baseUrl),
+          config: ag_ui.AgUiClientConfig(baseUrl: UrlBuilder(baseUrl).serverUrl),
         );
 
   @override
@@ -82,7 +87,7 @@ class HttpTransport implements NetworkTransport {
     // POST to cancel endpoint
     // Server may not support this - fail gracefully
     try {
-      final uri = Uri.parse('$baseUrl/rooms/$roomId/agui/$threadId/$runId/cancel');
+      final uri = _urlBuilder.cancelRun(roomId, threadId, runId);
       final response = await _httpClient.post(
         uri,
         headers: {

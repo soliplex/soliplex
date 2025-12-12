@@ -82,7 +82,11 @@ void main() {
         const key2 = ServerRoomKey(serverId: 'server1', roomId: 'room1');
         const key3 = ServerRoomKey(serverId: 'server2', roomId: 'room1');
 
-        final set = <ServerRoomKey>{key1, key2, key3};
+        // Build set incrementally to avoid equal_elements_in_set lint
+        final set = <ServerRoomKey>{};
+        set.add(key1);
+        set.add(key2); // Should not increase size (equals key1)
+        set.add(key3);
 
         expect(set.length, equals(2));
         expect(set.contains(key1), isTrue);
