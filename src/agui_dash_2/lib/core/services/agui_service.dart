@@ -6,12 +6,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
-import '../../infrastructure/quick_agui/thread.dart';
 import '../../infrastructure/quick_agui/tool_call_state.dart';
 import '../models/chat_models.dart';
+import '../network/connection_manager.dart';
+import '../utils/api_constants.dart';
 import '../utils/debug_log.dart';
 import '../utils/url_builder.dart';
 import 'local_tools_service.dart';
+import 'server_config_service.dart';
 
 /// Configuration for AG-UI service.
 class AgUiServiceConfig {
@@ -62,54 +64,57 @@ typedef UiToolHandler =
 /// Callback for local tool execution notifications.
 typedef LocalToolNotifier = void Function(String toolCallId, String toolName, String status);
 
-/// AG-UI Service - manages communication with the AG-UI server using Thread.
+/// AG-UI Service - facade over ConnectionManager for UI layer.
 ///
-/// Uses the quick_agui Thread class for:
-/// - Message history management
-/// - Tool call handling
-/// - Event streaming
+/// Provides a simplified API for the UI layer while delegating
+/// all networking and session management to ConnectionManager.
+///
+/// Key responsibilities:
+/// - Configuration management (room selection)
+/// - State tracking for UI binding
+/// - Delegating chat operations to ConnectionManager
+/// - Thread history loading
 class AgUiService extends ChangeNotifier {
-  AgUiServiceConfig? _config;
+  final ConnectionManager _connectionManager;
   final http.Client _httpClient = http.Client();
+
+  AgUiServiceConfig? _config;
   AgUiConnectionState _state = AgUiConnectionState.disconnected;
   String? _lastError;
-
-  Thread? _thread;
-  String? _currentRunId;
-
-  // AG-UI client for SSE streaming
-  ag_ui.AgUiClient? _agUiClient;
-
-  // Handler for UI tools (canvas_render, genui_render)
-  UiToolHandler? _uiToolHandler;
-
-  // Notifier for local tool execution events
-  LocalToolNotifier? _localToolNotifier;
 
   // Mutex to prevent concurrent chat() calls
   Completer<void>? _chatLock;
 
-  /// Tools that should be handled by the UI layer instead of LocalToolsService.
-  static const _uiTools = {'canvas_render', 'genui_render'};
+  AgUiService(this._connectionManager);
 
   AgUiConnectionState get state => _state;
   String? get lastError => _lastError;
-  String? get threadId => _thread?.id;
-  String? get runId => _currentRunId;
   bool get isConfigured => _config != null;
   String? get currentRoomId => _config?.roomId;
 
-  /// Stream of all AG-UI events (for UI to listen to).
-  Stream<ag_ui.BaseEvent>? get eventsStream => _thread?.stepsStream;
+  /// Get thread ID from the active session.
+  String? get threadId {
+    if (_config == null) return null;
+    return _connectionManager.getSession(_config!.roomId).threadId;
+  }
 
-  /// Stream of messages.
-  Stream<ag_ui.Message>? get messagesStream => _thread?.messageStream;
+  /// Get run ID from the active session.
+  String? get runId {
+    if (_config == null) return null;
+    return _connectionManager.getSession(_config!.roomId).activeRunId;
+  }
 
-  /// Stream of state updates.
-  Stream<ag_ui.State>? get stateStream => _thread?.stateStream;
+  /// Stream of AG-UI events from the active session.
+  Stream<ag_ui.BaseEvent>? get eventsStream {
+    if (_config == null) return null;
+    return _connectionManager.getSession(_config!.roomId).stepsStream;
+  }
 
-  /// Stream of tool call state changes for UI notifications.
-  Stream<ToolCallStateChange>? get toolStateChanges => _thread?.toolStateChanges;
+  /// Stream of tool call state changes from the active session.
+  Stream<ToolCallStateChange>? get toolStateChanges {
+    if (_config == null) return null;
+    return _connectionManager.getSession(_config!.roomId).toolStateChanges;
+  }
 
   /// Configure the AG-UI service with server details.
   void configure(AgUiServiceConfig config) {
@@ -124,236 +129,19 @@ class AgUiService extends ChangeNotifier {
     _state = AgUiConnectionState.disconnected;
     _lastError = null;
 
-    // Reset thread when room changes
-    _thread?.dispose();
-    _thread = null;
-    _currentRunId = null;
-
-    // Create AG-UI client with auth headers
-    _agUiClient = ag_ui.AgUiClient(
-      config: ag_ui.AgUiClientConfig(
-        baseUrl: config.baseUrl,
-        defaultHeaders: config.headers ?? {},
-      ),
-    );
+    // Switch room in ConnectionManager (handles session lifecycle)
+    _connectionManager.switchRoom(config.roomId);
 
     notifyListeners();
   }
 
-  /// Create a new thread on the server.
-  Future<(String, String)> _createThread() async {
-    final headers = {'Content-Type': 'application/json', ...?_config!.headers};
-
-    final response = await _httpClient.post(
-      _config!.createThreadUri,
-      headers: headers,
-      body: '{}',
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception(
-        'Failed to create thread: ${response.statusCode} ${response.body}',
-      );
-    }
-
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final threadId = data['thread_id'] as String?;
-    if (threadId == null) {
-      throw Exception('Server did not return thread_id');
-    }
-
-    // Server auto-creates initial run
-    final runs = data['runs'] as Map<String, dynamic>?;
-    if (runs == null || runs.isEmpty) {
-      throw Exception('Server did not return any runs');
-    }
-    final runId = runs.keys.first;
-
-    DebugLog.service('AG-UI: Created thread: $threadId with initial run: $runId');
-    return (threadId, runId);
-  }
-
-  /// Create a new run for the given thread.
-  Future<String> _createRun(String threadId) async {
-    final response = await _httpClient.post(
-      _config!.createRunUri(threadId),
-      headers: {'Content-Type': 'application/json', ...?_config!.headers},
-      body: '{}',
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception(
-        'Failed to create run: ${response.statusCode} ${response.body}',
-      );
-    }
-
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final runId = data['run_id'] as String?;
-    if (runId == null) {
-      throw Exception('Server did not return run_id');
-    }
-
-    DebugLog.service('AG-UI: Created run: $runId');
-    return runId;
-  }
-
-  /// Register local tools with the thread.
-  void _registerTools(LocalToolsService localToolsService) {
-    if (_thread == null) return;
-
-    for (final toolDef in localToolsService.tools) {
-      final agTool = ag_ui.Tool(
-        name: toolDef.name,
-        description: toolDef.description,
-        parameters: toolDef.parameters,
-      );
-
-      // UI tools are fire-and-forget - they execute but don't send results back
-      // This prevents infinite loops where the LLM keeps calling the same tool
-      final isFireAndForget = _uiTools.contains(toolDef.name);
-
-      _thread!.addTool(agTool, (call) async {
-        DebugLog.service('AG-UI: Tool executor callback for ${call.function.name}');
-
-        // Parse arguments
-        Map<String, dynamic> args = {};
-        try {
-          if (call.function.arguments.isNotEmpty) {
-            args = jsonDecode(call.function.arguments) as Map<String, dynamic>;
-          }
-        } catch (e) {
-          DebugLog.service('AG-UI: Failed to parse tool args: $e');
-        }
-
-        // Check if this is a UI tool that needs special handling
-        if (_uiTools.contains(call.function.name) && _uiToolHandler != null) {
-          DebugLog.service('AG-UI: Routing ${call.function.name} to UI handler (id=${call.id})');
-          _localToolNotifier?.call(call.id, call.function.name, 'executing');
-          try {
-            final result = await _uiToolHandler!(call.id, call.function.name, args);
-            _localToolNotifier?.call(call.id, call.function.name, 'completed');
-            return jsonEncode(result);
-          } catch (e) {
-            DebugLog.service('AG-UI: UI handler error: $e');
-            _localToolNotifier?.call(call.id, call.function.name, 'error: $e');
-            return jsonEncode({'error': e.toString()});
-          }
-        }
-
-        // Execute the tool via LocalToolsService
-        DebugLog.service('AG-UI: Calling localToolsService.executeTool...');
-        _localToolNotifier?.call(call.id, call.function.name, 'executing');
-        final result = await localToolsService.executeTool(
-          call.id,
-          call.function.name,
-          args,
-        );
-        DebugLog.service('AG-UI: Tool execution returned: success=${result.success}');
-
-        if (result.success) {
-          final json = jsonEncode(result.result);
-          DebugLog.service('AG-UI: Returning success JSON (${json.length} chars)');
-          _localToolNotifier?.call(call.id, call.function.name, 'completed');
-          return json;
-        } else {
-          DebugLog.service('AG-UI: Returning error: ${result.error}');
-          _localToolNotifier?.call(call.id, call.function.name, 'error');
-          return jsonEncode({'error': result.error});
-        }
-      }, fireAndForget: isFireAndForget);
-    }
-  }
-
-  /// Send a user message and get the agent's response.
+  /// Send a message and handle the full conversation flow.
   ///
-  /// Returns a stream of events for the UI to process.
-  Stream<ag_ui.BaseEvent> sendMessage(
-    String userMessage, {
-    LocalToolsService? localToolsService,
-  }) async* {
-    if (_config == null || _agUiClient == null) {
-      throw StateError('AgUiService not configured. Call configure() first.');
-    }
-
-    _state = AgUiConnectionState.connecting;
-    _lastError = null;
-    notifyListeners();
-
-    try {
-      // Create thread if needed
-      if (_thread == null) {
-        final (threadId, runId) = await _createThread();
-        _currentRunId = runId;
-
-        _thread = Thread(id: threadId, client: _agUiClient!);
-
-        // Register tools
-        if (localToolsService != null) {
-          _registerTools(localToolsService);
-        }
-      } else {
-        // Create new run for existing thread
-        _currentRunId = await _createRun(_thread!.id);
-      }
-
-      _state = AgUiConnectionState.streaming;
-      notifyListeners();
-
-      // Add user message
-      final userMsg = ag_ui.UserMessage(
-        id: 'user-${DateTime.now().millisecondsSinceEpoch}',
-        content: userMessage,
-      );
-
-      // Generate the endpoint using UrlBuilder for correct api/v1 prefix
-      final endpoint =
-          _config!.urlBuilder.runEndpoint(_config!.roomId, _thread!.id, _currentRunId!);
-      DebugLog.service('AG-UI: Starting run at $endpoint');
-
-      // Start the run - Thread handles the event loop
-      var toolResults = await _thread!.startRun(
-        endpoint: endpoint,
-        runId: _currentRunId!,
-        messages: [userMsg],
-      );
-
-      // Yield events from the thread's stream
-      // Note: Events are already being processed by Thread.startRun()
-      // We yield from the stepsStream for UI updates
-      await for (final event in _thread!.stepsStream) {
-        yield event;
-      }
-
-      // Handle tool result loop
-      while (toolResults.isNotEmpty) {
-        DebugLog.service('AG-UI: Processing ${toolResults.length} tool results');
-
-        _currentRunId = await _createRun(_thread!.id);
-        final newEndpoint =
-            _config!.urlBuilder.runEndpoint(_config!.roomId, _thread!.id, _currentRunId!);
-
-        toolResults = await _thread!.sendToolResults(
-          endpoint: newEndpoint,
-          runId: _currentRunId!,
-          toolMessages: toolResults,
-        );
-      }
-
-      _state = AgUiConnectionState.connected;
-      notifyListeners();
-    } catch (e, stackTrace) {
-      _state = AgUiConnectionState.error;
-      _lastError = e.toString();
-      DebugLog.service('AgUiService error: $e\n$stackTrace');
-      notifyListeners();
-      rethrow;
-    }
-  }
-
-  /// Simplified message sending that handles tool loop internally.
-  ///
-  /// This is the main method to use - it handles the full conversation flow
-  /// including tool execution and returns events as they occur.
+  /// Delegates to ConnectionManager.chat() which handles:
+  /// - Session initialization
+  /// - Tool registration
+  /// - Event streaming
+  /// - Tool result loops
   ///
   /// [uiToolHandler] is called for canvas_render and genui_render tools
   /// which need access to UI state (Riverpod providers).
@@ -363,7 +151,6 @@ class AgUiService extends ChangeNotifier {
   /// [onToolStateChange] is called when tool call states change (start/end execution).
   ///
   /// [state] is optional application state (e.g., canvas contents) to send with the request.
-  /// This state is available to the agent for context-aware responses.
   ///
   /// Note: Calls are serialized to prevent concurrent streaming issues.
   Future<void> chat(
@@ -384,10 +171,7 @@ class AgUiService extends ChangeNotifier {
     // Acquire lock
     _chatLock = Completer<void>();
 
-    // Store handlers for use in tool executor
-    _uiToolHandler = uiToolHandler;
-    _localToolNotifier = onLocalToolExecution;
-    if (_config == null || _agUiClient == null) {
+    if (_config == null) {
       _chatLock!.complete();
       _chatLock = null;
       throw StateError('AgUiService not configured. Call configure() first.');
@@ -398,73 +182,23 @@ class AgUiService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Create thread if needed
-      if (_thread == null) {
-        final (threadId, runId) = await _createThread();
-        _currentRunId = runId;
-
-        _thread = Thread(id: threadId, client: _agUiClient!);
-
-        // Register tools only once when thread is created
-        _registerTools(localToolsService);
-      } else {
-        // Create new run for existing thread
-        _currentRunId = await _createRun(_thread!.id);
-      }
-
       _state = AgUiConnectionState.streaming;
       notifyListeners();
 
-      // Listen to events stream
-      StreamSubscription<ag_ui.BaseEvent>? subscription;
-      StreamSubscription<ToolCallStateChange>? toolStateSubscription;
+      // Delegate to ConnectionManager
+      await _connectionManager.chat(
+        roomId: _config!.roomId,
+        userMessage: userMessage,
+        localToolsService: localToolsService,
+        onEvent: onEvent,
+        uiToolHandler: uiToolHandler,
+        onLocalToolExecution: onLocalToolExecution,
+        onToolStateChange: onToolStateChange,
+        state: state,
+      );
 
-      try {
-        subscription = _thread!.stepsStream.listen(onEvent);
-
-        // Listen to tool state changes for UI notifications
-        if (onToolStateChange != null) {
-          toolStateSubscription = _thread!.toolStateChanges.listen(onToolStateChange);
-        }
-
-        // Add user message
-        final userMsg = ag_ui.UserMessage(
-          id: 'user-${DateTime.now().millisecondsSinceEpoch}',
-          content: userMessage,
-        );
-
-        // Generate the endpoint using UrlBuilder for correct api/v1 prefix
-        final endpoint =
-            _config!.urlBuilder.runEndpoint(_config!.roomId, _thread!.id, _currentRunId!);
-
-        // Start the run with optional state
-        var toolResults = await _thread!.startRun(
-          endpoint: endpoint,
-          runId: _currentRunId!,
-          messages: [userMsg],
-          state: state,
-        );
-
-        // Handle tool result loop
-        while (toolResults.isNotEmpty) {
-          _currentRunId = await _createRun(_thread!.id);
-          final newEndpoint =
-              _config!.urlBuilder.runEndpoint(_config!.roomId, _thread!.id, _currentRunId!);
-
-          toolResults = await _thread!.sendToolResults(
-            endpoint: newEndpoint,
-            runId: _currentRunId!,
-            toolMessages: toolResults,
-          );
-        }
-
-        _state = AgUiConnectionState.connected;
-        notifyListeners();
-      } finally {
-        // Always cancel subscriptions
-        await subscription?.cancel();
-        await toolStateSubscription?.cancel();
-      }
+      _state = AgUiConnectionState.connected;
+      notifyListeners();
     } catch (e, stackTrace) {
       _state = AgUiConnectionState.error;
       _lastError = e.toString();
@@ -478,23 +212,28 @@ class AgUiService extends ChangeNotifier {
     }
   }
 
+  /// Cancel the current active run.
+  Future<void> cancelCurrentRun() async {
+    if (_config == null) {
+      DebugLog.service('AgUiService: Cannot cancel - not configured');
+      return;
+    }
+
+    await _connectionManager.cancelRun(_config!.roomId);
+    _state = AgUiConnectionState.connected;
+    notifyListeners();
+  }
+
   /// Resume an existing thread by ID and load its history.
   ///
   /// Returns the chat messages reconstructed from the thread's event history.
   /// The caller should pass these to ChatNotifier.loadMessages().
   Future<List<ChatMessage>> resumeThread(String threadId) async {
-    if (_config == null || _agUiClient == null) {
+    if (_config == null) {
       throw StateError('AgUiService not configured. Call configure() first.');
     }
 
     DebugLog.service('AgUiService: Resuming thread $threadId');
-
-    // Dispose old thread if exists
-    _thread?.dispose();
-
-    // Create new Thread instance with the existing ID
-    _thread = Thread(id: threadId, client: _agUiClient!);
-    _currentRunId = null;
 
     _state = AgUiConnectionState.connected;
     notifyListeners();
@@ -665,30 +404,62 @@ class AgUiService extends ChangeNotifier {
     return messages;
   }
 
-  /// Reset the conversation (clear thread).
+  /// Reset the conversation (clear session state).
   void resetConversation() {
-    _thread?.reset();
-    _thread?.dispose();
-    _thread = null;
-    _currentRunId = null;
+    if (_config != null) {
+      // Dispose the current session
+      _connectionManager.disposeSession(_config!.roomId);
+    }
     notifyListeners();
   }
 
   @override
   void dispose() {
-    _thread?.dispose();
     _httpClient.close();
     super.dispose();
   }
 }
 
-/// Riverpod provider for AgUiService.
+// =============================================================================
+// PROVIDERS
+// =============================================================================
+
+/// Provider for ConnectionManager (server-scoped).
+///
+/// Watches [currentServerProvider] - recreated when server changes.
+/// Also watches [agUiConfigProvider] to get auth headers.
+final connectionManagerProvider = ChangeNotifierProvider<ConnectionManager>((ref) {
+  final server = ref.watch(currentServerProvider);
+  final config = ref.watch(agUiConfigProvider);
+  final baseUrl = server?.url ?? ApiConstants.defaultServerUrl;
+  final headers = config?.headers;
+
+  DebugLog.service('ConnectionManager: Created for server ${server?.id}');
+  final manager = ConnectionManager(baseUrl: baseUrl, headers: headers);
+
+  ref.onDispose(() {
+    DebugLog.service('ConnectionManager: Disposed for server ${server?.id}');
+    manager.dispose();
+  });
+
+  return manager;
+});
+
+/// Provider for AgUiService.
+///
+/// Depends on ConnectionManager for all networking operations.
 final agUiServiceProvider = ChangeNotifierProvider<AgUiService>((ref) {
-  return AgUiService();
+  final connectionManager = ref.watch(connectionManagerProvider);
+  return AgUiService(connectionManager);
 });
 
 /// Provider for AG-UI configuration.
-final agUiConfigProvider = StateProvider<AgUiServiceConfig?>((ref) => null);
+///
+/// Watches [currentServerProvider] - config resets when server changes.
+final agUiConfigProvider = StateProvider<AgUiServiceConfig?>((ref) {
+  ref.watch(currentServerProvider);  // Reactive: resets on server change
+  return null;
+});
 
 /// Combined provider that auto-configures AgUiService when config changes.
 final configuredAgUiServiceProvider = Provider<AgUiService>((ref) {

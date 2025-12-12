@@ -3,12 +3,12 @@ import 'dart:convert';
 
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../infrastructure/quick_agui/tool_call_state.dart';
 import '../models/chat_models.dart';
 import '../services/local_tools_service.dart';
 import '../utils/debug_log.dart';
+import '../utils/url_builder.dart';
 import 'connection_events.dart';
 import 'http_transport.dart';
 import 'room_session.dart';
@@ -36,7 +36,9 @@ typedef LocalToolNotifier = void Function(
 /// - Connection observability
 class ConnectionManager extends ChangeNotifier {
   final String baseUrl;
+  final Map<String, String>? headers;
   final HttpTransport _transport;
+  final UrlBuilder _urlBuilder;
   ag_ui.AgUiClient? _agUiClient;
 
   /// All room sessions.
@@ -57,11 +59,18 @@ class ConnectionManager extends ChangeNotifier {
 
   ConnectionManager({
     required this.baseUrl,
+    this.headers,
     this.maxBackgroundedSessions = 5,
     HttpTransport? transport,
-  }) : _transport = transport ?? HttpTransport(baseUrl: baseUrl) {
+  }) : _urlBuilder = UrlBuilder(baseUrl),
+       _transport = transport ?? HttpTransport(baseUrl: baseUrl, defaultHeaders: headers) {
+    // Use serverUrl (not apiBaseUrl) because runEndpoint includes the api path.
+    // The ag_ui client replaces the path instead of appending to it.
     _agUiClient = ag_ui.AgUiClient(
-      config: ag_ui.AgUiClientConfig(baseUrl: baseUrl),
+      config: ag_ui.AgUiClientConfig(
+        baseUrl: _urlBuilder.serverUrl,
+        defaultHeaders: headers ?? {},
+      ),
     );
   }
 
@@ -341,29 +350,5 @@ class ConnectionManager extends ChangeNotifier {
   }
 }
 
-/// Provider for ConnectionManager that derives baseUrl from AgUiConfig.
-///
-/// Automatically updates when the AG-UI configuration changes.
-final connectionManagerProvider = ChangeNotifierProvider<ConnectionManager>((ref) {
-  // Import agUiConfigProvider to get the baseUrl
-  // We can't import agui_service.dart here due to circular deps,
-  // so we use a StateProvider that chat_screen.dart can set
-  final baseUrl = ref.watch(connectionBaseUrlProvider);
-  final manager = ConnectionManager(baseUrl: baseUrl);
-  ref.onDispose(() => manager.dispose());
-  return manager;
-});
-
-/// Base URL for ConnectionManager.
-/// Set this when configuring AG-UI (e.g., in chat_screen.dart).
-final connectionBaseUrlProvider = StateProvider<String>((ref) {
-  return 'http://localhost:8000/api/v1';
-});
-
-/// Provider for ConnectionManager with specific base URL.
-final connectionManagerWithBaseUrlProvider =
-    ChangeNotifierProvider.family<ConnectionManager, String>((ref, baseUrl) {
-  final manager = ConnectionManager(baseUrl: baseUrl);
-  ref.onDispose(() => manager.dispose());
-  return manager;
-});
+// Note: connectionManagerProvider is declared in lib/core/services/agui_service.dart
+// to avoid circular dependencies and ensure proper server-scoped lifecycle.

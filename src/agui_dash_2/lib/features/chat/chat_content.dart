@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/chat_models.dart';
-import '../../core/network/connection_manager.dart';
 import '../../core/providers/panel_providers.dart';
 import '../../core/services/agui_service.dart';
 import '../../core/services/chat_search_service.dart';
@@ -124,11 +123,17 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           // Skip if widget disposed
           if (!mounted) return {'skipped': true, 'reason': 'disposed'};
 
-          // Prevent duplicate execution of the same tool call
-          if (_processedUiToolCalls.contains(toolCallId)) {
+          // Get session for deduplication tracking
+          final connectionManager = ref.read(connectionManagerProvider);
+          final roomId = agUiService.currentRoomId;
+          if (roomId == null) return {'skipped': true, 'reason': 'no_room'};
+
+          final session = connectionManager.getSession(roomId);
+
+          // Prevent duplicate execution of the same tool call (session-level tracking)
+          if (!session.markToolCallProcessed(toolCallId)) {
             return {'skipped': true, 'reason': 'duplicate'};
           }
-          _processedUiToolCalls.add(toolCallId);
 
           // Get fresh references - notifiers may have been replaced during streaming
           final freshChatNotifier = ref.read(chatProvider.notifier);
@@ -147,12 +152,18 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           // Skip if widget disposed
           if (!mounted) return;
 
+          // Get session for deduplication tracking
+          final connectionManager = ref.read(connectionManagerProvider);
+          final roomId = agUiService.currentRoomId;
+          if (roomId == null) return;
+
+          final session = connectionManager.getSession(roomId);
+
           // Deduplicate by tool call ID - skip if we've already processed this execution
           final trackingKey = '$toolCallId:$status';
-          if (_processedToolNotifications.contains(trackingKey)) {
+          if (!session.markToolNotificationProcessed(trackingKey)) {
             return;
           }
-          _processedToolNotifications.add(trackingKey);
 
           // Get fresh references - notifiers may have been replaced during streaming
           final freshChatNotifier = ref.read(chatProvider.notifier);
@@ -241,12 +252,6 @@ class _ChatContentState extends ConsumerState<ChatContent> {
   // Maps AG-UI event messageId -> our internal ChatMessage id
   final Map<String, String> _messageIdMap = {};
   final Map<String, StringBuffer> _textBuffers = {};
-
-  // Track processed UI tool calls to prevent duplicate execution
-  final Set<String> _processedUiToolCalls = {};
-
-  // Track processed tool notifications to prevent duplicates (key: "$toolCallId:$status")
-  final Set<String> _processedToolNotifications = {};
 
   // Track tool call message IDs for updating status (key: toolCallId)
   final Map<String, String> _toolCallMessageIds = {};

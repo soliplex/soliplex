@@ -6,6 +6,7 @@ import '../../infrastructure/quick_agui/thread.dart';
 import '../../infrastructure/quick_agui/tool_call_state.dart';
 import '../models/chat_models.dart';
 import '../utils/debug_log.dart';
+import '../utils/url_builder.dart';
 import 'cancel_token.dart';
 import 'connection_events.dart';
 import 'http_transport.dart';
@@ -21,6 +22,7 @@ class RoomSession {
   final String roomId;
   final String baseUrl;
   final HttpTransport transport;
+  final UrlBuilder _urlBuilder;
 
   Thread? _thread;
   String? _activeRunId;
@@ -33,6 +35,13 @@ class RoomSession {
   /// Timestamp of last activity.
   DateTime? _lastActivity;
 
+  /// Processed tool calls for deduplication.
+  /// Used by UI layer to avoid processing the same tool call multiple times.
+  final Set<String> _processedToolCalls = {};
+
+  /// Processed tool notifications for deduplication.
+  final Set<String> _processedToolNotifications = {};
+
   /// Stream controller for session events.
   final StreamController<ConnectionEvent> _eventController =
       StreamController<ConnectionEvent>.broadcast();
@@ -41,7 +50,7 @@ class RoomSession {
     required this.roomId,
     required this.baseUrl,
     required this.transport,
-  });
+  }) : _urlBuilder = UrlBuilder(baseUrl);
 
   // Getters
   String? get threadId => _thread?.id;
@@ -78,8 +87,7 @@ class RoomSession {
     }
 
     // Create thread via HTTP
-    final endpoint = '$baseUrl/rooms/$roomId/agui';
-    final response = await transport.post(Uri.parse(endpoint), {});
+    final response = await transport.post(_urlBuilder.createThread(roomId), {});
 
     final threadId = response['thread_id'] as String?;
     if (threadId == null) {
@@ -111,8 +119,10 @@ class RoomSession {
       throw StateError('Session not initialized');
     }
 
-    final endpoint = '$baseUrl/rooms/$roomId/agui/${_thread!.id}';
-    final response = await transport.post(Uri.parse(endpoint), {});
+    final response = await transport.post(
+      _urlBuilder.createRun(roomId, _thread!.id),
+      {},
+    );
 
     final runId = response['run_id'] as String?;
     if (runId == null) {
@@ -144,7 +154,8 @@ class RoomSession {
     _state = SessionState.streaming;
     _lastActivity = DateTime.now();
 
-    final endpoint = 'rooms/$roomId/agui/${_thread!.id}/$_activeRunId';
+    // Relative endpoint for AG-UI client (without base URL)
+    final endpoint = _urlBuilder.runEndpoint(roomId, _thread!.id, _activeRunId!);
 
     _eventController.add(RunStartedEvent(
       roomId: roomId,
@@ -203,7 +214,7 @@ class RoomSession {
       throw StateError('Session not initialized');
     }
 
-    final endpoint = 'rooms/$roomId/agui/${_thread!.id}/$runId';
+    final endpoint = _urlBuilder.runEndpoint(roomId, _thread!.id, runId);
     _activeRunId = runId;
     _lastActivity = DateTime.now();
 
@@ -278,6 +289,30 @@ class RoomSession {
   /// Clear chat history.
   void clearChatHistory() {
     _chatHistory = [];
+  }
+
+  /// Mark a tool call as processed.
+  ///
+  /// Returns true if this is a new tool call (first time seeing it).
+  /// Returns false if already processed (duplicate).
+  bool markToolCallProcessed(String toolCallId) {
+    return _processedToolCalls.add(toolCallId);
+  }
+
+  /// Mark a tool notification as processed.
+  ///
+  /// Returns true if this is a new notification (first time seeing it).
+  /// Returns false if already processed (duplicate).
+  bool markToolNotificationProcessed(String key) {
+    return _processedToolNotifications.add(key);
+  }
+
+  /// Clear processed tool calls and notifications.
+  ///
+  /// Call this when starting a new conversation or resetting state.
+  void clearProcessedToolCalls() {
+    _processedToolCalls.clear();
+    _processedToolNotifications.clear();
   }
 
   /// Register a tool with the thread.

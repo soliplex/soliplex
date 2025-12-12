@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../services/agui_service.dart';
 import 'connection_events.dart';
 import 'connection_manager.dart';
 
