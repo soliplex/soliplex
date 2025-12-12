@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
 import '../models/server_models.dart';
+import '../utils/url_builder.dart';
 import 'secure_storage_service.dart';
 
 // Re-export models for convenience
@@ -73,38 +74,21 @@ class ServerConfigService extends ChangeNotifier {
     }
   }
 
-  /// Normalize a server URL (ensure https://, strip trailing slash and /api path)
+  /// Normalize a server URL (ensure https://, strip trailing slash and /api path).
+  ///
+  /// Delegates to [UrlBuilder.normalizeBaseUrl] for consistent URL handling.
   String normalizeUrl(String url) {
-    var normalized = url.trim();
-
-    // Add scheme if missing
-    if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
-      // Default to http for localhost, https otherwise
-      if (normalized.startsWith('localhost') || normalized.startsWith('127.0.0.1')) {
-        normalized = 'http://$normalized';
-      } else {
-        normalized = 'https://$normalized';
-      }
-    }
-
-    // Remove trailing slash
-    if (normalized.endsWith('/')) {
-      normalized = normalized.substring(0, normalized.length - 1);
-    }
-
-    // Strip /api and any version suffix - store just the base URL
-    normalized = normalized.replaceAll(RegExp(r'/api(/v\d+)?$'), '');
-
-    return normalized;
+    return UrlBuilder.normalizeBaseUrl(url);
   }
 
   /// Probe a server to discover its capabilities
   Future<ServerInfo> probeServer(String url) async {
     final normalizedUrl = normalizeUrl(url);
+    final urlBuilder = UrlBuilder(normalizedUrl);
 
     try {
       // Try to fetch /api/login endpoint to discover OIDC providers
-      final loginUrl = Uri.parse('$normalizedUrl/api/login');
+      final loginUrl = urlBuilder.login();
       final response = await _httpClient
           .get(loginUrl)
           .timeout(const Duration(seconds: 10));
@@ -137,8 +121,9 @@ class ServerConfigService extends ChangeNotifier {
 
   /// Fallback probe using /api/v1/rooms endpoint
   Future<ServerInfo> _probeRoomsEndpoint(String url) async {
+    final urlBuilder = UrlBuilder(url);
     try {
-      final roomsUrl = Uri.parse('$url/api/v1/rooms');
+      final roomsUrl = urlBuilder.rooms();
       final response = await _httpClient
           .get(roomsUrl)
           .timeout(const Duration(seconds: 10));
@@ -348,9 +333,26 @@ final serverConfigProvider = ChangeNotifierProvider<ServerConfigService>((ref) {
   return ServerConfigService(storage: storage);
 });
 
-/// Provider for current server connection
+/// Provider for current server ID only.
+///
+/// This provider only rebuilds when the server ID changes, not when
+/// ServerConfigService notifies for other reasons (like metadata updates).
+final currentServerIdProvider = Provider<String?>((ref) {
+  return ref.watch(serverConfigProvider.select((c) => c.currentServer?.id));
+});
+
+/// Provider for current server connection.
+///
+/// Uses [currentServerIdProvider] to only rebuild when the server ID changes,
+/// preventing unnecessary provider invalidation during auth token refresh
+/// or other ServerConfigService notifications.
 final currentServerProvider = Provider<ServerConnection?>((ref) {
-  final config = ref.watch(serverConfigProvider);
+  // Watch the ID to trigger rebuilds only on server change
+  final serverId = ref.watch(currentServerIdProvider);
+  if (serverId == null) return null;
+
+  // Read the full server object (don't watch to avoid extra rebuilds)
+  final config = ref.read(serverConfigProvider);
   return config.currentServer;
 });
 
