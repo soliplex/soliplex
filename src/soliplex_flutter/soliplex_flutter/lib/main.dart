@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'app_shell.dart';
+import 'features/test_page/test_page_feature.dart';
+
 void main() {
   runApp(const ProviderScope(child: SoliplexApp()));
 }
@@ -18,40 +21,11 @@ class SoliplexApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         useMaterial3: true,
       ),
-      home: const HomePage(),
-    );
-  }
-}
-
-/// Placeholder home page - will be replaced with app shell.
-class HomePage extends StatelessWidget {
-  const HomePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Soliplex'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      ),
-      body: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.rocket_launch, size: 64, color: Colors.indigo),
-            SizedBox(height: 16),
-            Text(
-              'Soliplex Flutter',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Phase 0 Complete - Ready for Phase 1',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-          ],
-        ),
-      ),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const AppShell(),
+        '/test': (context) => const TestPage(),
+      },
     );
   }
 }
