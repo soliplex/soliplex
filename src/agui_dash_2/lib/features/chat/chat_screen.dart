@@ -137,13 +137,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Store config for other providers that need it
     ref.read(agUiConfigProvider.notifier).state = config;
 
-    // Get fresh service reference after async operation and configure
-    try {
-      final service = ref.read(agUiServiceProvider);
-      service.configure(config);
-    } catch (e) {
-      debugPrint('Failed to configure AgUiService: $e');
-      // Service may have been disposed, which is ok if we're navigating away
+    // Configure the service, retrying if provider was invalidated
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (!mounted) return;
+
+      try {
+        final service = ref.read(agUiServiceProvider);
+        service.configure(config);
+        break; // Success
+      } catch (e) {
+        debugPrint('Configure attempt ${attempt + 1} failed: $e');
+        if (attempt < 2) {
+          // Wait for provider to settle and retry
+          await Future.delayed(const Duration(milliseconds: 50));
+        }
+      }
     }
 
     // Initialize feedback service for this room
