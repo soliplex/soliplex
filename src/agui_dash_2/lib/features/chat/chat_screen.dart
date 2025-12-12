@@ -103,31 +103,57 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _updateAgUiConfig() async {
+    if (!mounted) return;
+
     final selectedRoom = ref.read(selectedRoomProvider);
-    if (selectedRoom != null) {
-      // Get auth headers if available
+    if (selectedRoom == null) return;
+
+    // Get auth headers if available (this may trigger token refresh)
+    Map<String, String>? headers;
+    try {
       final authService = ref.read(authServiceProvider);
-      final headers = await authService.getAuthHeaders();
+      headers = await authService.getAuthHeaders();
+    } catch (e) {
+      debugPrint('Failed to get auth headers: $e');
+      headers = null;
+    }
 
-      final config = AgUiServiceConfig(
-        baseUrl: _serverUrl,
-        roomId: selectedRoom,
-        headers: headers.isNotEmpty ? headers : null,
-      );
+    // Check if widget is still mounted after async operation
+    if (!mounted) return;
 
-      // Store config for other providers that need it
-      ref.read(agUiConfigProvider.notifier).state = config;
+    // Re-read selected room in case it changed during await
+    final currentRoom = ref.read(selectedRoomProvider);
+    if (currentRoom != selectedRoom) {
+      // Room changed during await, skip this configuration
+      return;
+    }
 
-      // Explicitly configure the service (no auto-configuration)
-      ref.read(agUiServiceProvider).configure(config);
+    final config = AgUiServiceConfig(
+      baseUrl: _serverUrl,
+      roomId: selectedRoom,
+      headers: headers?.isNotEmpty == true ? headers : null,
+    );
 
-      // Initialize feedback service for this room
+    // Store config for other providers that need it
+    ref.read(agUiConfigProvider.notifier).state = config;
+
+    // Get fresh service reference after async operation and configure
+    try {
+      final service = ref.read(agUiServiceProvider);
+      service.configure(config);
+    } catch (e) {
+      debugPrint('Failed to configure AgUiService: $e');
+      // Service may have been disposed, which is ok if we're navigating away
+    }
+
+    // Initialize feedback service for this room
+    if (mounted) {
       ref.read(feedbackProvider.notifier).initialize(selectedRoom);
     }
   }
 
   Future<void> _onRoomChanged(String? roomId) async {
-    if (roomId == null) return;
+    if (roomId == null || !mounted) return;
 
     final previousRoomId = ref.read(selectedRoomProvider);
 
@@ -146,12 +172,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     ref.read(selectedRoomIdProvider.notifier).state = roomId;
     await _updateAgUiConfig();
 
+    // Check mounted after async operation
+    if (!mounted) return;
+
     // Restore chat history from per-room provider, or clear if empty
-    final savedMessages = ref.read(roomChatProvider(roomId)).messages;
-    if (savedMessages.isNotEmpty) {
-      ref.read(chatProvider.notifier).loadMessages(savedMessages);
-    } else {
-      ref.read(chatProvider.notifier).clearMessages();
+    try {
+      final savedMessages = ref.read(roomChatProvider(roomId)).messages;
+      if (savedMessages.isNotEmpty) {
+        ref.read(chatProvider.notifier).loadMessages(savedMessages);
+      } else {
+        ref.read(chatProvider.notifier).clearMessages();
+      }
+    } catch (e) {
+      debugPrint('Failed to restore chat history: $e');
     }
   }
 
