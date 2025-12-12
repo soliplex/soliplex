@@ -8,6 +8,7 @@ import '../../core/services/chat_service.dart';
 import '../../core/services/feedback_service.dart';
 import '../../core/services/rooms_service.dart';
 import '../layouts/standard_layout.dart';
+import '../notes/notes_dialog.dart';
 import '../layouts/canvas_layout.dart';
 import '../layouts/threecol_layout.dart';
 
@@ -116,6 +117,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ],
         ),
         actions: [
+          if (selectedRoom != null)
+            IconButton(
+              icon: const Icon(Icons.note_alt_outlined),
+              tooltip: 'Room notes',
+              onPressed: () => NotesDialog.show(context, selectedRoom),
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh rooms',

@@ -4,50 +4,7 @@ This document tracks planned, in-progress, and completed features for the agui_d
 
 ## Planned Features
 
-### 1. Room Notes Pad
-
-**Status**: Planned
-
-**Description**: A small notepad button in the UI that opens a markdown editor for keeping notes. Notes are persisted per-room to local files.
-
-**Requirements**:
-- Small notepad icon button in the UI (location TBD - header? context pane?)
-- Opens a dialog/panel with markdown editor
-- Notes saved to local folder with room name: `notes/{room_id}.md`
-- When switching rooms, loads existing notes for that room if they exist
-- Markdown preview support (optional/nice-to-have)
-
-**UI Design**:
-```
-┌─ Room Header ─────────────────────────┐
-│ Room: joker    [📝] [Settings] [...]  │
-└───────────────────────────────────────┘
-
-Clicking [📝] opens:
-┌─ Notes: joker ────────────────────────┐
-│ # My Notes                            │
-│                                       │
-│ - Important finding about X           │
-│ - Remember to test Y                  │
-│                                       │
-│ ───────────────────────────────────── │
-│                        [Save] [Close] │
-└───────────────────────────────────────┘
-```
-
-**Storage**:
-- Location: `{app_documents}/soliplex_notes/{room_id}.md`
-- Auto-save on close or explicit save button
-- Load on room change
-
-**Files to create**:
-- `lib/features/notes/notes_service.dart` - File I/O for notes
-- `lib/features/notes/notes_dialog.dart` - UI for editing
-- `lib/features/notes/notes_button.dart` - Button widget
-
-**Dependencies**:
-- `path_provider` package for getting documents directory
-- Consider `flutter_markdown` for preview (optional)
+(None currently)
 
 ---
 
@@ -59,7 +16,33 @@ Clicking [📝] opens:
 
 ## Completed
 
-### 1. Activity Status Indicator
+### 1. Room Notes Pad
+
+**Status**: Completed
+
+**Description**: A notepad button in the app bar that opens a markdown editor for keeping notes. Notes are persisted per-room to local files.
+
+**Implementation Details**:
+
+Files created:
+- `lib/features/notes/notes_service.dart` - File I/O with Riverpod StateNotifier
+- `lib/features/notes/notes_dialog.dart` - Dialog UI with text editor, save/close buttons
+
+Files modified:
+- `lib/features/chat/chat_screen.dart` - Added notepad icon button to app bar actions
+- `pubspec.yaml` - Added `path_provider` dependency
+
+**Features**:
+- Notepad icon button in app bar (only visible when room is selected)
+- Opens dialog with monospace text editor
+- Auto-saves on close
+- Manual save button with "Unsaved" indicator
+- Error handling with visual feedback
+- Notes persisted to `{documents}/soliplex_notes/{room_id}.md`
+
+---
+
+### 2. Activity Status Indicator
 
 **Status**: Completed
 
@@ -102,7 +85,7 @@ ref.read(activityStatusProvider.notifier).injectMessage(
 
 ---
 
-### 2. Response Feedback Chips
+### 3. Response Feedback Chips
 
 **Status**: Completed
 
