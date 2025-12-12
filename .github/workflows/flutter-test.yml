@@ -6,11 +6,13 @@ on:
     paths:
       - 'src/agui_dash_2/**'
       - 'src/flutter/**'
+      - '.github/workflows/flutter-test.yml'
   pull_request:
     branches: [main]
     paths:
       - 'src/agui_dash_2/**'
       - 'src/flutter/**'
+      - '.github/workflows/flutter-test.yml'
 
 # Default working directory for all jobs (monorepo structure)
 defaults:
