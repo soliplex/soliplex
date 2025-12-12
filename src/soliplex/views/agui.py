@@ -212,7 +212,7 @@ async def get_room_agui_thread_id(
                 await a_run.awaitable_attrs.run_agent_input
             ).to_agui_model(),
             a_run_meta=await a_run.awaitable_attrs.run_metadata,
-            a_run_events=None,
+            a_run_events=await a_run.list_events(),
         )
 
     return models.AGUI_Thread.from_thread(
