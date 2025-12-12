@@ -5,6 +5,7 @@ import '../../core/models/chat_models.dart';
 import '../../core/models/layout_mode.dart';
 import '../../core/services/agui_service.dart';
 import '../../core/services/chat_service.dart';
+import '../../core/services/feedback_service.dart';
 import '../../core/services/rooms_service.dart';
 import '../layouts/standard_layout.dart';
 import '../layouts/canvas_layout.dart';
@@ -61,6 +62,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       );
       // Reset conversation when switching rooms
       ref.read(agUiServiceProvider).resetConversation();
+      // Initialize feedback service for this room
+      ref.read(feedbackProvider.notifier).initialize(selectedRoom);
     }
   }
 

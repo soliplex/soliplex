@@ -4,14 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/chat_models.dart';
+import '../../core/services/activity_status_service.dart';
 import '../../core/services/agui_service.dart';
 import '../../core/services/canvas_service.dart';
 import '../../core/services/chat_service.dart';
 import '../../core/services/context_pane_service.dart';
 import '../../core/services/local_tools_service.dart';
 import '../../core/services/tool_execution_service.dart';
+import '../../core/utils/debug_log.dart';
 import '../../infrastructure/quick_agui/tool_call_state.dart';
 import 'builders/message_builder.dart';
+import 'widgets/message_feedback_chips.dart';
 import 'widgets/tool_execution_indicator.dart';
 
 /// Chat content widget that can be embedded in various layouts.
@@ -42,8 +45,6 @@ class _ChatContentState extends ConsumerState<ChatContent> {
   }
 
   void _handleGenUiEvent(String eventName, Map<String, Object?> arguments) {
-    debugPrint('GenUI Event: $eventName, args: $arguments');
-
     // Check if this event has a toolCallId that matches a registered callback
     final toolCallId = arguments['_toolCallId'] as String?;
     if (toolCallId != null && _searchCallbacks.containsKey(toolCallId)) {
@@ -53,16 +54,7 @@ class _ChatContentState extends ConsumerState<ChatContent> {
       callback?.call(eventName, payload);
       return;
     }
-
-    // Default: show snackbar for other events
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Event: $eventName'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
+    // Unhandled GenUI events are not shown to user
   }
 
   Future<void> _handleSend(dash.ChatMessage dashMessage) async {
@@ -109,11 +101,8 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           _processEvent(event, chatNotifier, contextNotifier, canvasNotifier);
         },
         uiToolHandler: (toolCallId, toolName, args) async {
-          debugPrint('UI Tool Handler: $toolName (id=$toolCallId) with args: $args');
-
           // Prevent duplicate execution of the same tool call
           if (_processedUiToolCalls.contains(toolCallId)) {
-            debugPrint('UI Tool Handler: SKIPPING duplicate tool call $toolCallId');
             return {'skipped': true, 'reason': 'duplicate'};
           }
           _processedUiToolCalls.add(toolCallId);
@@ -127,12 +116,9 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           );
         },
         onLocalToolExecution: (toolCallId, toolName, status) {
-          debugPrint('onLocalToolExecution: toolCallId=$toolCallId, toolName=$toolName, status=$status');
-
           // Deduplicate by tool call ID - skip if we've already processed this execution
           final trackingKey = '$toolCallId:$status';
           if (_processedToolNotifications.contains(trackingKey)) {
-            debugPrint('Skipping duplicate tool notification: $toolCallId $toolName $status');
             return;
           }
           _processedToolNotifications.add(trackingKey);
@@ -143,18 +129,13 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           if (status == 'executing') {
             final messageId = chatNotifier.addToolCallMessage(toolName);
             _toolCallMessageIds[toolCallId] = messageId;
-            debugPrint('Added tool call message: toolCallId=$toolCallId -> messageId=$messageId');
           } else {
             final messageId = _toolCallMessageIds[toolCallId];
-            debugPrint('Updating tool call: toolCallId=$toolCallId, messageId=$messageId');
             if (messageId != null) {
               chatNotifier.updateToolCallStatus(messageId, status);
-              debugPrint('Updated tool call status to: $status');
               if (status == 'completed' || status.startsWith('error')) {
                 _toolCallMessageIds.remove(toolCallId);
               }
-            } else {
-              debugPrint('WARNING: No message ID found for toolCallId=$toolCallId');
             }
           }
         },
@@ -164,12 +145,9 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         },
       );
     } catch (e) {
-      debugPrint('Error sending message: $e');
+      DebugLog.error('Error sending message: $e');
       if (mounted) {
         chatNotifier.addErrorMessage('Error: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
       }
     } finally {
       // Ensure tool execution state is cleared when chat completes
@@ -190,10 +168,6 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     ContextPaneNotifier contextNotifier,
     ChatNotifier chatNotifier,
   ) {
-    debugPrint(
-      'AG-UI: Tool state change - ${change.toolName}: ${change.previousState} -> ${change.newState}',
-    );
-
     if (change.isStarting) {
       // Tool execution started
       toolExecutionNotifier.startExecution(change.toolCallId, change.toolName);
@@ -235,112 +209,107 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     ContextPaneNotifier contextNotifier,
     CanvasNotifier canvasNotifier,
   ) {
-    // Skip verbose thinking content events
-    if (event is! ag_ui.ThinkingTextMessageContentEvent) {
-      debugPrint('AG-UI Event: ${event.runtimeType}');
-    }
+    final activityNotifier = ref.read(activityStatusProvider.notifier);
 
     switch (event) {
       case ag_ui.RunStartedEvent():
-        debugPrint('AG-UI: Run started - ${event.runId}');
+        DebugLog.agui('RunStarted runId=${event.runId}');
+        DebugLog.mapping('=== NEW RUN === messageIdMap has ${_messageIdMap.length} entries');
         contextNotifier.addAgUiEvent('Run Started', summary: event.runId);
+        activityNotifier.startActivity();
 
       case ag_ui.TextMessageStartEvent():
         final aguiMessageId = event.messageId;
-        debugPrint('AG-UI: TextMessageStartEvent received, messageId=$aguiMessageId');
+        DebugLog.mapping('TextMessageStart aguiId=$aguiMessageId, current map: $_messageIdMap');
         final chatMessageId = chatNotifier.startAgentMessage();
         _messageIdMap[aguiMessageId] = chatMessageId;
         _textBuffers[aguiMessageId] = StringBuffer();
-        debugPrint('AG-UI: Text message started, aguiId=$aguiMessageId -> chatId=$chatMessageId');
+        DebugLog.mapping('TextMessageStart mapped: aguiId=$aguiMessageId -> chatId=$chatMessageId');
+        activityNotifier.handleEvent('TextMessageStart');
 
       case ag_ui.TextMessageContentEvent():
         final aguiMessageId = event.messageId;
         final chatMessageId = _messageIdMap[aguiMessageId];
-        debugPrint('AG-UI: TextMessageContentEvent received, messageId=$aguiMessageId, delta="${event.delta}"');
         if (chatMessageId != null) {
           chatNotifier.appendToStreamingMessage(chatMessageId, event.delta);
           _textBuffers[aguiMessageId]?.write(event.delta);
         } else {
-          debugPrint('AG-UI: WARNING - TextMessageContentEvent but no mapping for messageId=$aguiMessageId');
+          DebugLog.warn('TextMessageContent: NO MAPPING for aguiId=$aguiMessageId, map=$_messageIdMap');
         }
 
       case ag_ui.TextMessageEndEvent():
         final aguiMessageId = event.messageId;
         final chatMessageId = _messageIdMap[aguiMessageId];
-        debugPrint('AG-UI: TextMessageEndEvent received, messageId=$aguiMessageId');
+        DebugLog.mapping('TextMessageEnd aguiId=$aguiMessageId, chatId=$chatMessageId');
         if (chatMessageId != null) {
           chatNotifier.finalizeStreamingMessage(chatMessageId);
           final text = _textBuffers[aguiMessageId]?.toString() ?? '';
+          DebugLog.chat('Finalized message: ${text.length} chars');
           contextNotifier.addTextMessage(text, isUser: false);
           _messageIdMap.remove(aguiMessageId);
           _textBuffers.remove(aguiMessageId);
         } else {
-          debugPrint('AG-UI: WARNING - TextMessageEndEvent but no mapping for messageId=$aguiMessageId');
+          DebugLog.warn('TextMessageEnd: NO MAPPING for aguiId=$aguiMessageId');
         }
 
       case ag_ui.ToolCallStartEvent():
-        debugPrint('AG-UI: Tool call started - ${event.toolCallName}');
+        DebugLog.tool('ToolCallStart: ${event.toolCallName}');
         contextNotifier.addToolCall(event.toolCallName, summary: 'started');
+        activityNotifier.handleEvent('ToolCallStart', toolName: event.toolCallName);
 
       case ag_ui.ToolCallArgsEvent():
-        // Args are handled by Thread class, just log here
-        debugPrint('AG-UI: Tool call args - ${event.toolCallId}');
+        break; // Args handled by Thread class
 
       case ag_ui.ToolCallEndEvent():
-        debugPrint('AG-UI: Tool call ended - ${event.toolCallId}');
+        break;
 
       case ag_ui.ToolCallResultEvent():
-        debugPrint('AG-UI: Tool result received');
         contextNotifier.addAgUiEvent('Tool Result');
 
       case ag_ui.StateSnapshotEvent():
-        debugPrint('AG-UI: State snapshot received');
         final stateData = event.snapshot as Map<String, dynamic>? ?? {};
         contextNotifier.updateState(stateData);
 
       case ag_ui.StateDeltaEvent():
-        debugPrint('AG-UI: State delta received');
         final delta = event.delta as List<dynamic>? ?? [];
         if (delta.isNotEmpty && delta.first is Map<String, dynamic>) {
           contextNotifier.applyDelta(delta.first as Map<String, dynamic>);
         }
 
       case ag_ui.ActivitySnapshotEvent():
-        debugPrint(
-          'AG-UI: Activity snapshot received - ${event.activities.length} activities',
-        );
         contextNotifier.addAgUiEvent(
           'Activity Snapshot',
           summary: '${event.activities.length} activities',
         );
 
       case ag_ui.ThinkingStartEvent():
-        debugPrint('AG-UI: Thinking started');
         contextNotifier.addAgUiEvent('Thinking');
+        activityNotifier.handleEvent('Thinking');
 
       case ag_ui.ThinkingTextMessageStartEvent():
-        debugPrint('AG-UI: Thinking text started');
+        break;
 
       case ag_ui.ThinkingTextMessageContentEvent():
-        // Suppressed - too verbose
         break;
 
       case ag_ui.ThinkingTextMessageEndEvent():
-        debugPrint('AG-UI: Thinking text ended');
+        break;
 
       case ag_ui.ThinkingEndEvent():
-        debugPrint('AG-UI: Thinking ended');
+        break;
 
       case ag_ui.RunFinishedEvent():
-        debugPrint('AG-UI: Run finished - ${event.runId}');
+        DebugLog.agui('RunFinished runId=${event.runId}');
+        DebugLog.mapping('=== RUN DONE === messageIdMap has ${_messageIdMap.length} entries remaining');
         contextNotifier.addAgUiEvent('Run Finished');
+        activityNotifier.stopActivity();
 
       case ag_ui.RunErrorEvent():
         chatNotifier.addErrorMessage(event.message);
         contextNotifier.addAgUiEvent('Error', summary: event.message);
-        debugPrint('AG-UI: Run error - ${event.code}: ${event.message}');
+        DebugLog.error('RunError: ${event.code}: ${event.message}');
+        activityNotifier.stopActivity();
 
-      // Handle custom events for genui_render and canvas_render
       case ag_ui.CustomEvent():
         _handleCustomEvent(
           event,
@@ -350,7 +319,7 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         );
 
       default:
-        debugPrint('AG-UI: Unhandled event - ${event.runtimeType}: $event');
+        DebugLog.warn('Unhandled event: ${event.runtimeType}');
     }
   }
 
@@ -362,8 +331,6 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     CanvasNotifier canvasNotifier,
     ContextPaneNotifier contextNotifier,
   ) {
-    debugPrint('_handleUiTool: $toolName');
-
     if (toolName == 'genui_render') {
       final widgetName = args['widget_name'] as String? ?? 'Widget';
       final data = args['data'] as Map<String, dynamic>? ?? {};
@@ -381,10 +348,6 @@ class _ChatContentState extends ConsumerState<ChatContent> {
       final widgetName = args['widget_name'] as String? ?? 'Widget';
       final data = args['data'] as Map<String, dynamic>? ?? {};
       final position = args['position'] as String? ?? 'append';
-
-      debugPrint(
-        '_handleUiTool canvas_render: widget=$widgetName, position=$position',
-      );
 
       switch (position) {
         case 'clear':
@@ -412,15 +375,8 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     ContextPaneNotifier contextNotifier,
     CanvasNotifier canvasNotifier,
   ) {
-    final eventName = event.name;
-
-    debugPrint('AG-UI: Custom event - $eventName (ignored - handled via tool)');
-
     // genui_render and canvas_render are handled via _handleUiTool
     // CustomEvents for these are ignored to prevent double-rendering
-    if (eventName == 'genui_render' || eventName == 'canvas_render') {
-      return;
-    }
   }
 
   /// Stubbed staff data for /search staff command
@@ -826,8 +782,6 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     String searchType,
     ChatNotifier chatNotifier,
   ) {
-    debugPrint('SearchWidget event: $eventName, payload: $payload');
-
     switch (eventName) {
       case 'submit':
         final selected = payload['selected'] as List<dynamic>? ?? [];
@@ -867,13 +821,17 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         // Constrain message bubbles to 70% of available chat width
         final messageMaxWidth = constraints.maxWidth * 0.7;
 
-        return Column(
+        final activityStatus = ref.watch(activityStatusProvider);
+
+        return Stack(
           children: [
-            // Tool execution indicator at top
-            const ToolExecutionIndicator(),
-            // Chat area takes remaining space
-            Expanded(
-              child: dash.DashChat(
+            Column(
+              children: [
+                // Tool execution indicator at top
+                const ToolExecutionIndicator(),
+                // Chat area takes remaining space
+                Expanded(
+                  child: dash.DashChat(
           currentUser: dash.ChatUser(
             id: ChatUser.user.id,
             firstName: ChatUser.user.firstName,
@@ -897,10 +855,10 @@ class _ChatContentState extends ConsumerState<ChatContent> {
             messageTextBuilder: (message, previousMessage, nextMessage) {
           final customProps = message.customProperties;
           final chatMessage = customProps?['chatMessage'] as ChatMessage?;
+          final isAgentMessage = message.user.id == ChatUser.agent.id;
 
           // For non-text messages, build custom widget
           if (chatMessage != null && chatMessage.type != MessageType.text) {
-            debugPrint('messageTextBuilder: Rendering ${chatMessage.type}');
             final customWidget = _messageBuilder.build(
               message,
               previousMessage: previousMessage,
@@ -909,12 +867,25 @@ class _ChatContentState extends ConsumerState<ChatContent> {
               isBeforeDateSeparator: false,
             );
             if (customWidget != null) {
+              // Add feedback chips for agent messages (not for tool calls/loading)
+              if (isAgentMessage &&
+                  chatMessage.type != MessageType.toolCall &&
+                  chatMessage.type != MessageType.loading) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    customWidget,
+                    MessageFeedbackChips(messageId: chatMessage.id),
+                  ],
+                );
+              }
               return customWidget;
             }
           }
 
-          // Default text rendering
-          return Text(
+          // Default text rendering with feedback chips for agent messages
+          final textWidget = Text(
             message.text,
             style: TextStyle(
               color: message.user.id == ChatUser.user.id
@@ -922,6 +893,20 @@ class _ChatContentState extends ConsumerState<ChatContent> {
                   : Theme.of(context).colorScheme.onSurface,
             ),
           );
+
+          // Add feedback chips for finalized agent text messages
+          if (isAgentMessage && chatMessage != null && !chatMessage.isStreaming) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                textWidget,
+                MessageFeedbackChips(messageId: chatMessage.id),
+              ],
+            );
+          }
+
+          return textWidget;
         },
       ),
       messageListOptions: dash.MessageListOptions(
@@ -963,9 +948,148 @@ class _ChatContentState extends ConsumerState<ChatContent> {
               : [],
             ),
             ),
+              ],
+            ),
+            // Activity status overlay (covers input area when active)
+            if (activityStatus.isActive && activityStatus.currentMessage != null)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  color: Theme.of(context).colorScheme.surface,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Row(
+                      children: [
+                        // Pulsing dots
+                        const _ActivityDots(),
+                        const SizedBox(width: 8),
+                        // Status message with animation
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 300),
+                          switchInCurve: Curves.easeOut,
+                          switchOutCurve: Curves.easeIn,
+                          transitionBuilder: (child, animation) {
+                            return FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0, 0.3),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: Text(
+                            activityStatus.currentMessage!,
+                            key: ValueKey(activityStatus.currentMessage),
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        // Stop button (non-functional)
+                        IconButton(
+                          icon: const Icon(Icons.stop_circle_outlined),
+                          onPressed: () {
+                            // TODO: Implement stop functionality
+                            debugPrint('Stop button pressed (not yet implemented)');
+                          },
+                          tooltip: 'Stop generation',
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
         );
       },
     );
+  }
+}
+
+/// Pulsing dots animation for activity indicator.
+class _ActivityDots extends StatefulWidget {
+  const _ActivityDots();
+
+  @override
+  State<_ActivityDots> createState() => _ActivityDotsState();
+}
+
+class _ActivityDotsState extends State<_ActivityDots>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(3, (index) {
+        return AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            // Stagger the animations for each dot
+            final delay = index * 0.2;
+            final value = (_controller.value + delay) % 1.0;
+            // Pulse effect using sin wave
+            final pulse = (1 + _sin(value * 2 * 3.14159)) / 2;
+            final scale = 0.5 + (0.5 * pulse);
+            final opacity = 0.4 + (0.6 * pulse);
+
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              width: 6 * scale,
+              height: 6 * scale,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withAlpha((opacity * 255).round()),
+              ),
+            );
+          },
+        );
+      }),
+    );
+  }
+
+  /// Simple sin approximation using Taylor series.
+  double _sin(double x) {
+    x = x % (2 * 3.14159);
+    if (x > 3.14159) x -= 2 * 3.14159;
+    double result = x;
+    double term = x;
+    for (int i = 1; i <= 5; i++) {
+      term *= -x * x / ((2 * i) * (2 * i + 1));
+      result += term;
+    }
+    return result;
   }
 }
