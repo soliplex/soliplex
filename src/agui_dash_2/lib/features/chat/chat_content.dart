@@ -1,11 +1,13 @@
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
 import 'package:dash_chat_2/dash_chat_2.dart' as dash;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/chat_models.dart';
 import '../../core/services/activity_status_service.dart';
 import '../../core/services/agui_service.dart';
+import '../../core/services/chat_search_service.dart';
 import '../../core/services/canvas_service.dart';
 import '../../core/services/chat_service.dart';
 import '../../core/services/context_pane_service.dart';
@@ -14,6 +16,8 @@ import '../../core/services/tool_execution_service.dart';
 import '../../core/utils/debug_log.dart';
 import '../../infrastructure/quick_agui/tool_call_state.dart';
 import 'builders/message_builder.dart';
+import 'widgets/chat_search_bar.dart';
+import 'widgets/code_block_widget.dart';
 import 'widgets/message_feedback_chips.dart';
 import 'widgets/tool_execution_indicator.dart';
 
@@ -806,6 +810,24 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     }
   }
 
+  /// Paste from clipboard into input field.
+  Future<void> _pasteFromClipboard() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (data?.text != null) {
+      final text = _inputController.text;
+      final selection = _inputController.selection;
+      final newText = text.replaceRange(
+        selection.start,
+        selection.end,
+        data!.text!,
+      );
+      _inputController.text = newText;
+      _inputController.selection = TextSelection.collapsed(
+        offset: selection.start + data.text!.length,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final chatState = ref.watch(chatProvider);
@@ -815,18 +837,56 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         .map((m) => toDashChatMessage(m))
         .toList();
 
-    // Use LayoutBuilder to get actual available width for the chat column
-    return LayoutBuilder(
+    // Wrap with keyboard shortcuts (Cmd+K for paste, Cmd+F for search)
+    return Shortcuts(
+      shortcuts: {
+        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyK):
+            const _PasteIntent(),
+        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyF):
+            const _SearchIntent(),
+      },
+      child: Actions(
+        actions: {
+          _PasteIntent: CallbackAction<_PasteIntent>(
+            onInvoke: (_) {
+              _pasteFromClipboard();
+              return null;
+            },
+          ),
+          _SearchIntent: CallbackAction<_SearchIntent>(
+            onInvoke: (_) {
+              ref.read(chatSearchProvider.notifier).openSearch();
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: LayoutBuilder(
       builder: (context, constraints) {
         // Constrain message bubbles to 70% of available chat width
         final messageMaxWidth = constraints.maxWidth * 0.7;
 
         final activityStatus = ref.watch(activityStatusProvider);
+        final searchState = ref.watch(chatSearchProvider);
 
         return Stack(
           children: [
             Column(
               children: [
+                // Search bar (when active)
+                if (searchState.isActive)
+                  ChatSearchBar(
+                    messageIds: chatState.messages.map((m) => m.id).toList(),
+                    getMessageText: (id) {
+                      try {
+                        final msg = chatState.messages.firstWhere((m) => m.id == id);
+                        return msg.text ?? '';
+                      } catch (_) {
+                        return '';
+                      }
+                    },
+                  ),
                 // Tool execution indicator at top
                 const ToolExecutionIndicator(),
                 // Chat area takes remaining space
@@ -867,7 +927,7 @@ class _ChatContentState extends ConsumerState<ChatContent> {
               isBeforeDateSeparator: false,
             );
             if (customWidget != null) {
-              // Add feedback chips for agent messages (not for tool calls/loading)
+              // Add feedback chips and copy for agent messages (not for tool calls/loading)
               if (isAgentMessage &&
                   chatMessage.type != MessageType.toolCall &&
                   chatMessage.type != MessageType.loading) {
@@ -876,7 +936,10 @@ class _ChatContentState extends ConsumerState<ChatContent> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     customWidget,
-                    MessageFeedbackChips(messageId: chatMessage.id),
+                    _MessageActionsRow(
+                      messageId: chatMessage.id,
+                      messageText: message.text,
+                    ),
                   ],
                 );
               }
@@ -885,23 +948,38 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           }
 
           // Default text rendering with feedback chips for agent messages
-          final textWidget = Text(
-            message.text,
-            style: TextStyle(
-              color: message.user.id == ChatUser.user.id
-                  ? Theme.of(context).colorScheme.onPrimaryContainer
-                  : Theme.of(context).colorScheme.onSurface,
-            ),
+          final textStyle = TextStyle(
+            color: message.user.id == ChatUser.user.id
+                ? Theme.of(context).colorScheme.onPrimaryContainer
+                : Theme.of(context).colorScheme.onSurface,
+          );
+          final textWidget = MessageTextWithCodeBlocks(
+            text: message.text,
+            textStyle: textStyle,
+            onQuote: (quotedText) {
+              // Insert quoted text into input field
+              final currentText = _inputController.text;
+              final newText = currentText.isEmpty
+                  ? '$quotedText\n\n'
+                  : '$currentText\n\n$quotedText\n\n';
+              _inputController.text = newText;
+              _inputController.selection = TextSelection.collapsed(
+                offset: newText.length,
+              );
+            },
           );
 
-          // Add feedback chips for finalized agent text messages
+          // Add feedback chips and copy button for finalized agent text messages
           if (isAgentMessage && chatMessage != null && !chatMessage.isStreaming) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 textWidget,
-                MessageFeedbackChips(messageId: chatMessage.id),
+                _MessageActionsRow(
+                  messageId: chatMessage.id,
+                  messageText: message.text,
+                ),
               ],
             );
           }
@@ -1015,8 +1093,21 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           ],
         );
       },
+          ),
+        ),
+      ),
     );
   }
+}
+
+/// Intent for paste action.
+class _PasteIntent extends Intent {
+  const _PasteIntent();
+}
+
+/// Intent for search action.
+class _SearchIntent extends Intent {
+  const _SearchIntent();
 }
 
 /// Pulsing dots animation for activity indicator.
@@ -1091,5 +1182,65 @@ class _ActivityDotsState extends State<_ActivityDots>
       result += term;
     }
     return result;
+  }
+}
+
+/// Row with feedback chips and copy button for messages.
+class _MessageActionsRow extends ConsumerStatefulWidget {
+  final String messageId;
+  final String messageText;
+
+  const _MessageActionsRow({
+    required this.messageId,
+    required this.messageText,
+  });
+
+  @override
+  ConsumerState<_MessageActionsRow> createState() => _MessageActionsRowState();
+}
+
+class _MessageActionsRowState extends ConsumerState<_MessageActionsRow> {
+  bool _copied = false;
+
+  Future<void> _copyToClipboard() async {
+    await Clipboard.setData(ClipboardData(text: widget.messageText));
+    setState(() => _copied = true);
+    // Reset after brief delay
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Feedback chips
+          MessageFeedbackChips(messageId: widget.messageId),
+          const Spacer(),
+          // Copy button
+          Tooltip(
+            message: _copied ? 'Copied!' : 'Copy message',
+            child: InkWell(
+              onTap: _copyToClipboard,
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Icon(
+                  _copied ? Icons.check : Icons.copy_outlined,
+                  size: 16,
+                  color: _copied
+                      ? Colors.green
+                      : Theme.of(context).colorScheme.outline,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

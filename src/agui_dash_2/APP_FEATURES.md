@@ -16,7 +16,37 @@ This document tracks planned, in-progress, and completed features for the agui_d
 
 ## Completed
 
-### 1. Room Notes Pad
+### 1. Text-Oriented Changes
+
+**Status**: Completed
+
+**Description**: Enhanced text handling in chat with selection, copy, search, and quote reply features for power users.
+
+**Implementation Details**:
+
+Files created:
+- `lib/features/chat/widgets/code_block_widget.dart` - Code block rendering with copy buttons and quote support
+- `lib/features/chat/widgets/chat_search_bar.dart` - Search bar UI
+- `lib/core/services/chat_search_service.dart` - Search state management
+
+Files modified:
+- `lib/features/chat/chat_content.dart` - Integrated all text features
+
+**Features**:
+- **Selectable text** - All message text is now selectable
+- **Copy button** - Far-right of feedback row copies entire message
+- **Cmd+K paste** - Keyboard shortcut to paste into input
+- **Code block copy** - Individual copy button per ``` fenced code block
+- **Search (Cmd+F)** - Search bar with match navigation (prev/next)
+- **Quote reply** - Select text, right-click "Quote" to insert as `> quoted text`
+
+**Keyboard Shortcuts**:
+- `Cmd+K` - Paste from clipboard
+- `Cmd+F` - Open search bar
+
+---
+
+### 2. Room Notes Pad
 
 **Status**: Completed
 
@@ -42,7 +72,7 @@ Files modified:
 
 ---
 
-### 2. Activity Status Indicator
+### 3. Activity Status Indicator
 
 **Status**: Completed
 
@@ -85,7 +115,7 @@ ref.read(activityStatusProvider.notifier).injectMessage(
 
 ---
 
-### 3. Response Feedback Chips
+### 4. Response Feedback Chips
 
 **Status**: Completed
 
