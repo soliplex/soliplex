@@ -251,9 +251,9 @@ class UserMenu extends ConsumerWidget {
         ),
         const PopupMenuDivider(),
         if (onSettingsTap != null)
-          PopupMenuItem(
+          const PopupMenuItem(
             value: 'settings',
-            child: const Row(
+            child: Row(
               children: [
                 Icon(Icons.settings, size: 20),
                 SizedBox(width: 8),

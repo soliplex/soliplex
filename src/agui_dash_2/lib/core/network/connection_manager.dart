@@ -32,7 +32,7 @@ typedef LocalToolNotifier = void Function(
 /// Singleton for app lifetime - handles server changes internally via switchServer().
 ///
 /// Handles:
-/// - Session pool (Map<roomId, RoomSession>)
+/// - Session pool (`Map<roomId, RoomSession>`)
 /// - Server switching (clears sessions on server change)
 /// - Room switching with state preservation
 /// - Run cancellation

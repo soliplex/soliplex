@@ -1,3 +1,4 @@
+// ignore_for_file: avoid_print
 // Standalone Dart CLI client for testing AG-UI 3-step flow
 // Run with: dart run bin/agui_client.dart
 //

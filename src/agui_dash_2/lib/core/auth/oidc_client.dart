@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
-import "package:http/http.dart" as http;
+import 'package:http/http.dart' as http;
 
 import 'oidc_auth_interactor.dart';
 
@@ -135,7 +135,7 @@ class OidcClient implements http.Client {
         ..followRedirects = true
         ..body = jsonEncode({'text': prompt});
 
-      debugPrint("starting request to $to");
+      debugPrint('starting request to $to');
 
       try {
         final response = await send(request);
@@ -154,7 +154,7 @@ class OidcClient implements http.Client {
               final data = value;
 
               final dataLines = data
-                  .split("\n")
+                  .split('\n')
                   .where((element) => element.isNotEmpty)
                   .toList();
 

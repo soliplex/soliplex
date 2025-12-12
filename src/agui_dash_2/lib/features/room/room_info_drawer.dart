@@ -153,7 +153,7 @@ class _RoomInfoContent extends ConsumerWidget {
             children: [
               // Description
               if (room.description != null && room.description!.isNotEmpty) ...[
-                _SectionHeader(title: 'Description'),
+                const _SectionHeader(title: 'Description'),
                 const SizedBox(height: 8),
                 Text(
                   room.description!,
@@ -165,14 +165,14 @@ class _RoomInfoContent extends ConsumerWidget {
               ],
 
               // Capability badges
-              _SectionHeader(title: 'Capabilities'),
+              const _SectionHeader(title: 'Capabilities'),
               const SizedBox(height: 8),
               CapabilityBadges(room: room),
               const SizedBox(height: 20),
 
               // Model info
               if (room.agent != null) ...[
-                _SectionHeader(title: 'Model'),
+                const _SectionHeader(title: 'Model'),
                 const SizedBox(height: 8),
                 _InfoCard(
                   children: [
@@ -205,7 +205,7 @@ class _RoomInfoContent extends ConsumerWidget {
 
               // MCP Client toolsets (toolsets this room connects TO)
               if (room.mcpClientToolsets.isNotEmpty) ...[
-                _SectionHeader(title: 'MCP Client Toolsets'),
+                const _SectionHeader(title: 'MCP Client Toolsets'),
                 const SizedBox(height: 8),
                 _InfoCard(
                   children: room.mcpClientToolsets.entries.map((entry) {
@@ -231,7 +231,7 @@ class _RoomInfoContent extends ConsumerWidget {
               ],
 
               // Feature flags
-              _SectionHeader(title: 'Features'),
+              const _SectionHeader(title: 'Features'),
               const SizedBox(height: 8),
               _InfoCard(
                 children: [

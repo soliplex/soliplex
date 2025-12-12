@@ -28,12 +28,12 @@ abstract class ServerScopedNotifier<State> extends StateNotifier<State> {
   final String? serverId;
 
   ServerScopedNotifier(super.initialState, {this.serverId}) {
-    DebugLog.service('${runtimeType}: Created for server $serverId');
+    DebugLog.service('$runtimeType: Created for server $serverId');
   }
 
   @override
   void dispose() {
-    DebugLog.service('${runtimeType}: Disposed (server $serverId)');
+    DebugLog.service('$runtimeType: Disposed (server $serverId)');
     super.dispose();
   }
 }

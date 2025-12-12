@@ -186,7 +186,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                   : ListView.separated(
                       shrinkWrap: true,
                       itemCount: _filteredItems.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final item = _filteredItems[index];
                         final id = item['id'] as String;
