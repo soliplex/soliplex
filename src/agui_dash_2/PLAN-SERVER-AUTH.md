@@ -356,10 +356,13 @@ Future<bool> refreshToken() async {
 |------|---------|
 | `lib/main.dart` | App startup flow, deep link handling |
 | `lib/core/services/agui_service.dart` | Auth header injection |
-| `pubspec.yaml` | Add flutter_secure_storage, uni_links |
+| `pubspec.yaml` | Add flutter_secure_storage, app_links, go_router |
 | `android/app/src/main/AndroidManifest.xml` | Deep link scheme |
 | `ios/Runner/Info.plist` | URL scheme |
 | `macos/Runner/Info.plist` | URL scheme |
+| `windows/runner/main.cpp` | Deep link argument handling |
+| `linux/my_application.cc` | Deep link argument handling |
+| `linux/soliplex.desktop` | URL scheme handler (create) |
 
 ---
 
@@ -378,9 +381,16 @@ Future<bool> refreshToken() async {
 ```yaml
 dependencies:
   flutter_secure_storage: ^9.0.0  # Secure credential storage
-  uni_links: ^0.5.1               # Deep link handling (mobile)
+  app_links: ^6.3.3               # Cross-platform deep links (iOS, Android, macOS, Windows, Linux)
   url_launcher: ^6.2.0            # Already have - for OIDC redirect
+  go_router: ^14.6.0              # Web routing with deep link support
 ```
+
+**Note**: `app_links` supersedes `uni_links` and provides unified handling across all desktop platforms:
+- Automatic Windows registry setup during build
+- macOS Info.plist integration
+- Linux .desktop file generation helper
+- Mobile (iOS/Android) intent handling
 
 ---
 
@@ -403,5 +413,374 @@ dependencies:
 | 1. Core Infrastructure | 1-2 |
 | 2. Server Selection UI | 1-2 |
 | 3. OIDC Authentication | 2-3 |
-| 4. Integration & Polish | 1-2 |
-| **Total** | **5-9 days** |
+| 4. Deep Link System | 1-2 |
+| 5. Integration & Polish | 1-2 |
+| **Total** | **6-11 days** |
+
+---
+
+## Extensible Deep Link System
+
+### Overview
+
+Universal deep link handling that works across all platforms:
+- **Mobile (iOS/Android)**: Custom scheme `soliplex://`
+- **macOS**: Custom scheme `soliplex://`
+- **Windows**: Custom scheme `soliplex://` (registry-based)
+- **Linux**: Custom scheme `soliplex://` (xdg-open / .desktop file)
+- **Web**: URL path/fragment-based routing
+
+### URL Formats
+
+| Platform | Format | Example |
+|----------|--------|---------|
+| Mobile | `soliplex://{action}?{params}` | `soliplex://chat?room=genui&text=Hello` |
+| Web | `https://app.example.com/#/{action}?{params}` | `.../#/chat?room=genui&text=Hello` |
+| Web (path) | `https://app.example.com/{action}?{params}` | `.../chat?room=genui&text=Hello` |
+
+### Architecture
+
+```dart
+/// Base class for all deep link actions
+abstract class DeepLinkAction {
+  /// Unique action identifier (e.g., "auth", "chat", "room")
+  String get actionId;
+
+  /// Parse parameters from URI
+  factory DeepLinkAction.fromUri(Uri uri);
+
+  /// Execute the action (navigate, submit, etc.)
+  Future<void> execute(BuildContext context, WidgetRef ref);
+}
+
+/// Registry of all supported deep link actions
+class DeepLinkRegistry {
+  final Map<String, DeepLinkAction Function(Uri)> _handlers = {};
+
+  void register(String actionId, DeepLinkAction Function(Uri) factory);
+  DeepLinkAction? parse(Uri uri);
+}
+
+/// Service that handles incoming deep links
+class DeepLinkService {
+  final DeepLinkRegistry registry;
+
+  // Platform-specific listeners
+  StreamSubscription? _mobileSubscription;  // uni_links
+
+  void initialize();
+  void handleUri(Uri uri);
+  void dispose();
+}
+```
+
+### Supported Actions
+
+#### 1. Auth Callback (`/auth`)
+
+OIDC callback with tokens.
+
+```
+soliplex://auth?token={jwt}&refresh_token={jwt}&expires_in=3600
+
+Web: /#/auth?token=...
+```
+
+```dart
+class AuthCallbackAction extends DeepLinkAction {
+  final String accessToken;
+  final String refreshToken;
+  final int expiresIn;
+
+  @override
+  String get actionId => 'auth';
+
+  @override
+  Future<void> execute(BuildContext context, WidgetRef ref) async {
+    final authService = ref.read(authServiceProvider);
+    await authService.handleTokenCallback(
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      expiresIn: expiresIn,
+    );
+    // Navigate to home or previous screen
+    context.go('/');
+  }
+}
+```
+
+#### 2. Chat in Room (`/chat`)
+
+Open a room, optionally with pre-filled text and auto-submit.
+
+```
+soliplex://chat?room=genui&text=Hello%20world&submit=true
+
+Web: /#/chat?room=genui&text=Hello%20world&submit=true
+```
+
+```dart
+class ChatAction extends DeepLinkAction {
+  final String roomId;
+  final String? text;
+  final bool autoSubmit;
+
+  @override
+  String get actionId => 'chat';
+
+  @override
+  Future<void> execute(BuildContext context, WidgetRef ref) async {
+    // Select the room
+    ref.read(selectedRoomProvider.notifier).state = roomId;
+
+    // Pre-fill text if provided
+    if (text != null) {
+      // Get input controller and set text
+      final inputController = ref.read(chatInputControllerProvider);
+      inputController.text = text!;
+
+      // Auto-submit if requested
+      if (autoSubmit) {
+        // Small delay to let UI settle
+        await Future.delayed(const Duration(milliseconds: 100));
+        ref.read(chatProvider.notifier).sendMessage(text!);
+      }
+    }
+
+    // Navigate to chat screen
+    context.go('/room/$roomId');
+  }
+}
+```
+
+#### 3. Open Room (`/room`)
+
+Navigate to a specific room.
+
+```
+soliplex://room/genui
+soliplex://room?id=genui
+
+Web: /#/room/genui
+```
+
+```dart
+class OpenRoomAction extends DeepLinkAction {
+  final String roomId;
+
+  @override
+  String get actionId => 'room';
+
+  @override
+  Future<void> execute(BuildContext context, WidgetRef ref) async {
+    ref.read(selectedRoomProvider.notifier).state = roomId;
+    context.go('/room/$roomId');
+  }
+}
+```
+
+#### 4. Connect to Server (`/connect`)
+
+Connect to a specific server (useful for QR codes, sharing).
+
+```
+soliplex://connect?url=https://api.example.com
+
+Web: /#/connect?url=https://api.example.com
+```
+
+```dart
+class ConnectServerAction extends DeepLinkAction {
+  final String serverUrl;
+
+  @override
+  String get actionId => 'connect';
+
+  @override
+  Future<void> execute(BuildContext context, WidgetRef ref) async {
+    final serverConfig = ref.read(serverConfigProvider.notifier);
+    await serverConfig.connectToServer(serverUrl);
+    // Will trigger auth flow if needed
+  }
+}
+```
+
+#### 5. Share/Import Thread (`/thread`)
+
+Open or import a shared conversation thread.
+
+```
+soliplex://thread?id=abc123&room=genui
+
+Web: /#/thread?id=abc123&room=genui
+```
+
+#### 6. Execute Command (`/command`)
+
+Run a slash command in a room.
+
+```
+soliplex://command?room=genui&cmd=/search%20staff
+
+Web: /#/command?room=genui&cmd=/search%20staff
+```
+
+### Web-Specific Handling
+
+For web, we use GoRouter's redirect and initial location handling:
+
+```dart
+final router = GoRouter(
+  initialLocation: _getInitialLocation(),
+  redirect: (context, state) {
+    // Check for deep link parameters in URL
+    final uri = Uri.parse(state.uri.toString());
+    if (_isDeepLinkAction(uri)) {
+      // Queue action for execution after app initialized
+      _pendingDeepLink = uri;
+      return '/'; // Redirect to home, action executes after
+    }
+    return null;
+  },
+  routes: [...],
+);
+
+String _getInitialLocation() {
+  // On web, check window.location for deep link
+  if (kIsWeb) {
+    final uri = Uri.parse(html.window.location.href);
+    if (_isDeepLinkAction(uri)) {
+      return uri.path;
+    }
+  }
+  return '/';
+}
+```
+
+### Registration
+
+```dart
+void registerDeepLinkActions(DeepLinkRegistry registry) {
+  registry.register('auth', (uri) => AuthCallbackAction.fromUri(uri));
+  registry.register('chat', (uri) => ChatAction.fromUri(uri));
+  registry.register('room', (uri) => OpenRoomAction.fromUri(uri));
+  registry.register('connect', (uri) => ConnectServerAction.fromUri(uri));
+  registry.register('thread', (uri) => ThreadAction.fromUri(uri));
+  registry.register('command', (uri) => CommandAction.fromUri(uri));
+}
+```
+
+### Platform Setup
+
+**Web (index.html or router config):**
+```dart
+// Handle fragment-based routing
+// /#/chat?room=genui&text=Hello
+// Already handled by GoRouter with hashUrlStrategy
+```
+
+**Windows (windows/runner/main.cpp or installer):**
+
+Register URL scheme in Windows Registry (during install):
+```reg
+[HKEY_CLASSES_ROOT\soliplex]
+@="URL:Soliplex Protocol"
+"URL Protocol"=""
+
+[HKEY_CLASSES_ROOT\soliplex\shell]
+
+[HKEY_CLASSES_ROOT\soliplex\shell\open]
+
+[HKEY_CLASSES_ROOT\soliplex\shell\open\command]
+@="\"C:\\Program Files\\Soliplex\\soliplex.exe\" \"%1\""
+```
+
+Or via Flutter's protocol handler registration:
+```dart
+// Use app_links package which handles Windows protocol registration
+// during build/install process
+```
+
+**Linux (.desktop file):**
+
+Create `soliplex.desktop` in `~/.local/share/applications/`:
+```ini
+[Desktop Entry]
+Name=Soliplex
+Exec=/opt/soliplex/soliplex %u
+Type=Application
+Terminal=false
+MimeType=x-scheme-handler/soliplex;
+```
+
+Register the handler:
+```bash
+xdg-mime default soliplex.desktop x-scheme-handler/soliplex
+update-desktop-database ~/.local/share/applications/
+```
+
+**All Platforms (app_links):**
+```dart
+// Single unified handler for all platforms
+void _initDeepLinks() async {
+  final appLinks = AppLinks();
+
+  // Handle app opened via deep link (cold start)
+  final initialLink = await appLinks.getInitialLink();
+  if (initialLink != null) {
+    _handleDeepLink(initialLink);
+  }
+
+  // Handle deep links while app is running (warm start)
+  _subscription = appLinks.uriLinkStream.listen((Uri uri) {
+    _handleDeepLink(uri);
+  });
+}
+
+void _handleDeepLink(Uri uri) {
+  final action = _registry.parse(uri);
+  if (action != null) {
+    action.execute(context, ref);
+  }
+}
+```
+
+**Desktop-specific notes:**
+- **Windows**: Deep links arrive as command-line arguments on app launch, or via window message when app is already running
+- **Linux**: Deep links arrive via command-line arguments (`%u` in .desktop file)
+- **macOS**: Uses Apple Events (handled by app_links automatically)
+
+### Example: QR Code for Quick Chat
+
+Generate a QR code that:
+1. Opens app (or app store if not installed)
+2. Connects to server
+3. Opens room with pre-filled message
+
+```
+soliplex://chat?server=https://api.example.com&room=support&text=I%20need%20help
+```
+
+Web fallback URL:
+```
+https://app.soliplex.io/#/chat?server=https://api.example.com&room=support&text=I%20need%20help
+```
+
+### Files to Create
+
+| File | Purpose |
+|------|---------|
+| `lib/core/services/deep_link_service.dart` | Central deep link handling |
+| `lib/core/services/deep_link_registry.dart` | Action registration |
+| `lib/core/models/deep_link_actions.dart` | Action implementations |
+| `lib/core/models/deep_link_action.dart` | Base action class |
+
+### Future Actions (Extensible)
+
+The registry pattern allows easy addition of new actions:
+
+- `/quiz?id=123` - Open a specific quiz
+- `/canvas?import=...` - Import canvas state
+- `/settings?tab=appearance` - Open specific settings
+- `/search?q=flutter` - Search across rooms
+- `/share?content=...` - Share content to a room
