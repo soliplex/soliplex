@@ -36,10 +36,13 @@ class ServerRegistry {
   /// Initialize the registry, loading saved state.
   Future<void> initialize() async {
     if (_initialized) return;
+    debugPrint('ServerRegistry.initialize: Starting...');
 
     try {
       // Load server history
+      debugPrint('ServerRegistry.initialize: Loading server history...');
       final historyJson = await _storage.loadServerHistory();
+      debugPrint('ServerRegistry.initialize: Loaded ${historyJson.length} servers');
       _serverHistory = historyJson
           .map((json) => ServerConnection.fromJson(json))
           .toList();

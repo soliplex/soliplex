@@ -5,7 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/room_models.dart';
-import 'auth_service.dart';
+import '../providers/app_providers.dart';
+import '../utils/api_constants.dart';
+import '../utils/url_builder.dart';
+import 'auth_manager.dart';
 
 // Re-export Room model for convenience
 export '../models/room_models.dart';
@@ -30,24 +33,25 @@ class RoomsState {
 /// Notifier for managing rooms state.
 class RoomsNotifier extends StateNotifier<RoomsState> {
   final http.Client _httpClient;
-  final AuthService? _authService;
-  String _serverUrl = 'http://localhost:8000';
+  final AuthManager? _authManager;
+  String? _serverId;
+  UrlBuilder _urlBuilder = UrlBuilder(ApiConstants.defaultServerUrl);
 
-  RoomsNotifier({http.Client? httpClient, AuthService? authService})
+  RoomsNotifier({http.Client? httpClient, AuthManager? authManager})
     : _httpClient = httpClient ?? http.Client(),
-      _authService = authService,
+      _authManager = authManager,
       super(const RoomsState());
 
-  /// Update the server URL (without /api path).
-  void setServerUrl(String serverUrl) {
-    // Strip trailing slash and any /api suffix
-    _serverUrl = serverUrl
-        .replaceAll(RegExp(r'/+$'), '')
-        .replaceAll(RegExp(r'/api(/v\d+)?$'), '');
+  /// Update the server URL and ID.
+  ///
+  /// Uses [UrlBuilder] for consistent URL normalization.
+  void setServerUrl(String serverUrl, {String? serverId}) {
+    _urlBuilder = UrlBuilder(serverUrl);
+    _serverId = serverId;
   }
 
-  /// Get the full API base URL.
-  String get _apiBaseUrl => '$_serverUrl/api/v1';
+  /// Get the URL builder for constructing API endpoints.
+  UrlBuilder get urlBuilder => _urlBuilder;
 
   /// Fetch available rooms from the server.
   Future<void> fetchRooms() async {
@@ -56,13 +60,14 @@ class RoomsNotifier extends StateNotifier<RoomsState> {
     try {
       // Build headers with auth token if available
       final headers = <String, String>{'Accept': 'application/json'};
-      if (_authService != null) {
-        final authHeaders = await _authService.getAuthHeaders();
+      if (_authManager != null && _serverId != null) {
+        final authHeaders = await _authManager.getAuthHeaders(_serverId!);
         headers.addAll(authHeaders);
+        debugPrint('Rooms: Using auth headers for server $_serverId');
       }
 
       final response = await _httpClient.get(
-        Uri.parse('$_apiBaseUrl/rooms'),
+        _urlBuilder.rooms(),
         headers: headers,
       );
 
@@ -115,13 +120,30 @@ class RoomsNotifier extends StateNotifier<RoomsState> {
 }
 
 /// Provider for rooms state.
+///
+/// Watches [currentServerFromAppStateProvider] to auto-refresh rooms when server changes.
 final roomsProvider = StateNotifierProvider<RoomsNotifier, RoomsState>((ref) {
-  final authService = ref.read(authServiceProvider);
-  return RoomsNotifier(authService: authService);
+  final server = ref.watch(currentServerFromAppStateProvider);
+  final authManager = ref.read(authManagerProvider);
+
+  final notifier = RoomsNotifier(authManager: authManager);
+
+  if (server != null) {
+    notifier.setServerUrl(server.url, serverId: server.id);
+    notifier.fetchRooms();
+  }
+
+  return notifier;
 });
 
 /// Provider for the currently selected room ID.
-final selectedRoomProvider = StateProvider<String?>((ref) => null);
+///
+/// Resets to null when [currentServerFromAppStateProvider] changes.
+final selectedRoomProvider = StateProvider<String?>((ref) {
+  // Watch server - when it changes, this provider rebuilds and returns null
+  ref.watch(currentServerFromAppStateProvider);
+  return null;
+});
 
 /// Provider for the currently selected room's full data.
 ///

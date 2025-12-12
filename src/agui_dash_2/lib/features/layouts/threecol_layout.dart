@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/connection_manager.dart';
 import '../../core/services/rooms_service.dart';
-import '../../core/services/server_config_service.dart';
+import '../../core/providers/app_providers.dart';
 import '../../core/services/thread_history_service.dart';
 import '../chat/chat_content.dart';
 import '../context/context_pane.dart';
@@ -64,7 +64,7 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
   }
 
   void _fetchThreads() {
-    final server = ref.read(currentServerProvider);
+    final server = ref.read(currentServerFromAppStateProvider);
     final roomId = ref.read(selectedRoomProvider);
     if (server != null && roomId != null) {
       final params = (baseUrl: server.url, roomId: roomId);
@@ -74,7 +74,7 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
 
   @override
   Widget build(BuildContext context) {
-    final server = ref.watch(currentServerProvider);
+    final server = ref.watch(currentServerFromAppStateProvider);
     final roomId = ref.watch(selectedRoomProvider);
     final connectionManager = ref.watch(connectionManagerProvider);
 

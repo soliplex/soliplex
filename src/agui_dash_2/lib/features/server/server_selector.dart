@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/services/auth_service.dart';
-import '../../core/services/server_config_service.dart';
+import '../../core/providers/app_providers.dart';
+import '../../core/services/server_config_service.dart' show serverHistoryProvider;
 import 'server_history_widget.dart';
 
 /// Header widget showing current server with ability to switch.
@@ -24,8 +24,9 @@ class ServerSelector extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final currentServer = ref.watch(currentServerProvider);
-    final authState = ref.watch(authStateProvider);
+    final currentServer = ref.watch(currentServerFromAppStateProvider);
+    final appStateAsync = ref.watch(appStateStreamProvider);
+    final appState = appStateAsync.valueOrNull;
     final theme = Theme.of(context);
 
     if (currentServer == null) {
@@ -35,6 +36,8 @@ class ServerSelector extends ConsumerWidget {
         label: const Text('Add Server'),
       );
     }
+
+    final userName = appState is AppStateReady ? appState.userName : null;
 
     return InkWell(
       onTap: () => _showServerMenu(context, ref),
@@ -59,7 +62,7 @@ class ServerSelector extends ConsumerWidget {
                     width: 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      color: _getStatusColor(authState.status, theme),
+                      color: _getStatusColor(appState, theme),
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: theme.colorScheme.surface,
@@ -83,9 +86,9 @@ class ServerSelector extends ConsumerWidget {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                if (authState.userName != null)
+                if (userName != null)
                   Text(
-                    authState.userName!,
+                    userName,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -105,20 +108,15 @@ class ServerSelector extends ConsumerWidget {
     );
   }
 
-  Color _getStatusColor(AuthStatus status, ThemeData theme) {
-    switch (status) {
-      case AuthStatus.authenticated:
-        return Colors.green;
-      case AuthStatus.authenticating:
-        return Colors.orange;
-      case AuthStatus.unauthenticated:
-      case AuthStatus.tokenExpired:
-        return Colors.orange;
-      case AuthStatus.error:
-        return theme.colorScheme.error;
-      case AuthStatus.noServer:
-        return Colors.grey;
-    }
+  Color _getStatusColor(AppState? state, ThemeData theme) {
+    return switch (state) {
+      AppStateReady() => Colors.green,
+      AppStateAuthenticating() => Colors.orange,
+      AppStateNeedsAuth() => Colors.orange,
+      AppStateError() => theme.colorScheme.error,
+      AppStateNoServer() => Colors.grey,
+      null => Colors.grey,
+    };
   }
 
   void _showServerMenu(BuildContext context, WidgetRef ref) {
@@ -164,8 +162,9 @@ class ServerChip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final currentServer = ref.watch(currentServerProvider);
-    final authState = ref.watch(authStateProvider);
+    final currentServer = ref.watch(currentServerFromAppStateProvider);
+    final appStateAsync = ref.watch(appStateStreamProvider);
+    final appState = appStateAsync.valueOrNull;
 
     if (currentServer == null) {
       return const SizedBox.shrink();
@@ -175,26 +174,22 @@ class ServerChip extends ConsumerWidget {
       avatar: Icon(
         Icons.dns_outlined,
         size: 16,
-        color: _getStatusColor(authState.status),
+        color: _getStatusColor(appState),
       ),
       label: Text(currentServer.label),
       onPressed: onTap,
     );
   }
 
-  Color _getStatusColor(AuthStatus status) {
-    switch (status) {
-      case AuthStatus.authenticated:
-        return Colors.green;
-      case AuthStatus.authenticating:
-      case AuthStatus.unauthenticated:
-      case AuthStatus.tokenExpired:
-        return Colors.orange;
-      case AuthStatus.error:
-        return Colors.red;
-      case AuthStatus.noServer:
-        return Colors.grey;
-    }
+  Color _getStatusColor(AppState? state) {
+    return switch (state) {
+      AppStateReady() => Colors.green,
+      AppStateAuthenticating() => Colors.orange,
+      AppStateNeedsAuth() => Colors.orange,
+      AppStateError() => Colors.red,
+      AppStateNoServer() => Colors.grey,
+      null => Colors.grey,
+    };
   }
 }
 
@@ -211,16 +206,17 @@ class UserMenu extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authStateProvider);
+    final appStateAsync = ref.watch(appStateStreamProvider);
+    final appState = appStateAsync.valueOrNull;
     final theme = Theme.of(context);
 
-    if (!authState.isAuthenticated) {
+    if (appState is! AppStateReady) {
       return const SizedBox.shrink();
     }
 
-    final initial = (authState.userName ?? authState.userEmail ?? '?')
-        .substring(0, 1)
-        .toUpperCase();
+    final userName = appState.userName;
+    final userEmail = appState.userEmail;
+    final initial = (userName ?? userEmail ?? '?').substring(0, 1).toUpperCase();
 
     return PopupMenuButton<String>(
       offset: const Offset(0, 40),
@@ -241,14 +237,14 @@ class UserMenu extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (authState.userName != null)
+              if (userName != null)
                 Text(
-                  authState.userName!,
+                  userName,
                   style: theme.textTheme.titleSmall,
                 ),
-              if (authState.userEmail != null)
+              if (userEmail != null)
                 Text(
-                  authState.userEmail!,
+                  userEmail,
                   style: theme.textTheme.bodySmall,
                 ),
             ],
@@ -310,7 +306,7 @@ class UserMenu extends ConsumerWidget {
     );
 
     if (confirmed == true) {
-      await ref.read(authServiceProvider).logout();
+      await ref.read(appStateManagerProvider).logout();
       onLogout?.call();
     }
   }

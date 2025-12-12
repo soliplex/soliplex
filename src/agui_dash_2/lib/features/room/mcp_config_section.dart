@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/room_models.dart';
 import '../../core/services/mcp_token_service.dart';
-import '../../core/services/server_config_service.dart';
+import '../../core/providers/app_providers.dart';
 
 /// Section showing MCP connection configuration for a room.
 ///
@@ -434,7 +434,7 @@ class _McpConfigSectionState extends ConsumerState<McpConfigSection> {
     });
 
     try {
-      final server = ref.read(currentServerProvider);
+      final server = ref.read(currentServerFromAppStateProvider);
       if (server == null) {
         setState(() {
           _error = 'No server configured';
@@ -467,7 +467,7 @@ class _McpConfigSectionState extends ConsumerState<McpConfigSection> {
   String? _generateConfig() {
     if (_token == null) return null;
 
-    final server = ref.read(currentServerProvider);
+    final server = ref.read(currentServerFromAppStateProvider);
     if (server == null) return null;
 
     final service = ref.read(mcpTokenServiceProvider);

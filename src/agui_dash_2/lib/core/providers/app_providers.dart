@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_providers.dart';
@@ -67,7 +68,9 @@ final currentAppStateProvider = Provider<AppState>((ref) {
 /// Convenience accessor.
 final currentServerFromAppStateProvider = Provider<ServerConnection?>((ref) {
   final stateAsync = ref.watch(appStateStreamProvider);
-  return stateAsync.whenOrNull(data: (state) => state.server);
+  final server = stateAsync.whenOrNull(data: (state) => state.server);
+  debugPrint('currentServerFromAppStateProvider: server=${server?.url}, id=${server?.id}');
+  return server;
 });
 
 /// Whether the app is ready (authenticated or no auth required).

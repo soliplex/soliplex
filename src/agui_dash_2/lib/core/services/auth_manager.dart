@@ -164,7 +164,9 @@ class AuthManager {
 
   /// Get auth headers for API calls.
   Future<Map<String, String>> getAuthHeaders(String serverId) async {
+    debugPrint('AuthManager.getAuthHeaders: serverId=$serverId');
     final token = await getAccessToken(serverId);
+    debugPrint('AuthManager.getAuthHeaders: token=${token != null ? "present (${token.length} chars)" : "null"}');
     if (token == null) return {};
     return {'Authorization': 'Bearer $token'};
   }

@@ -94,8 +94,11 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
       final appStateManager = ref.read(appStateManagerProvider);
       await appStateManager.setServer(info);
 
-      // If server doesn't require auth, AppStateManager will transition to Ready
-      // and AppShell will show ChatScreen
+      // If server doesn't require auth, call onConnected to pop this screen
+      // (for auth servers, OIDCProviderSelector handles the callback)
+      if (!info.requiresAuth) {
+        widget.onConnected?.call();
+      }
     } catch (e) {
       setState(() {
         _isProbing = false;

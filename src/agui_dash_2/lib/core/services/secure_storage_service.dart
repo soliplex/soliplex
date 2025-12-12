@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -70,11 +71,22 @@ class NativeSecureStorageService implements SecureStorageService {
     if (_checkedAvailability) return;
     _checkedAvailability = true;
 
+    debugPrint('SecureStorage: Checking availability...');
     try {
       // Try a test write/read to check if secure storage works
-      await _storage.write(key: '_test_key', value: 'test');
-      await _storage.delete(key: '_test_key');
+      // Add timeout to prevent hanging on keychain issues
+      debugPrint('SecureStorage: Testing write...');
+      await _storage.write(key: '_test_key', value: 'test')
+          .timeout(const Duration(seconds: 5), onTimeout: () {
+        throw TimeoutException('Secure storage write timed out');
+      });
+      debugPrint('SecureStorage: Testing delete...');
+      await _storage.delete(key: '_test_key')
+          .timeout(const Duration(seconds: 5), onTimeout: () {
+        throw TimeoutException('Secure storage delete timed out');
+      });
       _useFallback = false;
+      debugPrint('SecureStorage: Using native secure storage');
     } catch (e) {
       debugPrint('SecureStorage: Falling back to in-memory storage: $e');
       debugPrint('SecureStorage: For production, enable code signing in Xcode');

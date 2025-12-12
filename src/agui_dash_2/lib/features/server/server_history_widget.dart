@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/services/server_config_service.dart';
+import '../../core/models/server_models.dart';
+import '../../core/providers/app_providers.dart';
+import '../../core/services/server_config_service.dart' show serverConfigProvider, serverHistoryProvider;
 
 /// Widget displaying saved server connections.
 ///
@@ -23,7 +25,7 @@ class ServerHistoryWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final history = ref.watch(serverHistoryProvider);
-    final currentServer = ref.watch(currentServerProvider);
+    final currentServer = ref.watch(currentServerFromAppStateProvider);
 
     if (history.isEmpty) {
       return const Center(
@@ -192,7 +194,7 @@ class ServerHistoryPopup extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final history = ref.watch(serverHistoryProvider);
-    final currentServer = ref.watch(currentServerProvider);
+    final currentServer = ref.watch(currentServerFromAppStateProvider);
     final theme = Theme.of(context);
 
     return Column(

@@ -11,7 +11,8 @@ import '../../core/network/connection_manager.dart';
 import '../../core/services/feedback_service.dart';
 import '../../core/services/markdown_hooks.dart';
 import '../../core/services/rooms_service.dart';
-import '../../core/services/server_config_service.dart';
+// Note: server_config_service.dart is deprecated, but still needed for serverHistoryProvider
+// Use currentServerFromAppStateProvider from app_providers.dart for current server
 import '../../core/utils/api_constants.dart';
 import '../../core/utils/url_builder.dart';
 import '../layouts/standard_layout.dart';
@@ -39,7 +40,7 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// Get the URL builder for the current server.
   UrlBuilder get _urlBuilder {
-    final server = ref.read(currentServerProvider);
+    final server = ref.read(currentServerFromAppStateProvider);
     final url = server?.url ?? ApiConstants.defaultServerUrl;
     return UrlBuilder(url);
   }
@@ -58,6 +59,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _initializeConnectionManager();
       _fetchRoomsAndSelectDefault();
       _setupServerChangeListener();
+      _setupAuthStateListener();
     });
   }
 
@@ -68,10 +70,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// 2. Reinitialize ConnectionManager with new server URL
   /// 3. Fetch rooms from the new server
   void _setupServerChangeListener() {
-    final server = ref.read(currentServerProvider);
+    final server = ref.read(currentServerFromAppStateProvider);
     _lastServerUrl = server?.url;
 
-    ref.listenManual(currentServerProvider, (previous, next) async {
+    ref.listenManual(currentServerFromAppStateProvider, (previous, next) async {
       if (next?.url != _lastServerUrl && next != null) {
         debugPrint('Server changed: $_lastServerUrl -> ${next.url}');
         _lastServerUrl = next.url;
@@ -87,6 +89,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         await Future.microtask(() {});
 
         if (mounted) {
+          _fetchRoomsAndSelectDefault();
+        }
+      }
+    });
+  }
+
+  /// Set up a listener for auth state changes.
+  ///
+  /// When auth completes (transition to AppStateReady):
+  /// 1. Reinitialize ConnectionManager with auth headers
+  /// 2. Fetch rooms (may need auth for some endpoints)
+  void _setupAuthStateListener() {
+    ref.listenManual(appStateStreamProvider, (previous, next) async {
+      final prevState = previous?.valueOrNull;
+      final nextState = next.valueOrNull;
+
+      // Check if we just transitioned to authenticated state
+      final wasNotReady = prevState is! AppStateReady;
+      final isNowReady = nextState is AppStateReady;
+
+      if (wasNotReady && isNowReady) {
+        debugPrint('Auth completed - reinitializing ConnectionManager with auth headers');
+
+        // Reinitialize ConnectionManager with auth headers
+        await _initializeConnectionManager();
+
+        if (mounted) {
+          // Refresh rooms in case auth changed what we can access
           _fetchRoomsAndSelectDefault();
         }
       }
@@ -118,7 +148,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   /// Initialize ConnectionManager with the current server.
   Future<void> _initializeConnectionManager() async {
-    final server = ref.read(currentServerProvider);
+    final server = ref.read(currentServerFromAppStateProvider);
+    debugPrint('_initializeConnectionManager: server=${server?.url}, id=${server?.id}');
     if (server == null) return;
 
     // Get auth headers if available
@@ -126,6 +157,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     try {
       final authManager = ref.read(authManagerProvider);
       headers = await authManager.getAuthHeaders(server.id);
+      debugPrint('_initializeConnectionManager: got headers: ${headers.keys.toList()}');
     } catch (e) {
       debugPrint('Failed to get auth headers: $e');
     }
@@ -134,6 +166,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     // Configure ConnectionManager with server URL
     final connectionManager = ref.read(connectionManagerProvider);
+    debugPrint('_initializeConnectionManager: calling switchServer with ${headers?.isNotEmpty == true ? "auth" : "no auth"}');
     connectionManager.switchServer(server.url, headers: headers);
   }
 
@@ -141,10 +174,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _fetchRoomsAndSelectDefault() async {
     if (!mounted) return;
 
+    final server = ref.read(currentServerFromAppStateProvider);
+    if (server == null) return;
+
     // Set server URL and fetch rooms
     // Note: We re-read the notifier after async operations because the provider
     // may be invalidated during the fetch (e.g., during server switch).
-    ref.read(roomsProvider.notifier).setServerUrl(_serverUrl);
+    ref.read(roomsProvider.notifier).setServerUrl(server.url, serverId: server.id);
 
     try {
       await ref.read(roomsProvider.notifier).fetchRooms();
@@ -380,7 +416,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Widget _buildServerMenu() {
-    final currentServer = ref.watch(currentServerProvider);
+    final currentServer = ref.watch(currentServerFromAppStateProvider);
     final appStateAsync = ref.watch(appStateStreamProvider);
     final appState = appStateAsync.valueOrNull;
 

@@ -85,6 +85,7 @@ class AppStateManager {
 
     try {
       final server = await _serverRegistry.saveServer(serverInfo, displayName: displayName);
+      debugPrint('AppStateManager: Saved server ${server.url} with id=${server.id}');
 
       if (!server.requiresAuth) {
         debugPrint('AppStateManager: Server does not require auth, ready');
