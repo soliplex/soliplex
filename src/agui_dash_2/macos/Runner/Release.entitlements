@@ -8,9 +8,5 @@
 	<true/>
 	<key>com.apple.security.personal-information.location</key>
 	<true/>
-	<key>keychain-access-groups</key>
-	<array>
-		<string>$(AppIdentifierPrefix)com.soliplex.agui</string>
-	</array>
 </dict>
 </plist>

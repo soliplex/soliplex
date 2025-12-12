@@ -42,8 +42,14 @@ class StorageKeys {
 }
 
 /// Native platform implementation using flutter_secure_storage
+/// Falls back to in-memory storage if secure storage is unavailable
 class NativeSecureStorageService implements SecureStorageService {
   final FlutterSecureStorage _storage;
+
+  // Fallback storage when secure storage isn't available (e.g., unsigned macOS)
+  final Map<String, String> _fallbackStorage = {};
+  bool _useFallback = false;
+  bool _checkedAvailability = false;
 
   NativeSecureStorageService()
       : _storage = const FlutterSecureStorage(
@@ -58,34 +64,97 @@ class NativeSecureStorageService implements SecureStorageService {
           ),
         );
 
+  Future<void> _checkAvailability() async {
+    if (_checkedAvailability) return;
+    _checkedAvailability = true;
+
+    try {
+      // Try a test write/read to check if secure storage works
+      await _storage.write(key: '_test_key', value: 'test');
+      await _storage.delete(key: '_test_key');
+      _useFallback = false;
+    } catch (e) {
+      debugPrint('SecureStorage: Falling back to in-memory storage: $e');
+      debugPrint('SecureStorage: For production, enable code signing in Xcode');
+      _useFallback = true;
+    }
+  }
+
   @override
   Future<void> write(String key, String value) async {
-    await _storage.write(key: key, value: value);
+    await _checkAvailability();
+    if (_useFallback) {
+      _fallbackStorage[key] = value;
+      return;
+    }
+    try {
+      await _storage.write(key: key, value: value);
+    } catch (e) {
+      _fallbackStorage[key] = value;
+    }
   }
 
   @override
   Future<String?> read(String key) async {
-    return await _storage.read(key: key);
+    await _checkAvailability();
+    if (_useFallback) {
+      return _fallbackStorage[key];
+    }
+    try {
+      return await _storage.read(key: key);
+    } catch (e) {
+      return _fallbackStorage[key];
+    }
   }
 
   @override
   Future<void> delete(String key) async {
-    await _storage.delete(key: key);
+    await _checkAvailability();
+    _fallbackStorage.remove(key);
+    if (_useFallback) return;
+    try {
+      await _storage.delete(key: key);
+    } catch (e) {
+      // Already removed from fallback
+    }
   }
 
   @override
   Future<void> deleteAll() async {
-    await _storage.deleteAll();
+    await _checkAvailability();
+    _fallbackStorage.clear();
+    if (_useFallback) return;
+    try {
+      await _storage.deleteAll();
+    } catch (e) {
+      // Already cleared fallback
+    }
   }
 
   @override
   Future<bool> containsKey(String key) async {
-    return await _storage.containsKey(key: key);
+    await _checkAvailability();
+    if (_useFallback) {
+      return _fallbackStorage.containsKey(key);
+    }
+    try {
+      return await _storage.containsKey(key: key);
+    } catch (e) {
+      return _fallbackStorage.containsKey(key);
+    }
   }
 
   @override
   Future<Map<String, String>> readAll() async {
-    return await _storage.readAll();
+    await _checkAvailability();
+    if (_useFallback) {
+      return Map.from(_fallbackStorage);
+    }
+    try {
+      return await _storage.readAll();
+    } catch (e) {
+      return Map.from(_fallbackStorage);
+    }
   }
 }
 
