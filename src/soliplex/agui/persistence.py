@@ -304,22 +304,6 @@ class RunAgentInput(Base):
     data: Mapped[JSON_Mapped_From] = mapped_column()
 
     @classmethod
-    def empty(cls, run, thread_id, run_id, parent_run_id=None):
-        return cls(
-            run=run,
-            data={
-                "thread_id": thread_id,
-                "run_id": run_id,
-                "parent_run_id": parent_run_id,
-                "state": None,
-                "messages": [],
-                "context": [],
-                "tools": [],
-                "forwarded_props": None,
-            },
-        )
-
-    @classmethod
     def from_agui_model(cls, run: Run, model: agui_core.RunAgentInput):
         return cls(run=run, data=model.model_dump())
 
@@ -430,6 +414,7 @@ class ThreadStorage(agui_package.ThreadStorage):
         self,
         *,
         user_name: str,
+        room_id: str,
         thread_id: str,
         session,
     ):
@@ -443,12 +428,18 @@ class ThreadStorage(agui_package.ThreadStorage):
         if thread is None:
             raise agui_package.UnknownThread(user_name, thread_id)
 
+        t_room_id = await thread.awaitable_attrs.room_id
+
+        if t_room_id != room_id:
+            raise agui_package.ThreadRoomMismatch(room_id, t_room_id)
+
         return thread
 
     async def _find_thread_run(
         self,
         *,
         user_name: str,
+        room_id: str,
         thread_id: str,
         run_id: str,
         session,
@@ -456,6 +447,7 @@ class ThreadStorage(agui_package.ThreadStorage):
     ):
         thread = await self._find_user_thread(
             user_name=user_name,
+            room_id=room_id,
             thread_id=thread_id,
             session=session,
         )
@@ -477,20 +469,25 @@ class ThreadStorage(agui_package.ThreadStorage):
             )
             if room_id is not None:
                 query = query.where(Thread.room_id == room_id)
-            return await session.scalars(query)
+            result = await session.scalars(query)
+        return result
 
     async def get_thread(
         self,
         *,
         user_name: str,
+        room_id: str,
         thread_id: str,
     ) -> Thread:
         async with self.session as session:
-            return await self._find_user_thread(
+            result = await self._find_user_thread(
                 user_name=user_name,
+                room_id=room_id,
                 thread_id=thread_id,
                 session=session,
             )
+
+        return result
 
     async def new_thread(
         self,
@@ -510,13 +507,6 @@ class ThreadStorage(agui_package.ThreadStorage):
                 session.add(run)
 
             async with session.begin_nested():
-                run_input = RunAgentInput.empty(
-                    run=run,
-                    thread_id=await thread.awaitable_attrs.thread_id,
-                    run_id=await run.awaitable_attrs.run_id,
-                )
-                session.add(run_input)
-
                 if thread_metadata is not None:
                     if isinstance(thread_metadata, dict):
                         thread_metadata = ThreadMetadata(
@@ -528,18 +518,20 @@ class ThreadStorage(agui_package.ThreadStorage):
 
                     session.add(thread_metadata)
 
-            return thread
+        return thread
 
-    async def update_thread(
+    async def update_thread_metadata(
         self,
         *,
         user_name: str,
+        room_id: str,
         thread_id: str,
         thread_metadata: ThreadMetadata | dict = None,
     ) -> Thread:
         async with self.session as session:
             thread = await self._find_user_thread(
                 user_name=user_name,
+                room_id=room_id,
                 thread_id=thread_id,
                 session=session,
             )
@@ -559,17 +551,19 @@ class ThreadStorage(agui_package.ThreadStorage):
 
                 session.add(thread_metadata)
 
-            return thread
+        return thread
 
     async def delete_thread(
         self,
         *,
         user_name: str,
+        room_id: str,
         thread_id: str,
     ) -> None:
         async with self.session as session:
             thread = await self._find_user_thread(
                 user_name=user_name,
+                room_id=room_id,
                 thread_id=thread_id,
                 session=session,
             )
@@ -579,6 +573,7 @@ class ThreadStorage(agui_package.ThreadStorage):
         self,
         *,
         user_name: str,
+        room_id: str,
         thread_id: str,
         run_metadata: RunMetadata | dict = None,
         parent_run_id: str = None,
@@ -586,6 +581,7 @@ class ThreadStorage(agui_package.ThreadStorage):
         async with self.session as session:
             thread = await self._find_user_thread(
                 user_name=user_name,
+                room_id=room_id,
                 thread_id=thread_id,
                 session=session,
             )
@@ -593,6 +589,7 @@ class ThreadStorage(agui_package.ThreadStorage):
             if parent_run_id is not None:
                 parent = await self._find_thread_run(
                     user_name=user_name,
+                    room_id=room_id,
                     thread_id=thread_id,
                     run_id=parent_run_id,
                     session=session,
@@ -609,30 +606,6 @@ class ThreadStorage(agui_package.ThreadStorage):
                 session.add(run)
 
             async with session.begin_nested():
-                if parent is None:
-                    run_input = RunAgentInput.empty(
-                        run=run,
-                        thread_id=await thread.awaitable_attrs.thread_id,
-                        run_id=await run.awaitable_attrs.run_id,
-                    )
-                else:
-                    parent_run_input = (
-                        await parent.awaitable_attrs.run_agent_input
-                    )
-                    parent_run_input_agui = parent_run_input.to_agui_model()
-                    run_input_agui = parent_run_input_agui.model_copy(
-                        update={
-                            "run_id": await run.awaitable_attrs.run_id,
-                            "parent_run_id": parent_run_id,
-                        },
-                    )
-                    run_input = RunAgentInput.from_agui_model(
-                        run,
-                        run_input_agui,
-                    )
-
-                session.add(run_input)
-
                 if run_metadata is not None:
                     if isinstance(run_metadata, dict):
                         run_metadata = RunMetadata(run=run, **run_metadata)
@@ -640,17 +613,19 @@ class ThreadStorage(agui_package.ThreadStorage):
                         run_metadata.run = run
                     session.add(run_metadata)
 
-            return run
+        return run
 
     async def get_run(
         self,
         user_name: str,
+        room_id: str,
         thread_id: str,
         run_id: str,
     ) -> Run:
         async with self.session as session:
             run = await self._find_thread_run(
                 user_name=user_name,
+                room_id=room_id,
                 thread_id=thread_id,
                 run_id=run_id,
                 session=session,
@@ -660,12 +635,46 @@ class ThreadStorage(agui_package.ThreadStorage):
             await run.awaitable_attrs.run_agent_input
             await run.awaitable_attrs.run_metadata
 
-            return run
+        return run
 
-    async def update_run(
+    async def add_run_input(
         self,
         *,
         user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+        run_input: agui_core.RunAgentInput,
+    ) -> Run:
+        """Update a run with the given 'run_agent_input'"""
+        async with self.session as session:
+            run = await self._find_thread_run(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+                session=session,
+            )
+
+            already = await run.awaitable_attrs.run_agent_input
+
+            if already is not None:
+                raise agui_package.RunAlreadyStarted(
+                    user_name,
+                    thread_id,
+                    run_id,
+                )
+            session.add(
+                RunAgentInput.from_agui_model(run=run, model=run_input)
+            )
+
+        return run
+
+    async def update_run_metadata(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
         thread_id: str,
         run_id: str,
         run_metadata: RunMetadata | dict = None,
@@ -673,6 +682,7 @@ class ThreadStorage(agui_package.ThreadStorage):
         async with self.session as session:
             run = await self._find_thread_run(
                 user_name=user_name,
+                room_id=room_id,
                 thread_id=thread_id,
                 run_id=run_id,
                 session=session,
@@ -693,12 +703,13 @@ class ThreadStorage(agui_package.ThreadStorage):
 
                 session.add(run_metadata)
 
-            return run
+        return run
 
     async def save_run_events(
         self,
         *,
         user_name: str,
+        room_id: str,
         thread_id: str,
         run_id: str,
         events: agui_package.AGUI_Events,
@@ -709,6 +720,7 @@ class ThreadStorage(agui_package.ThreadStorage):
         async with self.session as session:
             run = await self._find_thread_run(
                 user_name=user_name,
+                room_id=room_id,
                 thread_id=thread_id,
                 run_id=run_id,
                 session=session,

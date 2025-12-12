@@ -325,26 +325,6 @@ async def test_run_list_events(w_agui_events):
     assert await run.list_events() == w_agui_events
 
 
-@pytest.mark.parametrize("w_parent", [False, True])
-def test_runagentinput_empty(w_parent):
-    run = agui_persistence.Run()
-
-    kw = {
-        "thread_id": THREAD_UUID,
-        "run_id": RUN_UUID,
-    }
-
-    if w_parent:
-        kw["parent_run_id"] = PARENT_RUN_ID
-
-    found = agui_persistence.RunAgentInput.empty(run, **kw)
-
-    expected_data = EMPTY_RUN_AGENT_INPUT.model_dump() | kw
-
-    assert found.run is run
-    assert found.data == expected_data
-
-
 @pytest.mark.parametrize(
     "agui_rai",
     [
@@ -471,6 +451,7 @@ async def test_threadstorage_thread_crud(the_async_session):
     with pytest.raises(agui_package.UnknownThread):
         await ts.get_thread(
             user_name=USER_NAME,
+            room_id=ROOM_ID,
             thread_id="NONESUCH",
         )
 
@@ -490,8 +471,18 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     await the_async_session.commit()
 
+    with pytest.raises(agui_package.ThreadRoomMismatch):
+        await ts.get_thread(
+            user_name=USER_NAME,
+            room_id="NONESUCH",
+            thread_id=thread_id,
+        )
+
+    await the_async_session.commit()
+
     gotten = await ts.get_thread(
         user_name=USER_NAME,
+        room_id=ROOM_ID,
         thread_id=thread_id,
     )
 
@@ -499,9 +490,23 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     await the_async_session.commit()
 
-    updated = await ts.update_thread(
+    with pytest.raises(agui_package.ThreadRoomMismatch):
+        await ts.update_thread_metadata(
+            user_name=USER_NAME,
+            thread_id=thread_id,
+            room_id="NONESUCH",
+            thread_metadata={
+                "name": THREAD_NAME,
+                "description": THREAD_DESCRIPTION,
+            },
+        )
+
+    await the_async_session.commit()
+
+    updated = await ts.update_thread_metadata(
         user_name=USER_NAME,
         thread_id=thread_id,
+        room_id=ROOM_ID,
         thread_metadata={
             "name": THREAD_NAME,
             "description": THREAD_DESCRIPTION,
@@ -519,8 +524,9 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     await the_async_session.commit()
 
-    updated_again = await ts.update_thread(
+    updated_again = await ts.update_thread_metadata(
         user_name=USER_NAME,
+        room_id=ROOM_ID,
         thread_id=thread_id,
         thread_metadata=agui_persistence.ThreadMetadata(
             name=THREAD_NAME,
@@ -538,8 +544,9 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     await the_async_session.commit()
 
-    cleared = await ts.update_thread(
+    cleared = await ts.update_thread_metadata(
         user_name=USER_NAME,
+        room_id=ROOM_ID,
         thread_id=thread_id,
         thread_metadata=None,
     )
@@ -553,8 +560,9 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     await the_async_session.commit()
 
-    cleared_again = await ts.update_thread(
+    cleared_again = await ts.update_thread_metadata(
         user_name=USER_NAME,
+        room_id=ROOM_ID,
         thread_id=thread_id,
         thread_metadata=None,
     )
@@ -568,10 +576,22 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     await the_async_session.commit()
 
+    with pytest.raises(agui_package.ThreadRoomMismatch):
+        await ts.delete_thread(
+            user_name=USER_NAME,
+            room_id="NONESUCH",
+            thread_id=thread_id,
+        )
+
+    await the_async_session.commit()
+
     await ts.delete_thread(
         user_name=USER_NAME,
+        room_id=ROOM_ID,
         thread_id=thread_id,
     )
+
+    await the_async_session.commit()
 
     await the_async_session.commit()
 
@@ -639,6 +659,7 @@ async def test_threadstorage_thread_run_cru(the_async_session):
     initial_run_id = await initial_run.awaitable_attrs.run_id
 
     assert await initial_run.awaitable_attrs.thread_id == thread_id
+    assert await initial_run.awaitable_attrs.run_input is None
 
     assert initial_run in await thread.awaitable_attrs.runs
 
@@ -650,8 +671,36 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     await the_async_session.commit()
 
+    rai_added = await ts.add_run_input(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=initial_run_id,
+        run_input=FULL_RUN_AGENT_INPUT,
+    )
+
+    assert rai_added is initial_run
+
+    await the_async_session.commit()
+
+    assert await initial_run.awaitable_attrs.run_input == FULL_RUN_AGENT_INPUT
+
+    await the_async_session.commit()
+
+    with pytest.raises(agui_package.RunAlreadyStarted):
+        await ts.add_run_input(
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=initial_run_id,
+            run_input=FULL_RUN_AGENT_INPUT,
+        )
+
+    await the_async_session.commit()
+
     gotten = await ts.get_run(
         user_name=USER_NAME,
+        room_id=ROOM_ID,
         thread_id=thread_id,
         run_id=initial_run_id,
     )
@@ -663,12 +712,14 @@ async def test_threadstorage_thread_run_cru(the_async_session):
     with pytest.raises(agui_package.UnknownRun):
         await ts.get_run(
             user_name=USER_NAME,
+            room_id=ROOM_ID,
             thread_id=thread_id,
             run_id="NONESUCH",
         )
 
     added = await ts.new_run(
         user_name=USER_NAME,
+        room_id=ROOM_ID,
         thread_id=thread_id,
         run_metadata={"label": "added"},
     )
@@ -676,8 +727,9 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     await the_async_session.commit()
 
-    updated = await ts.update_run(
+    updated = await ts.update_run_metadata(
         user_name=USER_NAME,
+        room_id=ROOM_ID,
         thread_id=thread_id,
         run_id=added_id,
         run_metadata={
@@ -692,8 +744,9 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     await the_async_session.commit()
 
-    updated_again = await ts.update_run(
+    updated_again = await ts.update_run_metadata(
         user_name=USER_NAME,
+        room_id=ROOM_ID,
         thread_id=thread_id,
         run_id=added_id,
         run_metadata=agui_persistence.RunMetadata(
@@ -708,8 +761,9 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     await the_async_session.commit()
 
-    cleared = await ts.update_run(
+    cleared = await ts.update_run_metadata(
         user_name=USER_NAME,
+        room_id=ROOM_ID,
         thread_id=thread_id,
         run_id=added_id,
         run_metadata=None,
@@ -721,8 +775,9 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     await the_async_session.commit()
 
-    cleared_again = await ts.update_run(
+    cleared_again = await ts.update_run_metadata(
         user_name=USER_NAME,
+        room_id=ROOM_ID,
         thread_id=thread_id,
         run_id=added_id,
         run_metadata=None,
@@ -736,6 +791,7 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     parent = await ts.new_run(
         user_name=USER_NAME,
+        room_id=ROOM_ID,
         thread_id=thread_id,
         run_metadata=agui_persistence.RunMetadata(label="parent"),
     )
@@ -744,18 +800,11 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     parent_id = await parent.awaitable_attrs.run_id
 
-    run_agent_input = agui_persistence.RunAgentInput.empty(
-        parent,
-        thread_id,
-        parent_id,
-    )
-
-    the_async_session.add(run_agent_input)
-
     await the_async_session.commit()
 
     spare = await ts.new_run(
         user_name=USER_NAME,
+        room_id=ROOM_ID,
         thread_id=thread_id,
         run_metadata=agui_persistence.RunMetadata(label="spare"),
         parent_run_id=parent_id,
@@ -769,16 +818,11 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     assert await spare.awaitable_attrs.parent is parent
 
-    rai = await spare.awaitable_attrs.run_agent_input
-
-    assert rai.thread_id == thread_id
-    assert rai.run_id == await spare.awaitable_attrs.run_id
-    assert rai.parent_run_id == parent_id
-
     await the_async_session.commit()
 
     wo_meta = await ts.new_run(
         user_name=USER_NAME,
+        room_id=ROOM_ID,
         thread_id=thread_id,
     )
 
@@ -826,6 +870,7 @@ async def test_threadstorage_save_run_events(
 
     found_events = await ts.save_run_events(
         user_name=USER_NAME,
+        room_id=ROOM_ID,
         thread_id=thread_id,
         run_id=run_id,
         events=w_agui_events,
