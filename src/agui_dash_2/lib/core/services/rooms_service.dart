@@ -4,25 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
-/// Represents a room from the AG-UI server.
-class Room {
-  final String id;
-  final String name;
-  final String? description;
+import '../models/room_models.dart';
 
-  const Room({required this.id, required this.name, this.description});
-
-  factory Room.fromJson(Map<String, dynamic> json) {
-    return Room(
-      id: json['id'] as String? ?? json['name'] as String,
-      name: json['name'] as String? ?? json['id'] as String,
-      description: json['description'] as String?,
-    );
-  }
-
-  @override
-  String toString() => 'Room($id: $name)';
-}
+// Re-export Room model for convenience
+export '../models/room_models.dart';
 
 /// State for rooms list.
 class RoomsState {
@@ -92,8 +77,10 @@ class RoomsNotifier extends StateNotifier<RoomsState> {
               .map((id) => Room(id: id.toString(), name: id.toString()))
               .toList();
         } else {
-          // Treat keys as room IDs
-          rooms = data.keys.map((id) => Room(id: id, name: id)).toList();
+          // Dictionary of room_id -> room_data (Soliplex format)
+          rooms = data.entries
+              .map((entry) => Room.fromJson(entry.value as Map<String, dynamic>))
+              .toList();
         }
       } else {
         throw Exception('Unexpected response format');
@@ -118,3 +105,19 @@ final roomsProvider = StateNotifierProvider<RoomsNotifier, RoomsState>((ref) {
 
 /// Provider for the currently selected room ID.
 final selectedRoomProvider = StateProvider<String?>((ref) => null);
+
+/// Provider for the currently selected room's full data.
+///
+/// Returns the full [Room] object for the selected room, or null if no room
+/// is selected or the room data hasn't been loaded yet.
+final selectedRoomDataProvider = Provider<Room?>((ref) {
+  final selectedRoomId = ref.watch(selectedRoomProvider);
+  if (selectedRoomId == null) return null;
+
+  final roomsState = ref.watch(roomsProvider);
+  try {
+    return roomsState.rooms.firstWhere((r) => r.id == selectedRoomId);
+  } catch (_) {
+    return null;
+  }
+});

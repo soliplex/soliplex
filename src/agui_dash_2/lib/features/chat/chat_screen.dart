@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/models/chat_models.dart';
 import '../../core/models/layout_mode.dart';
-import '../../core/network/connection_manager.dart';
 import '../../core/services/activity_status_service.dart';
 import '../../core/services/agui_service.dart';
 import '../../core/services/chat_service.dart';
@@ -16,6 +14,8 @@ import '../layouts/standard_layout.dart';
 import '../notes/notes_dialog.dart';
 import '../layouts/canvas_layout.dart';
 import '../layouts/threecol_layout.dart';
+import '../room/capability_badges.dart';
+import '../room/room_info_drawer.dart';
 
 /// Main chat screen widget - acts as app shell with layout switching.
 ///
@@ -130,30 +130,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  void _addTestGenUiMessage() {
-    debugPrint('TEST: _addTestGenUiMessage called');
-    final chatNotifier = ref.read(chatProvider.notifier);
-
-    chatNotifier.addGenUiMessage(
-      GenUiContent(
-        toolCallId: 'test-${DateTime.now().millisecondsSinceEpoch}',
-        widgetName: 'InfoCard',
-        data: {
-          'title': 'Hello from Native Widget!',
-          'subtitle': 'This widget was generated dynamically.',
-          'icon': Icons.rocket_launch.codePoint,
-          'color': Colors.blue.toARGB32(),
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final layoutMode = ref.watch(layoutModeProvider);
     final agUiService = ref.watch(configuredAgUiServiceProvider);
     final roomsState = ref.watch(roomsProvider);
     final selectedRoom = ref.watch(selectedRoomProvider);
+    final selectedRoomData = ref.watch(selectedRoomDataProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -164,11 +147,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             _buildConnectionIndicator(agUiService.state),
             const SizedBox(width: 16),
             _buildRoomSelector(roomsState, selectedRoom),
+            if (selectedRoomData != null) ...[
+              const SizedBox(width: 8),
+              Flexible(
+                child: CapabilityIcons(room: selectedRoomData),
+              ),
+            ],
             const Spacer(),
             _buildLayoutModeSelector(layoutMode),
           ],
         ),
         actions: [
+          if (selectedRoomData != null)
+            IconButton(
+              icon: const Icon(Icons.info_outline),
+              tooltip: 'Room info',
+              onPressed: () => RoomInfoDrawer.show(context, selectedRoomData),
+            ),
           if (selectedRoom != null)
             IconButton(
               icon: const Icon(Icons.note_alt_outlined),
@@ -179,11 +174,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh rooms',
             onPressed: () => ref.read(roomsProvider.notifier).fetchRooms(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.science),
-            tooltip: 'Test GenUI',
-            onPressed: _addTestGenUiMessage,
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline),

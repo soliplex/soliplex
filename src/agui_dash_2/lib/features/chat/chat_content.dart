@@ -14,9 +14,11 @@ import '../../core/services/chat_service.dart';
 import '../../core/services/context_pane_service.dart';
 import '../../core/services/local_tools_service.dart';
 import '../../core/services/room_chat_service.dart';
+import '../../core/services/rooms_service.dart';
 import '../../core/utils/debug_log.dart';
 import '../../infrastructure/quick_agui/tool_call_state.dart';
 import 'builders/message_builder.dart';
+import 'widgets/chat_input_area.dart';
 import 'widgets/chat_search_bar.dart';
 import 'widgets/collapsible_thinking_widget.dart';
 import 'widgets/message_feedback_chips.dart';
@@ -37,6 +39,8 @@ class ChatContent extends ConsumerStatefulWidget {
 class _ChatContentState extends ConsumerState<ChatContent> {
   late final MessageBuilder _messageBuilder;
   final TextEditingController _inputController = TextEditingController();
+  final FocusNode _inputFocusNode = FocusNode();
+  String? _previousRoomId;
 
   @override
   void initState() {
@@ -52,7 +56,21 @@ class _ChatContentState extends ConsumerState<ChatContent> {
   @override
   void dispose() {
     _inputController.dispose();
+    _inputFocusNode.dispose();
     super.dispose();
+  }
+
+  /// Focus the input field when room changes.
+  void _checkRoomChange(String? currentRoomId) {
+    if (currentRoomId != null && currentRoomId != _previousRoomId) {
+      _previousRoomId = currentRoomId;
+      // Schedule focus request after build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _inputFocusNode.requestFocus();
+        }
+      });
+    }
   }
 
   void _handleGenUiEvent(String eventName, Map<String, Object?> arguments) {
@@ -68,8 +86,22 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     // Unhandled GenUI events are not shown to user
   }
 
+  /// Send a message (called from ChatInputArea).
+  void _sendMessage() {
+    final text = _inputController.text.trim();
+    if (text.isEmpty) return;
+    _handleSendText(text);
+  }
+
+  /// Handle sending a message from DashChat's onSend callback.
   Future<void> _handleSend(dash.ChatMessage dashMessage) async {
     final text = dashMessage.text.trim();
+    if (text.isEmpty) return;
+    await _handleSendText(text);
+  }
+
+  /// Core send logic shared by both send methods.
+  Future<void> _handleSendText(String text) async {
     if (text.isEmpty) return;
 
     // Clear input immediately after capturing text
@@ -923,27 +955,33 @@ class _ChatContentState extends ConsumerState<ChatContent> {
 
         final activityStatus = ref.watch(activityStatusProvider);
         final searchState = ref.watch(chatSearchProvider);
+        final selectedRoom = ref.watch(selectedRoomDataProvider);
+        final selectedRoomId = ref.watch(selectedRoomProvider);
+        final hasMessages = chatState.messages.isNotEmpty;
 
-        return Stack(
+        // Focus input when room changes
+        _checkRoomChange(selectedRoomId);
+
+        return Column(
           children: [
-            Column(
-              children: [
-                // Search bar (when active)
-                if (searchState.isActive)
-                  ChatSearchBar(
-                    messageIds: chatState.messages.map((m) => m.id).toList(),
-                    getMessageText: (id) {
-                      try {
-                        final msg = chatState.messages.firstWhere((m) => m.id == id);
-                        return msg.text ?? '';
-                      } catch (_) {
-                        return '';
-                      }
-                    },
-                  ),
-                // Chat area takes remaining space
-                Expanded(
-                  child: dash.DashChat(
+            // Search bar (when active)
+            if (searchState.isActive)
+              ChatSearchBar(
+                messageIds: chatState.messages.map((m) => m.id).toList(),
+                getMessageText: (id) {
+                  try {
+                    final msg = chatState.messages.firstWhere((m) => m.id == id);
+                    return msg.text ?? '';
+                  } catch (_) {
+                    return '';
+                  }
+                },
+              ),
+            // Chat messages area (with DashChat's input hidden)
+            Expanded(
+              child: Stack(
+                children: [
+                  dash.DashChat(
           currentUser: dash.ChatUser(
             id: ChatUser.user.id,
             firstName: ChatUser.user.firstName,
@@ -1091,29 +1129,20 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           // TODO: Implement pagination if needed
         },
       ),
+      // Hide DashChat's input - we use ChatInputArea instead
       inputOptions: dash.InputOptions(
         textController: _inputController,
-        sendOnEnter: true,
-        inputDecoration: InputDecoration(
-          hintText: 'Type a message, SHIFT+ENTER multiple lines',
-          filled: true,
-          fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(24),
-            borderSide: BorderSide.none,
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 12,
-          ),
+        sendOnEnter: false,
+        alwaysShowSend: false,
+        inputDecoration: const InputDecoration(
+          // Make input invisible
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.zero,
+          isDense: true,
+          constraints: BoxConstraints(maxHeight: 0),
         ),
-        sendButtonBuilder: (onSend) {
-          return IconButton(
-            icon: const Icon(Icons.send),
-            onPressed: onSend,
-            color: Theme.of(context).colorScheme.primary,
-          );
-        },
+        inputToolbarPadding: EdgeInsets.zero,
+        sendButtonBuilder: (onSend) => const SizedBox.shrink(),
       ),
           typingUsers: chatState.isAgentTyping
               ? [
@@ -1124,77 +1153,42 @@ class _ChatContentState extends ConsumerState<ChatContent> {
                 ]
               : [],
             ),
-            ),
-              ],
-            ),
-            // Activity status overlay (covers input area when active)
-            if (activityStatus.isActive && activityStatus.currentMessage != null)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  color: Theme.of(context).colorScheme.surface,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: Row(
-                      children: [
-                        // Pulsing dots
-                        const _ActivityDots(),
-                        const SizedBox(width: 8),
-                        // Status message with animation
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 300),
-                          switchInCurve: Curves.easeOut,
-                          switchOutCurve: Curves.easeIn,
-                          transitionBuilder: (child, animation) {
-                            return FadeTransition(
-                              opacity: animation,
-                              child: SlideTransition(
-                                position: Tween<Offset>(
-                                  begin: const Offset(0, 0.3),
-                                  end: Offset.zero,
-                                ).animate(animation),
-                                child: child,
-                              ),
-                            );
-                          },
-                          child: Text(
-                            activityStatus.currentMessage!,
-                            key: ValueKey(activityStatus.currentMessage),
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
-                        // Stop button
-                        IconButton(
-                          icon: const Icon(Icons.stop_circle_outlined),
-                          onPressed: () async {
-                            final agUiService = ref.read(configuredAgUiServiceProvider);
-                            final roomId = agUiService.currentRoomId;
-                            if (roomId != null) {
-                              DebugLog.network('Stop button: cancelling run for room $roomId');
-                              final connectionManager = ref.read(connectionManagerProvider);
-                              await connectionManager.cancelRun(roomId);
-                              // Stop activity indicator
-                              ref.read(activityStatusProvider.notifier).stopActivity();
-                            }
-                          },
-                          tooltip: 'Stop generation',
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ],
+                  // Cover DashChat's input area (it can't be fully hidden via InputOptions)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: 64,
+                    child: Container(
+                      color: Theme.of(context).colorScheme.surface,
                     ),
                   ),
-                ),
+                ],
+              ),
+            ),
+            // Activity status bar OR custom input area
+            if (activityStatus.isActive && activityStatus.currentMessage != null)
+              ActivityStatusBar(
+                message: activityStatus.currentMessage!,
+                onStop: () async {
+                  final agUiService = ref.read(configuredAgUiServiceProvider);
+                  final roomId = agUiService.currentRoomId;
+                  if (roomId != null) {
+                    DebugLog.network('Stop button: cancelling run for room $roomId');
+                    final connectionManager = ref.read(connectionManagerProvider);
+                    await connectionManager.cancelRun(roomId);
+                    ref.read(activityStatusProvider.notifier).stopActivity();
+                  }
+                },
+              )
+            else
+              ChatInputArea(
+                controller: _inputController,
+                focusNode: _inputFocusNode,
+                onSend: _sendMessage,
+                room: selectedRoom,
+                hasMessages: hasMessages,
+                isLoading: activityStatus.isActive,
               ),
           ],
         );
@@ -1214,81 +1208,6 @@ class _PasteIntent extends Intent {
 /// Intent for search action.
 class _SearchIntent extends Intent {
   const _SearchIntent();
-}
-
-/// Pulsing dots animation for activity indicator.
-class _ActivityDots extends StatefulWidget {
-  const _ActivityDots();
-
-  @override
-  State<_ActivityDots> createState() => _ActivityDotsState();
-}
-
-class _ActivityDotsState extends State<_ActivityDots>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(3, (index) {
-        return AnimatedBuilder(
-          animation: _controller,
-          builder: (context, child) {
-            // Stagger the animations for each dot
-            final delay = index * 0.2;
-            final value = (_controller.value + delay) % 1.0;
-            // Pulse effect using sin wave
-            final pulse = (1 + _sin(value * 2 * 3.14159)) / 2;
-            final scale = 0.5 + (0.5 * pulse);
-            final opacity = 0.4 + (0.6 * pulse);
-
-            return Container(
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              width: 6 * scale,
-              height: 6 * scale,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Theme.of(context)
-                    .colorScheme
-                    .primary
-                    .withAlpha((opacity * 255).round()),
-              ),
-            );
-          },
-        );
-      }),
-    );
-  }
-
-  /// Simple sin approximation using Taylor series.
-  double _sin(double x) {
-    x = x % (2 * 3.14159);
-    if (x > 3.14159) x -= 2 * 3.14159;
-    double result = x;
-    double term = x;
-    for (int i = 1; i <= 5; i++) {
-      term *= -x * x / ((2 * i) * (2 * i + 1));
-      result += term;
-    }
-    return result;
-  }
 }
 
 /// Row with feedback chips and copy button for messages.
