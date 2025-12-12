@@ -1,12 +1,12 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/room_models.dart';
 import '../providers/app_providers.dart';
 import '../utils/api_constants.dart';
+import '../utils/debug_log.dart';
 import '../utils/url_builder.dart';
 import 'auth_manager.dart';
 
@@ -63,7 +63,7 @@ class RoomsNotifier extends StateNotifier<RoomsState> {
       if (_authManager != null && _serverId != null) {
         final authHeaders = await _authManager.getAuthHeaders(_serverId!);
         headers.addAll(authHeaders);
-        debugPrint('Rooms: Using auth headers for server $_serverId');
+        DebugLog.network('Rooms: Using auth headers for server $_serverId');
       }
 
       final response = await _httpClient.get(
@@ -107,10 +107,10 @@ class RoomsNotifier extends StateNotifier<RoomsState> {
         throw Exception('Unexpected response format');
       }
 
-      debugPrint('Rooms: Fetched ${rooms.length} rooms');
+      DebugLog.agui('Rooms: Fetched ${rooms.length} rooms');
       state = state.copyWith(rooms: rooms, isLoading: false);
     } catch (e) {
-      debugPrint('Rooms: Error fetching rooms: $e');
+      DebugLog.error('Rooms: Error fetching rooms: $e');
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }

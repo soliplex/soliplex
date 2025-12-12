@@ -7,6 +7,7 @@ import '../auth/oidc_auth_interactor.dart';
 import '../auth/secure_token_storage.dart';
 import '../auth/sso_config.dart';
 import '../models/server_models.dart';
+import '../utils/debug_log.dart';
 import '../utils/url_builder.dart';
 import 'secure_storage_service.dart';
 
@@ -72,18 +73,18 @@ class AuthManager {
   /// Start OIDC login flow.
   /// Returns UserInfo on success, throws on failure.
   Future<UserInfo?> login(OIDCAuthSystem provider, ServerConnection server) async {
-    debugPrint('AuthManager.login: Starting with provider ${provider.id}');
+    DebugLog.service('AuthManager.login: Starting with provider ${provider.id}');
 
     try {
       // Clear any existing OIDC tokens and config to avoid stale state
-      debugPrint('AuthManager: Clearing existing OIDC tokens and config');
+      DebugLog.service('AuthManager: Clearing existing OIDC tokens and config');
       await _tokenStorage.deleteOidcAuthTokenResponse();
       await _oidcInteractor.clearSsoConfig();
 
       // Build SsoConfig from OIDCAuthSystem
       final issuerUrl = provider.serverUrl;
       final scopes = provider.scope?.split(' ') ?? ['openid', 'profile', 'email'];
-      debugPrint('AuthManager: issuerUrl=$issuerUrl, scopes=$scopes');
+      DebugLog.service('AuthManager: issuerUrl=$issuerUrl, scopes=$scopes');
 
       final ssoConfig = SsoConfig(
         id: provider.id,
@@ -100,9 +101,9 @@ class AuthManager {
       _oidcInteractor.useAuth = true;
 
       // Use flutter_appauth for native OIDC flow
-      debugPrint('AuthManager: Calling authorizeAndExchangeCode...');
+      DebugLog.service('AuthManager: Calling authorizeAndExchangeCode...');
       final tokenResponse = await _oidcInteractor.authorizeAndExchangeCode(ssoConfig);
-      debugPrint('AuthManager: Got token response, expiry=${tokenResponse.accessTokenExpiration}');
+      DebugLog.service('AuthManager: Got token response, expiry=${tokenResponse.accessTokenExpiration}');
 
       // Store tokens
       await _storage.storeTokens(
@@ -111,15 +112,15 @@ class AuthManager {
         refreshToken: tokenResponse.refreshToken,
         expiresAt: tokenResponse.accessTokenExpiration,
       );
-      debugPrint('AuthManager: Tokens stored');
+      DebugLog.service('AuthManager: Tokens stored');
 
       // Fetch user info
       final userInfo = await _fetchUserInfo(server.url, tokenResponse.accessToken);
-      debugPrint('AuthManager: User info: $userInfo');
+      DebugLog.service('AuthManager: User info: $userInfo');
 
       return userInfo;
     } catch (e) {
-      debugPrint('AuthManager: OIDC login failed: $e');
+      DebugLog.error('AuthManager: OIDC login failed: $e');
       rethrow;
     }
   }
@@ -133,7 +134,7 @@ class AuthManager {
         await _oidcInteractor.logout(ssoConfig);
       }
     } catch (e) {
-      debugPrint('AuthManager: OIDC logout failed: $e');
+      DebugLog.error('AuthManager: OIDC logout failed: $e');
       // Continue with local logout even if OIDC logout fails
     }
 
@@ -164,9 +165,9 @@ class AuthManager {
 
   /// Get auth headers for API calls.
   Future<Map<String, String>> getAuthHeaders(String serverId) async {
-    debugPrint('AuthManager.getAuthHeaders: serverId=$serverId');
+    DebugLog.network('AuthManager.getAuthHeaders: serverId=$serverId');
     final token = await getAccessToken(serverId);
-    debugPrint('AuthManager.getAuthHeaders: token=${token != null ? "present (${token.length} chars)" : "null"}');
+    DebugLog.network('AuthManager.getAuthHeaders: token=${token != null ? "present (${token.length} chars)" : "null"}');
     if (token == null) return {};
     return {'Authorization': 'Bearer $token'};
   }
@@ -183,7 +184,7 @@ class AuthManager {
     try {
       final urlBuilder = UrlBuilder(serverUrl);
       final uri = urlBuilder.userInfo();
-      debugPrint('AuthManager: Fetching user info from $uri');
+      DebugLog.network('AuthManager: Fetching user info from $uri');
 
       final response = await _httpClient.get(
         uri,
@@ -195,7 +196,7 @@ class AuthManager {
         return UserInfo.fromJson(data);
       }
     } catch (e) {
-      debugPrint('AuthManager: Failed to fetch user info: $e');
+      DebugLog.error('AuthManager: Failed to fetch user info: $e');
     }
     return null;
   }
@@ -204,13 +205,13 @@ class AuthManager {
     try {
       final ssoConfig = await _oidcInteractor.getSsoConfig();
       if (ssoConfig == null) {
-        debugPrint('AuthManager: No SSO config found for token refresh');
+        DebugLog.warn('AuthManager: No SSO config found for token refresh');
         return false;
       }
 
       final tokenResponse = await _oidcInteractor.refreshAccessToken(ssoConfig);
       if (tokenResponse == null) {
-        debugPrint('AuthManager: Token refresh returned null');
+        DebugLog.warn('AuthManager: Token refresh returned null');
         return false;
       }
 
@@ -222,10 +223,10 @@ class AuthManager {
         expiresAt: tokenResponse.accessTokenExpiration,
       );
 
-      debugPrint('AuthManager: Token refreshed successfully');
+      DebugLog.service('AuthManager: Token refreshed successfully');
       return true;
     } catch (e) {
-      debugPrint('AuthManager: Token refresh failed: $e');
+      DebugLog.error('AuthManager: Token refresh failed: $e');
       return false;
     }
   }

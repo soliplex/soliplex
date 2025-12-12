@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_providers.dart';
@@ -8,6 +7,7 @@ import '../services/server_config_service.dart' show secureStorageProvider;
 import '../services/server_registry.dart';
 import '../state/app_state.dart';
 import '../state/app_state_manager.dart';
+import '../utils/debug_log.dart';
 
 // Re-export for convenience
 export '../state/app_state.dart';
@@ -69,7 +69,7 @@ final currentAppStateProvider = Provider<AppState>((ref) {
 final currentServerFromAppStateProvider = Provider<ServerConnection?>((ref) {
   final stateAsync = ref.watch(appStateStreamProvider);
   final server = stateAsync.whenOrNull(data: (state) => state.server);
-  debugPrint('currentServerFromAppStateProvider: server=${server?.url}, id=${server?.id}');
+  DebugLog.service('currentServerFromAppStateProvider: server=${server?.url}, id=${server?.id}');
   return server;
 });
 

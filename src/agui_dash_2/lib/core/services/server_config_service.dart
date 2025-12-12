@@ -368,15 +368,3 @@ final serverHistoryProvider = Provider<List<ServerConnection>>((ref) {
   final config = ref.watch(serverConfigProvider);
   return config.serverHistory;
 });
-
-/// Provider to check if a server is configured
-final hasServerProvider = Provider<bool>((ref) {
-  final config = ref.watch(serverConfigProvider);
-  return config.hasServer;
-});
-
-/// Provider for current server base URL
-final serverBaseUrlProvider = Provider<String?>((ref) {
-  final config = ref.watch(serverConfigProvider);
-  return config.baseUrl;
-});

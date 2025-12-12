@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
 import '../models/server_models.dart';
+import '../utils/debug_log.dart';
 import '../utils/url_builder.dart';
 import 'secure_storage_service.dart';
 
@@ -36,13 +36,13 @@ class ServerRegistry {
   /// Initialize the registry, loading saved state.
   Future<void> initialize() async {
     if (_initialized) return;
-    debugPrint('ServerRegistry.initialize: Starting...');
+    DebugLog.service('ServerRegistry.initialize: Starting...');
 
     try {
       // Load server history
-      debugPrint('ServerRegistry.initialize: Loading server history...');
+      DebugLog.service('ServerRegistry.initialize: Loading server history...');
       final historyJson = await _storage.loadServerHistory();
-      debugPrint('ServerRegistry.initialize: Loaded ${historyJson.length} servers');
+      DebugLog.service('ServerRegistry.initialize: Loaded ${historyJson.length} servers');
       _serverHistory = historyJson
           .map((json) => ServerConnection.fromJson(json))
           .toList();
@@ -62,7 +62,7 @@ class ServerRegistry {
 
       _initialized = true;
     } catch (e) {
-      debugPrint('ServerRegistry: Error loading state: $e');
+      DebugLog.error('ServerRegistry: Error loading state: $e');
       _initialized = true; // Mark initialized even on error
     }
   }
@@ -157,7 +157,7 @@ class ServerRegistry {
               ...value,
             }));
           } catch (e) {
-            debugPrint('Failed to parse OIDC provider $key: $e');
+            DebugLog.error('Failed to parse OIDC provider $key: $e');
           }
         }
       });
@@ -167,7 +167,7 @@ class ServerRegistry {
           try {
             providers.add(OIDCAuthSystem.fromJson(item));
           } catch (e) {
-            debugPrint('Failed to parse OIDC provider: $e');
+            DebugLog.error('Failed to parse OIDC provider: $e');
           }
         }
       }

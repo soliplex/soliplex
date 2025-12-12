@@ -405,39 +405,3 @@ final authServiceProvider = ChangeNotifierProvider<AuthService>((ref) {
     tokenStorage: tokenStorage,
   );
 });
-
-/// Provider for current auth state
-/// **DEPRECATED**: Use [appStateStreamProvider] instead.
-@Deprecated('Use appStateStreamProvider instead')
-final authStateProvider = Provider<AuthState>((ref) {
-  // ignore: deprecated_member_use_from_same_package
-  final auth = ref.watch(authServiceProvider);
-  return auth.state;
-});
-
-/// Provider for authentication status
-/// **DEPRECATED**: Use [isAppReadyProvider] instead.
-@Deprecated('Use isAppReadyProvider instead')
-final isAuthenticatedProvider = Provider<bool>((ref) {
-  // ignore: deprecated_member_use_from_same_package
-  final auth = ref.watch(authServiceProvider);
-  return auth.isAuthenticated;
-});
-
-/// Provider for checking if auth is needed
-/// **DEPRECATED**: Use [needsAuthFromAppStateProvider] instead.
-@Deprecated('Use needsAuthFromAppStateProvider instead')
-final needsAuthProvider = Provider<bool>((ref) {
-  // ignore: deprecated_member_use_from_same_package
-  final auth = ref.watch(authServiceProvider);
-  return auth.needsAuth;
-});
-
-/// Provider for current user name
-/// **DEPRECATED**: Use AppStateReady.userName instead.
-@Deprecated('Use AppStateReady.userName instead')
-final currentUserNameProvider = Provider<String?>((ref) {
-  // ignore: deprecated_member_use_from_same_package
-  final authState = ref.watch(authStateProvider);
-  return authState.userName;
-});
