@@ -233,6 +233,11 @@ class _ChatContentState extends ConsumerState<ChatContent> {
   // Track thinking message IDs (aguiThinkingId -> chatMessageId)
   final Map<String, String> _thinkingMessageIds = {};
 
+  // Buffer for thinking text that arrives before message exists
+  StringBuffer? _pendingThinkingBuffer;
+  bool _hasPendingThinking = false;
+  bool _pendingThinkingFinalized = false;  // Track if ThinkingTextMessageEnd already fired
+
   /// Process a single AG-UI event.
   void _processEvent(
     ag_ui.BaseEvent event,
@@ -248,6 +253,10 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         DebugLog.mapping('=== NEW RUN === messageIdMap has ${_messageIdMap.length} entries');
         contextNotifier.addAgUiEvent('Run Started', summary: event.runId);
         activityNotifier.startActivity();
+        // Clear any stale thinking buffer from previous run
+        _pendingThinkingBuffer = null;
+        _hasPendingThinking = false;
+        _pendingThinkingFinalized = false;
 
       case ag_ui.TextMessageStartEvent():
         final aguiMessageId = event.messageId;
@@ -257,6 +266,28 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         _textBuffers[aguiMessageId] = StringBuffer();
         DebugLog.mapping('TextMessageStart mapped: aguiId=$aguiMessageId -> chatId=$chatMessageId');
         activityNotifier.handleEvent('TextMessageStart');
+
+        // Apply any pending thinking to this new message
+        if (_hasPendingThinking && _pendingThinkingBuffer != null) {
+          final thinkingText = _pendingThinkingBuffer.toString();
+          if (thinkingText.isNotEmpty) {
+            chatNotifier.startThinking(chatMessageId);
+            chatNotifier.appendThinking(chatMessageId, thinkingText);
+            // If thinking was already finalized (ThinkingTextMessageEnd came before TextMessageStart),
+            // finalize it now
+            if (_pendingThinkingFinalized) {
+              chatNotifier.finalizeThinking(chatMessageId);
+              DebugLog.agui('Applied and finalized buffered thinking (${thinkingText.length} chars) to chatId=$chatMessageId');
+            } else {
+              // Thinking still streaming - track for later finalization
+              _thinkingMessageIds['current'] = chatMessageId;
+              DebugLog.agui('Applied buffered thinking (${thinkingText.length} chars) to chatId=$chatMessageId, still streaming');
+            }
+          }
+          _pendingThinkingBuffer = null;
+          _hasPendingThinking = false;
+          _pendingThinkingFinalized = false;
+        }
 
       case ag_ui.TextMessageContentEvent():
         final aguiMessageId = event.messageId;
@@ -318,28 +349,33 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         activityNotifier.handleEvent('Thinking');
 
       case ag_ui.ThinkingTextMessageStartEvent():
-        // Find the current or pending assistant message to attach thinking to
-        // Look for the most recent agent message that's streaming or just started
+        // Find the current streaming assistant message to attach thinking to
         final chatMessages = ref.read(chatProvider).messages;
         ChatMessage? targetMessage;
         for (final m in chatMessages.reversed) {
-          if (m.user.id == ChatUser.agent.id &&
-              (m.isStreaming || m.type == MessageType.text)) {
+          if (m.user.id == ChatUser.agent.id && m.isStreaming) {
             targetMessage = m;
             break;
           }
         }
         if (targetMessage != null) {
           chatNotifier.startThinking(targetMessage.id);
-          // Track using a constant key since thinking events don't have messageId
           _thinkingMessageIds['current'] = targetMessage.id;
           DebugLog.agui('ThinkingTextMessageStart: attached to chatId=${targetMessage.id}');
+        } else {
+          // No message yet - buffer thinking until TextMessageStart arrives
+          _pendingThinkingBuffer = StringBuffer();
+          _hasPendingThinking = true;
+          DebugLog.agui('ThinkingTextMessageStart: buffering (no message yet)');
         }
 
       case ag_ui.ThinkingTextMessageContentEvent():
         final chatMessageId = _thinkingMessageIds['current'];
         if (chatMessageId != null) {
           chatNotifier.appendThinking(chatMessageId, event.delta);
+        } else if (_hasPendingThinking) {
+          // Buffer thinking content until message exists
+          _pendingThinkingBuffer?.write(event.delta);
         }
 
       case ag_ui.ThinkingTextMessageEndEvent():
@@ -348,6 +384,10 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           chatNotifier.finalizeThinking(chatMessageId);
           _thinkingMessageIds.remove('current');
           DebugLog.agui('ThinkingTextMessageEnd: finalized chatId=$chatMessageId');
+        } else if (_hasPendingThinking) {
+          // Thinking ended but message hasn't started - mark as finalized for when message arrives
+          _pendingThinkingFinalized = true;
+          DebugLog.agui('ThinkingTextMessageEnd: buffered ${_pendingThinkingBuffer?.length ?? 0} chars, marked finalized');
         }
 
       case ag_ui.ThinkingEndEvent():
