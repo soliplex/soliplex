@@ -1,8 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
 
+import '../../core/network/cancel_token.dart';
+import '../../core/utils/debug_log.dart';
 import 'text_message_buffer.dart';
 import 'tool_call_reception_buffer.dart';
 import 'tool_call_registry.dart';
@@ -23,6 +24,7 @@ class Thread {
   final ag_ui.AgUiClient client;
   final List<ag_ui.Tool> _tools;
   final Map<String, ToolExecutor> _toolExecutors;
+  final Set<String> _fireAndForgetTools = {};
   final List<ag_ui.Run> _runs = [];
   final StreamController<ag_ui.Message> _messagesController;
   final StreamController<ag_ui.State> _statesController;
@@ -78,11 +80,20 @@ class Thread {
   /// If a tool with the same name already exists, it will be replaced.
   /// This is idempotent - calling with the same tool name multiple times
   /// will update the executor and tool definition.
-  void addTool(ag_ui.Tool tool, ToolExecutor executor) {
+  ///
+  /// If [fireAndForget] is true, the tool will be executed but its result
+  /// will NOT be sent back to the server. Use this for UI-only tools like
+  /// genui_render and canvas_render that don't need a follow-up response.
+  void addTool(ag_ui.Tool tool, ToolExecutor executor, {bool fireAndForget = false}) {
     // Remove existing tool with same name to prevent duplicates
     _tools.removeWhere((t) => t.name == tool.name);
     _tools.add(tool);
     _toolExecutors[tool.name] = executor;
+    if (fireAndForget) {
+      _fireAndForgetTools.add(tool.name);
+    } else {
+      _fireAndForgetTools.remove(tool.name);
+    }
   }
 
   /// Remove a tool.
@@ -110,17 +121,23 @@ class Thread {
   ///
   /// Returns list of tool messages if client tools were executed
   /// (caller should call again with these results).
+  ///
+  /// [cancelToken] can be used to cancel the run mid-stream.
   Future<List<ag_ui.ToolMessage>> startRun({
     required String endpoint,
     required String runId,
     List<ag_ui.Message>? messages,
     dynamic state,
+    CancelToken? cancelToken,
   }) async {
     // Check if disposed before starting
     if (_disposed) {
-      debugPrint('Thread: startRun called on disposed thread, ignoring');
+      DebugLog.thread(' startRun called on disposed thread, ignoring');
       return [];
     }
+
+    // Check if already cancelled
+    cancelToken?.throwIfCancelled();
 
     final run = ag_ui.Run(threadId: id, runId: runId);
     _runs.add(run);
@@ -138,13 +155,18 @@ class Thread {
     );
 
     try {
-      debugPrint('Thread: Starting await for loop on SSE stream');
+      DebugLog.thread(' Starting await for loop on SSE stream');
       await for (final event in client.runAgent(endpoint, agentInput)) {
-        debugPrint('Thread: Received event: ${event.runtimeType}');
+        DebugLog.thread(' Received event: ${event.runtimeType}');
         // Check if disposed during streaming
         if (_disposed) {
-          debugPrint('Thread: disposed during event stream, stopping');
+          DebugLog.thread(' disposed during event stream, stopping');
           break;
+        }
+        // Check if cancelled during streaming
+        if (cancelToken?.isCancelled == true) {
+          DebugLog.thread(' cancelled during event stream, stopping');
+          throw CancelledException(cancelToken!.cancelReason);
         }
         _addStep(event);
 
@@ -271,51 +293,21 @@ class Thread {
             _addMessage(message);
 
           default:
-            debugPrint("Thread: Ignored event ${event.runtimeType}");
+            break; // Ignore unknown events
         }
       }
     } catch (e) {
       // Handle decoding errors from ag_ui package gracefully
-      // This can happen when server sends event types the package doesn't recognize
-      debugPrint('Thread: Error processing events: $e');
-
       final errorStr = e.toString();
       if (errorStr.contains('DecodingError') ||
           errorStr.contains('Invalid event type')) {
-        // Try to get more details about what failed
-        debugPrint('Thread: ===== DECODING ERROR DETAILS =====');
-
-        // Check if it's a DecodingError with actualValue
-        if (e is ag_ui.DecodingError) {
-          final decodingError = e;
-          debugPrint('Thread: Field: ${decodingError.field}');
-          debugPrint('Thread: Expected: ${decodingError.expectedType}');
-          debugPrint('Thread: Actual value: ${decodingError.actualValue}');
-          if (decodingError.cause != null) {
-            debugPrint('Thread: Cause: ${decodingError.cause}');
-          }
-        }
-
-        // Also check for "Invalid event type: X" pattern in cause chain
-        final typeMatch = RegExp(
-          r'Invalid event type:\s*(\S+)',
-        ).firstMatch(errorStr);
-        if (typeMatch != null) {
-          debugPrint(
-            'Thread: Unknown event type from server: ${typeMatch.group(1)}',
-          );
-        }
-
-        debugPrint('Thread: ===================================');
-        debugPrint(
-          'Thread: Ignoring decoding error - continuing with partial results',
-        );
+        DebugLog.thread('Decoding error (continuing): $e');
       } else {
         rethrow;
       }
     }
 
-    debugPrint('Thread: SSE stream completed, checking for pending tool calls');
+    DebugLog.thread(' SSE stream completed, checking for pending tool calls');
 
     // Execute any pending client tools
     final pendingToolCalls = _toolRegistry.pendingCalls;
@@ -338,13 +330,8 @@ class Thread {
       // Atomically try to start execution - prevents double execution
       final callToExecute = _toolRegistry.tryStartExecution(toolCall.id);
       if (callToExecute == null) {
-        // Already executing or completed - skip
-        debugPrint(
-          'Thread: Skipping ${toolCall.function.name} (${toolCall.id}) - already processed',
-        );
-        continue;
+        continue; // Already executing or completed
       }
-
       futures.add(_executeAndTrack(callToExecute, toolMessages));
     }
 
@@ -357,6 +344,9 @@ class Thread {
     ag_ui.ToolCall toolCall,
     List<ag_ui.ToolMessage> results,
   ) async {
+    final toolName = toolCall.function.name;
+    final isFireAndForget = _fireAndForgetTools.contains(toolName);
+
     try {
       final result = await _executeClientTool(toolCall);
       final message = ag_ui.ToolMessage(
@@ -364,44 +354,43 @@ class Thread {
         toolCallId: toolCall.id,
         content: result,
       );
-      results.add(message);
+
+      // Only add to results if NOT fire-and-forget
+      // Fire-and-forget tools execute but don't send results back to server
+      if (!isFireAndForget) {
+        results.add(message);
+      } else {
+        DebugLog.thread(' Fire-and-forget tool $toolName executed, not sending result back');
+      }
       _toolRegistry.markCompleted(toolCall.id, message);
     } catch (e) {
-      debugPrint('Thread: Tool execution failed for ${toolCall.function.name}: $e');
+      DebugLog.thread(' Tool execution failed for $toolName: $e');
       _toolRegistry.markFailed(toolCall.id, e.toString());
-      // Still add an error result so the conversation can continue
-      results.add(
-        ag_ui.ToolMessage(
-          id: 'msg-${toolCall.id}',
-          toolCallId: toolCall.id,
-          content: 'ERROR: $e',
-        ),
-      );
+      // Still add an error result so the conversation can continue (unless fire-and-forget)
+      if (!isFireAndForget) {
+        results.add(
+          ag_ui.ToolMessage(
+            id: 'msg-${toolCall.id}',
+            toolCallId: toolCall.id,
+            content: 'ERROR: $e',
+          ),
+        );
+      }
     }
   }
 
   Future<String> _executeClientTool(ag_ui.ToolCall toolCall) async {
-    debugPrint(
-      'Thread: _executeClientTool called for ${toolCall.function.name}',
-    );
     final executor = _toolExecutors[toolCall.function.name];
 
     if (executor == null) {
-      debugPrint('Thread: No executor found for ${toolCall.function.name}');
       throw StateError(
         'No executor registered for client tool: ${toolCall.function.name}',
       );
     }
 
     try {
-      debugPrint('Thread: Calling executor for ${toolCall.function.name}...');
-      final result = await executor(toolCall);
-      debugPrint(
-        'Thread: Executor returned: ${result.substring(0, result.length.clamp(0, 100))}...',
-      );
-      return result;
+      return await executor(toolCall);
     } catch (e) {
-      debugPrint('Thread: Executor threw error: $e');
       return 'ERROR: ${e.toString()}';
     }
   }
@@ -411,8 +400,14 @@ class Thread {
     required String endpoint,
     required String runId,
     required List<ag_ui.ToolMessage> toolMessages,
+    CancelToken? cancelToken,
   }) async {
-    return startRun(endpoint: endpoint, runId: runId, messages: toolMessages);
+    return startRun(
+      endpoint: endpoint,
+      runId: runId,
+      messages: toolMessages,
+      cancelToken: cancelToken,
+    );
   }
 
   /// Clear all state for a new conversation.

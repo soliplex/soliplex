@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/chat_models.dart';
+import '../../core/network/connection_manager.dart';
 import '../../core/services/activity_status_service.dart';
 import '../../core/services/agui_service.dart';
 import '../../core/services/chat_search_service.dart';
@@ -12,6 +13,7 @@ import '../../core/services/canvas_service.dart';
 import '../../core/services/chat_service.dart';
 import '../../core/services/context_pane_service.dart';
 import '../../core/services/local_tools_service.dart';
+import '../../core/services/room_chat_service.dart';
 import '../../core/utils/debug_log.dart';
 import '../../infrastructure/quick_agui/tool_call_state.dart';
 import 'builders/message_builder.dart';
@@ -155,6 +157,8 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           _handleToolStateChange(change, contextNotifier);
         },
       );
+      // Sync chat state to per-room provider after successful completion
+      _syncToRoomProvider();
     } catch (e) {
       DebugLog.error('Error sending message: $e');
       if (mounted) {
@@ -168,7 +172,22 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         } else {
           chatNotifier.addServerError(e.toString());
         }
+        // Sync even on error so state is preserved
+        _syncToRoomProvider();
       }
+    }
+  }
+
+  /// Sync current chat state to the per-room provider for session preservation.
+  void _syncToRoomProvider() {
+    final agUiService = ref.read(configuredAgUiServiceProvider);
+    final roomId = agUiService.currentRoomId;
+    if (roomId == null) return;
+
+    final messages = ref.read(chatProvider).messages;
+    if (messages.isNotEmpty) {
+      ref.read(roomChatProvider(roomId).notifier).loadMessages(messages);
+      DebugLog.network('Synced ${messages.length} messages to room $roomId');
     }
   }
 
@@ -1155,12 +1174,19 @@ class _ChatContentState extends ConsumerState<ChatContent> {
                           ),
                         ),
                         const Spacer(),
-                        // Stop button (non-functional)
+                        // Stop button
                         IconButton(
                           icon: const Icon(Icons.stop_circle_outlined),
-                          onPressed: () {
-                            // TODO: Implement stop functionality
-                            debugPrint('Stop button pressed (not yet implemented)');
+                          onPressed: () async {
+                            final agUiService = ref.read(configuredAgUiServiceProvider);
+                            final roomId = agUiService.currentRoomId;
+                            if (roomId != null) {
+                              DebugLog.network('Stop button: cancelling run for room $roomId');
+                              final connectionManager = ref.read(connectionManagerProvider);
+                              await connectionManager.cancelRun(roomId);
+                              // Stop activity indicator
+                              ref.read(activityStatusProvider.notifier).stopActivity();
+                            }
                           },
                           tooltip: 'Stop generation',
                           color: Theme.of(context).colorScheme.error,

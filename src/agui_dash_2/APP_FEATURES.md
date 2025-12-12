@@ -10,7 +10,53 @@ This document tracks planned, in-progress, and completed features for the agui_d
 
 ## In Progress
 
-(None currently)
+### 9. Network Layer Refactoring
+
+**Status**: In Progress (Phase 1 Complete)
+
+**Description**: Refactoring the network layer to support concurrent SSE streams, room session preservation, connection observability, and stop/cancel functionality. Web compatible with pluggable architecture for future native networking.
+
+**Implementation Details**:
+
+See `NETWORK-IMPL.md` for full architectural plan.
+
+Files created (Phase 1):
+- `lib/core/network/cancel_token.dart` - Cancellation support for network operations
+- `lib/core/network/network_transport.dart` - Abstract interface for pluggable networking
+- `lib/core/network/http_transport.dart` - Web-compatible implementation using ag_ui
+- `lib/core/network/connection_events.dart` - Event types for observability
+- `lib/core/network/room_session.dart` - Per-room state container
+- `lib/core/network/connection_manager.dart` - Central hub managing all sessions
+- `lib/core/network/network_observer.dart` - Read-only visibility into connections
+- `lib/core/network/network.dart` - Barrel export file
+
+Files created (Phase 2):
+- `lib/core/services/room_chat_service.dart` - Per-room chat providers (roomChatProvider, activeChatProvider)
+
+Files modified:
+- `lib/infrastructure/quick_agui/thread.dart` - Added CancelToken support to startRun()
+- `lib/core/utils/debug_log.dart` - Added network logging category
+- `lib/features/chat/chat_content.dart` - Stop button, _syncToRoomProvider()
+- `lib/features/chat/chat_screen.dart` - Room switching with session preservation
+
+**Completed Phases**:
+- [x] Phase 1: Core Infrastructure (transport, session, manager, observer)
+- [x] Phase 2: Per-Room State (roomChatProvider family, activeChatProvider)
+- [x] Phase 3: Integration (per-room state sync, room switching)
+- [x] Phase 4: Stop Button (wired to ConnectionManager.cancelRun)
+- [x] Phase 5: Session Preservation (save/restore chat history on room switch)
+
+**Remaining Phases**:
+- [ ] Phase 6: Network Observer UI (optional debug panel)
+
+**Architecture**:
+```
+ConnectionManager (central hub)
+    └── Map<roomId, RoomSession>
+            └── Thread + ChatHistory + CancelToken
+NetworkObserver (read-only visibility)
+    └── events stream, connection info
+```
 
 ---
 

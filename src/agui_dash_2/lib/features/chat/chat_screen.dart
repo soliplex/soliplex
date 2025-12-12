@@ -4,10 +4,13 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/chat_models.dart';
 import '../../core/models/layout_mode.dart';
+import '../../core/network/connection_manager.dart';
+import '../../core/services/activity_status_service.dart';
 import '../../core/services/agui_service.dart';
 import '../../core/services/chat_service.dart';
 import '../../core/services/feedback_service.dart';
 import '../../core/services/markdown_hooks.dart';
+import '../../core/services/room_chat_service.dart';
 import '../../core/services/rooms_service.dart';
 import '../layouts/standard_layout.dart';
 import '../notes/notes_dialog.dart';
@@ -101,11 +104,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _onRoomChanged(String? roomId) {
     if (roomId == null) return;
 
+    final previousRoomId = ref.read(selectedRoomProvider);
+
+    // Stop any active activity indicator from previous room
+    ref.read(activityStatusProvider.notifier).stopActivity();
+
+    // Save current chat history to the per-room provider before switching
+    if (previousRoomId != null && previousRoomId != roomId) {
+      final currentMessages = ref.read(chatProvider).messages;
+      if (currentMessages.isNotEmpty) {
+        ref.read(roomChatProvider(previousRoomId).notifier).loadMessages(currentMessages);
+      }
+    }
+
     ref.read(selectedRoomProvider.notifier).state = roomId;
+    ref.read(selectedRoomIdProvider.notifier).state = roomId;
     _updateAgUiConfig();
 
-    // Clear chat when switching rooms
-    ref.read(chatProvider.notifier).clearMessages();
+    // Restore chat history from per-room provider, or clear if empty
+    final savedMessages = ref.read(roomChatProvider(roomId)).messages;
+    if (savedMessages.isNotEmpty) {
+      ref.read(chatProvider.notifier).loadMessages(savedMessages);
+    } else {
+      ref.read(chatProvider.notifier).clearMessages();
+    }
   }
 
   void _addTestGenUiMessage() {
