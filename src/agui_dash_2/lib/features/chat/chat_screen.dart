@@ -109,13 +109,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final authService = ref.read(authServiceProvider);
       final headers = await authService.getAuthHeaders();
 
-      ref.read(agUiConfigProvider.notifier).state = AgUiServiceConfig(
+      final config = AgUiServiceConfig(
         baseUrl: _serverUrl,
         roomId: selectedRoom,
         headers: headers.isNotEmpty ? headers : null,
       );
-      // Reset conversation when switching rooms
-      ref.read(agUiServiceProvider).resetConversation();
+
+      // Store config for other providers that need it
+      ref.read(agUiConfigProvider.notifier).state = config;
+
+      // Explicitly configure the service (no auto-configuration)
+      ref.read(agUiServiceProvider).configure(config);
+
       // Initialize feedback service for this room
       ref.read(feedbackProvider.notifier).initialize(selectedRoom);
     }

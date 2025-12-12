@@ -427,15 +427,13 @@ class AgUiService extends ChangeNotifier {
 /// Provider for ConnectionManager (server-scoped).
 ///
 /// Watches [currentServerProvider] - recreated when server changes.
-/// Also watches [agUiConfigProvider] to get auth headers.
+/// Does NOT watch agUiConfigProvider to avoid circular invalidation.
 final connectionManagerProvider = ChangeNotifierProvider<ConnectionManager>((ref) {
   final server = ref.watch(currentServerProvider);
-  final config = ref.watch(agUiConfigProvider);
   final baseUrl = server?.url ?? ApiConstants.defaultServerUrl;
-  final headers = config?.headers;
 
   DebugLog.service('ConnectionManager: Created for server ${server?.id}');
-  final manager = ConnectionManager(baseUrl: baseUrl, headers: headers);
+  final manager = ConnectionManager(baseUrl: baseUrl);
 
   ref.onDispose(() {
     DebugLog.service('ConnectionManager: Disposed for server ${server?.id}');
@@ -461,22 +459,11 @@ final agUiConfigProvider = StateProvider<AgUiServiceConfig?>((ref) {
   return null;
 });
 
-/// Combined provider that auto-configures AgUiService when config changes.
+/// Provider for configured AgUiService.
+///
+/// Simply returns the AgUiService. Configuration is managed explicitly
+/// by the UI layer via chat_screen.dart calling service.configure().
+/// This avoids lifecycle issues with auto-configuration.
 final configuredAgUiServiceProvider = Provider<AgUiService>((ref) {
-  final service = ref.watch(agUiServiceProvider);
-
-  ref.listen<AgUiServiceConfig?>(agUiConfigProvider, (previous, next) {
-    if (next != null &&
-        (previous?.roomId != next.roomId ||
-            previous?.baseUrl != next.baseUrl)) {
-      Future.microtask(() => service.configure(next));
-    }
-  });
-
-  final config = ref.read(agUiConfigProvider);
-  if (config != null && !service.isConfigured) {
-    Future.microtask(() => service.configure(config));
-  }
-
-  return service;
+  return ref.watch(agUiServiceProvider);
 });
