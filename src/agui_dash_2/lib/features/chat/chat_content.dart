@@ -12,7 +12,6 @@ import '../../core/services/canvas_service.dart';
 import '../../core/services/chat_service.dart';
 import '../../core/services/context_pane_service.dart';
 import '../../core/services/local_tools_service.dart';
-import '../../core/services/tool_execution_service.dart';
 import '../../core/utils/debug_log.dart';
 import '../../infrastructure/quick_agui/tool_call_state.dart';
 import 'builders/message_builder.dart';
@@ -21,7 +20,6 @@ import 'widgets/collapsible_thinking_widget.dart';
 import 'widgets/message_feedback_chips.dart';
 import 'widgets/streaming_markdown_widget.dart';
 import 'widgets/tool_call_summary_widget.dart';
-import 'widgets/tool_execution_indicator.dart';
 
 /// Chat content widget that can be embedded in various layouts.
 ///
@@ -80,7 +78,6 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     final localToolsService = ref.read(localToolsServiceProvider);
     final contextNotifier = ref.read(contextPaneProvider.notifier);
     final canvasNotifier = ref.read(canvasProvider.notifier);
-    final toolExecutionNotifier = ref.read(toolExecutionProvider.notifier);
 
     // Check for slash commands (handled locally, not sent to backend)
     if (text.startsWith('/')) {
@@ -155,7 +152,7 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         },
         onToolStateChange: (change) {
           if (!mounted) return;
-          _handleToolStateChange(change, toolExecutionNotifier, contextNotifier, chatNotifier);
+          _handleToolStateChange(change, contextNotifier);
         },
       );
     } catch (e) {
@@ -172,33 +169,20 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           chatNotifier.addServerError(e.toString());
         }
       }
-    } finally {
-      // Ensure tool execution state is cleared when chat completes
-      if (mounted) {
-        toolExecutionNotifier.clearAll();
-      }
     }
   }
 
-  /// Handle tool call state changes for UI notifications.
+  /// Handle tool call state changes for context pane logging.
   ///
   /// Note: Tool call messages are added/updated via onLocalToolExecution callback.
-  /// This handler only manages the ToolExecutionNotifier (for the indicator widget)
-  /// and ContextPaneNotifier (for the context pane).
+  /// This handler only updates the ContextPaneNotifier for debugging/visibility.
   void _handleToolStateChange(
     ToolCallStateChange change,
-    ToolExecutionNotifier toolExecutionNotifier,
     ContextPaneNotifier contextNotifier,
-    ChatNotifier chatNotifier,
   ) {
     if (change.isStarting) {
-      // Tool execution started
-      toolExecutionNotifier.startExecution(change.toolCallId, change.toolName);
       contextNotifier.addToolExecution(change.toolName, isStarting: true);
-      // Note: Chat message is added via onLocalToolExecution to track ID for status updates
     } else if (change.isEnding) {
-      // Tool execution ended
-      toolExecutionNotifier.endExecution(change.toolCallId);
       contextNotifier.addToolExecution(
         change.toolName,
         isStarting: false,
@@ -938,8 +922,6 @@ class _ChatContentState extends ConsumerState<ChatContent> {
                       }
                     },
                   ),
-                // Tool execution indicator at top
-                const ToolExecutionIndicator(),
                 // Chat area takes remaining space
                 Expanded(
                   child: dash.DashChat(
