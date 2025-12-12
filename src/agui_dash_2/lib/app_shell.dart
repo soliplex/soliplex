@@ -27,7 +27,8 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   void initState() {
     super.initState();
-    _initialize();
+    // Delay initialization to avoid modifying providers during build
+    Future.microtask(_initialize);
   }
 
   Future<void> _initialize() async {
@@ -42,10 +43,14 @@ class _AppShellState extends ConsumerState<AppShell> {
         await authService.initialize();
       }
 
-      ref.read(appInitializedProvider.notifier).state = true;
+      if (mounted) {
+        ref.read(appInitializedProvider.notifier).state = true;
+      }
     } catch (e) {
       debugPrint('AppShell: Initialization error: $e');
-      _initError = e.toString();
+      if (mounted) {
+        _initError = e.toString();
+      }
     } finally {
       if (mounted) {
         setState(() {
