@@ -149,10 +149,19 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
       await authService.startLogin(provider);
       debugPrint('OIDCProviderSelector: startLogin completed');
 
+      // Reset authenticating state
+      if (mounted) {
+        setState(() {
+          _isAuthenticating = false;
+        });
+      }
+
       // Check if login succeeded and trigger callback
       if (authService.isAuthenticated) {
         debugPrint('OIDCProviderSelector: Login succeeded, calling onAuthenticated');
         widget.onAuthenticated?.call();
+      } else {
+        debugPrint('OIDCProviderSelector: Login completed but not authenticated, status=${authService.state.status}');
       }
     } catch (e, stack) {
       debugPrint('OIDCProviderSelector: Login failed: $e');

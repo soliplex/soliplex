@@ -1,0 +1,224 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
+
+import '../utils/url_builder.dart';
+import 'auth_service.dart';
+
+/// Response from the MCP token endpoint.
+class McpTokenResponse {
+  final String token;
+  final String roomId;
+  final DateTime? expiresAt;
+  final String? serverUrl;
+
+  McpTokenResponse({
+    required this.token,
+    required this.roomId,
+    this.expiresAt,
+    this.serverUrl,
+  });
+
+  factory McpTokenResponse.fromJson(Map<String, dynamic> json) {
+    debugPrint('McpTokenResponse.fromJson keys: ${json.keys.toList()}');
+    debugPrint('McpTokenResponse.fromJson: $json');
+
+    DateTime? expiresAt;
+    // Try different field names for expiration
+    final expiresField = json['expires_at'] ?? json['expires'] ?? json['expiry'];
+    if (expiresField != null) {
+      if (expiresField is String) {
+        expiresAt = DateTime.tryParse(expiresField);
+      } else if (expiresField is int) {
+        // Unix timestamp
+        expiresAt = DateTime.fromMillisecondsSinceEpoch(expiresField * 1000);
+      }
+    }
+
+    // Try different field names for token
+    final rawToken = json['token'] ?? json['mcp_token'] ?? json['access_token'];
+    final tokenValue = rawToken?.toString() ?? '';
+
+    debugPrint('McpTokenResponse: parsed token length=${tokenValue.length}');
+
+    return McpTokenResponse(
+      token: tokenValue,
+      roomId: json['room_id'] as String? ?? '',
+      expiresAt: expiresAt,
+      serverUrl: json['server_url'] as String?,
+    );
+  }
+
+  /// Check if the token is expired.
+  bool get isExpired {
+    if (expiresAt == null) return false;
+    return DateTime.now().isAfter(expiresAt!);
+  }
+
+  /// Get time until expiration as a human-readable string.
+  String? get expiresIn {
+    if (expiresAt == null) return null;
+    final duration = expiresAt!.difference(DateTime.now());
+    if (duration.isNegative) return 'Expired';
+    if (duration.inDays > 0) return '${duration.inDays}d';
+    if (duration.inHours > 0) return '${duration.inHours}h';
+    if (duration.inMinutes > 0) return '${duration.inMinutes}m';
+    return '${duration.inSeconds}s';
+  }
+}
+
+/// Service for fetching MCP tokens for rooms.
+class McpTokenService {
+  final http.Client _httpClient;
+  final AuthService _authService;
+
+  McpTokenService({
+    required AuthService authService,
+    http.Client? httpClient,
+  })  : _authService = authService,
+        _httpClient = httpClient ?? http.Client();
+
+  /// Fetch an MCP token for the given room.
+  ///
+  /// Returns null if the request fails or the room doesn't support MCP.
+  Future<McpTokenResponse?> getToken({
+    required String serverUrl,
+    required String roomId,
+  }) async {
+    try {
+      final urlBuilder = UrlBuilder(serverUrl);
+      final uri = urlBuilder.mcpToken(roomId);
+
+      final headers = await _authService.getAuthHeaders();
+      headers['Accept'] = 'application/json';
+
+      debugPrint('McpTokenService: Fetching token from $uri');
+
+      final response = await _httpClient.get(uri, headers: headers);
+
+      debugPrint('McpTokenService: Response status ${response.statusCode}');
+      debugPrint('McpTokenService: Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body) as Map<String, dynamic>;
+        return McpTokenResponse.fromJson(json);
+      } else {
+        debugPrint('McpTokenService: Failed with status ${response.statusCode}');
+        debugPrint('McpTokenService: Response: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('McpTokenService: Error fetching token: $e');
+      return null;
+    }
+  }
+
+  /// Generate MCP connection config for Claude Desktop or other MCP clients.
+  ///
+  /// Returns a JSON config suitable for claude_desktop_config.json
+  String generateMcpConfig({
+    required String serverUrl,
+    required String roomId,
+    required String token,
+  }) {
+    final urlBuilder = UrlBuilder(serverUrl);
+    // MCP endpoint is typically at /mcp or /api/v1/rooms/{roomId}/mcp
+    final mcpUrl = '${urlBuilder.serverUrl}/api/v1/rooms/$roomId/mcp';
+
+    final config = {
+      'mcpServers': {
+        'soliplex-$roomId': {
+          'url': mcpUrl,
+          'transport': 'http',
+          'headers': {
+            'Authorization': 'Bearer $token',
+          },
+        },
+      },
+    };
+
+    return const JsonEncoder.withIndent('  ').convert(config);
+  }
+}
+
+/// Provider for MCP token service.
+final mcpTokenServiceProvider = Provider<McpTokenService>((ref) {
+  final authService = ref.watch(authServiceProvider);
+  return McpTokenService(authService: authService);
+});
+
+/// State for MCP token fetching.
+class McpTokenState {
+  final McpTokenResponse? token;
+  final bool isLoading;
+  final String? error;
+
+  const McpTokenState({
+    this.token,
+    this.isLoading = false,
+    this.error,
+  });
+
+  McpTokenState copyWith({
+    McpTokenResponse? token,
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+    bool clearToken = false,
+  }) {
+    return McpTokenState(
+      token: clearToken ? null : (token ?? this.token),
+      isLoading: isLoading ?? this.isLoading,
+      error: clearError ? null : (error ?? this.error),
+    );
+  }
+}
+
+/// Notifier for managing MCP token state per room.
+class McpTokenNotifier extends StateNotifier<McpTokenState> {
+  final McpTokenService _service;
+  final String _serverUrl;
+
+  McpTokenNotifier({
+    required McpTokenService service,
+    required String serverUrl,
+  })  : _service = service,
+        _serverUrl = serverUrl,
+        super(const McpTokenState());
+
+  /// Fetch token for a room.
+  Future<void> fetchToken(String roomId) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+
+    final token = await _service.getToken(
+      serverUrl: _serverUrl,
+      roomId: roomId,
+    );
+
+    if (token != null) {
+      state = state.copyWith(token: token, isLoading: false);
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to fetch MCP token',
+      );
+    }
+  }
+
+  /// Clear the current token.
+  void clearToken() {
+    state = const McpTokenState();
+  }
+
+  /// Generate config JSON for the current token.
+  String? generateConfig(String roomId) {
+    if (state.token == null) return null;
+    return _service.generateMcpConfig(
+      serverUrl: _serverUrl,
+      roomId: roomId,
+      token: state.token!.token,
+    );
+  }
+}

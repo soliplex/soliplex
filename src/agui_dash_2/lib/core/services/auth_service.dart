@@ -9,6 +9,7 @@ import '../auth/auth_providers.dart';
 import '../auth/oidc_auth_interactor.dart';
 import '../auth/secure_token_storage.dart';
 import '../auth/sso_config.dart';
+import '../utils/url_builder.dart';
 import 'secure_storage_service.dart';
 import 'server_config_service.dart'; // exports server_models.dart
 
@@ -266,13 +267,23 @@ class AuthService extends ChangeNotifier {
     String token,
   ) async {
     try {
+      final urlBuilder = UrlBuilder(serverUrl);
+      final uri = urlBuilder.userInfo();
+      debugPrint('AuthService: Fetching user info from $uri');
+      debugPrint('AuthService: Token (first 20 chars): ${token.substring(0, token.length > 20 ? 20 : token.length)}...');
+
       final response = await _httpClient.get(
-        Uri.parse('$serverUrl/user_info'),
+        uri,
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 10));
 
+      debugPrint('AuthService: User info response status: ${response.statusCode}');
       if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        debugPrint('AuthService: User info parsed: $data');
+        return data;
+      } else {
+        debugPrint('AuthService: User info failed: ${response.body}');
       }
     } catch (e) {
       debugPrint('AuthService: Failed to fetch user info: $e');

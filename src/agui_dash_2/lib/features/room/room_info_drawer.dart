@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/room_models.dart';
 import 'capability_badges.dart';
+import 'mcp_config_section.dart';
 import 'system_prompt_viewer.dart';
 import 'tools_list.dart';
 
@@ -54,7 +56,7 @@ class RoomInfoDrawer extends StatelessWidget {
   }
 }
 
-class _RoomInfoContent extends StatelessWidget {
+class _RoomInfoContent extends ConsumerWidget {
   final Room room;
   final ScrollController? scrollController;
 
@@ -64,7 +66,7 @@ class _RoomInfoContent extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -201,9 +203,9 @@ class _RoomInfoContent extends StatelessWidget {
                 const SizedBox(height: 20),
               ],
 
-              // MCP toolsets
+              // MCP Client toolsets (toolsets this room connects TO)
               if (room.mcpClientToolsets.isNotEmpty) ...[
-                _SectionHeader(title: 'MCP Toolsets'),
+                _SectionHeader(title: 'MCP Client Toolsets'),
                 const SizedBox(height: 8),
                 _InfoCard(
                   children: room.mcpClientToolsets.entries.map((entry) {
@@ -245,6 +247,10 @@ class _RoomInfoContent extends StatelessWidget {
                   ),
                 ],
               ),
+
+              // MCP Server config section (always shown)
+              const SizedBox(height: 20),
+              McpConfigSection(room: room),
             ],
           ),
         ),

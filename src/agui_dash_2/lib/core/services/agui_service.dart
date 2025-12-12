@@ -129,9 +129,12 @@ class AgUiService extends ChangeNotifier {
     _thread = null;
     _currentRunId = null;
 
-    // Create AG-UI client
+    // Create AG-UI client with auth headers
     _agUiClient = ag_ui.AgUiClient(
-      config: ag_ui.AgUiClientConfig(baseUrl: config.baseUrl),
+      config: ag_ui.AgUiClientConfig(
+        baseUrl: config.baseUrl,
+        defaultHeaders: config.headers ?? {},
+      ),
     );
 
     notifyListeners();
