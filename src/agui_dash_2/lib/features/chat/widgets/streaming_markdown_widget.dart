@@ -1,0 +1,232 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_streaming_text_markdown/flutter_streaming_text_markdown.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../core/services/markdown_hooks.dart';
+import 'tracked_markdown_image.dart';
+import 'markdown_code_block.dart';
+
+/// Widget that renders markdown with streaming animation support.
+///
+/// This widget provides two rendering modes:
+/// - **Streaming mode** (`isStreaming=true`): Uses [StreamingTextMarkdown.claude()]
+///   for smooth character-by-character animation as text arrives.
+/// - **Static mode** (`isStreaming=false`): Uses [MarkdownBody] with full
+///   callbacks for links, images, and code blocks.
+///
+/// Example usage:
+/// ```dart
+/// StreamingMarkdownWidget(
+///   text: message.text,
+///   messageId: message.id,
+///   isStreaming: message.isStreaming,
+///   onQuote: (quotedText) {
+///     // Insert quoted text into input field
+///   },
+/// )
+/// ```
+class StreamingMarkdownWidget extends ConsumerStatefulWidget {
+  /// The markdown text to render
+  final String text;
+
+  /// Unique identifier for the message (used for tracking)
+  final String messageId;
+
+  /// Whether the message is currently streaming
+  final bool isStreaming;
+
+  /// Optional text style for the content
+  final TextStyle? textStyle;
+
+  /// Callback when text is quoted (via context menu)
+  final void Function(String quotedText)? onQuote;
+
+  const StreamingMarkdownWidget({
+    super.key,
+    required this.text,
+    required this.messageId,
+    required this.isStreaming,
+    this.textStyle,
+    this.onQuote,
+  });
+
+  @override
+  ConsumerState<StreamingMarkdownWidget> createState() =>
+      _StreamingMarkdownWidgetState();
+}
+
+class _StreamingMarkdownWidgetState
+    extends ConsumerState<StreamingMarkdownWidget> {
+  @override
+  Widget build(BuildContext context) {
+    final hooks = ref.watch(markdownHooksProvider);
+    final colorScheme = Theme.of(context).colorScheme;
+
+    if (widget.isStreaming) {
+      // Streaming mode - use animated markdown
+      return StreamingTextMarkdown.claude(
+        text: widget.text,
+        onComplete: () {
+          hooks.onStreamingComplete?.call();
+        },
+        theme: StreamingTextTheme(
+          textStyle: widget.textStyle ??
+              TextStyle(
+                color: colorScheme.onSurface,
+                fontSize: 14,
+              ),
+        ),
+      );
+    } else {
+      // Finalized mode - use static markdown with full callbacks
+      return _buildStaticMarkdown(context, hooks);
+    }
+  }
+
+  Widget _buildStaticMarkdown(BuildContext context, MarkdownHooks hooks) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return MarkdownBody(
+      data: widget.text,
+      selectable: true,
+      styleSheet: MarkdownStyleSheet(
+        p: widget.textStyle ??
+            TextStyle(
+              color: colorScheme.onSurface,
+              fontSize: 14,
+            ),
+        code: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 13,
+          color: colorScheme.onSurface,
+          backgroundColor: colorScheme.surfaceContainerHighest,
+        ),
+        codeblockDecoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        a: TextStyle(
+          color: colorScheme.primary,
+          decoration: TextDecoration.underline,
+        ),
+        h1: TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          color: colorScheme.onSurface,
+        ),
+        h2: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: colorScheme.onSurface,
+        ),
+        h3: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: colorScheme.onSurface,
+        ),
+        blockquoteDecoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest,
+          border: Border(
+            left: BorderSide(
+              color: colorScheme.primary,
+              width: 4,
+            ),
+          ),
+        ),
+        blockquotePadding: const EdgeInsets.all(12),
+        listBullet: TextStyle(color: colorScheme.onSurface),
+      ),
+      onTapLink: (text, href, title) {
+        // Fire the hook callback
+        hooks.onLinkTap?.call(href, text, widget.messageId);
+
+        // Default behavior: open in browser
+        if (href != null) {
+          launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication);
+        }
+      },
+      sizedImageBuilder: (config) {
+        return TrackedMarkdownImage(
+          imageUrl: config.uri.toString(),
+          messageId: widget.messageId,
+          width: config.width,
+          height: config.height,
+        );
+      },
+      builders: {
+        'pre': MarkdownCodeBlockBuilder(
+          onCopy: (code, language) {
+            hooks.onCodeCopy?.call(code, language, widget.messageId);
+          },
+          onQuote: widget.onQuote != null
+              ? (quotedText) {
+                  hooks.onQuote?.call(quotedText, widget.messageId);
+                  widget.onQuote?.call(quotedText);
+                }
+              : null,
+          messageId: widget.messageId,
+        ),
+      },
+    );
+  }
+}
+
+/// Selectable text widget with quote support via context menu.
+///
+/// This is used for non-markdown text or when you need custom
+/// selection behavior.
+class SelectableTextWithQuote extends StatelessWidget {
+  final String text;
+  final TextStyle? style;
+  final void Function(String quotedText)? onQuote;
+
+  const SelectableTextWithQuote({
+    super.key,
+    required this.text,
+    this.style,
+    this.onQuote,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SelectableText(
+      text,
+      style: style,
+      contextMenuBuilder: onQuote != null
+          ? (context, editableTextState) {
+              final selection = editableTextState.textEditingValue.selection;
+              final selectedText = selection.textInside(text);
+
+              return AdaptiveTextSelectionToolbar(
+                anchors: editableTextState.contextMenuAnchors,
+                children: [
+                  TextSelectionToolbarTextButton(
+                    padding: const EdgeInsets.all(8),
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: selectedText));
+                      editableTextState.hideToolbar();
+                    },
+                    child: const Text('Copy'),
+                  ),
+                  if (selectedText.isNotEmpty)
+                    TextSelectionToolbarTextButton(
+                      padding: const EdgeInsets.all(8),
+                      onPressed: () {
+                        final quoted = selectedText
+                            .split('\n')
+                            .map((line) => '> $line')
+                            .join('\n');
+                        onQuote!(quoted);
+                        editableTextState.hideToolbar();
+                      },
+                      child: const Text('Quote'),
+                    ),
+                ],
+              );
+            }
+          : null,
+    );
+  }
+}

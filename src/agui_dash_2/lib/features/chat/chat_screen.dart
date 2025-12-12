@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/chat_models.dart';
 import '../../core/models/layout_mode.dart';
 import '../../core/services/agui_service.dart';
 import '../../core/services/chat_service.dart';
 import '../../core/services/feedback_service.dart';
+import '../../core/services/markdown_hooks.dart';
 import '../../core/services/rooms_service.dart';
 import '../layouts/standard_layout.dart';
 import '../notes/notes_dialog.dart';
@@ -33,8 +35,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.initState();
     // Fetch rooms and configure AG-UI service on startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeMarkdownHooks();
       _fetchRoomsAndConfigure();
     });
+  }
+
+  /// Initialize markdown hooks with default behaviors
+  void _initializeMarkdownHooks() {
+    final hooks = ref.read(markdownHooksProvider);
+
+    // Default link handling: open in external browser
+    hooks.onLinkTap ??= (href, text, messageId) {
+      if (href != null) {
+        launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication);
+      }
+    };
+
+    // Optional: Log image load states for debugging
+    hooks.onImageLoad ??= (imageUrl, messageId, state) {
+      debugPrint('Image load [$messageId]: $imageUrl -> ${state.name}');
+    };
+
+    // Optional: Log when all images in a message are loaded
+    hooks.onAllImagesLoaded ??= (messageId) {
+      debugPrint('All images loaded for message: $messageId');
+    };
+
+    // Optional: Log code copy events
+    hooks.onCodeCopy ??= (code, language, messageId) {
+      debugPrint('Code copied [$messageId]: ${language ?? 'unknown'} (${code.length} chars)');
+    };
   }
 
   Future<void> _fetchRoomsAndConfigure() async {

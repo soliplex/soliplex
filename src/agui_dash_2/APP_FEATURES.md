@@ -145,6 +145,106 @@ Files modified:
 
 ---
 
+### 5. Streaming Markdown with Hooks
+
+**Status**: Completed
+
+**Description**: Integrated `flutter_streaming_text_markdown` for streaming AI responses with Claude-style animation. Added extensible hook system for link taps, image completion tracking, code copy events, and text quoting.
+
+**Implementation Details**:
+
+Files created:
+- `lib/core/services/markdown_hooks.dart` - Callback registry with typed callbacks (LinkTap, ImageLoad, CodeCopy, Quote, AllImagesLoaded)
+- `lib/core/services/image_load_tracker.dart` - Per-message image loading state tracker with Riverpod provider
+- `lib/features/chat/widgets/streaming_markdown_widget.dart` - Main wrapper: streaming animation during response, full markdown with callbacks when finalized
+- `lib/features/chat/widgets/tracked_markdown_image.dart` - CachedNetworkImage wrapper with load state tracking
+- `lib/features/chat/widgets/markdown_code_block.dart` - Custom code block builder with copy button and quote support
+- `IMPLEMENTATION_STREAMING_MARKDOWN.md` - Full implementation documentation
+
+Files modified:
+- `pubspec.yaml` - Added `flutter_streaming_text_markdown`, `flutter_markdown`, `markdown`, `url_launcher`
+- `lib/features/chat/chat_content.dart` - Replaced `MessageTextWithCodeBlocks` with `StreamingMarkdownWidget`
+- `lib/features/chat/chat_screen.dart` - Initialize hooks with default behaviors
+
+**Features**:
+- **Streaming animation** - Claude-style character-by-character reveal during response streaming
+- **Full markdown support** - Headers, lists, blockquotes, links, images, code blocks
+- **Link handling** - Opens in external browser (customizable via hooks)
+- **Image tracking** - Per-image load/error callbacks + all-images-loaded event per message
+- **Code blocks** - Styled with language label, copy button with "Copied!" feedback
+- **Quote support** - Context menu on selected text to insert as `> quoted text`
+- **Extensible hooks** - Register custom callbacks for link taps, image loads, code copy, etc.
+
+**Hook API**:
+```dart
+final hooks = ref.read(markdownHooksProvider);
+
+// Custom link handling
+hooks.onLinkTap = (href, text, messageId) {
+  if (href?.startsWith('internal://') == true) {
+    // Handle internally
+  } else {
+    launchUrl(Uri.parse(href!));
+  }
+};
+
+// Track all images loaded (useful for auto-scroll)
+hooks.onAllImagesLoaded = (messageId) {
+  scrollController.animateTo(scrollController.position.maxScrollExtent, ...);
+};
+
+// Image load analytics
+hooks.onImageLoad = (imageUrl, messageId, state) {
+  analytics.track('image_load', {'url': imageUrl, 'state': state.name});
+};
+```
+
+**Rendering Modes**:
+- `isStreaming=true` → Uses `StreamingTextMarkdown.claude()` for animation
+- `isStreaming=false` → Uses `MarkdownBody` with full callbacks (links, images, code blocks)
+
+---
+
+### 6. Friendly Tiered Error Display
+
+**Status**: Completed
+
+**Description**: Replaced harsh red error boxes with friendly, muted error cards. Errors are classified by type (network, server, tool) with appropriate messaging and expandable technical details.
+
+**Implementation Details**:
+
+Files created:
+- `lib/core/models/error_types.dart` - ChatErrorType enum and ChatErrorInfo class with factory constructors
+- `lib/features/chat/widgets/friendly_error_card.dart` - Expandable error card widget with tiered styling
+
+Files modified:
+- `lib/core/models/chat_models.dart` - Added `errorInfo` field to ChatMessage
+- `lib/core/services/chat_service.dart` - Added typed error methods: `addNetworkError()`, `addServerError()`, `addToolError()`
+- `lib/features/chat/builders/message_builder.dart` - Replaced `_buildErrorMessage()` with FriendlyErrorCard
+- `lib/features/chat/chat_content.dart` - Updated error handling to use typed error methods
+
+**Error Types**:
+| Type | Icon | Friendly Message | Has Retry |
+|------|------|------------------|-----------|
+| Network | 🔌 | "Connection hiccup" | Yes |
+| Server | 😅 | "Server had trouble with that" | No |
+| Tool | 🔧 | "{tool_name} couldn't complete" | No |
+
+**Features**:
+- **Muted styling** - Uses `surfaceContainerHighest` background instead of red
+- **Expandable details** - Click to show error code and technical details
+- **Auto-classification** - Legacy errors auto-classified based on content
+- **Retry button** - Network errors offer retry action
+- **Tool context** - Tool errors show which tool failed and brief error snippet
+
+**UI Behavior**:
+- Collapsed by default showing friendly message + icon
+- Expand arrow shown if technical details available
+- Error code displayed in monospace when expanded
+- Technical details in smaller, muted monospace text
+
+---
+
 ## Notes
 
 - Features should be implemented incrementally

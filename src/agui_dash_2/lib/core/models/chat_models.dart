@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:uuid/uuid.dart';
+import 'error_types.dart';
 
 const _uuid = Uuid();
 
@@ -51,6 +52,7 @@ class ChatMessage extends Equatable {
   final String? text;
   final GenUiContent? genUiContent;
   final String? errorMessage;
+  final ChatErrorInfo? errorInfo;
   final bool isStreaming;
   final String? toolCallName;
   final String? toolCallStatus;
@@ -63,6 +65,7 @@ class ChatMessage extends Equatable {
     this.text,
     this.genUiContent,
     this.errorMessage,
+    this.errorInfo,
     this.isStreaming = false,
     this.toolCallName,
     this.toolCallStatus,
@@ -121,14 +124,16 @@ class ChatMessage extends Equatable {
   factory ChatMessage.error({
     String? id,
     required ChatUser user,
-    required String errorMessage,
+    String? errorMessage,
+    ChatErrorInfo? errorInfo,
     DateTime? createdAt,
   }) {
     return ChatMessage(
       id: id,
       user: user,
       type: MessageType.error,
-      errorMessage: errorMessage,
+      errorMessage: errorMessage ?? errorInfo?.technicalDetails,
+      errorInfo: errorInfo,
       createdAt: createdAt,
     );
   }
@@ -160,6 +165,7 @@ class ChatMessage extends Equatable {
     String? text,
     GenUiContent? genUiContent,
     String? errorMessage,
+    ChatErrorInfo? errorInfo,
     bool? isStreaming,
     String? toolCallName,
     String? toolCallStatus,
@@ -172,6 +178,7 @@ class ChatMessage extends Equatable {
       text: text ?? this.text,
       genUiContent: genUiContent ?? this.genUiContent,
       errorMessage: errorMessage ?? this.errorMessage,
+      errorInfo: errorInfo ?? this.errorInfo,
       isStreaming: isStreaming ?? this.isStreaming,
       toolCallName: toolCallName ?? this.toolCallName,
       toolCallStatus: toolCallStatus ?? this.toolCallStatus,
@@ -187,6 +194,7 @@ class ChatMessage extends Equatable {
     text,
     genUiContent,
     errorMessage,
+    errorInfo,
     isStreaming,
     toolCallName,
     toolCallStatus,

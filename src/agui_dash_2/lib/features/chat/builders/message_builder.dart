@@ -2,6 +2,7 @@ import 'package:dash_chat_2/dash_chat_2.dart' as dash;
 import 'package:flutter/material.dart';
 
 import '../../../core/models/chat_models.dart';
+import '../widgets/friendly_error_card.dart';
 import '../widgets/genui_message_widget.dart';
 
 /// Custom message builder for Dash Chat 2.
@@ -27,18 +28,10 @@ class MessageBuilder {
   }) {
     // Extract our custom message from customProperties
     final customProps = dashMessage.customProperties;
-    if (customProps == null) {
-      debugPrint('MessageBuilder: No customProperties');
-      return null;
-    }
+    if (customProps == null) return null;
 
     final chatMessage = customProps['chatMessage'] as ChatMessage?;
-    if (chatMessage == null) {
-      debugPrint('MessageBuilder: No chatMessage in customProperties');
-      return null;
-    }
-
-    debugPrint('MessageBuilder: Building widget for type: ${chatMessage.type}');
+    if (chatMessage == null) return null;
 
     return switch (chatMessage.type) {
       MessageType.text => null, // Use default text bubble
@@ -100,29 +93,17 @@ class MessageBuilder {
   }
 
   Widget _buildErrorMessage(ChatMessage message) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.red.shade50,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.red.shade200),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
-            const SizedBox(width: 12),
-            Flexible(
-              child: Text(
-                message.errorMessage ?? 'An error occurred',
-                style: TextStyle(color: Colors.red.shade700),
-              ),
-            ),
-          ],
-        ),
-      ),
+    // Use friendly error card if we have typed error info
+    if (message.errorInfo != null) {
+      return FriendlyErrorCard(
+        errorInfo: message.errorInfo!,
+        fallbackMessage: message.errorMessage,
+      );
+    }
+
+    // Fallback: create error info from legacy error message
+    return FriendlyErrorCard.fromMessage(
+      message.errorMessage ?? 'An error occurred',
     );
   }
 
@@ -210,30 +191,19 @@ class MessageBuilder {
 
 /// Convert our ChatMessage to Dash Chat's ChatMessage format.
 dash.ChatMessage toDashChatMessage(ChatMessage message) {
-  debugPrint(
-    'toDashChatMessage: id=${message.id}, type=${message.type}, hasGenUiContent=${message.genUiContent != null}',
-  );
-
   // For non-text messages, use placeholder text so messageTextBuilder gets called
   String displayText;
   switch (message.type) {
     case MessageType.text:
       displayText = message.text ?? '';
-      debugPrint('toDashChatMessage: TEXT message');
     case MessageType.genUi:
       displayText = '[Widget]'; // Placeholder - will be replaced by builder
-      debugPrint(
-        'toDashChatMessage: GENUI widget=${message.genUiContent?.widgetName}',
-      );
     case MessageType.loading:
       displayText = '[Loading...]';
-      debugPrint('toDashChatMessage: LOADING message');
     case MessageType.error:
       displayText = message.errorMessage ?? '[Error]';
-      debugPrint('toDashChatMessage: ERROR message=${message.errorMessage}');
     case MessageType.toolCall:
       displayText = '[Tool: ${message.toolCallName}]';
-      debugPrint('toDashChatMessage: TOOLCALL name=${message.toolCallName}');
   }
 
   return dash.ChatMessage(

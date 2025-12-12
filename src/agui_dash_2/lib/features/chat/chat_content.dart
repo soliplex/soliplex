@@ -19,6 +19,7 @@ import 'builders/message_builder.dart';
 import 'widgets/chat_search_bar.dart';
 import 'widgets/code_block_widget.dart';
 import 'widgets/message_feedback_chips.dart';
+import 'widgets/streaming_markdown_widget.dart';
 import 'widgets/tool_execution_indicator.dart';
 
 /// Chat content widget that can be embedded in various layouts.
@@ -87,7 +88,10 @@ class _ChatContentState extends ConsumerState<ChatContent> {
 
     // Check if AG-UI is configured
     if (!agUiService.isConfigured) {
-      chatNotifier.addErrorMessage('AG-UI server not configured');
+      chatNotifier.addServerError(
+        'AG-UI server not configured',
+        errorCode: 'NOT_CONFIGURED',
+      );
       return;
     }
 
@@ -151,7 +155,16 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     } catch (e) {
       DebugLog.error('Error sending message: $e');
       if (mounted) {
-        chatNotifier.addErrorMessage('Error: $e');
+        final errorStr = e.toString().toLowerCase();
+        // Classify error based on exception content
+        if (errorStr.contains('socket') ||
+            errorStr.contains('connection') ||
+            errorStr.contains('timeout') ||
+            errorStr.contains('network')) {
+          chatNotifier.addNetworkError(e.toString());
+        } else {
+          chatNotifier.addServerError(e.toString());
+        }
       }
     } finally {
       // Ensure tool execution state is cleared when chat completes
@@ -309,7 +322,10 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         activityNotifier.stopActivity();
 
       case ag_ui.RunErrorEvent():
-        chatNotifier.addErrorMessage(event.message);
+        chatNotifier.addServerError(
+          event.message,
+          errorCode: event.code,
+        );
         contextNotifier.addAgUiEvent('Error', summary: event.message);
         DebugLog.error('RunError: ${event.code}: ${event.message}');
         activityNotifier.stopActivity();
@@ -953,8 +969,10 @@ class _ChatContentState extends ConsumerState<ChatContent> {
                 ? Theme.of(context).colorScheme.onPrimaryContainer
                 : Theme.of(context).colorScheme.onSurface,
           );
-          final textWidget = MessageTextWithCodeBlocks(
+          final textWidget = StreamingMarkdownWidget(
             text: message.text,
+            messageId: chatMessage?.id ?? message.createdAt.toString(),
+            isStreaming: chatMessage?.isStreaming ?? false,
             textStyle: textStyle,
             onQuote: (quotedText) {
               // Insert quoted text into input field

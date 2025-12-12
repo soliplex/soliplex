@@ -1,7 +1,7 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/chat_models.dart';
+import '../models/error_types.dart';
 
 /// Chat state containing messages and metadata.
 class ChatState {
@@ -157,29 +157,48 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
   /// Add a complete GenUI message (not from placeholder).
   void addGenUiMessage(GenUiContent content) {
-    debugPrint(
-      'ChatNotifier: Adding GenUI message - widget: ${content.widgetName}',
-    );
     final message = ChatMessage.genUi(user: ChatUser.agent, content: content);
-    debugPrint(
-      'ChatNotifier: Created message type: ${message.type}, genUiContent: ${message.genUiContent != null}',
-    );
     state = state.copyWith(messages: [...state.messages, message]);
-    debugPrint('ChatNotifier: Total messages now: ${state.messages.length}');
-    // Verify the message in state
-    final lastMsg = state.messages.last;
-    debugPrint('ChatNotifier: Last message type in state: ${lastMsg.type}');
   }
 
-  /// Add an error message.
-  void addErrorMessage(String errorMessage) {
+  /// Add an error message with optional typed error info.
+  void addErrorMessage(String errorMessage, {ChatErrorInfo? errorInfo}) {
     final message = ChatMessage.error(
       user: ChatUser.agent,
       errorMessage: errorMessage,
+      errorInfo: errorInfo,
     );
     state = state.copyWith(
       messages: [...state.messages, message],
       isAgentTyping: false,
+    );
+  }
+
+  /// Add a network error (connection issues, timeouts).
+  void addNetworkError(String details) {
+    addErrorMessage(
+      details,
+      errorInfo: ChatErrorInfo.network(details: details),
+    );
+  }
+
+  /// Add a server error (500s, rate limits, etc.).
+  void addServerError(String message, {String? errorCode, String? details}) {
+    addErrorMessage(
+      message,
+      errorInfo: ChatErrorInfo.server(
+        message: message,
+        errorCode: errorCode,
+        details: details,
+      ),
+    );
+  }
+
+  /// Add a tool execution error.
+  void addToolError(String toolName, String error) {
+    addErrorMessage(
+      error,
+      errorInfo: ChatErrorInfo.tool(toolName: toolName, error: error),
     );
   }
 
@@ -197,19 +216,12 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
   /// Update the status of a tool call message.
   void updateToolCallStatus(String messageId, String status) {
-    debugPrint('updateToolCallStatus: messageId=$messageId, status=$status');
-    bool found = false;
     final messages = state.messages.map((m) {
       if (m.id == messageId && m.type == MessageType.toolCall) {
-        found = true;
-        debugPrint('updateToolCallStatus: Found message, updating from ${m.toolCallStatus} to $status');
         return m.copyWith(toolCallStatus: status);
       }
       return m;
     }).toList();
-    if (!found) {
-      debugPrint('updateToolCallStatus: WARNING - message not found with id=$messageId');
-    }
     state = state.copyWith(messages: messages);
   }
 
