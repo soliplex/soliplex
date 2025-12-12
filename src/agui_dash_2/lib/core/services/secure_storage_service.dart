@@ -60,6 +60,8 @@ class NativeSecureStorageService implements SecureStorageService {
             accessibility: KeychainAccessibility.first_unlock_this_device,
           ),
           mOptions: MacOsOptions(
+            // Use unique account name to avoid keychain conflicts
+            accountName: 'soliplex_server_config',
             accessibility: KeychainAccessibility.first_unlock_this_device,
           ),
         );

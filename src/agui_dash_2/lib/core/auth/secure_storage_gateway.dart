@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'secure_storage_capabilities.dart';
@@ -13,22 +14,50 @@ class SecureStorageGateway
 
   @override
   Future<String?> read(String key) async {
-    return await _storage.read(key: key);
+    try {
+      return await _storage.read(key: key);
+    } catch (e) {
+      debugPrint('SecureStorageGateway: Error reading $key: $e');
+      return null;
+    }
   }
 
   @override
   Future<void> write(String key, String? value) async {
     // Delete first to avoid macOS Keychain duplicate item error (-25299)
     try {
+      debugPrint('SecureStorageGateway: Deleting $key before write');
       await _storage.delete(key: key);
-    } catch (_) {
-      // Ignore delete errors - key may not exist
+    } catch (e) {
+      debugPrint('SecureStorageGateway: Delete of $key failed (ok if not exists): $e');
     }
-    await _storage.write(key: key, value: value);
+
+    try {
+      debugPrint('SecureStorageGateway: Writing $key');
+      await _storage.write(key: key, value: value);
+      debugPrint('SecureStorageGateway: Write $key succeeded');
+    } catch (e) {
+      debugPrint('SecureStorageGateway: Write $key failed: $e');
+      rethrow;
+    }
   }
 
   @override
   Future<void> delete(String key) async {
-    await _storage.delete(key: key);
+    try {
+      await _storage.delete(key: key);
+    } catch (e) {
+      debugPrint('SecureStorageGateway: Delete $key failed: $e');
+    }
+  }
+
+  /// Clear all stored items
+  Future<void> deleteAll() async {
+    try {
+      await _storage.deleteAll();
+      debugPrint('SecureStorageGateway: Deleted all items');
+    } catch (e) {
+      debugPrint('SecureStorageGateway: DeleteAll failed: $e');
+    }
   }
 }

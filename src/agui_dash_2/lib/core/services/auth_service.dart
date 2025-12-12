@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 
 import '../auth/auth_providers.dart';
 import '../auth/oidc_auth_interactor.dart';
+import '../auth/secure_token_storage.dart';
 import '../auth/sso_config.dart';
 import 'secure_storage_service.dart';
 import 'server_config_service.dart'; // exports server_models.dart
@@ -23,6 +24,7 @@ class AuthService extends ChangeNotifier {
   final SecureStorageService _storage;
   final ServerConfigService _serverConfig;
   final OidcAuthInteractor _oidcInteractor;
+  final SecureTokenStorage _tokenStorage;
   final http.Client _httpClient;
 
   AuthState _state = const AuthState.initial();
@@ -32,10 +34,12 @@ class AuthService extends ChangeNotifier {
     required SecureStorageService storage,
     required ServerConfigService serverConfig,
     required OidcAuthInteractor oidcInteractor,
+    required SecureTokenStorage tokenStorage,
     http.Client? httpClient,
   })  : _storage = storage,
         _serverConfig = serverConfig,
         _oidcInteractor = oidcInteractor,
+        _tokenStorage = tokenStorage,
         _httpClient = httpClient ?? http.Client();
 
   // Getters
@@ -119,6 +123,10 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Clear any existing OIDC tokens to avoid keychain duplicate errors
+      debugPrint('AuthService: Clearing existing OIDC tokens before login');
+      await _tokenStorage.deleteOidcAuthTokenResponse();
+
       // Build SsoConfig from OIDCAuthSystem
       // serverUrl is the OIDC issuer URL (e.g., https://keycloak.example.com/realms/myrealm)
       final issuerUrl = provider.serverUrl;
@@ -358,10 +366,12 @@ final authServiceProvider = ChangeNotifierProvider<AuthService>((ref) {
   final storage = ref.watch(secureStorageProvider);
   final serverConfig = ref.watch(serverConfigProvider);
   final oidcInteractor = ref.watch(oidcAuthInteractorProvider);
+  final tokenStorage = ref.watch(secureTokenStorageProvider);
   return AuthService(
     storage: storage,
     serverConfig: serverConfig,
     oidcInteractor: oidcInteractor,
+    tokenStorage: tokenStorage,
   );
 });
 

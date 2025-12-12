@@ -21,6 +21,8 @@ final flutterSecureStorageProvider = Provider<FlutterSecureStorage>((ref) {
       accessibility: KeychainAccessibility.first_unlock_this_device,
     ),
     mOptions: MacOsOptions(
+      // Use unique account name to avoid keychain conflicts
+      accountName: 'soliplex_oidc_tokens',
       accessibility: KeychainAccessibility.first_unlock_this_device,
     ),
   );
