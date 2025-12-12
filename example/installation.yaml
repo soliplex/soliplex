@@ -194,7 +194,7 @@ haiku_rag_config_file: "./haiku.rag.yaml"
 agent_configs:
 
   - id: "default_chat"
-    model_name: "qwen3:latest"
+    model_name: "gpt-oss:20b" #"qwen3:4b"
     system_prompt: |
       You are an expert AI assistant specializing in information retrieval.
 
