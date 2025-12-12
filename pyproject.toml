@@ -19,6 +19,7 @@ dependencies = [
     "authlib",
     "fastapi",
     "fastmcp >= 2.13.0.2, < 2.14",
+    "greenlet",
     "haiku.rag-slim >= 0.20.0",
     "itsdangerous",
     "jsonpatch",

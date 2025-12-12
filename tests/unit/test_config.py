@@ -1695,7 +1695,7 @@ def test__rtb_ctor(
             assert found.resolve() == expected.resolve()
 
             expected_ep = {
-                "rag_lancedb_path": expected,
+                "rag_lancedb_path": expected.resolve(),
             }
 
             assert rtb_config.get_extra_parameters() == expected_ep
@@ -1726,7 +1726,7 @@ def test_sdtc_ctor(installation_config, temp_dir):
     assert found.resolve() == from_stem.resolve()
 
     expected_ep = {
-        "rag_lancedb_path": from_stem,
+        "rag_lancedb_path": from_stem.resolve(),
         "search_documents_limit": 5,
     }
 
@@ -1826,7 +1826,7 @@ def test_sdtc_get_extra_parameters_w_missing_file(
 
     ep = sdt_config.get_extra_parameters()
 
-    assert ep["rag_lancedb_path"] == f"MISSING: {exp_filename}"
+    assert ep["rag_lancedb_path"] == f"MISSING: {exp_filename.resolve()}"
 
 
 @pytest.mark.parametrize(
@@ -1986,7 +1986,7 @@ def test_rrtc_ctor(installation_config, temp_dir):
     assert found.resolve() == from_stem.resolve()
 
     expected_ep = {
-        "rag_lancedb_path": from_stem,
+        "rag_lancedb_path": from_stem.resolve(),
     }
 
     assert rrt_config.get_extra_parameters() == expected_ep
@@ -3567,7 +3567,7 @@ def test_strip_secret_prefix(config_str, expectation, expected):
 def test_resolve_file_prefix(temp_dir, config_str, expected):
     config_path = temp_dir / "config.yaml"
 
-    expected = expected.format(temp_dir=temp_dir)
+    expected = expected.format(temp_dir=temp_dir.resolve())
 
     found = config.resolve_file_prefix(config_str, config_path)
 
