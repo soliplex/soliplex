@@ -17,9 +17,10 @@ import '../../core/utils/debug_log.dart';
 import '../../infrastructure/quick_agui/tool_call_state.dart';
 import 'builders/message_builder.dart';
 import 'widgets/chat_search_bar.dart';
-import 'widgets/code_block_widget.dart';
+import 'widgets/collapsible_thinking_widget.dart';
 import 'widgets/message_feedback_chips.dart';
 import 'widgets/streaming_markdown_widget.dart';
+import 'widgets/tool_call_summary_widget.dart';
 import 'widgets/tool_execution_indicator.dart';
 
 /// Chat content widget that can be embedded in various layouts.
@@ -40,7 +41,12 @@ class _ChatContentState extends ConsumerState<ChatContent> {
   @override
   void initState() {
     super.initState();
-    _messageBuilder = MessageBuilder(onGenUiEvent: _handleGenUiEvent);
+    _messageBuilder = MessageBuilder(
+      onGenUiEvent: _handleGenUiEvent,
+      onToggleToolGroup: (messageId) {
+        ref.read(chatProvider.notifier).toggleToolGroupExpanded(messageId);
+      },
+    );
   }
 
   @override
@@ -219,6 +225,9 @@ class _ChatContentState extends ConsumerState<ChatContent> {
   // Track active search widgets and their callbacks
   final Map<String, void Function(String, Map<String, dynamic>)> _searchCallbacks = {};
 
+  // Track thinking message IDs (aguiThinkingId -> chatMessageId)
+  final Map<String, String> _thinkingMessageIds = {};
+
   /// Process a single AG-UI event.
   void _processEvent(
     ag_ui.BaseEvent event,
@@ -304,15 +313,41 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         activityNotifier.handleEvent('Thinking');
 
       case ag_ui.ThinkingTextMessageStartEvent():
-        break;
+        // Find the current or pending assistant message to attach thinking to
+        // Look for the most recent agent message that's streaming or just started
+        final chatMessages = ref.read(chatProvider).messages;
+        ChatMessage? targetMessage;
+        for (final m in chatMessages.reversed) {
+          if (m.user.id == ChatUser.agent.id &&
+              (m.isStreaming || m.type == MessageType.text)) {
+            targetMessage = m;
+            break;
+          }
+        }
+        if (targetMessage != null) {
+          chatNotifier.startThinking(targetMessage.id);
+          // Track using a constant key since thinking events don't have messageId
+          _thinkingMessageIds['current'] = targetMessage.id;
+          DebugLog.agui('ThinkingTextMessageStart: attached to chatId=${targetMessage.id}');
+        }
 
       case ag_ui.ThinkingTextMessageContentEvent():
-        break;
+        final chatMessageId = _thinkingMessageIds['current'];
+        if (chatMessageId != null) {
+          chatNotifier.appendThinking(chatMessageId, event.delta);
+        }
 
       case ag_ui.ThinkingTextMessageEndEvent():
-        break;
+        final chatMessageId = _thinkingMessageIds['current'];
+        if (chatMessageId != null) {
+          chatNotifier.finalizeThinking(chatMessageId);
+          _thinkingMessageIds.remove('current');
+          DebugLog.agui('ThinkingTextMessageEnd: finalized chatId=$chatMessageId');
+        }
 
       case ag_ui.ThinkingEndEvent():
+        // Cleanup any orphaned thinking
+        _thinkingMessageIds.remove('current');
         break;
 
       case ag_ui.RunFinishedEvent():
@@ -987,17 +1022,62 @@ class _ChatContentState extends ConsumerState<ChatContent> {
             },
           );
 
+          // Build thinking section if present
+          Widget? thinkingSection;
+          if (isAgentMessage &&
+              chatMessage != null &&
+              chatMessage.thinkingText != null &&
+              chatMessage.thinkingText!.isNotEmpty) {
+            thinkingSection = CollapsibleThinkingWidget(
+              thinkingText: chatMessage.thinkingText!,
+              isStreaming: chatMessage.isThinkingStreaming,
+              isExpanded: chatMessage.isThinkingExpanded || chatMessage.isThinkingStreaming,
+              onToggle: () {
+                ref.read(chatProvider.notifier).toggleThinkingExpanded(chatMessage.id);
+              },
+            );
+          }
+
+          // Build tool calls section if present (attached to message)
+          Widget? toolCallsSection;
+          if (isAgentMessage &&
+              chatMessage != null &&
+              chatMessage.toolCalls != null &&
+              chatMessage.toolCalls!.isNotEmpty) {
+            toolCallsSection = ToolCallSummaryWidget(
+              toolCalls: chatMessage.toolCalls!,
+              isExpanded: chatMessage.isToolGroupExpanded,
+              onToggle: () {
+                ref.read(chatProvider.notifier).toggleToolGroupExpanded(chatMessage.id);
+              },
+            );
+          }
+
           // Add feedback chips and copy button for finalized agent text messages
           if (isAgentMessage && chatMessage != null && !chatMessage.isStreaming) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (thinkingSection != null) thinkingSection,
                 textWidget,
+                if (toolCallsSection != null) toolCallsSection,
                 _MessageActionsRow(
                   messageId: chatMessage.id,
                   messageText: message.text,
                 ),
+              ],
+            );
+          }
+
+          // Streaming agent message with thinking
+          if (isAgentMessage && chatMessage != null && thinkingSection != null) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                thinkingSection,
+                textWidget,
               ],
             );
           }

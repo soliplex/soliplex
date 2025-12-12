@@ -245,6 +245,68 @@ Files modified:
 
 ---
 
+### 7. Collapsible Thinking Display
+
+**Status**: Completed
+
+**Description**: Shows AI reasoning/thinking as a collapsible section within assistant messages. Auto-expands while streaming, auto-collapses when complete. Users can manually expand to review reasoning.
+
+**Implementation Details**:
+
+Files created:
+- `lib/features/chat/widgets/collapsible_thinking_widget.dart` - Expandable thinking section with streaming support
+
+Files modified:
+- `lib/core/models/chat_models.dart` - Added `thinkingText`, `isThinkingStreaming`, `isThinkingExpanded` fields
+- `lib/core/services/chat_service.dart` - Added `startThinking()`, `appendThinking()`, `finalizeThinking()`, `toggleThinkingExpanded()` methods
+- `lib/features/chat/chat_content.dart` - Wired up thinking events, integrated widget into message builder
+
+**Features**:
+- Muted background styling with brain icon
+- Pulsing icon animation while streaming
+- Header shows "Thinking..." (streaming) or "View reasoning (N chars)" (collapsed)
+- Uses `StreamingTextMarkdown.claude()` for animated streaming
+- Uses `MarkdownBody` for finalized content with selectable text
+- Max height 300px with scroll for long thinking content
+
+**Event Flow**:
+- `ThinkingTextMessageStartEvent` -> Attach to current assistant message, start buffer
+- `ThinkingTextMessageContentEvent` -> Append delta to buffer
+- `ThinkingTextMessageEndEvent` -> Finalize buffer, auto-collapse
+
+---
+
+### 8. Subtle Tool Call Display
+
+**Status**: Completed
+
+**Description**: Replaced prominent colored tool call bubbles with compact, inline indicators. Tool calls can be grouped and expanded to see individual tool status.
+
+**Implementation Details**:
+
+Files created:
+- `lib/features/chat/widgets/tool_call_summary_widget.dart` - Compact grouped tool display and inline indicator
+- `lib/core/models/chat_models.dart` - Added `ToolCallSummary` class, `MessageType.toolCallGroup`
+
+Files modified:
+- `lib/core/models/chat_models.dart` - Added `toolCalls`, `isToolGroupExpanded` fields to ChatMessage
+- `lib/core/services/chat_service.dart` - Added `addToolCallToGroup()`, `updateToolCallInGroup()`, `finalizeToolCallGroup()`, `toggleToolGroupExpanded()` methods
+- `lib/features/chat/builders/message_builder.dart` - Replaced prominent tool bubbles with compact `CompactToolCallIndicator`
+
+**Features**:
+- **Compact single tool**: Inline `[spinner] Tool Name` indicator
+- **Grouped tools**: Collapsed shows "Used 3 tools" with overall status
+- **Expanded view**: Individual tools with status icons (spinner/check/error)
+- Color-coded status: Primary (executing), Muted (completed), Error (failed)
+- Error messages shown inline when expanded
+
+**Tool Call States**:
+- `executing` - Spinner, primary color
+- `completed` - Check mark, muted color
+- `error:message` - X icon, error color with message snippet
+
+---
+
 ## Notes
 
 - Features should be implemented incrementally

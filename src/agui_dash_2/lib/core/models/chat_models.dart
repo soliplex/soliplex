@@ -41,7 +41,45 @@ class ChatUser extends Equatable {
 }
 
 /// Type of chat message content.
-enum MessageType { text, genUi, loading, error, toolCall }
+enum MessageType { text, genUi, loading, error, toolCall, toolCallGroup }
+
+/// Summary of a tool call for grouped display.
+class ToolCallSummary extends Equatable {
+  final String toolCallId;
+  final String toolName;
+  final String status; // 'executing' | 'completed' | 'error:...'
+  final DateTime startedAt;
+  final DateTime? completedAt;
+
+  const ToolCallSummary({
+    required this.toolCallId,
+    required this.toolName,
+    required this.status,
+    required this.startedAt,
+    this.completedAt,
+  });
+
+  bool get isExecuting => status == 'executing';
+  bool get isCompleted => status == 'completed';
+  bool get isError => status.startsWith('error:');
+  String? get errorMessage => isError ? status.substring(6) : null;
+
+  ToolCallSummary copyWith({
+    String? status,
+    DateTime? completedAt,
+  }) {
+    return ToolCallSummary(
+      toolCallId: toolCallId,
+      toolName: toolName,
+      status: status ?? this.status,
+      startedAt: startedAt,
+      completedAt: completedAt ?? this.completedAt,
+    );
+  }
+
+  @override
+  List<Object?> get props => [toolCallId, toolName, status, startedAt, completedAt];
+}
 
 /// Represents a message in the chat.
 class ChatMessage extends Equatable {
@@ -57,6 +95,15 @@ class ChatMessage extends Equatable {
   final String? toolCallName;
   final String? toolCallStatus;
 
+  // Thinking fields
+  final String? thinkingText;
+  final bool isThinkingStreaming;
+  final bool isThinkingExpanded;
+
+  // Tool call group fields
+  final List<ToolCallSummary>? toolCalls;
+  final bool isToolGroupExpanded;
+
   ChatMessage({
     String? id,
     required this.user,
@@ -69,6 +116,11 @@ class ChatMessage extends Equatable {
     this.isStreaming = false,
     this.toolCallName,
     this.toolCallStatus,
+    this.thinkingText,
+    this.isThinkingStreaming = false,
+    this.isThinkingExpanded = false,
+    this.toolCalls,
+    this.isToolGroupExpanded = false,
   }) : id = id ?? _uuid.v4(),
        createdAt = createdAt ?? DateTime.now();
 
@@ -156,6 +208,24 @@ class ChatMessage extends Equatable {
     );
   }
 
+  /// Create a tool call group message.
+  factory ChatMessage.toolCallGroup({
+    String? id,
+    required ChatUser user,
+    required List<ToolCallSummary> toolCalls,
+    bool isExpanded = false,
+    DateTime? createdAt,
+  }) {
+    return ChatMessage(
+      id: id,
+      user: user,
+      type: MessageType.toolCallGroup,
+      toolCalls: toolCalls,
+      isToolGroupExpanded: isExpanded,
+      createdAt: createdAt,
+    );
+  }
+
   /// Create a copy with updated fields.
   ChatMessage copyWith({
     String? id,
@@ -169,6 +239,11 @@ class ChatMessage extends Equatable {
     bool? isStreaming,
     String? toolCallName,
     String? toolCallStatus,
+    String? thinkingText,
+    bool? isThinkingStreaming,
+    bool? isThinkingExpanded,
+    List<ToolCallSummary>? toolCalls,
+    bool? isToolGroupExpanded,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -182,6 +257,11 @@ class ChatMessage extends Equatable {
       isStreaming: isStreaming ?? this.isStreaming,
       toolCallName: toolCallName ?? this.toolCallName,
       toolCallStatus: toolCallStatus ?? this.toolCallStatus,
+      thinkingText: thinkingText ?? this.thinkingText,
+      isThinkingStreaming: isThinkingStreaming ?? this.isThinkingStreaming,
+      isThinkingExpanded: isThinkingExpanded ?? this.isThinkingExpanded,
+      toolCalls: toolCalls ?? this.toolCalls,
+      isToolGroupExpanded: isToolGroupExpanded ?? this.isToolGroupExpanded,
     );
   }
 
@@ -198,6 +278,11 @@ class ChatMessage extends Equatable {
     isStreaming,
     toolCallName,
     toolCallStatus,
+    thinkingText,
+    isThinkingStreaming,
+    isThinkingExpanded,
+    toolCalls,
+    isToolGroupExpanded,
   ];
 }
 

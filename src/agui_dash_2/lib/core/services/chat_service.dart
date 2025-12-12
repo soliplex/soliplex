@@ -10,11 +10,21 @@ class ChatState {
   final Set<String> streamingMessageIds; // Track multiple concurrent streams
   final Map<String, String> pendingToolCalls; // toolCallId -> accumulated args
 
+  // Thinking state
+  final Map<String, StringBuffer> thinkingBuffers; // messageId -> thinking text
+  final Set<String> thinkingMessageIds; // messages currently receiving thinking
+
+  // Tool call grouping state
+  final List<ToolCallSummary> pendingToolCallSummaries; // tools to be grouped
+
   const ChatState({
     this.messages = const [],
     this.isAgentTyping = false,
     this.streamingMessageIds = const {},
     this.pendingToolCalls = const {},
+    this.thinkingBuffers = const {},
+    this.thinkingMessageIds = const {},
+    this.pendingToolCallSummaries = const [],
   });
 
   ChatState copyWith({
@@ -22,12 +32,19 @@ class ChatState {
     bool? isAgentTyping,
     Set<String>? streamingMessageIds,
     Map<String, String>? pendingToolCalls,
+    Map<String, StringBuffer>? thinkingBuffers,
+    Set<String>? thinkingMessageIds,
+    List<ToolCallSummary>? pendingToolCallSummaries,
   }) {
     return ChatState(
       messages: messages ?? this.messages,
       isAgentTyping: isAgentTyping ?? this.isAgentTyping,
       streamingMessageIds: streamingMessageIds ?? this.streamingMessageIds,
       pendingToolCalls: pendingToolCalls ?? this.pendingToolCalls,
+      thinkingBuffers: thinkingBuffers ?? this.thinkingBuffers,
+      thinkingMessageIds: thinkingMessageIds ?? this.thinkingMessageIds,
+      pendingToolCallSummaries:
+          pendingToolCallSummaries ?? this.pendingToolCallSummaries,
     );
   }
 }
@@ -281,6 +298,181 @@ class ChatNotifier extends StateNotifier<ChatState> {
   void setAgentTyping(bool isTyping) {
     state = state.copyWith(isAgentTyping: isTyping);
   }
+
+  // =====================
+  // Thinking Methods
+  // =====================
+
+  /// Start thinking for a message (initialize buffer, set streaming=true).
+  void startThinking(String messageId) {
+    final buffers = Map<String, StringBuffer>.from(state.thinkingBuffers);
+    buffers[messageId] = StringBuffer();
+
+    final thinkingIds = Set<String>.from(state.thinkingMessageIds)
+      ..add(messageId);
+
+    // Update message to show thinking is streaming
+    final messages = state.messages.map((m) {
+      if (m.id == messageId) {
+        return m.copyWith(isThinkingStreaming: true, isThinkingExpanded: true);
+      }
+      return m;
+    }).toList();
+
+    state = state.copyWith(
+      messages: messages,
+      thinkingBuffers: buffers,
+      thinkingMessageIds: thinkingIds,
+    );
+  }
+
+  /// Append thinking content chunk.
+  void appendThinking(String messageId, String delta) {
+    final buffer = state.thinkingBuffers[messageId];
+    if (buffer == null) return;
+
+    buffer.write(delta);
+
+    // Update message with current thinking text
+    final messages = state.messages.map((m) {
+      if (m.id == messageId) {
+        return m.copyWith(thinkingText: buffer.toString());
+      }
+      return m;
+    }).toList();
+
+    state = state.copyWith(messages: messages);
+  }
+
+  /// Finalize thinking (set streaming=false, collapse).
+  void finalizeThinking(String messageId) {
+    final buffer = state.thinkingBuffers[messageId];
+    final finalText = buffer?.toString();
+
+    // Update message
+    final messages = state.messages.map((m) {
+      if (m.id == messageId) {
+        return m.copyWith(
+          thinkingText: finalText,
+          isThinkingStreaming: false,
+          isThinkingExpanded: false, // Auto-collapse when done
+        );
+      }
+      return m;
+    }).toList();
+
+    // Clean up buffers
+    final buffers = Map<String, StringBuffer>.from(state.thinkingBuffers)
+      ..remove(messageId);
+    final thinkingIds = Set<String>.from(state.thinkingMessageIds)
+      ..remove(messageId);
+
+    state = state.copyWith(
+      messages: messages,
+      thinkingBuffers: buffers,
+      thinkingMessageIds: thinkingIds,
+    );
+  }
+
+  /// Toggle thinking expanded state (user action).
+  void toggleThinkingExpanded(String messageId) {
+    final messages = state.messages.map((m) {
+      if (m.id == messageId && m.thinkingText != null) {
+        return m.copyWith(isThinkingExpanded: !m.isThinkingExpanded);
+      }
+      return m;
+    }).toList();
+
+    state = state.copyWith(messages: messages);
+  }
+
+  // =====================
+  // Tool Call Grouping Methods
+  // =====================
+
+  /// Add a tool call to the pending group.
+  void addToolCallToGroup(String toolCallId, String toolName) {
+    final summary = ToolCallSummary(
+      toolCallId: toolCallId,
+      toolName: toolName,
+      status: 'executing',
+      startedAt: DateTime.now(),
+    );
+
+    state = state.copyWith(
+      pendingToolCallSummaries: [...state.pendingToolCallSummaries, summary],
+    );
+  }
+
+  /// Update status of a tool in the pending group.
+  void updateToolCallInGroup(String toolCallId, String status) {
+    final summaries = state.pendingToolCallSummaries.map((s) {
+      if (s.toolCallId == toolCallId) {
+        return s.copyWith(
+          status: status,
+          completedAt:
+              status != 'executing' ? DateTime.now() : s.completedAt,
+        );
+      }
+      return s;
+    }).toList();
+
+    state = state.copyWith(pendingToolCallSummaries: summaries);
+  }
+
+  /// Finalize tool call group - attach to a message or create summary message.
+  /// Call this when the response ends to create the grouped tool message.
+  void finalizeToolCallGroup(String? attachToMessageId) {
+    if (state.pendingToolCallSummaries.isEmpty) return;
+
+    final toolCalls = List<ToolCallSummary>.from(state.pendingToolCallSummaries);
+
+    if (attachToMessageId != null) {
+      // Attach tool calls to existing message
+      final messages = state.messages.map((m) {
+        if (m.id == attachToMessageId) {
+          return m.copyWith(toolCalls: toolCalls);
+        }
+        return m;
+      }).toList();
+
+      state = state.copyWith(
+        messages: messages,
+        pendingToolCallSummaries: const [],
+      );
+    } else {
+      // Create standalone tool call group message
+      final message = ChatMessage.toolCallGroup(
+        user: ChatUser.system,
+        toolCalls: toolCalls,
+      );
+
+      state = state.copyWith(
+        messages: [...state.messages, message],
+        pendingToolCallSummaries: const [],
+      );
+    }
+  }
+
+  /// Toggle tool group expanded state.
+  void toggleToolGroupExpanded(String messageId) {
+    final messages = state.messages.map((m) {
+      if (m.id == messageId) {
+        return m.copyWith(isToolGroupExpanded: !m.isToolGroupExpanded);
+      }
+      return m;
+    }).toList();
+
+    state = state.copyWith(messages: messages);
+  }
+
+  /// Clear pending tool call summaries (e.g., on error or cancel).
+  void clearPendingToolCalls() {
+    state = state.copyWith(pendingToolCallSummaries: const []);
+  }
+
+  /// Check if there are any pending tool calls.
+  bool get hasPendingToolCalls => state.pendingToolCallSummaries.isNotEmpty;
 }
 
 /// Riverpod provider for ChatNotifier.

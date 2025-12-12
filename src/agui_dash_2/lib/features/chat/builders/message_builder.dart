@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../core/models/chat_models.dart';
 import '../widgets/friendly_error_card.dart';
 import '../widgets/genui_message_widget.dart';
+import '../widgets/tool_call_summary_widget.dart';
 
 /// Custom message builder for Dash Chat 2.
 ///
@@ -15,8 +16,9 @@ import '../widgets/genui_message_widget.dart';
 class MessageBuilder {
   final void Function(String eventName, Map<String, Object?> arguments)?
   onGenUiEvent;
+  final void Function(String messageId)? onToggleToolGroup;
 
-  MessageBuilder({this.onGenUiEvent});
+  MessageBuilder({this.onGenUiEvent, this.onToggleToolGroup});
 
   /// Build a custom message widget based on message type.
   Widget? build(
@@ -39,6 +41,7 @@ class MessageBuilder {
       MessageType.loading => _buildLoadingMessage(),
       MessageType.error => _buildErrorMessage(chatMessage),
       MessageType.toolCall => _buildToolCallMessage(chatMessage),
+      MessageType.toolCallGroup => _buildToolCallGroupMessage(chatMessage),
     };
   }
 
@@ -107,85 +110,36 @@ class MessageBuilder {
     );
   }
 
+  /// Build a compact, inline tool call indicator.
   Widget _buildToolCallMessage(ChatMessage message) {
     final toolName = message.toolCallName ?? 'Unknown tool';
     final status = message.toolCallStatus ?? 'executing';
-    final isExecuting = status == 'executing';
-    final isError = status.startsWith('error');
-    final formattedName = _formatToolName(toolName);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: isError
-              ? Colors.red.shade50
-              : isExecuting
-                  ? Colors.blue.shade50
-                  : Colors.green.shade50,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isError
-                ? Colors.red.shade200
-                : isExecuting
-                    ? Colors.blue.shade200
-                    : Colors.green.shade200,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isExecuting)
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.blue.shade600,
-                ),
-              )
-            else if (isError)
-              Icon(Icons.error_outline, color: Colors.red.shade600, size: 18)
-            else
-              Icon(Icons.check_circle_outline, color: Colors.green.shade600, size: 18),
-            const SizedBox(width: 10),
-            Icon(Icons.build_outlined, size: 16, color: Colors.grey.shade600),
-            const SizedBox(width: 6),
-            Text(
-              formattedName,
-              style: TextStyle(
-                fontWeight: FontWeight.w500,
-                color: Colors.grey.shade800,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              status,
-              style: TextStyle(
-                fontSize: 12,
-                color: isError
-                    ? Colors.red.shade600
-                    : isExecuting
-                        ? Colors.blue.shade600
-                        : Colors.green.shade600,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-        ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: CompactToolCallIndicator(
+        toolName: toolName,
+        status: status,
       ),
     );
   }
 
-  /// Format tool name for display (convert snake_case to Title Case).
-  String _formatToolName(String name) {
-    return name
-        .split('_')
-        .map((word) => word.isEmpty
-            ? ''
-            : '${word[0].toUpperCase()}${word.substring(1)}')
-        .join(' ');
+  /// Build a grouped tool call summary widget.
+  Widget _buildToolCallGroupMessage(ChatMessage message) {
+    if (message.toolCalls == null || message.toolCalls!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: ToolCallSummaryWidget(
+        toolCalls: message.toolCalls!,
+        isExpanded: message.isToolGroupExpanded,
+        onToggle: () {
+          onToggleToolGroup?.call(message.id);
+        },
+      ),
+    );
   }
 }
 
@@ -204,6 +158,8 @@ dash.ChatMessage toDashChatMessage(ChatMessage message) {
       displayText = message.errorMessage ?? '[Error]';
     case MessageType.toolCall:
       displayText = '[Tool: ${message.toolCallName}]';
+    case MessageType.toolCallGroup:
+      displayText = '[Tools: ${message.toolCalls?.length ?? 0}]';
   }
 
   return dash.ChatMessage(
