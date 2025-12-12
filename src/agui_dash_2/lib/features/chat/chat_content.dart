@@ -959,25 +959,20 @@ class _ChatContentState extends ConsumerState<ChatContent> {
   Widget build(BuildContext context) {
     final chatState = ref.watch(chatProvider);
 
-    // Wrap with keyboard shortcuts (Cmd+K for paste, Cmd+F for search)
+    // Wrap with keyboard shortcut for paste (Alt+K)
+    // Note: Other shortcuts (search, room/layout switching) are handled by
+    // KeyboardShortcutsWidget at the ChatScreen level.
+    // Using Alt instead of Cmd/Ctrl to avoid browser shortcut conflicts on web.
     return Shortcuts(
       shortcuts: {
-        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyK):
+        const SingleActivator(LogicalKeyboardKey.keyK, alt: true):
             const _PasteIntent(),
-        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyF):
-            const _SearchIntent(),
       },
       child: Actions(
         actions: {
           _PasteIntent: CallbackAction<_PasteIntent>(
             onInvoke: (_) {
               _pasteFromClipboard();
-              return null;
-            },
-          ),
-          _SearchIntent: CallbackAction<_SearchIntent>(
-            onInvoke: (_) {
-              ref.read(chatSearchProvider.notifier).openSearch();
               return null;
             },
           ),
@@ -1070,9 +1065,4 @@ class _ChatContentState extends ConsumerState<ChatContent> {
 /// Intent for paste action.
 class _PasteIntent extends Intent {
   const _PasteIntent();
-}
-
-/// Intent for search action.
-class _SearchIntent extends Intent {
-  const _SearchIntent();
 }

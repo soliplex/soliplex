@@ -19,6 +19,8 @@ import '../layouts/canvas_layout.dart';
 import '../layouts/threecol_layout.dart';
 import '../room/capability_badges.dart';
 import '../room/room_info_drawer.dart';
+import '../keyboard/keyboard_shortcuts_widget.dart';
+import '../keyboard/keyboard_shortcuts_help_dialog.dart';
 
 /// Main chat screen widget - acts as app shell with layout switching.
 ///
@@ -157,8 +159,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final selectedRoom = ref.watch(selectedRoomProvider);
     final selectedRoomData = ref.watch(selectedRoomDataProvider);
 
-    return Scaffold(
-      appBar: AppBar(
+    return KeyboardShortcutsWidget(
+      child: Scaffold(
+        appBar: AppBar(
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -201,10 +204,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ref.read(agUiServiceProvider).resetConversation();
             },
           ),
+          IconButton(
+            icon: const Icon(Icons.keyboard_outlined),
+            tooltip: 'Keyboard shortcuts',
+            onPressed: () => KeyboardShortcutsHelpDialog.show(context),
+          ),
           _buildServerMenu(),
         ],
+        ),
+        body: _buildLayout(layoutMode),
       ),
-      body: _buildLayout(layoutMode),
     );
   }
 
