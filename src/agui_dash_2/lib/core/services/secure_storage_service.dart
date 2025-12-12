@@ -1,0 +1,229 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+/// Abstract interface for secure credential storage
+abstract class SecureStorageService {
+  /// Write a value to secure storage
+  Future<void> write(String key, String value);
+
+  /// Read a value from secure storage
+  Future<String?> read(String key);
+
+  /// Delete a value from secure storage
+  Future<void> delete(String key);
+
+  /// Delete all values from secure storage
+  Future<void> deleteAll();
+
+  /// Check if a key exists
+  Future<bool> containsKey(String key);
+
+  /// Read all key-value pairs
+  Future<Map<String, String>> readAll();
+}
+
+/// Storage keys for server authentication
+class StorageKeys {
+  static const String accessToken = 'access_token';
+  static const String refreshToken = 'refresh_token';
+  static const String tokenExpiry = 'token_expiry';
+  static const String refreshExpiry = 'refresh_expiry';
+  static const String currentServerId = 'current_server_id';
+  static const String serverHistory = 'server_history';
+
+  /// Get token key for a specific server
+  static String serverAccessToken(String serverId) => 'server_${serverId}_access_token';
+  static String serverRefreshToken(String serverId) => 'server_${serverId}_refresh_token';
+  static String serverTokenExpiry(String serverId) => 'server_${serverId}_token_expiry';
+
+  StorageKeys._();
+}
+
+/// Native platform implementation using flutter_secure_storage
+class NativeSecureStorageService implements SecureStorageService {
+  final FlutterSecureStorage _storage;
+
+  NativeSecureStorageService()
+      : _storage = const FlutterSecureStorage(
+          aOptions: AndroidOptions(
+            encryptedSharedPreferences: true,
+          ),
+          iOptions: IOSOptions(
+            accessibility: KeychainAccessibility.first_unlock_this_device,
+          ),
+          mOptions: MacOsOptions(
+            accessibility: KeychainAccessibility.first_unlock_this_device,
+          ),
+        );
+
+  @override
+  Future<void> write(String key, String value) async {
+    await _storage.write(key: key, value: value);
+  }
+
+  @override
+  Future<String?> read(String key) async {
+    return await _storage.read(key: key);
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    await _storage.delete(key: key);
+  }
+
+  @override
+  Future<void> deleteAll() async {
+    await _storage.deleteAll();
+  }
+
+  @override
+  Future<bool> containsKey(String key) async {
+    return await _storage.containsKey(key: key);
+  }
+
+  @override
+  Future<Map<String, String>> readAll() async {
+    return await _storage.readAll();
+  }
+}
+
+/// Web implementation using in-memory storage with session persistence
+/// Note: For production, consider using encrypted localStorage or IndexedDB
+class WebSecureStorageService implements SecureStorageService {
+  final Map<String, String> _storage = {};
+  bool _initialized = false;
+
+  WebSecureStorageService() {
+    _loadFromSession();
+  }
+
+  void _loadFromSession() {
+    if (_initialized) return;
+    _initialized = true;
+    // On web, we could use window.sessionStorage for session-only persistence
+    // For now, using in-memory only (tokens lost on refresh)
+    // TODO: Implement proper web storage with encryption consideration
+  }
+
+  @override
+  Future<void> write(String key, String value) async {
+    _storage[key] = value;
+  }
+
+  @override
+  Future<String?> read(String key) async {
+    return _storage[key];
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    _storage.remove(key);
+  }
+
+  @override
+  Future<void> deleteAll() async {
+    _storage.clear();
+  }
+
+  @override
+  Future<bool> containsKey(String key) async {
+    return _storage.containsKey(key);
+  }
+
+  @override
+  Future<Map<String, String>> readAll() async {
+    return Map.from(_storage);
+  }
+}
+
+/// Factory to create the appropriate storage service for the platform
+class SecureStorageFactory {
+  static SecureStorageService create() {
+    if (kIsWeb) {
+      return WebSecureStorageService();
+    }
+    return NativeSecureStorageService();
+  }
+}
+
+/// Extension methods for common token operations
+extension TokenStorageExtension on SecureStorageService {
+  /// Store tokens for a server
+  Future<void> storeTokens({
+    required String serverId,
+    required String accessToken,
+    String? refreshToken,
+    DateTime? expiresAt,
+    DateTime? refreshExpiresAt,
+  }) async {
+    await write(StorageKeys.serverAccessToken(serverId), accessToken);
+
+    if (refreshToken != null) {
+      await write(StorageKeys.serverRefreshToken(serverId), refreshToken);
+    }
+
+    if (expiresAt != null) {
+      await write(
+        StorageKeys.serverTokenExpiry(serverId),
+        expiresAt.toIso8601String(),
+      );
+    }
+  }
+
+  /// Get access token for a server
+  Future<String?> getAccessToken(String serverId) async {
+    return await read(StorageKeys.serverAccessToken(serverId));
+  }
+
+  /// Get refresh token for a server
+  Future<String?> getRefreshToken(String serverId) async {
+    return await read(StorageKeys.serverRefreshToken(serverId));
+  }
+
+  /// Get token expiry for a server
+  Future<DateTime?> getTokenExpiry(String serverId) async {
+    final expiry = await read(StorageKeys.serverTokenExpiry(serverId));
+    if (expiry == null) return null;
+    return DateTime.tryParse(expiry);
+  }
+
+  /// Clear tokens for a server
+  Future<void> clearTokens(String serverId) async {
+    await delete(StorageKeys.serverAccessToken(serverId));
+    await delete(StorageKeys.serverRefreshToken(serverId));
+    await delete(StorageKeys.serverTokenExpiry(serverId));
+  }
+
+  /// Store server history (list of ServerConnection as JSON)
+  Future<void> storeServerHistory(List<Map<String, dynamic>> history) async {
+    await write(StorageKeys.serverHistory, jsonEncode(history));
+  }
+
+  /// Load server history
+  Future<List<Map<String, dynamic>>> loadServerHistory() async {
+    final data = await read(StorageKeys.serverHistory);
+    if (data == null) return [];
+    try {
+      final list = jsonDecode(data) as List;
+      return list.cast<Map<String, dynamic>>();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Store current server ID
+  Future<void> storeCurrentServerId(String? serverId) async {
+    if (serverId == null) {
+      await delete(StorageKeys.currentServerId);
+    } else {
+      await write(StorageKeys.currentServerId, serverId);
+    }
+  }
+
+  /// Get current server ID
+  Future<String?> getCurrentServerId() async {
+    return await read(StorageKeys.currentServerId);
+  }
+}
