@@ -5,9 +5,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app_shell.dart';
 import '../../core/models/layout_mode.dart';
+import '../../core/providers/app_providers.dart';
 import '../../core/providers/panel_providers.dart';
 import '../../core/network/connection_manager.dart';
-import '../../core/services/auth_service.dart';
 import '../../core/services/feedback_service.dart';
 import '../../core/services/markdown_hooks.dart';
 import '../../core/services/rooms_service.dart';
@@ -124,8 +124,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Get auth headers if available
     Map<String, String>? headers;
     try {
-      final authService = ref.read(authServiceProvider);
-      headers = await authService.getAuthHeaders();
+      final authManager = ref.read(authManagerProvider);
+      headers = await authManager.getAuthHeaders(server.id);
     } catch (e) {
       debugPrint('Failed to get auth headers: $e');
     }
@@ -381,7 +381,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Widget _buildServerMenu() {
     final currentServer = ref.watch(currentServerProvider);
-    final authState = ref.watch(authStateProvider);
+    final appStateAsync = ref.watch(appStateStreamProvider);
+    final appState = appStateAsync.valueOrNull;
 
     return PopupMenuButton<String>(
       icon: const Icon(Icons.dns_outlined),
@@ -405,10 +406,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       fontWeight: FontWeight.bold,
                     ),
               ),
-              if (authState.userName != null) ...[
+              if (appState is AppStateReady && appState.userName != null) ...[
                 const SizedBox(height: 2),
                 Text(
-                  authState.userName!,
+                  appState.userName!,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -474,14 +475,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (!mounted) return;
 
     if (confirmed == true) {
-      final authService = ref.read(authServiceProvider);
-      final serverConfig = ref.read(serverConfigProvider);
-
-      await authService.logout();
-
-      if (!mounted) return;
-
-      await serverConfig.clearAll();
+      final appStateManager = ref.read(appStateManagerProvider);
+      await appStateManager.clearServer();
 
       if (!mounted) return;
 

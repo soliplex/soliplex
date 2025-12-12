@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/services/server_config_service.dart';
+import '../../core/models/server_models.dart';
+import '../../core/providers/app_providers.dart';
+import '../../core/services/server_config_service.dart' show serverHistoryProvider;
+import '../../core/utils/api_constants.dart';
 import 'server_history_widget.dart';
 import 'oidc_provider_selector.dart';
 
@@ -25,12 +28,36 @@ class ServerSetupScreen extends ConsumerStatefulWidget {
 }
 
 class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
-  final _urlController = TextEditingController(text: 'http://localhost:8000');
+  final _urlController = TextEditingController(text: ApiConstants.defaultServerUrl);
   final _formKey = GlobalKey<FormState>();
 
   bool _isProbing = false;
   ServerInfo? _serverInfo;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // Check if we're in NeedsAuth state - show providers from app state
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAppState();
+    });
+  }
+
+  void _checkAppState() {
+    final appState = ref.read(currentAppStateProvider);
+    if (appState is AppStateNeedsAuth) {
+      // Pre-populate the URL from the saved server
+      _urlController.text = appState.server.url;
+      setState(() {
+        _serverInfo = ServerInfo(
+          url: appState.server.url,
+          isReachable: true,
+          oidcProviders: appState.providers,
+        );
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -48,8 +75,8 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
     });
 
     try {
-      final serverConfig = ref.read(serverConfigProvider);
-      final info = await serverConfig.probeServer(_urlController.text);
+      final serverRegistry = ref.read(serverRegistryProvider);
+      final info = await serverRegistry.probeServer(_urlController.text);
 
       setState(() {
         _serverInfo = info;
@@ -63,30 +90,16 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
         return;
       }
 
-      // Register the server with serverConfig (needed for AuthService)
-      await serverConfig.connectToServer(info);
+      // Set server via AppStateManager - it handles auth state transitions
+      final appStateManager = ref.read(appStateManagerProvider);
+      await appStateManager.setServer(info);
 
-      // If server doesn't require auth, navigate immediately
-      if (info.isOpenAccess) {
-        widget.onConnected?.call();
-      }
-      // Otherwise, show OIDC provider selection (server is already registered)
+      // If server doesn't require auth, AppStateManager will transition to Ready
+      // and AppShell will show ChatScreen
     } catch (e) {
       setState(() {
         _isProbing = false;
         _error = e.toString();
-      });
-    }
-  }
-
-  Future<void> _connectToServer(ServerInfo info) async {
-    try {
-      final serverConfig = ref.read(serverConfigProvider);
-      await serverConfig.connectToServer(info);
-      widget.onConnected?.call();
-    } catch (e) {
-      setState(() {
-        _error = 'Failed to connect: $e';
       });
     }
   }
@@ -109,6 +122,21 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final serverHistory = ref.watch(serverHistoryProvider);
+    final appState = ref.watch(currentAppStateProvider);
+
+    // Get OIDC providers from app state if in NeedsAuth state
+    final List<OIDCAuthSystem> oidcProviders;
+    final String? serverUrl;
+    if (appState is AppStateNeedsAuth) {
+      oidcProviders = appState.providers;
+      serverUrl = appState.server.url;
+    } else if (_serverInfo != null && _serverInfo!.requiresAuth) {
+      oidcProviders = _serverInfo!.oidcProviders;
+      serverUrl = _serverInfo!.url;
+    } else {
+      oidcProviders = [];
+      serverUrl = null;
+    }
 
     return Scaffold(
       body: Center(
@@ -150,7 +178,7 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
                     validator: _validateUrl,
                     decoration: InputDecoration(
                       labelText: 'Server URL',
-                      hintText: 'http://localhost:8000',
+                      hintText: ApiConstants.defaultServerUrl,
                       prefixIcon: const Icon(Icons.link),
                       border: const OutlineInputBorder(),
                       suffixIcon: _isProbing
@@ -210,7 +238,7 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
                 ),
 
                 // OIDC Provider Selection
-                if (_serverInfo != null && _serverInfo!.requiresAuth) ...[
+                if (oidcProviders.isNotEmpty && serverUrl != null) ...[
                   const SizedBox(height: 24),
                   const Divider(),
                   const SizedBox(height: 16),
@@ -221,8 +249,8 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
                   ),
                   const SizedBox(height: 16),
                   OIDCProviderSelector(
-                    providers: _serverInfo!.oidcProviders,
-                    serverUrl: _serverInfo!.url,
+                    providers: oidcProviders,
+                    serverUrl: serverUrl,
                     onAuthenticated: () {
                       widget.onConnected?.call();
                     },

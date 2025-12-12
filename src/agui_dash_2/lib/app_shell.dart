@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'core/services/auth_service.dart';
-import 'core/services/server_config_service.dart';
+import 'core/providers/app_providers.dart';
 import 'features/chat/chat_screen.dart';
 import 'features/server/server_setup_screen.dart';
 
@@ -13,6 +12,8 @@ final appInitializedProvider = StateProvider<bool>((ref) => false);
 /// - Server configuration check
 /// - Authentication state
 /// - Navigation between setup and main app
+///
+/// Uses stream-based AppState for reactive updates without cascading rebuilds.
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
@@ -27,21 +28,14 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   void initState() {
     super.initState();
-    // Delay initialization to avoid modifying providers during build
     Future.microtask(_initialize);
   }
 
   Future<void> _initialize() async {
     try {
-      // Initialize server config (loads saved servers)
-      final serverConfig = ref.read(serverConfigProvider);
-      await serverConfig.initialize();
-
-      // If we have a server, initialize auth
-      if (serverConfig.hasServer) {
-        final authService = ref.read(authServiceProvider);
-        await authService.initialize();
-      }
+      // Initialize the AppStateManager (loads saved server and checks auth)
+      final appStateManager = ref.read(appStateManagerProvider);
+      await appStateManager.initialize();
 
       if (mounted) {
         ref.read(appInitializedProvider.notifier).state = true;
@@ -109,41 +103,96 @@ class _AppShellState extends ConsumerState<AppShell> {
       );
     }
 
-    // Check server configuration
-    final hasServer = ref.watch(hasServerProvider);
+    // Watch app state stream
+    final stateAsync = ref.watch(appStateStreamProvider);
 
-    if (!hasServer) {
-      return ServerSetupScreen(
-        onConnected: () {
-          // Server connected - auth state will be updated by the auth flow
-          // Just trigger rebuild by reading provider
-          debugPrint('AppShell: onConnected - server connected');
-          _initializeAuth();
-        },
-      );
-    }
-
-    // Check auth state
-    final authState = ref.watch(authStateProvider);
-
-    // If server requires auth and we're not authenticated, show setup
-    if (authState.needsAuth) {
-      return ServerSetupScreen(
-        onConnected: () {
-          // Auth state is already set by startLogin - just trigger rebuild
-          // by reading the provider (the widget tree will update automatically)
-          debugPrint('AppShell: onConnected - auth completed');
-        },
-      );
-    }
-
-    // All good - show main app
-    return const ChatScreen();
+    return stateAsync.when(
+      data: (state) => _buildForState(state),
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, _) => Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 48,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              const SizedBox(height: 16),
+              Text('Error: $error'),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () {
+                  setState(() {
+                    _isInitializing = true;
+                    _initError = null;
+                  });
+                  _initialize();
+                },
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
-  Future<void> _initializeAuth() async {
-    final authService = ref.read(authServiceProvider);
-    await authService.initialize();
+  Widget _buildForState(AppState state) {
+    return switch (state) {
+      AppStateNoServer() => ServerSetupScreen(
+          onConnected: () {
+            // State machine handles transitions
+            debugPrint('AppShell: Server setup completed');
+          },
+        ),
+      AppStateNeedsAuth() => ServerSetupScreen(
+          onConnected: () {
+            // State machine handles transitions
+            debugPrint('AppShell: Auth completed');
+          },
+        ),
+      AppStateAuthenticating() => const Scaffold(
+          body: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Authenticating...'),
+              ],
+            ),
+          ),
+        ),
+      AppStateReady() => const ChatScreen(),
+      AppStateError(:final message, :final previousState) => Scaffold(
+          body: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                const SizedBox(height: 16),
+                Text(message),
+                const SizedBox(height: 16),
+                if (previousState != null)
+                  FilledButton(
+                    onPressed: () {
+                      ref.read(appStateManagerProvider).retryFromError();
+                    },
+                    child: const Text('Retry'),
+                  ),
+              ],
+            ),
+          ),
+        ),
+    };
   }
 }
 

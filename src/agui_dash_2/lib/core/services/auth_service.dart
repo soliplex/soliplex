@@ -15,12 +15,17 @@ import 'server_config_service.dart'; // exports server_models.dart
 
 /// Service for handling OIDC authentication flow.
 ///
+/// **DEPRECATED**: Use [AuthManager] and [AppStateManager] instead.
+/// This class uses ChangeNotifier which causes cascading provider
+/// invalidations. The new architecture uses stream-based state management.
+///
 /// Handles:
 /// - Initiating OIDC login flow via flutter_appauth
 /// - Processing auth callbacks (tokens from redirect)
 /// - Token validation and refresh
 /// - User info retrieval
 /// - Logout
+@Deprecated('Use AuthManager and AppStateManager instead')
 class AuthService extends ChangeNotifier {
   final SecureStorageService _storage;
   final ServerConfigService _serverConfig;
@@ -382,12 +387,12 @@ class AuthService extends ChangeNotifier {
 }
 
 // ============================================================================
-// Riverpod Providers
+// Riverpod Providers (DEPRECATED - use app_providers.dart instead)
 // ============================================================================
 
 /// Provider for auth service
-/// Note: Uses ref.read instead of ref.watch to prevent disposal during auth flow
-/// when serverConfig.updateServer() triggers provider rebuilds
+/// **DEPRECATED**: Use [authManagerProvider] and [appStateManagerProvider] instead.
+@Deprecated('Use authManagerProvider and appStateManagerProvider instead')
 final authServiceProvider = ChangeNotifierProvider<AuthService>((ref) {
   final storage = ref.read(secureStorageProvider);
   final serverConfig = ref.read(serverConfigProvider);
@@ -402,25 +407,37 @@ final authServiceProvider = ChangeNotifierProvider<AuthService>((ref) {
 });
 
 /// Provider for current auth state
+/// **DEPRECATED**: Use [appStateStreamProvider] instead.
+@Deprecated('Use appStateStreamProvider instead')
 final authStateProvider = Provider<AuthState>((ref) {
+  // ignore: deprecated_member_use_from_same_package
   final auth = ref.watch(authServiceProvider);
   return auth.state;
 });
 
 /// Provider for authentication status
+/// **DEPRECATED**: Use [isAppReadyProvider] instead.
+@Deprecated('Use isAppReadyProvider instead')
 final isAuthenticatedProvider = Provider<bool>((ref) {
+  // ignore: deprecated_member_use_from_same_package
   final auth = ref.watch(authServiceProvider);
   return auth.isAuthenticated;
 });
 
 /// Provider for checking if auth is needed
+/// **DEPRECATED**: Use [needsAuthFromAppStateProvider] instead.
+@Deprecated('Use needsAuthFromAppStateProvider instead')
 final needsAuthProvider = Provider<bool>((ref) {
+  // ignore: deprecated_member_use_from_same_package
   final auth = ref.watch(authServiceProvider);
   return auth.needsAuth;
 });
 
 /// Provider for current user name
+/// **DEPRECATED**: Use AppStateReady.userName instead.
+@Deprecated('Use AppStateReady.userName instead')
 final currentUserNameProvider = Provider<String?>((ref) {
+  // ignore: deprecated_member_use_from_same_package
   final authState = ref.watch(authStateProvider);
   return authState.userName;
 });

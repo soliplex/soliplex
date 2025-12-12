@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/services/auth_service.dart';
-import '../../core/services/server_config_service.dart';
+import '../../core/models/server_models.dart';
+import '../../core/providers/app_providers.dart';
 
 /// Widget for selecting and initiating OIDC login.
 ///
@@ -34,10 +34,12 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
     super.initState();
     // Use listenManual in initState to avoid listener issues in build
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.listenManual(authStateProvider, (previous, next) {
-        debugPrint('OIDCProviderSelector: Auth state changed: ${previous?.status} -> ${next.status}');
+      ref.listenManual(appStateStreamProvider, (previous, next) {
+        final prevState = previous?.valueOrNull;
+        final nextState = next.valueOrNull;
+        debugPrint('OIDCProviderSelector: App state changed: $prevState -> $nextState');
         // Only call onAuthenticated once per auth flow
-        if (next.isAuthenticated && !_hasCalledOnAuthenticated) {
+        if (nextState is AppStateReady && !_hasCalledOnAuthenticated) {
           _hasCalledOnAuthenticated = true;
           debugPrint('OIDCProviderSelector: Calling onAuthenticated callback');
           widget.onAuthenticated?.call();
@@ -48,11 +50,11 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authStateProvider);
+    final appStateAsync = ref.watch(appStateStreamProvider);
     final theme = Theme.of(context);
 
     debugPrint('OIDCProviderSelector build: providers=${widget.providers.length}, '
-        'authStatus=${authState.status}, isAuthenticating=$_isAuthenticating');
+        'isAuthenticating=$_isAuthenticating');
 
     if (widget.providers.isEmpty) {
       debugPrint('OIDCProviderSelector: No providers available');
@@ -64,12 +66,20 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
       );
     }
 
+    return appStateAsync.when(
+      data: (state) => _buildForState(state, theme),
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => _buildErrorCard(theme, e.toString()),
+    );
+  }
+
+  Widget _buildForState(AppState state, ThemeData theme) {
     // Show error if auth failed
-    if (authState.status == AuthStatus.error) {
+    if (state is AppStateError) {
       debugPrint('OIDCProviderSelector: Showing error state');
       return Column(
         children: [
-          _buildErrorCard(theme, authState.error ?? 'Authentication failed'),
+          _buildErrorCard(theme, state.message),
           const SizedBox(height: 16),
           _buildProviderButtons(theme),
         ],
@@ -77,7 +87,7 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
     }
 
     // Show loading during auth
-    if (_isAuthenticating || authState.status == AuthStatus.authenticating) {
+    if (_isAuthenticating || state is AppStateAuthenticating) {
       debugPrint('OIDCProviderSelector: Showing authenticating state');
       return Column(
         children: [
@@ -152,9 +162,9 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
     });
 
     try {
-      final authService = ref.read(authServiceProvider);
-      debugPrint('OIDCProviderSelector: Got auth service, calling startLogin');
-      await authService.startLogin(provider);
+      final appStateManager = ref.read(appStateManagerProvider);
+      debugPrint('OIDCProviderSelector: Got app state manager, calling startLogin');
+      await appStateManager.startLogin(provider);
       debugPrint('OIDCProviderSelector: startLogin completed');
 
       // Reset authenticating state - callback handled by ref.listen
@@ -253,10 +263,12 @@ class CompactLoginPrompt extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authStateProvider);
+    final appStateAsync = ref.watch(appStateStreamProvider);
     final theme = Theme.of(context);
 
-    if (authState.isAuthenticated) {
+    final isReady = appStateAsync.whenOrNull(data: (s) => s.isReady) ?? false;
+
+    if (isReady) {
       return const SizedBox.shrink();
     }
 
