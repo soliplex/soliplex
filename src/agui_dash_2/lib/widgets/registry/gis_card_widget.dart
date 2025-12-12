@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'gis_map_modal.dart';
+import 'widget_utils.dart';
 
 /// Represents a single GIS coordinate point with optional metadata.
 class GISCoordinate {
@@ -24,33 +25,12 @@ class GISCoordinate {
 
   factory GISCoordinate.fromMap(Map<String, dynamic> data) {
     return GISCoordinate(
-      latitude: _parseDouble(data['latitude']) ?? 0.0,
-      longitude: _parseDouble(data['longitude']) ?? 0.0,
-      accuracy: _parseDouble(data['accuracy']),
+      latitude: parseDouble(data['latitude']) ?? 0.0,
+      longitude: parseDouble(data['longitude']) ?? 0.0,
+      accuracy: parseDouble(data['accuracy']),
       label: data['label'] as String?,
-      color: data['color'] != null ? _parseColor(data['color']) : null,
+      color: parseColor(data['color']),
     );
-  }
-
-  static double? _parseDouble(dynamic value) {
-    if (value == null) return null;
-    if (value is num) return value.toDouble();
-    if (value is String) return double.tryParse(value);
-    return null;
-  }
-
-  static Color? _parseColor(dynamic value) {
-    if (value == null) return null;
-    if (value is String) {
-      // Support hex colors like "#FF0000" or "FF0000"
-      final hex = value.replaceFirst('#', '');
-      if (hex.length == 6) {
-        return Color(int.parse('FF$hex', radix: 16));
-      } else if (hex.length == 8) {
-        return Color(int.parse(hex, radix: 16));
-      }
-    }
-    return null;
   }
 }
 
@@ -118,9 +98,9 @@ class GISCardWidget extends StatelessWidget {
       // Legacy single coordinate format
       coords = [
         GISCoordinate(
-          latitude: _parseDouble(data['latitude']) ?? 0.0,
-          longitude: _parseDouble(data['longitude']) ?? 0.0,
-          accuracy: _parseDouble(data['accuracy']),
+          latitude: parseDouble(data['latitude']) ?? 0.0,
+          longitude: parseDouble(data['longitude']) ?? 0.0,
+          accuracy: parseDouble(data['accuracy']),
           label: data['label'] as String?,
         ),
       ];
@@ -128,7 +108,7 @@ class GISCardWidget extends StatelessWidget {
 
     return GISCardWidget(
       coordinates: coords,
-      zoom: _parseDouble(data['zoom']) ?? 15.0,
+      zoom: parseDouble(data['zoom']) ?? 15.0,
       title: data['title'] as String?,
       showAccuracyCircle: data['showAccuracyCircle'] as bool? ?? true,
       onTap: onEvent != null
@@ -139,14 +119,6 @@ class GISCardWidget extends StatelessWidget {
               })
           : null,
     );
-  }
-
-  /// Parse a value that might be a num or a String to double.
-  static double? _parseDouble(dynamic value) {
-    if (value == null) return null;
-    if (value is num) return value.toDouble();
-    if (value is String) return double.tryParse(value);
-    return null;
   }
 
   /// Calculate the center point of all coordinates.

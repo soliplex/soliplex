@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'widget_utils.dart';
+
 /// MetricDisplay widget for showing a metric value with label, unit, and trend.
 class MetricDisplayWidget extends StatelessWidget {
   final String label;
@@ -38,7 +40,7 @@ class MetricDisplayWidget extends StatelessWidget {
       value: data['value']?.toString() ?? '',
       unit: data['unit'] as String?,
       trend: data['trend'] as String?,
-      color: data['color'] != null ? Color(data['color'] as int) : null,
+      color: parseColor(data['color']),
     );
   }
 

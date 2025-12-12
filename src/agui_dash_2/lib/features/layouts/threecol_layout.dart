@@ -28,8 +28,8 @@ class ThreeColumnLayout extends ConsumerWidget {
           ),
         ),
         const VerticalDivider(width: 1),
-        // Chat (middle column - flexible)
-        const Expanded(child: ChatContent()),
+        // Chat (middle column - flexible) - ClipRect prevents overflow during scroll
+        const Expanded(child: ClipRect(child: ChatContent())),
         const VerticalDivider(width: 1),
         // Context pane (right column)
         SizedBox(
@@ -298,19 +298,6 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
                 // Load the historical messages into chat
                 if (messages.isNotEmpty) {
                   ref.read(chatProvider.notifier).loadMessages(messages);
-                }
-
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        messages.isNotEmpty
-                            ? 'Loaded ${messages.length} messages from thread'
-                            : 'Resumed thread - send a message to continue',
-                      ),
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
                 }
               },
             ),

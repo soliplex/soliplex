@@ -127,9 +127,12 @@ class AgUiService extends ChangeNotifier {
 
   /// Create a new thread on the server.
   Future<(String, String)> _createThread() async {
+    final url = _config!.roomEndpoint;
+    final headers = {'Content-Type': 'application/json', ...?_config!.headers};
+
     final response = await _httpClient.post(
-      Uri.parse(_config!.roomEndpoint),
-      headers: {'Content-Type': 'application/json', ...?_config!.headers},
+      Uri.parse(url),
+      headers: headers,
       body: '{}',
     );
 

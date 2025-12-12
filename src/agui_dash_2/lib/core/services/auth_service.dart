@@ -114,10 +114,13 @@ class AuthService extends ChangeNotifier {
 
   /// Start OIDC login flow with the specified provider using flutter_appauth
   Future<void> startLogin(OIDCAuthSystem provider) async {
+    debugPrint('AuthService.startLogin: Starting with provider ${provider.id}');
     final server = _serverConfig.currentServer;
     if (server == null) {
+      debugPrint('AuthService.startLogin: No server configured!');
       throw StateError('No server configured');
     }
+    debugPrint('AuthService.startLogin: Server=${server.url}');
 
     _state = _state.copyWith(status: AuthStatus.authenticating);
     notifyListeners();
@@ -126,11 +129,13 @@ class AuthService extends ChangeNotifier {
       // Clear any existing OIDC tokens to avoid keychain duplicate errors
       debugPrint('AuthService: Clearing existing OIDC tokens before login');
       await _tokenStorage.deleteOidcAuthTokenResponse();
+      debugPrint('AuthService: Tokens cleared');
 
       // Build SsoConfig from OIDCAuthSystem
       // serverUrl is the OIDC issuer URL (e.g., https://keycloak.example.com/realms/myrealm)
       final issuerUrl = provider.serverUrl;
       final scopes = provider.scope?.split(' ') ?? ['openid', 'profile', 'email'];
+      debugPrint('AuthService: issuerUrl=$issuerUrl, scopes=$scopes');
 
       final ssoConfig = SsoConfig(
         id: provider.id,
@@ -142,23 +147,30 @@ class AuthService extends ChangeNotifier {
         redirectUrl: _getRedirectUrl(),
         scopes: scopes,
       );
+      debugPrint('AuthService: SsoConfig created, redirectUrl=${_getRedirectUrl()}');
 
       // Enable auth on the interactor
       _oidcInteractor.useAuth = true;
 
       // Use flutter_appauth for native OIDC flow
+      debugPrint('AuthService: Calling authorizeAndExchangeCode...');
       final tokenResponse = await _oidcInteractor.authorizeAndExchangeCode(ssoConfig);
+      debugPrint('AuthService: Got token response, expiry=${tokenResponse.accessTokenExpiration}');
 
       // Store tokens using existing storage service
+      debugPrint('AuthService: Storing tokens...');
       await _storage.storeTokens(
         serverId: server.id,
         accessToken: tokenResponse.accessToken,
         refreshToken: tokenResponse.refreshToken,
         expiresAt: tokenResponse.accessTokenExpiration,
       );
+      debugPrint('AuthService: Tokens stored');
 
       // Fetch user info
+      debugPrint('AuthService: Fetching user info...');
       final userInfo = await _fetchUserInfo(server.url, tokenResponse.accessToken);
+      debugPrint('AuthService: User info: $userInfo');
 
       _state = AuthState(
         status: AuthStatus.authenticated,
@@ -167,11 +179,13 @@ class AuthService extends ChangeNotifier {
         userName: userInfo?['name'] as String?,
         userEmail: userInfo?['email'] as String?,
       );
+      debugPrint('AuthService: State updated to authenticated');
 
       // Update server with token expiry
       await _serverConfig.updateServer(
         server.copyWith(tokenExpiry: tokenResponse.accessTokenExpiration),
       );
+      debugPrint('AuthService: Server updated');
 
       notifyListeners();
     } catch (e) {
@@ -362,11 +376,13 @@ class AuthService extends ChangeNotifier {
 // ============================================================================
 
 /// Provider for auth service
+/// Note: Uses ref.read instead of ref.watch to prevent disposal during auth flow
+/// when serverConfig.updateServer() triggers provider rebuilds
 final authServiceProvider = ChangeNotifierProvider<AuthService>((ref) {
-  final storage = ref.watch(secureStorageProvider);
-  final serverConfig = ref.watch(serverConfigProvider);
-  final oidcInteractor = ref.watch(oidcAuthInteractorProvider);
-  final tokenStorage = ref.watch(secureTokenStorageProvider);
+  final storage = ref.read(secureStorageProvider);
+  final serverConfig = ref.read(serverConfigProvider);
+  final oidcInteractor = ref.read(oidcAuthInteractorProvider);
+  final tokenStorage = ref.read(secureTokenStorageProvider);
   return AuthService(
     storage: storage,
     serverConfig: serverConfig,

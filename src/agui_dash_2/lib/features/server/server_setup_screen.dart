@@ -63,11 +63,14 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
         return;
       }
 
-      // If server doesn't require auth, connect directly
+      // Register the server with serverConfig (needed for AuthService)
+      await serverConfig.connectToServer(info);
+
+      // If server doesn't require auth, navigate immediately
       if (info.isOpenAccess) {
-        await _connectToServer(info);
+        widget.onConnected?.call();
       }
-      // Otherwise, show OIDC provider selection
+      // Otherwise, show OIDC provider selection (server is already registered)
     } catch (e) {
       setState(() {
         _isProbing = false;

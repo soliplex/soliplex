@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'widget_utils.dart';
+
 /// ActionButton widget for interactive buttons.
 class ActionButtonWidget extends StatelessWidget {
   final String label;
@@ -28,7 +30,7 @@ class ActionButtonWidget extends StatelessWidget {
   ) {
     return ActionButtonWidget(
       label: data['label'] as String? ?? 'Action',
-      color: data['color'] != null ? Color(data['color'] as int) : null,
+      color: parseColor(data['color']),
       onPressed: onEvent != null ? () => onEvent('pressed', data) : null,
     );
   }

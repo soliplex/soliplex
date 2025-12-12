@@ -73,7 +73,7 @@ class ServerConfigService extends ChangeNotifier {
     }
   }
 
-  /// Normalize a server URL (ensure https://, strip trailing slash)
+  /// Normalize a server URL (ensure https://, strip trailing slash and /api path)
   String normalizeUrl(String url) {
     var normalized = url.trim();
 
@@ -92,6 +92,9 @@ class ServerConfigService extends ChangeNotifier {
       normalized = normalized.substring(0, normalized.length - 1);
     }
 
+    // Strip /api and any version suffix - store just the base URL
+    normalized = normalized.replaceAll(RegExp(r'/api(/v\d+)?$'), '');
+
     return normalized;
   }
 
@@ -100,8 +103,8 @@ class ServerConfigService extends ChangeNotifier {
     final normalizedUrl = normalizeUrl(url);
 
     try {
-      // Try to fetch /login endpoint to discover OIDC providers
-      final loginUrl = Uri.parse('$normalizedUrl/login');
+      // Try to fetch /api/login endpoint to discover OIDC providers
+      final loginUrl = Uri.parse('$normalizedUrl/api/login');
       final response = await _httpClient
           .get(loginUrl)
           .timeout(const Duration(seconds: 10));
@@ -132,10 +135,10 @@ class ServerConfigService extends ChangeNotifier {
     }
   }
 
-  /// Fallback probe using /rooms endpoint
+  /// Fallback probe using /api/v1/rooms endpoint
   Future<ServerInfo> _probeRoomsEndpoint(String url) async {
     try {
-      final roomsUrl = Uri.parse('$url/rooms');
+      final roomsUrl = Uri.parse('$url/api/v1/rooms');
       final response = await _httpClient
           .get(roomsUrl)
           .timeout(const Duration(seconds: 10));

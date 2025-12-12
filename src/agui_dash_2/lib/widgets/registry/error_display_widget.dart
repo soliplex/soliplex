@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'widget_utils.dart';
+
 /// ErrorDisplay widget for showing error messages.
 class ErrorDisplayWidget extends StatelessWidget {
   final String message;
@@ -22,7 +24,7 @@ class ErrorDisplayWidget extends StatelessWidget {
   ) {
     return ErrorDisplayWidget(
       message: data['message'] as String? ?? 'An error occurred',
-      color: data['color'] != null ? Color(data['color'] as int) : null,
+      color: parseColor(data['color']),
     );
   }
 

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'widget_utils.dart';
+
 /// LocationCard widget for displaying GPS location data.
 class LocationCardWidget extends StatelessWidget {
   final double? latitude;
@@ -46,24 +48,16 @@ class LocationCardWidget extends StatelessWidget {
     void Function(String, Map<String, dynamic>)? onEvent,
   ) {
     return LocationCardWidget(
-      latitude: _parseDouble(data['latitude']),
-      longitude: _parseDouble(data['longitude']),
-      accuracy: _parseDouble(data['accuracy']),
-      altitude: _parseDouble(data['altitude']),
+      latitude: parseDouble(data['latitude']),
+      longitude: parseDouble(data['longitude']),
+      accuracy: parseDouble(data['accuracy']),
+      altitude: parseDouble(data['altitude']),
       address: data['address'] as String?,
       city: data['city'] as String?,
       country: data['country'] as String?,
       timestamp: data['timestamp'] as String?,
-      color: data['color'] != null ? Color(data['color'] as int) : null,
+      color: parseColor(data['color']),
     );
-  }
-
-  /// Parse a value that might be a num or a String to double.
-  static double? _parseDouble(dynamic value) {
-    if (value == null) return null;
-    if (value is num) return value.toDouble();
-    if (value is String) return double.tryParse(value);
-    return null;
   }
 
   @override

@@ -56,35 +56,53 @@ class OidcMobileAuthInteractor implements OidcAuthInteractor {
   Future<OidcAuthTokenResponse> _authorizeAndExchangeCode(
     SsoConfig config,
   ) async {
-    final result = await _appAuth.authorizeAndExchangeCode(
-      AuthorizationTokenRequest(
-        config.clientId,
-        config.redirectUrl,
-        scopes: config.scopes,
-        issuer: config.endpoint,
-        externalUserAgent: ExternalUserAgent.asWebAuthenticationSession,
-      ),
-    );
+    debugPrint('_authorizeAndExchangeCode: calling flutter_appauth...');
+    debugPrint('  clientId: ${config.clientId}');
+    debugPrint('  redirectUrl: ${config.redirectUrl}');
+    debugPrint('  issuer: ${config.endpoint}');
+    debugPrint('  scopes: ${config.scopes}');
 
-    if (result.idToken == null ||
-        result.accessToken == null ||
-        result.accessTokenExpirationDateTime == null ||
-        result.refreshToken == null) {
-      throw Exception(
-        'At least one of the values in oidc auth result is null:\n'
-        'is id token null? ${result.idToken == null}\n'
-        'is access token null: ${result.accessToken == null}\n'
-        'is token expiration null: ${result.accessTokenExpirationDateTime == null}\n'
-        'is refresh token null: ${result.refreshToken == null}\n',
+    try {
+      final result = await _appAuth.authorizeAndExchangeCode(
+        AuthorizationTokenRequest(
+          config.clientId,
+          config.redirectUrl,
+          scopes: config.scopes,
+          issuer: config.endpoint,
+          externalUserAgent: ExternalUserAgent.asWebAuthenticationSession,
+        ),
       );
-    }
 
-    return OidcAuthTokenResponse(
-      idToken: result.idToken!,
-      accessToken: result.accessToken!,
-      accessTokenExpiration: result.accessTokenExpirationDateTime!,
-      refreshToken: result.refreshToken!,
-    );
+      debugPrint('_authorizeAndExchangeCode: got result from flutter_appauth');
+      debugPrint('  idToken null? ${result.idToken == null}');
+      debugPrint('  accessToken null? ${result.accessToken == null}');
+      debugPrint('  expiration null? ${result.accessTokenExpirationDateTime == null}');
+      debugPrint('  refreshToken null? ${result.refreshToken == null}');
+
+      if (result.idToken == null ||
+          result.accessToken == null ||
+          result.accessTokenExpirationDateTime == null ||
+          result.refreshToken == null) {
+        throw Exception(
+          'At least one of the values in oidc auth result is null:\n'
+          'is id token null? ${result.idToken == null}\n'
+          'is access token null: ${result.accessToken == null}\n'
+          'is token expiration null: ${result.accessTokenExpirationDateTime == null}\n'
+          'is refresh token null: ${result.refreshToken == null}\n',
+        );
+      }
+
+      return OidcAuthTokenResponse(
+        idToken: result.idToken!,
+        accessToken: result.accessToken!,
+        accessTokenExpiration: result.accessTokenExpirationDateTime!,
+        refreshToken: result.refreshToken!,
+      );
+    } catch (e, stack) {
+      debugPrint('_authorizeAndExchangeCode: EXCEPTION: $e');
+      debugPrint('_authorizeAndExchangeCode: Stack: $stack');
+      rethrow;
+    }
   }
 
   @override

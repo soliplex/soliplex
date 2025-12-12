@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'widget_utils.dart';
+
 /// ProgressCard widget for displaying progress bars with labels.
 class ProgressCardWidget extends StatelessWidget {
   final String label;
@@ -29,8 +31,8 @@ class ProgressCardWidget extends StatelessWidget {
   ) {
     return ProgressCardWidget(
       label: data['label'] as String? ?? '',
-      progress: (data['progress'] as num?)?.toDouble() ?? 0.0,
-      color: data['color'] != null ? Color(data['color'] as int) : null,
+      progress: parseDouble(data['progress']) ?? 0.0,
+      color: parseColor(data['color']),
     );
   }
 

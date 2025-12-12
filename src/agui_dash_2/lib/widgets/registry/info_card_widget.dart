@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'widget_utils.dart';
+
 /// InfoCard widget for displaying information with title, subtitle, and optional icon.
 class InfoCardWidget extends StatelessWidget {
   final String title;
@@ -55,10 +57,8 @@ class InfoCardWidget extends StatelessWidget {
     return InfoCardWidget(
       title: data['title'] as String? ?? '',
       subtitle: data['subtitle'] as String?,
-      icon: data['icon'] != null
-          ? IconData(data['icon'] as int, fontFamily: 'MaterialIcons')
-          : null,
-      color: data['color'] != null ? Color(data['color'] as int) : null,
+      icon: parseIcon(data['icon']),
+      color: parseColor(data['color']),
       onTap: onEvent != null ? () => onEvent('tap', {}) : null,
     );
   }

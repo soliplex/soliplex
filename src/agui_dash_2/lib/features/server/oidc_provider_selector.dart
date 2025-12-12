@@ -33,14 +33,21 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
     final authState = ref.watch(authStateProvider);
     final theme = Theme.of(context);
 
+    debugPrint('OIDCProviderSelector build: providers=${widget.providers.length}, '
+        'authStatus=${authState.status}, isAuthenticating=$_isAuthenticating');
+
     // Listen for auth completion
     ref.listen(authStateProvider, (previous, next) {
+      debugPrint('OIDCProviderSelector: Auth state changed: ${previous?.status} -> ${next.status}');
+      debugPrint('OIDCProviderSelector: isAuthenticated: ${previous?.isAuthenticated} -> ${next.isAuthenticated}');
       if (next.isAuthenticated && previous?.isAuthenticated != true) {
+        debugPrint('OIDCProviderSelector: Calling onAuthenticated callback');
         widget.onAuthenticated?.call();
       }
     });
 
     if (widget.providers.isEmpty) {
+      debugPrint('OIDCProviderSelector: No providers available');
       return Center(
         child: Text(
           'No login methods available',
@@ -51,6 +58,7 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
 
     // Show error if auth failed
     if (authState.status == AuthStatus.error) {
+      debugPrint('OIDCProviderSelector: Showing error state');
       return Column(
         children: [
           _buildErrorCard(theme, authState.error ?? 'Authentication failed'),
@@ -62,6 +70,7 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
 
     // Show loading during auth
     if (_isAuthenticating || authState.status == AuthStatus.authenticating) {
+      debugPrint('OIDCProviderSelector: Showing authenticating state');
       return Column(
         children: [
           const CircularProgressIndicator(),
@@ -79,17 +88,23 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
       );
     }
 
+    debugPrint('OIDCProviderSelector: Showing provider buttons');
     return _buildProviderButtons(theme);
   }
 
   Widget _buildProviderButtons(ThemeData theme) {
+    debugPrint('OIDCProviderSelector: Building ${widget.providers.length} provider buttons');
     return Column(
       children: widget.providers.map((provider) {
+        debugPrint('OIDCProviderSelector: Creating button for ${provider.id}');
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: _OIDCProviderButton(
             provider: provider,
-            onTap: () => _startLogin(provider),
+            onTap: () {
+              debugPrint('OIDCProviderSelector: Button tapped for ${provider.id}');
+              _startLogin(provider);
+            },
           ),
         );
       }).toList(),
@@ -123,14 +138,25 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
   }
 
   Future<void> _startLogin(OIDCAuthSystem provider) async {
+    debugPrint('OIDCProviderSelector: Starting login with ${provider.id}');
     setState(() {
       _isAuthenticating = true;
     });
 
     try {
       final authService = ref.read(authServiceProvider);
+      debugPrint('OIDCProviderSelector: Got auth service, calling startLogin');
       await authService.startLogin(provider);
-    } catch (e) {
+      debugPrint('OIDCProviderSelector: startLogin completed');
+
+      // Check if login succeeded and trigger callback
+      if (authService.isAuthenticated) {
+        debugPrint('OIDCProviderSelector: Login succeeded, calling onAuthenticated');
+        widget.onAuthenticated?.call();
+      }
+    } catch (e, stack) {
+      debugPrint('OIDCProviderSelector: Login failed: $e');
+      debugPrint('OIDCProviderSelector: Stack: $stack');
       if (mounted) {
         setState(() {
           _isAuthenticating = false;

@@ -34,7 +34,18 @@ class ChatScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
-  static const String _defaultBaseUrl = 'http://localhost:8000/api/v1';
+  /// Get the server URL from config, defaulting to localhost.
+  /// Strips any /api suffix to ensure consistent URL construction.
+  String get _serverUrl {
+    final server = ref.read(currentServerProvider);
+    var url = server?.url ?? 'http://localhost:8000';
+    // Strip /api and any version suffix if present
+    url = url.replaceAll(RegExp(r'/api(/v\d+)?$'), '');
+    return url;
+  }
+
+  /// Get the API base URL (server + /api/v1).
+  String get _apiBaseUrl => '$_serverUrl/api/v1';
 
   @override
   void initState() {
@@ -76,7 +87,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _fetchRoomsAndConfigure() async {
     // Fetch available rooms
     final roomsNotifier = ref.read(roomsProvider.notifier);
-    roomsNotifier.setBaseUrl(_defaultBaseUrl);
+    roomsNotifier.setServerUrl(_serverUrl);
     await roomsNotifier.fetchRooms();
 
     // Select first room by default if none selected
@@ -87,15 +98,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     // Configure AG-UI with selected room
-    _updateAgUiConfig();
+    await _updateAgUiConfig();
   }
 
-  void _updateAgUiConfig() {
+  Future<void> _updateAgUiConfig() async {
     final selectedRoom = ref.read(selectedRoomProvider);
     if (selectedRoom != null) {
+      // Get auth headers if available
+      final authService = ref.read(authServiceProvider);
+      final headers = await authService.getAuthHeaders();
+
       ref.read(agUiConfigProvider.notifier).state = AgUiServiceConfig(
-        baseUrl: _defaultBaseUrl,
+        baseUrl: _apiBaseUrl,
         roomId: selectedRoom,
+        headers: headers.isNotEmpty ? headers : null,
       );
       // Reset conversation when switching rooms
       ref.read(agUiServiceProvider).resetConversation();
@@ -104,7 +120,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  void _onRoomChanged(String? roomId) {
+  Future<void> _onRoomChanged(String? roomId) async {
     if (roomId == null) return;
 
     final previousRoomId = ref.read(selectedRoomProvider);
@@ -122,7 +138,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     ref.read(selectedRoomProvider.notifier).state = roomId;
     ref.read(selectedRoomIdProvider.notifier).state = roomId;
-    _updateAgUiConfig();
+    await _updateAgUiConfig();
 
     // Restore chat history from per-room provider, or clear if empty
     final savedMessages = ref.read(roomChatProvider(roomId)).messages;
@@ -144,19 +160,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('AG-UI Dashboard'),
-            const SizedBox(width: 8),
             _buildConnectionIndicator(agUiService.state),
-            const SizedBox(width: 16),
-            _buildRoomSelector(roomsState, selectedRoom),
+            const SizedBox(width: 8),
+            Flexible(
+              child: _buildRoomSelector(roomsState, selectedRoom),
+            ),
             if (selectedRoomData != null) ...[
               const SizedBox(width: 8),
-              Flexible(
-                child: CapabilityIcons(room: selectedRoomData),
-              ),
+              CapabilityIcons(room: selectedRoomData),
             ],
-            const Spacer(),
+            const SizedBox(width: 8),
             _buildLayoutModeSelector(layoutMode),
           ],
         ),
@@ -199,17 +214,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         return ButtonSegment(
           value: mode,
           icon: Icon(mode.icon, size: 18),
-          label: Text(mode.displayName),
+          tooltip: mode.displayName,
         );
       }).toList(),
       selected: {currentMode},
       onSelectionChanged: (Set<LayoutMode> modes) {
         ref.read(layoutModeProvider.notifier).state = modes.first;
       },
+      showSelectedIcon: false,
       style: ButtonStyle(
         visualDensity: VisualDensity.compact,
         padding: WidgetStateProperty.all(
-          const EdgeInsets.symmetric(horizontal: 12),
+          const EdgeInsets.symmetric(horizontal: 8),
         ),
       ),
     );

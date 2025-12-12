@@ -116,6 +116,9 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           _processEvent(event, chatNotifier, contextNotifier, canvasNotifier);
         },
         uiToolHandler: (toolCallId, toolName, args) async {
+          // Skip if widget disposed
+          if (!mounted) return {'skipped': true, 'reason': 'disposed'};
+
           // Prevent duplicate execution of the same tool call
           if (_processedUiToolCalls.contains(toolCallId)) {
             return {'skipped': true, 'reason': 'duplicate'};
@@ -131,6 +134,9 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           );
         },
         onLocalToolExecution: (toolCallId, toolName, status) {
+          // Skip if widget disposed
+          if (!mounted) return;
+
           // Deduplicate by tool call ID - skip if we've already processed this execution
           final trackingKey = '$toolCallId:$status';
           if (_processedToolNotifications.contains(trackingKey)) {
@@ -182,6 +188,8 @@ class _ChatContentState extends ConsumerState<ChatContent> {
 
   /// Sync current chat state to the per-room provider for session preservation.
   void _syncToRoomProvider() {
+    if (!mounted) return;
+
     final agUiService = ref.read(configuredAgUiServiceProvider);
     final roomId = agUiService.currentRoomId;
     if (roomId == null) return;

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/room_models.dart';
+import 'auth_service.dart';
 
 // Re-export Room model for convenience
 export '../models/room_models.dart';
@@ -29,25 +30,40 @@ class RoomsState {
 /// Notifier for managing rooms state.
 class RoomsNotifier extends StateNotifier<RoomsState> {
   final http.Client _httpClient;
-  String _baseUrl = 'http://localhost:8000/api/v1';
+  final AuthService? _authService;
+  String _serverUrl = 'http://localhost:8000';
 
-  RoomsNotifier({http.Client? httpClient})
+  RoomsNotifier({http.Client? httpClient, AuthService? authService})
     : _httpClient = httpClient ?? http.Client(),
+      _authService = authService,
       super(const RoomsState());
 
-  /// Update the base URL for the API.
-  void setBaseUrl(String baseUrl) {
-    _baseUrl = baseUrl;
+  /// Update the server URL (without /api path).
+  void setServerUrl(String serverUrl) {
+    // Strip trailing slash and any /api suffix
+    _serverUrl = serverUrl
+        .replaceAll(RegExp(r'/+$'), '')
+        .replaceAll(RegExp(r'/api(/v\d+)?$'), '');
   }
+
+  /// Get the full API base URL.
+  String get _apiBaseUrl => '$_serverUrl/api/v1';
 
   /// Fetch available rooms from the server.
   Future<void> fetchRooms() async {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
+      // Build headers with auth token if available
+      final headers = <String, String>{'Accept': 'application/json'};
+      if (_authService != null) {
+        final authHeaders = await _authService.getAuthHeaders();
+        headers.addAll(authHeaders);
+      }
+
       final response = await _httpClient.get(
-        Uri.parse('$_baseUrl/rooms'),
-        headers: {'Accept': 'application/json'},
+        Uri.parse('$_apiBaseUrl/rooms'),
+        headers: headers,
       );
 
       if (response.statusCode != 200) {
@@ -100,7 +116,8 @@ class RoomsNotifier extends StateNotifier<RoomsState> {
 
 /// Provider for rooms state.
 final roomsProvider = StateNotifierProvider<RoomsNotifier, RoomsState>((ref) {
-  return RoomsNotifier();
+  final authService = ref.read(authServiceProvider);
+  return RoomsNotifier(authService: authService);
 });
 
 /// Provider for the currently selected room ID.
