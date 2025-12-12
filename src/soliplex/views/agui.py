@@ -17,7 +17,6 @@ from soliplex import util
 from soliplex.agui import mpx as agui_mpx
 from soliplex.agui import parser as agui_parser
 from soliplex.agui import persistence as agui_persistence
-from soliplex.agui import util as agui_util
 
 router = fastapi.APIRouter(tags=["rooms"])
 
@@ -81,71 +80,6 @@ async def _check_user_room_agent(
     return user_name, user_profile, agent
 
 
-async def _check_user_thread(
-    *,
-    room_id: str,
-    thread_id: str,
-    user_name: str,
-    the_threads: agui_package.ThreadStorage,
-) -> agui_package.Thread:
-    """Check for an existing thread for the user within the given room"""
-    try:
-        thread = await the_threads.get_thread(
-            user_name=user_name,
-            thread_id=thread_id,
-        )
-    except agui_package.UnknownThread:
-        raise fastapi.HTTPException(
-            status_code=404,
-            detail=f"No such thread: {thread_id}",
-        ) from None
-
-    t_room_id = await thread.awaitable_attrs.room_id
-
-    if t_room_id != room_id:
-        msg = f"Expected thread.room_id: {room_id}, found {t_room_id}"
-        raise fastapi.HTTPException(
-            status_code=400,
-            detail=msg,
-        ) from None
-
-    return thread
-
-
-async def _check_user_thread_run(
-    *,
-    room_id: str,
-    thread_id: str,
-    user_name: str,
-    run_id: str,
-    the_threads: agui_package.ThreadStorage,
-) -> agui_package.Run:
-    """Check for an existing thread / run for the user within the given room"""
-    try:
-        run = await the_threads.get_run(
-            thread_id=thread_id,
-            user_name=user_name,
-            run_id=run_id,
-        )
-    except agui_package.UnknownRun:
-        raise fastapi.HTTPException(
-            status_code=404,
-            detail=f"No such run: {run_id}",
-        ) from None
-
-    thread = await run.awaitable_attrs.thread
-    t_room_id = await thread.awaitable_attrs.room_id
-
-    if t_room_id != room_id:
-        msg = f"Expected thread.room_id: {room_id}, found {t_room_id}"
-        raise fastapi.HTTPException(
-            status_code=400,
-            detail=msg,
-        ) from None
-
-    return run
-
-
 @util.logfire_span("GET /v1/rooms/{room_id}/agui")
 @router.get("/v1/rooms/{room_id}/agui")
 async def get_room_agui(
@@ -204,12 +138,19 @@ async def get_room_agui_thread_id(
         the_installation=the_installation,
         token=token,
     )
-    thread = await _check_user_thread(
-        room_id=room_id,
-        thread_id=thread_id,
-        user_name=user_name,
-        the_threads=the_threads,
-    )
+    try:
+        thread = await the_threads.get_thread(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+        )
+
+    except agui_package.AGUI_Exception as exc:
+        raise fastapi.HTTPException(
+            status_code=exc.status_code,
+            detail=exc.args,
+        ) from None
+
     thread_meta = await thread.awaitable_attrs.thread_metadata
 
     a_thread_runs = {}
@@ -248,13 +189,19 @@ async def get_room_agui_thread_id_run_id(
         the_installation=the_installation,
         token=token,
     )
-    run = await _check_user_thread_run(
-        room_id=room_id,
-        thread_id=thread_id,
-        user_name=user_name,
-        run_id=run_id,
-        the_threads=the_threads,
-    )
+    try:
+        run = await the_threads.get_run(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+        )
+
+    except agui_package.AGUI_Exception as exc:
+        raise fastapi.HTTPException(
+            status_code=exc.status_code,
+            detail=exc.args,
+        ) from None
 
     return models.AGUI_Run.from_run(
         a_run=run,
@@ -351,14 +298,16 @@ async def post_room_agui_thread_id(
     try:
         run = await the_threads.new_run(
             user_name=user_name,
+            room_id=room_id,
             thread_id=thread_id,
             parent_run_id=parent_run_id,
             run_metadata=r_metadata,
         )
-    except agui_package.MissingParentRun:
+
+    except agui_package.AGUI_Exception as exc:
         raise fastapi.HTTPException(
-            status_code=400,
-            detail=f"No such parent run: {parent_run_id}",
+            status_code=exc.status_code,
+            detail=exc.args,
         ) from None
 
     # Wait for these for a new run because the are set only at commit time
@@ -412,11 +361,20 @@ async def post_room_agui_thread_id_meta(
         if value is not None
     }
 
-    await the_threads.update_thread_metadata(
-        user_name=user_name,
-        thread_id=thread_id,
-        thread_metadata=new_md_dict,
-    )
+    try:
+        await the_threads.update_thread_metadata(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            thread_metadata=new_md_dict,
+        )
+
+    except agui_package.AGUI_Exception as exc:
+        raise fastapi.HTTPException(
+            status_code=exc.status_code,
+            detail=exc.args,
+        ) from None
+
     return fastapi.Response(status_code=205)
 
 
@@ -452,34 +410,31 @@ async def post_room_agui_thread_id_run_id(
         the_installation=the_installation,
         token=token,
     )
-    run = await _check_user_thread_run(
-        room_id=room_id,
-        thread_id=thread_id,
-        user_name=user_name,
-        run_id=run_id,
-        the_threads=the_threads,
-    )
 
     agui_adapter = await ai_ag_ui.AGUIAdapter.from_request(
         request=request,
         agent=agent,
     )
 
-    old_run_agent_input = await run.awaitable_attrs.run_agent_input
-    new_run_agent_input = agui_adapter.run_input
-
     try:
-        agui_util.check_run_input(old_run_agent_input, new_run_agent_input)
-    except agui_package.RunInputMismatch:
+        await the_threads.add_run_input(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+            run_input=agui_adapter.run_input,
+        )
+
+    except agui_package.AGUI_Exception as exc:
         raise fastapi.HTTPException(
-            status_code=400,
-            detail="Mismatched 'run_input'",
+            status_code=exc.status_code,
+            detail=exc.args,
         ) from None
 
     agent_deps = the_installation.get_agent_deps_for_room(
         room_id,
         user=user,
-        run_agent_input=new_run_agent_input,
+        run_agent_input=agui_adapter.run_input,
     )
 
     emitter = agent_deps.agui_emitter
@@ -497,6 +452,7 @@ async def post_room_agui_thread_id_run_id(
     save_events = functools.partial(
         the_threads.save_run_events,
         user_name=user_name,
+        room_id=room_id,
         thread_id=thread_id,
         run_id=run_id,
     )
@@ -547,12 +503,21 @@ async def post_room_agui_thread_id_run_id_meta(
         if value is not None
     }
 
-    await the_threads.update_run_metadata(
-        thread_id=thread_id,
-        user_name=user_name,
-        run_id=run_id,
-        run_metadata=new_md_dict,
-    )
+    try:
+        await the_threads.update_run_metadata(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+            run_metadata=new_md_dict,
+        )
+
+    except agui_package.AGUI_Exception as exc:
+        raise fastapi.HTTPException(
+            status_code=exc.status_code,
+            detail=exc.args,
+        ) from None
+
     return fastapi.Response(status_code=205)
 
 
@@ -572,17 +537,19 @@ async def delete_room_agui_thread_id(
         the_installation=the_installation,
         token=token,
     )
-    await _check_user_thread(
-        room_id=room_id,
-        thread_id=thread_id,
-        user_name=user_name,
-        the_threads=the_threads,
-    )
+    try:
+        await the_threads.delete_thread(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+        )
 
-    await the_threads.delete_thread(
-        user_name=user_name,
-        thread_id=thread_id,
-    )
+    except agui_package.AGUI_Exception as exc:
+        raise fastapi.HTTPException(
+            status_code=exc.status_code,
+            detail=exc.args,
+        ) from None
+
     return fastapi.Response(
         status_code=204,
         content=f"Deleted thread: {thread_id}",
