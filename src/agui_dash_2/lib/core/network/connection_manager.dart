@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/chat_models.dart';
 import '../services/local_tools_service.dart';
@@ -437,5 +438,10 @@ class ConnectionManager extends ChangeNotifier {
   }
 }
 
-// Note: connectionManagerProvider is declared in lib/core/services/agui_service.dart
-// to avoid circular dependencies and ensure proper server-scoped lifecycle.
+/// Singleton provider for ConnectionManager.
+/// Persists for app lifetime - NOT server-scoped.
+final connectionManagerProvider = ChangeNotifierProvider<ConnectionManager>((ref) {
+  final manager = ConnectionManager();
+  ref.onDispose(() => manager.dispose());
+  return manager;
+});

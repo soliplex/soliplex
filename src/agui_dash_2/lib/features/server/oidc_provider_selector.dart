@@ -27,6 +27,24 @@ class OIDCProviderSelector extends ConsumerStatefulWidget {
 
 class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
   bool _isAuthenticating = false;
+  bool _hasCalledOnAuthenticated = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Use listenManual in initState to avoid listener issues in build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.listenManual(authStateProvider, (previous, next) {
+        debugPrint('OIDCProviderSelector: Auth state changed: ${previous?.status} -> ${next.status}');
+        // Only call onAuthenticated once per auth flow
+        if (next.isAuthenticated && !_hasCalledOnAuthenticated) {
+          _hasCalledOnAuthenticated = true;
+          debugPrint('OIDCProviderSelector: Calling onAuthenticated callback');
+          widget.onAuthenticated?.call();
+        }
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,16 +53,6 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
 
     debugPrint('OIDCProviderSelector build: providers=${widget.providers.length}, '
         'authStatus=${authState.status}, isAuthenticating=$_isAuthenticating');
-
-    // Listen for auth completion
-    ref.listen(authStateProvider, (previous, next) {
-      debugPrint('OIDCProviderSelector: Auth state changed: ${previous?.status} -> ${next.status}');
-      debugPrint('OIDCProviderSelector: isAuthenticated: ${previous?.isAuthenticated} -> ${next.isAuthenticated}');
-      if (next.isAuthenticated && previous?.isAuthenticated != true) {
-        debugPrint('OIDCProviderSelector: Calling onAuthenticated callback');
-        widget.onAuthenticated?.call();
-      }
-    });
 
     if (widget.providers.isEmpty) {
       debugPrint('OIDCProviderSelector: No providers available');
@@ -149,19 +157,11 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
       await authService.startLogin(provider);
       debugPrint('OIDCProviderSelector: startLogin completed');
 
-      // Reset authenticating state
+      // Reset authenticating state - callback handled by ref.listen
       if (mounted) {
         setState(() {
           _isAuthenticating = false;
         });
-      }
-
-      // Check if login succeeded and trigger callback
-      if (authService.isAuthenticated) {
-        debugPrint('OIDCProviderSelector: Login succeeded, calling onAuthenticated');
-        widget.onAuthenticated?.call();
-      } else {
-        debugPrint('OIDCProviderSelector: Login completed but not authenticated, status=${authService.state.status}');
       }
     } catch (e, stack) {
       debugPrint('OIDCProviderSelector: Login failed: $e');

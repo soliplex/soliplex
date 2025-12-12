@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/chat_models.dart';
 import '../../core/network/room_session.dart';
 import '../../core/providers/panel_providers.dart';
-import '../../core/services/agui_service.dart';
+import '../../core/network/connection_manager.dart';
 import '../../core/services/chat_search_service.dart';
 import '../../core/services/local_tools_service.dart';
 import '../../core/services/rooms_service.dart';

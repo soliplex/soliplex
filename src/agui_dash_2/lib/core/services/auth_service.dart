@@ -127,10 +127,11 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Clear any existing OIDC tokens to avoid keychain duplicate errors
-      debugPrint('AuthService: Clearing existing OIDC tokens before login');
+      // Clear any existing OIDC tokens and config to avoid stale state on server switch
+      debugPrint('AuthService: Clearing existing OIDC tokens and config before login');
       await _tokenStorage.deleteOidcAuthTokenResponse();
-      debugPrint('AuthService: Tokens cleared');
+      await _oidcInteractor.clearSsoConfig();
+      debugPrint('AuthService: Tokens and config cleared');
 
       // Build SsoConfig from OIDCAuthSystem
       // serverUrl is the OIDC issuer URL (e.g., https://keycloak.example.com/realms/myrealm)
@@ -182,11 +183,9 @@ class AuthService extends ChangeNotifier {
       );
       debugPrint('AuthService: State updated to authenticated');
 
-      // Update server with token expiry
-      await _serverConfig.updateServer(
-        server.copyWith(tokenExpiry: tokenResponse.accessTokenExpiration),
-      );
-      debugPrint('AuthService: Server updated');
+      // Note: Don't call _serverConfig.updateServer() here as it triggers
+      // notifyListeners() which causes AppShell to rebuild and interrupt the auth flow.
+      // Token expiry is stored in _storage and in the AuthState.currentServer.
 
       notifyListeners();
     } catch (e) {

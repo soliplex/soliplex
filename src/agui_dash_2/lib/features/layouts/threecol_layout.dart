@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/services/agui_service.dart';
+import '../../core/network/connection_manager.dart';
 import '../../core/services/rooms_service.dart';
 import '../../core/services/server_config_service.dart';
 import '../../core/services/thread_history_service.dart';

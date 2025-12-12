@@ -6,7 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app_shell.dart';
 import '../../core/models/layout_mode.dart';
 import '../../core/providers/panel_providers.dart';
-import '../../core/services/agui_service.dart';
+import '../../core/network/connection_manager.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/feedback_service.dart';
 import '../../core/services/markdown_hooks.dart';

@@ -27,6 +27,7 @@ abstract class OidcAuthInteractor {
   Future<String?> getRefreshToken();
   Future<SsoConfig?> getSsoConfig();
   Future<void> setSsoConfig(SsoConfig config);
+  Future<void> clearSsoConfig();
   bool isTokenExpiring(OidcAuthTokenResponse? tokenResponse);
   Future<void> applyToRequest(http.BaseRequest request);
   Future<void> applyToHeader(Map<String, String> headers);
@@ -75,6 +76,9 @@ abstract class OidcAuthInteractorBase implements OidcAuthInteractor {
 
   @override
   Future<void> setSsoConfig(SsoConfig config) => ssoStorage.setSsoConfig(config);
+
+  @override
+  Future<void> clearSsoConfig() => ssoStorage.deleteSsoConfig();
 
   // =========================================================================
   // Token expiration check (shared implementation)

@@ -115,7 +115,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     if (!hasServer) {
       return ServerSetupScreen(
         onConnected: () {
-          // Re-initialize auth after server connected
+          // Server connected - auth state will be updated by the auth flow
+          // Just trigger rebuild by reading provider
+          debugPrint('AppShell: onConnected - server connected');
           _initializeAuth();
         },
       );
@@ -128,7 +130,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     if (authState.needsAuth) {
       return ServerSetupScreen(
         onConnected: () {
-          _initializeAuth();
+          // Auth state is already set by startLogin - just trigger rebuild
+          // by reading the provider (the widget tree will update automatically)
+          debugPrint('AppShell: onConnected - auth completed');
         },
       );
     }
@@ -149,8 +153,8 @@ extension AppShellNavigation on BuildContext {
   void showServerSetup() {
     Navigator.of(this).push(
       MaterialPageRoute(
-        builder: (context) => ServerSetupScreen(
-          onConnected: () => Navigator.of(context).pop(),
+        builder: (routeContext) => ServerSetupScreen(
+          onConnected: () => Navigator.of(routeContext).pop(),
         ),
       ),
     );
