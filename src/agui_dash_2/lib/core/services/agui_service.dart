@@ -10,6 +10,7 @@ import '../../infrastructure/quick_agui/thread.dart';
 import '../../infrastructure/quick_agui/tool_call_state.dart';
 import '../models/chat_models.dart';
 import '../utils/debug_log.dart';
+import '../utils/url_builder.dart';
 import 'local_tools_service.dart';
 
 /// Configuration for AG-UI service.
@@ -18,16 +19,27 @@ class AgUiServiceConfig {
   final String roomId;
   final Duration timeout;
   final Map<String, String>? headers;
+  final UrlBuilder _urlBuilder;
 
-  const AgUiServiceConfig({
+  AgUiServiceConfig({
     required this.baseUrl,
     required this.roomId,
     this.timeout = const Duration(seconds: 30),
     this.headers,
-  });
+  }) : _urlBuilder = UrlBuilder(baseUrl);
 
-  /// Base endpoint for the room
-  String get roomEndpoint => '$baseUrl/rooms/$roomId/agui';
+  /// Get the URL builder for constructing endpoints.
+  UrlBuilder get urlBuilder => _urlBuilder;
+
+  /// Create thread endpoint: POST /api/v1/rooms/{roomId}/agui
+  Uri get createThreadUri => _urlBuilder.createThread(roomId);
+
+  /// Create run endpoint: POST /api/v1/rooms/{roomId}/agui/{threadId}
+  Uri createRunUri(String threadId) => _urlBuilder.createRun(roomId, threadId);
+
+  /// Execute run endpoint: POST /api/v1/rooms/{roomId}/agui/{threadId}/{runId}
+  Uri executeRunUri(String threadId, String runId) =>
+      _urlBuilder.executeRun(roomId, threadId, runId);
 }
 
 /// Connection state for the AG-UI service.
@@ -127,11 +139,10 @@ class AgUiService extends ChangeNotifier {
 
   /// Create a new thread on the server.
   Future<(String, String)> _createThread() async {
-    final url = _config!.roomEndpoint;
     final headers = {'Content-Type': 'application/json', ...?_config!.headers};
 
     final response = await _httpClient.post(
-      Uri.parse(url),
+      _config!.createThreadUri,
       headers: headers,
       body: '{}',
     );
@@ -162,7 +173,7 @@ class AgUiService extends ChangeNotifier {
   /// Create a new run for the given thread.
   Future<String> _createRun(String threadId) async {
     final response = await _httpClient.post(
-      Uri.parse('${_config!.roomEndpoint}/$threadId'),
+      _config!.createRunUri(threadId),
       headers: {'Content-Type': 'application/json', ...?_config!.headers},
       body: '{}',
     );
@@ -291,9 +302,9 @@ class AgUiService extends ChangeNotifier {
         content: userMessage,
       );
 
-      // Generate the endpoint
+      // Generate the endpoint using UrlBuilder for correct api/v1 prefix
       final endpoint =
-          'rooms/${_config!.roomId}/agui/${_thread!.id}/$_currentRunId';
+          _config!.urlBuilder.runEndpoint(_config!.roomId, _thread!.id, _currentRunId!);
       DebugLog.service('AG-UI: Starting run at $endpoint');
 
       // Start the run - Thread handles the event loop
@@ -316,7 +327,7 @@ class AgUiService extends ChangeNotifier {
 
         _currentRunId = await _createRun(_thread!.id);
         final newEndpoint =
-            'rooms/${_config!.roomId}/agui/${_thread!.id}/$_currentRunId';
+            _config!.urlBuilder.runEndpoint(_config!.roomId, _thread!.id, _currentRunId!);
 
         toolResults = await _thread!.sendToolResults(
           endpoint: newEndpoint,
@@ -419,9 +430,9 @@ class AgUiService extends ChangeNotifier {
           content: userMessage,
         );
 
-        // Generate the endpoint
+        // Generate the endpoint using UrlBuilder for correct api/v1 prefix
         final endpoint =
-            'rooms/${_config!.roomId}/agui/${_thread!.id}/$_currentRunId';
+            _config!.urlBuilder.runEndpoint(_config!.roomId, _thread!.id, _currentRunId!);
 
         // Start the run with optional state
         var toolResults = await _thread!.startRun(
@@ -435,7 +446,7 @@ class AgUiService extends ChangeNotifier {
         while (toolResults.isNotEmpty) {
           _currentRunId = await _createRun(_thread!.id);
           final newEndpoint =
-              'rooms/${_config!.roomId}/agui/${_thread!.id}/$_currentRunId';
+              _config!.urlBuilder.runEndpoint(_config!.roomId, _thread!.id, _currentRunId!);
 
           toolResults = await _thread!.sendToolResults(
             endpoint: newEndpoint,
@@ -498,8 +509,9 @@ class AgUiService extends ChangeNotifier {
     DebugLog.service('AgUiService: Loading history for thread $threadId');
 
     try {
+      // Use createRunUri to get thread details (same endpoint, different method)
       final response = await _httpClient.get(
-        Uri.parse('${_config!.roomEndpoint}/$threadId'),
+        _config!.createRunUri(threadId),
         headers: {'Content-Type': 'application/json', ...?_config!.headers},
       );
 

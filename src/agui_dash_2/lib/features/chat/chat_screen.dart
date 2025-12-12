@@ -13,6 +13,8 @@ import '../../core/services/markdown_hooks.dart';
 import '../../core/services/room_chat_service.dart';
 import '../../core/services/rooms_service.dart';
 import '../../core/services/server_config_service.dart';
+import '../../core/utils/api_constants.dart';
+import '../../core/utils/url_builder.dart';
 import '../layouts/standard_layout.dart';
 import '../notes/notes_dialog.dart';
 import '../layouts/canvas_layout.dart';
@@ -36,18 +38,15 @@ class ChatScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
-  /// Get the server URL from config, defaulting to localhost.
-  /// Strips any /api suffix to ensure consistent URL construction.
-  String get _serverUrl {
+  /// Get the URL builder for the current server.
+  UrlBuilder get _urlBuilder {
     final server = ref.read(currentServerProvider);
-    var url = server?.url ?? 'http://localhost:8000';
-    // Strip /api and any version suffix if present
-    url = url.replaceAll(RegExp(r'/api(/v\d+)?$'), '');
-    return url;
+    final url = server?.url ?? ApiConstants.defaultServerUrl;
+    return UrlBuilder(url);
   }
 
-  /// Get the API base URL (server + /api/v1).
-  String get _apiBaseUrl => '$_serverUrl/api/v1';
+  /// Get the server URL (bare server, no /api path).
+  String get _serverUrl => _urlBuilder.serverUrl;
 
   @override
   void initState() {
@@ -111,7 +110,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final headers = await authService.getAuthHeaders();
 
       ref.read(agUiConfigProvider.notifier).state = AgUiServiceConfig(
-        baseUrl: _apiBaseUrl,
+        baseUrl: _serverUrl,
         roomId: selectedRoom,
         headers: headers.isNotEmpty ? headers : null,
       );
@@ -434,12 +433,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
     );
 
+    // Check if widget is still mounted after async dialog
+    if (!mounted) return;
+
     if (confirmed == true) {
+      // Get references before any async operations that might dispose the widget
+      final authService = ref.read(authServiceProvider);
+      final serverConfig = ref.read(serverConfigProvider);
+
       // Logout from auth service
-      await ref.read(authServiceProvider).logout();
+      await authService.logout();
+
+      // Check mounted again after async operation
+      if (!mounted) return;
 
       // Clear server config to force re-setup
-      await ref.read(serverConfigProvider).clearAll();
+      await serverConfig.clearAll();
+
+      // Check mounted again after async operation
+      if (!mounted) return;
 
       // Reset app initialized state to show setup screen
       ref.read(appInitializedProvider.notifier).state = false;

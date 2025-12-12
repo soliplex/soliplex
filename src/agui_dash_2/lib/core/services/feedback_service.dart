@@ -1,16 +1,20 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
+
+// Conditional imports for file-based persistence (non-web only)
+import 'feedback_service_io.dart' if (dart.library.html) 'feedback_service_web.dart'
+    as platform;
 
 import '../../features/chat/widgets/feedback_dialog.dart';
 
 /// Service for persisting message feedback to local storage.
 ///
-/// Feedback is stored per-room in JSON files:
+/// On native platforms, feedback is stored per-room in JSON files:
 /// `{documents}/soliplex_feedback/{room_id}.json`
+///
+/// On web, feedback is stored in localStorage.
 class FeedbackService {
   final String roomId;
   final Map<String, FeedbackResult> _feedbackCache = {};
@@ -40,14 +44,13 @@ class FeedbackService {
     await _persistFeedback();
   }
 
-  /// Load feedback from disk.
+  /// Load feedback from storage.
   Future<void> loadFeedback() async {
     if (_loaded) return;
 
     try {
-      final file = await _getFeedbackFile();
-      if (await file.exists()) {
-        final content = await file.readAsString();
+      final content = await platform.loadFeedbackData(roomId);
+      if (content != null && content.isNotEmpty) {
         final json = jsonDecode(content) as Map<String, dynamic>;
         final feedbackList = json['feedback'] as List<dynamic>? ?? [];
 
@@ -67,34 +70,22 @@ class FeedbackService {
       _loaded = true;
     } catch (e) {
       debugPrint('FeedbackService: Error loading feedback: $e');
+      _loaded = true; // Mark as loaded even on error to avoid repeated attempts
     }
   }
 
-  /// Persist feedback to disk.
+  /// Persist feedback to storage.
   Future<void> _persistFeedback() async {
     try {
-      final file = await _getFeedbackFile();
       final json = {
         'roomId': roomId,
         'updatedAt': DateTime.now().toIso8601String(),
         'feedback': _feedbackCache.values.map((f) => f.toJson()).toList(),
       };
-      await file.writeAsString(jsonEncode(json));
+      await platform.saveFeedbackData(roomId, jsonEncode(json));
     } catch (e) {
       debugPrint('FeedbackService: Error saving feedback: $e');
     }
-  }
-
-  /// Get the feedback file for this room.
-  Future<File> _getFeedbackFile() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final feedbackDir = Directory('${directory.path}/soliplex_feedback');
-
-    if (!await feedbackDir.exists()) {
-      await feedbackDir.create(recursive: true);
-    }
-
-    return File('${feedbackDir.path}/$roomId.json');
   }
 
   /// Get all feedback for this room.
