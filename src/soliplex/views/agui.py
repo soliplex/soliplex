@@ -4,6 +4,7 @@ import functools
 
 import fastapi
 import pydantic_ai
+from ag_ui import core as agui_core
 from fastapi import responses
 from fastapi import security
 from pydantic_ai.ui import ag_ui as ai_ag_ui
@@ -15,6 +16,7 @@ from soliplex import models
 from soliplex import util
 from soliplex.agui import mpx as agui_mpx
 from soliplex.agui import parser as agui_parser
+from soliplex.agui import persistence as agui_persistence
 from soliplex.agui import util as agui_util
 
 router = fastapi.APIRouter(tags=["rooms"])
@@ -179,6 +181,13 @@ async def get_room_agui(
     return models.AGUI_Threads(threads=model_threads)
 
 
+async def _get_run_input(
+    run: agui_persistence.Run,
+) -> agui_core.RunAgentInput | None:
+    rai = await run.awaitable_attrs.run_agent_input
+    return rai.to_agui_model() if rai is not None else None
+
+
 @util.logfire_span("GET /v1/rooms/{room_id}/agui/{thread_id}")
 @router.get("/v1/rooms/{room_id}/agui/{thread_id}")
 async def get_room_agui_thread_id(
@@ -208,9 +217,7 @@ async def get_room_agui_thread_id(
     for a_run in await thread.list_runs():
         a_thread_runs[a_run.run_id] = models.AGUI_Run.from_run(
             a_run=a_run,
-            a_run_input=(
-                await a_run.awaitable_attrs.run_agent_input
-            ).to_agui_model(),
+            a_run_input=await _get_run_input(a_run),
             a_run_meta=await a_run.awaitable_attrs.run_metadata,
             a_run_events=None,
         )
@@ -248,13 +255,10 @@ async def get_room_agui_thread_id_run_id(
         run_id=run_id,
         the_threads=the_threads,
     )
-    await run.awaitable_attrs.thread
 
     return models.AGUI_Run.from_run(
         a_run=run,
-        a_run_input=(
-            await run.awaitable_attrs.run_agent_input
-        ).to_agui_model(),
+        a_run_input=await _get_run_input(run),
         a_run_meta=await run.awaitable_attrs.run_metadata,
         a_run_events=await run.list_events(),
     )
@@ -297,11 +301,10 @@ async def post_room_agui(
     run_map = {}
 
     for run in await thread.list_runs():
-        rai = await run.awaitable_attrs.run_agent_input
         run_meta = await run.awaitable_attrs.run_metadata
         run_map[run.run_id] = models.AGUI_Run.from_run(
             a_run=run,
-            a_run_input=rai.to_agui_model(),
+            a_run_input=await _get_run_input(run),
             a_run_meta=run_meta,
             a_run_events=[],
         )
@@ -362,13 +365,15 @@ async def post_room_agui_thread_id(
     run_id = await run.awaitable_attrs.run_id
     created = await run.awaitable_attrs.created
 
+    rai = await run.awaitable_attrs.run_agent_input
+
     return models.AGUI_Run(
         room_id=room_id,
         thread_id=thread_id,
         parent_run_id=parent_run_id,
         run_id=run_id,
         created=created,
-        run_input=(await run.awaitable_attrs.run_agent_input).to_agui_model(),
+        run_input=rai.to_agui_model() if rai is not None else None,
         events=[event.to_agui_model() for event in await run.list_events()],
         metadata=models.AGUI_RunMetadata.from_run_meta(
             a_run_meta=await run.awaitable_attrs.run_metadata,

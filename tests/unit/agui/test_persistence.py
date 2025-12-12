@@ -325,26 +325,6 @@ async def test_run_list_events(w_agui_events):
     assert await run.list_events() == w_agui_events
 
 
-@pytest.mark.parametrize("w_parent", [False, True])
-def test_runagentinput_empty(w_parent):
-    run = agui_persistence.Run()
-
-    kw = {
-        "thread_id": THREAD_UUID,
-        "run_id": RUN_UUID,
-    }
-
-    if w_parent:
-        kw["parent_run_id"] = PARENT_RUN_ID
-
-    found = agui_persistence.RunAgentInput.empty(run, **kw)
-
-    expected_data = EMPTY_RUN_AGENT_INPUT.model_dump() | kw
-
-    assert found.run is run
-    assert found.data == expected_data
-
-
 @pytest.mark.parametrize(
     "agui_rai",
     [
@@ -744,14 +724,6 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     parent_id = await parent.awaitable_attrs.run_id
 
-    run_agent_input = agui_persistence.RunAgentInput.empty(
-        parent,
-        thread_id,
-        parent_id,
-    )
-
-    the_async_session.add(run_agent_input)
-
     await the_async_session.commit()
 
     spare = await ts.new_run(
@@ -768,12 +740,6 @@ async def test_threadstorage_thread_run_cru(the_async_session):
     assert rmd.label == "spare"
 
     assert await spare.awaitable_attrs.parent is parent
-
-    rai = await spare.awaitable_attrs.run_agent_input
-
-    assert rai.thread_id == thread_id
-    assert rai.run_id == await spare.awaitable_attrs.run_id
-    assert rai.parent_run_id == parent_id
 
     await the_async_session.commit()
 

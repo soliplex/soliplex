@@ -505,7 +505,6 @@ async def test_get_room_agui_thread_id_run_id(
     cuir.return_value = USER_NAME
 
     test_run.list_events.return_value = w_events
-    test_run.awaitable_attrs.thread = _awaitable("thread", test_thread)
 
     run_agent_input = mock.Mock(spec_set=["to_agui_model"])
     run_agent_input.to_agui_model.return_value = run_input

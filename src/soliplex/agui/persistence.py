@@ -304,22 +304,6 @@ class RunAgentInput(Base):
     data: Mapped[JSON_Mapped_From] = mapped_column()
 
     @classmethod
-    def empty(cls, run, thread_id, run_id, parent_run_id=None):
-        return cls(
-            run=run,
-            data={
-                "thread_id": thread_id,
-                "run_id": run_id,
-                "parent_run_id": parent_run_id,
-                "state": None,
-                "messages": [],
-                "context": [],
-                "tools": [],
-                "forwarded_props": None,
-            },
-        )
-
-    @classmethod
     def from_agui_model(cls, run: Run, model: agui_core.RunAgentInput):
         return cls(run=run, data=model.model_dump())
 
@@ -510,13 +494,6 @@ class ThreadStorage(agui_package.ThreadStorage):
                 session.add(run)
 
             async with session.begin_nested():
-                run_input = RunAgentInput.empty(
-                    run=run,
-                    thread_id=await thread.awaitable_attrs.thread_id,
-                    run_id=await run.awaitable_attrs.run_id,
-                )
-                session.add(run_input)
-
                 if thread_metadata is not None:
                     if isinstance(thread_metadata, dict):
                         thread_metadata = ThreadMetadata(
@@ -609,30 +586,6 @@ class ThreadStorage(agui_package.ThreadStorage):
                 session.add(run)
 
             async with session.begin_nested():
-                if parent is None:
-                    run_input = RunAgentInput.empty(
-                        run=run,
-                        thread_id=await thread.awaitable_attrs.thread_id,
-                        run_id=await run.awaitable_attrs.run_id,
-                    )
-                else:
-                    parent_run_input = (
-                        await parent.awaitable_attrs.run_agent_input
-                    )
-                    parent_run_input_agui = parent_run_input.to_agui_model()
-                    run_input_agui = parent_run_input_agui.model_copy(
-                        update={
-                            "run_id": await run.awaitable_attrs.run_id,
-                            "parent_run_id": parent_run_id,
-                        },
-                    )
-                    run_input = RunAgentInput.from_agui_model(
-                        run,
-                        run_input_agui,
-                    )
-
-                session.add(run_input)
-
                 if run_metadata is not None:
                     if isinstance(run_metadata, dict):
                         run_metadata = RunMetadata(run=run, **run_metadata)

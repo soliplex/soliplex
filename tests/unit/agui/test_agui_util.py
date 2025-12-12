@@ -51,7 +51,7 @@ def test__timestamp(dt, tz):
 
 
 @pytest.mark.parametrize(
-    "ri_kwargs, expectation",
+    "rhs_kwargs, expectation",
     [
         ({}, no_error()),
         ({"thread_id": OTHER_THREAD_ID}, raises_run_input_mismatch),
@@ -59,8 +59,15 @@ def test__timestamp(dt, tz):
         ({"parent_run_id": OTHER_PARENT_RUN_ID}, raises_run_input_mismatch),
     ],
 )
-def test_check_run_input(ri_kwargs, expectation):
-    to_compare = TEST_RUN_INPUT.model_copy(update=ri_kwargs)
+@pytest.mark.parametrize("w_lhs_none", [False, True])
+def test_check_run_input(w_lhs_none, rhs_kwargs, expectation):
+    if w_lhs_none:
+        lhs = None
+        expectation = no_error()
+    else:
+        lhs = TEST_RUN_INPUT
+
+    rhs = TEST_RUN_INPUT.model_copy(update=rhs_kwargs)
 
     with expectation as expectation:
-        agui_util.check_run_input(TEST_RUN_INPUT, to_compare)
+        agui_util.check_run_input(lhs, rhs)
