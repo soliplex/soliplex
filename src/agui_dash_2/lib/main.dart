@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'features/chat/chat_screen.dart';
+import 'app_shell.dart';
 
 void main() {
   runApp(const ProviderScope(child: AgUiDashApp()));
@@ -30,7 +30,7 @@ class AgUiDashApp extends StatelessWidget {
         useMaterial3: true,
       ),
       themeMode: ThemeMode.system,
-      home: const ChatScreen(),
+      home: const AppShell(),
     );
   }
 }
