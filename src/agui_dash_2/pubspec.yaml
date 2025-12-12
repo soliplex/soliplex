@@ -25,9 +25,11 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # AG-UI Protocol SDK (SSE-based) - using local fork with ACTIVITY_SNAPSHOT support
+  # AG-UI Protocol SDK (SSE-based) - using soliplex fork with ACTIVITY_SNAPSHOT support
   ag_ui:
-    path: ../../../ag-ui/sdks/community/dart
+    git:
+      url: https://github.com/soliplex/ag-ui.git
+      path: sdks/community/dart
 
   # State Management / DI
   flutter_riverpod: ^2.6.1
