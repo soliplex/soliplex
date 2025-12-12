@@ -81,11 +81,19 @@ class AgUiService extends ChangeNotifier {
   AgUiServiceConfig? _config;
   AgUiConnectionState _state = AgUiConnectionState.disconnected;
   String? _lastError;
+  bool _isDisposed = false;
 
   // Mutex to prevent concurrent chat() calls
   Completer<void>? _chatLock;
 
   AgUiService(this._connectionManager);
+
+  /// Safely notify listeners, checking if disposed first.
+  void _safeNotifyListeners() {
+    if (!_isDisposed) {
+      notifyListeners();
+    }
+  }
 
   AgUiConnectionState get state => _state;
   String? get lastError => _lastError;
@@ -132,7 +140,7 @@ class AgUiService extends ChangeNotifier {
     // Switch room in ConnectionManager (handles session lifecycle)
     _connectionManager.switchRoom(config.roomId);
 
-    notifyListeners();
+    _safeNotifyListeners();
   }
 
   /// Send a message and handle the full conversation flow.
@@ -179,11 +187,11 @@ class AgUiService extends ChangeNotifier {
 
     _state = AgUiConnectionState.connecting;
     _lastError = null;
-    notifyListeners();
+    _safeNotifyListeners();
 
     try {
       _state = AgUiConnectionState.streaming;
-      notifyListeners();
+      _safeNotifyListeners();
 
       // Delegate to ConnectionManager
       await _connectionManager.chat(
@@ -198,12 +206,12 @@ class AgUiService extends ChangeNotifier {
       );
 
       _state = AgUiConnectionState.connected;
-      notifyListeners();
+      _safeNotifyListeners();
     } catch (e, stackTrace) {
       _state = AgUiConnectionState.error;
       _lastError = e.toString();
       DebugLog.error('AgUiService error: $e');
-      notifyListeners();
+      _safeNotifyListeners();
       rethrow;
     } finally {
       // Always release lock
@@ -221,7 +229,7 @@ class AgUiService extends ChangeNotifier {
 
     await _connectionManager.cancelRun(_config!.roomId);
     _state = AgUiConnectionState.connected;
-    notifyListeners();
+    _safeNotifyListeners();
   }
 
   /// Resume an existing thread by ID and load its history.
@@ -236,7 +244,7 @@ class AgUiService extends ChangeNotifier {
     DebugLog.service('AgUiService: Resuming thread $threadId');
 
     _state = AgUiConnectionState.connected;
-    notifyListeners();
+    _safeNotifyListeners();
 
     // Load and return thread history
     return await loadThreadHistory(threadId);
@@ -410,11 +418,12 @@ class AgUiService extends ChangeNotifier {
       // Dispose the current session
       _connectionManager.disposeSession(_config!.roomId);
     }
-    notifyListeners();
+    _safeNotifyListeners();
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
     _httpClient.close();
     super.dispose();
   }
