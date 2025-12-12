@@ -497,6 +497,61 @@ case ag_ui.TextMessageContentEvent():
   }
 ```
 
+### 7. Cascading Tool Call Loop for UI Tools (Fixed)
+
+**Problem**: When UI-only tools (`genui_render`, `canvas_render`) were called by the LLM, the client would:
+1. Execute the tool locally (render widget)
+2. Return a result like `{"rendered": true}`
+3. Send the tool result back to the server via a new run
+4. The LLM would see the minimal result and potentially call the same tool again
+5. This created an infinite loop of `RunStarted` → `RunFinished` events:
+```
+flutter: [AG-UI] RunFinished runId=c71138f4-90dd-46ef-8e73-f8996d6c7a19
+flutter: [AG-UI] RunStarted runId=b99b78de-72c5-4c41-8c81-95f0f2a9c894
+flutter: [AG-UI] RunFinished runId=b99b78de-72c5-4c41-8c81-95f0f2a9c894
+flutter: [AG-UI] RunStarted runId=1195fc7b-6a23-4883-a65a-b6d283f536d7
+... (continues indefinitely)
+```
+
+**Root Cause**: UI-only tools are "fire and forget" - they render something visually but the LLM doesn't need to know the result. Sending results back caused the LLM to continue the conversation unnecessarily.
+
+**Fix**: Added a `fireAndForget` parameter to `addTool()`:
+```dart
+// In Thread class
+final Set<String> _fireAndForgetTools = {};
+
+void addTool(ag_ui.Tool tool, ToolExecutor executor, {bool fireAndForget = false}) {
+  _tools.removeWhere((t) => t.name == tool.name);
+  _tools.add(tool);
+  _toolExecutors[tool.name] = executor;
+  if (fireAndForget) {
+    _fireAndForgetTools.add(tool.name);
+  }
+}
+
+// In _executeAndTrack()
+Future<void> _executeAndTrack(ag_ui.ToolCall toolCall, List<ag_ui.ToolMessage> results) async {
+  final isFireAndForget = _fireAndForgetTools.contains(toolCall.function.name);
+
+  final result = await _executeClientTool(toolCall);
+  final message = ag_ui.ToolMessage(...);
+
+  // Only add to results if NOT fire-and-forget
+  if (!isFireAndForget) {
+    results.add(message);
+  }
+  _toolRegistry.markCompleted(toolCall.id, message);
+}
+```
+
+And in `AgUiService._registerTools()`:
+```dart
+final isFireAndForget = _uiTools.contains(toolDef.name);  // canvas_render, genui_render
+_thread!.addTool(agTool, executor, fireAndForget: isFireAndForget);
+```
+
+**Result**: Fire-and-forget tools still execute and render UI, but their results are not sent back to the server. Since `toolResults` is empty, the `while (toolResults.isNotEmpty)` loop exits and the conversation ends normally.
+
 ## Design Recommendations
 
 Based on lessons learned:
@@ -506,3 +561,4 @@ Based on lessons learned:
 3. **Serialize operations when using broadcast streams** - Or filter events by run/message ID
 4. **Idempotent tool registration** - `addTool()` should handle being called multiple times with the same tool
 5. **Clear state between operations** - Ensure registries, buffers, and trackers are properly cleaned up
+6. **Distinguish UI-only vs conversation tools** - Tools that only affect the UI (rendering widgets) should be "fire and forget" - execute locally but don't send results back to the server to avoid infinite loops

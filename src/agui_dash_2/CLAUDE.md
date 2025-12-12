@@ -6,6 +6,7 @@ Project-specific instructions for Claude Code when working on this codebase.
 
 - **SOLIPLEX.md** - Backend API documentation for AG-UI integration (endpoints, request/response schemas, state sync)
 - **QUICK_AGUI.md** - Notes on the quick_agui Flutter library (issues, workarounds, architecture)
+- **APP_FEATURES.md** - Planned, in-progress, and completed app features (feedback chips, notes pad, etc.)
 
 ## Documentation Requirements
 
@@ -16,3 +17,7 @@ Project-specific instructions for Claude Code when working on this codebase.
   - Tool registration/execution quirks
   - Any workarounds implemented in the app layer to compensate for library limitations
 - Backend API discoveries should be documented in `SOLIPLEX.md`
+- **Feature tracking**: When working on new features, update `APP_FEATURES.md`:
+  - Move features from "Planned" to "In Progress" when starting work
+  - Move features from "In Progress" to "Completed" when done
+  - Add implementation notes, files modified, and any gotchas discovered
