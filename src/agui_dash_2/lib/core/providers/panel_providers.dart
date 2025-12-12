@@ -15,6 +15,7 @@ import '../services/activity_status_service.dart';
 import '../services/canvas_service.dart';
 import '../services/chat_service.dart';
 import '../services/context_pane_service.dart';
+import '../services/rooms_service.dart' show selectedRoomProvider;
 import 'app_providers.dart';
 
 // =============================================================================
@@ -60,10 +61,12 @@ final contextPaneProvider =
 
 /// Provider for activity status state.
 ///
-/// Watches [currentServerFromAppStateProvider] - activity stops when server changes.
+/// Watches [currentServerFromAppStateProvider] AND [selectedRoomProvider].
+/// Activity stops when server OR room changes (notifier disposed, timers cancelled).
 final activityStatusProvider =
     StateNotifierProvider<ActivityStatusNotifier, ActivityStatusState>((ref) {
   final config = ref.watch(activityStatusConfigProvider);
   final server = ref.watch(currentServerFromAppStateProvider);
-  return ActivityStatusNotifier(config: config, serverId: server?.id);
+  final roomId = ref.watch(selectedRoomProvider);
+  return ActivityStatusNotifier(config: config, serverId: server?.id, roomId: roomId);
 });

@@ -21,8 +21,17 @@ linter:
   # `// ignore_for_file: name_of_lint` syntax on the line or in the file
   # producing the lint.
   rules:
-    # avoid_print: false  # Uncomment to disable the `avoid_print` rule
-    # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+    # ==========================================================================
+    # Phase 1: Core abstractions - immutability and equality
+    # ==========================================================================
+    prefer_final_fields: true
+    prefer_const_constructors: true
+    prefer_const_declarations: true
+    hash_and_equals: true  # Critical for ServerRoomKey
+    avoid_print: true
+    prefer_single_quotes: true
+    always_declare_return_types: true
+    annotate_overrides: true
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

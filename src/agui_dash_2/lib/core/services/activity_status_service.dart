@@ -53,14 +53,16 @@ class ActivityStatusState {
 /// Notifier that manages activity status state and message cycling.
 ///
 /// Extends [ServerScopedNotifier] to automatically reset when server changes.
+/// Also resets when room changes (provider watches selectedRoomProvider).
 class ActivityStatusNotifier extends ServerScopedNotifier<ActivityStatusState> {
   final ActivityStatusConfig _config;
+  final String? roomId;
 
   Timer? _initialDelayTimer;
   Timer? _cycleTimer;
   Timer? _injectedMessageTimer;
 
-  ActivityStatusNotifier({ActivityStatusConfig? config, super.serverId})
+  ActivityStatusNotifier({ActivityStatusConfig? config, super.serverId, this.roomId})
       : _config = config ?? ActivityStatusConfig.defaultConfig,
         super(const ActivityStatusState());
 

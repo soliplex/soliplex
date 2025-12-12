@@ -1,5 +1,6 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../utils/debug_log.dart';
 
 /// Base class for StateNotifiers that must reset when server changes.
 ///
@@ -27,12 +28,12 @@ abstract class ServerScopedNotifier<State> extends StateNotifier<State> {
   final String? serverId;
 
   ServerScopedNotifier(super.initialState, {this.serverId}) {
-    debugPrint('${runtimeType}: Created for server $serverId');
+    DebugLog.service('${runtimeType}: Created for server $serverId');
   }
 
   @override
   void dispose() {
-    debugPrint('${runtimeType}: Disposed (server $serverId)');
+    DebugLog.service('${runtimeType}: Disposed (server $serverId)');
     super.dispose();
   }
 }

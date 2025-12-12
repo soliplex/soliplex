@@ -11,6 +11,7 @@ import '../utils/url_builder.dart';
 import 'cancel_token.dart';
 import 'connection_events.dart';
 import 'http_transport.dart';
+import 'server_room_key.dart';
 
 /// Callback for canvas operations from event processing.
 typedef CanvasCallback = void Function(String operation, String widgetName, Map<String, dynamic> data);
@@ -31,6 +32,7 @@ typedef ActivityCallback = void Function(bool isActive, {String? eventType, Stri
 /// - Cancellation support
 class RoomSession {
   final String roomId;
+  final String? serverId;
   final String baseUrl;
   final HttpTransport transport;
   final UrlBuilder _urlBuilder;
@@ -100,6 +102,7 @@ class RoomSession {
 
   RoomSession({
     required this.roomId,
+    this.serverId,
     required this.baseUrl,
     required this.transport,
   }) : _urlBuilder = UrlBuilder(baseUrl);
@@ -112,6 +115,12 @@ class RoomSession {
   bool get isStreaming => _state == SessionState.streaming;
   bool get isDisposed => _state == SessionState.disposed;
   DateTime? get lastActivity => _lastActivity;
+
+  /// Composite key for this session (serverId + roomId).
+  /// Returns null if serverId is not set.
+  ServerRoomKey? get key => serverId != null
+      ? ServerRoomKey(serverId: serverId!, roomId: roomId)
+      : null;
 
   /// The authoritative list of messages for this room.
   List<ChatMessage> get messages => List.unmodifiable(_messages);
