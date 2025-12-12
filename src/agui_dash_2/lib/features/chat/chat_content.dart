@@ -985,7 +985,10 @@ class _ChatContentState extends ConsumerState<ChatContent> {
               final searchState = ref.watch(chatSearchProvider);
               final selectedRoom = ref.watch(selectedRoomDataProvider);
               final selectedRoomId = ref.watch(selectedRoomProvider);
-              final hasMessages = chatState.messages.isNotEmpty;
+              // Only count agent messages to prevent suggestion flash on user submit
+              final hasAgentMessages = chatState.messages.any(
+                (m) => m.user.id == ChatUser.agent.id,
+              );
 
               // Focus input when room changes
               _checkRoomChange(selectedRoomId);
@@ -1043,7 +1046,7 @@ class _ChatContentState extends ConsumerState<ChatContent> {
                       focusNode: _inputFocusNode,
                       onSend: _sendMessage,
                       room: selectedRoom,
-                      hasMessages: hasMessages,
+                      hasMessages: hasAgentMessages,
                       isLoading: activityStatus.isActive,
                     ),
                 ],
