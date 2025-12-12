@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/chat_models.dart';
+import '../../../core/providers/panel_providers.dart';
+import '../../../core/services/canvas_content_service.dart';
 import 'chat_typing_indicator.dart';
 import 'collapsible_thinking_widget.dart';
 import 'friendly_error_card.dart';
@@ -168,6 +170,7 @@ class ChatMessageBubble extends ConsumerWidget {
             child: _MessageActionsRow(
               messageId: message.id,
               messageText: '[Widget: ${message.genUiContent!.widgetName}]',
+              genUiContent: message.genUiContent,
             ),
           ),
       ],
@@ -244,10 +247,12 @@ class ChatMessageBubble extends ConsumerWidget {
 class _MessageActionsRow extends ConsumerStatefulWidget {
   final String messageId;
   final String messageText;
+  final GenUiContent? genUiContent;
 
   const _MessageActionsRow({
     required this.messageId,
     required this.messageText,
+    this.genUiContent,
   });
 
   @override
@@ -256,6 +261,8 @@ class _MessageActionsRow extends ConsumerStatefulWidget {
 
 class _MessageActionsRowState extends ConsumerState<_MessageActionsRow> {
   bool _copied = false;
+  bool _sentToCanvas = false;
+  final _contentService = CanvasContentService();
 
   Future<void> _copyToClipboard() async {
     await Clipboard.setData(ClipboardData(text: widget.messageText));
@@ -265,8 +272,35 @@ class _MessageActionsRowState extends ConsumerState<_MessageActionsRow> {
     });
   }
 
+  void _sendToCanvas() {
+    final canvasNotifier = ref.read(canvasProvider.notifier);
+
+    // For GenUI widgets, send the actual widget directly
+    if (widget.genUiContent != null) {
+      final genUi = widget.genUiContent!;
+      canvasNotifier.addItem(genUi.widgetName, genUi.data);
+    } else {
+      // For text messages, analyze and convert
+      if (widget.messageText.isEmpty) return;
+
+      final analysis = _contentService.analyze(
+        widget.messageText,
+        sourceMessageId: widget.messageId,
+      );
+      canvasNotifier.addItem(analysis.widgetName, analysis.data);
+    }
+
+    // Show feedback via icon change
+    setState(() => _sentToCanvas = true);
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _sentToCanvas = false);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Row(
@@ -274,6 +308,26 @@ class _MessageActionsRowState extends ConsumerState<_MessageActionsRow> {
         children: [
           MessageFeedbackChips(messageId: widget.messageId),
           const Spacer(),
+          // Send to canvas button
+          Tooltip(
+            message: _sentToCanvas ? 'Sent!' : 'Send to canvas',
+            child: InkWell(
+              onTap: _sendToCanvas,
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Icon(
+                  _sentToCanvas
+                      ? Icons.check
+                      : Icons.dashboard_customize_outlined,
+                  size: 16,
+                  color: _sentToCanvas ? Colors.green : colorScheme.outline,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          // Copy button
           Tooltip(
             message: _copied ? 'Copied!' : 'Copy message',
             child: InkWell(
@@ -284,9 +338,7 @@ class _MessageActionsRowState extends ConsumerState<_MessageActionsRow> {
                 child: Icon(
                   _copied ? Icons.check : Icons.copy_outlined,
                   size: 16,
-                  color: _copied
-                      ? Colors.green
-                      : Theme.of(context).colorScheme.outline,
+                  color: _copied ? Colors.green : colorScheme.outline,
                 ),
               ),
             ),

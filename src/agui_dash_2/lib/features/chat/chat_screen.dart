@@ -5,10 +5,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app_shell.dart';
 import '../../core/models/layout_mode.dart';
-import '../../core/services/activity_status_service.dart';
+import '../../core/providers/panel_providers.dart';
 import '../../core/services/agui_service.dart';
 import '../../core/services/auth_service.dart';
-import '../../core/services/chat_service.dart';
 import '../../core/services/feedback_service.dart';
 import '../../core/services/markdown_hooks.dart';
 import '../../core/services/room_chat_service.dart';
@@ -317,7 +316,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         borderRadius: BorderRadius.circular(8),
       ),
       child: DropdownButton<String>(
-        value: selectedRoom,
+        value: selectedRoom,  // Guaranteed valid by reactive provider chain
         hint: const Text('Select room'),
         underline: const SizedBox(),
         isDense: true,

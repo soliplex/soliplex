@@ -8,6 +8,7 @@ Project-specific instructions for Claude Code when working on this codebase.
 - **QUICK_AGUI.md** - Notes on the quick_agui Flutter library (issues, workarounds, architecture)
 - **APP_FEATURES.md** - Planned, in-progress, and completed app features (feedback chips, notes pad, etc.)
 - **GENUI-WIDGETS.md** - Widget system documentation (registry, creating widgets, semantic IDs, limitations)
+- **STATE_MANAGEMENT.md** - Riverpod state management patterns (server-scoped providers, adding new panels)
 
 ## Documentation Requirements
 
@@ -75,3 +76,13 @@ Both `_io.dart` and `_web.dart` files must export the same function signatures.
 3. Use conditional imports in the main service file
 4. If UI should be hidden on web, add `kIsWeb` checks in the UI layer
 5. Document the feature in this table above
+
+## Server-Scoped Provider Pattern
+
+Panel state (chat, canvas, context pane, activity status) must reset when the server changes. See **STATE_MANAGEMENT.md** for full documentation.
+
+**Quick reference:**
+1. Extend `ServerScopedNotifier<State>` for panel notifiers
+2. Declare providers in `lib/core/providers/panel_providers.dart`
+3. Always `ref.watch(currentServerProvider)` in provider declarations
+4. Import providers from `panel_providers.dart`, not service files

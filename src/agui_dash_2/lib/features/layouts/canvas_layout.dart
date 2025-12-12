@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/services/canvas_service.dart';
+import '../../core/providers/panel_providers.dart';
 import '../canvas/canvas_view.dart';
 import '../chat/chat_content.dart';
 

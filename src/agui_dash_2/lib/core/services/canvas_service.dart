@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/server_scoped_notifier.dart';
 
 /// Represents an item displayed on the canvas.
 class CanvasItem {
@@ -56,6 +56,20 @@ class CanvasItem {
           return 'info-${title.toLowerCase().replaceAll(RegExp(r'\s+'), '-').substring(0, title.length.clamp(0, 20))}';
         }
         break;
+      // Canvas content widgets (send-to-canvas feature)
+      case 'NoteCard':
+        final content = data['content'] as String? ?? '';
+        final hash = content.hashCode.abs().toString();
+        return 'note-${hash.length > 8 ? hash.substring(0, 8) : hash}';
+      case 'CodeCard':
+        final code = data['code'] as String? ?? '';
+        final lang = data['language'] as String? ?? 'code';
+        final hash = code.hashCode.abs().toString();
+        return '$lang-${hash.length > 8 ? hash.substring(0, 8) : hash}';
+      case 'MarkdownCard':
+        final content = data['content'] as String? ?? '';
+        final hash = content.hashCode.abs().toString();
+        return 'markdown-${hash.length > 8 ? hash.substring(0, 8) : hash}';
     }
     // Fallback to timestamp-based ID
     return '${widgetName.toLowerCase()}-${DateTime.now().millisecondsSinceEpoch}';
@@ -73,6 +87,17 @@ class CanvasItem {
         return title;
       case 'InfoCard':
         return data['title'] as String? ?? 'Info';
+      case 'NoteCard':
+        final content = data['content'] as String? ?? '';
+        final preview = content.length > 50 ? '${content.substring(0, 50)}...' : content;
+        return 'Note: $preview';
+      case 'CodeCard':
+        final lang = data['language'] as String? ?? 'code';
+        return 'Code ($lang)';
+      case 'MarkdownCard':
+        final content = data['content'] as String? ?? '';
+        final preview = content.length > 50 ? '${content.substring(0, 50)}...' : content;
+        return 'Markdown: $preview';
       default:
         return widgetName;
     }
@@ -123,8 +148,10 @@ class CanvasState {
 ///
 /// Supports adding, replacing, and clearing canvas items.
 /// Agent can push widgets to canvas via the `canvas_render` tool.
-class CanvasNotifier extends StateNotifier<CanvasState> {
-  CanvasNotifier() : super(const CanvasState());
+///
+/// Extends [ServerScopedNotifier] to automatically reset when server changes.
+class CanvasNotifier extends ServerScopedNotifier<CanvasState> {
+  CanvasNotifier({super.serverId}) : super(const CanvasState());
 
   /// Add a new item to the canvas.
   ///
@@ -198,9 +225,4 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
   }
 }
 
-/// Provider for canvas state.
-final canvasProvider = StateNotifierProvider<CanvasNotifier, CanvasState>((
-  ref,
-) {
-  return CanvasNotifier();
-});
+// Note: canvasProvider is declared in lib/core/providers/panel_providers.dart

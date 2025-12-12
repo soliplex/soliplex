@@ -1,7 +1,6 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../models/chat_models.dart';
 import '../models/error_types.dart';
+import '../providers/server_scoped_notifier.dart';
 
 /// Chat state containing messages and metadata.
 class ChatState {
@@ -50,8 +49,10 @@ class ChatState {
 }
 
 /// StateNotifier for managing chat state.
-class ChatNotifier extends StateNotifier<ChatState> {
-  ChatNotifier() : super(const ChatState());
+///
+/// Extends [ServerScopedNotifier] to automatically reset when server changes.
+class ChatNotifier extends ServerScopedNotifier<ChatState> {
+  ChatNotifier({super.serverId}) : super(const ChatState());
 
   /// Add a user message.
   void addUserMessage(String text) {
@@ -475,7 +476,4 @@ class ChatNotifier extends StateNotifier<ChatState> {
   bool get hasPendingToolCalls => state.pendingToolCallSummaries.isNotEmpty;
 }
 
-/// Riverpod provider for ChatNotifier.
-final chatProvider = StateNotifierProvider<ChatNotifier, ChatState>((ref) {
-  return ChatNotifier();
-});
+// Note: chatProvider is declared in lib/core/providers/panel_providers.dart

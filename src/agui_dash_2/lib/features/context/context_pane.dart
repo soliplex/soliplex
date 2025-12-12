@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/providers/panel_providers.dart';
 import '../../core/services/context_pane_service.dart';
 
 /// Context pane widget for displaying AG-UI activity and state.

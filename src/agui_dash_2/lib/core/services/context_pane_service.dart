@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/server_scoped_notifier.dart';
 
 /// Represents an item in the context pane.
 class ContextItem {
@@ -52,8 +52,10 @@ class ContextPaneState {
 /// - STATE_SNAPSHOT events from the agent
 /// - Tool call results
 /// - Other relevant events
-class ContextPaneNotifier extends StateNotifier<ContextPaneState> {
-  ContextPaneNotifier() : super(const ContextPaneState());
+///
+/// Extends [ServerScopedNotifier] to automatically reset when server changes.
+class ContextPaneNotifier extends ServerScopedNotifier<ContextPaneState> {
+  ContextPaneNotifier({super.serverId}) : super(const ContextPaneState());
 
   /// Called when STATE_SNAPSHOT event is received.
   void updateState(Map<String, dynamic> newState) {
@@ -234,8 +236,4 @@ class ContextPaneNotifier extends StateNotifier<ContextPaneState> {
   }
 }
 
-/// Provider for context pane state.
-final contextPaneProvider =
-    StateNotifierProvider<ContextPaneNotifier, ContextPaneState>((ref) {
-      return ContextPaneNotifier();
-    });
+// Note: contextPaneProvider is declared in lib/core/providers/panel_providers.dart

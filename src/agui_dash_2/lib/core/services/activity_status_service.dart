@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/activity_status_config.dart';
+import '../providers/server_scoped_notifier.dart';
 
 /// State for the activity status indicator.
 class ActivityStatusState {
@@ -50,14 +51,16 @@ class ActivityStatusState {
 }
 
 /// Notifier that manages activity status state and message cycling.
-class ActivityStatusNotifier extends StateNotifier<ActivityStatusState> {
+///
+/// Extends [ServerScopedNotifier] to automatically reset when server changes.
+class ActivityStatusNotifier extends ServerScopedNotifier<ActivityStatusState> {
   final ActivityStatusConfig _config;
 
   Timer? _initialDelayTimer;
   Timer? _cycleTimer;
   Timer? _injectedMessageTimer;
 
-  ActivityStatusNotifier({ActivityStatusConfig? config})
+  ActivityStatusNotifier({ActivityStatusConfig? config, super.serverId})
       : _config = config ?? ActivityStatusConfig.defaultConfig,
         super(const ActivityStatusState());
 
@@ -167,9 +170,4 @@ final activityStatusConfigProvider = StateProvider<ActivityStatusConfig>((ref) {
   return ActivityStatusConfig.defaultConfig;
 });
 
-/// Provider for activity status state and notifier.
-final activityStatusProvider =
-    StateNotifierProvider<ActivityStatusNotifier, ActivityStatusState>((ref) {
-  final config = ref.watch(activityStatusConfigProvider);
-  return ActivityStatusNotifier(config: config);
-});
+// Note: activityStatusProvider is declared in lib/core/providers/panel_providers.dart

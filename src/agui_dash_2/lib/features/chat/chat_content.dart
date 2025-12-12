@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/chat_models.dart';
 import '../../core/network/connection_manager.dart';
-import '../../core/services/activity_status_service.dart';
+import '../../core/providers/panel_providers.dart';
 import '../../core/services/agui_service.dart';
 import '../../core/services/chat_search_service.dart';
 import '../../core/services/canvas_service.dart';
@@ -16,6 +16,7 @@ import '../../core/services/room_chat_service.dart';
 import '../../core/services/rooms_service.dart';
 import '../../core/utils/debug_log.dart';
 import '../../infrastructure/quick_agui/tool_call_state.dart';
+import '../room/welcome_card.dart';
 import 'widgets/chat_input_area.dart';
 import 'widgets/chat_message_list.dart';
 import 'widgets/chat_search_bar.dart';
@@ -1026,6 +1027,16 @@ class _ChatContentState extends ConsumerState<ChatContent> {
                         ref.read(chatProvider.notifier).toggleToolGroupExpanded(messageId);
                       },
                       onGenUiEvent: _handleGenUiEvent,
+                      // Show welcome card at top when no agent messages
+                      welcomeWidget: !hasAgentMessages && selectedRoom != null
+                          ? WelcomeCard(
+                              room: selectedRoom,
+                              onSuggestionTap: (suggestion) {
+                                _inputController.text = suggestion;
+                                _sendMessage();
+                              },
+                            )
+                          : null,
                     ),
                   ),
                   // Activity status bar OR custom input area
@@ -1051,6 +1062,7 @@ class _ChatContentState extends ConsumerState<ChatContent> {
                       room: selectedRoom,
                       hasMessages: hasAgentMessages,
                       isLoading: activityStatus.isActive,
+                      showWelcome: false, // Welcome card now in ChatMessageList
                     ),
                 ],
               );

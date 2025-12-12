@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/providers/panel_providers.dart';
 import '../../core/services/agui_service.dart';
-import '../../core/services/chat_service.dart';
 import '../../core/services/thread_history_service.dart';
 import '../chat/chat_content.dart';
 import '../context/context_pane.dart';
@@ -215,15 +215,14 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
             color: Theme.of(context).colorScheme.outline,
           ),
           const SizedBox(height: 8),
-          Text(
-            'No threads yet',
-            style: TextStyle(color: Theme.of(context).colorScheme.outline),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Start a conversation',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.outline,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'This is where current and past threads will be listed',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.outline,
+              ),
+              textAlign: TextAlign.center,
             ),
           ),
         ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/providers/panel_providers.dart';
 import '../../core/services/canvas_service.dart';
 import '../../core/services/widget_registry.dart';
 
