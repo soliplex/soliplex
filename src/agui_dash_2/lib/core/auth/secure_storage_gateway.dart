@@ -1,63 +1,41 @@
-import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
+import '../services/secure_storage_service.dart';
 import 'secure_storage_capabilities.dart';
 
+/// Adapter that wraps SecureStorageService to implement the capability interfaces
+/// used by OIDC auth components.
+///
+/// This consolidates storage - both server config and OIDC tokens use the same
+/// underlying SecureStorageService which has proper fallback support.
 class SecureStorageGateway
     implements
         SecureStorageReadCapability,
         SecureStorageWriteCapability,
         SecureStorageDeleteCapability {
-  const SecureStorageGateway(this._storage);
+  SecureStorageGateway(this._storage);
 
-  final FlutterSecureStorage _storage;
+  final SecureStorageService _storage;
 
   @override
   Future<String?> read(String key) async {
-    try {
-      return await _storage.read(key: key);
-    } catch (e) {
-      debugPrint('SecureStorageGateway: Error reading $key: $e');
-      return null;
-    }
+    return await _storage.read(key);
   }
 
   @override
   Future<void> write(String key, String? value) async {
-    // Delete first to avoid macOS Keychain duplicate item error (-25299)
-    try {
-      debugPrint('SecureStorageGateway: Deleting $key before write');
-      await _storage.delete(key: key);
-    } catch (e) {
-      debugPrint('SecureStorageGateway: Delete of $key failed (ok if not exists): $e');
-    }
-
-    try {
-      debugPrint('SecureStorageGateway: Writing $key');
-      await _storage.write(key: key, value: value);
-      debugPrint('SecureStorageGateway: Write $key succeeded');
-    } catch (e) {
-      debugPrint('SecureStorageGateway: Write $key failed: $e');
-      rethrow;
+    if (value == null) {
+      await _storage.delete(key);
+    } else {
+      await _storage.write(key, value);
     }
   }
 
   @override
   Future<void> delete(String key) async {
-    try {
-      await _storage.delete(key: key);
-    } catch (e) {
-      debugPrint('SecureStorageGateway: Delete $key failed: $e');
-    }
+    await _storage.delete(key);
   }
 
   /// Clear all stored items
   Future<void> deleteAll() async {
-    try {
-      await _storage.deleteAll();
-      debugPrint('SecureStorageGateway: Deleted all items');
-    } catch (e) {
-      debugPrint('SecureStorageGateway: DeleteAll failed: $e');
-    }
+    await _storage.deleteAll();
   }
 }

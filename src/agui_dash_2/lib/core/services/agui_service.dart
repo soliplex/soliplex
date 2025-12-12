@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import '../../infrastructure/quick_agui/thread.dart';
 import '../../infrastructure/quick_agui/tool_call_state.dart';
 import '../models/chat_models.dart';
+import '../utils/debug_log.dart';
 import 'local_tools_service.dart';
 
 /// Configuration for AG-UI service.
@@ -106,7 +107,7 @@ class AgUiService extends ChangeNotifier {
       return;
     }
 
-    debugPrint('AgUiService: Configuring for room "${config.roomId}"');
+    DebugLog.service('AgUiService: Configuring for room "${config.roomId}"');
     _config = config;
     _state = AgUiConnectionState.disconnected;
     _lastError = null;
@@ -151,7 +152,7 @@ class AgUiService extends ChangeNotifier {
     }
     final runId = runs.keys.first;
 
-    debugPrint('AG-UI: Created thread: $threadId with initial run: $runId');
+    DebugLog.service('AG-UI: Created thread: $threadId with initial run: $runId');
     return (threadId, runId);
   }
 
@@ -175,7 +176,7 @@ class AgUiService extends ChangeNotifier {
       throw Exception('Server did not return run_id');
     }
 
-    debugPrint('AG-UI: Created run: $runId');
+    DebugLog.service('AG-UI: Created run: $runId');
     return runId;
   }
 
@@ -190,8 +191,12 @@ class AgUiService extends ChangeNotifier {
         parameters: toolDef.parameters,
       );
 
+      // UI tools are fire-and-forget - they execute but don't send results back
+      // This prevents infinite loops where the LLM keeps calling the same tool
+      final isFireAndForget = _uiTools.contains(toolDef.name);
+
       _thread!.addTool(agTool, (call) async {
-        debugPrint('AG-UI: Tool executor callback for ${call.function.name}');
+        DebugLog.service('AG-UI: Tool executor callback for ${call.function.name}');
 
         // Parse arguments
         Map<String, dynamic> args = {};
@@ -200,45 +205,45 @@ class AgUiService extends ChangeNotifier {
             args = jsonDecode(call.function.arguments) as Map<String, dynamic>;
           }
         } catch (e) {
-          debugPrint('AG-UI: Failed to parse tool args: $e');
+          DebugLog.service('AG-UI: Failed to parse tool args: $e');
         }
 
         // Check if this is a UI tool that needs special handling
         if (_uiTools.contains(call.function.name) && _uiToolHandler != null) {
-          debugPrint('AG-UI: Routing ${call.function.name} to UI handler (id=${call.id})');
+          DebugLog.service('AG-UI: Routing ${call.function.name} to UI handler (id=${call.id})');
           _localToolNotifier?.call(call.id, call.function.name, 'executing');
           try {
             final result = await _uiToolHandler!(call.id, call.function.name, args);
             _localToolNotifier?.call(call.id, call.function.name, 'completed');
             return jsonEncode(result);
           } catch (e) {
-            debugPrint('AG-UI: UI handler error: $e');
+            DebugLog.service('AG-UI: UI handler error: $e');
             _localToolNotifier?.call(call.id, call.function.name, 'error: $e');
             return jsonEncode({'error': e.toString()});
           }
         }
 
         // Execute the tool via LocalToolsService
-        debugPrint('AG-UI: Calling localToolsService.executeTool...');
+        DebugLog.service('AG-UI: Calling localToolsService.executeTool...');
         _localToolNotifier?.call(call.id, call.function.name, 'executing');
         final result = await localToolsService.executeTool(
           call.id,
           call.function.name,
           args,
         );
-        debugPrint('AG-UI: Tool execution returned: success=${result.success}');
+        DebugLog.service('AG-UI: Tool execution returned: success=${result.success}');
 
         if (result.success) {
           final json = jsonEncode(result.result);
-          debugPrint('AG-UI: Returning success JSON (${json.length} chars)');
+          DebugLog.service('AG-UI: Returning success JSON (${json.length} chars)');
           _localToolNotifier?.call(call.id, call.function.name, 'completed');
           return json;
         } else {
-          debugPrint('AG-UI: Returning error: ${result.error}');
+          DebugLog.service('AG-UI: Returning error: ${result.error}');
           _localToolNotifier?.call(call.id, call.function.name, 'error');
           return jsonEncode({'error': result.error});
         }
-      });
+      }, fireAndForget: isFireAndForget);
     }
   }
 
@@ -286,7 +291,7 @@ class AgUiService extends ChangeNotifier {
       // Generate the endpoint
       final endpoint =
           'rooms/${_config!.roomId}/agui/${_thread!.id}/$_currentRunId';
-      debugPrint('AG-UI: Starting run at $endpoint');
+      DebugLog.service('AG-UI: Starting run at $endpoint');
 
       // Start the run - Thread handles the event loop
       var toolResults = await _thread!.startRun(
@@ -304,7 +309,7 @@ class AgUiService extends ChangeNotifier {
 
       // Handle tool result loop
       while (toolResults.isNotEmpty) {
-        debugPrint('AG-UI: Processing ${toolResults.length} tool results');
+        DebugLog.service('AG-UI: Processing ${toolResults.length} tool results');
 
         _currentRunId = await _createRun(_thread!.id);
         final newEndpoint =
@@ -322,7 +327,7 @@ class AgUiService extends ChangeNotifier {
     } catch (e, stackTrace) {
       _state = AgUiConnectionState.error;
       _lastError = e.toString();
-      debugPrint('AgUiService error: $e\n$stackTrace');
+      DebugLog.service('AgUiService error: $e\n$stackTrace');
       notifyListeners();
       rethrow;
     }
@@ -355,7 +360,7 @@ class AgUiService extends ChangeNotifier {
   }) async {
     // Wait for any pending chat() to complete
     while (_chatLock != null) {
-      debugPrint('AG-UI: Waiting for previous chat() to complete...');
+      DebugLog.service('AG-UI: Waiting for previous chat() to complete...');
       await _chatLock!.future;
     }
 
@@ -394,62 +399,64 @@ class AgUiService extends ChangeNotifier {
       notifyListeners();
 
       // Listen to events stream
-      final subscription = _thread!.stepsStream.listen(onEvent);
-
-      // Listen to tool state changes for UI notifications
+      StreamSubscription<ag_ui.BaseEvent>? subscription;
       StreamSubscription<ToolCallStateChange>? toolStateSubscription;
-      if (onToolStateChange != null) {
-        toolStateSubscription = _thread!.toolStateChanges.listen(onToolStateChange);
-      }
 
-      // Add user message
-      final userMsg = ag_ui.UserMessage(
-        id: 'user-${DateTime.now().millisecondsSinceEpoch}',
-        content: userMessage,
-      );
+      try {
+        subscription = _thread!.stepsStream.listen(onEvent);
 
-      // Generate the endpoint
-      final endpoint =
-          'rooms/${_config!.roomId}/agui/${_thread!.id}/$_currentRunId';
-      debugPrint('AG-UI: Starting run at $endpoint');
+        // Listen to tool state changes for UI notifications
+        if (onToolStateChange != null) {
+          toolStateSubscription = _thread!.toolStateChanges.listen(onToolStateChange);
+        }
 
-      // Start the run with optional state
-      var toolResults = await _thread!.startRun(
-        endpoint: endpoint,
-        runId: _currentRunId!,
-        messages: [userMsg],
-        state: state,
-      );
+        // Add user message
+        final userMsg = ag_ui.UserMessage(
+          id: 'user-${DateTime.now().millisecondsSinceEpoch}',
+          content: userMessage,
+        );
 
-      // Handle tool result loop
-      while (toolResults.isNotEmpty) {
-        debugPrint('AG-UI: Processing ${toolResults.length} tool results');
-
-        _currentRunId = await _createRun(_thread!.id);
-        final newEndpoint =
+        // Generate the endpoint
+        final endpoint =
             'rooms/${_config!.roomId}/agui/${_thread!.id}/$_currentRunId';
 
-        toolResults = await _thread!.sendToolResults(
-          endpoint: newEndpoint,
+        // Start the run with optional state
+        var toolResults = await _thread!.startRun(
+          endpoint: endpoint,
           runId: _currentRunId!,
-          toolMessages: toolResults,
+          messages: [userMsg],
+          state: state,
         );
+
+        // Handle tool result loop
+        while (toolResults.isNotEmpty) {
+          _currentRunId = await _createRun(_thread!.id);
+          final newEndpoint =
+              'rooms/${_config!.roomId}/agui/${_thread!.id}/$_currentRunId';
+
+          toolResults = await _thread!.sendToolResults(
+            endpoint: newEndpoint,
+            runId: _currentRunId!,
+            toolMessages: toolResults,
+          );
+        }
+
+        _state = AgUiConnectionState.connected;
+        notifyListeners();
+      } finally {
+        // Always cancel subscriptions
+        await subscription?.cancel();
+        await toolStateSubscription?.cancel();
       }
-
-      await subscription.cancel();
-      await toolStateSubscription?.cancel();
-
-      _state = AgUiConnectionState.connected;
-      notifyListeners();
     } catch (e, stackTrace) {
       _state = AgUiConnectionState.error;
       _lastError = e.toString();
-      debugPrint('AgUiService error: $e\n$stackTrace');
+      DebugLog.error('AgUiService error: $e');
       notifyListeners();
       rethrow;
     } finally {
-      // Release lock
-      _chatLock!.complete();
+      // Always release lock
+      _chatLock?.complete();
       _chatLock = null;
     }
   }
@@ -463,7 +470,7 @@ class AgUiService extends ChangeNotifier {
       throw StateError('AgUiService not configured. Call configure() first.');
     }
 
-    debugPrint('AgUiService: Resuming thread $threadId');
+    DebugLog.service('AgUiService: Resuming thread $threadId');
 
     // Dispose old thread if exists
     _thread?.dispose();
@@ -485,7 +492,7 @@ class AgUiService extends ChangeNotifier {
       throw StateError('AgUiService not configured.');
     }
 
-    debugPrint('AgUiService: Loading history for thread $threadId');
+    DebugLog.service('AgUiService: Loading history for thread $threadId');
 
     try {
       final response = await _httpClient.get(
@@ -494,14 +501,14 @@ class AgUiService extends ChangeNotifier {
       );
 
       if (response.statusCode != 200) {
-        debugPrint('AgUiService: Failed to load thread: ${response.statusCode}');
+        DebugLog.service('AgUiService: Failed to load thread: ${response.statusCode}');
         return [];
       }
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final runs = data['runs'] as Map<String, dynamic>? ?? {};
 
-      debugPrint('AgUiService: Found ${runs.length} runs');
+      DebugLog.service('AgUiService: Found ${runs.length} runs');
 
       // Collect all messages from all runs, sorted by creation time
       final List<ChatMessage> messages = [];
@@ -519,7 +526,7 @@ class AgUiService extends ChangeNotifier {
         final runInput = runData['run_input'] as Map<String, dynamic>?;
         final events = runData['events'] as List<dynamic>? ?? [];
 
-        debugPrint('AgUiService: Run ${entry.key} has ${events.length} events');
+        DebugLog.service('AgUiService: Run ${entry.key} has ${events.length} events');
 
         // Extract user messages from run_input
         if (runInput != null) {
@@ -542,10 +549,10 @@ class AgUiService extends ChangeNotifier {
         messages.addAll(_eventsToMessages(events));
       }
 
-      debugPrint('AgUiService: Loaded ${messages.length} messages from history');
+      DebugLog.service('AgUiService: Loaded ${messages.length} messages from history');
       return messages;
     } catch (e, stackTrace) {
-      debugPrint('AgUiService: Error loading thread history: $e\n$stackTrace');
+      DebugLog.service('AgUiService: Error loading thread history: $e\n$stackTrace');
       return [];
     }
   }
@@ -627,7 +634,7 @@ class AgUiService extends ChangeNotifier {
                   ),
                 ));
               } catch (e) {
-                debugPrint('AgUiService: Failed to parse genui_render args: $e');
+                DebugLog.service('AgUiService: Failed to parse genui_render args: $e');
               }
             }
           }

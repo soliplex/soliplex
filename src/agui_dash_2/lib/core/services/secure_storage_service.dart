@@ -90,8 +90,15 @@ class NativeSecureStorageService implements SecureStorageService {
       return;
     }
     try {
+      // Delete first to avoid macOS Keychain duplicate item error (-25299)
+      try {
+        await _storage.delete(key: key);
+      } catch (_) {
+        // Ignore - key may not exist
+      }
       await _storage.write(key: key, value: value);
     } catch (e) {
+      debugPrint('SecureStorage: Write failed for $key: $e, using fallback');
       _fallbackStorage[key] = value;
     }
   }
