@@ -194,19 +194,14 @@ class ConnectionManager extends ChangeNotifier {
     return session;
   }
 
-  /// Track subscribed sessions to avoid duplicate listeners.
-  final Set<String> _subscribedSessions = {};
+  /// Track subscriptions for proper cleanup.
+  final Map<String, StreamSubscription<ConnectionEvent>> _sessionSubscriptions = {};
 
   void _subscribeToSession(RoomSession session) {
     final sessionKey = '${session.serverId}:${session.roomId}';
-    if (_subscribedSessions.contains(sessionKey)) return;
-    _subscribedSessions.add(sessionKey);
+    if (_sessionSubscriptions.containsKey(sessionKey)) return;
 
-    session.events.listen((event) {
-      if (!_eventController.isClosed) {
-        _eventController.add(event);
-      }
-    });
+    _sessionSubscriptions[sessionKey] = session.events.listen(_eventController.add);
   }
 
   /// Get messages for a room (reads from RoomSession).
@@ -469,7 +464,13 @@ class ConnectionManager extends ChangeNotifier {
   @override
   void dispose() {
     _registry.removeListener(_onRegistryChanged);
-    _subscribedSessions.clear();
+
+    // Cancel all session subscriptions
+    for (final subscription in _sessionSubscriptions.values) {
+      subscription.cancel();
+    }
+    _sessionSubscriptions.clear();
+
     _eventController.close();
     // Note: Don't dispose registry here - it may be shared
     super.dispose();
