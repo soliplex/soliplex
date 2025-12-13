@@ -76,9 +76,9 @@ class UrlBuilder {
   Uri runMeta(String roomId, String threadId, String runId) =>
       Uri.parse('$apiBaseUrl/v1/rooms/$roomId/agui/$threadId/$runId/meta');
 
-  /// Endpoint path for AG-UI client (relative path).
+  /// Endpoint path for AG-UI client (relative path without leading slash).
   String runEndpointPath(String roomId, String threadId, String runId) =>
-      '/api/v1/rooms/$roomId/agui/$threadId/$runId';
+      'api/v1/rooms/$roomId/agui/$threadId/$runId';
 
   @override
   String toString() => 'UrlBuilder($_baseUrl)';

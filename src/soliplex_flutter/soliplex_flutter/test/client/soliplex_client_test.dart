@@ -366,12 +366,24 @@ void main() {
     });
 
     group('createThread via API', () {
-      test('creates thread and returns IDs', () async {
+      test('creates thread and extracts run_id from nested runs', () async {
+        // Actual API response format has run_id nested inside runs map
         mockHttpClient = createMockClient((request) async {
           if (request.url.path == '/api/v1/rooms/room1/agui' &&
               request.method == 'POST') {
             return http.Response(
-              jsonEncode({'thread_id': 'new-thread', 'run_id': 'new-run'}),
+              jsonEncode({
+                'room_id': 'room1',
+                'thread_id': 'new-thread',
+                'runs': {
+                  'new-run': {
+                    'thread_id': 'new-thread',
+                    'run_id': 'new-run',
+                    'created': '2025-01-01T00:00:00',
+                  },
+                },
+                'created': '2025-01-01T00:00:00',
+              }),
               201,
             );
           }
@@ -383,6 +395,7 @@ void main() {
         final result = await api.createThread('room1');
 
         expect(result['thread_id'], equals('new-thread'));
+        // run_id should be extracted from nested runs map
         expect(result['run_id'], equals('new-run'));
       });
     });

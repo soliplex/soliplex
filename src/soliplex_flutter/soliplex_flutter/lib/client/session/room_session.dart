@@ -40,8 +40,17 @@ class RoomSession {
 
   // Message state - THE source of truth
   final List<ChatMessage> _messages = [];
-  final StreamController<List<ChatMessage>> _messageController =
-      StreamController<List<ChatMessage>>.broadcast();
+  late final StreamController<List<ChatMessage>> _messageController =
+      StreamController<List<ChatMessage>>.broadcast(
+    onListen: () {
+      // Schedule emission to ensure subscriber is ready to receive
+      Future.microtask(() {
+        if (!_messageController.isClosed) {
+          _messageController.add(List.unmodifiable(_messages));
+        }
+      });
+    },
+  );
 
   // Event processing state
   final Map<String, String> _messageIdMap = {}; // aguiId → chatId
