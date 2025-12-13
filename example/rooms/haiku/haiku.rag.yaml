@@ -1,6 +1,24 @@
-# Uncomment to test reranking for the 'search_documents' tool in this room
+#------------------------------------------------------------------------------
+# Override global haiku.rag configuration
+#
+# Note that this file must be configured in the 'search_documents' tool
+# configuration for any settings here to be applied
+#------------------------------------------------------------------------------
+#
+# Uncomment to enable reranking for the 'search_documents' tool
+#
 #reranking:
-# model:
-#   name: "gpt-oss:20b"
-#   provider: "ollama"
+#  model:
+#    name: "gpt-oss:20b"
+#    provider: "ollama"
 
+#
+# Uncomment to override HR search settings in this room
+#
+#search:
+#  limit: 5
+#  context_radius: 0
+#  max_context_items: 10
+#  max_context_chars: 10000
+#  vector_index_metric: cosine
+#  vector_refine_factor: 30

@@ -17,3 +17,5 @@ tools:
     rag_lancedb_stem: "rag"
     search_documents_limit: 7
     allow_mcp: true
+    # Apply HR config overrides local to this room
+    #haiku_rag_config: "./haiku.rag.yaml"
