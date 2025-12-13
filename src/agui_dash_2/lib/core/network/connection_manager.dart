@@ -8,10 +8,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/chat_models.dart';
 import '../services/local_tools_service.dart';
 import '../utils/debug_log.dart';
-import '../utils/url_builder.dart';
 import 'connection_events.dart';
-import 'http_transport.dart';
+import 'connection_registry.dart';
 import 'room_session.dart';
+import 'server_connection_state.dart';
+import 'server_room_key.dart';
 
 /// UI tool handler callback type.
 typedef UiToolHandler = Future<Map<String, dynamic>> Function(
@@ -27,31 +28,28 @@ typedef LocalToolNotifier = void Function(
   String status,
 );
 
-/// Central hub managing all room sessions.
+/// Facade over [ConnectionRegistry] for backward compatibility.
 ///
-/// Singleton for app lifetime - handles server changes internally via switchServer().
+/// This class provides the same API as the original ConnectionManager
+/// while delegating to the multi-server ConnectionRegistry internally.
+///
+/// Key changes from original:
+/// - `switchServer()` is now NON-DESTRUCTIVE (sessions preserved per server)
+/// - Added `focusServer()` for multi-server switching
+/// - All session operations delegate to registry
 ///
 /// Handles:
-/// - Session pool (`Map<roomId, RoomSession>`)
-/// - Server switching (clears sessions on server change)
+/// - Session pool per server (via ConnectionRegistry)
+/// - Server switching (non-destructive, preserves sessions)
 /// - Room switching with state preservation
 /// - Run cancellation
 /// - Connection observability
 class ConnectionManager extends ChangeNotifier {
-  String _baseUrl;
-  Map<String, String>? _headers;
-  HttpTransport _transport;
-  UrlBuilder _urlBuilder;
-  ag_ui.AgUiClient? _agUiClient;
+  /// Connection registry for multi-server support.
+  final ConnectionRegistry _registry;
 
-  /// All room sessions.
-  final Map<String, RoomSession> _sessions = {};
-
-  /// Currently active room ID.
-  String? _activeRoomId;
-
-  /// Max backgrounded sessions before LRU eviction.
-  final int maxBackgroundedSessions;
+  /// Currently active server ID.
+  String? _activeServerId;
 
   /// Event stream for all sessions.
   final StreamController<ConnectionEvent> _eventController =
@@ -61,114 +59,154 @@ class ConnectionManager extends ChangeNotifier {
   static const _uiTools = {'canvas_render', 'genui_render'};
 
   /// Whether the manager has been configured with a server.
-  bool get isConfigured => _baseUrl.isNotEmpty;
+  bool get isConfigured => _activeServerId != null && _registry.hasServer(_activeServerId!);
 
   /// Current server URL.
-  String get serverUrl => _urlBuilder.serverUrl;
+  String get serverUrl => _activeServerState?.baseUrl ?? '';
+
+  /// Current server ID.
+  String? get activeServerId => _activeServerId;
+
+  /// Currently active room ID.
+  String? get activeRoomId => _registry.activeRoomId;
+
+  /// Get the active server state, or null if none.
+  ServerConnectionState? get _activeServerState =>
+      _activeServerId != null ? _registry.getServerState(_activeServerId!) : null;
+
+  /// Max backgrounded sessions before LRU eviction (delegated to registry config).
+  int get maxBackgroundedSessions => 5;
 
   ConnectionManager({
+    ConnectionRegistry? registry,
     String baseUrl = '',
     Map<String, String>? headers,
-    this.maxBackgroundedSessions = 5,
-    HttpTransport? transport,
-  }) : _baseUrl = baseUrl,
-       _headers = headers,
-       _urlBuilder = UrlBuilder(baseUrl.isNotEmpty ? baseUrl : 'http://localhost'),
-       _transport = transport ?? HttpTransport(baseUrl: baseUrl.isNotEmpty ? baseUrl : 'http://localhost', defaultHeaders: headers) {
+  }) : _registry = registry ?? ConnectionRegistry() {
+    // Listen to registry changes
+    _registry.addListener(_onRegistryChanged);
+
+    // If baseUrl provided, connect immediately (backward compat)
     if (baseUrl.isNotEmpty) {
-      _initializeClient();
+      switchServer(baseUrl, headers: headers);
     }
   }
 
-  void _initializeClient() {
-    // Use serverUrl (not apiBaseUrl) because runEndpoint includes the api path.
-    // The ag_ui client replaces the path instead of appending to it.
-    _agUiClient = ag_ui.AgUiClient(
-      config: ag_ui.AgUiClientConfig(
-        baseUrl: _urlBuilder.serverUrl,
-        defaultHeaders: _headers ?? {},
-      ),
-    );
+  void _onRegistryChanged() {
+    notifyListeners();
   }
 
-  /// Switch to a different server.
+  /// Switch to a different server (NON-DESTRUCTIVE).
   ///
-  /// Disposes all existing sessions and reinitializes for the new server.
+  /// Creates or retrieves a server connection. Sessions on other servers
+  /// are preserved (not destroyed like the old implementation).
+  ///
   /// Call this when the user selects a different server.
   void switchServer(String newBaseUrl, {Map<String, String>? headers}) {
-    if (_baseUrl == newBaseUrl && _headersEqual(headers)) {
+    // Generate a server ID from the URL (or use provided ID)
+    final serverId = _serverIdFromUrl(newBaseUrl);
+
+    if (_activeServerId == serverId) {
       DebugLog.network('ConnectionManager: Server unchanged, skipping switch');
       return;
     }
 
-    DebugLog.network('ConnectionManager: Switching server from $_baseUrl to $newBaseUrl');
+    DebugLog.network('ConnectionManager: Switching server to $newBaseUrl (id: $serverId)');
 
-    // Dispose all existing sessions
-    for (final session in _sessions.values) {
-      session.dispose();
-    }
-    _sessions.clear();
-    _activeRoomId = null;
-
-    // Update configuration
-    _baseUrl = newBaseUrl;
-    _headers = headers;
-    _urlBuilder = UrlBuilder(newBaseUrl);
-    _transport = HttpTransport(baseUrl: newBaseUrl, defaultHeaders: headers);
-    _initializeClient();
+    // Connect to the server (or get existing connection)
+    _registry.connectServer(serverId, newBaseUrl, headers: headers);
+    _activeServerId = serverId;
+    _registry.focusServer(serverId);
 
     notifyListeners();
   }
 
-  bool _headersEqual(Map<String, String>? newHeaders) {
-    if (_headers == null && newHeaders == null) return true;
-    if (_headers == null || newHeaders == null) return false;
-    if (_headers!.length != newHeaders.length) return false;
-    for (final key in _headers!.keys) {
-      if (_headers![key] != newHeaders[key]) return false;
+  /// Focus a different server by ID (for multi-server support).
+  ///
+  /// Unlike [switchServer], this only changes the active server
+  /// without connecting to a new one.
+  void focusServer(String serverId) {
+    if (!_registry.hasServer(serverId)) {
+      throw StateError('Server $serverId not connected. Call switchServer() first.');
     }
-    return true;
+
+    if (_activeServerId == serverId) {
+      return;
+    }
+
+    DebugLog.network('ConnectionManager: Focusing server $serverId');
+    _activeServerId = serverId;
+    _registry.focusServer(serverId);
+    notifyListeners();
+  }
+
+  /// Get list of connected server IDs.
+  List<String> get connectedServerIds => _registry.serverIds;
+
+  /// Check if a server is connected.
+  bool hasServer(String serverId) => _registry.hasServer(serverId);
+
+  /// Generate a server ID from a URL.
+  String _serverIdFromUrl(String url) {
+    // Extract host:port as ID (e.g., "localhost:8080")
+    final uri = Uri.parse(url);
+    return '${uri.host}:${uri.port}';
   }
 
   // Getters
-  String? get activeRoomId => _activeRoomId;
-  RoomSession? get activeSession =>
-      _activeRoomId != null ? _sessions[_activeRoomId] : null;
+  RoomSession? get activeSession {
+    final roomId = activeRoomId;
+    final serverId = _activeServerId;
+    if (roomId == null || serverId == null) return null;
+    return _registry.getExistingSession(ServerRoomKey(serverId: serverId, roomId: roomId));
+  }
 
   /// Stream of connection events for observability.
   Stream<ConnectionEvent> get events => _eventController.stream;
 
-  /// Get all active connections info.
-  List<ConnectionInfo> get activeConnections =>
-      _sessions.values.map((s) => s.connectionInfo).toList();
+  /// Get all active connections info (for current server).
+  List<ConnectionInfo> get activeConnections {
+    final serverState = _activeServerState;
+    if (serverState == null) return [];
+    return serverState.sessions.values.map((s) => s.connectionInfo).toList();
+  }
 
-  /// Get connection info for a specific room.
-  ConnectionInfo? getConnectionInfo(String roomId) =>
-      _sessions[roomId]?.connectionInfo;
+  /// Get connection info for a specific room (on current server).
+  ConnectionInfo? getConnectionInfo(String roomId) {
+    if (_activeServerId == null) return null;
+    final session = _registry.getExistingSession(
+      ServerRoomKey(serverId: _activeServerId!, roomId: roomId),
+    );
+    return session?.connectionInfo;
+  }
 
-  /// Get or create a session for a room.
+  /// Get or create a session for a room (on current server).
   RoomSession getSession(String roomId) {
-    var session = _sessions[roomId];
-    if (session == null) {
-      session = RoomSession(
-        roomId: roomId,
-        baseUrl: _baseUrl,
-        transport: _transport,
-      );
-      _sessions[roomId] = session;
-
-      // Forward session events
-      session.events.listen((event) {
-        _eventController.add(event);
-        notifyListeners();
-      });
-
-      // Forward message updates
-      session.messageStream.listen((_) {
-        notifyListeners();
-      });
+    if (_activeServerId == null) {
+      throw StateError('No server configured. Call switchServer() first.');
     }
+
+    final key = ServerRoomKey(serverId: _activeServerId!, roomId: roomId);
+    final session = _registry.getSession(key);
+
+    // Forward session events (subscribe if new)
+    _subscribeToSession(session);
+
     return session;
+  }
+
+  /// Track subscribed sessions to avoid duplicate listeners.
+  final Set<String> _subscribedSessions = {};
+
+  void _subscribeToSession(RoomSession session) {
+    final sessionKey = '${session.serverId}:${session.roomId}';
+    if (_subscribedSessions.contains(sessionKey)) return;
+    _subscribedSessions.add(sessionKey);
+
+    session.events.listen((event) {
+      if (!_eventController.isClosed) {
+        _eventController.add(event);
+      }
+    });
   }
 
   /// Get messages for a room (reads from RoomSession).
@@ -183,14 +221,23 @@ class ConnectionManager extends ChangeNotifier {
 
   /// Check if agent is typing in a room.
   bool isAgentTyping(String roomId) {
-    return _sessions[roomId]?.isAgentTyping ?? false;
+    if (_activeServerId == null) return false;
+    final session = _registry.getExistingSession(
+      ServerRoomKey(serverId: _activeServerId!, roomId: roomId),
+    );
+    return session?.isAgentTyping ?? false;
   }
 
-  /// Switch to a different room.
+  /// Switch to a different room (on current server).
   ///
   /// Suspends the current session (if any) and resumes or creates the new one.
   Future<RoomSession> switchRoom(String newRoomId) async {
-    final previousRoomId = _activeRoomId;
+    if (_activeServerId == null) {
+      throw StateError('No server configured. Call switchServer() first.');
+    }
+
+    final key = ServerRoomKey(serverId: _activeServerId!, roomId: newRoomId);
+    final previousRoomId = _registry.activeRoomId;
 
     if (previousRoomId == newRoomId) {
       // Already on this room
@@ -199,29 +246,17 @@ class ConnectionManager extends ChangeNotifier {
 
     DebugLog.network('ConnectionManager: Switching from $previousRoomId to $newRoomId');
 
-    // Suspend previous session
-    if (previousRoomId != null) {
-      final previousSession = _sessions[previousRoomId];
-      previousSession?.suspend();
-    }
+    // Use registry's setActive which handles suspend/resume
+    _registry.setActive(key);
 
-    // Get or create new session
+    // Get the session and subscribe
     final newSession = getSession(newRoomId);
 
-    // Resume if backgrounded
-    if (newSession.state == SessionState.backgrounded) {
-      newSession.resume();
-    }
-
-    _activeRoomId = newRoomId;
-
     _eventController.add(RoomSwitchedEvent(
+      serverId: _activeServerId,
       roomId: newRoomId,
       previousRoomId: previousRoomId,
     ));
-
-    // LRU eviction of backgrounded sessions
-    _evictOldSessions();
 
     notifyListeners();
     return newSession;
@@ -229,9 +264,14 @@ class ConnectionManager extends ChangeNotifier {
 
   /// Initialize a session for a room (create thread).
   Future<void> initializeSession(String roomId) async {
+    final serverState = _activeServerState;
+    if (serverState == null) {
+      throw StateError('No server configured. Call switchServer() first.');
+    }
+
     final session = getSession(roomId);
-    if (session.threadId == null && _agUiClient != null) {
-      await session.initialize(_agUiClient!);
+    if (session.threadId == null) {
+      await session.initialize(serverState.agUiClient);
       notifyListeners();
     }
   }
@@ -316,7 +356,14 @@ class ConnectionManager extends ChangeNotifier {
 
   /// Cancel the active run for a room.
   Future<void> cancelRun(String roomId) async {
-    final session = _sessions[roomId];
+    if (_activeServerId == null) {
+      DebugLog.network('ConnectionManager: No server configured');
+      return;
+    }
+
+    final session = _registry.getExistingSession(
+      ServerRoomKey(serverId: _activeServerId!, roomId: roomId),
+    );
     if (session == null) {
       DebugLog.network('ConnectionManager: No session for room $roomId');
       return;
@@ -328,7 +375,10 @@ class ConnectionManager extends ChangeNotifier {
 
   /// Clear messages for a room.
   void clearMessages(String roomId) {
-    final session = _sessions[roomId];
+    if (_activeServerId == null) return;
+    final session = _registry.getExistingSession(
+      ServerRoomKey(serverId: _activeServerId!, roomId: roomId),
+    );
     session?.clearMessages();
     notifyListeners();
   }
@@ -397,43 +447,31 @@ class ConnectionManager extends ChangeNotifier {
     }
   }
 
-  /// Evict oldest backgrounded sessions if over limit.
-  void _evictOldSessions() {
-    final backgrounded = _sessions.entries
-        .where((e) => e.value.state == SessionState.backgrounded)
-        .toList()
-      ..sort((a, b) =>
-          (a.value.lastActivity ?? DateTime(0)).compareTo(b.value.lastActivity ?? DateTime(0)));
-
-    while (backgrounded.length > maxBackgroundedSessions) {
-      final oldest = backgrounded.removeAt(0);
-      DebugLog.network('ConnectionManager: Evicting old session for room ${oldest.key}');
-      oldest.value.dispose();
-      _sessions.remove(oldest.key);
-    }
-  }
-
-  /// Dispose a specific room session.
+  /// Dispose a specific room session (on current server).
   void disposeSession(String roomId) {
-    final session = _sessions.remove(roomId);
-    session?.dispose();
+    final serverState = _activeServerState;
+    if (serverState == null) return;
 
-    if (_activeRoomId == roomId) {
-      _activeRoomId = null;
-    }
-
+    serverState.disposeSession(roomId);
     notifyListeners();
   }
 
-  /// Dispose all sessions.
+  /// Remove a server and all its sessions.
+  void removeServer(String serverId) {
+    _registry.removeServer(serverId);
+    if (_activeServerId == serverId) {
+      _activeServerId = null;
+    }
+    notifyListeners();
+  }
+
+  /// Dispose all sessions and the manager.
   @override
   void dispose() {
-    for (final session in _sessions.values) {
-      session.dispose();
-    }
-    _sessions.clear();
-    _transport.close();
+    _registry.removeListener(_onRegistryChanged);
+    _subscribedSessions.clear();
     _eventController.close();
+    // Note: Don't dispose registry here - it may be shared
     super.dispose();
   }
 }
@@ -441,7 +479,8 @@ class ConnectionManager extends ChangeNotifier {
 /// Singleton provider for ConnectionManager.
 /// Persists for app lifetime - NOT server-scoped.
 final connectionManagerProvider = ChangeNotifierProvider<ConnectionManager>((ref) {
-  final manager = ConnectionManager();
+  final registry = ref.read(connectionRegistryProvider);
+  final manager = ConnectionManager(registry: registry);
   ref.onDispose(() => manager.dispose());
   return manager;
 });
