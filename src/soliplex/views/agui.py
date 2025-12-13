@@ -160,7 +160,7 @@ async def get_room_agui_thread_id(
             a_run=a_run,
             a_run_input=await _get_run_input(a_run),
             a_run_meta=await a_run.awaitable_attrs.run_metadata,
-            a_run_events=await a_run.list_events(),
+            a_run_events=None,
         )
 
     return models.AGUI_Thread.from_thread(
