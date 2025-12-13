@@ -215,8 +215,11 @@ class PermanentCanvasWidget extends ConsumerWidget {
       ref.read(pinnedItemsProvider.notifier).addItem(item);
     }
 
-    titleController.dispose();
-    contentController.dispose();
+    // Dispose controllers after the frame to avoid issues with ongoing animations
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      titleController.dispose();
+      contentController.dispose();
+    });
   }
 }
 

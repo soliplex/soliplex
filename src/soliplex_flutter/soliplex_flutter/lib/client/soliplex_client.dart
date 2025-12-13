@@ -28,8 +28,10 @@ class SoliplexClient {
   SoliplexClient({
     String baseUrl = 'http://localhost:8000',
     Map<String, String>? headers,
+    SoliplexApi? api,
+    ConnectionManager? connectionManager,
   }) : _headers = headers {
-    _configure(baseUrl, headers);
+    _configure(baseUrl, headers, api: api, connectionManager: connectionManager);
   }
 
   late SoliplexApi _api;
@@ -50,13 +52,19 @@ class SoliplexClient {
   /// Current base URL.
   String get baseUrl => _connectionManager.baseUrl;
 
-  void _configure(String baseUrl, Map<String, String>? headers) {
+  void _configure(
+    String baseUrl,
+    Map<String, String>? headers, {
+    SoliplexApi? api,
+    ConnectionManager? connectionManager,
+  }) {
     final normalizedUrl = UrlBuilder.normalizeBaseUrl(baseUrl);
-    _api = SoliplexApi(baseUrl: normalizedUrl, headers: headers);
-    _connectionManager = ConnectionManager(
-      baseUrl: normalizedUrl,
-      headers: headers,
-    );
+    _api = api ?? SoliplexApi(baseUrl: normalizedUrl, headers: headers);
+    _connectionManager = connectionManager ??
+        ConnectionManager(
+          baseUrl: normalizedUrl,
+          headers: headers,
+        );
     _headers = headers;
   }
 
