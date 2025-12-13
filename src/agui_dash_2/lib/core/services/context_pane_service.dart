@@ -54,8 +54,12 @@ class ContextPaneState {
 /// - Other relevant events
 ///
 /// Extends [ServerScopedNotifier] to automatically reset when server changes.
+/// When used with [roomContextPaneProvider], also tracks roomId for per-room state.
 class ContextPaneNotifier extends ServerScopedNotifier<ContextPaneState> {
-  ContextPaneNotifier({super.serverId}) : super(const ContextPaneState());
+  /// The room this context pane belongs to (null for server-scoped legacy usage).
+  final String? roomId;
+
+  ContextPaneNotifier({super.serverId, this.roomId}) : super(const ContextPaneState());
 
   /// Called when STATE_SNAPSHOT event is received.
   void updateState(Map<String, dynamic> newState) {

@@ -150,8 +150,12 @@ class CanvasState {
 /// Agent can push widgets to canvas via the `canvas_render` tool.
 ///
 /// Extends [ServerScopedNotifier] to automatically reset when server changes.
+/// When used with [roomCanvasProvider], also tracks roomId for per-room state.
 class CanvasNotifier extends ServerScopedNotifier<CanvasState> {
-  CanvasNotifier({super.serverId}) : super(const CanvasState());
+  /// The room this canvas belongs to (null for server-scoped legacy usage).
+  final String? roomId;
+
+  CanvasNotifier({super.serverId, this.roomId}) : super(const CanvasState());
 
   /// Add a new item to the canvas.
   ///
