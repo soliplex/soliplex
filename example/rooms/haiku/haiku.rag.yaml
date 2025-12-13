@@ -1,6 +1,23 @@
-# Uncomment to test reranking for the 'search_documents' tool in this room
+#------------------------------------------------------------------------------
+# Override global haiku.rag configuration
+#
+# Note that this file must be configured in the 'search_documents' tool
+# configuration for any settings here to be applied
+#------------------------------------------------------------------------------
+#
+# Uncomment to enable reranking for the 'search_documents' tool
+#
+# See: https://ggozad.github.io/haiku.rag/configuration/providers/#reranking-providers
 #reranking:
-# model:
-#   name: "gpt-oss:20b"
-#   provider: "ollama"
+#  model:
+#    name: "mixedbread-ai/mxbai-rerank-base-v2"
+#    provider: "mxbai"  # or cohere, zeroentropy, vllm
 
+#
+# Uncomment to override HR search settings in this room
+#
+# See: https://ggozad.github.io/haiku.rag/configuration/qa-research/
+#
+#search:
+#  limit: 5
+#  context_radius: 0

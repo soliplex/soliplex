@@ -58,36 +58,30 @@ async def test_search_documents_wo_tool_config():
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_limit", [None, 2])
-@pytest.mark.parametrize("w_cites", [False, True])
 @pytest.mark.parametrize("w_radius", [0, 2])
 @pytest.mark.parametrize("n_docs", [0, 1, 10])
 @mock.patch("soliplex.tools.rag_client")
-async def test_search_documents(
-    rag_client, n_docs, w_radius, w_cites, w_limit
-):
+async def test_search_documents(rag_client, n_docs, w_radius, w_limit):
     hr_class = rag_client.HaikuRAG = mock.MagicMock()
     hr = hr_class.return_value
     client = hr.__aenter__.return_value
     search = client.search
     expand_context = client.expand_context
 
-    docs = [
-        (
-            mock.Mock(
-                spec=["content", "document_uri"],
-                content=f"Doc #{i_doc}",
-                document_uri=f"https://example.com/docs/doc_{i_doc}.pdf",
-            ),
-            i_doc,
+    search_results = [
+        mock.Mock(
+            spec=["content", "document_uri", "score"],
+            content=f"Doc #{i_doc}",
+            document_uri=f"https://example.com/docs/doc_{i_doc}.pdf",
+            score=i_doc,
         )
         for i_doc in range(n_docs)
     ]
 
-    search.return_value = expand_context.return_value = docs
+    search.return_value = expand_context.return_value = search_results
 
     sdt_config = mock.create_autospec(config.SearchDocumentsToolConfig)
-    sdt_config.expand_context_radius = w_radius
-    sdt_config.return_citations = w_cites
+    sdt_config.haiku_rag_config.search.context_radius = w_radius
 
     if w_limit is None:
         sdt_config.search_documents_limit = exp_limit = 5
@@ -100,19 +94,15 @@ async def test_search_documents(
         tool_config=sdt_config,
     )
 
-    for f_result, (doc, i_doc) in zip(found, docs, strict=True):
-        assert f_result.score == i_doc
-        assert f_result.content == doc.content
-
-        if w_cites:
-            assert f_result.document_uri == doc.document_uri
-        else:
-            assert f_result.document_uri is None
+    if w_radius > 0:
+        assert found is expand_context.return_value
+    else:
+        assert found is search_results
 
     search.assert_awaited_once_with(QUESTION, limit=exp_limit)
 
     if w_radius > 0:
-        expand_context.assert_called_once_with(docs, radius=w_radius)
+        expand_context.assert_called_once_with(search_results)
     else:
         expand_context.assert_not_called()
 

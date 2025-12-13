@@ -15,7 +15,7 @@ tools:
   - tool_name: "soliplex.tools.get_current_user"
   - tool_name: "soliplex.tools.search_documents"
     rag_lancedb_stem: "rag"
-    return_citations: true
-    expand_context_radius: 3
     search_documents_limit: 7
     allow_mcp: true
+    # Apply HR config overrides local to this room
+    #haiku_rag_config: "./haiku.rag.yaml"

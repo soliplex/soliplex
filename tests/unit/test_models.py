@@ -313,9 +313,7 @@ def test_tool_from_config_w_sdtc(temp_dir):
 
     tool_config = config.SearchDocumentsToolConfig(
         rag_lancedb_override_path=str(sdtc_rag_lance_db_path),
-        expand_context_radius=3,
         search_documents_limit=7,
-        return_citations=True,
         allow_mcp=True,
     )
 
@@ -329,10 +327,8 @@ def test_tool_from_config_w_sdtc(temp_dir):
     assert tool_model.tool_requires == config.ToolRequires.TOOL_CONFIG
     assert tool_model.allow_mcp is True
     assert tool_model.extra_parameters == dict(
-        rag_lancedb_path=sdtc_rag_lance_db_path,
-        expand_context_radius=3,
+        rag_lancedb_path=sdtc_rag_lance_db_path.resolve(),
         search_documents_limit=7,
-        return_citations=True,
     )
 
 

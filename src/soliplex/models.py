@@ -360,12 +360,6 @@ class UserProfile(pydantic.BaseModel):
     preferred_username: str
 
 
-class SearchResult(pydantic.BaseModel):
-    content: str
-    score: float
-    document_uri: str | None = None
-
-
 # ----------------------------------------------------------------------------
 #   Room-related models
 # ----------------------------------------------------------------------------

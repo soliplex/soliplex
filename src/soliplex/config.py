@@ -449,9 +449,7 @@ class SearchDocumentsToolConfig(ToolConfig, _RAGToolBase):
     kind: str = "search_documents"
     tool_name: str = "soliplex.tools.search_documents"
 
-    expand_context_radius: int = 2
     search_documents_limit: int = 5
-    return_citations: bool = False
 
     # Set in 'from_yaml' below
     _installation_config: InstallationConfig = _no_repr_none()
@@ -479,9 +477,7 @@ class SearchDocumentsToolConfig(ToolConfig, _RAGToolBase):
             super().get_extra_parameters()
             | _RAGToolBase.get_extra_parameters(self)
             | {
-                "expand_context_radius": self.expand_context_radius,
                 "search_documents_limit": self.search_documents_limit,
-                "return_citations": self.return_citations,
             }
         )
 

@@ -1,13 +1,11 @@
 # haiku.rag configuration file
 # See https://ggozad.github.io/haiku.rag/configuration/ for details
 
-# Configure 'production' for standard CLI logging, 'development' for Logfire
 environment: development
 
 storage:
-  data_dir: ''
-  disable_autocreate: true
-  vacuum_retention_seconds: 60
+  data_dir: ""
+  vacuum_retention_seconds: 86400
 
 # This section is used to configure how files are added to the RAG
 # database.  It is not currently working for the 'haiku-rag serve --monitor'
@@ -20,25 +18,25 @@ monitor:
 # This section is for configuring LanceDB in various "remote" modes.
 # Leave it commented out to use local filesystem databases.
 #lancedb:
-  # Configure LanceDB Cloud
-  # uri: ''
-  # api_key: ''
-  # region: ''
+# Configure LanceDB Cloud
+# uri: ''
+# api_key: ''
+# region: ''
 
-  # Configure Amazon S3
-  # Use AWS credentials or IAM roles
-  # uri: s3://my-bucket/my-table
+# Configure Amazon S3
+# Use AWS credentials or IAM roles
+# uri: s3://my-bucket/my-table
 
-  # Configure Azure Blob Storage
-  # Use Azure credentials
-  # uri: az://my-bucket/my-table
+# Configure Azure Blob Storage
+# Use Azure credentials
+# uri: az://my-bucket/my-table
 
-  # Google Cloud Storage
-  # Use GCP credentials
-  # uri: gs://my-bucket/my-table
-  
-  # Configure Hadoop file system
-  # uri: hdfs://namenode:port/path/to/table
+# Google Cloud Storage
+# Use GCP credentials
+# uri: gs://my-bucket/my-table
+
+# Configure Hadoop file system
+# uri: hdfs://namenode:port/path/to/table
 
 embeddings:
   model:
@@ -66,25 +64,23 @@ qa:
 
 processing:
   chunk_size: 256
-  context_chunk_radius: 0
-  markdown_preprocessor: ''
+
+search:
+  context_radius: 0
 
 providers:
-#
-#  Leave the 'ollama' section commented out to allow it's base URL to be
-#  populated from 'os.environ' when using the 'haiku-rag' CLI.
-#
-#  In the soliplex server, this value will be replaced by the value
-#  configured for 'OLLAMA_BASE_URL' in the installation environment (if set).
-#
-#  ollama:
-#   base_url: http://localhost:11434
+  #
+  #  Leave the 'ollama' section commented out to allow it's base URL to be
+  #  populated from 'os.environ' when using the 'haiku-rag' CLI.
+  #
+  #  In the soliplex server, this value will be replaced by the value
+  #  configured for 'OLLAMA_BASE_URL' in the installation environment (if set).
+  #
+  #  ollama:
+  #   base_url: http://localhost:11434
 
   vllm:
-    embeddings_base_url: ''
-    rerank_base_url: ''
-    qa_base_url: ''
-    research_base_url: ''
-
-a2a:
-  max_contexts: 1000
+    embeddings_base_url: ""
+    rerank_base_url: ""
+    qa_base_url: ""
+    research_base_url: ""
