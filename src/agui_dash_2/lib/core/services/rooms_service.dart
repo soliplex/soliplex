@@ -1,14 +1,13 @@
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 
 import '../models/room_models.dart';
+import '../network/network_transport_layer.dart';
 import '../providers/app_providers.dart';
 import '../utils/api_constants.dart';
 import '../utils/debug_log.dart';
 import '../utils/url_builder.dart';
-import 'auth_manager.dart';
 
 // Re-export Room model for convenience
 export '../models/room_models.dart';
@@ -31,23 +30,25 @@ class RoomsState {
 }
 
 /// Notifier for managing rooms state.
+///
+/// Uses [NetworkTransportLayer] for:
+/// - Automatic auth header injection
+/// - 401 retry with header refresh
+/// - Network Inspector visibility
 class RoomsNotifier extends StateNotifier<RoomsState> {
-  final http.Client _httpClient;
-  final AuthManager? _authManager;
-  String? _serverId;
+  NetworkTransportLayer? _transportLayer;
   UrlBuilder _urlBuilder = UrlBuilder(ApiConstants.defaultServerUrl);
 
-  RoomsNotifier({http.Client? httpClient, AuthManager? authManager})
-    : _httpClient = httpClient ?? http.Client(),
-      _authManager = authManager,
+  RoomsNotifier({NetworkTransportLayer? transportLayer})
+    : _transportLayer = transportLayer,
       super(const RoomsState());
 
-  /// Update the server URL and ID.
+  /// Update the transport layer and URL builder.
   ///
-  /// Uses [UrlBuilder] for consistent URL normalization.
-  void setServerUrl(String serverUrl, {String? serverId}) {
+  /// Called when server changes to update the network layer.
+  void setTransportLayer(NetworkTransportLayer? transportLayer, String serverUrl) {
+    _transportLayer = transportLayer;
     _urlBuilder = UrlBuilder(serverUrl);
-    _serverId = serverId;
   }
 
   /// Get the URL builder for constructing API endpoints.
@@ -55,21 +56,19 @@ class RoomsNotifier extends StateNotifier<RoomsState> {
 
   /// Fetch available rooms from the server.
   Future<void> fetchRooms() async {
+    if (_transportLayer == null) {
+      DebugLog.network('Rooms: No transport layer available');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'No transport layer configured',
+      );
+      return;
+    }
+
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      // Build headers with auth token if available
-      final headers = <String, String>{'Accept': 'application/json'};
-      if (_authManager != null && _serverId != null) {
-        final authHeaders = await _authManager.getAuthHeaders(_serverId!);
-        headers.addAll(authHeaders);
-        DebugLog.network('Rooms: Using auth headers for server $_serverId');
-      }
-
-      final response = await _httpClient.get(
-        _urlBuilder.rooms(),
-        headers: headers,
-      );
+      final response = await _transportLayer!.get(_urlBuilder.rooms());
 
       if (response.statusCode != 200) {
         throw Exception('Failed to fetch rooms: ${response.statusCode}');
@@ -100,7 +99,9 @@ class RoomsNotifier extends StateNotifier<RoomsState> {
         } else {
           // Dictionary of room_id -> room_data (Soliplex format)
           rooms = data.entries
-              .map((entry) => Room.fromJson(entry.value as Map<String, dynamic>))
+              .map(
+                (entry) => Room.fromJson(entry.value as Map<String, dynamic>),
+              )
               .toList();
         }
       } else {
@@ -117,29 +118,25 @@ class RoomsNotifier extends StateNotifier<RoomsState> {
 
   /// Refresh rooms list.
   Future<void> refresh() => fetchRooms();
-
-  @override
-  void dispose() {
-    _httpClient.close();
-    super.dispose();
-  }
 }
 
 /// Provider for rooms state.
 ///
-/// Watches [currentServerFromAppStateProvider] to auto-refresh rooms when server changes.
+/// Watches [currentServerFromAppStateProvider] to reset when server changes.
+/// The transport layer and fetch are triggered by ChatScreen after
+/// ConnectionManager is initialized (which registers the transport layer).
+///
+/// Uses [NetworkTransportLayer] for:
+/// - Automatic auth header injection
+/// - 401 retry with header refresh
+/// - Network Inspector visibility
 final roomsProvider = StateNotifierProvider<RoomsNotifier, RoomsState>((ref) {
-  final server = ref.watch(currentServerFromAppStateProvider);
-  final authManager = ref.read(authManagerProvider);
+  // Watch server changes to reset state when server changes
+  ref.watch(currentServerFromAppStateProvider);
 
-  final notifier = RoomsNotifier(authManager: authManager);
-
-  if (server != null) {
-    notifier.setServerUrl(server.url, serverId: server.id);
-    notifier.fetchRooms();
-  }
-
-  return notifier;
+  // Don't auto-fetch here - ChatScreen._fetchRoomsAndSelectDefault() handles
+  // setting the transport layer and fetching after ConnectionManager is ready.
+  return RoomsNotifier();
 });
 
 /// Provider for the currently selected room ID.

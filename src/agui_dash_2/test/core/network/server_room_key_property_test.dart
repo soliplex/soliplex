@@ -154,7 +154,8 @@ void main() {
         expect(
           collisionRate,
           lessThan(0.05),
-          reason: 'Hash collision rate should be < 5%, got ${collisionRate * 100}%',
+          reason:
+              'Hash collision rate should be < 5%, got ${collisionRate * 100}%',
         );
       });
     });
@@ -257,8 +258,12 @@ void main() {
     group('IsValid Invariants', () {
       test('isValid is true iff both fields are non-empty', () {
         for (var i = 0; i < 100; i++) {
-          final serverId = random.nextBool() ? randomString(random.nextInt(20) + 1) : '';
-          final roomId = random.nextBool() ? randomString(random.nextInt(20) + 1) : '';
+          final serverId = random.nextBool()
+              ? randomString(random.nextInt(20) + 1)
+              : '';
+          final roomId = random.nextBool()
+              ? randomString(random.nextInt(20) + 1)
+              : '';
 
           final key = ServerRoomKey(serverId: serverId, roomId: roomId);
           final expectedValid = serverId.isNotEmpty && roomId.isNotEmpty;
@@ -266,7 +271,8 @@ void main() {
           expect(
             key.isValid,
             equals(expectedValid),
-            reason: 'isValid should be $expectedValid for serverId="$serverId", roomId="$roomId"',
+            reason:
+                'isValid should be $expectedValid for serverId="$serverId", roomId="$roomId"',
           );
         }
       });

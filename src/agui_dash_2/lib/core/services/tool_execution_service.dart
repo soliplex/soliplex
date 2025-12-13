@@ -22,9 +22,7 @@ class ActiveToolExecution {
 class ToolExecutionState {
   final Map<String, ActiveToolExecution> activeExecutions;
 
-  const ToolExecutionState({
-    this.activeExecutions = const {},
-  });
+  const ToolExecutionState({this.activeExecutions = const {}});
 
   /// Whether there are any active executions.
   bool get hasActiveExecutions => activeExecutions.isNotEmpty;
@@ -72,7 +70,9 @@ class ToolExecutionNotifier extends StateNotifier<ToolExecutionState> {
 
   /// Mark a tool as finished executing.
   void endExecution(String toolCallId) {
-    final updated = Map<String, ActiveToolExecution>.from(state.activeExecutions);
+    final updated = Map<String, ActiveToolExecution>.from(
+      state.activeExecutions,
+    );
     updated.remove(toolCallId);
     state = state.copyWith(activeExecutions: updated);
   }
@@ -96,5 +96,5 @@ class ToolExecutionNotifier extends StateNotifier<ToolExecutionState> {
 /// Riverpod provider for tool execution state.
 final toolExecutionProvider =
     StateNotifierProvider<ToolExecutionNotifier, ToolExecutionState>((ref) {
-  return ToolExecutionNotifier();
-});
+      return ToolExecutionNotifier();
+    });

@@ -40,10 +40,7 @@ class ChatErrorInfo {
   });
 
   /// Create a network error (connection issues, timeouts)
-  factory ChatErrorInfo.network({
-    String? details,
-    bool canRetry = true,
-  }) {
+  factory ChatErrorInfo.network({String? details, bool canRetry = true}) {
     return ChatErrorInfo(
       type: ChatErrorType.network,
       friendlyMessage: 'Connection hiccup',

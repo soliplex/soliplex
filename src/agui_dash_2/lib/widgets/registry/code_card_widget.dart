@@ -83,9 +83,7 @@ class _CodeCardWidgetState extends State<CodeCardWidget> {
           // Header with language and copy button
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHigh,
-            ),
+            decoration: BoxDecoration(color: colorScheme.surfaceContainerHigh),
             child: Row(
               children: [
                 // Language badge

@@ -32,11 +32,7 @@ class MarkdownCodeBlockBuilder extends MarkdownElementBuilder {
   /// The message ID (for tracking purposes)
   final String? messageId;
 
-  MarkdownCodeBlockBuilder({
-    this.onCopy,
-    this.onQuote,
-    this.messageId,
-  });
+  MarkdownCodeBlockBuilder({this.onCopy, this.onQuote, this.messageId});
 
   @override
   Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
@@ -102,10 +98,7 @@ class _StyledCodeBlockState extends State<_StyledCodeBlock> {
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: colorScheme.outlineVariant,
-          width: 1,
-        ),
+        border: Border.all(color: colorScheme.outlineVariant, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -115,8 +108,9 @@ class _StyledCodeBlockState extends State<_StyledCodeBlock> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: colorScheme.surfaceContainerHigh,
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(7)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(7),
+              ),
             ),
             child: Row(
               children: [
@@ -185,7 +179,8 @@ class _StyledCodeBlockState extends State<_StyledCodeBlock> {
                             padding: const EdgeInsets.all(8),
                             onPressed: () {
                               Clipboard.setData(
-                                  ClipboardData(text: selectedText));
+                                ClipboardData(text: selectedText),
+                              );
                               editableTextState.hideToolbar();
                             },
                             child: const Text('Copy'),

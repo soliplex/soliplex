@@ -15,13 +15,15 @@ class AppStateManager {
   final ServerRegistry _serverRegistry;
   final AuthManager _authManager;
 
-  final _stateSubject = BehaviorSubject<AppState>.seeded(const AppStateNoServer());
+  final _stateSubject = BehaviorSubject<AppState>.seeded(
+    const AppStateNoServer(),
+  );
 
   AppStateManager({
     required ServerRegistry serverRegistry,
     required AuthManager authManager,
-  })  : _serverRegistry = serverRegistry,
-        _authManager = authManager;
+  }) : _serverRegistry = serverRegistry,
+       _authManager = authManager;
 
   /// Stream of app state changes.
   Stream<AppState> get state => _stateSubject.stream;
@@ -43,10 +45,14 @@ class AppStateManager {
         return;
       }
 
-      DebugLog.service('AppStateManager: Found server ${server.url}, requiresAuth=${server.requiresAuth}');
+      DebugLog.service(
+        'AppStateManager: Found server ${server.url}, requiresAuth=${server.requiresAuth}',
+      );
 
       if (!server.requiresAuth) {
-        DebugLog.service('AppStateManager: Server does not require auth, ready');
+        DebugLog.service(
+          'AppStateManager: Server does not require auth, ready',
+        );
         _stateSubject.add(AppStateReady(server: server));
         return;
       }
@@ -58,19 +64,25 @@ class AppStateManager {
       if (hasValidToken) {
         final userInfo = await _authManager.getUserInfo(server);
         DebugLog.service('AppStateManager: Got user info, ready');
-        _stateSubject.add(AppStateReady(
-          server: server,
-          userName: userInfo?.name,
-          userEmail: userInfo?.email,
-        ));
+        _stateSubject.add(
+          AppStateReady(
+            server: server,
+            userName: userInfo?.name,
+            userEmail: userInfo?.email,
+          ),
+        );
       } else {
         // Need to probe server to get OIDC providers
-        DebugLog.service('AppStateManager: No valid token, probing for providers');
+        DebugLog.service(
+          'AppStateManager: No valid token, probing for providers',
+        );
         final serverInfo = await _serverRegistry.probeServer(server.url);
-        _stateSubject.add(AppStateNeedsAuth(
-          server: server,
-          providers: serverInfo.oidcProviders,
-        ));
+        _stateSubject.add(
+          AppStateNeedsAuth(
+            server: server,
+            providers: serverInfo.oidcProviders,
+          ),
+        );
       }
     } catch (e) {
       DebugLog.error('AppStateManager: Initialization error: $e');
@@ -84,18 +96,27 @@ class AppStateManager {
     DebugLog.service('AppStateManager: Setting server ${serverInfo.url}');
 
     try {
-      final server = await _serverRegistry.saveServer(serverInfo, displayName: displayName);
-      DebugLog.service('AppStateManager: Saved server ${server.url} with id=${server.id}');
+      final server = await _serverRegistry.saveServer(
+        serverInfo,
+        displayName: displayName,
+      );
+      DebugLog.service(
+        'AppStateManager: Saved server ${server.url} with id=${server.id}',
+      );
 
       if (!server.requiresAuth) {
-        DebugLog.service('AppStateManager: Server does not require auth, ready');
+        DebugLog.service(
+          'AppStateManager: Server does not require auth, ready',
+        );
         _stateSubject.add(AppStateReady(server: server));
       } else {
         DebugLog.service('AppStateManager: Server requires auth');
-        _stateSubject.add(AppStateNeedsAuth(
-          server: server,
-          providers: serverInfo.oidcProviders,
-        ));
+        _stateSubject.add(
+          AppStateNeedsAuth(
+            server: server,
+            providers: serverInfo.oidcProviders,
+          ),
+        );
       }
     } catch (e) {
       DebugLog.error('AppStateManager: Error setting server: $e');
@@ -107,30 +128,34 @@ class AppStateManager {
   Future<void> startLogin(OIDCAuthSystem provider) async {
     final current = currentState;
     if (current is! AppStateNeedsAuth) {
-      DebugLog.warn('AppStateManager: startLogin called in wrong state: $current');
+      DebugLog.warn(
+        'AppStateManager: startLogin called in wrong state: $current',
+      );
       return;
     }
 
-    DebugLog.service('AppStateManager: Starting login with provider ${provider.id}');
-    _stateSubject.add(AppStateAuthenticating(
-      server: current.server,
-      provider: provider,
-    ));
+    DebugLog.service(
+      'AppStateManager: Starting login with provider ${provider.id}',
+    );
+    _stateSubject.add(
+      AppStateAuthenticating(server: current.server, provider: provider),
+    );
 
     try {
       final userInfo = await _authManager.login(provider, current.server);
       DebugLog.service('AppStateManager: Login successful');
-      _stateSubject.add(AppStateReady(
-        server: current.server,
-        userName: userInfo?.name,
-        userEmail: userInfo?.email,
-      ));
+      _stateSubject.add(
+        AppStateReady(
+          server: current.server,
+          userName: userInfo?.name,
+          userEmail: userInfo?.email,
+        ),
+      );
     } catch (e) {
       DebugLog.error('AppStateManager: Login failed: $e');
-      _stateSubject.add(AppStateError(
-        'Authentication failed: $e',
-        previousState: current,
-      ));
+      _stateSubject.add(
+        AppStateError('Authentication failed: $e', previousState: current),
+      );
     }
   }
 
@@ -147,14 +172,19 @@ class AppStateManager {
 
     // Re-probe server to get providers
     final serverInfo = await _serverRegistry.probeServer(current.server.url);
-    _stateSubject.add(AppStateNeedsAuth(
-      server: current.server,
-      providers: serverInfo.oidcProviders,
-    ));
+    _stateSubject.add(
+      AppStateNeedsAuth(
+        server: current.server,
+        providers: serverInfo.oidcProviders,
+      ),
+    );
   }
 
   /// Switch to a different server.
-  Future<void> switchServer(ServerInfo serverInfo, {String? displayName}) async {
+  Future<void> switchServer(
+    ServerInfo serverInfo, {
+    String? displayName,
+  }) async {
     final current = currentState;
     DebugLog.service('AppStateManager: Switching server to ${serverInfo.url}');
 
@@ -216,7 +246,9 @@ class AppStateManager {
   /// Select a server from history.
   /// Probes and transitions to appropriate state.
   Future<void> selectServerFromHistory(String serverId) async {
-    DebugLog.service('AppStateManager: Selecting server $serverId from history');
+    DebugLog.service(
+      'AppStateManager: Selecting server $serverId from history',
+    );
 
     try {
       final server = await _serverRegistry.setCurrentServer(serverId);
@@ -230,18 +262,22 @@ class AppStateManager {
       final hasValidToken = await _authManager.hasValidToken(server.id);
       if (hasValidToken) {
         final userInfo = await _authManager.getUserInfo(server);
-        _stateSubject.add(AppStateReady(
-          server: server,
-          userName: userInfo?.name,
-          userEmail: userInfo?.email,
-        ));
+        _stateSubject.add(
+          AppStateReady(
+            server: server,
+            userName: userInfo?.name,
+            userEmail: userInfo?.email,
+          ),
+        );
       } else {
         // Need to probe server to get OIDC providers
         final serverInfo = await _serverRegistry.probeServer(server.url);
-        _stateSubject.add(AppStateNeedsAuth(
-          server: server,
-          providers: serverInfo.oidcProviders,
-        ));
+        _stateSubject.add(
+          AppStateNeedsAuth(
+            server: server,
+            providers: serverInfo.oidcProviders,
+          ),
+        );
       }
     } catch (e) {
       DebugLog.error('AppStateManager: Error selecting server: $e');

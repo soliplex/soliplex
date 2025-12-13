@@ -64,10 +64,11 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
   }
 
   void _fetchThreads() {
-    final server = ref.read(currentServerFromAppStateProvider);
+    final connectionManager = ref.read(connectionManagerProvider);
+    final serverId = connectionManager.activeServerId;
     final roomId = ref.read(selectedRoomProvider);
-    if (server != null && roomId != null) {
-      final params = (baseUrl: server.url, roomId: roomId);
+    if (serverId != null && roomId != null) {
+      final params = (serverId: serverId, roomId: roomId);
       ref.read(threadHistoryProvider(params).notifier).fetchThreads();
     }
   }
@@ -88,7 +89,12 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
     final session = connectionManager.getSession(roomId);
     final currentThreadId = session.threadId;
 
-    final params = (baseUrl: server.url, roomId: roomId);
+    // Use ConnectionManager's server ID (URL-derived, not UUID)
+    final serverId = connectionManager.activeServerId;
+    if (serverId == null) {
+      return const Center(child: Text('Connecting...'));
+    }
+    final params = (serverId: serverId, roomId: roomId);
     final threadState = ref.watch(threadHistoryProvider(params));
 
     return Column(
@@ -127,37 +133,43 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
         // 1. We have messages AND
         // 2. Either no thread selected, OR current threadId is not in the fetched list
         if (messages.isNotEmpty) ...[
-          Builder(builder: (context) {
-            final isInList = currentThreadId != null &&
-                threadState.threads.any((t) => t.threadId == currentThreadId);
+          Builder(
+            builder: (context) {
+              final isInList =
+                  currentThreadId != null &&
+                  threadState.threads.any((t) => t.threadId == currentThreadId);
 
-            // Only show if this is a new thread not yet in the list
-            if (currentThreadId == null || !isInList) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Card(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  child: ListTile(
-                    leading: const Icon(Icons.chat_bubble),
-                    title: const Text('Current Session'),
-                    subtitle: Text('${messages.length} messages'),
-                    trailing: currentThreadId != null
-                        ? const Icon(Icons.cloud_done, size: 16)
-                        : const Icon(Icons.cloud_off, size: 16),
-                    onTap: currentThreadId != null
-                        ? () {
-                            // Select this thread
-                            ref
-                                .read(threadHistoryProvider(params).notifier)
-                                .selectThread(currentThreadId);
-                          }
-                        : null,
+              // Only show if this is a new thread not yet in the list
+              if (currentThreadId == null || !isInList) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
                   ),
-                ),
-              );
-            }
-            return const SizedBox.shrink();
-          }),
+                  child: Card(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    child: ListTile(
+                      leading: const Icon(Icons.chat_bubble),
+                      title: const Text('Current Session'),
+                      subtitle: Text('${messages.length} messages'),
+                      trailing: currentThreadId != null
+                          ? const Icon(Icons.cloud_done, size: 16)
+                          : const Icon(Icons.cloud_off, size: 16),
+                      onTap: currentThreadId != null
+                          ? () {
+                              // Select this thread
+                              ref
+                                  .read(threadHistoryProvider(params).notifier)
+                                  .selectThread(currentThreadId);
+                            }
+                          : null,
+                    ),
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
         ],
 
         // Thread list
@@ -239,7 +251,7 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
     BuildContext context,
     WidgetRef ref,
     ThreadHistoryState threadState,
-    ({String baseUrl, String roomId}) params,
+    ({String serverId, String roomId}) params,
     String roomId,
   ) {
     final connectionManager = ref.watch(connectionManagerProvider);

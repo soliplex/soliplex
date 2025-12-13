@@ -33,10 +33,76 @@ typedef WidgetBuilder =
 /// Maps widget names to builder functions. Agents send widget_name + JSON data,
 /// and the registry renders the appropriate native Flutter widget.
 class WidgetRegistry {
-  WidgetRegistry._();
-  static final WidgetRegistry instance = WidgetRegistry._();
-
   final Map<String, WidgetBuilder> _builders = {};
+
+  /// Creates a new widget registry with all default widgets registered.
+  WidgetRegistry() {
+    _registerDefaultWidgets();
+  }
+
+  /// Register default widgets internally during construction.
+  void _registerDefaultWidgets() {
+    register('InfoCard', (context, data, onEvent) {
+      return InfoCardWidget.fromData(data, onEvent);
+    });
+
+    register('MetricDisplay', (context, data, onEvent) {
+      return MetricDisplayWidget.fromData(data, onEvent);
+    });
+
+    register('DataList', (context, data, onEvent) {
+      return DataListWidget.fromData(data, onEvent);
+    });
+
+    register('ErrorDisplay', (context, data, onEvent) {
+      return ErrorDisplayWidget.fromData(data, onEvent);
+    });
+
+    register('LoadingIndicator', (context, data, onEvent) {
+      return LoadingIndicatorWidget.fromData(data, onEvent);
+    });
+
+    register('ActionButton', (context, data, onEvent) {
+      return ActionButtonWidget.fromData(data, onEvent);
+    });
+
+    register('ProgressCard', (context, data, onEvent) {
+      return ProgressCardWidget.fromData(data, onEvent);
+    });
+
+    register('LocationCard', (context, data, onEvent) {
+      return LocationCardWidget.fromData(data, onEvent);
+    });
+
+    register('GISCard', (context, data, onEvent) {
+      return GISCardWidget.fromData(data, onEvent);
+    });
+
+    register('SearchWidget', (context, data, onEvent) {
+      return SearchWidget(data: data, onEvent: onEvent);
+    });
+
+    register('SkillsCard', (context, data, onEvent) {
+      return SkillsCardWidget.fromData(data, onEvent);
+    });
+
+    register('ProjectCard', (context, data, onEvent) {
+      return ProjectCardWidget.fromData(data, onEvent);
+    });
+
+    // Canvas content widgets (for send-to-canvas feature)
+    register('NoteCard', (context, data, onEvent) {
+      return NoteCardWidget.fromData(data, onEvent);
+    });
+
+    register('CodeCard', (context, data, onEvent) {
+      return CodeCardWidget.fromData(data, onEvent);
+    });
+
+    register('MarkdownCard', (context, data, onEvent) {
+      return MarkdownCardWidget.fromData(data, onEvent);
+    });
+  }
 
   /// Register a widget builder for a given name.
   void register(String widgetName, WidgetBuilder builder) {
@@ -66,73 +132,10 @@ class WidgetRegistry {
   List<String> get registeredWidgets => _builders.keys.toList();
 }
 
-/// Register all default widgets with the registry.
-void _registerDefaultWidgets(WidgetRegistry registry) {
-  registry.register('InfoCard', (context, data, onEvent) {
-    return InfoCardWidget.fromData(data, onEvent);
-  });
-
-  registry.register('MetricDisplay', (context, data, onEvent) {
-    return MetricDisplayWidget.fromData(data, onEvent);
-  });
-
-  registry.register('DataList', (context, data, onEvent) {
-    return DataListWidget.fromData(data, onEvent);
-  });
-
-  registry.register('ErrorDisplay', (context, data, onEvent) {
-    return ErrorDisplayWidget.fromData(data, onEvent);
-  });
-
-  registry.register('LoadingIndicator', (context, data, onEvent) {
-    return LoadingIndicatorWidget.fromData(data, onEvent);
-  });
-
-  registry.register('ActionButton', (context, data, onEvent) {
-    return ActionButtonWidget.fromData(data, onEvent);
-  });
-
-  registry.register('ProgressCard', (context, data, onEvent) {
-    return ProgressCardWidget.fromData(data, onEvent);
-  });
-
-  registry.register('LocationCard', (context, data, onEvent) {
-    return LocationCardWidget.fromData(data, onEvent);
-  });
-
-  registry.register('GISCard', (context, data, onEvent) {
-    return GISCardWidget.fromData(data, onEvent);
-  });
-
-  registry.register('SearchWidget', (context, data, onEvent) {
-    return SearchWidget(data: data, onEvent: onEvent);
-  });
-
-  registry.register('SkillsCard', (context, data, onEvent) {
-    return SkillsCardWidget.fromData(data, onEvent);
-  });
-
-  registry.register('ProjectCard', (context, data, onEvent) {
-    return ProjectCardWidget.fromData(data, onEvent);
-  });
-
-  // Canvas content widgets (for send-to-canvas feature)
-  registry.register('NoteCard', (context, data, onEvent) {
-    return NoteCardWidget.fromData(data, onEvent);
-  });
-
-  registry.register('CodeCard', (context, data, onEvent) {
-    return CodeCardWidget.fromData(data, onEvent);
-  });
-
-  registry.register('MarkdownCard', (context, data, onEvent) {
-    return MarkdownCardWidget.fromData(data, onEvent);
-  });
-}
-
 /// Riverpod provider for the widget registry.
+///
+/// Creates a single instance per provider scope. Default widgets are
+/// registered during construction. Tests can override with custom instances.
 final widgetRegistryProvider = Provider<WidgetRegistry>((ref) {
-  final registry = WidgetRegistry.instance;
-  _registerDefaultWidgets(registry);
-  return registry;
+  return WidgetRegistry();
 });

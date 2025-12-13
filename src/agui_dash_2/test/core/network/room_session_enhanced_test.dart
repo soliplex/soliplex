@@ -34,17 +34,21 @@ void main() {
     transport = MockHttpTransport();
 
     // Setup default mock behavior for post
-    when(() => transport.post(any(), any())).thenAnswer((_) async => {
-          'thread_id': 'test-thread-id',
-          'runs': {'run-1': {}},
-        });
+    when(() => transport.post(any(), any())).thenAnswer(
+      (_) async => {
+        'thread_id': 'test-thread-id',
+        'runs': {'run-1': {}},
+      },
+    );
 
     // Setup default mock behavior for cancelRun
-    when(() => transport.cancelRun(
-          roomId: any(named: 'roomId'),
-          threadId: any(named: 'threadId'),
-          runId: any(named: 'runId'),
-        )).thenAnswer((_) async {});
+    when(
+      () => transport.cancelRun(
+        roomId: any(named: 'roomId'),
+        threadId: any(named: 'threadId'),
+        runId: any(named: 'runId'),
+      ),
+    ).thenAnswer((_) async {});
 
     session = RoomSession(
       roomId: 'test-room',
@@ -69,7 +73,10 @@ void main() {
         transport: transport,
       );
 
-      expect(defaultSession.inactivityTimeout, equals(const Duration(hours: 24)));
+      expect(
+        defaultSession.inactivityTimeout,
+        equals(const Duration(hours: 24)),
+      );
 
       defaultSession.dispose();
     });
@@ -379,14 +386,17 @@ void main() {
       expect(session.connectionInfo.state, equals(SessionState.active));
     });
 
-    test('connectionInfo includes thread and run info after initialization', () async {
-      final mockClient = MockAgUiClient();
-      await session.initialize(agUiClient: mockClient);
+    test(
+      'connectionInfo includes thread and run info after initialization',
+      () async {
+        final mockClient = MockAgUiClient();
+        await session.initialize(agUiClient: mockClient);
 
-      final info = session.connectionInfo;
-      expect(info.threadId, isNotNull);
-      expect(info.activeRunId, isNotNull);
-    });
+        final info = session.connectionInfo;
+        expect(info.threadId, isNotNull);
+        expect(info.activeRunId, isNotNull);
+      },
+    );
   });
 
   group('Session without serverId', () {

@@ -37,7 +37,9 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
       ref.listenManual(appStateStreamProvider, (previous, next) {
         final prevState = previous?.valueOrNull;
         final nextState = next.valueOrNull;
-        debugPrint('OIDCProviderSelector: App state changed: $prevState -> $nextState');
+        debugPrint(
+          'OIDCProviderSelector: App state changed: $prevState -> $nextState',
+        );
         // Only call onAuthenticated once per auth flow
         if (nextState is AppStateReady && !_hasCalledOnAuthenticated) {
           _hasCalledOnAuthenticated = true;
@@ -53,8 +55,10 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
     final appStateAsync = ref.watch(appStateStreamProvider);
     final theme = Theme.of(context);
 
-    debugPrint('OIDCProviderSelector build: providers=${widget.providers.length}, '
-        'isAuthenticating=$_isAuthenticating');
+    debugPrint(
+      'OIDCProviderSelector build: providers=${widget.providers.length}, '
+      'isAuthenticating=$_isAuthenticating',
+    );
 
     if (widget.providers.isEmpty) {
       debugPrint('OIDCProviderSelector: No providers available');
@@ -93,15 +97,9 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
         children: [
           const CircularProgressIndicator(),
           const SizedBox(height: 16),
-          Text(
-            'Authenticating...',
-            style: theme.textTheme.bodyMedium,
-          ),
+          Text('Authenticating...', style: theme.textTheme.bodyMedium),
           const SizedBox(height: 8),
-          TextButton(
-            onPressed: _cancelAuth,
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: _cancelAuth, child: const Text('Cancel')),
         ],
       );
     }
@@ -111,7 +109,9 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
   }
 
   Widget _buildProviderButtons(ThemeData theme) {
-    debugPrint('OIDCProviderSelector: Building ${widget.providers.length} provider buttons');
+    debugPrint(
+      'OIDCProviderSelector: Building ${widget.providers.length} provider buttons',
+    );
     return Column(
       children: widget.providers.map((provider) {
         debugPrint('OIDCProviderSelector: Creating button for ${provider.id}');
@@ -120,7 +120,9 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
           child: _OIDCProviderButton(
             provider: provider,
             onTap: () {
-              debugPrint('OIDCProviderSelector: Button tapped for ${provider.id}');
+              debugPrint(
+                'OIDCProviderSelector: Button tapped for ${provider.id}',
+              );
               _startLogin(provider);
             },
           ),
@@ -163,7 +165,9 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
 
     try {
       final appStateManager = ref.read(appStateManagerProvider);
-      debugPrint('OIDCProviderSelector: Got app state manager, calling startLogin');
+      debugPrint(
+        'OIDCProviderSelector: Got app state manager, calling startLogin',
+      );
       await appStateManager.startLogin(provider);
       debugPrint('OIDCProviderSelector: startLogin completed');
 
@@ -196,16 +200,14 @@ class _OIDCProviderButton extends StatelessWidget {
   final OIDCAuthSystem provider;
   final VoidCallback? onTap;
 
-  const _OIDCProviderButton({
-    required this.provider,
-    this.onTap,
-  });
+  const _OIDCProviderButton({required this.provider, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     // Determine icon based on provider ID
-    final (IconData icon, Color? bgColor, Color? fgColor) =
-        _getProviderStyle(provider.id.toLowerCase());
+    final (IconData icon, Color? bgColor, Color? fgColor) = _getProviderStyle(
+      provider.id.toLowerCase(),
+    );
 
     return SizedBox(
       width: double.infinity,
@@ -256,10 +258,7 @@ class _OIDCProviderButton extends StatelessWidget {
 class CompactLoginPrompt extends ConsumerWidget {
   final VoidCallback? onLoginTap;
 
-  const CompactLoginPrompt({
-    super.key,
-    this.onLoginTap,
-  });
+  const CompactLoginPrompt({super.key, this.onLoginTap});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

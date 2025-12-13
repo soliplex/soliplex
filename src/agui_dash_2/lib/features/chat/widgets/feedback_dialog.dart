@@ -44,10 +44,8 @@ class FeedbackDialog extends StatefulWidget {
   }) {
     return showDialog<FeedbackResult>(
       context: context,
-      builder: (context) => FeedbackDialog(
-        initialRating: initialRating,
-        messageId: messageId,
-      ),
+      builder: (context) =>
+          FeedbackDialog(initialRating: initialRating, messageId: messageId),
     );
   }
 

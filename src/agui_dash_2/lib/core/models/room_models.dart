@@ -31,7 +31,8 @@ class RoomTool {
       description: json['tool_description'] as String?,
       toolRequires: json['tool_requires'] as String? ?? 'bare',
       allowMcp: json['allow_mcp'] as bool? ?? true,
-      extraParameters: (json['extra_parameters'] as Map<String, dynamic>?) ?? {},
+      extraParameters:
+          (json['extra_parameters'] as Map<String, dynamic>?) ?? {},
     );
   }
 
@@ -89,7 +90,9 @@ class AgentConfig {
 
   /// Get a display-friendly model name.
   String get displayModelName {
-    if (isFactory) return 'Factory: ${factoryName?.split('.').last ?? 'custom'}';
+    if (isFactory) {
+      return 'Factory: ${factoryName?.split('.').last ?? 'custom'}';
+    }
     return modelName ?? 'Unknown';
   }
 

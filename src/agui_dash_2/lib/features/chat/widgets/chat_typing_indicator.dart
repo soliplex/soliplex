@@ -72,8 +72,9 @@ class _ChatTypingIndicatorState extends State<ChatTypingIndicator>
                     height: 8 * scale,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: colorScheme.onSurfaceVariant
-                          .withAlpha((opacity * 255).round()),
+                      color: colorScheme.onSurfaceVariant.withAlpha(
+                        (opacity * 255).round(),
+                      ),
                     ),
                   );
                 },
@@ -114,11 +115,7 @@ class ChatAvatar extends StatelessWidget {
   final ChatUser user;
   final double radius;
 
-  const ChatAvatar({
-    super.key,
-    required this.user,
-    this.radius = 16,
-  });
+  const ChatAvatar({super.key, required this.user, this.radius = 16});
 
   @override
   Widget build(BuildContext context) {
@@ -127,8 +124,9 @@ class ChatAvatar extends StatelessWidget {
 
     return CircleAvatar(
       radius: radius,
-      backgroundColor:
-          isUser ? colorScheme.primaryContainer : colorScheme.secondaryContainer,
+      backgroundColor: isUser
+          ? colorScheme.primaryContainer
+          : colorScheme.secondaryContainer,
       child: Text(
         user.firstName?.substring(0, 1).toUpperCase() ?? '?',
         style: TextStyle(

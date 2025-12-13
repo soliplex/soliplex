@@ -3,13 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/models/room_models.dart';
 
 /// Badge types for room capabilities.
-enum CapabilityType {
-  rag,
-  tools,
-  mcp,
-  attachments,
-  factory,
-}
+enum CapabilityType { rag, tools, mcp, attachments, factory }
 
 /// A row of capability badges showing room features at a glance.
 ///
@@ -33,73 +27,80 @@ class CapabilityBadges extends StatelessWidget {
 
     // RAG badge (if room has RAG tools)
     if (room.hasRag) {
-      badges.add(_CapabilityBadge(
-        type: CapabilityType.rag,
-        label: compact ? 'RAG' : 'RAG',
-        tooltip: 'Has document search capabilities',
-        color: _badgeColor(CapabilityType.rag),
-        icon: Icons.search,
-        onTap: () => onBadgeTap?.call(CapabilityType.rag),
-      ));
+      badges.add(
+        _CapabilityBadge(
+          type: CapabilityType.rag,
+          label: compact ? 'RAG' : 'RAG',
+          tooltip: 'Has document search capabilities',
+          color: _badgeColor(CapabilityType.rag),
+          icon: Icons.search,
+          onTap: () => onBadgeTap?.call(CapabilityType.rag),
+        ),
+      );
     }
 
     // Tools badge (with count)
     if (room.toolCount > 0) {
-      badges.add(_CapabilityBadge(
-        type: CapabilityType.tools,
-        label: compact ? '${room.toolCount}T' : '${room.toolCount} Tools',
-        tooltip: 'Has ${room.toolCount} tools available',
-        color: _badgeColor(CapabilityType.tools),
-        icon: Icons.build_outlined,
-        onTap: () => onBadgeTap?.call(CapabilityType.tools),
-      ));
+      badges.add(
+        _CapabilityBadge(
+          type: CapabilityType.tools,
+          label: compact ? '${room.toolCount}T' : '${room.toolCount} Tools',
+          tooltip: 'Has ${room.toolCount} tools available',
+          color: _badgeColor(CapabilityType.tools),
+          icon: Icons.build_outlined,
+          onTap: () => onBadgeTap?.call(CapabilityType.tools),
+        ),
+      );
     }
 
     // MCP badge (if room has MCP integrations)
     if (room.hasMcp) {
-      badges.add(_CapabilityBadge(
-        type: CapabilityType.mcp,
-        label: compact ? 'MCP' : 'MCP',
-        tooltip: '${room.mcpToolsetCount} MCP toolset${room.mcpToolsetCount > 1 ? 's' : ''} connected',
-        color: _badgeColor(CapabilityType.mcp),
-        icon: Icons.hub_outlined,
-        onTap: () => onBadgeTap?.call(CapabilityType.mcp),
-      ));
+      badges.add(
+        _CapabilityBadge(
+          type: CapabilityType.mcp,
+          label: compact ? 'MCP' : 'MCP',
+          tooltip:
+              '${room.mcpToolsetCount} MCP toolset${room.mcpToolsetCount > 1 ? 's' : ''} connected',
+          color: _badgeColor(CapabilityType.mcp),
+          icon: Icons.hub_outlined,
+          onTap: () => onBadgeTap?.call(CapabilityType.mcp),
+        ),
+      );
     }
 
     // Attachments badge
     if (room.enableAttachments) {
-      badges.add(_CapabilityBadge(
-        type: CapabilityType.attachments,
-        label: compact ? 'ATT' : 'Attachments',
-        tooltip: 'File attachments enabled',
-        color: _badgeColor(CapabilityType.attachments),
-        icon: Icons.attach_file,
-        onTap: () => onBadgeTap?.call(CapabilityType.attachments),
-      ));
+      badges.add(
+        _CapabilityBadge(
+          type: CapabilityType.attachments,
+          label: compact ? 'ATT' : 'Attachments',
+          tooltip: 'File attachments enabled',
+          color: _badgeColor(CapabilityType.attachments),
+          icon: Icons.attach_file,
+          onTap: () => onBadgeTap?.call(CapabilityType.attachments),
+        ),
+      );
     }
 
     // Factory agent badge
     if (room.agent?.isFactory ?? false) {
-      badges.add(_CapabilityBadge(
-        type: CapabilityType.factory,
-        label: compact ? 'FAC' : 'Factory',
-        tooltip: 'Uses a custom agent factory',
-        color: _badgeColor(CapabilityType.factory),
-        icon: Icons.factory_outlined,
-        onTap: () => onBadgeTap?.call(CapabilityType.factory),
-      ));
+      badges.add(
+        _CapabilityBadge(
+          type: CapabilityType.factory,
+          label: compact ? 'FAC' : 'Factory',
+          tooltip: 'Uses a custom agent factory',
+          color: _badgeColor(CapabilityType.factory),
+          icon: Icons.factory_outlined,
+          onTap: () => onBadgeTap?.call(CapabilityType.factory),
+        ),
+      );
     }
 
     if (badges.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    return Wrap(
-      spacing: 6,
-      runSpacing: 4,
-      children: badges,
-    );
+    return Wrap(spacing: 6, runSpacing: 4, children: badges);
   }
 
   Color _badgeColor(CapabilityType type) {
@@ -147,19 +148,12 @@ class _CapabilityBadge extends StatelessWidget {
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: color.withValues(alpha: 0.3),
-              width: 1,
-            ),
+            border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                icon,
-                size: 12,
-                color: color,
-              ),
+              Icon(icon, size: 12, color: color),
               const SizedBox(width: 4),
               Text(
                 label,
@@ -194,11 +188,7 @@ class CapabilityIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
-      child: Icon(
-        icon,
-        size: 14,
-        color: color,
-      ),
+      child: Icon(icon, size: 14, color: color),
     );
   }
 }
@@ -214,35 +204,43 @@ class CapabilityIcons extends StatelessWidget {
     final indicators = <Widget>[];
 
     if (room.hasRag) {
-      indicators.add(const CapabilityIndicator(
-        icon: Icons.search,
-        color: Color(0xFF7C3AED),
-        tooltip: 'RAG enabled',
-      ));
+      indicators.add(
+        const CapabilityIndicator(
+          icon: Icons.search,
+          color: Color(0xFF7C3AED),
+          tooltip: 'RAG enabled',
+        ),
+      );
     }
 
     if (room.toolCount > 0) {
-      indicators.add(CapabilityIndicator(
-        icon: Icons.build_outlined,
-        color: const Color(0xFF2563EB),
-        tooltip: '${room.toolCount} tools',
-      ));
+      indicators.add(
+        CapabilityIndicator(
+          icon: Icons.build_outlined,
+          color: const Color(0xFF2563EB),
+          tooltip: '${room.toolCount} tools',
+        ),
+      );
     }
 
     if (room.hasMcp) {
-      indicators.add(const CapabilityIndicator(
-        icon: Icons.hub_outlined,
-        color: Color(0xFF059669),
-        tooltip: 'MCP connected',
-      ));
+      indicators.add(
+        const CapabilityIndicator(
+          icon: Icons.hub_outlined,
+          color: Color(0xFF059669),
+          tooltip: 'MCP connected',
+        ),
+      );
     }
 
     if (room.enableAttachments) {
-      indicators.add(const CapabilityIndicator(
-        icon: Icons.attach_file,
-        color: Color(0xFFD97706),
-        tooltip: 'Attachments enabled',
-      ));
+      indicators.add(
+        const CapabilityIndicator(
+          icon: Icons.attach_file,
+          color: Color(0xFFD97706),
+          tooltip: 'Attachments enabled',
+        ),
+      );
     }
 
     if (indicators.isEmpty) {

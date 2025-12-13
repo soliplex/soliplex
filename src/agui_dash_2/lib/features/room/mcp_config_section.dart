@@ -193,11 +193,7 @@ class _McpConfigSectionState extends ConsumerState<McpConfigSection> {
                 ),
               )
             else
-              Icon(
-                Icons.key,
-                size: 18,
-                color: colorScheme.primary,
-              ),
+              Icon(Icons.key, size: 18, color: colorScheme.primary),
             const SizedBox(width: 8),
             Text(
               _isLoading ? 'Generating...' : 'Generate MCP Token',
@@ -226,11 +222,7 @@ class _McpConfigSectionState extends ConsumerState<McpConfigSection> {
           // Token header with expiry info
           Row(
             children: [
-              const Icon(
-                Icons.check_circle,
-                size: 18,
-                color: Colors.green,
-              ),
+              const Icon(Icons.check_circle, size: 18, color: Colors.green),
               const SizedBox(width: 8),
               Text(
                 'Token',
@@ -277,10 +269,7 @@ class _McpConfigSectionState extends ConsumerState<McpConfigSection> {
               Expanded(
                 child: FilledButton.icon(
                   onPressed: () => _copyToken(),
-                  icon: Icon(
-                    _copied ? Icons.check : Icons.copy,
-                    size: 16,
-                  ),
+                  icon: Icon(_copied ? Icons.check : Icons.copy, size: 16),
                   label: Text(_copied ? 'Copied!' : 'Copy Token'),
                 ),
               ),
@@ -367,9 +356,7 @@ class _McpConfigSectionState extends ConsumerState<McpConfigSection> {
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: colorScheme.outline.withValues(alpha: 0.1),
-        ),
+        border: Border.all(color: colorScheme.outline.withValues(alpha: 0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -393,34 +380,33 @@ class _McpConfigSectionState extends ConsumerState<McpConfigSection> {
               ],
             ),
           ),
-          Divider(
-            height: 1,
-            color: colorScheme.outline.withValues(alpha: 0.1),
+          Divider(height: 1, color: colorScheme.outline.withValues(alpha: 0.1)),
+          ...tools.map(
+            (tool) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF059669),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      tool.toolName,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          ...tools.map((tool) => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF059669),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        tool.toolName,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              )),
           const SizedBox(height: 4),
         ],
       ),

@@ -27,12 +27,12 @@ class OIDCAuthSystem extends Equatable {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'title': title,
-        'server_url': serverUrl,
-        'client_id': clientId,
-        if (scope != null) 'scope': scope,
-      };
+    'id': id,
+    'title': title,
+    'server_url': serverUrl,
+    'client_id': clientId,
+    if (scope != null) 'scope': scope,
+  };
 
   @override
   List<Object?> get props => [id, title, serverUrl, clientId, scope];
@@ -63,11 +63,7 @@ class ServerInfo extends Equatable {
   bool get isOpenAccess => isReachable && authDisabled;
 
   factory ServerInfo.unreachable(String url, String error) {
-    return ServerInfo(
-      url: url,
-      isReachable: false,
-      error: error,
-    );
+    return ServerInfo(url: url, isReachable: false, error: error);
   }
 
   factory ServerInfo.fromProbe({
@@ -86,13 +82,13 @@ class ServerInfo extends Equatable {
 
   @override
   List<Object?> get props => [
-        url,
-        isReachable,
-        authDisabled,
-        oidcProviders,
-        error,
-        serverVersion,
-      ];
+    url,
+    isReachable,
+    authDisabled,
+    oidcProviders,
+    error,
+    serverVersion,
+  ];
 }
 
 /// A saved server connection with optional credentials
@@ -130,8 +126,9 @@ class ServerConnection extends Equatable {
   /// Whether token is expiring soon (within 5 minutes)
   bool get isTokenExpiringSoon {
     if (tokenExpiry == null) return false;
-    return DateTime.now()
-        .isAfter(tokenExpiry!.subtract(const Duration(minutes: 5)));
+    return DateTime.now().isAfter(
+      tokenExpiry!.subtract(const Duration(minutes: 5)),
+    );
   }
 
   ServerConnection copyWith({
@@ -169,25 +166,25 @@ class ServerConnection extends Equatable {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'url': url,
-        if (displayName != null) 'display_name': displayName,
-        'requires_auth': requiresAuth,
-        if (authProviderId != null) 'auth_provider_id': authProviderId,
-        'last_connected': lastConnected.toIso8601String(),
-        if (tokenExpiry != null) 'token_expiry': tokenExpiry!.toIso8601String(),
-      };
+    'id': id,
+    'url': url,
+    if (displayName != null) 'display_name': displayName,
+    'requires_auth': requiresAuth,
+    if (authProviderId != null) 'auth_provider_id': authProviderId,
+    'last_connected': lastConnected.toIso8601String(),
+    if (tokenExpiry != null) 'token_expiry': tokenExpiry!.toIso8601String(),
+  };
 
   @override
   List<Object?> get props => [
-        id,
-        url,
-        displayName,
-        requiresAuth,
-        authProviderId,
-        lastConnected,
-        tokenExpiry,
-      ];
+    id,
+    url,
+    displayName,
+    requiresAuth,
+    authProviderId,
+    lastConnected,
+    tokenExpiry,
+  ];
 }
 
 /// Authentication state for the current session
@@ -230,8 +227,7 @@ class AuthState extends Equatable {
 
   bool get isAuthenticated => status == AuthStatus.authenticated;
   bool get needsAuth =>
-      status == AuthStatus.unauthenticated ||
-      status == AuthStatus.tokenExpired;
+      status == AuthStatus.unauthenticated || status == AuthStatus.tokenExpired;
   bool get hasServer => currentServer != null;
 
   const AuthState.initial() : this();
@@ -259,13 +255,13 @@ class AuthState extends Equatable {
 
   @override
   List<Object?> get props => [
-        status,
-        currentServer,
-        userId,
-        userName,
-        userEmail,
-        error,
-      ];
+    status,
+    currentServer,
+    userId,
+    userName,
+    userEmail,
+    error,
+  ];
 }
 
 /// Token data (for internal use, not persisted directly)
@@ -289,7 +285,9 @@ class TokenData {
 
   bool get isExpiringSoon {
     if (expiresAt == null) return false;
-    return DateTime.now().isAfter(expiresAt!.subtract(const Duration(minutes: 5)));
+    return DateTime.now().isAfter(
+      expiresAt!.subtract(const Duration(minutes: 5)),
+    );
   }
 
   bool get canRefresh {
@@ -310,7 +308,9 @@ class TokenData {
     return TokenData(
       accessToken: params['token'] ?? params['access_token'] ?? '',
       refreshToken: params['refresh_token'],
-      expiresAt: expiresIn != null ? now.add(Duration(seconds: expiresIn)) : null,
+      expiresAt: expiresIn != null
+          ? now.add(Duration(seconds: expiresIn))
+          : null,
       refreshExpiresAt: refreshExpiresIn != null
           ? now.add(Duration(seconds: refreshExpiresIn))
           : null,

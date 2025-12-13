@@ -15,11 +15,7 @@ class ServerSelector extends ConsumerWidget {
   final VoidCallback? onAddServer;
   final VoidCallback? onSettingsTap;
 
-  const ServerSelector({
-    super.key,
-    this.onAddServer,
-    this.onSettingsTap,
-  });
+  const ServerSelector({super.key, this.onAddServer, this.onSettingsTap});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -154,10 +150,7 @@ class ServerSelector extends ConsumerWidget {
 class ServerChip extends ConsumerWidget {
   final VoidCallback? onTap;
 
-  const ServerChip({
-    super.key,
-    this.onTap,
-  });
+  const ServerChip({super.key, this.onTap});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -197,11 +190,7 @@ class UserMenu extends ConsumerWidget {
   final VoidCallback? onLogout;
   final VoidCallback? onSettingsTap;
 
-  const UserMenu({
-    super.key,
-    this.onLogout,
-    this.onSettingsTap,
-  });
+  const UserMenu({super.key, this.onLogout, this.onSettingsTap});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -215,7 +204,9 @@ class UserMenu extends ConsumerWidget {
 
     final userName = appState.userName;
     final userEmail = appState.userEmail;
-    final initial = (userName ?? userEmail ?? '?').substring(0, 1).toUpperCase();
+    final initial = (userName ?? userEmail ?? '?')
+        .substring(0, 1)
+        .toUpperCase();
 
     return PopupMenuButton<String>(
       offset: const Offset(0, 40),
@@ -237,15 +228,9 @@ class UserMenu extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (userName != null)
-                Text(
-                  userName,
-                  style: theme.textTheme.titleSmall,
-                ),
+                Text(userName, style: theme.textTheme.titleSmall),
               if (userEmail != null)
-                Text(
-                  userEmail,
-                  style: theme.textTheme.bodySmall,
-                ),
+                Text(userEmail, style: theme.textTheme.bodySmall),
             ],
           ),
         ),

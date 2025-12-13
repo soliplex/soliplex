@@ -14,9 +14,7 @@ class ImageLoadTrackerState {
   ImageLoadTrackerState copyWith({
     Map<String, Map<String, ImageLoadState>>? tracking,
   }) {
-    return ImageLoadTrackerState(
-      tracking: tracking ?? this.tracking,
-    );
+    return ImageLoadTrackerState(tracking: tracking ?? this.tracking);
   }
 
   /// Check if all images for a message are loaded (or errored).
@@ -24,7 +22,8 @@ class ImageLoadTrackerState {
     final images = tracking[messageId];
     if (images == null || images.isEmpty) return true;
     return images.values.every(
-      (state) => state == ImageLoadState.loaded || state == ImageLoadState.error,
+      (state) =>
+          state == ImageLoadState.loaded || state == ImageLoadState.error,
     );
   }
 
@@ -79,7 +78,9 @@ class ImageLoadTracker extends StateNotifier<ImageLoadTrackerState> {
     final newImages = Map<String, ImageLoadState>.from(currentImages);
     newImages[imageUrl] = ImageLoadState.loading;
 
-    final newTracking = Map<String, Map<String, ImageLoadState>>.from(state.tracking);
+    final newTracking = Map<String, Map<String, ImageLoadState>>.from(
+      state.tracking,
+    );
     newTracking[messageId] = newImages;
 
     state = state.copyWith(tracking: newTracking);
@@ -96,7 +97,11 @@ class ImageLoadTracker extends StateNotifier<ImageLoadTrackerState> {
     _updateImageState(messageId, imageUrl, ImageLoadState.error);
   }
 
-  void _updateImageState(String messageId, String imageUrl, ImageLoadState newState) {
+  void _updateImageState(
+    String messageId,
+    String imageUrl,
+    ImageLoadState newState,
+  ) {
     final currentImages = state.tracking[messageId];
     if (currentImages == null || !currentImages.containsKey(imageUrl)) return;
 
@@ -104,7 +109,9 @@ class ImageLoadTracker extends StateNotifier<ImageLoadTrackerState> {
     final newImages = Map<String, ImageLoadState>.from(currentImages);
     newImages[imageUrl] = newState;
 
-    final newTracking = Map<String, Map<String, ImageLoadState>>.from(state.tracking);
+    final newTracking = Map<String, Map<String, ImageLoadState>>.from(
+      state.tracking,
+    );
     newTracking[messageId] = newImages;
 
     state = state.copyWith(tracking: newTracking);
@@ -113,7 +120,8 @@ class ImageLoadTracker extends StateNotifier<ImageLoadTrackerState> {
   }
 
   /// Check if all images for a message are loaded (or errored).
-  bool areAllImagesLoaded(String messageId) => state.areAllImagesLoaded(messageId);
+  bool areAllImagesLoaded(String messageId) =>
+      state.areAllImagesLoaded(messageId);
 
   /// Get the current count of images in each state for a message.
   Map<ImageLoadState, int> getImageStateCounts(String messageId) =>
@@ -129,7 +137,9 @@ class ImageLoadTracker extends StateNotifier<ImageLoadTrackerState> {
   void clearMessage(String messageId) {
     if (!state.tracking.containsKey(messageId)) return;
 
-    final newTracking = Map<String, Map<String, ImageLoadState>>.from(state.tracking);
+    final newTracking = Map<String, Map<String, ImageLoadState>>.from(
+      state.tracking,
+    );
     newTracking.remove(messageId);
     state = state.copyWith(tracking: newTracking);
   }
@@ -153,12 +163,12 @@ class ImageLoadTracker extends StateNotifier<ImageLoadTrackerState> {
 /// [markdownHooksProvider] so that hook consumers receive image events.
 final imageLoadTrackerProvider =
     StateNotifierProvider<ImageLoadTracker, ImageLoadTrackerState>((ref) {
-  final hooks = ref.watch(markdownHooksProvider);
-  final tracker = ImageLoadTracker();
+      final hooks = ref.watch(markdownHooksProvider);
+      final tracker = ImageLoadTracker();
 
-  // Wire up callbacks from hooks
-  tracker.onAllImagesLoaded = hooks.onAllImagesLoaded;
-  tracker.onImageLoad = hooks.onImageLoad;
+      // Wire up callbacks from hooks
+      tracker.onAllImagesLoaded = hooks.onAllImagesLoaded;
+      tracker.onImageLoad = hooks.onImageLoad;
 
-  return tracker;
-});
+      return tracker;
+    });

@@ -47,10 +47,9 @@ class _TrackedMarkdownImageState extends ConsumerState<TrackedMarkdownImage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !_registered) {
         _registered = true;
-        ref.read(imageLoadTrackerProvider.notifier).trackImage(
-              widget.messageId,
-              widget.imageUrl,
-            );
+        ref
+            .read(imageLoadTrackerProvider.notifier)
+            .trackImage(widget.messageId, widget.imageUrl);
       }
     });
   }
@@ -60,10 +59,9 @@ class _TrackedMarkdownImageState extends ConsumerState<TrackedMarkdownImage> {
       _completed = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          ref.read(imageLoadTrackerProvider.notifier).markLoaded(
-                widget.messageId,
-                widget.imageUrl,
-              );
+          ref
+              .read(imageLoadTrackerProvider.notifier)
+              .markLoaded(widget.messageId, widget.imageUrl);
         }
       });
     }
@@ -74,10 +72,9 @@ class _TrackedMarkdownImageState extends ConsumerState<TrackedMarkdownImage> {
       _completed = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          ref.read(imageLoadTrackerProvider.notifier).markError(
-                widget.messageId,
-                widget.imageUrl,
-              );
+          ref
+              .read(imageLoadTrackerProvider.notifier)
+              .markError(widget.messageId, widget.imageUrl);
         }
       });
     }
@@ -99,9 +96,7 @@ class _TrackedMarkdownImageState extends ConsumerState<TrackedMarkdownImage> {
           color: colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: const Center(
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
+        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       ),
       imageBuilder: (context, imageProvider) {
         // Mark as loaded when image is ready
@@ -139,10 +134,7 @@ class _TrackedMarkdownImageState extends ConsumerState<TrackedMarkdownImage> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
                   'Failed to load image',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: colorScheme.error,
-                  ),
+                  style: TextStyle(fontSize: 12, color: colorScheme.error),
                   textAlign: TextAlign.center,
                 ),
               ),

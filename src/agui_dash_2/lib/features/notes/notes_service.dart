@@ -2,7 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Conditional imports for file-based persistence (non-web only)
-import 'notes_service_io.dart' if (dart.library.html) 'notes_service_web.dart'
+import 'notes_service_io.dart'
+    if (dart.library.html) 'notes_service_web.dart'
     as platform;
 
 /// Service for persisting room notes to local markdown files.
@@ -98,15 +99,9 @@ class NotesNotifier extends StateNotifier<NotesState> {
 
     try {
       final content = await _service!.loadNotes();
-      state = NotesState(
-        content: content,
-        isLoaded: true,
-      );
+      state = NotesState(content: content, isLoaded: true);
     } catch (e) {
-      state = NotesState(
-        isLoaded: true,
-        error: 'Failed to load notes: $e',
-      );
+      state = NotesState(isLoaded: true, error: 'Failed to load notes: $e');
     }
   }
 
@@ -118,10 +113,7 @@ class NotesNotifier extends StateNotifier<NotesState> {
 
     try {
       await _service!.saveNotes(content);
-      state = state.copyWith(
-        content: content,
-        isSaving: false,
-      );
+      state = state.copyWith(content: content, isSaving: false);
     } catch (e) {
       state = state.copyWith(
         isSaving: false,

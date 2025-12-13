@@ -30,20 +30,22 @@ class NetworkTransportLayer {
   NetworkTransportLayer({
     required this.baseUrl,
     http.Client? httpClient,
+    ag_ui.AgUiClient? agUiClient,
     Map<String, String>? defaultHeaders,
     Future<Map<String, String>> Function()? headerRefresher,
     NetworkInspector? inspector,
-  })  : _httpClient = httpClient ?? http.Client(),
-        _headers = defaultHeaders,
-        _headerRefresher = headerRefresher,
-        _urlBuilder = UrlBuilder(baseUrl),
-        _inspector = inspector,
-        _agUiClient = ag_ui.AgUiClient(
-          config: ag_ui.AgUiClientConfig(
-            baseUrl: UrlBuilder(baseUrl).serverUrl,
-            defaultHeaders: defaultHeaders ?? {},
-          ),
-        ) {
+  }) : _httpClient = httpClient ?? http.Client(),
+       _headers = defaultHeaders,
+       _headerRefresher = headerRefresher,
+       _urlBuilder = UrlBuilder(baseUrl),
+       _inspector = inspector,
+       _agUiClient = agUiClient ??
+           ag_ui.AgUiClient(
+             config: ag_ui.AgUiClientConfig(
+               baseUrl: UrlBuilder(baseUrl).serverUrl,
+               defaultHeaders: defaultHeaders ?? {},
+             ),
+           ) {
     DebugLog.network('NetworkTransportLayer: Created for $baseUrl');
   }
 
@@ -69,6 +71,70 @@ class NetworkTransportLayer {
     // require recreating the client or using per-request headers.
     // For now, HTTP headers are updated, SSE uses initial config.
     DebugLog.network('NetworkTransportLayer: Headers updated');
+  }
+
+  /// Make an HTTP GET request with observable hooks.
+  ///
+  /// Supports 401 retry with header refresh.
+  Future<http.Response> get(
+    Uri uri, {
+    Map<String, String>? additionalHeaders,
+  }) async {
+    if (_disposed) {
+      throw StateError('Cannot use disposed NetworkTransportLayer');
+    }
+
+    final requestHeaders = {
+      'Accept': 'application/json',
+      ...?_headers,
+      ...?additionalHeaders,
+    };
+
+    // Record request for inspector
+    final requestId = _inspector?.recordRequest(
+      method: 'GET',
+      uri: uri,
+      headers: requestHeaders,
+    );
+
+    try {
+      var response = await _httpClient.get(uri, headers: requestHeaders);
+
+      // 401 retry with header refresh
+      if (response.statusCode == 401 && _headerRefresher != null) {
+        DebugLog.network(
+          'NetworkTransportLayer: 401 received on GET, refreshing headers...',
+        );
+        _headers = await _headerRefresher();
+        final retryHeaders = {
+          'Accept': 'application/json',
+          ...?_headers,
+          ...?additionalHeaders,
+        };
+        response = await _httpClient.get(uri, headers: retryHeaders);
+        DebugLog.network(
+          'NetworkTransportLayer: GET retry returned ${response.statusCode}',
+        );
+      }
+
+      // Record response for inspector
+      if (requestId != null) {
+        _inspector?.recordResponse(
+          requestId: requestId,
+          statusCode: response.statusCode,
+          headers: response.headers,
+          body: response.body,
+        );
+      }
+
+      return response;
+    } catch (e) {
+      // Record error for inspector
+      if (requestId != null) {
+        _inspector?.recordError(requestId: requestId, error: e.toString());
+      }
+      rethrow;
+    }
   }
 
   /// Make an HTTP POST request with observable hooks.
@@ -106,7 +172,9 @@ class NetworkTransportLayer {
 
       // 401 retry with header refresh
       if (response.statusCode == 401 && _headerRefresher != null) {
-        DebugLog.network('NetworkTransportLayer: 401 received, refreshing headers...');
+        DebugLog.network(
+          'NetworkTransportLayer: 401 received, refreshing headers...',
+        );
         _headers = await _headerRefresher();
         final retryHeaders = {
           'Content-Type': 'application/json',
@@ -118,7 +186,9 @@ class NetworkTransportLayer {
           headers: retryHeaders,
           body: body,
         );
-        DebugLog.network('NetworkTransportLayer: Retry returned ${response.statusCode}');
+        DebugLog.network(
+          'NetworkTransportLayer: Retry returned ${response.statusCode}',
+        );
       }
 
       // Record response for inspector
@@ -157,7 +227,9 @@ class NetworkTransportLayer {
     }
 
     // Ensure proper path separator between serverUrl and endpoint
-    final normalizedEndpoint = endpoint.startsWith('/') ? endpoint : '/$endpoint';
+    final normalizedEndpoint = endpoint.startsWith('/')
+        ? endpoint
+        : '/$endpoint';
     final uri = Uri.parse('${_urlBuilder.serverUrl}$normalizedEndpoint');
     final startTime = DateTime.now();
     var eventCount = 0;
@@ -171,7 +243,9 @@ class NetworkTransportLayer {
       body: {'threadId': input.threadId, 'runId': input.runId},
     );
 
-    DebugLog.network('NetworkTransportLayer: SSE stream starting for $endpoint');
+    DebugLog.network(
+      'NetworkTransportLayer: SSE stream starting for $endpoint',
+    );
 
     try {
       await for (final event in _agUiClient.runAgent(endpoint, input)) {
@@ -179,7 +253,9 @@ class NetworkTransportLayer {
         yield event;
       }
 
-      DebugLog.network('NetworkTransportLayer: SSE stream completed ($eventCount events)');
+      DebugLog.network(
+        'NetworkTransportLayer: SSE stream completed ($eventCount events)',
+      );
     } catch (e) {
       error = e.toString();
       DebugLog.network('NetworkTransportLayer: SSE stream error: $e');

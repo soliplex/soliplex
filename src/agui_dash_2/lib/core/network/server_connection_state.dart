@@ -54,10 +54,12 @@ class ServerConnectionState {
     required this.headers,
     required NetworkTransportLayer transportLayer,
     required this.transport,
-  })  : urlBuilder = UrlBuilder(baseUrl),
-        _transportLayer = transportLayer,
-        lastActivity = DateTime.now() {
-    DebugLog.service('ServerConnectionState: Created for server $serverId ($baseUrl)');
+  }) : urlBuilder = UrlBuilder(baseUrl),
+       _transportLayer = transportLayer,
+       lastActivity = DateTime.now() {
+    DebugLog.service(
+      'ServerConnectionState: Created for server $serverId ($baseUrl)',
+    );
   }
 
   /// Creates a new server connection state.
@@ -74,18 +76,22 @@ class ServerConnectionState {
     NetworkInspector? inspector,
   }) {
     // Create or use provided transport layer
-    final layer = transportLayer ?? NetworkTransportLayer(
-      baseUrl: baseUrl,
-      defaultHeaders: headers,
-      headerRefresher: headerRefresher,
-      inspector: inspector,
-    );
+    final layer =
+        transportLayer ??
+        NetworkTransportLayer(
+          baseUrl: baseUrl,
+          defaultHeaders: headers,
+          headerRefresher: headerRefresher,
+          inspector: inspector,
+        );
 
     // Create or use provided HttpTransport
-    final httpTransport = transport ?? HttpTransport.fromTransportLayer(
-      baseUrl: baseUrl,
-      transportLayer: layer,
-    );
+    final httpTransport =
+        transport ??
+        HttpTransport.fromTransportLayer(
+          baseUrl: baseUrl,
+          transportLayer: layer,
+        );
 
     return ServerConnectionState._(
       serverId: serverId,
@@ -127,7 +133,9 @@ class ServerConnectionState {
   /// Returns an existing session if one exists, otherwise creates a new one.
   RoomSession getOrCreateSession(String roomId) {
     if (_disposed) {
-      throw StateError('Cannot get session from disposed ServerConnectionState');
+      throw StateError(
+        'Cannot get session from disposed ServerConnectionState',
+      );
     }
 
     touch();
@@ -160,7 +168,9 @@ class ServerConnectionState {
     final session = sessions.remove(roomId);
     if (session != null) {
       session.dispose();
-      DebugLog.service('ServerConnectionState: Disposed session for room $roomId');
+      DebugLog.service(
+        'ServerConnectionState: Disposed session for room $roomId',
+      );
     }
 
     if (activeRoomId == roomId) {

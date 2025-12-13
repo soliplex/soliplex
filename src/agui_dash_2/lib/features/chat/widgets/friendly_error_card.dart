@@ -23,7 +23,10 @@ class FriendlyErrorCard extends StatefulWidget {
   });
 
   /// Create from legacy error message string (for backwards compatibility)
-  factory FriendlyErrorCard.fromMessage(String message, {VoidCallback? onRetry}) {
+  factory FriendlyErrorCard.fromMessage(
+    String message, {
+    VoidCallback? onRetry,
+  }) {
     // Try to classify the error based on message content
     ChatErrorInfo errorInfo;
     if (message.toLowerCase().contains('connection') ||
@@ -85,10 +88,7 @@ class _FriendlyErrorCardState extends State<FriendlyErrorCard> {
       child: Row(
         children: [
           // Emoji icon
-          Text(
-            widget.errorInfo.icon,
-            style: const TextStyle(fontSize: 18),
-          ),
+          Text(widget.errorInfo.icon, style: const TextStyle(fontSize: 18)),
           const SizedBox(width: 10),
 
           // Friendly message
@@ -109,7 +109,9 @@ class _FriendlyErrorCardState extends State<FriendlyErrorCard> {
                   Text(
                     _truncate(widget.errorInfo.technicalDetails!, 50),
                     style: TextStyle(
-                      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                      color: colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.7,
+                      ),
                       fontSize: 12,
                     ),
                   ),
@@ -122,7 +124,10 @@ class _FriendlyErrorCardState extends State<FriendlyErrorCard> {
             TextButton(
               onPressed: widget.onRetry,
               style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
@@ -145,10 +150,7 @@ class _FriendlyErrorCardState extends State<FriendlyErrorCard> {
                 size: 20,
               ),
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(
-                minWidth: 32,
-                minHeight: 32,
-              ),
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               tooltip: _expanded ? 'Hide details' : 'Show details',
             ),
         ],

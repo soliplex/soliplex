@@ -39,18 +39,12 @@ class _WelcomeCardState extends State<WelcomeCard>
     _fadeAnimation = Tween<double>(
       begin: 0.0,
       end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOut,
-    ));
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
 
     _scaleAnimation = Tween<double>(
       begin: 0.95,
       end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOut,
-    ));
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
 
     _controller.forward();
   }
@@ -79,10 +73,7 @@ class _WelcomeCardState extends State<WelcomeCard>
       builder: (context, child) {
         return FadeTransition(
           opacity: _fadeAnimation,
-          child: ScaleTransition(
-            scale: _scaleAnimation,
-            child: child,
-          ),
+          child: ScaleTransition(scale: _scaleAnimation, child: child),
         );
       },
       child: Container(
@@ -92,10 +83,7 @@ class _WelcomeCardState extends State<WelcomeCard>
           color: colorScheme.primaryContainer.withValues(alpha: 0.3),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(
-              color: colorScheme.primaryContainer,
-              width: 1,
-            ),
+            side: BorderSide(color: colorScheme.primaryContainer, width: 1),
           ),
           child: Padding(
             padding: const EdgeInsets.all(20),
@@ -199,10 +187,7 @@ class _SuggestionChip extends StatelessWidget {
   final String suggestion;
   final VoidCallback? onTap;
 
-  const _SuggestionChip({
-    required this.suggestion,
-    this.onTap,
-  });
+  const _SuggestionChip({required this.suggestion, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -234,9 +219,9 @@ class _SuggestionChip extends StatelessWidget {
               Flexible(
                 child: Text(
                   suggestion,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurface,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: colorScheme.onSurface),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),

@@ -40,9 +40,18 @@ final oidcAuthInteractorProvider = Provider<OidcAuthInteractor>((ref) {
   final tokenStorage = ref.watch(secureTokenStorageProvider);
 
   if (kIsWeb) {
-    return OidcWebAuthInteractor(ssoStorage, tokenStorage, _tokenExpirationBuffer);
+    return OidcWebAuthInteractor(
+      ssoStorage,
+      tokenStorage,
+      _tokenExpirationBuffer,
+    );
   } else {
     final appAuth = ref.watch(flutterAppAuthProvider);
-    return OidcMobileAuthInteractor(appAuth, ssoStorage, tokenStorage, _tokenExpirationBuffer);
+    return OidcMobileAuthInteractor(
+      appAuth,
+      ssoStorage,
+      tokenStorage,
+      _tokenExpirationBuffer,
+    );
   }
 });

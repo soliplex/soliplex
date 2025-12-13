@@ -11,23 +11,22 @@ import '../services/local_tools_service.dart';
 import '../utils/debug_log.dart';
 import 'connection_events.dart';
 import 'connection_registry.dart';
+import 'room_event_handler.dart';
 import 'room_session.dart';
 import 'server_connection_state.dart';
 import 'server_room_key.dart';
 
 /// UI tool handler callback type.
-typedef UiToolHandler = Future<Map<String, dynamic>> Function(
-  String toolCallId,
-  String toolName,
-  Map<String, dynamic> args,
-);
+typedef UiToolHandler =
+    Future<Map<String, dynamic>> Function(
+      String toolCallId,
+      String toolName,
+      Map<String, dynamic> args,
+    );
 
 /// Local tool execution notifier callback type.
-typedef LocalToolNotifier = void Function(
-  String toolCallId,
-  String toolName,
-  String status,
-);
+typedef LocalToolNotifier =
+    void Function(String toolCallId, String toolName, String status);
 
 /// Callback to refresh auth headers on 401.
 typedef HeaderRefresher = Future<Map<String, String>> Function(String serverId);
@@ -66,7 +65,8 @@ class ConnectionManager extends ChangeNotifier {
   static const _uiTools = {'canvas_render', 'genui_render'};
 
   /// Whether the manager has been configured with a server.
-  bool get isConfigured => _activeServerId != null && _registry.hasServer(_activeServerId!);
+  bool get isConfigured =>
+      _activeServerId != null && _registry.hasServer(_activeServerId!);
 
   /// Current server URL.
   String get serverUrl => _activeServerState?.baseUrl ?? '';
@@ -78,8 +78,9 @@ class ConnectionManager extends ChangeNotifier {
   String? get activeRoomId => _registry.activeRoomId;
 
   /// Get the active server state, or null if none.
-  ServerConnectionState? get _activeServerState =>
-      _activeServerId != null ? _registry.getServerState(_activeServerId!) : null;
+  ServerConnectionState? get _activeServerState => _activeServerId != null
+      ? _registry.getServerState(_activeServerId!)
+      : null;
 
   /// Max backgrounded sessions before LRU eviction (delegated to registry config).
   int get maxBackgroundedSessions => 5;
@@ -119,7 +120,9 @@ class ConnectionManager extends ChangeNotifier {
       return;
     }
 
-    DebugLog.network('ConnectionManager: Switching server to $newBaseUrl (id: $serverId)');
+    DebugLog.network(
+      'ConnectionManager: Switching server to $newBaseUrl (id: $serverId)',
+    );
 
     // Create header refresher bound to this server ID
     final serverHeaderRefresher = _headerRefresher != null
@@ -145,7 +148,9 @@ class ConnectionManager extends ChangeNotifier {
   /// without connecting to a new one.
   void focusServer(String serverId) {
     if (!_registry.hasServer(serverId)) {
-      throw StateError('Server $serverId not connected. Call switchServer() first.');
+      throw StateError(
+        'Server $serverId not connected. Call switchServer() first.',
+      );
     }
 
     if (_activeServerId == serverId) {
@@ -176,7 +181,9 @@ class ConnectionManager extends ChangeNotifier {
     final roomId = activeRoomId;
     final serverId = _activeServerId;
     if (roomId == null || serverId == null) return null;
-    return _registry.getExistingSession(ServerRoomKey(serverId: serverId, roomId: roomId));
+    return _registry.getExistingSession(
+      ServerRoomKey(serverId: serverId, roomId: roomId),
+    );
   }
 
   /// Stream of connection events for observability.
@@ -214,13 +221,16 @@ class ConnectionManager extends ChangeNotifier {
   }
 
   /// Track subscriptions for proper cleanup.
-  final Map<String, StreamSubscription<ConnectionEvent>> _sessionSubscriptions = {};
+  final Map<String, StreamSubscription<ConnectionEvent>> _sessionSubscriptions =
+      {};
 
   void _subscribeToSession(RoomSession session) {
     final sessionKey = '${session.serverId}:${session.roomId}';
     if (_sessionSubscriptions.containsKey(sessionKey)) return;
 
-    _sessionSubscriptions[sessionKey] = session.events.listen(_eventController.add);
+    _sessionSubscriptions[sessionKey] = session.events.listen(
+      _eventController.add,
+    );
   }
 
   /// Get messages for a room (reads from RoomSession).
@@ -258,7 +268,9 @@ class ConnectionManager extends ChangeNotifier {
       return getSession(newRoomId);
     }
 
-    DebugLog.network('ConnectionManager: Switching from $previousRoomId to $newRoomId');
+    DebugLog.network(
+      'ConnectionManager: Switching from $previousRoomId to $newRoomId',
+    );
 
     // Use registry's setActive which handles suspend/resume
     _registry.setActive(key);
@@ -266,11 +278,13 @@ class ConnectionManager extends ChangeNotifier {
     // Get the session and subscribe
     final newSession = getSession(newRoomId);
 
-    _eventController.add(RoomSwitchedEvent(
-      serverId: _activeServerId,
-      roomId: newRoomId,
-      previousRoomId: previousRoomId,
-    ));
+    _eventController.add(
+      RoomSwitchedEvent(
+        serverId: _activeServerId,
+        roomId: newRoomId,
+        previousRoomId: previousRoomId,
+      ),
+    );
 
     notifyListeners();
     return newSession;
@@ -306,21 +320,21 @@ class ConnectionManager extends ChangeNotifier {
     required LocalToolsService localToolsService,
     UiToolHandler? uiToolHandler,
     LocalToolNotifier? onLocalToolExecution,
-    CanvasCallback? onCanvasUpdate,
-    ContextCallback? onContextUpdate,
-    ActivityCallback? onActivityUpdate,
+    RoomEventHandler? eventHandler,
     Map<String, dynamic>? state,
   }) async {
     if (!isConfigured) {
-      throw StateError('ConnectionManager not configured. Call switchServer() first.');
+      throw StateError(
+        'ConnectionManager not configured. Call switchServer() first.',
+      );
     }
 
     final session = getSession(roomId);
 
-    // Set up callbacks for side effects
-    session.onCanvasUpdate = onCanvasUpdate;
-    session.onContextUpdate = onContextUpdate;
-    session.onActivityUpdate = onActivityUpdate;
+    // Set up event handler for side effects
+    if (eventHandler != null) {
+      session.setEventHandler(eventHandler);
+    }
 
     // Initialize if needed
     if (session.threadId == null) {
@@ -331,7 +345,12 @@ class ConnectionManager extends ChangeNotifier {
     session.addUserMessage(userMessage);
 
     // Register tools
-    _registerTools(session, localToolsService, uiToolHandler, onLocalToolExecution);
+    _registerTools(
+      session,
+      localToolsService,
+      uiToolHandler,
+      onLocalToolExecution,
+    );
 
     // Listen to event streams - session processes events internally
     StreamSubscription<ag_ui.BaseEvent>? stepsSub;
@@ -347,6 +366,9 @@ class ConnectionManager extends ChangeNotifier {
         content: userMessage,
       );
 
+      // Create fresh run for this message (fixes multi-message bug)
+      await session.createRun();
+
       // Start run
       var toolResults = await session.startRun(
         messages: [userMsg],
@@ -355,7 +377,9 @@ class ConnectionManager extends ChangeNotifier {
 
       // Tool result loop
       while (toolResults.isNotEmpty) {
-        DebugLog.network('ConnectionManager: Processing ${toolResults.length} tool results');
+        DebugLog.network(
+          'ConnectionManager: Processing ${toolResults.length} tool results',
+        );
 
         final newRunId = await session.createRun();
         toolResults = await session.sendToolResults(
@@ -431,19 +455,39 @@ class ConnectionManager extends ChangeNotifier {
 
         // UI tools (canvas_render, genui_render)
         if (_uiTools.contains(call.function.name) && uiToolHandler != null) {
-          session.handleLocalToolExecution(call.id, call.function.name, 'executing');
+          session.handleLocalToolExecution(
+            call.id,
+            call.function.name,
+            'executing',
+          );
           try {
-            final result = await uiToolHandler(call.id, call.function.name, args);
-            session.handleLocalToolExecution(call.id, call.function.name, 'completed');
+            final result = await uiToolHandler(
+              call.id,
+              call.function.name,
+              args,
+            );
+            session.handleLocalToolExecution(
+              call.id,
+              call.function.name,
+              'completed',
+            );
             return jsonEncode(result);
           } catch (e) {
-            session.handleLocalToolExecution(call.id, call.function.name, 'error: $e');
+            session.handleLocalToolExecution(
+              call.id,
+              call.function.name,
+              'error: $e',
+            );
             return jsonEncode({'error': e.toString()});
           }
         }
 
         // Regular tools
-        session.handleLocalToolExecution(call.id, call.function.name, 'executing');
+        session.handleLocalToolExecution(
+          call.id,
+          call.function.name,
+          'executing',
+        );
         final result = await localToolsService.executeTool(
           call.id,
           call.function.name,
@@ -451,10 +495,18 @@ class ConnectionManager extends ChangeNotifier {
         );
 
         if (result.success) {
-          session.handleLocalToolExecution(call.id, call.function.name, 'completed');
+          session.handleLocalToolExecution(
+            call.id,
+            call.function.name,
+            'completed',
+          );
           return jsonEncode(result.result);
         } else {
-          session.handleLocalToolExecution(call.id, call.function.name, 'error');
+          session.handleLocalToolExecution(
+            call.id,
+            call.function.name,
+            'error',
+          );
           return jsonEncode({'error': result.error});
         }
       }, fireAndForget: isFireAndForget);
@@ -498,7 +550,9 @@ class ConnectionManager extends ChangeNotifier {
 
 /// Singleton provider for ConnectionManager.
 /// Persists for app lifetime - NOT server-scoped.
-final connectionManagerProvider = ChangeNotifierProvider<ConnectionManager>((ref) {
+final connectionManagerProvider = ChangeNotifierProvider<ConnectionManager>((
+  ref,
+) {
   final registry = ref.read(connectionRegistryProvider);
   final authManager = ref.read(authManagerProvider);
 

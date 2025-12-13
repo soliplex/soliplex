@@ -53,7 +53,8 @@ class FakeNetworkTransport implements NetworkTransport {
     this.postResponse = const {},
   });
 
-  @override
+  /// Fake runAgent implementation for testing.
+  /// Note: This is NOT part of NetworkTransport interface (SSE is via AgUiClient).
   Stream<ag_ui.BaseEvent> runAgent({
     required String endpoint,
     required ag_ui.RunAgentInput input,
@@ -100,10 +101,7 @@ class FakeNetworkTransport implements NetworkTransport {
   }
 
   @override
-  Future<Map<String, dynamic>> post(
-    Uri uri,
-    Map<String, dynamic> body,
-  ) async {
+  Future<Map<String, dynamic>> post(Uri uri, Map<String, dynamic> body) async {
     postCallCount++;
     return postResponse;
   }

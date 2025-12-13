@@ -28,7 +28,8 @@ class McpTokenResponse {
 
     DateTime? expiresAt;
     // Try different field names for expiration
-    final expiresField = json['expires_at'] ?? json['expires'] ?? json['expiry'];
+    final expiresField =
+        json['expires_at'] ?? json['expires'] ?? json['expiry'];
     if (expiresField != null) {
       if (expiresField is String) {
         expiresAt = DateTime.tryParse(expiresField);
@@ -75,11 +76,9 @@ class McpTokenService {
   final http.Client _httpClient;
   final AuthManager _authManager;
 
-  McpTokenService({
-    required AuthManager authManager,
-    http.Client? httpClient,
-  })  : _authManager = authManager,
-        _httpClient = httpClient ?? http.Client();
+  McpTokenService({required AuthManager authManager, http.Client? httpClient})
+    : _authManager = authManager,
+      _httpClient = httpClient ?? http.Client();
 
   /// Fetch an MCP token for the given room.
   ///
@@ -107,7 +106,9 @@ class McpTokenService {
         final json = jsonDecode(response.body) as Map<String, dynamic>;
         return McpTokenResponse.fromJson(json);
       } else {
-        debugPrint('McpTokenService: Failed with status ${response.statusCode}');
+        debugPrint(
+          'McpTokenService: Failed with status ${response.statusCode}',
+        );
         debugPrint('McpTokenService: Response: ${response.body}');
         return null;
       }
@@ -134,9 +135,7 @@ class McpTokenService {
         'soliplex-$roomId': {
           'url': mcpUrl,
           'transport': 'http',
-          'headers': {
-            'Authorization': 'Bearer $token',
-          },
+          'headers': {'Authorization': 'Bearer $token'},
         },
       },
     };
@@ -157,11 +156,7 @@ class McpTokenState {
   final bool isLoading;
   final String? error;
 
-  const McpTokenState({
-    this.token,
-    this.isLoading = false,
-    this.error,
-  });
+  const McpTokenState({this.token, this.isLoading = false, this.error});
 
   McpTokenState copyWith({
     McpTokenResponse? token,
@@ -188,10 +183,10 @@ class McpTokenNotifier extends StateNotifier<McpTokenState> {
     required McpTokenService service,
     required String serverUrl,
     required String serverId,
-  })  : _service = service,
-        _serverUrl = serverUrl,
-        _serverId = serverId,
-        super(const McpTokenState());
+  }) : _service = service,
+       _serverUrl = serverUrl,
+       _serverId = serverId,
+       super(const McpTokenState());
 
   /// Fetch token for a room.
   Future<void> fetchToken(String roomId) async {

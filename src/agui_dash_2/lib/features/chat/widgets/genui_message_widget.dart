@@ -46,8 +46,9 @@ class GenUiMessageWidget extends ConsumerWidget {
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(12),
-            border:
-                Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
           ),
           clipBehavior: Clip.antiAlias,
           child: SingleChildScrollView(

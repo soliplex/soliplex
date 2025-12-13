@@ -17,17 +17,16 @@ import 'oidc_provider_selector.dart';
 class ServerSetupScreen extends ConsumerStatefulWidget {
   final VoidCallback? onConnected;
 
-  const ServerSetupScreen({
-    super.key,
-    this.onConnected,
-  });
+  const ServerSetupScreen({super.key, this.onConnected});
 
   @override
   ConsumerState<ServerSetupScreen> createState() => _ServerSetupScreenState();
 }
 
 class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
-  final _urlController = TextEditingController(text: ApiConstants.defaultServerUrl);
+  final _urlController = TextEditingController(
+    text: ApiConstants.defaultServerUrl,
+  );
   final _formKey = GlobalKey<FormState>();
 
   bool _isProbing = false;
@@ -189,7 +188,9 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
                               child: SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               ),
                             )
                           : null,
@@ -264,10 +265,7 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
                   const SizedBox(height: 32),
                   const Divider(),
                   const SizedBox(height: 16),
-                  Text(
-                    'Recent Servers',
-                    style: theme.textTheme.titleMedium,
-                  ),
+                  Text('Recent Servers', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 8),
                   ServerHistoryWidget(
                     onServerSelected: (server) {

@@ -18,10 +18,7 @@ abstract class NetworkTransport {
   });
 
   /// Make a POST request to the server.
-  Future<Map<String, dynamic>> post(
-    Uri uri,
-    Map<String, dynamic> body,
-  );
+  Future<Map<String, dynamic>> post(Uri uri, Map<String, dynamic> body);
 
   /// Close the transport and release resources.
   Future<void> close();

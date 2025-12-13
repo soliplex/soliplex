@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/chat_models.dart';
+import '../../core/network/room_event_handler.dart';
 import '../../core/network/room_session.dart';
 import '../../core/providers/panel_providers.dart';
 import '../../core/network/connection_manager.dart';
@@ -33,7 +34,8 @@ class _ChatContentState extends ConsumerState<ChatContent> {
   String? _previousRoomId;
 
   // Track active search widgets and their callbacks
-  final Map<String, void Function(String, Map<String, dynamic>)> _searchCallbacks = {};
+  final Map<String, void Function(String, Map<String, dynamic>)>
+  _searchCallbacks = {};
 
   @override
   void dispose() {
@@ -106,81 +108,17 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           if (!mounted) return {'skipped': true, 'reason': 'disposed'};
           return _handleUiTool(toolCallId, toolName, args, roomId);
         },
-        onCanvasUpdate: (operation, widgetName, data) {
-          if (!mounted) return;
-          final canvasNotifier = ref.read(activeCanvasNotifierProvider);
-          if (canvasNotifier == null) return; // No room selected
-          switch (operation) {
-            case 'clear':
-              canvasNotifier.clear();
-            case 'replace':
-              canvasNotifier.replaceAll(widgetName, data);
-            default:
-              canvasNotifier.addItem(widgetName, data);
-          }
-        },
-        onContextUpdate: (eventType, {String? summary, Map<String, dynamic>? data}) {
-          if (!mounted) return;
-          final contextNotifier = ref.read(activeContextPaneNotifierProvider);
-          if (contextNotifier == null) return; // No room selected
-          switch (eventType) {
-            case 'userMessage':
-              contextNotifier.addTextMessage(summary ?? '', isUser: true);
-            case 'textMessage':
-              contextNotifier.addTextMessage(summary ?? '', isUser: false);
-            case 'runStarted':
-              contextNotifier.addAgUiEvent('Run Started', summary: summary);
-            case 'runFinished':
-              contextNotifier.addAgUiEvent('Run Finished');
-            case 'toolCall':
-              contextNotifier.addToolCall(summary ?? 'tool', summary: 'started');
-            case 'toolResult':
-              contextNotifier.addAgUiEvent('Tool Result');
-            case 'genUiRender':
-              contextNotifier.addGenUiRender(summary ?? 'Widget');
-            case 'stateSnapshot':
-              if (data != null) contextNotifier.updateState(data);
-            case 'stateDelta':
-              if (data != null) contextNotifier.applyDelta(data);
-            case 'thinking':
-              contextNotifier.addAgUiEvent('Thinking');
-            case 'error':
-              contextNotifier.addAgUiEvent('Error', summary: summary);
-            case 'localToolExecution':
-              final parts = summary?.split(': ') ?? [];
-              if (parts.length >= 2) {
-                contextNotifier.addLocalToolExecution(parts[0], status: parts[1]);
-              }
-          }
-        },
-        onActivityUpdate: (isActive, {String? eventType, String? toolName}) {
-          if (!mounted) return;
-          final activityNotifier = ref.read(activityStatusProvider.notifier);
-          if (isActive) {
-            if (eventType != null) {
-              activityNotifier.handleEvent(eventType, toolName: toolName);
-            } else {
-              activityNotifier.startActivity();
-            }
-          } else {
-            activityNotifier.stopActivity();
-          }
-        },
+        eventHandler: _ChatEventHandler(
+          ref: ref,
+          isMounted: () => mounted,
+        ),
         state: canvasState.toJson(),
       );
     } catch (e) {
       DebugLog.error('Error sending message: $e');
       if (mounted) {
         final session = connectionManager.getSession(roomId);
-        final errorStr = e.toString().toLowerCase();
-        if (errorStr.contains('socket') ||
-            errorStr.contains('connection') ||
-            errorStr.contains('timeout') ||
-            errorStr.contains('network')) {
-          session.addErrorMessage(e.toString());
-        } else {
-          session.addErrorMessage(e.toString());
-        }
+        session.addErrorMessage(e.toString());
       }
     }
   }
@@ -255,14 +193,16 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     {
       'id': 'p1',
       'title': 'Mobile App Redesign',
-      'description': 'Complete overhaul of the customer-facing mobile application',
+      'description':
+          'Complete overhaul of the customer-facing mobile application',
       'required_skills': ['Flutter', 'Dart', 'Figma', 'UX Research'],
       'status': 'open',
     },
     {
       'id': 'p2',
       'title': 'Data Pipeline Migration',
-      'description': 'Migrate legacy ETL pipelines to cloud-native architecture',
+      'description':
+          'Migrate legacy ETL pipelines to cloud-native architecture',
       'required_skills': ['Python', 'AWS', 'Kubernetes', 'Docker'],
       'status': 'open',
     },
@@ -270,7 +210,12 @@ class _ChatContentState extends ConsumerState<ChatContent> {
       'id': 'p3',
       'title': 'ML Recommendation Engine',
       'description': 'Build personalized recommendation system for e-commerce',
-      'required_skills': ['Python', 'Machine Learning', 'TensorFlow', 'PostgreSQL'],
+      'required_skills': [
+        'Python',
+        'Machine Learning',
+        'TensorFlow',
+        'PostgreSQL',
+      ],
       'status': 'open',
     },
   ];
@@ -279,7 +224,8 @@ class _ChatContentState extends ConsumerState<ChatContent> {
   static const Map<String, Map<String, dynamic>> _demos = {
     'team-builder': {
       'title': 'Team Builder',
-      'description': 'Build an optimal team for a project based on required skills',
+      'description':
+          'Build an optimal team for a project based on required skills',
       'steps': [
         '1. Type: /list projects',
         '2. Pick a project (e.g., "Mobile App Redesign")',
@@ -378,20 +324,25 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         for (final project in _stubbedProjectsData) {
           session.addGenUiMessage(
             GenUiContent(
-              toolCallId: 'project-${project['id']}-${DateTime.now().millisecondsSinceEpoch}',
+              toolCallId:
+                  'project-${project['id']}-${DateTime.now().millisecondsSinceEpoch}',
               widgetName: 'ProjectCard',
               data: project,
             ),
           );
         }
       case 'demos':
-        final demoList = _demos.entries.map((e) {
-          final demo = e.value;
-          return '• /demo ${e.key} - ${demo['title']}\n  ${demo['description']}';
-        }).join('\n\n');
+        final demoList = _demos.entries
+            .map((e) {
+              final demo = e.value;
+              return '• /demo ${e.key} - ${demo['title']}\n  ${demo['description']}';
+            })
+            .join('\n\n');
         session.addSystemMessage('Available Demos:\n\n$demoList');
       default:
-        session.addSystemMessage('Unknown list type: $listType\nTry: /list projects or /list demos');
+        session.addSystemMessage(
+          'Unknown list type: $listType\nTry: /list projects or /list demos',
+        );
     }
   }
 
@@ -405,14 +356,18 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     session.addUserMessage('/demo $demoName');
 
     if (demoName.isEmpty) {
-      session.addSystemMessage('Usage: /demo <name>\nType /list demos to see available demos.');
+      session.addSystemMessage(
+        'Usage: /demo <name>\nType /list demos to see available demos.',
+      );
       return;
     }
 
     final demo = _demos[demoName];
     if (demo == null) {
       final available = _demos.keys.join(', ');
-      session.addSystemMessage('Unknown demo: $demoName\nAvailable: $available');
+      session.addSystemMessage(
+        'Unknown demo: $demoName\nAvailable: $available',
+      );
       return;
     }
 
@@ -435,10 +390,12 @@ class _ChatContentState extends ConsumerState<ChatContent> {
       case 'submit':
         final selected = payload['selected'] as List<dynamic>? ?? [];
         if (selected.isNotEmpty) {
-          final names = selected.map((item) {
-            final map = item as Map<String, dynamic>;
-            return '${map['title']} (${map['subtitle']})';
-          }).join(', ');
+          final names = selected
+              .map((item) {
+                final map = item as Map<String, dynamic>;
+                return '${map['title']} (${map['subtitle']})';
+              })
+              .join(', ');
 
           final prefill = 'Selected $searchType: $names\n';
           _inputController.text = prefill;
@@ -503,7 +460,7 @@ class _ChatContentState extends ConsumerState<ChatContent> {
     final selectedRoomId = ref.watch(selectedRoomProvider);
     final selectedRoom = ref.watch(selectedRoomDataProvider);
     final searchState = ref.watch(chatSearchProvider);
-    final activityStatus = ref.watch(activityStatusProvider);
+    final activityStatus = ref.watch(activeActivityStatusProvider);
 
     // Get messages from ConnectionManager (the source of truth)
     final connectionManager = ref.watch(connectionManagerProvider);
@@ -567,7 +524,8 @@ class _ChatContentState extends ConsumerState<ChatContent> {
                       onQuote: _handleQuote,
                       onToggleThinking: (messageId) {
                         if (selectedRoomId != null) {
-                          connectionManager.getSession(selectedRoomId)
+                          connectionManager
+                              .getSession(selectedRoomId)
                               .toggleThinkingExpanded(messageId);
                         }
                       },
@@ -587,14 +545,19 @@ class _ChatContentState extends ConsumerState<ChatContent> {
                     ),
                   ),
                   // Activity status bar OR input area
-                  if (activityStatus.isActive && activityStatus.currentMessage != null)
+                  if (activityStatus.isActive &&
+                      activityStatus.currentMessage != null)
                     ActivityStatusBar(
                       message: activityStatus.currentMessage!,
                       onStop: () async {
                         if (selectedRoomId != null) {
-                          DebugLog.network('Stop button: cancelling run for room $selectedRoomId');
+                          DebugLog.network(
+                            'Stop button: cancelling run for room $selectedRoomId',
+                          );
                           await connectionManager.cancelRun(selectedRoomId);
-                          ref.read(activityStatusProvider.notifier).stopActivity();
+                          ref
+                              .read(activeActivityStatusNotifierProvider)
+                              ?.stopActivity();
                         }
                       },
                     )
@@ -621,4 +584,91 @@ class _ChatContentState extends ConsumerState<ChatContent> {
 /// Intent for paste action.
 class _PasteIntent extends Intent {
   const _PasteIntent();
+}
+
+/// Event handler for chat screen to receive RoomSession events.
+class _ChatEventHandler implements RoomEventHandler {
+  final WidgetRef ref;
+  final bool Function() isMounted;
+
+  _ChatEventHandler({required this.ref, required this.isMounted});
+
+  @override
+  void onCanvasUpdate(
+    String operation,
+    String widgetName,
+    Map<String, dynamic> data,
+  ) {
+    if (!isMounted()) return;
+    final canvasNotifier = ref.read(activeCanvasNotifierProvider);
+    if (canvasNotifier == null) return; // No room selected
+    switch (operation) {
+      case 'clear':
+        canvasNotifier.clear();
+      case 'replace':
+        canvasNotifier.replaceAll(widgetName, data);
+      default:
+        canvasNotifier.addItem(widgetName, data);
+    }
+  }
+
+  @override
+  void onContextUpdate(
+    String eventType, {
+    String? summary,
+    Map<String, dynamic>? data,
+  }) {
+    if (!isMounted()) return;
+    final contextNotifier = ref.read(activeContextPaneNotifierProvider);
+    if (contextNotifier == null) return; // No room selected
+    switch (eventType) {
+      case 'userMessage':
+        contextNotifier.addTextMessage(summary ?? '', isUser: true);
+      case 'textMessage':
+        contextNotifier.addTextMessage(summary ?? '', isUser: false);
+      case 'runStarted':
+        contextNotifier.addAgUiEvent('Run Started', summary: summary);
+      case 'runFinished':
+        contextNotifier.addAgUiEvent('Run Finished');
+      case 'toolCall':
+        contextNotifier.addToolCall(summary ?? 'tool', summary: 'started');
+      case 'toolResult':
+        contextNotifier.addAgUiEvent('Tool Result');
+      case 'genUiRender':
+        contextNotifier.addGenUiRender(summary ?? 'Widget');
+      case 'stateSnapshot':
+        if (data != null) contextNotifier.updateState(data);
+      case 'stateDelta':
+        if (data != null) contextNotifier.applyDelta(data);
+      case 'thinking':
+        contextNotifier.addAgUiEvent('Thinking');
+      case 'error':
+        contextNotifier.addAgUiEvent('Error', summary: summary);
+      case 'localToolExecution':
+        final parts = summary?.split(': ') ?? [];
+        if (parts.length >= 2) {
+          contextNotifier.addLocalToolExecution(parts[0], status: parts[1]);
+        }
+    }
+  }
+
+  @override
+  void onActivityUpdate(
+    bool isActive, {
+    String? eventType,
+    String? toolName,
+  }) {
+    if (!isMounted()) return;
+    final activityNotifier = ref.read(activeActivityStatusNotifierProvider);
+    if (activityNotifier == null) return;
+    if (isActive) {
+      if (eventType != null) {
+        activityNotifier.handleEvent(eventType, toolName: toolName);
+      } else {
+        activityNotifier.startActivity();
+      }
+    } else {
+      activityNotifier.stopActivity();
+    }
+  }
 }

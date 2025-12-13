@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/providers/app_providers.dart';
 import 'features/chat/chat_screen.dart';
+import 'features/inspector/network_inspector_screen.dart';
 import 'features/server/server_setup_screen.dart';
 
 /// Provider for tracking initialization state
@@ -108,9 +109,8 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     return stateAsync.when(
       data: (state) => _buildForState(state),
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (error, _) => Scaffold(
         body: Center(
           child: Column(
@@ -144,54 +144,54 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget _buildForState(AppState state) {
     return switch (state) {
       AppStateNoServer() => ServerSetupScreen(
-          onConnected: () {
-            // State machine handles transitions
-            debugPrint('AppShell: Server setup completed');
-          },
-        ),
+        onConnected: () {
+          // State machine handles transitions
+          debugPrint('AppShell: Server setup completed');
+        },
+      ),
       AppStateNeedsAuth() => ServerSetupScreen(
-          onConnected: () {
-            // State machine handles transitions
-            debugPrint('AppShell: Auth completed');
-          },
-        ),
+        onConnected: () {
+          // State machine handles transitions
+          debugPrint('AppShell: Auth completed');
+        },
+      ),
       AppStateAuthenticating() => const Scaffold(
-          body: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Authenticating...'),
-              ],
-            ),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Authenticating...'),
+            ],
           ),
         ),
+      ),
       AppStateReady() => const ChatScreen(),
       AppStateError(:final message, :final previousState) => Scaffold(
-          body: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.error_outline,
-                  size: 48,
-                  color: Theme.of(context).colorScheme.error,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 48,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              const SizedBox(height: 16),
+              Text(message),
+              const SizedBox(height: 16),
+              if (previousState != null)
+                FilledButton(
+                  onPressed: () {
+                    ref.read(appStateManagerProvider).retryFromError();
+                  },
+                  child: const Text('Retry'),
                 ),
-                const SizedBox(height: 16),
-                Text(message),
-                const SizedBox(height: 16),
-                if (previousState != null)
-                  FilledButton(
-                    onPressed: () {
-                      ref.read(appStateManagerProvider).retryFromError();
-                    },
-                    child: const Text('Retry'),
-                  ),
-              ],
-            ),
+            ],
           ),
         ),
+      ),
     };
   }
 }
@@ -205,6 +205,15 @@ extension AppShellNavigation on BuildContext {
         builder: (routeContext) => ServerSetupScreen(
           onConnected: () => Navigator.of(routeContext).pop(),
         ),
+      ),
+    );
+  }
+
+  /// Navigate to network inspector screen
+  void showNetworkInspector() {
+    Navigator.of(this).push(
+      MaterialPageRoute(
+        builder: (routeContext) => const NetworkInspectorScreen(),
       ),
     );
   }

@@ -38,7 +38,9 @@ class GISMapModal extends StatelessWidget {
   /// Calculate bounds that contain all coordinates with padding.
   LatLngBounds? get _bounds {
     if (coordinates.isEmpty) return null;
-    if (coordinates.length == 1) return null; // Use center/zoom for single point
+    if (coordinates.length == 1) {
+      return null; // Use center/zoom for single point
+    }
 
     double minLat = coordinates.first.latitude;
     double maxLat = coordinates.first.latitude;
@@ -52,10 +54,7 @@ class GISMapModal extends StatelessWidget {
       if (coord.longitude > maxLng) maxLng = coord.longitude;
     }
 
-    return LatLngBounds(
-      LatLng(minLat, minLng),
-      LatLng(maxLat, maxLng),
-    );
+    return LatLngBounds(LatLng(minLat, minLng), LatLng(maxLat, maxLng));
   }
 
   @override
@@ -79,10 +78,7 @@ class GISMapModal extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.map,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+                  Icon(Icons.map, color: Theme.of(context).colorScheme.primary),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -125,7 +121,8 @@ class GISMapModal extends StatelessWidget {
                 children: [
                   // OpenStreetMap tiles
                   TileLayer(
-                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName: 'com.example.agui_dash_2',
                   ),
                   // Accuracy circles
@@ -133,29 +130,35 @@ class GISMapModal extends StatelessWidget {
                     CircleLayer(
                       circles: coordinates
                           .where((c) => c.accuracy != null && c.accuracy! > 0)
-                          .map((c) => CircleMarker(
-                                point: c.toLatLng(),
-                                radius: c.accuracy!,
-                                useRadiusInMeter: true,
-                                color: (c.color ?? Colors.blue).withAlpha(40),
-                                borderColor: (c.color ?? Colors.blue).withAlpha(150),
-                                borderStrokeWidth: 2,
-                              ))
+                          .map(
+                            (c) => CircleMarker(
+                              point: c.toLatLng(),
+                              radius: c.accuracy!,
+                              useRadiusInMeter: true,
+                              color: (c.color ?? Colors.blue).withAlpha(40),
+                              borderColor: (c.color ?? Colors.blue).withAlpha(
+                                150,
+                              ),
+                              borderStrokeWidth: 2,
+                            ),
+                          )
                           .toList(),
                     ),
                   // Location markers
                   MarkerLayer(
                     markers: coordinates
-                        .map((c) => Marker(
-                              point: c.toLatLng(),
-                              width: 40,
-                              height: 40,
-                              child: Icon(
-                                Icons.location_on,
-                                color: c.color ?? Colors.red,
-                                size: 40,
-                              ),
-                            ))
+                        .map(
+                          (c) => Marker(
+                            point: c.toLatLng(),
+                            width: 40,
+                            height: 40,
+                            child: Icon(
+                              Icons.location_on,
+                              color: c.color ?? Colors.red,
+                              size: 40,
+                            ),
+                          ),
+                        )
                         .toList(),
                   ),
                 ],
@@ -180,8 +183,8 @@ class GISMapModal extends StatelessWidget {
                     pointCount > 1
                         ? '$pointCount points'
                         : first != null
-                            ? '${first.latitude.toStringAsFixed(6)}, ${first.longitude.toStringAsFixed(6)}'
-                            : 'No coordinates',
+                        ? '${first.latitude.toStringAsFixed(6)}, ${first.longitude.toStringAsFixed(6)}'
+                        : 'No coordinates',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       fontFamily: 'monospace',
                       color: Colors.grey.shade700,

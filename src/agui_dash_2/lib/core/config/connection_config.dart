@@ -69,10 +69,13 @@ class ConnectionConfig {
     bool? keepAlive,
   }) {
     return ConnectionConfig(
-      roomInactivityTimeout: roomInactivityTimeout ?? this.roomInactivityTimeout,
-      serverInactivityTimeout: serverInactivityTimeout ?? this.serverInactivityTimeout,
+      roomInactivityTimeout:
+          roomInactivityTimeout ?? this.roomInactivityTimeout,
+      serverInactivityTimeout:
+          serverInactivityTimeout ?? this.serverInactivityTimeout,
       maxBackgroundedSessionsPerServer:
-          maxBackgroundedSessionsPerServer ?? this.maxBackgroundedSessionsPerServer,
+          maxBackgroundedSessionsPerServer ??
+          this.maxBackgroundedSessionsPerServer,
       cleanupInterval: cleanupInterval ?? this.cleanupInterval,
       keepAlive: keepAlive ?? this.keepAlive,
     );
@@ -85,18 +88,19 @@ class ConnectionConfig {
           runtimeType == other.runtimeType &&
           roomInactivityTimeout == other.roomInactivityTimeout &&
           serverInactivityTimeout == other.serverInactivityTimeout &&
-          maxBackgroundedSessionsPerServer == other.maxBackgroundedSessionsPerServer &&
+          maxBackgroundedSessionsPerServer ==
+              other.maxBackgroundedSessionsPerServer &&
           cleanupInterval == other.cleanupInterval &&
           keepAlive == other.keepAlive;
 
   @override
   int get hashCode => Object.hash(
-        roomInactivityTimeout,
-        serverInactivityTimeout,
-        maxBackgroundedSessionsPerServer,
-        cleanupInterval,
-        keepAlive,
-      );
+    roomInactivityTimeout,
+    serverInactivityTimeout,
+    maxBackgroundedSessionsPerServer,
+    cleanupInterval,
+    keepAlive,
+  );
 
   @override
   String toString() {

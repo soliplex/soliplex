@@ -9,11 +9,8 @@ sealed class ConnectionEvent {
   final String roomId;
   final DateTime timestamp;
 
-  ConnectionEvent({
-    this.serverId,
-    required this.roomId,
-    DateTime? timestamp,
-  }) : timestamp = timestamp ?? DateTime.now();
+  ConnectionEvent({this.serverId, required this.roomId, DateTime? timestamp})
+    : timestamp = timestamp ?? DateTime.now();
 }
 
 /// Session was created for a room.
@@ -28,7 +25,8 @@ class SessionCreatedEvent extends ConnectionEvent {
   });
 
   @override
-  String toString() => 'SessionCreated(server: $serverId, room: $roomId, thread: $threadId)';
+  String toString() =>
+      'SessionCreated(server: $serverId, room: $roomId, thread: $threadId)';
 }
 
 /// Active room was switched.
@@ -43,7 +41,8 @@ class RoomSwitchedEvent extends ConnectionEvent {
   });
 
   @override
-  String toString() => 'RoomSwitched(server: $serverId, from: $previousRoomId, to: $roomId)';
+  String toString() =>
+      'RoomSwitched(server: $serverId, from: $previousRoomId, to: $roomId)';
 }
 
 /// A run was started.
@@ -60,7 +59,8 @@ class RunStartedEvent extends ConnectionEvent {
   });
 
   @override
-  String toString() => 'RunStarted(server: $serverId, room: $roomId, run: $runId)';
+  String toString() =>
+      'RunStarted(server: $serverId, room: $roomId, run: $runId)';
 }
 
 /// A run was completed successfully.
@@ -77,7 +77,8 @@ class RunCompletedEvent extends ConnectionEvent {
   });
 
   @override
-  String toString() => 'RunCompleted(server: $serverId, room: $roomId, run: $runId)';
+  String toString() =>
+      'RunCompleted(server: $serverId, room: $roomId, run: $runId)';
 }
 
 /// A run was cancelled.
@@ -96,7 +97,8 @@ class RunCancelledEvent extends ConnectionEvent {
   });
 
   @override
-  String toString() => 'RunCancelled(server: $serverId, room: $roomId, run: $runId, reason: $reason)';
+  String toString() =>
+      'RunCancelled(server: $serverId, room: $roomId, run: $runId, reason: $reason)';
 }
 
 /// A run failed with an error.
@@ -115,7 +117,8 @@ class RunFailedEvent extends ConnectionEvent {
   });
 
   @override
-  String toString() => 'RunFailed(server: $serverId, room: $roomId, run: $runId, error: $error)';
+  String toString() =>
+      'RunFailed(server: $serverId, room: $roomId, run: $runId, error: $error)';
 }
 
 /// Session was suspended (room switched away).
@@ -197,7 +200,8 @@ class ConnectionInfo {
     this.lastActivity,
   });
 
-  bool get isActive => state == SessionState.active || state == SessionState.streaming;
+  bool get isActive =>
+      state == SessionState.active || state == SessionState.streaming;
   bool get isStreaming => state == SessionState.streaming;
 
   @override

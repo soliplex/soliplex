@@ -34,9 +34,7 @@ class ToolExecutionIndicator extends ConsumerWidget {
       decoration: BoxDecoration(
         color: primaryContainer.withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: primary.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: primary.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -54,9 +52,9 @@ class ToolExecutionIndicator extends ConsumerWidget {
             child: Text(
               displayText,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.w500,
-                  ),
+                color: Theme.of(context).colorScheme.onPrimaryContainer,
+                fontWeight: FontWeight.w500,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -69,9 +67,11 @@ class ToolExecutionIndicator extends ConsumerWidget {
   String _formatToolName(String name) {
     return name
         .split('_')
-        .map((word) => word.isEmpty
-            ? ''
-            : '${word[0].toUpperCase()}${word.substring(1)}')
+        .map(
+          (word) => word.isEmpty
+              ? ''
+              : '${word[0].toUpperCase()}${word.substring(1)}',
+        )
         .join(' ');
   }
 }
@@ -109,8 +109,8 @@ class ToolExecutionChip extends ConsumerWidget {
           Text(
             '${execState.activeCount}',
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSecondaryContainer,
-                ),
+              color: Theme.of(context).colorScheme.onSecondaryContainer,
+            ),
           ),
         ],
       ),

@@ -16,10 +16,11 @@ typedef ToolExecutor = Future<String> Function(ag_ui.ToolCall call);
 ///
 /// This allows the transport layer to intercept SSE calls for observability.
 /// Uses SimpleRunAgentInput since that's what Thread creates internally.
-typedef RunAgentDelegate = Stream<ag_ui.BaseEvent> Function(
-  String endpoint,
-  ag_ui.SimpleRunAgentInput input,
-);
+typedef RunAgentDelegate =
+    Stream<ag_ui.BaseEvent> Function(
+      String endpoint,
+      ag_ui.SimpleRunAgentInput input,
+    );
 
 /// Thread manages an AG-UI conversation thread.
 ///
@@ -30,8 +31,7 @@ typedef RunAgentDelegate = Stream<ag_ui.BaseEvent> Function(
 /// - Event streaming
 class Thread {
   final String id;
-  final ag_ui.AgUiClient? _client;
-  final RunAgentDelegate? _runAgentDelegate;
+  final RunAgentDelegate _runAgentDelegate;
   final List<ag_ui.Tool> _tools;
   final Map<String, ToolExecutor> _toolExecutors;
   final Set<String> _fireAndForgetTools = {};
@@ -50,35 +50,16 @@ class Thread {
   // Per-message text buffers to support concurrent message streams
   final Map<String, TextMessageBuffer> _textBuffers = {};
 
-  /// Creates a Thread with direct AgUiClient (legacy).
-  Thread({
-    required this.id,
-    required ag_ui.AgUiClient client,
-    List<ag_ui.Tool>? tools,
-    Map<String, ToolExecutor>? toolExecutors,
-  }) : _client = client,
-       _runAgentDelegate = null,
-       _tools = tools != null ? List.from(tools) : <ag_ui.Tool>[],
-       _toolExecutors = toolExecutors != null
-           ? Map.from(toolExecutors)
-           : <String, ToolExecutor>{},
-       _messagesController = StreamController.broadcast(),
-       _statesController = StreamController.broadcast(),
-       _stepsController = StreamController.broadcast() {
-    stateStream.forEach((s) => currentState = s);
-  }
-
-  /// Creates a Thread with a runAgent delegate for transport layer integration.
+  /// Creates a Thread with a runAgent delegate.
   ///
-  /// Use this constructor when SSE should flow through NetworkTransportLayer
+  /// The delegate allows SSE to flow through NetworkTransportLayer
   /// for observability via NetworkInspector.
-  Thread.withDelegate({
+  Thread({
     required this.id,
     required RunAgentDelegate runAgent,
     List<ag_ui.Tool>? tools,
     Map<String, ToolExecutor>? toolExecutors,
-  }) : _client = null,
-       _runAgentDelegate = runAgent,
+  }) : _runAgentDelegate = runAgent,
        _tools = tools != null ? List.from(tools) : <ag_ui.Tool>[],
        _toolExecutors = toolExecutors != null
            ? Map.from(toolExecutors)
@@ -89,24 +70,12 @@ class Thread {
     stateStream.forEach((s) => currentState = s);
   }
 
-  /// For backward compatibility - returns client if available.
-  @Deprecated('Use runAgent delegate instead')
-  ag_ui.AgUiClient? get client => _client;
-
-  /// Get the SSE stream for runAgent, using delegate or client.
+  /// Get the SSE stream for runAgent via delegate.
   Stream<ag_ui.BaseEvent> _getRunAgentStream(
     String endpoint,
     ag_ui.SimpleRunAgentInput input,
   ) {
-    if (_runAgentDelegate != null) {
-      // Use delegate (flows through NetworkTransportLayer with inspector hooks)
-      return _runAgentDelegate(endpoint, input);
-    } else if (_client != null) {
-      // Legacy: use client directly
-      return _client.runAgent(endpoint, input);
-    } else {
-      throw StateError('Thread has neither runAgent delegate nor client');
-    }
+    return _runAgentDelegate(endpoint, input);
   }
 
   Iterable<ag_ui.Run> get runs => _runs;
@@ -127,7 +96,8 @@ class Thread {
   List<ag_ui.Tool> get tools => List.unmodifiable(_tools);
 
   /// Stream of tool call state changes for UI notifications.
-  Stream<ToolCallStateChange> get toolStateChanges => _toolRegistry.stateChanges;
+  Stream<ToolCallStateChange> get toolStateChanges =>
+      _toolRegistry.stateChanges;
 
   /// Add a tool dynamically.
   ///
@@ -138,7 +108,11 @@ class Thread {
   /// If [fireAndForget] is true, the tool will be executed but its result
   /// will NOT be sent back to the server. Use this for UI-only tools like
   /// genui_render and canvas_render that don't need a follow-up response.
-  void addTool(ag_ui.Tool tool, ToolExecutor executor, {bool fireAndForget = false}) {
+  void addTool(
+    ag_ui.Tool tool,
+    ToolExecutor executor, {
+    bool fireAndForget = false,
+  }) {
     // Remove existing tool with same name to prevent duplicates
     _tools.removeWhere((t) => t.name == tool.name);
     _tools.add(tool);
@@ -415,7 +389,9 @@ class Thread {
       if (!isFireAndForget) {
         results.add(message);
       } else {
-        DebugLog.thread(' Fire-and-forget tool $toolName executed, not sending result back');
+        DebugLog.thread(
+          ' Fire-and-forget tool $toolName executed, not sending result back',
+        );
       }
       _toolRegistry.markCompleted(toolCall.id, message);
     } catch (e) {

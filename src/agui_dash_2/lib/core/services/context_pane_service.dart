@@ -59,7 +59,8 @@ class ContextPaneNotifier extends ServerScopedNotifier<ContextPaneState> {
   /// The room this context pane belongs to (null for server-scoped legacy usage).
   final String? roomId;
 
-  ContextPaneNotifier({super.serverId, this.roomId}) : super(const ContextPaneState());
+  ContextPaneNotifier({super.serverId, this.roomId})
+    : super(const ContextPaneState());
 
   /// Called when STATE_SNAPSHOT event is received.
   void updateState(Map<String, dynamic> newState) {

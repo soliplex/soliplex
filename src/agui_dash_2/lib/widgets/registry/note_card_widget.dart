@@ -104,10 +104,7 @@ class NoteCardWidget extends StatelessWidget {
           // Content
           Padding(
             padding: const EdgeInsets.all(12),
-            child: SelectableText(
-              content,
-              style: theme.textTheme.bodyMedium,
-            ),
+            child: SelectableText(content, style: theme.textTheme.bodyMedium),
           ),
         ],
       ),

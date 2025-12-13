@@ -38,9 +38,12 @@ class StorageKeys {
   static const String serverHistory = 'server_history';
 
   /// Get token key for a specific server
-  static String serverAccessToken(String serverId) => 'server_${serverId}_access_token';
-  static String serverRefreshToken(String serverId) => 'server_${serverId}_refresh_token';
-  static String serverTokenExpiry(String serverId) => 'server_${serverId}_token_expiry';
+  static String serverAccessToken(String serverId) =>
+      'server_${serverId}_access_token';
+  static String serverRefreshToken(String serverId) =>
+      'server_${serverId}_refresh_token';
+  static String serverTokenExpiry(String serverId) =>
+      'server_${serverId}_token_expiry';
 
   StorageKeys._();
 }
@@ -56,19 +59,17 @@ class NativeSecureStorageService implements SecureStorageService {
   bool _checkedAvailability = false;
 
   NativeSecureStorageService()
-      : _storage = const FlutterSecureStorage(
-          aOptions: AndroidOptions(
-            encryptedSharedPreferences: true,
-          ),
-          iOptions: IOSOptions(
-            accessibility: KeychainAccessibility.first_unlock_this_device,
-          ),
-          mOptions: MacOsOptions(
-            // Use unique account name to avoid keychain conflicts
-            accountName: 'soliplex_server_config',
-            accessibility: KeychainAccessibility.first_unlock_this_device,
-          ),
-        );
+    : _storage = const FlutterSecureStorage(
+        aOptions: AndroidOptions(encryptedSharedPreferences: true),
+        iOptions: IOSOptions(
+          accessibility: KeychainAccessibility.first_unlock_this_device,
+        ),
+        mOptions: MacOsOptions(
+          // Use unique account name to avoid keychain conflicts
+          accountName: 'soliplex_server_config',
+          accessibility: KeychainAccessibility.first_unlock_this_device,
+        ),
+      );
 
   Future<void> _checkAvailability() async {
     if (_checkedAvailability) return;
@@ -79,20 +80,30 @@ class NativeSecureStorageService implements SecureStorageService {
       // Try a test write/read to check if secure storage works
       // Add timeout to prevent hanging on keychain issues
       DebugLog.service('SecureStorage: Testing write...');
-      await _storage.write(key: '_test_key', value: 'test')
-          .timeout(const Duration(seconds: 5), onTimeout: () {
-        throw TimeoutException('Secure storage write timed out');
-      });
+      await _storage
+          .write(key: '_test_key', value: 'test')
+          .timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              throw TimeoutException('Secure storage write timed out');
+            },
+          );
       DebugLog.service('SecureStorage: Testing delete...');
-      await _storage.delete(key: '_test_key')
-          .timeout(const Duration(seconds: 5), onTimeout: () {
-        throw TimeoutException('Secure storage delete timed out');
-      });
+      await _storage
+          .delete(key: '_test_key')
+          .timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              throw TimeoutException('Secure storage delete timed out');
+            },
+          );
       _useFallback = false;
       DebugLog.service('SecureStorage: Using native secure storage');
     } catch (e) {
       DebugLog.warn('SecureStorage: Falling back to in-memory storage: $e');
-      DebugLog.warn('SecureStorage: For production, enable code signing in Xcode');
+      DebugLog.warn(
+        'SecureStorage: For production, enable code signing in Xcode',
+      );
       _useFallback = true;
     }
   }

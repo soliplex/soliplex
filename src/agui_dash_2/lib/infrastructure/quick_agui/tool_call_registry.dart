@@ -115,12 +115,7 @@ class ToolCallRegistry {
     );
     _calls[toolCallId] = failed;
 
-    _emitStateChange(
-      failed,
-      previousState,
-      ToolCallState.failed,
-      error: error,
-    );
+    _emitStateChange(failed, previousState, ToolCallState.failed, error: error);
   }
 
   /// Get all completed tool messages.
@@ -141,10 +136,10 @@ class ToolCallRegistry {
   TrackedToolCall? getTracked(String callId) => _calls[callId];
 
   /// Check if there are any pending or executing calls.
-  bool get hasActiveWork =>
-      _calls.values.any((t) =>
-          t.state == ToolCallState.received ||
-          t.state == ToolCallState.executing);
+  bool get hasActiveWork => _calls.values.any(
+    (t) =>
+        t.state == ToolCallState.received || t.state == ToolCallState.executing,
+  );
 
   /// Clear all tracked calls.
   void clear() {
@@ -165,14 +160,16 @@ class ToolCallRegistry {
   }) {
     if (_stateChangeController.isClosed) return;
 
-    _stateChangeController.add(ToolCallStateChange(
-      toolCallId: tracked.id,
-      toolName: tracked.toolName,
-      previousState: previousState,
-      newState: newState,
-      timestamp: DateTime.now(),
-      result: result,
-      error: error,
-    ));
+    _stateChangeController.add(
+      ToolCallStateChange(
+        toolCallId: tracked.id,
+        toolName: tracked.toolName,
+        previousState: previousState,
+        newState: newState,
+        timestamp: DateTime.now(),
+        result: result,
+        error: error,
+      ),
+    );
   }
 }

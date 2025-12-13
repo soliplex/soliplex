@@ -19,7 +19,8 @@ class ChatMessageList extends StatefulWidget {
   final void Function(String quotedText)? onQuote;
   final void Function(String messageId)? onToggleThinking;
   final void Function(String messageId)? onToggleToolGroup;
-  final void Function(String eventName, Map<String, Object?> arguments)? onGenUiEvent;
+  final void Function(String eventName, Map<String, Object?> arguments)?
+  onGenUiEvent;
 
   /// Optional widget to show at the top of the list (e.g., welcome card).
   /// This appears above all messages when the list is empty or has few messages.
@@ -103,9 +104,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
     final itemCount = baseCount + (hasWelcome ? 1 : 0);
 
     if (itemCount == 0) {
-      return const Center(
-        child: Text('No messages yet'),
-      );
+      return const Center(child: Text('No messages yet'));
     }
 
     return ListView.builder(
@@ -118,6 +117,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
         // If typing, index 0 shows typing indicator
         if (widget.isAgentTyping && index == 0) {
           return const Padding(
+            key: ValueKey('typing-indicator'),
             padding: EdgeInsets.only(bottom: 8),
             child: ChatTypingIndicator(),
           );
@@ -126,6 +126,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
         // Welcome widget appears at the top (highest index in reverse list)
         if (hasWelcome && index == itemCount - 1) {
           return Padding(
+            key: const ValueKey('welcome-widget'),
             padding: const EdgeInsets.only(bottom: 8),
             child: widget.welcomeWidget!,
           );
@@ -153,6 +154,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
             : null;
 
         return Padding(
+          key: ValueKey(message.id),
           padding: const EdgeInsets.only(bottom: 8),
           child: ChatMessageBubble(
             message: message,
@@ -185,7 +187,8 @@ extension ChatMessageListScrolling on ScrollController {
 
     // Estimate position (rough calculation - may need refinement)
     // For a more accurate approach, we'd need itemExtent or key-based scrolling
-    final estimatedPosition = (totalMessages - 1 - index) * 80.0; // Rough height
+    final estimatedPosition =
+        (totalMessages - 1 - index) * 80.0; // Rough height
 
     animateTo(
       estimatedPosition,

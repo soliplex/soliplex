@@ -8,6 +8,7 @@ import '../../core/models/layout_mode.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/providers/panel_providers.dart';
 import '../../core/network/connection_manager.dart';
+import '../../core/network/connection_registry.dart';
 import '../../core/services/feedback_service.dart';
 import '../../core/services/markdown_hooks.dart';
 import '../../core/services/rooms_service.dart';
@@ -37,12 +38,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// Track the current server URL to detect changes.
   String? _lastServerUrl;
 
+  /// Subscription for server change listener - must be cancelled on dispose.
+  ProviderSubscription<dynamic>? _serverChangeSubscription;
+
+  /// Subscription for auth state listener - must be cancelled on dispose.
+  ProviderSubscription<dynamic>? _authStateSubscription;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       _initializeMarkdownHooks();
-      _initializeConnectionManager();
+      await _initializeConnectionManager();
       _fetchRoomsAndSelectDefault();
       _setupServerChangeListener();
       _setupAuthStateListener();
@@ -59,26 +66,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final server = ref.read(currentServerFromAppStateProvider);
     _lastServerUrl = server?.url;
 
-    ref.listenManual(currentServerFromAppStateProvider, (previous, next) async {
-      if (next?.url != _lastServerUrl && next != null) {
-        debugPrint('Server changed: $_lastServerUrl -> ${next.url}');
-        _lastServerUrl = next.url;
+    _serverChangeSubscription = ref.listenManual(
+      currentServerFromAppStateProvider,
+      (previous, next) async {
+        if (next?.url != _lastServerUrl && next != null) {
+          debugPrint('Server changed: $_lastServerUrl -> ${next.url}');
+          _lastServerUrl = next.url;
 
-        // Clear selected room - old room ID is invalid for new server
-        ref.read(selectedRoomProvider.notifier).state = null;
+          // Clear selected room - old room ID is invalid for new server
+          ref.read(selectedRoomProvider.notifier).state = null;
 
-        // Reinitialize ConnectionManager immediately
-        _initializeConnectionManager();
+          // Reinitialize ConnectionManager and wait for it to complete
+          await _initializeConnectionManager();
 
-        // Wait for providers to settle before fetching rooms
-        // This prevents race conditions with provider invalidation
-        await Future.microtask(() {});
-
-        if (mounted) {
-          _fetchRoomsAndSelectDefault();
+          if (mounted) {
+            _fetchRoomsAndSelectDefault();
+          }
         }
-      }
-    });
+      },
+    );
   }
 
   /// Set up a listener for auth state changes.
@@ -87,7 +93,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// 1. Reinitialize ConnectionManager with auth headers
   /// 2. Fetch rooms (may need auth for some endpoints)
   void _setupAuthStateListener() {
-    ref.listenManual(appStateStreamProvider, (previous, next) async {
+    _authStateSubscription = ref.listenManual(appStateStreamProvider, (
+      previous,
+      next,
+    ) async {
+      // Use valueOrNull for safe access (Riverpod 2.x)
       final prevState = previous?.valueOrNull;
       final nextState = next.valueOrNull;
 
@@ -96,7 +106,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final isNowReady = nextState is AppStateReady;
 
       if (wasNotReady && isNowReady) {
-        debugPrint('Auth completed - reinitializing ConnectionManager with auth headers');
+        debugPrint(
+          'Auth completed - reinitializing ConnectionManager with auth headers',
+        );
 
         // Reinitialize ConnectionManager with auth headers
         await _initializeConnectionManager();
@@ -107,6 +119,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         }
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _serverChangeSubscription?.close();
+    _authStateSubscription?.close();
+    super.dispose();
   }
 
   /// Initialize markdown hooks with default behaviors.
@@ -128,14 +147,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     };
 
     hooks.onCodeCopy ??= (code, language, messageId) {
-      debugPrint('Code copied [$messageId]: ${language ?? 'unknown'} (${code.length} chars)');
+      debugPrint(
+        'Code copied [$messageId]: ${language ?? 'unknown'} (${code.length} chars)',
+      );
     };
   }
 
   /// Initialize ConnectionManager with the current server.
   Future<void> _initializeConnectionManager() async {
     final server = ref.read(currentServerFromAppStateProvider);
-    debugPrint('_initializeConnectionManager: server=${server?.url}, id=${server?.id}');
+    debugPrint(
+      '_initializeConnectionManager: server=${server?.url}, id=${server?.id}',
+    );
     if (server == null) return;
 
     // Get auth headers if available
@@ -143,7 +166,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     try {
       final authManager = ref.read(authManagerProvider);
       headers = await authManager.getAuthHeaders(server.id);
-      debugPrint('_initializeConnectionManager: got headers: ${headers.keys.toList()}');
+      debugPrint(
+        '_initializeConnectionManager: got headers: ${headers.keys.toList()}',
+      );
     } catch (e) {
       debugPrint('Failed to get auth headers: $e');
     }
@@ -152,7 +177,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     // Configure ConnectionManager with server URL
     final connectionManager = ref.read(connectionManagerProvider);
-    debugPrint('_initializeConnectionManager: calling switchServer with ${headers?.isNotEmpty == true ? "auth" : "no auth"}');
+    debugPrint(
+      '_initializeConnectionManager: calling switchServer with ${headers?.isNotEmpty == true ? "auth" : "no auth"}',
+    );
     connectionManager.switchServer(server.url, headers: headers);
   }
 
@@ -163,10 +190,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final server = ref.read(currentServerFromAppStateProvider);
     if (server == null) return;
 
-    // Set server URL and fetch rooms
-    // Note: We re-read the notifier after async operations because the provider
-    // may be invalidated during the fetch (e.g., during server switch).
-    ref.read(roomsProvider.notifier).setServerUrl(server.url, serverId: server.id);
+    // Get transport layer using ConnectionManager's server ID
+    // (ConnectionManager uses URL-derived ID, not app's UUID)
+    final connectionManager = ref.read(connectionManagerProvider);
+    final serverId = connectionManager.activeServerId;
+    if (serverId == null) return;
+
+    final registry = ref.read(connectionRegistryProvider);
+    final serverState = registry.getServerState(serverId);
+    ref
+        .read(roomsProvider.notifier)
+        .setTransportLayer(serverState?.transportLayer, server.url);
 
     try {
       await ref.read(roomsProvider.notifier).fetchRooms();
@@ -196,7 +230,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (roomId == null || !mounted) return;
 
     // Stop any active activity indicator from previous room
-    ref.read(activityStatusProvider.notifier).stopActivity();
+    ref.read(activeActivityStatusNotifierProvider)?.stopActivity();
 
     // Switch room in ConnectionManager
     final connectionManager = ref.read(connectionManagerProvider);
@@ -229,57 +263,60 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return KeyboardShortcutsWidget(
       child: Scaffold(
         appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildConnectionIndicator(isConfigured, isStreaming),
-            const SizedBox(width: 8),
-            Flexible(
-              child: _buildRoomSelector(roomsState, selectedRoom),
-            ),
-            if (selectedRoomData != null) ...[
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildConnectionIndicator(isConfigured, isStreaming),
               const SizedBox(width: 8),
-              CapabilityIcons(room: selectedRoomData),
+              Flexible(child: _buildRoomSelector(roomsState, selectedRoom)),
+              if (selectedRoomData != null) ...[
+                const SizedBox(width: 8),
+                CapabilityIcons(room: selectedRoomData),
+              ],
+              const SizedBox(width: 8),
+              _buildLayoutModeSelector(layoutMode),
             ],
-            const SizedBox(width: 8),
-            _buildLayoutModeSelector(layoutMode),
+          ),
+          actions: [
+            if (selectedRoomData != null)
+              IconButton(
+                icon: const Icon(Icons.info_outline),
+                tooltip: 'Room info',
+                onPressed: () => RoomInfoDrawer.show(context, selectedRoomData),
+              ),
+            // Notes feature not available on web (uses local file storage)
+            if (selectedRoom != null && !kIsWeb)
+              IconButton(
+                icon: const Icon(Icons.note_alt_outlined),
+                tooltip: 'Room notes',
+                onPressed: () => NotesDialog.show(context, selectedRoom),
+              ),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Refresh rooms',
+              onPressed: () => ref.read(roomsProvider.notifier).fetchRooms(),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Clear chat',
+              onPressed: () {
+                if (selectedRoom != null) {
+                  connectionManager.clearMessages(selectedRoom);
+                }
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.keyboard_outlined),
+              tooltip: 'Keyboard shortcuts',
+              onPressed: () => KeyboardShortcutsHelpDialog.show(context),
+            ),
+            IconButton(
+              icon: const Icon(Icons.bug_report_outlined),
+              tooltip: 'Network inspector',
+              onPressed: () => context.showNetworkInspector(),
+            ),
+            _buildServerMenu(),
           ],
-        ),
-        actions: [
-          if (selectedRoomData != null)
-            IconButton(
-              icon: const Icon(Icons.info_outline),
-              tooltip: 'Room info',
-              onPressed: () => RoomInfoDrawer.show(context, selectedRoomData),
-            ),
-          // Notes feature not available on web (uses local file storage)
-          if (selectedRoom != null && !kIsWeb)
-            IconButton(
-              icon: const Icon(Icons.note_alt_outlined),
-              tooltip: 'Room notes',
-              onPressed: () => NotesDialog.show(context, selectedRoom),
-            ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh rooms',
-            onPressed: () => ref.read(roomsProvider.notifier).fetchRooms(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Clear chat',
-            onPressed: () {
-              if (selectedRoom != null) {
-                connectionManager.clearMessages(selectedRoom);
-              }
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.keyboard_outlined),
-            tooltip: 'Keyboard shortcuts',
-            onPressed: () => KeyboardShortcutsHelpDialog.show(context),
-          ),
-          _buildServerMenu(),
-        ],
         ),
         body: _buildLayout(layoutMode),
       ),
@@ -418,15 +455,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               Text(
                 'Connected to:',
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
                 currentServer?.label ?? 'Unknown',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               if (appState is AppStateReady && appState.userName != null) ...[
                 const SizedBox(height: 2),

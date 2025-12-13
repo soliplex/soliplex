@@ -42,9 +42,15 @@ class ActivityStatusState {
   }) {
     return ActivityStatusState(
       isActive: isActive ?? this.isActive,
-      currentMessage: clearMessage ? null : (currentMessage ?? this.currentMessage),
-      currentEventType: clearEventType ? null : (currentEventType ?? this.currentEventType),
-      currentToolName: clearToolName ? null : (currentToolName ?? this.currentToolName),
+      currentMessage: clearMessage
+          ? null
+          : (currentMessage ?? this.currentMessage),
+      currentEventType: clearEventType
+          ? null
+          : (currentEventType ?? this.currentEventType),
+      currentToolName: clearToolName
+          ? null
+          : (currentToolName ?? this.currentToolName),
       messageIndex: messageIndex ?? this.messageIndex,
     );
   }
@@ -68,9 +74,12 @@ class ActivityStatusNotifier extends ServerScopedNotifier<ActivityStatusState> {
 
   bool _isDisposed = false;
 
-  ActivityStatusNotifier({ActivityStatusConfig? config, super.serverId, this.roomId})
-      : _config = config ?? ActivityStatusConfig.defaultConfig,
-        super(const ActivityStatusState());
+  ActivityStatusNotifier({
+    ActivityStatusConfig? config,
+    super.serverId,
+    this.roomId,
+  }) : _config = config ?? ActivityStatusConfig.defaultConfig,
+       super(const ActivityStatusState());
 
   /// Start activity indicator (called on RunStarted).
   void startActivity() {
@@ -120,10 +129,7 @@ class ActivityStatusNotifier extends ServerScopedNotifier<ActivityStatusState> {
     // Cancel injected message timer if exists
     _injectedMessageTimer?.cancel();
 
-    state = state.copyWith(
-      isActive: true,
-      currentMessage: message,
-    );
+    state = state.copyWith(isActive: true, currentMessage: message);
 
     // If duration specified, return to normal cycling after
     if (duration != null) {

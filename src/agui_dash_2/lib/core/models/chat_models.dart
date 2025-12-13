@@ -84,7 +84,14 @@ class ToolCallSummary extends Equatable {
   }
 
   @override
-  List<Object?> get props => [toolCallId, toolName, status, errorMessage, startedAt, completedAt];
+  List<Object?> get props => [
+    toolCallId,
+    toolName,
+    status,
+    errorMessage,
+    startedAt,
+    completedAt,
+  ];
 }
 
 /// Represents a message in the chat.

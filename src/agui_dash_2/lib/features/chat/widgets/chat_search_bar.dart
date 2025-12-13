@@ -42,11 +42,9 @@ class _ChatSearchBarState extends ConsumerState<ChatSearchBar> {
   }
 
   void _onSearchChanged(String value) {
-    ref.read(chatSearchProvider.notifier).search(
-          value,
-          widget.messageIds,
-          widget.getMessageText,
-        );
+    ref
+        .read(chatSearchProvider.notifier)
+        .search(value, widget.messageIds, widget.getMessageText);
   }
 
   void _close() {
@@ -62,18 +60,12 @@ class _ChatSearchBarState extends ConsumerState<ChatSearchBar> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest,
-        border: Border(
-          bottom: BorderSide(color: colorScheme.outlineVariant),
-        ),
+        border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
       ),
       child: Row(
         children: [
           // Search icon
-          Icon(
-            Icons.search,
-            size: 20,
-            color: colorScheme.onSurfaceVariant,
-          ),
+          Icon(Icons.search, size: 20, color: colorScheme.onSurfaceVariant),
           const SizedBox(width: 8),
 
           // Search input

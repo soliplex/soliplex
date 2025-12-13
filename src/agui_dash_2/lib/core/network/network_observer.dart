@@ -18,10 +18,7 @@ class NetworkObserver {
 
   StreamSubscription<ConnectionEvent>? _subscription;
 
-  NetworkObserver(
-    this._manager, {
-    this.maxEventHistory = 100,
-  }) {
+  NetworkObserver(this._manager, {this.maxEventHistory = 100}) {
     _subscription = _manager.events.listen(_onEvent);
   }
 
@@ -67,12 +64,12 @@ class NetworkObserver {
 
   /// Get summary stats.
   NetworkStats get stats => NetworkStats(
-        totalConnections: connections.length,
-        activeCount: activeConnections.length,
-        streamingCount: streamingConnections.length,
-        backgroundedCount: backgroundedConnections.length,
-        totalEvents: _eventHistory.length,
-      );
+    totalConnections: connections.length,
+    activeCount: activeConnections.length,
+    streamingCount: streamingConnections.length,
+    backgroundedCount: backgroundedConnections.length,
+    totalEvents: _eventHistory.length,
+  );
 
   void dispose() {
     _subscription?.cancel();
@@ -111,7 +108,7 @@ final networkObserverProvider = Provider<NetworkObserver>((ref) {
 /// Provider for NetworkObserver with specific ConnectionManager.
 final networkObserverWithManagerProvider =
     Provider.family<NetworkObserver, ConnectionManager>((ref, manager) {
-  final observer = NetworkObserver(manager);
-  ref.onDispose(() => observer.dispose());
-  return observer;
-});
+      final observer = NetworkObserver(manager);
+      ref.onDispose(() => observer.dispose());
+      return observer;
+    });

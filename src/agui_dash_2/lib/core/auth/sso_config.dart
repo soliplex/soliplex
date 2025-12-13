@@ -33,6 +33,13 @@ class SsoConfig extends Equatable {
 
   @override
   List<Object?> get props => [
-    id, title, endpoint, tokenEndpoint, loginUrl, clientId, redirectUrl, scopes,
+    id,
+    title,
+    endpoint,
+    tokenEndpoint,
+    loginUrl,
+    clientId,
+    redirectUrl,
+    scopes,
   ];
 }

@@ -30,11 +30,7 @@ class CanvasItem {
 
   /// Convert to JSON for state serialization.
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'widget': widgetName,
-      'data': data,
-    };
+    return {'id': id, 'widget': widgetName, 'data': data};
   }
 
   /// Generate a semantic ID from widget data.
@@ -89,14 +85,18 @@ class CanvasItem {
         return data['title'] as String? ?? 'Info';
       case 'NoteCard':
         final content = data['content'] as String? ?? '';
-        final preview = content.length > 50 ? '${content.substring(0, 50)}...' : content;
+        final preview = content.length > 50
+            ? '${content.substring(0, 50)}...'
+            : content;
         return 'Note: $preview';
       case 'CodeCard':
         final lang = data['language'] as String? ?? 'code';
         return 'Code ($lang)';
       case 'MarkdownCard':
         final content = data['content'] as String? ?? '';
-        final preview = content.length > 50 ? '${content.substring(0, 50)}...' : content;
+        final preview = content.length > 50
+            ? '${content.substring(0, 50)}...'
+            : content;
         return 'Markdown: $preview';
       default:
         return widgetName;
@@ -119,9 +119,7 @@ class CanvasState {
 
   /// Convert to JSON for AG-UI state field.
   Map<String, dynamic> toJson() {
-    return {
-      'canvas': items.map((item) => item.toJson()).toList(),
-    };
+    return {'canvas': items.map((item) => item.toJson()).toList()};
   }
 
   /// Human-readable summary for LLM context.
@@ -137,7 +135,9 @@ class CanvasState {
     for (final entry in grouped.entries) {
       final widgetType = entry.key;
       final widgetItems = entry.value;
-      final summaries = widgetItems.map((i) => '  - ${i.summary} [${i.id}]').join('\n');
+      final summaries = widgetItems
+          .map((i) => '  - ${i.summary} [${i.id}]')
+          .join('\n');
       parts.add('$widgetType (${widgetItems.length}):\n$summaries');
     }
     return 'Canvas contents:\n${parts.join('\n')}';
@@ -179,22 +179,14 @@ class CanvasNotifier extends ServerScopedNotifier<CanvasState> {
     }
 
     // Add new item
-    final item = CanvasItem(
-      id: id,
-      widgetName: widgetName,
-      data: data,
-    );
+    final item = CanvasItem(id: id, widgetName: widgetName, data: data);
     state = state.copyWith(items: [...state.items, item]);
   }
 
   /// Replace all items with a single new item.
   void replaceAll(String widgetName, Map<String, dynamic> data) {
     final id = CanvasItem.semanticId(widgetName, data);
-    final item = CanvasItem(
-      id: id,
-      widgetName: widgetName,
-      data: data,
-    );
+    final item = CanvasItem(id: id, widgetName: widgetName, data: data);
     state = state.copyWith(items: [item]);
   }
 

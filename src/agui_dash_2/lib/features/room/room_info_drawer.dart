@@ -49,9 +49,7 @@ class RoomInfoDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Drawer(
       width: 360,
-      child: SafeArea(
-        child: _RoomInfoContent(room: room),
-      ),
+      child: SafeArea(child: _RoomInfoContent(room: room)),
     );
   }
 }
@@ -60,10 +58,7 @@ class _RoomInfoContent extends ConsumerWidget {
   final Room room;
   final ScrollController? scrollController;
 
-  const _RoomInfoContent({
-    required this.room,
-    this.scrollController,
-  });
+  const _RoomInfoContent({required this.room, this.scrollController});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -211,7 +206,9 @@ class _RoomInfoContent extends ConsumerWidget {
                   children: room.mcpClientToolsets.entries.map((entry) {
                     final toolset = entry.value;
                     return _InfoRow(
-                      icon: toolset.kind == 'http' ? Icons.http : Icons.terminal,
+                      icon: toolset.kind == 'http'
+                          ? Icons.http
+                          : Icons.terminal,
                       label: entry.key,
                       value: toolset.kind.toUpperCase(),
                       subtitle: toolset.url ?? toolset.command,
@@ -224,9 +221,7 @@ class _RoomInfoContent extends ConsumerWidget {
               // System prompt
               if (room.agent?.systemPrompt != null &&
                   room.agent!.systemPrompt!.isNotEmpty) ...[
-                SystemPromptViewer(
-                  systemPrompt: room.agent!.systemPrompt,
-                ),
+                SystemPromptViewer(systemPrompt: room.agent!.systemPrompt),
                 const SizedBox(height: 20),
               ],
 
@@ -290,9 +285,7 @@ class _InfoCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: colorScheme.outline.withValues(alpha: 0.1),
-        ),
+        border: Border.all(color: colorScheme.outline.withValues(alpha: 0.1)),
       ),
       child: Column(
         children: [
@@ -333,11 +326,7 @@ class _InfoRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: Row(
         children: [
-          Icon(
-            icon,
-            size: 18,
-            color: colorScheme.onSurfaceVariant,
-          ),
+          Icon(icon, size: 18, color: colorScheme.onSurfaceVariant),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -353,7 +342,9 @@ class _InfoRow extends StatelessWidget {
                   Text(
                     subtitle!,
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                      color: colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.7,
+                      ),
                       fontFamily: 'monospace',
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -393,18 +384,9 @@ class _FeatureRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: Row(
         children: [
-          Icon(
-            icon,
-            size: 18,
-            color: colorScheme.onSurfaceVariant,
-          ),
+          Icon(icon, size: 18, color: colorScheme.onSurfaceVariant),
           const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              label,
-              style: theme.textTheme.bodyMedium,
-            ),
-          ),
+          Expanded(child: Text(label, style: theme.textTheme.bodyMedium)),
           Icon(
             enabled ? Icons.check_circle : Icons.cancel_outlined,
             size: 18,

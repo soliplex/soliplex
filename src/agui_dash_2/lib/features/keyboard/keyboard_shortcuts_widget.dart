@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -89,10 +90,7 @@ class _KeyboardShortcutsWidgetState
             },
           ),
         },
-        child: Focus(
-          autofocus: true,
-          child: widget.child,
-        ),
+        child: Focus(autofocus: true, child: widget.child),
       ),
     );
   }

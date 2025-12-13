@@ -183,10 +183,7 @@ void main() {
 
     group('Backward Compatibility', () {
       test('getSession throws if no server configured', () {
-        expect(
-          () => manager.getSession('room1'),
-          throwsA(isA<StateError>()),
-        );
+        expect(() => manager.getSession('room1'), throwsA(isA<StateError>()));
       });
 
       test('getSession creates session on current server', () {
@@ -199,10 +196,7 @@ void main() {
       });
 
       test('switchRoom throws if no server configured', () {
-        expect(
-          () => manager.switchRoom('room1'),
-          throwsA(isA<StateError>()),
-        );
+        expect(() => manager.switchRoom('room1'), throwsA(isA<StateError>()));
       });
 
       test('switchRoom updates registry active key', () async {

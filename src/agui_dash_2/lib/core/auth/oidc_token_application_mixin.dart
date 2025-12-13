@@ -10,7 +10,8 @@ import 'sso_config.dart';
 class SsoConfigNotSetException implements Exception {
   final String message;
   SsoConfigNotSetException([
-    this.message = 'Single sign on config has not been selected. '
+    this.message =
+        'Single sign on config has not been selected. '
         'Please try again after selecting a SSO configuration.',
   ]);
 
@@ -75,7 +76,8 @@ abstract class OidcAuthInteractorBase implements OidcAuthInteractor {
   Future<SsoConfig?> getSsoConfig() => ssoStorage.getSsoConfig();
 
   @override
-  Future<void> setSsoConfig(SsoConfig config) => ssoStorage.setSsoConfig(config);
+  Future<void> setSsoConfig(SsoConfig config) =>
+      ssoStorage.setSsoConfig(config);
 
   @override
   Future<void> clearSsoConfig() => ssoStorage.deleteSsoConfig();
@@ -129,7 +131,9 @@ abstract class OidcAuthInteractorBase implements OidcAuthInteractor {
       headers['authorization'] = 'Bearer $token';
     } else {
       debugPrint('Token not expired.');
-      debugPrint('Current token expiration: ${currentToken!.accessTokenExpiration}');
+      debugPrint(
+        'Current token expiration: ${currentToken!.accessTokenExpiration}',
+      );
       headers['authorization'] = 'Bearer ${currentToken.accessToken}';
     }
   }
@@ -155,14 +159,18 @@ abstract class OidcAuthInteractorBase implements OidcAuthInteractor {
 
     if (refreshResponse != null) {
       debugPrint('Refresh successful');
-      debugPrint('New token expiration: ${refreshResponse.accessTokenExpiration}');
+      debugPrint(
+        'New token expiration: ${refreshResponse.accessTokenExpiration}',
+      );
       return refreshResponse.accessToken;
     }
 
     // Refresh failed, need to re-authenticate
     debugPrint('Refresh not successful, re-authenticating...');
     final newTokenResponse = await authorizeAndExchangeCode(ssoConfig);
-    debugPrint('Signed in again. New expiration: ${newTokenResponse.accessTokenExpiration}');
+    debugPrint(
+      'Signed in again. New expiration: ${newTokenResponse.accessTokenExpiration}',
+    );
     return newTokenResponse.accessToken;
   }
 

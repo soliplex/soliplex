@@ -14,10 +14,7 @@ class ServerRoomKey {
   /// Creates a new server-room key.
   ///
   /// Both [serverId] and [roomId] must be non-empty strings.
-  const ServerRoomKey({
-    required this.serverId,
-    required this.roomId,
-  });
+  const ServerRoomKey({required this.serverId, required this.roomId});
 
   /// Creates a key from a colon-separated string (e.g., "server1:room1").
   ///
@@ -25,7 +22,9 @@ class ServerRoomKey {
   factory ServerRoomKey.parse(String key) {
     final colonIndex = key.indexOf(':');
     if (colonIndex == -1 || colonIndex == 0 || colonIndex == key.length - 1) {
-      throw FormatException('Invalid ServerRoomKey format: "$key". Expected "serverId:roomId"');
+      throw FormatException(
+        'Invalid ServerRoomKey format: "$key". Expected "serverId:roomId"',
+      );
     }
     return ServerRoomKey(
       serverId: key.substring(0, colonIndex),
@@ -51,10 +50,7 @@ class ServerRoomKey {
   String toString() => '$serverId:$roomId';
 
   /// Creates a copy with optionally updated fields.
-  ServerRoomKey copyWith({
-    String? serverId,
-    String? roomId,
-  }) {
+  ServerRoomKey copyWith({String? serverId, String? roomId}) {
     return ServerRoomKey(
       serverId: serverId ?? this.serverId,
       roomId: roomId ?? this.roomId,

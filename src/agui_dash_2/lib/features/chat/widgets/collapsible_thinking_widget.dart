@@ -68,10 +68,7 @@ class CollapsibleThinkingWidget extends StatelessWidget {
           children: [
             // Brain icon with subtle animation while streaming
             if (isStreaming)
-              _PulsingIcon(
-                icon: Icons.psychology,
-                color: colorScheme.primary,
-              )
+              _PulsingIcon(icon: Icons.psychology, color: colorScheme.primary)
             else
               Icon(
                 Icons.psychology_outlined,
@@ -157,10 +154,7 @@ class _PulsingIcon extends StatefulWidget {
   final IconData icon;
   final Color color;
 
-  const _PulsingIcon({
-    required this.icon,
-    required this.color,
-  });
+  const _PulsingIcon({required this.icon, required this.color});
 
   @override
   State<_PulsingIcon> createState() => _PulsingIconState();
@@ -179,9 +173,10 @@ class _PulsingIconState extends State<_PulsingIcon>
       vsync: this,
     )..repeat(reverse: true);
 
-    _animation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _animation = Tween<double>(
+      begin: 0.5,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -197,11 +192,7 @@ class _PulsingIconState extends State<_PulsingIcon>
       builder: (context, child) {
         return Opacity(
           opacity: _animation.value,
-          child: Icon(
-            widget.icon,
-            size: 18,
-            color: widget.color,
-          ),
+          child: Icon(widget.icon, size: 18, color: widget.color),
         );
       },
     );

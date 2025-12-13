@@ -10,10 +10,7 @@ import 'notes_service.dart';
 class NotesDialog extends ConsumerStatefulWidget {
   final String roomId;
 
-  const NotesDialog({
-    super.key,
-    required this.roomId,
-  });
+  const NotesDialog({super.key, required this.roomId});
 
   /// Show the notes dialog.
   static Future<void> show(BuildContext context, String roomId) {
@@ -138,9 +135,12 @@ class _NotesDialogState extends ConsumerState<NotesDialog> {
                       expands: true,
                       textAlignVertical: TextAlignVertical.top,
                       decoration: InputDecoration(
-                        hintText: 'Write your notes here...\n\nSupports markdown formatting.',
+                        hintText:
+                            'Write your notes here...\n\nSupports markdown formatting.',
                         filled: true,
-                        fillColor: Theme.of(context).colorScheme.surfaceContainerLowest,
+                        fillColor: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerLowest,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                           borderSide: BorderSide.none,
@@ -165,15 +165,9 @@ class _NotesDialogState extends ConsumerState<NotesDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                TextButton(
-                  onPressed: _save,
-                  child: const Text('Save'),
-                ),
+                TextButton(onPressed: _save, child: const Text('Save')),
                 const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _close,
-                  child: const Text('Close'),
-                ),
+                FilledButton(onPressed: _close, child: const Text('Close')),
               ],
             ),
           ],

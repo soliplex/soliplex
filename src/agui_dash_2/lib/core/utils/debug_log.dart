@@ -11,14 +11,15 @@ class DebugLog {
   static bool enabled = true;
 
   /// Log categories - enable only what you need to debug
-  static bool agUiEvents = true;       // AG-UI event processing
-  static bool chatMessages = true;     // Chat message flow (critical for debugging)
-  static bool messageMapping = true;   // Message ID mapping (critical for second response issue)
-  static bool toolsEnabled = false;    // Tool execution
-  static bool threadEnabled = false;   // Thread/SSE stream processing
+  static bool agUiEvents = true; // AG-UI event processing
+  static bool chatMessages = true; // Chat message flow (critical for debugging)
+  static bool messageMapping =
+      true; // Message ID mapping (critical for second response issue)
+  static bool toolsEnabled = false; // Tool execution
+  static bool threadEnabled = false; // Thread/SSE stream processing
   static bool servicesEnabled = false; // Service initialization
-  static bool canvasEnabled = false;   // Canvas operations
-  static bool networkEnabled = true;   // Network/connection management
+  static bool canvasEnabled = false; // Canvas operations
+  static bool networkEnabled = true; // Network/connection management
 
   static void log(String category, String message) {
     if (!enabled) return;

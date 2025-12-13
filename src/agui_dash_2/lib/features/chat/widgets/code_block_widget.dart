@@ -56,7 +56,10 @@ class MessageTextWithCodeBlocks extends StatelessWidget {
   /// Parse text into segments of regular text and code blocks.
   List<_TextSegment> _parseCodeBlocks(String text) {
     final segments = <_TextSegment>[];
-    final codeBlockPattern = RegExp(r'```(\w*)\n?([\s\S]*?)```', multiLine: true);
+    final codeBlockPattern = RegExp(
+      r'```(\w*)\n?([\s\S]*?)```',
+      multiLine: true,
+    );
 
     int lastEnd = 0;
     for (final match in codeBlockPattern.allMatches(text)) {
@@ -71,11 +74,9 @@ class MessageTextWithCodeBlocks extends StatelessWidget {
       // Add code block
       final language = match.group(1) ?? '';
       final code = match.group(2) ?? '';
-      segments.add(_TextSegment(
-        content: code.trim(),
-        isCode: true,
-        language: language,
-      ));
+      segments.add(
+        _TextSegment(content: code.trim(), isCode: true, language: language),
+      );
 
       lastEnd = match.end;
     }
@@ -103,11 +104,7 @@ class _TextSegment {
   final bool isCode;
   final String? language;
 
-  _TextSegment({
-    required this.content,
-    required this.isCode,
-    this.language,
-  });
+  _TextSegment({required this.content, required this.isCode, this.language});
 }
 
 /// Selectable text with quote context menu option.
@@ -170,11 +167,7 @@ class _CodeBlock extends StatefulWidget {
   final String? language;
   final void Function(String quotedText)? onQuote;
 
-  const _CodeBlock({
-    required this.code,
-    this.language,
-    this.onQuote,
-  });
+  const _CodeBlock({required this.code, this.language, this.onQuote});
 
   @override
   State<_CodeBlock> createState() => _CodeBlockState();
@@ -199,10 +192,7 @@ class _CodeBlockState extends State<_CodeBlock> {
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: colorScheme.outlineVariant,
-          width: 1,
-        ),
+        border: Border.all(color: colorScheme.outlineVariant, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -212,7 +202,9 @@ class _CodeBlockState extends State<_CodeBlock> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: colorScheme.surfaceContainerHigh,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(7)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(7),
+              ),
             ),
             child: Row(
               children: [
@@ -238,14 +230,18 @@ class _CodeBlockState extends State<_CodeBlock> {
                         Icon(
                           _copied ? Icons.check : Icons.copy_outlined,
                           size: 14,
-                          color: _copied ? Colors.green : colorScheme.onSurfaceVariant,
+                          color: _copied
+                              ? Colors.green
+                              : colorScheme.onSurfaceVariant,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           _copied ? 'Copied!' : 'Copy',
                           style: TextStyle(
                             fontSize: 12,
-                            color: _copied ? Colors.green : colorScheme.onSurfaceVariant,
+                            color: _copied
+                                ? Colors.green
+                                : colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],

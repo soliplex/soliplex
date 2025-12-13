@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -97,10 +98,7 @@ class KeyboardShortcutsHelpDialog extends ConsumerWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              shortcut.label,
-              style: theme.textTheme.bodyMedium,
-            ),
+            child: Text(shortcut.label, style: theme.textTheme.bodyMedium),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

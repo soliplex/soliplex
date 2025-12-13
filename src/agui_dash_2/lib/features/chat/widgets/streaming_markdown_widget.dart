@@ -72,11 +72,9 @@ class _StreamingMarkdownWidgetState
           hooks.onStreamingComplete?.call();
         },
         theme: StreamingTextTheme(
-          textStyle: widget.textStyle ??
-              TextStyle(
-                color: colorScheme.onSurface,
-                fontSize: 14,
-              ),
+          textStyle:
+              widget.textStyle ??
+              TextStyle(color: colorScheme.onSurface, fontSize: 14),
         ),
       );
     } else {
@@ -92,11 +90,9 @@ class _StreamingMarkdownWidgetState
       data: widget.text,
       selectable: true,
       styleSheet: MarkdownStyleSheet(
-        p: widget.textStyle ??
-            TextStyle(
-              color: colorScheme.onSurface,
-              fontSize: 14,
-            ),
+        p:
+            widget.textStyle ??
+            TextStyle(color: colorScheme.onSurface, fontSize: 14),
         code: TextStyle(
           fontFamily: 'monospace',
           fontSize: 13,
@@ -129,10 +125,7 @@ class _StreamingMarkdownWidgetState
         blockquoteDecoration: BoxDecoration(
           color: colorScheme.surfaceContainerHighest,
           border: Border(
-            left: BorderSide(
-              color: colorScheme.primary,
-              width: 4,
-            ),
+            left: BorderSide(color: colorScheme.primary, width: 4),
           ),
         ),
         blockquotePadding: const EdgeInsets.all(12),

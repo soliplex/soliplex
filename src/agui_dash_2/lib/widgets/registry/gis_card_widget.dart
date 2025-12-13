@@ -113,10 +113,12 @@ class GISCardWidget extends StatelessWidget {
       showAccuracyCircle: data['showAccuracyCircle'] as bool? ?? true,
       onTap: onEvent != null
           ? () => onEvent('tap', {
-                'coordinates': coords
-                    .map((c) => {'latitude': c.latitude, 'longitude': c.longitude})
-                    .toList(),
-              })
+              'coordinates': coords
+                  .map(
+                    (c) => {'latitude': c.latitude, 'longitude': c.longitude},
+                  )
+                  .toList(),
+            })
           : null,
     );
   }
@@ -141,7 +143,9 @@ class GISCardWidget extends StatelessWidget {
   /// Calculate bounds that contain all coordinates with padding.
   LatLngBounds? get _bounds {
     if (coordinates.isEmpty) return null;
-    if (coordinates.length == 1) return null; // Use center/zoom for single point
+    if (coordinates.length == 1) {
+      return null; // Use center/zoom for single point
+    }
 
     double minLat = coordinates.first.latitude;
     double maxLat = coordinates.first.latitude;
@@ -155,10 +159,7 @@ class GISCardWidget extends StatelessWidget {
       if (coord.longitude > maxLng) maxLng = coord.longitude;
     }
 
-    return LatLngBounds(
-      LatLng(minLat, minLng),
-      LatLng(maxLat, maxLng),
-    );
+    return LatLngBounds(LatLng(minLat, minLng), LatLng(maxLat, maxLng));
   }
 
   void _openMapModal(BuildContext context) {
@@ -198,11 +199,7 @@ class GISCardWidget extends StatelessWidget {
                       color: Colors.blue.withAlpha(25),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(
-                      Icons.map,
-                      color: Colors.blue,
-                      size: 20,
-                    ),
+                    child: const Icon(Icons.map, color: Colors.blue, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -211,20 +208,20 @@ class GISCardWidget extends StatelessWidget {
                       children: [
                         Text(
                           title ?? (pointCount > 1 ? 'Locations' : 'Location'),
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         Text(
                           pointCount > 1
                               ? '$pointCount points'
                               : first != null
-                                  ? '${first.latitude.toStringAsFixed(4)}, ${first.longitude.toStringAsFixed(4)}'
-                                  : 'No coordinates',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.grey.shade600,
-                            fontFamily: 'monospace',
-                          ),
+                              ? '${first.latitude.toStringAsFixed(4)}, ${first.longitude.toStringAsFixed(4)}'
+                              : 'No coordinates',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Colors.grey.shade600,
+                                fontFamily: 'monospace',
+                              ),
                         ),
                       ],
                     ),
@@ -263,7 +260,8 @@ class GISCardWidget extends StatelessWidget {
                   children: [
                     // OpenStreetMap tiles
                     TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       userAgentPackageName: 'com.example.agui_dash_2',
                     ),
                     // Accuracy circles
@@ -271,14 +269,18 @@ class GISCardWidget extends StatelessWidget {
                       CircleLayer(
                         circles: coordinates
                             .where((c) => c.accuracy != null && c.accuracy! > 0)
-                            .map((c) => CircleMarker(
-                                  point: c.toLatLng(),
-                                  radius: c.accuracy!,
-                                  useRadiusInMeter: true,
-                                  color: (c.color ?? Colors.blue).withAlpha(40),
-                                  borderColor: (c.color ?? Colors.blue).withAlpha(150),
-                                  borderStrokeWidth: 2,
-                                ))
+                            .map(
+                              (c) => CircleMarker(
+                                point: c.toLatLng(),
+                                radius: c.accuracy!,
+                                useRadiusInMeter: true,
+                                color: (c.color ?? Colors.blue).withAlpha(40),
+                                borderColor: (c.color ?? Colors.blue).withAlpha(
+                                  150,
+                                ),
+                                borderStrokeWidth: 2,
+                              ),
+                            )
                             .toList(),
                       ),
                     // Location markers
@@ -286,16 +288,18 @@ class GISCardWidget extends StatelessWidget {
                       markers: coordinates
                           .asMap()
                           .entries
-                          .map((entry) => Marker(
-                                point: entry.value.toLatLng(),
-                                width: 40,
-                                height: 40,
-                                child: Icon(
-                                  Icons.location_on,
-                                  color: entry.value.color ?? Colors.red,
-                                  size: 40,
-                                ),
-                              ))
+                          .map(
+                            (entry) => Marker(
+                              point: entry.value.toLatLng(),
+                              width: 40,
+                              height: 40,
+                              child: Icon(
+                                Icons.location_on,
+                                color: entry.value.color ?? Colors.red,
+                                size: 40,
+                              ),
+                            ),
+                          )
                           .toList(),
                     ),
                   ],
@@ -311,11 +315,7 @@ class GISCardWidget extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.touch_app,
-                    size: 14,
-                    color: Colors.grey.shade500,
-                  ),
+                  Icon(Icons.touch_app, size: 14, color: Colors.grey.shade500),
                   const SizedBox(width: 4),
                   Text(
                     'Tap to open interactive map',

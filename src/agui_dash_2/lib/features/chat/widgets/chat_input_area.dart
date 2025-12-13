@@ -46,7 +46,8 @@ class ChatInputArea extends StatefulWidget {
 class _ChatInputAreaState extends State<ChatInputArea> {
   FocusNode? _ownedFocusNode;
 
-  FocusNode get _focusNode => widget.focusNode ?? (_ownedFocusNode ??= FocusNode());
+  FocusNode get _focusNode =>
+      widget.focusNode ?? (_ownedFocusNode ??= FocusNode());
 
   @override
   void dispose() {
@@ -81,9 +82,7 @@ class _ChatInputAreaState extends State<ChatInputArea> {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         border: Border(
-          top: BorderSide(
-            color: colorScheme.outline.withValues(alpha: 0.1),
-          ),
+          top: BorderSide(color: colorScheme.outline.withValues(alpha: 0.1)),
         ),
       ),
       child: SafeArea(
@@ -93,7 +92,9 @@ class _ChatInputAreaState extends State<ChatInputArea> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Welcome card (shown when no messages)
-            if (widget.showWelcome && !widget.hasMessages && widget.room != null)
+            if (widget.showWelcome &&
+                !widget.hasMessages &&
+                widget.room != null)
               WelcomeCard(
                 room: widget.room!,
                 onSuggestionTap: _handleSuggestionTap,
@@ -131,10 +132,7 @@ class _SuggestionsSection extends StatelessWidget {
   final List<String> suggestions;
   final void Function(String) onTap;
 
-  const _SuggestionsSection({
-    required this.suggestions,
-    required this.onTap,
-  });
+  const _SuggestionsSection({required this.suggestions, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -154,10 +152,7 @@ class _SuggestionsSection extends StatelessWidget {
             ),
           ),
         ),
-        SuggestionChips(
-          suggestions: suggestions,
-          onSuggestionTap: onTap,
-        ),
+        SuggestionChips(suggestions: suggestions, onSuggestionTap: onTap),
       ],
     );
   }
@@ -241,11 +236,7 @@ class ActivityStatusBar extends StatelessWidget {
   final String message;
   final VoidCallback? onStop;
 
-  const ActivityStatusBar({
-    super.key,
-    required this.message,
-    this.onStop,
-  });
+  const ActivityStatusBar({super.key, required this.message, this.onStop});
 
   @override
   Widget build(BuildContext context) {
@@ -256,9 +247,7 @@ class ActivityStatusBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         border: Border(
-          top: BorderSide(
-            color: colorScheme.outline.withValues(alpha: 0.1),
-          ),
+          top: BorderSide(color: colorScheme.outline.withValues(alpha: 0.1)),
         ),
       ),
       child: SafeArea(
@@ -370,10 +359,9 @@ class _ActivityDotsState extends State<_ActivityDots>
               height: 6 * scale,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Theme.of(context)
-                    .colorScheme
-                    .primary
-                    .withAlpha((opacity * 255).round()),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withAlpha((opacity * 255).round()),
               ),
             );
           },

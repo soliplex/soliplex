@@ -2,8 +2,9 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 
+import '../network/connection_registry.dart';
+import '../network/network_transport_layer.dart';
 import '../utils/url_builder.dart';
 
 /// Information about a thread from the API.
@@ -74,19 +75,28 @@ class ThreadHistoryState {
 class ThreadHistoryNotifier extends StateNotifier<ThreadHistoryState> {
   final String baseUrl;
   final String roomId;
-  final http.Client _client;
+  final NetworkTransportLayer? _transportLayer;
   final UrlBuilder _urlBuilder;
 
   ThreadHistoryNotifier({
     required this.baseUrl,
     required this.roomId,
-    http.Client? client,
-  }) : _client = client ?? http.Client(),
+    NetworkTransportLayer? transportLayer,
+  }) : _transportLayer = transportLayer,
        _urlBuilder = UrlBuilder(baseUrl),
        super(const ThreadHistoryState());
 
   /// Fetch threads from the API.
   Future<void> fetchThreads() async {
+    if (_transportLayer == null) {
+      debugPrint('ThreadHistory: No transport layer available');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'No transport layer configured',
+      );
+      return;
+    }
+
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
@@ -94,10 +104,7 @@ class ThreadHistoryNotifier extends StateNotifier<ThreadHistoryState> {
       final uri = _urlBuilder.roomThreads(roomId);
       debugPrint('ThreadHistory: Fetching threads from $uri');
 
-      final response = await _client.get(
-        uri,
-        headers: {'Accept': 'application/json'},
-      );
+      final response = await _transportLayer.get(uri);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -155,15 +162,24 @@ class ThreadHistoryNotifier extends StateNotifier<ThreadHistoryState> {
   }
 }
 
-/// Provider for thread history, scoped by room.
+/// Provider for thread history, scoped by server and room.
+///
+/// Uses [NetworkTransportLayer] from [ConnectionRegistry] for:
+/// - Automatic auth header injection
+/// - 401 retry with header refresh
+/// - Network Inspector visibility
 final threadHistoryProvider =
     StateNotifierProvider.family<
       ThreadHistoryNotifier,
       ThreadHistoryState,
-      ({String baseUrl, String roomId})
+      ({String serverId, String roomId})
     >((ref, params) {
+      final registry = ref.read(connectionRegistryProvider);
+      final serverState = registry.getServerState(params.serverId);
+
       return ThreadHistoryNotifier(
-        baseUrl: params.baseUrl,
+        baseUrl: serverState?.baseUrl ?? '',
         roomId: params.roomId,
+        transportLayer: serverState?.transportLayer,
       );
     });

@@ -27,9 +27,7 @@ class ServerHistoryWidget extends ConsumerWidget {
     final currentServer = ref.watch(currentServerFromAppStateProvider);
 
     if (history.isEmpty) {
-      return const Center(
-        child: Text('No saved servers'),
-      );
+      return const Center(child: Text('No saved servers'));
     }
 
     return ListView.builder(
@@ -78,7 +76,9 @@ class ServerHistoryWidget extends ConsumerWidget {
     );
 
     if (confirmed == true && context.mounted) {
-      await ref.read(appStateManagerProvider).removeServerFromHistory(server.id);
+      await ref
+          .read(appStateManagerProvider)
+          .removeServerFromHistory(server.id);
     }
   }
 }
@@ -124,10 +124,7 @@ class _ServerHistoryTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (server.displayName != null)
-            Text(
-              server.url,
-              style: theme.textTheme.bodySmall,
-            ),
+            Text(server.url, style: theme.textTheme.bodySmall),
           Row(
             children: [
               Icon(
@@ -185,10 +182,7 @@ class _ServerHistoryTile extends StatelessWidget {
 class ServerHistoryPopup extends ConsumerWidget {
   final VoidCallback? onAddNew;
 
-  const ServerHistoryPopup({
-    super.key,
-    this.onAddNew,
-  });
+  const ServerHistoryPopup({super.key, this.onAddNew});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -202,10 +196,7 @@ class ServerHistoryPopup extends ConsumerWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Text(
-            'Servers',
-            style: theme.textTheme.titleSmall,
-          ),
+          child: Text('Servers', style: theme.textTheme.titleSmall),
         ),
         const Divider(height: 1),
         ...history.map((server) {
@@ -224,7 +215,9 @@ class ServerHistoryPopup extends ConsumerWidget {
             ),
             selected: isSelected,
             onTap: () {
-              ref.read(appStateManagerProvider).selectServerFromHistory(server.id);
+              ref
+                  .read(appStateManagerProvider)
+                  .selectServerFromHistory(server.id);
               Navigator.pop(context);
             },
           );

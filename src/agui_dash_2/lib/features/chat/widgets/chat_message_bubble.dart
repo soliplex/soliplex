@@ -25,7 +25,8 @@ class ChatMessageBubble extends ConsumerWidget {
   final void Function(String quotedText)? onQuote;
   final VoidCallback? onToggleThinking;
   final VoidCallback? onToggleToolGroup;
-  final void Function(String eventName, Map<String, Object?> arguments)? onGenUiEvent;
+  final void Function(String eventName, Map<String, Object?> arguments)?
+  onGenUiEvent;
 
   const ChatMessageBubble({
     super.key,
@@ -51,7 +52,9 @@ class ChatMessageBubble extends ConsumerWidget {
     final showAvatar = previousMessage?.user.id != message.user.id;
 
     return Row(
-      mainAxisAlignment: _isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+      mainAxisAlignment: _isUser
+          ? MainAxisAlignment.end
+          : MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         // Agent avatar (left side)
@@ -62,7 +65,6 @@ class ChatMessageBubble extends ConsumerWidget {
           )
         else if (!_isUser)
           const SizedBox(width: 40), // Spacer for alignment
-
         // Message content
         Flexible(
           child: ConstrainedBox(
@@ -115,7 +117,8 @@ class ChatMessageBubble extends ConsumerWidget {
             CollapsibleThinkingWidget(
               thinkingText: message.thinkingText!,
               isStreaming: message.isThinkingStreaming,
-              isExpanded: message.isThinkingExpanded || message.isThinkingStreaming,
+              isExpanded:
+                  message.isThinkingExpanded || message.isThinkingStreaming,
               onToggle: onToggleThinking ?? () {},
             ),
 

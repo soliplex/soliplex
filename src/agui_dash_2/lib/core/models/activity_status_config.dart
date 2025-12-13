@@ -48,45 +48,24 @@ class ActivityStatusConfig {
         'Writing...',
         'Formulating answer...',
       ],
-      'ToolCallStart': [
-        'Using a tool...',
-        'Taking action...',
-        'Executing...',
-      ],
-      'ToolCallEnd': [
-        'Tool completed...',
-        'Processing result...',
-      ],
+      'ToolCallStart': ['Using a tool...', 'Taking action...', 'Executing...'],
+      'ToolCallEnd': ['Tool completed...', 'Processing result...'],
     },
     toolMessages: {
-      'get_location': [
-        'Finding your location...',
-        'Locating...',
-      ],
-      'canvas_render': [
-        'Rendering to canvas...',
-        'Drawing...',
-      ],
-      'genui_render': [
-        'Generating UI...',
-        'Building interface...',
-      ],
-      'search': [
-        'Searching...',
-        'Looking for results...',
-      ],
-      'web_search': [
-        'Searching the web...',
-        'Browsing...',
-      ],
+      'get_location': ['Finding your location...', 'Locating...'],
+      'canvas_render': ['Rendering to canvas...', 'Drawing...'],
+      'genui_render': ['Generating UI...', 'Building interface...'],
+      'search': ['Searching...', 'Looking for results...'],
+      'web_search': ['Searching the web...', 'Browsing...'],
     },
   );
 
   /// Merge this config with another, with other taking precedence.
   ActivityStatusConfig merge(ActivityStatusConfig other) {
     return ActivityStatusConfig(
-      idleMessages:
-          other.idleMessages.isNotEmpty ? other.idleMessages : idleMessages,
+      idleMessages: other.idleMessages.isNotEmpty
+          ? other.idleMessages
+          : idleMessages,
       eventMessages: {...eventMessages, ...other.eventMessages},
       toolMessages: {...toolMessages, ...other.toolMessages},
       cycleInterval: other.cycleInterval,

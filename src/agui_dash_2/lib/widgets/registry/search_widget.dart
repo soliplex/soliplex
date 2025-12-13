@@ -19,11 +19,7 @@ class SearchWidget extends StatefulWidget {
   final Map<String, dynamic> data;
   final void Function(String eventName, Map<String, dynamic> payload)? onEvent;
 
-  const SearchWidget({
-    super.key,
-    required this.data,
-    this.onEvent,
-  });
+  const SearchWidget({super.key, required this.data, this.onEvent});
 
   @override
   State<SearchWidget> createState() => _SearchWidgetState();
@@ -176,7 +172,9 @@ class _SearchWidgetState extends State<SearchWidget> {
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Text(
-                          _query.isEmpty ? 'Type to search' : 'No results found',
+                          _query.isEmpty
+                              ? 'Type to search'
+                              : 'No results found',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.hintColor,
                           ),
@@ -211,8 +209,8 @@ class _SearchWidgetState extends State<SearchWidget> {
                               ? Text(item['subtitle'])
                               : null,
                           selected: isSelected,
-                          selectedTileColor:
-                              theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+                          selectedTileColor: theme.colorScheme.primaryContainer
+                              .withValues(alpha: 0.3),
                           onTap: () => _toggleSelection(item),
                         );
                       },

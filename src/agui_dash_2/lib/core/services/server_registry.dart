@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
 import '../models/server_models.dart';
+import '../network/network_inspector.dart';
 import '../utils/debug_log.dart';
 import '../utils/url_builder.dart';
 import 'secure_storage_service.dart';
@@ -13,9 +14,13 @@ import 'secure_storage_service.dart';
 ///
 /// Plain class (no ChangeNotifier) for server storage and discovery.
 /// Methods return data directly, no notifications.
+///
+/// Optionally accepts [NetworkInspector] for traffic observability.
+/// HTTP calls (server probing) are instrumented to appear in the Network Inspector panel.
 class ServerRegistry {
   final SecureStorageService _storage;
   final http.Client _httpClient;
+  final NetworkInspector? _inspector;
 
   List<ServerConnection> _serverHistory = [];
   ServerConnection? _currentServer;
@@ -24,8 +29,10 @@ class ServerRegistry {
   ServerRegistry({
     SecureStorageService? storage,
     http.Client? httpClient,
-  })  : _storage = storage ?? SecureStorageFactory.create(),
-        _httpClient = httpClient ?? http.Client();
+    NetworkInspector? inspector,
+  }) : _storage = storage ?? SecureStorageFactory.create(),
+       _httpClient = httpClient ?? http.Client(),
+       _inspector = inspector;
 
   // Read-only accessors
   List<ServerConnection> get serverHistory => List.unmodifiable(_serverHistory);
@@ -42,7 +49,9 @@ class ServerRegistry {
       // Load server history
       DebugLog.service('ServerRegistry.initialize: Loading server history...');
       final historyJson = await _storage.loadServerHistory();
-      DebugLog.service('ServerRegistry.initialize: Loaded ${historyJson.length} servers');
+      DebugLog.service(
+        'ServerRegistry.initialize: Loaded ${historyJson.length} servers',
+      );
       _serverHistory = historyJson
           .map((json) => ServerConnection.fromJson(json))
           .toList();
@@ -55,8 +64,9 @@ class ServerRegistry {
       if (currentId != null) {
         _currentServer = _serverHistory.firstWhere(
           (s) => s.id == currentId,
-          orElse: () =>
-              _serverHistory.isNotEmpty ? _serverHistory.first : throw StateError('No servers'),
+          orElse: () => _serverHistory.isNotEmpty
+              ? _serverHistory.first
+              : throw StateError('No servers'),
         );
       }
 
@@ -84,21 +94,35 @@ class ServerRegistry {
     final normalizedUrl = normalizeUrl(url);
     final urlBuilder = UrlBuilder(normalizedUrl);
 
+    // Record request for Network Inspector
+    final loginUrl = urlBuilder.login();
+    final requestId = _inspector?.recordRequest(
+      method: 'GET',
+      uri: loginUrl,
+      headers: const {},
+    );
+
     try {
       // Try to fetch /api/login endpoint to discover OIDC providers
-      final loginUrl = urlBuilder.login();
       final response = await _httpClient
           .get(loginUrl)
           .timeout(const Duration(seconds: 10));
+
+      // Record response for Network Inspector
+      if (requestId != null) {
+        _inspector?.recordResponse(
+          requestId: requestId,
+          statusCode: response.statusCode,
+          headers: response.headers,
+          body: response.body,
+        );
+      }
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final providers = _parseOidcProviders(data);
 
-        return ServerInfo.fromProbe(
-          url: normalizedUrl,
-          providers: providers,
-        );
+        return ServerInfo.fromProbe(url: normalizedUrl, providers: providers);
       } else if (response.statusCode == 404) {
         // /login not found - try /rooms to verify it's a Soliplex server
         return await _probeRoomsEndpoint(normalizedUrl);
@@ -109,26 +133,48 @@ class ServerRegistry {
         );
       }
     } on TimeoutException {
+      // Record error for Network Inspector
+      if (requestId != null) {
+        _inspector?.recordError(requestId: requestId, error: 'Connection timed out');
+      }
       return ServerInfo.unreachable(normalizedUrl, 'Connection timed out');
     } catch (e) {
+      // Record error for Network Inspector
+      if (requestId != null) {
+        _inspector?.recordError(requestId: requestId, error: e.toString());
+      }
       return ServerInfo.unreachable(normalizedUrl, e.toString());
     }
   }
 
   Future<ServerInfo> _probeRoomsEndpoint(String url) async {
     final urlBuilder = UrlBuilder(url);
+    final roomsUrl = urlBuilder.rooms();
+
+    // Record request for Network Inspector
+    final requestId = _inspector?.recordRequest(
+      method: 'GET',
+      uri: roomsUrl,
+      headers: const {},
+    );
+
     try {
-      final roomsUrl = urlBuilder.rooms();
       final response = await _httpClient
           .get(roomsUrl)
           .timeout(const Duration(seconds: 10));
 
-      if (response.statusCode == 200) {
-        return ServerInfo(
-          url: url,
-          isReachable: true,
-          authDisabled: true,
+      // Record response for Network Inspector
+      if (requestId != null) {
+        _inspector?.recordResponse(
+          requestId: requestId,
+          statusCode: response.statusCode,
+          headers: response.headers,
+          body: response.body,
         );
+      }
+
+      if (response.statusCode == 200) {
+        return ServerInfo(url: url, isReachable: true, authDisabled: true);
       } else if (response.statusCode == 401) {
         return ServerInfo.unreachable(
           url,
@@ -141,6 +187,10 @@ class ServerRegistry {
         );
       }
     } catch (e) {
+      // Record error for Network Inspector
+      if (requestId != null) {
+        _inspector?.recordError(requestId: requestId, error: e.toString());
+      }
       return ServerInfo.unreachable(url, e.toString());
     }
   }
@@ -152,10 +202,7 @@ class ServerRegistry {
       data.forEach((key, value) {
         if (value is Map<String, dynamic>) {
           try {
-            providers.add(OIDCAuthSystem.fromJson({
-              'id': key,
-              ...value,
-            }));
+            providers.add(OIDCAuthSystem.fromJson({'id': key, ...value}));
           } catch (e) {
             DebugLog.error('Failed to parse OIDC provider $key: $e');
           }

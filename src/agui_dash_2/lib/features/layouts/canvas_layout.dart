@@ -62,10 +62,7 @@ class CanvasLayout extends ConsumerWidget {
         // Divider
         const VerticalDivider(width: 1),
         // Chat area (1/3 width) - ClipRect prevents overflow during scroll
-        const Expanded(
-          flex: 1,
-          child: ClipRect(child: ChatContent()),
-        ),
+        const Expanded(flex: 1, child: ClipRect(child: ChatContent())),
       ],
     );
   }

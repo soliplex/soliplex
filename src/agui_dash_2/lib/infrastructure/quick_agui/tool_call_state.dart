@@ -78,7 +78,10 @@ class TrackedToolCall {
 
   /// Transition to executing state.
   TrackedToolCall toExecuting() {
-    assert(state == ToolCallState.received, 'Can only execute from received state');
+    assert(
+      state == ToolCallState.received,
+      'Can only execute from received state',
+    );
     return copyWith(
       state: ToolCallState.executing,
       executionStartedAt: DateTime.now(),
@@ -87,7 +90,10 @@ class TrackedToolCall {
 
   /// Transition to completed state with result.
   TrackedToolCall toCompleted(ToolMessage result) {
-    assert(state == ToolCallState.executing, 'Can only complete from executing state');
+    assert(
+      state == ToolCallState.executing,
+      'Can only complete from executing state',
+    );
     return copyWith(
       state: ToolCallState.completed,
       completedAt: DateTime.now(),
@@ -97,7 +103,10 @@ class TrackedToolCall {
 
   /// Transition to failed state with error.
   TrackedToolCall toFailed(String error) {
-    assert(state == ToolCallState.executing, 'Can only fail from executing state');
+    assert(
+      state == ToolCallState.executing,
+      'Can only fail from executing state',
+    );
     return copyWith(
       state: ToolCallState.failed,
       completedAt: DateTime.now(),

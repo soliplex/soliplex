@@ -54,18 +54,13 @@ void main() {
       });
 
       test('serverId defaults to null', () {
-        final event = RoomSwitchedEvent(
-          roomId: 'room-2',
-        );
+        final event = RoomSwitchedEvent(roomId: 'room-2');
 
         expect(event.serverId, isNull);
       });
 
       test('toString includes serverId', () {
-        final event = RoomSwitchedEvent(
-          serverId: 'server-1',
-          roomId: 'room-2',
-        );
+        final event = RoomSwitchedEvent(serverId: 'server-1', roomId: 'room-2');
 
         expect(event.toString(), contains('server-1'));
       });
@@ -276,9 +271,7 @@ void main() {
       });
 
       test('serverId defaults to null', () {
-        final event = SessionDisposedEvent(
-          roomId: 'room-1',
-        );
+        final event = SessionDisposedEvent(roomId: 'room-1');
 
         expect(event.serverId, isNull);
       });
@@ -296,7 +289,7 @@ void main() {
 
   group('ConnectionInfo serverId Tests', () {
     test('includes serverId in constructor', () {
-      final info = ConnectionInfo(
+      const info = ConnectionInfo(
         serverId: 'server-1',
         roomId: 'room-1',
         threadId: 'thread-1',
@@ -312,16 +305,13 @@ void main() {
     });
 
     test('serverId defaults to null', () {
-      final info = ConnectionInfo(
-        roomId: 'room-1',
-        state: SessionState.active,
-      );
+      const info = ConnectionInfo(roomId: 'room-1', state: SessionState.active);
 
       expect(info.serverId, isNull);
     });
 
     test('toString includes serverId', () {
-      final info = ConnectionInfo(
+      const info = ConnectionInfo(
         serverId: 'server-1',
         roomId: 'room-1',
         state: SessionState.active,
@@ -331,19 +321,19 @@ void main() {
     });
 
     test('isActive returns true for active and streaming states', () {
-      final activeInfo = ConnectionInfo(
+      const activeInfo = ConnectionInfo(
         roomId: 'room-1',
         state: SessionState.active,
       );
-      final streamingInfo = ConnectionInfo(
+      const streamingInfo = ConnectionInfo(
         roomId: 'room-1',
         state: SessionState.streaming,
       );
-      final backgroundedInfo = ConnectionInfo(
+      const backgroundedInfo = ConnectionInfo(
         roomId: 'room-1',
         state: SessionState.backgrounded,
       );
-      final disposedInfo = ConnectionInfo(
+      const disposedInfo = ConnectionInfo(
         roomId: 'room-1',
         state: SessionState.disposed,
       );
@@ -355,11 +345,11 @@ void main() {
     });
 
     test('isStreaming returns true only for streaming state', () {
-      final activeInfo = ConnectionInfo(
+      const activeInfo = ConnectionInfo(
         roomId: 'room-1',
         state: SessionState.active,
       );
-      final streamingInfo = ConnectionInfo(
+      const streamingInfo = ConnectionInfo(
         roomId: 'room-1',
         state: SessionState.streaming,
       );
@@ -372,14 +362,17 @@ void main() {
   group('ConnectionEvent timestamp Tests', () {
     test('timestamp defaults to now', () {
       final before = DateTime.now();
-      final event = SessionCreatedEvent(
-        roomId: 'room-1',
-        threadId: 'thread-1',
-      );
+      final event = SessionCreatedEvent(roomId: 'room-1', threadId: 'thread-1');
       final after = DateTime.now();
 
-      expect(event.timestamp.isAfter(before) || event.timestamp == before, isTrue);
-      expect(event.timestamp.isBefore(after) || event.timestamp == after, isTrue);
+      expect(
+        event.timestamp.isAfter(before) || event.timestamp == before,
+        isTrue,
+      );
+      expect(
+        event.timestamp.isBefore(after) || event.timestamp == after,
+        isTrue,
+      );
     });
 
     test('timestamp can be specified', () {
@@ -396,14 +389,35 @@ void main() {
 
   group('Event Type Verification', () {
     test('all events extend ConnectionEvent', () {
-      expect(SessionCreatedEvent(roomId: 'r', threadId: 't'), isA<ConnectionEvent>());
+      expect(
+        SessionCreatedEvent(roomId: 'r', threadId: 't'),
+        isA<ConnectionEvent>(),
+      );
       expect(RoomSwitchedEvent(roomId: 'r'), isA<ConnectionEvent>());
-      expect(RunStartedEvent(roomId: 'r', threadId: 't', runId: 'run'), isA<ConnectionEvent>());
-      expect(RunCompletedEvent(roomId: 'r', threadId: 't', runId: 'run'), isA<ConnectionEvent>());
-      expect(RunCancelledEvent(roomId: 'r', threadId: 't', runId: 'run'), isA<ConnectionEvent>());
-      expect(RunFailedEvent(roomId: 'r', threadId: 't', runId: 'run', error: 'e'), isA<ConnectionEvent>());
-      expect(SessionSuspendedEvent(roomId: 'r', threadId: 't'), isA<ConnectionEvent>());
-      expect(SessionResumedEvent(roomId: 'r', threadId: 't'), isA<ConnectionEvent>());
+      expect(
+        RunStartedEvent(roomId: 'r', threadId: 't', runId: 'run'),
+        isA<ConnectionEvent>(),
+      );
+      expect(
+        RunCompletedEvent(roomId: 'r', threadId: 't', runId: 'run'),
+        isA<ConnectionEvent>(),
+      );
+      expect(
+        RunCancelledEvent(roomId: 'r', threadId: 't', runId: 'run'),
+        isA<ConnectionEvent>(),
+      );
+      expect(
+        RunFailedEvent(roomId: 'r', threadId: 't', runId: 'run', error: 'e'),
+        isA<ConnectionEvent>(),
+      );
+      expect(
+        SessionSuspendedEvent(roomId: 'r', threadId: 't'),
+        isA<ConnectionEvent>(),
+      );
+      expect(
+        SessionResumedEvent(roomId: 'r', threadId: 't'),
+        isA<ConnectionEvent>(),
+      );
       expect(SessionDisposedEvent(roomId: 'r'), isA<ConnectionEvent>());
     });
   });

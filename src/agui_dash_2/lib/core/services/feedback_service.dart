@@ -4,7 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Conditional imports for file-based persistence (non-web only)
-import 'feedback_service_io.dart' if (dart.library.html) 'feedback_service_web.dart'
+import 'feedback_service_io.dart'
+    if (dart.library.html) 'feedback_service_web.dart'
     as platform;
 
 import '../../features/chat/widgets/feedback_dialog.dart';
@@ -99,10 +100,7 @@ class FeedbackState {
   final Map<String, FeedbackResult> feedback;
   final bool isLoaded;
 
-  const FeedbackState({
-    this.feedback = const {},
-    this.isLoaded = false,
-  });
+  const FeedbackState({this.feedback = const {}, this.isLoaded = false});
 
   FeedbackState copyWith({
     Map<String, FeedbackResult>? feedback,
@@ -146,9 +144,7 @@ class FeedbackNotifier extends StateNotifier<FeedbackState> {
     if (_service == null) return;
 
     await _service!.saveFeedback(feedback);
-    state = state.copyWith(
-      feedback: Map.from(_service!._feedbackCache),
-    );
+    state = state.copyWith(feedback: Map.from(_service!._feedbackCache));
   }
 
   /// Remove feedback.
@@ -156,14 +152,13 @@ class FeedbackNotifier extends StateNotifier<FeedbackState> {
     if (_service == null) return;
 
     await _service!.removeFeedback(messageId);
-    state = state.copyWith(
-      feedback: Map.from(_service!._feedbackCache),
-    );
+    state = state.copyWith(feedback: Map.from(_service!._feedbackCache));
   }
 }
 
 /// Provider for feedback service.
-final feedbackProvider =
-    StateNotifierProvider<FeedbackNotifier, FeedbackState>((ref) {
-  return FeedbackNotifier();
-});
+final feedbackProvider = StateNotifierProvider<FeedbackNotifier, FeedbackState>(
+  (ref) {
+    return FeedbackNotifier();
+  },
+);

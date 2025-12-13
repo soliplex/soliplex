@@ -87,7 +87,9 @@ class _SystemPromptViewerState extends State<SystemPromptViewer> {
                     child: Icon(
                       _copied ? Icons.check : Icons.copy_outlined,
                       size: 16,
-                      color: _copied ? Colors.green : colorScheme.onSurfaceVariant,
+                      color: _copied
+                          ? Colors.green
+                          : colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ),
@@ -163,7 +165,9 @@ class SystemPromptPreview extends StatelessWidget {
         : systemPrompt!;
 
     // Replace newlines with spaces for compact display
-    final singleLine = truncated.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ');
+    final singleLine = truncated
+        .replaceAll('\n', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ');
 
     return Text(
       '"$singleLine"',

@@ -57,17 +57,21 @@ void main() {
     transport = MockHttpTransport();
 
     // Setup default mock behavior for post
-    when(() => transport.post(any(), any())).thenAnswer((_) async => {
-          'thread_id': 'test-thread-id',
-          'runs': {'run-1': {}},
-        });
+    when(() => transport.post(any(), any())).thenAnswer(
+      (_) async => {
+        'thread_id': 'test-thread-id',
+        'runs': {'run-1': {}},
+      },
+    );
 
     // Setup default mock behavior for cancelRun
-    when(() => transport.cancelRun(
-          roomId: any(named: 'roomId'),
-          threadId: any(named: 'threadId'),
-          runId: any(named: 'runId'),
-        )).thenAnswer((_) async {});
+    when(
+      () => transport.cancelRun(
+        roomId: any(named: 'roomId'),
+        threadId: any(named: 'threadId'),
+        runId: any(named: 'runId'),
+      ),
+    ).thenAnswer((_) async {});
 
     session = RoomSession(
       roomId: 'test-room',
@@ -110,24 +114,23 @@ void main() {
         expect(session.isDisposed, isFalse);
       });
 
-      test('suspend() emits SessionSuspendedEvent when thread exists',
-          () async {
-        final mockClient = MockAgUiClient();
-        await session.initialize(agUiClient: mockClient);
+      test(
+        'suspend() emits SessionSuspendedEvent when thread exists',
+        () async {
+          final mockClient = MockAgUiClient();
+          await session.initialize(agUiClient: mockClient);
 
-        final events = <ConnectionEvent>[];
-        session.events.listen(events.add);
+          final events = <ConnectionEvent>[];
+          session.events.listen(events.add);
 
-        session.suspend();
+          session.suspend();
 
-        // Wait for event to be processed
-        await Future.delayed(Duration.zero);
+          // Wait for event to be processed
+          await Future.delayed(Duration.zero);
 
-        expect(
-          events,
-          contains(isA<SessionSuspendedEvent>()),
-        );
-      });
+          expect(events, contains(isA<SessionSuspendedEvent>()));
+        },
+      );
     });
 
     group('State Transition: backgrounded → active', () {
@@ -173,10 +176,7 @@ void main() {
         // Wait for event to be processed
         await Future.delayed(Duration.zero);
 
-        expect(
-          events,
-          contains(isA<SessionResumedEvent>()),
-        );
+        expect(events, contains(isA<SessionResumedEvent>()));
       });
     });
 
@@ -223,10 +223,7 @@ void main() {
         // Wait for event to be processed
         await Future.delayed(Duration.zero);
 
-        expect(
-          events,
-          contains(isA<SessionDisposedEvent>()),
-        );
+        expect(events, contains(isA<SessionDisposedEvent>()));
       });
     });
 
@@ -244,10 +241,7 @@ void main() {
       test('cannot resume disposed session', () {
         session.dispose();
 
-        expect(
-          () => session.resume(),
-          throwsA(isA<StateError>()),
-        );
+        expect(() => session.resume(), throwsA(isA<StateError>()));
       });
 
       test('cannot start run on disposed session', () async {
@@ -325,10 +319,7 @@ void main() {
 
     group('State-Dependent Operations', () {
       test('createRun requires initialization', () async {
-        expect(
-          () => session.createRun(),
-          throwsA(isA<StateError>()),
-        );
+        expect(() => session.createRun(), throwsA(isA<StateError>()));
       });
 
       test('startRun requires initialization', () async {
@@ -349,10 +340,7 @@ void main() {
     group('Event Stream Lifecycle', () {
       test('events stream closes on dispose', () async {
         var streamClosed = false;
-        session.events.listen(
-          (_) {},
-          onDone: () => streamClosed = true,
-        );
+        session.events.listen((_) {}, onDone: () => streamClosed = true);
 
         session.dispose();
 
@@ -364,10 +352,7 @@ void main() {
 
       test('message stream closes on dispose', () async {
         var streamClosed = false;
-        session.messageStream.listen(
-          (_) {},
-          onDone: () => streamClosed = true,
-        );
+        session.messageStream.listen((_) {}, onDone: () => streamClosed = true);
 
         session.dispose();
 

@@ -21,11 +21,7 @@ class ShortcutActions {
   static ShowHelpDialogCallback? showHelpDialog;
 
   /// Execute an action by its identifier.
-  static void execute(
-    WidgetRef ref,
-    String action,
-    BuildContext context,
-  ) {
+  static void execute(WidgetRef ref, String action, BuildContext context) {
     // Room navigation by index
     if (action.startsWith('room_') && action.length == 6) {
       final digit = int.tryParse(action.substring(5));

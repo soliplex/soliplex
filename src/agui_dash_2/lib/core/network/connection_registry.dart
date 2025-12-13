@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/connection_config.dart';
 import '../utils/debug_log.dart';
 import 'connection_events.dart' show SessionState;
+import 'network_inspector.dart';
 import 'room_session.dart';
 import 'server_connection_state.dart';
 import 'server_room_key.dart';
@@ -27,6 +28,9 @@ class ConnectionRegistry extends ChangeNotifier {
   final ConnectionConfig _config;
   final Map<String, ServerConnectionState> _servers = {};
 
+  /// Network inspector for traffic capture (optional).
+  final NetworkInspector? _inspector;
+
   /// Currently active server ID.
   String? _activeServerId;
 
@@ -40,8 +44,11 @@ class ConnectionRegistry extends ChangeNotifier {
   bool _disposed = false;
 
   /// Creates a new connection registry.
-  ConnectionRegistry({ConnectionConfig? config})
-      : _config = config ?? ConnectionConfig.defaultConfig {
+  ///
+  /// [inspector] is optional network inspector for traffic capture.
+  ConnectionRegistry({ConnectionConfig? config, NetworkInspector? inspector})
+    : _config = config ?? ConnectionConfig.defaultConfig,
+      _inspector = inspector {
     _startCleanupTimer();
     DebugLog.service('ConnectionRegistry: Created with config $_config');
   }
@@ -54,7 +61,8 @@ class ConnectionRegistry extends ChangeNotifier {
   bool get isDisposed => _disposed;
 
   /// The currently active server-room key, or null if none active.
-  ServerRoomKey? get activeKey => _activeServerId != null && _activeRoomId != null
+  ServerRoomKey? get activeKey =>
+      _activeServerId != null && _activeRoomId != null
       ? ServerRoomKey(serverId: _activeServerId!, roomId: _activeRoomId!)
       : null;
 
@@ -97,7 +105,9 @@ class ConnectionRegistry extends ChangeNotifier {
     var serverState = _servers[serverId];
     if (serverState != null) {
       serverState.touch();
-      DebugLog.service('ConnectionRegistry: Returning existing server $serverId');
+      DebugLog.service(
+        'ConnectionRegistry: Returning existing server $serverId',
+      );
       return serverState;
     }
 
@@ -106,10 +116,13 @@ class ConnectionRegistry extends ChangeNotifier {
       baseUrl: baseUrl,
       headers: headers,
       headerRefresher: headerRefresher,
+      inspector: _inspector,
     );
     _servers[serverId] = serverState;
 
-    DebugLog.service('ConnectionRegistry: Connected to server $serverId ($baseUrl)');
+    DebugLog.service(
+      'ConnectionRegistry: Connected to server $serverId ($baseUrl)',
+    );
     notifyListeners();
 
     return serverState;
@@ -191,7 +204,9 @@ class ConnectionRegistry extends ChangeNotifier {
         _config.maxBackgroundedSessionsPerServer,
       );
       if (evicted > 0) {
-        DebugLog.service('ConnectionRegistry: Evicted $evicted backgrounded sessions');
+        DebugLog.service(
+          'ConnectionRegistry: Evicted $evicted backgrounded sessions',
+        );
       }
     }
 
@@ -348,9 +363,15 @@ class ConnectionRegistry extends ChangeNotifier {
 /// Provider for the connection registry.
 ///
 /// Singleton for app lifetime - manages all server connections.
+/// Injects NetworkInspector for traffic capture.
+///
+/// NOTE: Uses ref.read for inspector (not watch) because the registry
+/// should not be rebuilt when the inspector notifies listeners.
 final connectionRegistryProvider = Provider<ConnectionRegistry>((ref) {
   final config = ref.watch(connectionConfigProvider);
-  final registry = ConnectionRegistry(config: config);
+  // Use read (not watch) - inspector changes shouldn't rebuild registry
+  final inspector = ref.read(networkInspectorProvider);
+  final registry = ConnectionRegistry(config: config, inspector: inspector);
   ref.onDispose(() => registry.dispose());
   return registry;
 });

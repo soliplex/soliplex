@@ -11,10 +11,7 @@ import 'feedback_dialog.dart';
 class MessageFeedbackChips extends ConsumerWidget {
   final String messageId;
 
-  const MessageFeedbackChips({
-    super.key,
-    required this.messageId,
-  });
+  const MessageFeedbackChips({super.key, required this.messageId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

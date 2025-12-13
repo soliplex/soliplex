@@ -7,6 +7,7 @@ import '../auth/oidc_auth_interactor.dart';
 import '../auth/secure_token_storage.dart';
 import '../auth/sso_config.dart';
 import '../models/server_models.dart';
+import '../network/network_inspector.dart';
 import '../utils/debug_log.dart';
 import '../utils/url_builder.dart';
 import 'secure_storage_service.dart';
@@ -32,21 +33,27 @@ class UserInfo {
 ///
 /// Plain class (no ChangeNotifier) for auth operations.
 /// Methods return data directly, no notifications.
+///
+/// Optionally accepts [NetworkInspector] for traffic observability.
+/// HTTP calls are instrumented to appear in the Network Inspector panel.
 class AuthManager {
   final SecureStorageService _storage;
   final OidcAuthInteractor _oidcInteractor;
   final SecureTokenStorage _tokenStorage;
   final http.Client _httpClient;
+  final NetworkInspector? _inspector;
 
   AuthManager({
     required SecureStorageService storage,
     required OidcAuthInteractor oidcInteractor,
     required SecureTokenStorage tokenStorage,
     http.Client? httpClient,
-  })  : _storage = storage,
-        _oidcInteractor = oidcInteractor,
-        _tokenStorage = tokenStorage,
-        _httpClient = httpClient ?? http.Client();
+    NetworkInspector? inspector,
+  }) : _storage = storage,
+       _oidcInteractor = oidcInteractor,
+       _tokenStorage = tokenStorage,
+       _httpClient = httpClient ?? http.Client(),
+       _inspector = inspector;
 
   /// Check if we have a valid (non-expired) token for a server.
   Future<bool> hasValidToken(String serverId) async {
@@ -72,8 +79,13 @@ class AuthManager {
 
   /// Start OIDC login flow.
   /// Returns UserInfo on success, throws on failure.
-  Future<UserInfo?> login(OIDCAuthSystem provider, ServerConnection server) async {
-    DebugLog.service('AuthManager.login: Starting with provider ${provider.id}');
+  Future<UserInfo?> login(
+    OIDCAuthSystem provider,
+    ServerConnection server,
+  ) async {
+    DebugLog.service(
+      'AuthManager.login: Starting with provider ${provider.id}',
+    );
 
     try {
       // Clear any existing OIDC tokens and config to avoid stale state
@@ -83,7 +95,8 @@ class AuthManager {
 
       // Build SsoConfig from OIDCAuthSystem
       final issuerUrl = provider.serverUrl;
-      final scopes = provider.scope?.split(' ') ?? ['openid', 'profile', 'email'];
+      final scopes =
+          provider.scope?.split(' ') ?? ['openid', 'profile', 'email'];
       DebugLog.service('AuthManager: issuerUrl=$issuerUrl, scopes=$scopes');
 
       final ssoConfig = SsoConfig(
@@ -102,8 +115,12 @@ class AuthManager {
 
       // Use flutter_appauth for native OIDC flow
       DebugLog.service('AuthManager: Calling authorizeAndExchangeCode...');
-      final tokenResponse = await _oidcInteractor.authorizeAndExchangeCode(ssoConfig);
-      DebugLog.service('AuthManager: Got token response, expiry=${tokenResponse.accessTokenExpiration}');
+      final tokenResponse = await _oidcInteractor.authorizeAndExchangeCode(
+        ssoConfig,
+      );
+      DebugLog.service(
+        'AuthManager: Got token response, expiry=${tokenResponse.accessTokenExpiration}',
+      );
 
       // Store tokens
       await _storage.storeTokens(
@@ -115,7 +132,10 @@ class AuthManager {
       DebugLog.service('AuthManager: Tokens stored');
 
       // Fetch user info
-      final userInfo = await _fetchUserInfo(server.url, tokenResponse.accessToken);
+      final userInfo = await _fetchUserInfo(
+        server.url,
+        tokenResponse.accessToken,
+      );
       DebugLog.service('AuthManager: User info: $userInfo');
 
       return userInfo;
@@ -167,7 +187,9 @@ class AuthManager {
   Future<Map<String, String>> getAuthHeaders(String serverId) async {
     DebugLog.network('AuthManager.getAuthHeaders: serverId=$serverId');
     final token = await getAccessToken(serverId);
-    DebugLog.network('AuthManager.getAuthHeaders: token=${token != null ? "present (${token.length} chars)" : "null"}');
+    DebugLog.network(
+      'AuthManager.getAuthHeaders: token=${token != null ? "present (${token.length} chars)" : "null"}',
+    );
     if (token == null) return {};
     return {'Authorization': 'Bearer $token'};
   }
@@ -181,21 +203,43 @@ class AuthManager {
   }
 
   Future<UserInfo?> _fetchUserInfo(String serverUrl, String token) async {
-    try {
-      final urlBuilder = UrlBuilder(serverUrl);
-      final uri = urlBuilder.userInfo();
-      DebugLog.network('AuthManager: Fetching user info from $uri');
+    final urlBuilder = UrlBuilder(serverUrl);
+    final uri = urlBuilder.userInfo();
+    final headers = {'Authorization': 'Bearer $token'};
 
-      final response = await _httpClient.get(
-        uri,
-        headers: {'Authorization': 'Bearer $token'},
-      ).timeout(const Duration(seconds: 10));
+    DebugLog.network('AuthManager: Fetching user info from $uri');
+
+    // Record request for Network Inspector
+    final requestId = _inspector?.recordRequest(
+      method: 'GET',
+      uri: uri,
+      headers: headers,
+    );
+
+    try {
+      final response = await _httpClient
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 10));
+
+      // Record response for Network Inspector
+      if (requestId != null) {
+        _inspector?.recordResponse(
+          requestId: requestId,
+          statusCode: response.statusCode,
+          headers: response.headers,
+          body: response.body,
+        );
+      }
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         return UserInfo.fromJson(data);
       }
     } catch (e) {
+      // Record error for Network Inspector
+      if (requestId != null) {
+        _inspector?.recordError(requestId: requestId, error: e.toString());
+      }
       DebugLog.error('AuthManager: Failed to fetch user info: $e');
     }
     return null;

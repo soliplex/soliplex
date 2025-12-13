@@ -4,15 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:agui_dash_2/main.dart';
 
 void main() {
-  testWidgets('AgUiDashApp widget creates MaterialApp', (WidgetTester tester) async {
+  testWidgets('AgUiDashApp widget creates MaterialApp', (
+    WidgetTester tester,
+  ) async {
     // Build the app widget (but not full ProviderScope which triggers async init)
     await tester.pumpWidget(
       const MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: Text('AG-UI Dashboard'),
-          ),
-        ),
+        home: Scaffold(body: Center(child: Text('AG-UI Dashboard'))),
       ),
     );
 

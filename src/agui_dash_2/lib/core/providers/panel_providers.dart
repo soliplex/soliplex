@@ -53,8 +53,8 @@ final activeServerRoomKeyProvider = Provider<ServerRoomKey?>((ref) {
 /// Use [activeCanvasProvider] for UI convenience.
 final roomCanvasProvider =
     StateNotifierProvider.family<CanvasNotifier, CanvasState, ServerRoomKey>(
-  (ref, key) => CanvasNotifier(serverId: key.serverId, roomId: key.roomId),
-);
+      (ref, key) => CanvasNotifier(serverId: key.serverId, roomId: key.roomId),
+    );
 
 /// Active canvas state for current room.
 ///
@@ -80,7 +80,9 @@ final activeCanvasNotifierProvider = Provider<CanvasNotifier?>((ref) {
 ///
 /// DEPRECATED: Prefer [roomCanvasProvider] for per-room state.
 /// Watches [currentServerFromAppStateProvider] - canvas clears when server changes.
-final canvasProvider = StateNotifierProvider<CanvasNotifier, CanvasState>((ref) {
+final canvasProvider = StateNotifierProvider<CanvasNotifier, CanvasState>((
+  ref,
+) {
   final server = ref.watch(currentServerFromAppStateProvider);
   return CanvasNotifier(serverId: server?.id);
 });
@@ -94,9 +96,14 @@ final canvasProvider = StateNotifierProvider<CanvasNotifier, CanvasState>((ref) 
 /// Keyed by [ServerRoomKey] - maintains separate context pane per room.
 /// Use [activeContextPaneProvider] for UI convenience.
 final roomContextPaneProvider =
-    StateNotifierProvider.family<ContextPaneNotifier, ContextPaneState, ServerRoomKey>(
-  (ref, key) => ContextPaneNotifier(serverId: key.serverId, roomId: key.roomId),
-);
+    StateNotifierProvider.family<
+      ContextPaneNotifier,
+      ContextPaneState,
+      ServerRoomKey
+    >(
+      (ref, key) =>
+          ContextPaneNotifier(serverId: key.serverId, roomId: key.roomId),
+    );
 
 /// Active context pane state for current room.
 ///
@@ -124,9 +131,9 @@ final activeContextPaneNotifierProvider = Provider<ContextPaneNotifier?>((ref) {
 /// Watches [currentServerFromAppStateProvider] - context pane clears when server changes.
 final contextPaneProvider =
     StateNotifierProvider<ContextPaneNotifier, ContextPaneState>((ref) {
-  final server = ref.watch(currentServerFromAppStateProvider);
-  return ContextPaneNotifier(serverId: server?.id);
-});
+      final server = ref.watch(currentServerFromAppStateProvider);
+      return ContextPaneNotifier(serverId: server?.id);
+    });
 
 // =============================================================================
 // ACTIVITY STATUS
@@ -139,14 +146,18 @@ final contextPaneProvider =
 /// and timers are properly scoped to the room lifecycle.
 ///
 /// Use [activeActivityStatusProvider] for UI convenience.
-final roomActivityStatusProvider = StateNotifierProvider.family<
-    ActivityStatusNotifier, ActivityStatusState, ServerRoomKey>(
-  (ref, key) => ActivityStatusNotifier(
-    config: ref.watch(activityStatusConfigProvider),
-    serverId: key.serverId,
-    roomId: key.roomId,
-  ),
-);
+final roomActivityStatusProvider =
+    StateNotifierProvider.family<
+      ActivityStatusNotifier,
+      ActivityStatusState,
+      ServerRoomKey
+    >(
+      (ref, key) => ActivityStatusNotifier(
+        config: ref.watch(activityStatusConfigProvider),
+        serverId: key.serverId,
+        roomId: key.roomId,
+      ),
+    );
 
 /// Active activity status state for current room.
 ///
@@ -162,21 +173,10 @@ final activeActivityStatusProvider = Provider<ActivityStatusState>((ref) {
 ///
 /// Returns the notifier for the current room, or null if no room selected.
 /// Use this to modify activity status state.
-final activeActivityStatusNotifierProvider =
-    Provider<ActivityStatusNotifier?>((ref) {
+final activeActivityStatusNotifierProvider = Provider<ActivityStatusNotifier?>((
+  ref,
+) {
   final key = ref.watch(activeServerRoomKeyProvider);
   if (key == null) return null;
   return ref.read(roomActivityStatusProvider(key).notifier);
-});
-
-/// Legacy provider for activity status state (server-scoped only).
-///
-/// DEPRECATED: Prefer [roomActivityStatusProvider] for per-room state.
-/// Kept for backward compatibility during migration.
-final activityStatusProvider =
-    StateNotifierProvider<ActivityStatusNotifier, ActivityStatusState>((ref) {
-  final config = ref.watch(activityStatusConfigProvider);
-  final server = ref.watch(currentServerFromAppStateProvider);
-  final roomId = ref.watch(selectedRoomProvider);
-  return ActivityStatusNotifier(config: config, serverId: server?.id, roomId: roomId);
 });

@@ -69,18 +69,17 @@ class DataListWidget extends StatelessWidget {
         // Support multiple field names for flexibility:
         // - title: primary display text
         // - value OR subtitle: secondary display text
-        final title = map['title'] as String? ??
+        final title =
+            map['title'] as String? ??
             map['name'] as String? ??
             map['label'] as String? ??
             '';
-        final value = map['value']?.toString() ??
+        final value =
+            map['value']?.toString() ??
             map['subtitle']?.toString() ??
             map['description']?.toString() ??
             '';
-        return DataListItem(
-          title: title,
-          value: value,
-        );
+        return DataListItem(title: title, value: value);
       }).toList(),
     );
   }

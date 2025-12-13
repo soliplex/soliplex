@@ -15,9 +15,9 @@ void main() {
 
   setUp(() {
     disposed = false;
-    config = ActivityStatusConfig(
-      initialDelay: const Duration(milliseconds: 100),
-      cycleInterval: const Duration(milliseconds: 200),
+    config = const ActivityStatusConfig(
+      initialDelay: Duration(milliseconds: 100),
+      cycleInterval: Duration(milliseconds: 200),
       idleMessages: ['Message 1', 'Message 2', 'Message 3'],
     );
     notifier = ActivityStatusNotifier(
@@ -240,7 +240,10 @@ void main() {
         // After duration, should show next cycling message (not original)
         async.elapse(const Duration(milliseconds: 350));
 
-        expect(notifier.state.currentMessage, isNot(equals('Custom Injection')));
+        expect(
+          notifier.state.currentMessage,
+          isNot(equals('Custom Injection')),
+        );
         expect(notifier.state.isActive, isTrue);
 
         // Must dispose inside fakeAsync since timers were created here

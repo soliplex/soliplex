@@ -50,8 +50,14 @@ void main() {
       test('aggressive has short timeouts', () {
         const config = ConnectionConfig.aggressive;
 
-        expect(config.roomInactivityTimeout, equals(const Duration(minutes: 30)));
-        expect(config.serverInactivityTimeout, equals(const Duration(hours: 1)));
+        expect(
+          config.roomInactivityTimeout,
+          equals(const Duration(minutes: 30)),
+        );
+        expect(
+          config.serverInactivityTimeout,
+          equals(const Duration(hours: 1)),
+        );
         expect(config.maxBackgroundedSessionsPerServer, equals(2));
         expect(config.cleanupInterval, equals(const Duration(minutes: 1)));
         expect(config.keepAlive, isFalse);
@@ -73,8 +79,12 @@ void main() {
       });
 
       test('different configs are not equal', () {
-        const config1 = ConnectionConfig(roomInactivityTimeout: Duration(hours: 1));
-        const config2 = ConnectionConfig(roomInactivityTimeout: Duration(hours: 2));
+        const config1 = ConnectionConfig(
+          roomInactivityTimeout: Duration(hours: 1),
+        );
+        const config2 = ConnectionConfig(
+          roomInactivityTimeout: Duration(hours: 2),
+        );
 
         expect(config1, isNot(equals(config2)));
       });
@@ -115,7 +125,10 @@ void main() {
         );
 
         expect(copied.roomInactivityTimeout, equals(const Duration(hours: 1)));
-        expect(copied.serverInactivityTimeout, equals(original.serverInactivityTimeout));
+        expect(
+          copied.serverInactivityTimeout,
+          equals(original.serverInactivityTimeout),
+        );
       });
 
       test('copies with new serverInactivityTimeout', () {
@@ -125,7 +138,10 @@ void main() {
         );
 
         expect(copied.serverInactivityTimeout, equals(const Duration(days: 1)));
-        expect(copied.roomInactivityTimeout, equals(original.roomInactivityTimeout));
+        expect(
+          copied.roomInactivityTimeout,
+          equals(original.roomInactivityTimeout),
+        );
       });
 
       test('copies with new maxBackgroundedSessionsPerServer', () {

@@ -60,7 +60,11 @@ class ChatSearchNotifier extends StateNotifier<ChatSearchState> {
   }
 
   /// Update search query and matching messages.
-  void search(String query, List<String> allMessageIds, String Function(String) getMessageText) {
+  void search(
+    String query,
+    List<String> allMessageIds,
+    String Function(String) getMessageText,
+  ) {
     if (query.isEmpty) {
       state = state.copyWith(
         query: '',
@@ -97,7 +101,8 @@ class ChatSearchNotifier extends StateNotifier<ChatSearchState> {
   /// Go to previous match.
   void previousMatch() {
     if (!state.hasMatches) return;
-    final prev = (state.currentMatchIndex - 1 + state.matchCount) % state.matchCount;
+    final prev =
+        (state.currentMatchIndex - 1 + state.matchCount) % state.matchCount;
     state = state.copyWith(currentMatchIndex: prev);
   }
 }
@@ -105,5 +110,5 @@ class ChatSearchNotifier extends StateNotifier<ChatSearchState> {
 /// Provider for chat search.
 final chatSearchProvider =
     StateNotifierProvider<ChatSearchNotifier, ChatSearchState>((ref) {
-  return ChatSearchNotifier();
-});
+      return ChatSearchNotifier();
+    });

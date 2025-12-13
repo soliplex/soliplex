@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_providers.dart';
 import '../models/server_models.dart';
+import '../network/network_inspector.dart';
 import '../services/auth_manager.dart';
 import '../services/secure_storage_service.dart' show secureStorageProvider;
 import '../services/server_registry.dart';
@@ -14,23 +15,28 @@ export '../state/app_state.dart';
 
 /// Provider for ServerRegistry.
 /// Singleton - persists for app lifetime.
+/// Injects NetworkInspector for traffic observability.
 final serverRegistryProvider = Provider<ServerRegistry>((ref) {
   final storage = ref.read(secureStorageProvider);
-  final registry = ServerRegistry(storage: storage);
+  final inspector = ref.read(networkInspectorProvider);
+  final registry = ServerRegistry(storage: storage, inspector: inspector);
   ref.onDispose(() => registry.dispose());
   return registry;
 });
 
 /// Provider for AuthManager.
 /// Singleton - persists for app lifetime.
+/// Injects NetworkInspector for traffic observability.
 final authManagerProvider = Provider<AuthManager>((ref) {
   final storage = ref.read(secureStorageProvider);
   final oidcInteractor = ref.read(oidcAuthInteractorProvider);
   final tokenStorage = ref.read(secureTokenStorageProvider);
+  final inspector = ref.read(networkInspectorProvider);
   final manager = AuthManager(
     storage: storage,
     oidcInteractor: oidcInteractor,
     tokenStorage: tokenStorage,
+    inspector: inspector,
   );
   ref.onDispose(() => manager.dispose());
   return manager;
@@ -69,7 +75,9 @@ final currentAppStateProvider = Provider<AppState>((ref) {
 final currentServerFromAppStateProvider = Provider<ServerConnection?>((ref) {
   final stateAsync = ref.watch(appStateStreamProvider);
   final server = stateAsync.whenOrNull(data: (state) => state.server);
-  DebugLog.service('currentServerFromAppStateProvider: server=${server?.url}, id=${server?.id}');
+  DebugLog.service(
+    'currentServerFromAppStateProvider: server=${server?.url}, id=${server?.id}',
+  );
   return server;
 });
 

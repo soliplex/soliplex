@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../providers/app_providers.dart';
 import 'api_constants.dart';
 
 /// Centralized URL builder for consistent API endpoint construction.
@@ -58,8 +59,13 @@ class UrlBuilder {
   Uri createRun(String roomId, String threadId) => thread(roomId, threadId);
 
   /// POST /api/v1/rooms/{roomId}/agui/{threadId}/meta - Update thread metadata.
-  Uri threadMeta(String roomId, String threadId) => _apiUri(
-      [ApiConstants.rooms, roomId, ApiConstants.agui, threadId, ApiConstants.meta]);
+  Uri threadMeta(String roomId, String threadId) => _apiUri([
+    ApiConstants.rooms,
+    roomId,
+    ApiConstants.agui,
+    threadId,
+    ApiConstants.meta,
+  ]);
 
   // =========================================================================
   // AG-UI RUN API
@@ -84,23 +90,23 @@ class UrlBuilder {
 
   /// POST /api/v1/rooms/{roomId}/agui/{threadId}/{runId}/cancel - Cancel run.
   Uri cancelRun(String roomId, String threadId, String runId) => _apiUri([
-        ApiConstants.rooms,
-        roomId,
-        ApiConstants.agui,
-        threadId,
-        runId,
-        ApiConstants.cancel
-      ]);
+    ApiConstants.rooms,
+    roomId,
+    ApiConstants.agui,
+    threadId,
+    runId,
+    ApiConstants.cancel,
+  ]);
 
   /// POST /api/v1/rooms/{roomId}/agui/{threadId}/{runId}/meta - Update run metadata.
   Uri runMeta(String roomId, String threadId, String runId) => _apiUri([
-        ApiConstants.rooms,
-        roomId,
-        ApiConstants.agui,
-        threadId,
-        runId,
-        ApiConstants.meta
-      ]);
+    ApiConstants.rooms,
+    roomId,
+    ApiConstants.agui,
+    threadId,
+    runId,
+    ApiConstants.meta,
+  ]);
 
   // =========================================================================
   // MCP API
@@ -126,7 +132,9 @@ class UrlBuilder {
 
   /// Build a URI with the API path prefix.
   Uri _apiUri(List<String> pathSegments) {
-    return Uri.parse('$_baseUrl${ApiConstants.apiPath}/${pathSegments.join('/')}');
+    return Uri.parse(
+      '$_baseUrl${ApiConstants.apiPath}/${pathSegments.join('/')}',
+    );
   }
 
   /// Normalize a server URL to bare format.
@@ -145,8 +153,10 @@ class UrlBuilder {
     var normalized = url.trim();
 
     // Add scheme if missing
-    if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
-      if (normalized.startsWith('localhost') || normalized.startsWith('127.0.0.1')) {
+    if (!normalized.startsWith('http://') &&
+        !normalized.startsWith('https://')) {
+      if (normalized.startsWith('localhost') ||
+          normalized.startsWith('127.0.0.1')) {
         normalized = 'http://$normalized';
       } else {
         normalized = 'https://$normalized';
@@ -175,8 +185,11 @@ class UrlBuilder {
 ///   final uri = urlBuilder.rooms();
 /// }
 /// ```
+/// Provider for the URL builder based on current server.
+///
+/// Returns null when no server is configured.
 final urlBuilderProvider = Provider<UrlBuilder?>((ref) {
-  // This will be connected to the server config provider in the migration
-  // For now, return null - services should check for null
-  return null;
+  final server = ref.watch(currentServerFromAppStateProvider);
+  if (server == null) return null;
+  return UrlBuilder(server.url);
 });

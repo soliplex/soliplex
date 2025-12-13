@@ -95,15 +95,18 @@ class ToolCallSummaryWidget extends StatelessWidget {
     // Label text
     String label;
     if (hasExecuting) {
-      final executingTools =
-          toolCalls.where((t) => t.isExecuting).map((t) => _formatToolName(t.toolName));
+      final executingTools = toolCalls
+          .where((t) => t.isExecuting)
+          .map((t) => _formatToolName(t.toolName));
       if (toolCalls.length == 1) {
         label = 'Running ${executingTools.first}...';
       } else {
-        label = 'Running ${executingTools.length} of ${toolCalls.length} tools...';
+        label =
+            'Running ${executingTools.length} of ${toolCalls.length} tools...';
       }
     } else {
-      label = 'Used ${toolCalls.length} tool${toolCalls.length == 1 ? '' : 's'}';
+      label =
+          'Used ${toolCalls.length} tool${toolCalls.length == 1 ? '' : 's'}';
     }
 
     return InkWell(
@@ -165,11 +168,7 @@ class ToolCallSummaryWidget extends StatelessWidget {
         ),
       );
     } else if (tool.isCompleted) {
-      icon = Icon(
-        Icons.check,
-        size: 14,
-        color: colorScheme.onSurfaceVariant,
-      );
+      icon = Icon(Icons.check, size: 14, color: colorScheme.onSurfaceVariant);
     } else if (tool.isError) {
       icon = Icon(
         Icons.close,
@@ -227,8 +226,11 @@ class ToolCallSummaryWidget extends StatelessWidget {
   String _formatToolName(String name) {
     return name
         .split('_')
-        .map((word) =>
-            word.isEmpty ? '' : '${word[0].toUpperCase()}${word.substring(1)}')
+        .map(
+          (word) => word.isEmpty
+              ? ''
+              : '${word[0].toUpperCase()}${word.substring(1)}',
+        )
         .join(' ');
   }
 
@@ -271,7 +273,11 @@ class CompactToolCallIndicator extends StatelessWidget {
       );
       color = colorScheme.primary;
     } else if (isError) {
-      icon = Icon(Icons.close, size: 14, color: colorScheme.error.withValues(alpha: 0.8));
+      icon = Icon(
+        Icons.close,
+        size: 14,
+        color: colorScheme.error.withValues(alpha: 0.8),
+      );
       color = colorScheme.error.withValues(alpha: 0.8);
     } else {
       icon = Icon(Icons.check, size: 14, color: colorScheme.onSurfaceVariant);
@@ -301,8 +307,11 @@ class CompactToolCallIndicator extends StatelessWidget {
   String _formatToolName(String name) {
     return name
         .split('_')
-        .map((word) =>
-            word.isEmpty ? '' : '${word[0].toUpperCase()}${word.substring(1)}')
+        .map(
+          (word) => word.isEmpty
+              ? ''
+              : '${word[0].toUpperCase()}${word.substring(1)}',
+        )
         .join(' ');
   }
 }

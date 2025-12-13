@@ -3,12 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Categories for organizing keyboard shortcuts.
-enum ShortcutCategory {
-  general,
-  navigation,
-  view,
-  editing,
-}
+enum ShortcutCategory { general, navigation, view, editing }
 
 /// Extension methods for ShortcutCategory.
 extension ShortcutCategoryExtension on ShortcutCategory {
@@ -85,7 +80,7 @@ class ShortcutDefinition {
     return SingleActivator(
       trigger,
       control: !isMac && control,
-      meta: isMac && control,  // Cmd on mac, Ctrl elsewhere
+      meta: isMac && control, // Cmd on mac, Ctrl elsewhere
       shift: shift,
       alt: alt,
     );
@@ -178,15 +173,17 @@ class KeyboardShortcutService {
     _initialized = true;
 
     // General - Alt+/ (browsers don't capture Alt shortcuts)
-    register(const ShortcutDefinition(
-      id: 'show_help',
-      label: 'Show Keyboard Shortcuts',
-      description: 'Open the keyboard shortcuts help dialog',
-      category: ShortcutCategory.general,
-      trigger: LogicalKeyboardKey.slash,
-      alt: true,
-      action: 'show_help',
-    ));
+    register(
+      const ShortcutDefinition(
+        id: 'show_help',
+        label: 'Show Keyboard Shortcuts',
+        description: 'Open the keyboard shortcuts help dialog',
+        category: ShortcutCategory.general,
+        trigger: LogicalKeyboardKey.slash,
+        alt: true,
+        action: 'show_help',
+      ),
+    );
 
     // Navigation - Room switching by number (Alt+1-9)
     final digitKeys = [
@@ -202,108 +199,130 @@ class KeyboardShortcutService {
     ];
 
     for (int i = 0; i < 9; i++) {
-      register(ShortcutDefinition(
-        id: 'room_${i + 1}',
-        label: 'Switch to Room ${i + 1}',
-        description: 'Switch to the ${_ordinal(i + 1)} room',
-        category: ShortcutCategory.navigation,
-        trigger: digitKeys[i],
-        alt: true,
-        action: 'room_${i + 1}',
-      ));
+      register(
+        ShortcutDefinition(
+          id: 'room_${i + 1}',
+          label: 'Switch to Room ${i + 1}',
+          description: 'Switch to the ${_ordinal(i + 1)} room',
+          category: ShortcutCategory.navigation,
+          trigger: digitKeys[i],
+          alt: true,
+          action: 'room_${i + 1}',
+        ),
+      );
     }
 
     // Navigation - Previous/Next room (Alt+[/])
-    register(const ShortcutDefinition(
-      id: 'room_prev',
-      label: 'Previous Room',
-      description: 'Switch to the previous room',
-      category: ShortcutCategory.navigation,
-      trigger: LogicalKeyboardKey.bracketLeft,
-      alt: true,
-      action: 'room_prev',
-    ));
+    register(
+      const ShortcutDefinition(
+        id: 'room_prev',
+        label: 'Previous Room',
+        description: 'Switch to the previous room',
+        category: ShortcutCategory.navigation,
+        trigger: LogicalKeyboardKey.bracketLeft,
+        alt: true,
+        action: 'room_prev',
+      ),
+    );
 
-    register(const ShortcutDefinition(
-      id: 'room_next',
-      label: 'Next Room',
-      description: 'Switch to the next room',
-      category: ShortcutCategory.navigation,
-      trigger: LogicalKeyboardKey.bracketRight,
-      alt: true,
-      action: 'room_next',
-    ));
+    register(
+      const ShortcutDefinition(
+        id: 'room_next',
+        label: 'Next Room',
+        description: 'Switch to the next room',
+        category: ShortcutCategory.navigation,
+        trigger: LogicalKeyboardKey.bracketRight,
+        alt: true,
+        action: 'room_next',
+      ),
+    );
 
     // View - Layout switching (Alt+Shift+1/2/3)
-    register(const ShortcutDefinition(
-      id: 'layout_standard',
-      label: 'Standard Layout',
-      description: 'Switch to full-screen chat view',
-      category: ShortcutCategory.view,
-      trigger: LogicalKeyboardKey.digit1,
-      alt: true,
-      shift: true,
-      action: 'layout_standard',
-    ));
+    register(
+      const ShortcutDefinition(
+        id: 'layout_standard',
+        label: 'Standard Layout',
+        description: 'Switch to full-screen chat view',
+        category: ShortcutCategory.view,
+        trigger: LogicalKeyboardKey.digit1,
+        alt: true,
+        shift: true,
+        action: 'layout_standard',
+      ),
+    );
 
-    register(const ShortcutDefinition(
-      id: 'layout_canvas',
-      label: 'Canvas Layout',
-      description: 'Switch to canvas + chat view',
-      category: ShortcutCategory.view,
-      trigger: LogicalKeyboardKey.digit2,
-      alt: true,
-      shift: true,
-      action: 'layout_canvas',
-    ));
+    register(
+      const ShortcutDefinition(
+        id: 'layout_canvas',
+        label: 'Canvas Layout',
+        description: 'Switch to canvas + chat view',
+        category: ShortcutCategory.view,
+        trigger: LogicalKeyboardKey.digit2,
+        alt: true,
+        shift: true,
+        action: 'layout_canvas',
+      ),
+    );
 
-    register(const ShortcutDefinition(
-      id: 'layout_threecol',
-      label: 'Three Column Layout',
-      description: 'Switch to thread + chat + context view',
-      category: ShortcutCategory.view,
-      trigger: LogicalKeyboardKey.digit3,
-      alt: true,
-      shift: true,
-      action: 'layout_threecol',
-    ));
+    register(
+      const ShortcutDefinition(
+        id: 'layout_threecol',
+        label: 'Three Column Layout',
+        description: 'Switch to thread + chat + context view',
+        category: ShortcutCategory.view,
+        trigger: LogicalKeyboardKey.digit3,
+        alt: true,
+        shift: true,
+        action: 'layout_threecol',
+      ),
+    );
 
     // Editing - Paste uses Alt+K, Search uses Alt+F (avoid browser conflicts)
-    register(const ShortcutDefinition(
-      id: 'paste',
-      label: 'Paste from Clipboard',
-      description: 'Paste content from clipboard into chat',
-      category: ShortcutCategory.editing,
-      trigger: LogicalKeyboardKey.keyK,
-      alt: true,
-      action: 'paste',
-    ));
+    register(
+      const ShortcutDefinition(
+        id: 'paste',
+        label: 'Paste from Clipboard',
+        description: 'Paste content from clipboard into chat',
+        category: ShortcutCategory.editing,
+        trigger: LogicalKeyboardKey.keyK,
+        alt: true,
+        action: 'paste',
+      ),
+    );
 
-    register(const ShortcutDefinition(
-      id: 'search',
-      label: 'Search Chat',
-      description: 'Open the chat search bar',
-      category: ShortcutCategory.editing,
-      trigger: LogicalKeyboardKey.keyF,
-      alt: true,
-      action: 'search',
-    ));
+    register(
+      const ShortcutDefinition(
+        id: 'search',
+        label: 'Search Chat',
+        description: 'Open the chat search bar',
+        category: ShortcutCategory.editing,
+        trigger: LogicalKeyboardKey.keyF,
+        alt: true,
+        action: 'search',
+      ),
+    );
   }
 
   /// Get ordinal string for a number.
   String _ordinal(int n) {
     if (n >= 11 && n <= 13) return '${n}th';
     switch (n % 10) {
-      case 1: return '${n}st';
-      case 2: return '${n}nd';
-      case 3: return '${n}rd';
-      default: return '${n}th';
+      case 1:
+        return '${n}st';
+      case 2:
+        return '${n}nd';
+      case 3:
+        return '${n}rd';
+      default:
+        return '${n}th';
     }
   }
 }
 
 /// Riverpod provider for the keyboard shortcut service.
-final keyboardShortcutServiceProvider = Provider<KeyboardShortcutService>((ref) {
+final keyboardShortcutServiceProvider = Provider<KeyboardShortcutService>((
+  ref,
+) {
   final service = KeyboardShortcutService.instance;
   service.initialize();
   return service;

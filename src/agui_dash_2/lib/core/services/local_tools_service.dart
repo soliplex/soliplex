@@ -76,7 +76,7 @@ class LocalToolsService {
   Stream<LocalToolResult> get results => _resultController.stream;
 
   /// Lock to prevent concurrent location permission requests.
-  bool _locationPermissionInProgress = false;
+  /// Uses Completer pattern - if a request is in-flight (not completed), others wait.
   Completer<LocationPermission>? _permissionCompleter;
 
   /// Initialize with default tools.
@@ -202,15 +202,18 @@ class LocalToolsService {
     debugPrint('LocalToolsService: Current permission: $permission');
     bool justGrantedPermission = false;
     if (permission == LocationPermission.denied) {
-      // Use lock to prevent concurrent permission requests
-      if (_locationPermissionInProgress) {
+      // Use Completer lock to prevent concurrent permission requests.
+      // Check if an uncompleted request is in-flight - if so, wait for it.
+      final existingCompleter = _permissionCompleter;
+      if (existingCompleter != null && !existingCompleter.isCompleted) {
         debugPrint(
           'LocalToolsService: Permission request already in progress, waiting...',
         );
-        permission = await _permissionCompleter!.future;
+        permission = await existingCompleter.future;
       } else {
-        _locationPermissionInProgress = true;
-        _permissionCompleter = Completer<LocationPermission>();
+        // Create new Completer SYNCHRONOUSLY before any await - makes this atomic
+        final completer = Completer<LocationPermission>();
+        _permissionCompleter = completer;
 
         try {
           debugPrint('LocalToolsService: Requesting location permission...');
@@ -218,12 +221,10 @@ class LocalToolsService {
           debugPrint(
             'LocalToolsService: After request, permission: $permission',
           );
-          _permissionCompleter!.complete(permission);
+          completer.complete(permission);
         } catch (e) {
-          _permissionCompleter!.completeError(e);
+          completer.completeError(e);
           rethrow;
-        } finally {
-          _locationPermissionInProgress = false;
         }
       }
 
@@ -262,7 +263,9 @@ class LocalToolsService {
           await Future.delayed(const Duration(milliseconds: 500));
         }
 
-        debugPrint('LocalToolsService: Attempt $attempt - calling getCurrentPosition...');
+        debugPrint(
+          'LocalToolsService: Attempt $attempt - calling getCurrentPosition...',
+        );
         position = await Geolocator.getCurrentPosition(
           locationSettings: LocationSettings(
             accuracy: highAccuracy

@@ -14,5 +14,10 @@ class OidcAuthTokenResponse extends Equatable {
   });
 
   @override
-  List<Object?> get props => [idToken, accessToken, accessTokenExpiration, refreshToken];
+  List<Object?> get props => [
+    idToken,
+    accessToken,
+    accessTokenExpiration,
+    refreshToken,
+  ];
 }

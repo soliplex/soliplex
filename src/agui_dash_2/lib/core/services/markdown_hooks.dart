@@ -2,31 +2,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Callback when a link is tapped in markdown
-typedef LinkTapCallback = void Function(
-  String? href,
-  String text,
-  String messageId,
-);
+typedef LinkTapCallback =
+    void Function(String? href, String text, String messageId);
 
 /// Callback when an image load state changes
-typedef ImageLoadCallback = void Function(
-  String imageUrl,
-  String messageId,
-  ImageLoadState state,
-);
+typedef ImageLoadCallback =
+    void Function(String imageUrl, String messageId, ImageLoadState state);
 
 /// Callback when code is copied from a code block
-typedef CodeCopyCallback = void Function(
-  String code,
-  String? language,
-  String messageId,
-);
+typedef CodeCopyCallback =
+    void Function(String code, String? language, String messageId);
 
 /// Callback when text is quoted
-typedef QuoteCallback = void Function(
-  String quotedText,
-  String messageId,
-);
+typedef QuoteCallback = void Function(String quotedText, String messageId);
 
 /// Callback when all images in a message finish loading
 typedef AllImagesLoadedCallback = void Function(String messageId);

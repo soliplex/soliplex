@@ -128,31 +128,31 @@ class SkillsCardWidget extends StatelessWidget {
             const Divider(height: 1),
             const SizedBox(height: 8),
             // Skills list
-            ...skills.map((skill) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 100,
-                    child: SelectableText(
-                      skill.name,
-                      style: theme.textTheme.bodyMedium,
+            ...skills.map(
+              (skill) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 100,
+                      child: SelectableText(
+                        skill.name,
+                        style: theme.textTheme.bodyMedium,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _SkillLevelBar(level: skill.level),
-                  ),
-                  const SizedBox(width: 8),
-                  SelectableText(
-                    _levelLabel(skill.level),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.hintColor,
+                    const SizedBox(width: 8),
+                    Expanded(child: _SkillLevelBar(level: skill.level)),
+                    const SizedBox(width: 8),
+                    SelectableText(
+                      _levelLabel(skill.level),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.hintColor,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            )),
+            ),
           ],
         ),
       ),
@@ -161,12 +161,18 @@ class SkillsCardWidget extends StatelessWidget {
 
   String _levelLabel(int level) {
     switch (level) {
-      case 1: return 'Beginner';
-      case 2: return 'Basic';
-      case 3: return 'Intermediate';
-      case 4: return 'Advanced';
-      case 5: return 'Expert';
-      default: return 'Unknown';
+      case 1:
+        return 'Beginner';
+      case 2:
+        return 'Basic';
+      case 3:
+        return 'Intermediate';
+      case 4:
+        return 'Advanced';
+      case 5:
+        return 'Expert';
+      default:
+        return 'Unknown';
     }
   }
 }

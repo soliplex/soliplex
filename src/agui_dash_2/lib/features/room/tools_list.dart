@@ -63,7 +63,10 @@ class _ToolsListState extends State<ToolsList> {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: colorScheme.primaryContainer,
                     borderRadius: BorderRadius.circular(12),
@@ -141,11 +144,7 @@ class _ToolItem extends StatelessWidget {
             child: Row(
               children: [
                 // Tool type icon
-                Icon(
-                  _getToolIcon(tool),
-                  size: 14,
-                  color: _getToolColor(tool),
-                ),
+                Icon(_getToolIcon(tool), size: 14, color: _getToolColor(tool)),
                 const SizedBox(width: 8),
                 // Tool name
                 Expanded(
@@ -188,7 +187,10 @@ class _ToolItem extends StatelessWidget {
                 runSpacing: 4,
                 children: tool.extraParameters.entries.map((e) {
                   return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(4),
@@ -211,7 +213,9 @@ class _ToolItem extends StatelessWidget {
 
   IconData _getToolIcon(RoomTool tool) {
     if (tool.isRagTool) return Icons.search;
-    if (tool.kind.contains('time') || tool.kind.contains('date')) return Icons.schedule;
+    if (tool.kind.contains('time') || tool.kind.contains('date')) {
+      return Icons.schedule;
+    }
     if (tool.kind.contains('user')) return Icons.person_outline;
     if (tool.kind.contains('location')) return Icons.location_on_outlined;
     return Icons.extension_outlined;
@@ -219,7 +223,9 @@ class _ToolItem extends StatelessWidget {
 
   Color _getToolColor(RoomTool tool) {
     if (tool.isRagTool) return const Color(0xFF7C3AED);
-    if (tool.kind.contains('time') || tool.kind.contains('date')) return const Color(0xFF059669);
+    if (tool.kind.contains('time') || tool.kind.contains('date')) {
+      return const Color(0xFF059669);
+    }
     if (tool.kind.contains('user')) return const Color(0xFF2563EB);
     return const Color(0xFF6B7280);
   }

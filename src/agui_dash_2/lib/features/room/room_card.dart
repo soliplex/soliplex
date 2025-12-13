@@ -92,7 +92,9 @@ class RoomCard extends StatelessWidget {
                             room.agent!.displayModelName,
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: isSelected
-                                  ? colorScheme.onPrimaryContainer.withValues(alpha: 0.7)
+                                  ? colorScheme.onPrimaryContainer.withValues(
+                                      alpha: 0.7,
+                                    )
                                   : colorScheme.onSurfaceVariant,
                             ),
                             overflow: TextOverflow.ellipsis,
@@ -124,7 +126,9 @@ class RoomCard extends StatelessWidget {
                         Icons.info_outline,
                         size: 18,
                         color: isSelected
-                            ? colorScheme.onPrimaryContainer.withValues(alpha: 0.7)
+                            ? colorScheme.onPrimaryContainer.withValues(
+                                alpha: 0.7,
+                              )
                             : colorScheme.onSurfaceVariant,
                       ),
                       onPressed: onInfoTap,
@@ -187,9 +191,7 @@ class CompactRoomCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected
-              ? colorScheme.primaryContainer
-              : Colors.transparent,
+          color: isSelected ? colorScheme.primaryContainer : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
@@ -214,8 +216,7 @@ class CompactRoomCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (room.toolCount > 0)
-              CapabilityIcons(room: room),
+            if (room.toolCount > 0) CapabilityIcons(room: room),
           ],
         ),
       ),
@@ -264,10 +265,9 @@ class RoomSelectorSheet extends StatelessWidget {
                 height: 4,
                 margin: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurfaceVariant
-                      .withValues(alpha: 0.4),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),

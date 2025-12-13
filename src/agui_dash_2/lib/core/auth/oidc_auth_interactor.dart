@@ -29,10 +29,10 @@ class OidcMobileAuthInteractor extends OidcAuthInteractorBase {
     SecureTokenStorage tokenStorage,
     Duration tokenExpirationBuffer,
   ) : super(
-          ssoStorage: ssoStorage,
-          tokenStorage: tokenStorage,
-          tokenExpirationBuffer: tokenExpirationBuffer,
-        );
+        ssoStorage: ssoStorage,
+        tokenStorage: tokenStorage,
+        tokenExpirationBuffer: tokenExpirationBuffer,
+      );
 
   @override
   Future<OidcAuthTokenResponse> authorizeAndExchangeCode(
@@ -69,7 +69,9 @@ class OidcMobileAuthInteractor extends OidcAuthInteractorBase {
       debugPrint('_authorizeAndExchangeCode: got result from flutter_appauth');
       debugPrint('  idToken null? ${result.idToken == null}');
       debugPrint('  accessToken null? ${result.accessToken == null}');
-      debugPrint('  expiration null? ${result.accessTokenExpirationDateTime == null}');
+      debugPrint(
+        '  expiration null? ${result.accessTokenExpirationDateTime == null}',
+      );
       debugPrint('  refreshToken null? ${result.refreshToken == null}');
 
       _validateTokenResult(
@@ -185,7 +187,8 @@ class OidcTokenValidationException implements Exception {
   });
 
   @override
-  String toString() => 'At least one of the values in oidc auth result is null:\n'
+  String toString() =>
+      'At least one of the values in oidc auth result is null:\n'
       'is id token null? $idTokenNull\n'
       'is access token null: $accessTokenNull\n'
       'is token expiration null: $expirationNull\n'
@@ -203,10 +206,10 @@ class OidcWebAuthInteractor extends OidcAuthInteractorBase {
     SecureTokenStorage tokenStorage,
     Duration tokenExpirationBuffer,
   ) : super(
-          ssoStorage: ssoStorage,
-          tokenStorage: tokenStorage,
-          tokenExpirationBuffer: tokenExpirationBuffer,
-        );
+        ssoStorage: ssoStorage,
+        tokenStorage: tokenStorage,
+        tokenExpirationBuffer: tokenExpirationBuffer,
+      );
 
   @override
   Future<OidcAuthTokenResponse> authorizeAndExchangeCode(
