@@ -47,7 +47,10 @@ How we know it's done:
 
 - [ ] AC1: User can {action} and sees {result}
 - [ ] AC2: System handles {edge case} by {behavior}
-- [ ] AC-TEST: Unit tests exist for new/modified code
+- [ ] AC-TEST: Unit tests exist and pass for new/modified code
+- [ ] AC-COVERAGE: Test coverage measured for modified files
+- [ ] AC-ANALYZER: `flutter analyze` reports zero errors/warnings
+- [ ] AC-FORMATTER: Code formatting reviewed (run `dart format`)
 
 ## Non-Goals
 

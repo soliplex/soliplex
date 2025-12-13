@@ -146,6 +146,31 @@ Every spec completion requires:
    - Final coverage captured at `/docs-complete`
    - Delta reported for touched files
 
+### Quality Gates
+
+Quality metrics are enforced at `/docs-complete`:
+
+| Gate | Check | Blocks Completion? |
+|------|-------|-------------------|
+| Tests | `flutter test` - all passing | **Yes** |
+| Analyzer | `flutter analyze` - zero errors/warnings | **Yes** |
+| Coverage | Coverage delta for modified files | No (warn only) |
+| Formatter | `dart format --set-exit-if-changed` | No (warn only) |
+
+**Analyzer enforcement:**
+- Errors and warnings **BLOCK** spec completion
+- Info-level hints are allowed (don't block)
+- Fix all warnings/errors before running `/docs-complete`
+
+**Why this matters:**
+- Analyzer issues indicate potential bugs or code quality problems
+- Treating them as seriously as test failures prevents technical debt
+- Coverage and formatter warnings remind to maintain standards without blocking
+
+**Session warnings:**
+- `/docs-log` shows warnings if quality metrics aren't clean
+- Warnings indicate what will block completion later
+
 ### Coverage Metrics
 
 Coverage is tracked per-file for files modified by the spec:

@@ -24,25 +24,51 @@ Mark a spec as DONE and add completion records.
       - If no testing documented: warn user and ask if they want to add tests first
       - This is a soft check (warn, don't block)
 
-   b. **Auto-detect test files**:
+   b. **Quality Gate: Analyzer** (BLOCKING):
+      - Run `flutter analyze`
+      - Parse output for errors and warnings (ignore info-level hints)
+      - Count issues: `flutter analyze 2>&1 | grep -cE " warning | error "`
+      - If count > 0: **BLOCK completion**
+        - Show: "❌ Cannot complete spec: {N} analyzer warnings/errors found"
+        - List the issues
+        - Instruct: "Fix these issues and run `/docs-complete` again"
+        - Stop here - do not proceed
+      - If clean: proceed to next step
+
+   c. **Quality Gate: Formatter** (WARNING):
+      - Run `dart format --set-exit-if-changed . 2>&1`
+      - If exit code != 0: **WARN** (don't block)
+        - Show: "⚠️ Warning: Some files need formatting"
+        - Suggest: "Run `dart format .` to fix"
+      - Proceed regardless of result
+
+   d. **Quality Gate: Coverage** (WARNING):
+      - Run `flutter test --coverage`
+      - Compare coverage for modified files against baseline (from work log)
+      - If coverage decreased for any file: **WARN** (don't block)
+        - Show: "⚠️ Coverage decreased for: {files}"
+        - Show before/after for each affected file
+      - Proceed regardless of result
+
+   e. **Auto-detect test files**:
       - Scan `test/` directory for files related to the spec
       - Match by: feature name, file names mentioned in work log
       - List discovered test files for inclusion in completion record
 
-   c. **Capture final coverage**:
+   f. **Record final coverage**:
       - Run `flutter test --coverage`
       - Parse `coverage/lcov.info`
       - Compare against baseline from work log (if recorded)
       - Calculate delta for files modified by this spec
       - Format as coverage table (see work-log-recipe for format)
 
-   d. Review the spec:
+   g. Review the spec:
       - Check all Requirements - are they done?
       - Check all Acceptance Criteria - are they met?
-      - Verify test AC is satisfied (tests exist for new code)
+      - Verify quality ACs are satisfied (tests, analyzer, formatter, coverage)
       - If not all checked, ask user to confirm completion anyway or address remaining items
 
-   e. Update the spec file:
+   h. Update the spec file:
       - Change Status: IN_PROGRESS → DONE
       - Update the Updated date
       - Change Version to 1.0.0 (or increment if already versioned)
@@ -53,13 +79,13 @@ Mark a spec as DONE and add completion records.
         - Tests (auto-detected test files)
         - Notes (any implementation notes)
 
-   f. Update the work log:
+   i. Update the work log:
       - Add final "Complete" entry using template from recipe
       - Include coverage delta table
       - Change work log Status: active → complete
       - Include summary, total files modified, ADRs created, lessons learned
 
-   g. **ADR Wizard** (run after work log update):
+   j. **ADR Wizard** (run after work log update):
       1. Extract all decisions from work log (### Decisions sections)
       2. Scan for keywords: "chose", "vs", "over", "instead of", "pattern", "architecture"
       3. For each flagged decision, show terse outline:
@@ -73,7 +99,7 @@ Mark a spec as DONE and add completion records.
       4. For each "yes", create ADR file using `docs/recipes/adr-recipe.md` template
       5. Link new ADRs in spec's Related section
 
-   h. **Lessons Extraction**:
+   k. **Lessons Extraction**:
       1. Extract "Lessons Learned" from work log completion entry
       2. For each lesson, ask user to categorize:
          - riverpod, testing, architecture, flutter, or general
@@ -86,7 +112,7 @@ Mark a spec as DONE and add completion records.
          - **Date:** YYYY-MM-DD
          ```
 
-   i. **Deferred Items Prompt**:
+   l. **Deferred Items Prompt**:
       1. Check work log for "Deferred Items" or unchecked "Next" items
       2. List them to user:
          ```

@@ -32,6 +32,17 @@ Manually add a session entry to an active work log.
    - Run `git diff --stat` to get file change ranges
    - Ask: "What's the single most important next action?"
 
+   **Quality Gate Warnings:**
+   - If tests are failing:
+     - Show: "⚠️ Tests failing - these will BLOCK `/docs-complete`"
+   - If coverage decreased for modified files:
+     - Show: "⚠️ Coverage decreased for {files} - review before completion"
+   - If `flutter analyze` reports warnings or errors:
+     - Show: "⚠️ Analyzer has {N} warnings/errors - these will BLOCK `/docs-complete`"
+     - List the issues
+   - If `dart format --set-exit-if-changed` fails:
+     - Show: "⚠️ {N} files need formatting - run `dart format .` to fix"
+
 6. Append session entry to the work log:
    - Use today's date
    - Increment session number

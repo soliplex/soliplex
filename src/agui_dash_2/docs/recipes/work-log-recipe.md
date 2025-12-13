@@ -77,10 +77,10 @@ What was the goal of this session?
 - `path/to/file.dart:NN-MM` - brief description of change
 
 **Quality metrics:**
-- Tests: N passing, M failing
-- Coverage: file.dart XX%→YY%
-- Analyzer: N issues (or "clean")
-- Formatter: N files changed (or "clean")
+- Tests: N passing, M failing *(blocks completion if failing)*
+- Coverage: file.dart XX%→YY% *(tracked, warn if decreased)*
+- Analyzer: N issues (or "clean") *(blocks completion if warnings/errors)*
+- Formatter: N files changed (or "clean") *(warning only)*
 
 **Next action:** Single most important next step
 
@@ -115,10 +115,10 @@ The Resume Context section captures essential state for picking up work in a new
 - `lib/core/network/network_transport_layer.dart` (new file)
 
 **Quality metrics:**
-- Tests: 291 passing, 0 failing
-- Coverage: network_transport_layer.dart new→85%
-- Analyzer: clean
-- Formatter: clean
+- Tests: 291 passing, 0 failing *(blocks completion if failing)*
+- Coverage: network_transport_layer.dart new→85% *(tracked, warn if decreased)*
+- Analyzer: clean *(blocks completion if warnings/errors)*
+- Formatter: clean *(warning only)*
 
 **Next action:** Wire SSE through transport layer for inspector visibility
 ```
