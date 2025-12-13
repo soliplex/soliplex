@@ -78,7 +78,33 @@ Wire SSE through NetworkTransportLayer so NetworkInspector can observe SSE strea
 - Thread uses delegate pattern to avoid coupling to NetworkTransportLayer directly
 
 ### Next
-- [ ] Add tests for NetworkTransportLayer SSE tracking
+- [x] Add tests for NetworkTransportLayer
 - [ ] Verify SSE entries appear in NetworkInspector UI
+
+---
+
+## 2025-12-13 - Session 3 (Testing)
+
+### Context
+Add unit tests for NetworkTransportLayer.
+
+### Tests Created
+- `test/core/network/network_transport_layer_test.dart`: 9 tests
+  - HTTP POST records request/response in inspector
+  - HTTP POST records errors in inspector
+  - 401 retry with header refresh
+  - Dispose prevents further requests
+  - isDisposed returns correct state
+  - close is idempotent
+  - Default headers used in requests
+  - updateHeaders changes future requests
+  - AgUiClient exposed for SSE
+
+### Test Results
+- **Total**: 291 tests
+- **All passing**: Yes
+
+### Next
+- [ ] Manual verification: SSE entries appear in NetworkInspector UI
 
 ---
