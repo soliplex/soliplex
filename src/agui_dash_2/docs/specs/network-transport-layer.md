@@ -106,7 +106,7 @@ SSE  ──► HttpTransport ──► NetworkTransportLayer ──► NetworkIn
 
 ## Related
 
-- ADRs: none yet
+- ADRs: ADR-0001 (SSE Delegate Pattern for Thread)
 - Work Log: LOG:network-transport-layer
 - Supersedes: SPEC:sse-transport-unification
 
