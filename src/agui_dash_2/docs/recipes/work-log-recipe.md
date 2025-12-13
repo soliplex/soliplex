@@ -1,0 +1,223 @@
+# Work Log Recipe
+
+> Machine instructions for maintaining per-feature work logs.
+
+## When to Use
+
+- Starting a work session on a feature
+- Completing a work session
+- Any time code is modified for a tracked spec
+
+## File Location
+
+`docs/work-logs/{feature-name}.md`
+
+Name MUST match the spec: `SPEC:room-tags` → `work-logs/room-tags.md`
+
+## Template (New Log)
+
+```markdown
+# Work Log: {Feature Name}
+
+| Field | Value |
+|-------|-------|
+| Spec | SPEC:{feature-name} |
+| Created | YYYY-MM-DD |
+| Status | active / complete |
+
+---
+
+## YYYY-MM-DD - Session 1
+
+### Context
+What was the goal of this session?
+
+### Baseline Coverage
+*Captured at start via `flutter test --coverage`*
+
+| File | Coverage |
+|------|----------|
+| (none yet or existing coverage) | |
+
+### Changes
+- `path/to/file.dart`: Description of change
+- `path/to/other.dart`: Description of change
+
+### Decisions
+- Chose X over Y because Z (see ADR-NNNN if applicable)
+
+### Next
+- [ ] Next action 1
+- [ ] Next action 2
+
+---
+```
+
+## Session Entry Template (Append)
+
+```markdown
+---
+
+## YYYY-MM-DD - Session N
+
+### Context
+{goal}
+
+### Changes
+- `file`: {change}
+
+### Decisions
+- {decision or "None"}
+
+### Next
+- [ ] {action}
+
+---
+```
+
+## Testing Session Template
+
+Use this when documenting test creation/execution:
+
+```markdown
+---
+
+## YYYY-MM-DD - Testing
+
+### Context
+Adding unit tests for {feature}.
+
+### Tests Created
+- `test/path/to/file_test.dart`: {X} tests for {component}
+- `test/path/to/other_test.dart`: {Y} tests for {component}
+
+### Test Results
+- **Total tests**: {N}
+- **All passing**: Yes/No
+- **Command**: `flutter test {paths}`
+
+### Coverage
+| File | Coverage |
+|------|----------|
+| lib/path/to/file.dart | XX% |
+
+### Next
+- [ ] {remaining test work or "Testing complete"}
+
+---
+```
+
+## Rules
+
+1. **Append-only**: Never delete or modify previous entries
+2. **Timestamp everything**: Use ISO 8601 (YYYY-MM-DD)
+3. **Be concrete**: List actual files changed, not vague descriptions
+4. **Link decisions**: Reference ADRs when created
+5. **Track blockers**: Note what's blocking progress
+
+## Session Start Checklist
+
+1. Check spec status (should be IN_PROGRESS)
+2. Review previous session's "Next" items
+3. Add new session entry with Context
+
+## Session End Checklist
+
+1. List all files modified in Changes
+2. Note any decisions made
+3. Add Next items for future sessions
+4. If feature complete:
+   - Update log Status → complete
+   - Add final summary entry
+   - Update spec to DONE
+
+## Pause Entry Template
+
+```markdown
+---
+
+## YYYY-MM-DD - Paused
+
+### Reason
+{why pausing}
+
+### State at Pause
+- Last completed: {summary}
+- Next planned: {from previous Next section}
+
+---
+```
+
+## Resume Entry Template
+
+```markdown
+---
+
+## YYYY-MM-DD - Resumed
+
+### Context
+Resuming work. {current focus}
+
+### Changes
+- (starting fresh this session)
+
+---
+```
+
+## Final Entry Template (Feature Complete)
+
+```markdown
+---
+
+## YYYY-MM-DD - Complete
+
+### Summary
+Brief summary of the entire implementation.
+
+### Total Files Modified
+- `file1.dart`
+- `file2.dart`
+- ...
+
+### Tests
+- `test/path/to/file_test.dart`: {X} tests
+- `test/path/to/other_test.dart`: {Y} tests
+- **Total**: {N} tests, all passing
+
+### Coverage Delta
+*Comparing baseline (start) to final (completion)*
+
+| File | Before | After | Delta |
+|------|--------|-------|-------|
+| lib/path/to/file.dart | 0% | 85% | +85% |
+| lib/path/to/other.dart | 45% | 78% | +33% |
+
+### ADRs Created
+- ADR-NNNN: {title} (or "None")
+
+### Lessons Learned
+- {insight}
+
+---
+```
+
+## Lessons Aggregation
+
+At spec completion, lessons from "Lessons Learned" are extracted and added to `docs/lessons/{category}.md`:
+
+Categories: `riverpod`, `testing`, `architecture`, `flutter`, `general`
+
+Format in lessons file:
+```markdown
+## {Lesson title}
+- **Source:** SPEC:{spec-name}
+- **Context:** {brief context}
+- **Lesson:** {the insight}
+- **Date:** YYYY-MM-DD
+```
+
+## Cross-Reference Format
+
+When referencing in other docs:
+- Full: `docs/work-logs/room-tags.md`
+- Short: `LOG:room-tags`
