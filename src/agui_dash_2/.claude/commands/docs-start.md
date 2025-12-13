@@ -61,16 +61,42 @@ Start a PLANNED spec or resume a PAUSED spec.
 
    **If PLANNED (new work):**
 
-   a. Update the spec file:
+   a. **Problem Validation Check** (REQUIRED):
+      - Read the spec and check for "## Problem Validation" section
+      - If section is missing or incomplete:
+        ```
+        Problem Validation section is incomplete.
+        Before starting, please fill out:
+        - What problem does this solve?
+        - Is this root cause or symptom?
+        - What happens if we DON'T do this?
+        - Cost/Benefit assessment
+        - Verdict (Critical/High/Medium/Low)
+
+        Would you like to fill this out now? [y/n]
+        ```
+        - If yes: walk through each question and update the spec
+        - If no: stop here, do not start the spec
+
+      - If verdict is "Low":
+        ```
+        This spec is marked as LOW priority (nice-to-have, minor cleanup).
+        Are you sure you want to start this now? [y/n]
+        ```
+        - If no: stop here
+
+      - Proceed only when validation is complete and confirmed
+
+   b. Update the spec file:
       - Change Status: PLANNED → IN_PROGRESS
       - Update the Updated date to today
 
-   b. **Capture baseline coverage**:
+   c. **Capture baseline coverage**:
       - Run `flutter test --coverage` (may take a moment)
       - Parse `coverage/lcov.info` if it exists
       - Note: baseline may be empty for new features
 
-   c. Create work log at `docs/work-logs/{spec-name}.md`:
+   d. Create work log at `docs/work-logs/{spec-name}.md`:
       - Use template from recipe
       - Set Spec reference
       - Set Created date
@@ -78,10 +104,11 @@ Start a PLANNED spec or resume a PAUSED spec.
       - Add first session entry with Context from user (ask what they're starting with)
       - Include baseline coverage section (see recipe for format)
 
-   d. Confirm to user:
+   e. Confirm to user:
       - "Started work on SPEC:{name}"
       - "Work log created at docs/work-logs/{name}.md"
       - "Baseline coverage captured"
+      - "Problem validation: {verdict}"
 
 ## Important
 

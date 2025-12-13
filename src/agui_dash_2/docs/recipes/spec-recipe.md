@@ -33,6 +33,30 @@ Use kebab-case for naming: `room-tags.md`, `user-authentication.md`
 
 One paragraph describing the feature and its value.
 
+## Problem Validation
+
+*Complete before `/docs-start`*
+
+### What problem does this solve?
+[Describe the actual pain point - bugs, user friction, developer confusion, etc.]
+
+### Is this root cause or symptom?
+- [ ] Root cause - this directly fixes the issue
+- [ ] Symptom - the real problem is: ___
+
+### What happens if we DON'T do this?
+[Describe impact of inaction - "nothing" is a valid answer that suggests low priority]
+
+### Cost/Benefit
+- **Effort:** [Low/Medium/High] - [brief justification]
+- **Benefit:** [Low/Medium/High] - [brief justification]
+
+### Verdict
+- [ ] **Critical** - Blocking bugs, security, data loss
+- [ ] **High** - User-facing issues, significant tech debt
+- [ ] **Medium** - Improvements, moderate cleanup
+- [ ] **Low** - Nice-to-have, minor cleanup (reconsider priority)
+
 ## Requirements
 
 Checklist of concrete deliverables:
@@ -121,9 +145,11 @@ Any implementation notes, gotchas, or follow-up considerations.
 ## Status Transitions
 
 ### PLANNED → IN_PROGRESS
-1. Update `Status` field
-2. Update `Updated` date
-3. Create corresponding work log: `docs/work-logs/{feature-name}.md`
+1. **Verify Problem Validation section is complete** (required)
+   - If verdict is "Low": confirm you want to proceed
+2. Update `Status` field
+3. Update `Updated` date
+4. Create corresponding work log: `docs/work-logs/{feature-name}.md`
 
 ### IN_PROGRESS → DONE
 1. Update `Status` field

@@ -94,9 +94,19 @@ docs/
 ┌─────────────────────────────────────────────────────────────┐
 │  1. PLAN                                                    │
 │     ├─ Human creates SPEC (status: PLANNED)                 │
-│     └─ Defines requirements, acceptance criteria            │
+│     ├─ Defines requirements, acceptance criteria            │
+│     └─ Fills Problem Validation section                     │
+├─────────────────────────────────────────────────────────────┤
+│  1b. VALIDATE (before /docs-start)                          │
+│     ├─ What problem does this solve?                        │
+│     ├─ Root cause or symptom?                               │
+│     ├─ What happens if we DON'T do this?                    │
+│     ├─ Cost/Benefit assessment                              │
+│     └─ Verdict: Critical / High / Medium / Low              │
 ├─────────────────────────────────────────────────────────────┤
 │  2. EXECUTE (/docs-start)                                   │
+│     ├─ Verify Problem Validation complete (blocks if not)   │
+│     ├─ Warn if verdict is "Low"                             │
 │     ├─ Update SPEC status → IN_PROGRESS                     │
 │     ├─ Capture baseline coverage                            │
 │     ├─ Claude creates/appends WORK-LOG per session          │
