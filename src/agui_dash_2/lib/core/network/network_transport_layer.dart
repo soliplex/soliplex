@@ -156,7 +156,9 @@ class NetworkTransportLayer {
       throw StateError('Cannot use disposed NetworkTransportLayer');
     }
 
-    final uri = Uri.parse('${_urlBuilder.serverUrl}$endpoint');
+    // Ensure proper path separator between serverUrl and endpoint
+    final normalizedEndpoint = endpoint.startsWith('/') ? endpoint : '/$endpoint';
+    final uri = Uri.parse('${_urlBuilder.serverUrl}$normalizedEndpoint');
     final startTime = DateTime.now();
     var eventCount = 0;
     String? error;
