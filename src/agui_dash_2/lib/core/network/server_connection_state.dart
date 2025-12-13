@@ -4,13 +4,15 @@ import '../utils/debug_log.dart';
 import '../utils/url_builder.dart';
 import 'connection_events.dart' show SessionState;
 import 'http_transport.dart';
+import 'network_inspector.dart';
+import 'network_transport_layer.dart';
 import 'room_session.dart';
 
 /// Per-server connection state container.
 ///
 /// Holds all the resources needed to communicate with a single server:
-/// - HttpTransport for network operations
-/// - ag_ui.AgUiClient for SSE streaming
+/// - NetworkTransportLayer for unified HTTP/SSE transport
+/// - HttpTransport for API operations
 /// - Map of room sessions
 ///
 /// Created and managed by [ConnectionRegistry].
@@ -24,11 +26,11 @@ class ServerConnectionState {
   /// Auth headers for this server.
   final Map<String, String>? headers;
 
-  /// Network transport for this server.
-  final HttpTransport transport;
+  /// Unified transport layer owning http.Client and AgUiClient.
+  final NetworkTransportLayer _transportLayer;
 
-  /// AG-UI client for SSE streaming.
-  final ag_ui.AgUiClient agUiClient;
+  /// Network transport for API operations.
+  final HttpTransport transport;
 
   /// URL builder for this server.
   final UrlBuilder urlBuilder;
@@ -45,30 +47,65 @@ class ServerConnectionState {
   /// Whether this server connection has been disposed.
   bool _disposed = false;
 
-  /// Creates a new server connection state.
-  ///
-  /// [headerRefresher] is called on 401 to refresh auth headers.
-  ServerConnectionState({
+  /// Private constructor used by factory.
+  ServerConnectionState._({
     required this.serverId,
     required this.baseUrl,
-    this.headers,
-    HttpTransport? transport,
-    Future<Map<String, String>> Function()? headerRefresher,
+    required this.headers,
+    required NetworkTransportLayer transportLayer,
+    required this.transport,
   })  : urlBuilder = UrlBuilder(baseUrl),
-        transport = transport ?? HttpTransport(
-          baseUrl: baseUrl,
-          defaultHeaders: headers,
-          headerRefresher: headerRefresher,
-        ),
-        agUiClient = ag_ui.AgUiClient(
-          config: ag_ui.AgUiClientConfig(
-            baseUrl: UrlBuilder(baseUrl).serverUrl,
-            defaultHeaders: headers ?? {},
-          ),
-        ),
+        _transportLayer = transportLayer,
         lastActivity = DateTime.now() {
     DebugLog.service('ServerConnectionState: Created for server $serverId ($baseUrl)');
   }
+
+  /// Creates a new server connection state.
+  ///
+  /// [headerRefresher] is called on 401 to refresh auth headers.
+  /// [inspector] is optional network inspector for traffic capture.
+  factory ServerConnectionState({
+    required String serverId,
+    required String baseUrl,
+    Map<String, String>? headers,
+    HttpTransport? transport,
+    NetworkTransportLayer? transportLayer,
+    Future<Map<String, String>> Function()? headerRefresher,
+    NetworkInspector? inspector,
+  }) {
+    // Create or use provided transport layer
+    final layer = transportLayer ?? NetworkTransportLayer(
+      baseUrl: baseUrl,
+      defaultHeaders: headers,
+      headerRefresher: headerRefresher,
+      inspector: inspector,
+    );
+
+    // Create or use provided HttpTransport
+    final httpTransport = transport ?? HttpTransport.fromTransportLayer(
+      baseUrl: baseUrl,
+      transportLayer: layer,
+    );
+
+    return ServerConnectionState._(
+      serverId: serverId,
+      baseUrl: baseUrl,
+      headers: headers,
+      transportLayer: layer,
+      transport: httpTransport,
+    );
+  }
+
+  /// The unified transport layer for HTTP and SSE.
+  ///
+  /// Use this for SSE streaming to enable NetworkInspector observability.
+  NetworkTransportLayer get transportLayer => _transportLayer;
+
+  /// AG-UI client for SSE streaming.
+  ///
+  /// Obtained from the transport layer for unified network management.
+  /// Prefer using [transportLayer] directly for new code.
+  ag_ui.AgUiClient get agUiClient => _transportLayer.agUiClient;
 
   /// Whether this state has been disposed.
   bool get isDisposed => _disposed;
@@ -171,6 +208,7 @@ class ServerConnectionState {
     sessions.clear();
 
     transport.close();
+    _transportLayer.close();
   }
 
   @override

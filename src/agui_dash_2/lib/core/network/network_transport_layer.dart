@@ -150,7 +150,7 @@ class NetworkTransportLayer {
   /// Only stream-level metadata is captured.
   Stream<ag_ui.BaseEvent> runAgent(
     String endpoint,
-    ag_ui.RunAgentInput input,
+    ag_ui.SimpleRunAgentInput input,
   ) async* {
     if (_disposed) {
       throw StateError('Cannot use disposed NetworkTransportLayer');
@@ -172,15 +172,7 @@ class NetworkTransportLayer {
     DebugLog.network('NetworkTransportLayer: SSE stream starting for $endpoint');
 
     try {
-      final simpleInput = ag_ui.SimpleRunAgentInput(
-        threadId: input.threadId,
-        runId: input.runId,
-        messages: input.messages,
-        tools: input.tools,
-        state: input.state,
-      );
-
-      await for (final event in _agUiClient.runAgent(endpoint, simpleInput)) {
+      await for (final event in _agUiClient.runAgent(endpoint, input)) {
         eventCount++;
         yield event;
       }

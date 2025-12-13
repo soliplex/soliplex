@@ -123,7 +123,7 @@ class ConnectionManager extends ChangeNotifier {
 
     // Create header refresher bound to this server ID
     final serverHeaderRefresher = _headerRefresher != null
-        ? () => _headerRefresher!(serverId)
+        ? () => _headerRefresher(serverId)
         : null;
 
     // Connect to the server (or get existing connection)
@@ -285,7 +285,7 @@ class ConnectionManager extends ChangeNotifier {
 
     final session = getSession(roomId);
     if (session.threadId == null) {
-      await session.initialize(serverState.agUiClient);
+      await session.initialize(transportLayer: serverState.transportLayer);
       notifyListeners();
     }
   }

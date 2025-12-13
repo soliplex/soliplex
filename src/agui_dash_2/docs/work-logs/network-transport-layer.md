@@ -41,8 +41,44 @@ Remove dead code from HttpTransport first. The `_agUiClient` instance and `runAg
 - NetworkTransportLayer records SSE streams as single entries (method: 'SSE') with metadata (event count, duration), not individual events (too verbose)
 
 ### Next
-- [ ] Update ServerConnectionState to use NetworkTransportLayer instead of creating AgUiClient directly
-- [ ] Wire SSE through NetworkTransportLayer for inspector visibility
+- [x] Update ServerConnectionState to use NetworkTransportLayer instead of creating AgUiClient directly
+- [x] Wire SSE through NetworkTransportLayer for inspector visibility
 - [ ] Add tests for NetworkTransportLayer
+
+---
+
+## 2025-12-13 - Session 2
+
+### Context
+Wire SSE through NetworkTransportLayer so NetworkInspector can observe SSE streams.
+
+### Changes
+- `lib/core/network/server_connection_state.dart`:
+  - Changed to factory constructor pattern
+  - Creates NetworkTransportLayer internally
+  - HttpTransport now uses transport layer (no duplicate http.Client)
+  - `agUiClient` getter returns from transport layer
+  - Added `transportLayer` getter for SSE routing
+- `lib/infrastructure/quick_agui/thread.dart`:
+  - Added `RunAgentDelegate` typedef for SSE streaming
+  - Added `Thread.withDelegate()` constructor for transport layer integration
+  - `_getRunAgentStream()` helper uses delegate or falls back to client
+- `lib/core/network/room_session.dart`:
+  - Changed `initialize()` to named parameters
+  - Accepts `transportLayer` or `agUiClient` (for backward compat)
+  - Uses `Thread.withDelegate()` when transport layer provided
+- `lib/core/network/connection_manager.dart`:
+  - Updated to pass `transportLayer` to `session.initialize()`
+- `test/core/network/room_session_enhanced_test.dart`, `room_session_state_test.dart`:
+  - Updated `initialize()` calls to use named parameter syntax
+
+### Decisions
+- SSE now flows through NetworkTransportLayer when `transportLayer` is provided to `RoomSession.initialize()`
+- Legacy path with `agUiClient` still works for tests
+- Thread uses delegate pattern to avoid coupling to NetworkTransportLayer directly
+
+### Next
+- [ ] Add tests for NetworkTransportLayer SSE tracking
+- [ ] Verify SSE entries appear in NetworkInspector UI
 
 ---

@@ -266,7 +266,7 @@ void main() {
       );
 
       // Initialize to set lastActivity
-      await shortTimeoutSession.initialize(mockClient);
+      await shortTimeoutSession.initialize(agUiClient: mockClient);
 
       // Suspend
       shortTimeoutSession.suspend();
@@ -288,7 +288,7 @@ void main() {
         inactivityTimeout: const Duration(milliseconds: 50),
       );
 
-      await shortTimeoutSession.initialize(mockClient);
+      await shortTimeoutSession.initialize(agUiClient: mockClient);
       shortTimeoutSession.suspend();
       await Future.delayed(const Duration(milliseconds: 100));
 
@@ -308,7 +308,7 @@ void main() {
       final events = <ConnectionEvent>[];
       session.events.listen(events.add);
 
-      await session.initialize(mockClient);
+      await session.initialize(agUiClient: mockClient);
       await Future.delayed(Duration.zero);
 
       final createdEvent = events.whereType<SessionCreatedEvent>().first;
@@ -317,7 +317,7 @@ void main() {
 
     test('SessionSuspendedEvent includes serverId', () async {
       final mockClient = MockAgUiClient();
-      await session.initialize(mockClient);
+      await session.initialize(agUiClient: mockClient);
 
       final events = <ConnectionEvent>[];
       session.events.listen(events.add);
@@ -331,7 +331,7 @@ void main() {
 
     test('SessionResumedEvent includes serverId', () async {
       final mockClient = MockAgUiClient();
-      await session.initialize(mockClient);
+      await session.initialize(agUiClient: mockClient);
 
       session.suspend();
 
@@ -347,7 +347,7 @@ void main() {
 
     test('SessionDisposedEvent includes serverId', () async {
       final mockClient = MockAgUiClient();
-      await session.initialize(mockClient);
+      await session.initialize(agUiClient: mockClient);
 
       final events = <ConnectionEvent>[];
       session.events.listen(events.add);
@@ -381,7 +381,7 @@ void main() {
 
     test('connectionInfo includes thread and run info after initialization', () async {
       final mockClient = MockAgUiClient();
-      await session.initialize(mockClient);
+      await session.initialize(agUiClient: mockClient);
 
       final info = session.connectionInfo;
       expect(info.threadId, isNotNull);
@@ -402,7 +402,7 @@ void main() {
       final events = <ConnectionEvent>[];
       noServerSession.events.listen(events.add);
 
-      await noServerSession.initialize(mockClient);
+      await noServerSession.initialize(agUiClient: mockClient);
       await Future.delayed(Duration.zero);
 
       final createdEvent = events.whereType<SessionCreatedEvent>().first;

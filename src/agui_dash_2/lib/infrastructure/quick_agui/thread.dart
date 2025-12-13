@@ -12,6 +12,15 @@ import 'tool_call_state.dart';
 /// Callback type for executing client-side tools.
 typedef ToolExecutor = Future<String> Function(ag_ui.ToolCall call);
 
+/// Delegate for SSE streaming via runAgent.
+///
+/// This allows the transport layer to intercept SSE calls for observability.
+/// Uses SimpleRunAgentInput since that's what Thread creates internally.
+typedef RunAgentDelegate = Stream<ag_ui.BaseEvent> Function(
+  String endpoint,
+  ag_ui.SimpleRunAgentInput input,
+);
+
 /// Thread manages an AG-UI conversation thread.
 ///
 /// Handles:
@@ -21,7 +30,8 @@ typedef ToolExecutor = Future<String> Function(ag_ui.ToolCall call);
 /// - Event streaming
 class Thread {
   final String id;
-  final ag_ui.AgUiClient client;
+  final ag_ui.AgUiClient? _client;
+  final RunAgentDelegate? _runAgentDelegate;
   final List<ag_ui.Tool> _tools;
   final Map<String, ToolExecutor> _toolExecutors;
   final Set<String> _fireAndForgetTools = {};
@@ -40,12 +50,15 @@ class Thread {
   // Per-message text buffers to support concurrent message streams
   final Map<String, TextMessageBuffer> _textBuffers = {};
 
+  /// Creates a Thread with direct AgUiClient (legacy).
   Thread({
     required this.id,
-    required this.client,
+    required ag_ui.AgUiClient client,
     List<ag_ui.Tool>? tools,
     Map<String, ToolExecutor>? toolExecutors,
-  }) : _tools = tools != null ? List.from(tools) : <ag_ui.Tool>[],
+  }) : _client = client,
+       _runAgentDelegate = null,
+       _tools = tools != null ? List.from(tools) : <ag_ui.Tool>[],
        _toolExecutors = toolExecutors != null
            ? Map.from(toolExecutors)
            : <String, ToolExecutor>{},
@@ -53,6 +66,47 @@ class Thread {
        _statesController = StreamController.broadcast(),
        _stepsController = StreamController.broadcast() {
     stateStream.forEach((s) => currentState = s);
+  }
+
+  /// Creates a Thread with a runAgent delegate for transport layer integration.
+  ///
+  /// Use this constructor when SSE should flow through NetworkTransportLayer
+  /// for observability via NetworkInspector.
+  Thread.withDelegate({
+    required this.id,
+    required RunAgentDelegate runAgent,
+    List<ag_ui.Tool>? tools,
+    Map<String, ToolExecutor>? toolExecutors,
+  }) : _client = null,
+       _runAgentDelegate = runAgent,
+       _tools = tools != null ? List.from(tools) : <ag_ui.Tool>[],
+       _toolExecutors = toolExecutors != null
+           ? Map.from(toolExecutors)
+           : <String, ToolExecutor>{},
+       _messagesController = StreamController.broadcast(),
+       _statesController = StreamController.broadcast(),
+       _stepsController = StreamController.broadcast() {
+    stateStream.forEach((s) => currentState = s);
+  }
+
+  /// For backward compatibility - returns client if available.
+  @Deprecated('Use runAgent delegate instead')
+  ag_ui.AgUiClient? get client => _client;
+
+  /// Get the SSE stream for runAgent, using delegate or client.
+  Stream<ag_ui.BaseEvent> _getRunAgentStream(
+    String endpoint,
+    ag_ui.SimpleRunAgentInput input,
+  ) {
+    if (_runAgentDelegate != null) {
+      // Use delegate (flows through NetworkTransportLayer with inspector hooks)
+      return _runAgentDelegate(endpoint, input);
+    } else if (_client != null) {
+      // Legacy: use client directly
+      return _client.runAgent(endpoint, input);
+    } else {
+      throw StateError('Thread has neither runAgent delegate nor client');
+    }
   }
 
   Iterable<ag_ui.Run> get runs => _runs;
@@ -156,7 +210,8 @@ class Thread {
 
     try {
       DebugLog.thread(' Starting await for loop on SSE stream');
-      await for (final event in client.runAgent(endpoint, agentInput)) {
+      final stream = _getRunAgentStream(endpoint, agentInput);
+      await for (final event in stream) {
         DebugLog.thread(' Received event: ${event.runtimeType}');
         // Check if disposed during streaming
         if (_disposed) {

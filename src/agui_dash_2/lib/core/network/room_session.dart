@@ -11,6 +11,7 @@ import '../utils/url_builder.dart';
 import 'cancel_token.dart';
 import 'connection_events.dart';
 import 'http_transport.dart';
+import 'network_transport_layer.dart';
 import 'server_room_key.dart';
 
 /// Callback for canvas operations from event processing.
@@ -161,7 +162,18 @@ class RoomSession {
       );
 
   /// Initialize the session by creating a thread.
-  Future<void> initialize(ag_ui.AgUiClient agUiClient) async {
+  ///
+  /// Pass [transportLayer] to route SSE through NetworkTransportLayer
+  /// for observability via NetworkInspector.
+  ///
+  /// Pass [agUiClient] for legacy/test usage (SSE not observable).
+  Future<void> initialize({
+    NetworkTransportLayer? transportLayer,
+    ag_ui.AgUiClient? agUiClient,
+  }) async {
+    if (transportLayer == null && agUiClient == null) {
+      throw ArgumentError('Either transportLayer or agUiClient must be provided');
+    }
     if (_state == SessionState.disposed) {
       throw StateError('Cannot initialize disposed session');
     }
@@ -181,8 +193,17 @@ class RoomSession {
     }
     _activeRunId = runs.keys.first;
 
-    // Create Thread instance
-    _thread = Thread(id: threadId, client: agUiClient);
+    // Create Thread instance with delegate or client
+    if (transportLayer != null) {
+      _thread = Thread.withDelegate(
+        id: threadId,
+        runAgent: transportLayer.runAgent,
+      );
+      DebugLog.network('RoomSession: Created thread $threadId with transport layer');
+    } else {
+      _thread = Thread(id: threadId, client: agUiClient!);
+      DebugLog.network('RoomSession: Created thread $threadId with legacy client');
+    }
     _lastActivity = DateTime.now();
 
     _eventController.add(SessionCreatedEvent(

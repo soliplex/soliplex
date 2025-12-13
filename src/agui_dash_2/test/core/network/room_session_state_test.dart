@@ -113,7 +113,7 @@ void main() {
       test('suspend() emits SessionSuspendedEvent when thread exists',
           () async {
         final mockClient = MockAgUiClient();
-        await session.initialize(mockClient);
+        await session.initialize(agUiClient: mockClient);
 
         final events = <ConnectionEvent>[];
         session.events.listen(events.add);
@@ -161,7 +161,7 @@ void main() {
 
       test('resume() emits SessionResumedEvent when thread exists', () async {
         final mockClient = MockAgUiClient();
-        await session.initialize(mockClient);
+        await session.initialize(agUiClient: mockClient);
 
         session.suspend();
 
@@ -213,7 +213,7 @@ void main() {
 
       test('dispose() emits SessionDisposedEvent', () async {
         final mockClient = MockAgUiClient();
-        await session.initialize(mockClient);
+        await session.initialize(agUiClient: mockClient);
 
         final events = <ConnectionEvent>[];
         session.events.listen(events.add);
@@ -236,7 +236,7 @@ void main() {
 
         final mockClient = MockAgUiClient();
         expect(
-          () => session.initialize(mockClient),
+          () => session.initialize(agUiClient: mockClient),
           throwsA(isA<StateError>()),
         );
       });
@@ -252,7 +252,7 @@ void main() {
 
       test('cannot start run on disposed session', () async {
         final mockClient = MockAgUiClient();
-        await session.initialize(mockClient);
+        await session.initialize(agUiClient: mockClient);
 
         session.dispose();
 
