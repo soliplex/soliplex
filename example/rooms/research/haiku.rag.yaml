@@ -7,6 +7,9 @@
 #
 # Uncomment to tweak the research configuration for 'research_report' tool
 #
+# See: 
+#      https://ggozad.github.io/haiku.rag/configuration/qa-research/#research-configuration
+#
 #research:
 #  model:
 #    provider: ollama
