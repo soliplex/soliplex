@@ -125,10 +125,11 @@ void main() {
         );
       });
 
-      test('runEndpointPath returns relative path', () {
+      test('runEndpointPath returns relative path without leading slash', () {
+        // AG-UI client adds the leading slash when constructing the URL
         expect(
           builder.runEndpointPath('room-1', 'thread-1', 'run-1'),
-          '/api/v1/rooms/room-1/agui/thread-1/run-1',
+          'api/v1/rooms/room-1/agui/thread-1/run-1',
         );
       });
     });

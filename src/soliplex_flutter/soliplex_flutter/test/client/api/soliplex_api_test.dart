@@ -22,11 +22,12 @@ void main() {
     });
 
     group('getRooms', () {
-      test('fetches and parses rooms', () async {
+      test('fetches and parses rooms from map response', () async {
+        // API returns rooms as a map with room IDs as keys
         final mockClient = MockClient((request) async {
           expect(request.url.path, contains('/rooms'));
           return http.Response(
-            '[{"id": "room1", "name": "Room 1"}, {"id": "room2", "name": "Room 2"}]',
+            '{"room1": {"id": "room1", "name": "Room 1"}, "room2": {"id": "room2", "name": "Room 2"}}',
             200,
           );
         });
@@ -43,8 +44,7 @@ void main() {
         final rooms = await api.getRooms();
 
         expect(rooms, hasLength(2));
-        expect(rooms[0].id, equals('room1'));
-        expect(rooms[0].name, equals('Room 1'));
+        expect(rooms.map((r) => r.id).toSet(), equals({'room1', 'room2'}));
       });
 
       test('throws on error response', () async {
@@ -92,11 +92,12 @@ void main() {
     });
 
     group('getThreads', () {
-      test('fetches and parses threads', () async {
+      test('parses threads from wrapped response', () async {
+        // Real API returns threads wrapped in {"threads": [...]}
         final mockClient = MockClient((request) async {
           expect(request.url.path, contains('/rooms/room1/agui'));
           return http.Response(
-            '[{"id": "t1", "room_id": "room1", "name": "Thread 1"}]',
+            '{"threads": [{"id": "t1", "room_id": "room1", "name": "Thread 1"}]}',
             200,
           );
         });
@@ -168,6 +169,28 @@ void main() {
 
         expect(result['thread_id'], equals('t1'));
         expect(result['run_id'], equals('r1'));
+      });
+
+      test('sends empty JSON body (required by API)', () async {
+        String? requestBody;
+        final mockClient = MockClient((request) async {
+          requestBody = request.body;
+          return http.Response('{"thread_id": "t1", "run_id": "r1"}', 201);
+        });
+
+        final transport = HttpTransport(
+          baseUrl: 'https://example.com',
+          client: mockClient,
+        );
+        final api = SoliplexApi(
+          baseUrl: 'https://example.com',
+          transport: transport,
+        );
+
+        await api.createThread('room1');
+
+        expect(requestBody, isNotNull);
+        expect(requestBody, isNotEmpty);
       });
     });
 
@@ -281,6 +304,28 @@ void main() {
         final result = await api.createRun('room1', 't1');
 
         expect(result['run_id'], equals('r1'));
+      });
+
+      test('sends empty JSON body (required by API)', () async {
+        String? requestBody;
+        final mockClient = MockClient((request) async {
+          requestBody = request.body;
+          return http.Response('{"run_id": "r1"}', 201);
+        });
+
+        final transport = HttpTransport(
+          baseUrl: 'https://example.com',
+          client: mockClient,
+        );
+        final api = SoliplexApi(
+          baseUrl: 'https://example.com',
+          transport: transport,
+        );
+
+        await api.createRun('room1', 't1');
+
+        expect(requestBody, isNotNull);
+        expect(requestBody, isNotEmpty);
       });
     });
 

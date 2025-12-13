@@ -48,6 +48,22 @@ void main() {
       });
     });
 
+    group('messageStream', () {
+      test('emits initial empty list immediately', () async {
+        final session = RoomSession(
+          roomId: 'room1',
+          baseUrl: 'http://localhost:8000',
+          agUiClient: mockClient,
+        );
+
+        // Stream should emit an initial value without waiting for messages
+        final firstValue = await session.messageStream.first
+            .timeout(const Duration(milliseconds: 100));
+
+        expect(firstValue, isEmpty);
+      });
+    });
+
     group('addUserMessage', () {
       test('adds user message to list', () {
         final session = RoomSession(
@@ -73,10 +89,17 @@ void main() {
         final messages = <List<ChatMessage>>[];
         session.messageStream.listen(messages.add);
 
+        // Wait for initial emission from onListen microtask
+        await Future.delayed(Duration.zero);
+        expect(messages, hasLength(1));
+        expect(messages[0], isEmpty);
+
         session.addUserMessage('Hello');
 
         await Future.delayed(Duration.zero);
-        expect(messages, hasLength(1));
+        // Second emission is after adding message
+        expect(messages, hasLength(2));
+        expect(messages[1], hasLength(1));
       });
 
       test('calls onContextUpdate callback', () {

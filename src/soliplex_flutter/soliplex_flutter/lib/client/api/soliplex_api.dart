@@ -29,8 +29,11 @@ class SoliplexApi {
     final response = await _transport.get(_urlBuilder.rooms());
     _checkResponse(response);
 
-    final list = response.jsonList;
-    return list.map((e) => Room.fromJson(e as Map<String, dynamic>)).toList();
+    // API returns a Map with room IDs as keys
+    final map = response.jsonMap;
+    return map.values
+        .map((e) => Room.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   /// Get a specific room.
@@ -47,7 +50,9 @@ class SoliplexApi {
     final response = await _transport.get(_urlBuilder.threads(roomId));
     _checkResponse(response);
 
-    final list = response.jsonList;
+    // API returns threads wrapped in {"threads": [...]}
+    final map = response.jsonMap;
+    final list = map['threads'] as List<dynamic>;
     return list
         .map((e) => ThreadInfo.fromJson(e as Map<String, dynamic>))
         .toList();
@@ -64,9 +69,23 @@ class SoliplexApi {
   ///
   /// Returns the created thread info including thread_id and initial run_id.
   Future<Map<String, dynamic>> createThread(String roomId) async {
-    final response = await _transport.post(_urlBuilder.threads(roomId));
+    // API requires a body (even if empty)
+    final response = await _transport.post(
+      _urlBuilder.threads(roomId),
+      body: {},
+    );
     _checkResponse(response);
-    return response.jsonMap;
+
+    final result = Map<String, dynamic>.from(response.jsonMap);
+
+    // Extract run_id from nested runs map (API returns runs as a map)
+    final runs = result['runs'] as Map<String, dynamic>?;
+    if (runs != null && runs.isNotEmpty) {
+      final firstRun = runs.values.first as Map<String, dynamic>;
+      result['run_id'] = firstRun['run_id'];
+    }
+
+    return result;
   }
 
   /// Delete a thread.
@@ -108,8 +127,10 @@ class SoliplexApi {
 
   /// Create a new run in a thread.
   Future<Map<String, dynamic>> createRun(String roomId, String threadId) async {
+    // API requires a body (even if empty)
     final response = await _transport.post(
       _urlBuilder.createRun(roomId, threadId),
+      body: {},
     );
     _checkResponse(response);
     return response.jsonMap;
