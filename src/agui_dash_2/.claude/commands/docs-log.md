@@ -24,12 +24,21 @@ Manually add a session entry to an active work log.
    - Any decisions made? (reference ADRs if applicable)
    - What's next?
 
-5. Append session entry to the work log:
+5. **Capture Resume Context** (critical for session continuity):
+   - Run `flutter test` and capture pass/fail count
+   - Run `flutter test --coverage` and note coverage for touched files
+   - Run `flutter analyze` and capture issue count (or "clean")
+   - Run `dart format --set-exit-if-changed .` and note status (or "clean")
+   - Run `git diff --stat` to get file change ranges
+   - Ask: "What's the single most important next action?"
+
+6. Append session entry to the work log:
    - Use today's date
    - Increment session number
    - Fill in Context, Changes, Decisions, Next sections
+   - **Include Resume Context section with quality metrics**
 
-6. Confirm:
+7. Confirm:
    - "Added session entry to LOG:{name}"
    - Show the entry that was added
 

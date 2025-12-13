@@ -127,7 +127,7 @@ Manual verification of SSE entries in NetworkInspector UI. Discovered and fixed 
 - App launched successfully on macOS
 - SSE streams completing correctly:
   - Room `joker`: 309 events
-  - Room `u28`: 121 events
+  - Room `x28`: 121 events
   - Room `faux`: 14 events
 - Debug logs show proper SSE lifecycle:
   - `[NET] NetworkTransportLayer: SSE stream starting for api/v1/rooms/...`

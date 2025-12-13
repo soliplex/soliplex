@@ -72,7 +72,55 @@ What was the goal of this session?
 ### Next
 - [ ] {action}
 
+### Resume Context
+**Modified files:**
+- `path/to/file.dart:NN-MM` - brief description of change
+
+**Quality metrics:**
+- Tests: N passing, M failing
+- Coverage: file.dart XX%→YY%
+- Analyzer: N issues (or "clean")
+- Formatter: N files changed (or "clean")
+
+**Next action:** Single most important next step
+
 ---
+```
+
+## Resume Context (Critical for Session Continuity)
+
+The Resume Context section captures essential state for picking up work in a new session.
+
+**Why it matters:**
+- New sessions start with zero context
+- File paths alone don't show *where* in the file you were working
+- Test/coverage status shows project health at session end
+
+**What to include:**
+
+| Field | Content | How to Get It |
+|-------|---------|---------------|
+| Modified files | File path + line range + brief description | `git diff --stat`, editor "recent files" |
+| Tests | Pass/fail count | `flutter test 2>&1 \| tail -1` |
+| Coverage | Before→After for touched files | `flutter test --coverage`, lcov report |
+| Analyzer | Issue count or "clean" | `flutter analyze` |
+| Formatter | Files needing format or "clean" | `dart format --set-exit-if-changed .` |
+| Next action | Single actionable step (not a list) | Most important "Next" item |
+
+**Example:**
+```markdown
+### Resume Context
+**Modified files:**
+- `lib/core/network/http_transport.dart:142-168` - removed dead runAgent code
+- `lib/core/network/network_transport_layer.dart` (new file)
+
+**Quality metrics:**
+- Tests: 291 passing, 0 failing
+- Coverage: network_transport_layer.dart new→85%
+- Analyzer: clean
+- Formatter: clean
+
+**Next action:** Wire SSE through transport layer for inspector visibility
 ```
 
 ## Testing Session Template
@@ -118,15 +166,23 @@ Adding unit tests for {feature}.
 ## Session Start Checklist
 
 1. Check spec status (should be IN_PROGRESS)
-2. Review previous session's "Next" items
-3. Add new session entry with Context
+2. **Read previous session's Resume Context** for quick orientation
+3. Review previous session's "Next" items
+4. Add new session entry with Context
 
 ## Session End Checklist
 
 1. List all files modified in Changes
 2. Note any decisions made
 3. Add Next items for future sessions
-4. If feature complete:
+4. **Add Resume Context section** (critical for session continuity):
+   - Run `flutter test` and capture pass/fail count
+   - Run `flutter test --coverage` and note changes for touched files
+   - Run `flutter analyze` and capture issue count (or "clean")
+   - Run `dart format --set-exit-if-changed .` and note status
+   - Note file:line ranges for key changes
+   - State single most important next action
+5. If feature complete:
    - Update log Status → complete
    - Add final summary entry
    - Update spec to DONE

@@ -1,7 +1,7 @@
 # Documentation Process
 
 > Master reference for the SOLIPLEX documentation lifecycle.
-> Version: 3.0.0 | Last Updated: 2025-12-13
+> Version: 3.1.0 | Last Updated: 2025-12-13
 
 ## Overview
 
@@ -125,6 +125,7 @@ Every work session MUST:
 3. List concrete changes made
 4. Note any decisions (with ADR refs if applicable)
 5. State next actions or blockers
+6. **Include Resume Context** with quality metrics (tests, coverage, analyzer, formatter)
 
 ## Enforced Rules
 
@@ -162,13 +163,38 @@ Use `/docs-pause` to shelve work and allow starting something else:
 - Multiple specs can be PAUSED simultaneously
 - PAUSED does NOT block starting new work (unlike IN_PROGRESS)
 
-### Completion Wizards
+### Resume Context (Critical for Session Continuity)
 
-At `/docs-complete`, three wizards run automatically:
+Every session entry MUST end with a Resume Context section containing:
 
-1. **ADR Wizard**: Scans decisions for keywords (chose, vs, pattern, architecture), shows terse outlines, prompts to create ADRs
-2. **Lessons Extraction**: Extracts lessons learned, prompts for categorization, appends to `docs/lessons/{category}.md`
-3. **Deferred Items**: Lists uncompleted items, prompts to create follow-up PLANNED specs
+```markdown
+### Resume Context
+**Modified files:**
+- `path/to/file.dart:NN-MM` - brief description
+
+**Quality metrics:**
+- Tests: N passing, M failing
+- Coverage: file.dart XX%→YY%
+- Analyzer: N issues (or "clean")
+- Formatter: N files changed (or "clean")
+
+**Next action:** Single most important next step
+```
+
+**Why this matters:**
+- New sessions start with zero context
+- File paths alone don't show *where* in the file you were working
+- Quality metrics show project health at session end
+
+### Completion Wizards (Future Enhancement)
+
+*Note: These wizards are planned but not yet implemented. Currently, ADRs and lessons are created manually.*
+
+At `/docs-complete`, these wizards are planned:
+
+1. **ADR Wizard**: Scan decisions for keywords, prompt to create ADRs
+2. **Lessons Extraction**: Extract lessons, categorize, append to lessons files
+3. **Deferred Items**: List uncompleted items, prompt to create follow-up specs
 
 ### Lessons Categories
 
