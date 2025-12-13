@@ -145,10 +145,47 @@ final contextPaneProvider =
 // ACTIVITY STATUS
 // =============================================================================
 
-/// Provider for activity status state.
+/// Per-room activity status state provider (family).
 ///
-/// Watches [currentServerFromAppStateProvider] AND [selectedRoomProvider].
-/// Activity stops when server OR room changes (notifier disposed, timers cancelled).
+/// Keyed by [ServerRoomKey] - maintains separate activity status per room.
+/// This prevents timer race conditions: each room's notifier is independent,
+/// and timers are properly scoped to the room lifecycle.
+///
+/// Use [activeActivityStatusProvider] for UI convenience.
+final roomActivityStatusProvider = StateNotifierProvider.family<
+    ActivityStatusNotifier, ActivityStatusState, ServerRoomKey>(
+  (ref, key) => ActivityStatusNotifier(
+    config: ref.watch(activityStatusConfigProvider),
+    serverId: key.serverId,
+    roomId: key.roomId,
+  ),
+);
+
+/// Active activity status state for current room.
+///
+/// Convenience provider that derives from [roomActivityStatusProvider] using
+/// [activeServerRoomKeyProvider]. Returns empty state if no room selected.
+final activeActivityStatusProvider = Provider<ActivityStatusState>((ref) {
+  final key = ref.watch(activeServerRoomKeyProvider);
+  if (key == null) return const ActivityStatusState();
+  return ref.watch(roomActivityStatusProvider(key));
+});
+
+/// Active activity status notifier for current room.
+///
+/// Returns the notifier for the current room, or null if no room selected.
+/// Use this to modify activity status state.
+final activeActivityStatusNotifierProvider =
+    Provider<ActivityStatusNotifier?>((ref) {
+  final key = ref.watch(activeServerRoomKeyProvider);
+  if (key == null) return null;
+  return ref.read(roomActivityStatusProvider(key).notifier);
+});
+
+/// Legacy provider for activity status state (server-scoped only).
+///
+/// DEPRECATED: Prefer [roomActivityStatusProvider] for per-room state.
+/// Kept for backward compatibility during migration.
 final activityStatusProvider =
     StateNotifierProvider<ActivityStatusNotifier, ActivityStatusState>((ref) {
   final config = ref.watch(activityStatusConfigProvider);

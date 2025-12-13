@@ -1,12 +1,12 @@
-// ignore_for_file: deprecated_member_use_from_same_package
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
+import '../providers/app_providers.dart';
 import '../utils/url_builder.dart';
-import 'auth_service.dart';
+import 'auth_manager.dart';
 
 /// Response from the MCP token endpoint.
 class McpTokenResponse {
@@ -73,12 +73,12 @@ class McpTokenResponse {
 /// Service for fetching MCP tokens for rooms.
 class McpTokenService {
   final http.Client _httpClient;
-  final AuthService _authService;
+  final AuthManager _authManager;
 
   McpTokenService({
-    required AuthService authService,
+    required AuthManager authManager,
     http.Client? httpClient,
-  })  : _authService = authService,
+  })  : _authManager = authManager,
         _httpClient = httpClient ?? http.Client();
 
   /// Fetch an MCP token for the given room.
@@ -86,13 +86,14 @@ class McpTokenService {
   /// Returns null if the request fails or the room doesn't support MCP.
   Future<McpTokenResponse?> getToken({
     required String serverUrl,
+    required String serverId,
     required String roomId,
   }) async {
     try {
       final urlBuilder = UrlBuilder(serverUrl);
       final uri = urlBuilder.mcpToken(roomId);
 
-      final headers = await _authService.getAuthHeaders();
+      final headers = await _authManager.getAuthHeaders(serverId);
       headers['Accept'] = 'application/json';
 
       debugPrint('McpTokenService: Fetching token from $uri');
@@ -146,8 +147,8 @@ class McpTokenService {
 
 /// Provider for MCP token service.
 final mcpTokenServiceProvider = Provider<McpTokenService>((ref) {
-  final authService = ref.watch(authServiceProvider);
-  return McpTokenService(authService: authService);
+  final authManager = ref.read(authManagerProvider);
+  return McpTokenService(authManager: authManager);
 });
 
 /// State for MCP token fetching.
@@ -181,12 +182,15 @@ class McpTokenState {
 class McpTokenNotifier extends StateNotifier<McpTokenState> {
   final McpTokenService _service;
   final String _serverUrl;
+  final String _serverId;
 
   McpTokenNotifier({
     required McpTokenService service,
     required String serverUrl,
+    required String serverId,
   })  : _service = service,
         _serverUrl = serverUrl,
+        _serverId = serverId,
         super(const McpTokenState());
 
   /// Fetch token for a room.
@@ -195,6 +199,7 @@ class McpTokenNotifier extends StateNotifier<McpTokenState> {
 
     final token = await _service.getToken(
       serverUrl: _serverUrl,
+      serverId: _serverId,
       roomId: roomId,
     );
 

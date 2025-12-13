@@ -446,6 +446,7 @@ class _McpConfigSectionState extends ConsumerState<McpConfigSection> {
       final service = ref.read(mcpTokenServiceProvider);
       final token = await service.getToken(
         serverUrl: server.url,
+        serverId: server.id,
         roomId: widget.room.id,
       );
 
