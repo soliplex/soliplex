@@ -78,6 +78,14 @@ Known edge cases and expected behavior:
 - ADRs: {ADR-NNNN, ...} or "none yet"
 - Work Log: LOG:{feature-name}
 
+## Technical Debt Discovered
+
+Track debt items found during implementation (add to `docs/BACKLOG.md`):
+
+- [ ] None discovered
+OR
+- [ ] DEBT:{name} - {brief description}
+
 ---
 
 ## Completion Record

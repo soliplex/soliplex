@@ -69,6 +69,19 @@ What was the goal of this session?
 ### Decisions
 - {decision or "None"}
 
+### Lessons Learned
+- [ ] None this session
+OR
+- **Lesson:** {brief description}
+  - Context: {what happened}
+  - Recommendation: {what to do differently}
+  - Category: {architecture|riverpod|testing|flutter|general}
+
+### Debt/Redesign Candidates
+- [ ] None discovered
+OR
+- Added DEBT:{name} to BACKLOG.md - {brief description}
+
 ### Next
 - [ ] {action}
 
@@ -174,15 +187,24 @@ Adding unit tests for {feature}.
 
 1. List all files modified in Changes
 2. Note any decisions made
-3. Add Next items for future sessions
-4. **Add Resume Context section** (critical for session continuity):
+3. **Check for Lessons Learned** (see `docs/lessons/README.md` for criteria):
+   - Did this take longer than expected?
+   - Did you change approach mid-work?
+   - Was there unexpected behavior?
+   - Check "None this session" or document the lesson
+4. **Check for Technical Debt** discovered:
+   - Did you notice code that needs redesign?
+   - Did you add a workaround?
+   - Check "None discovered" or add to `docs/BACKLOG.md`
+5. Add Next items for future sessions
+6. **Add Resume Context section** (critical for session continuity):
    - Run `flutter test` and capture pass/fail count
    - Run `flutter test --coverage` and note changes for touched files
    - Run `flutter analyze` and capture issue count (or "clean")
    - Run `dart format --set-exit-if-changed .` and note status
    - Note file:line ranges for key changes
    - State single most important next action
-5. If feature complete:
+7. If feature complete:
    - Update log Status → complete
    - Add final summary entry
    - Update spec to DONE

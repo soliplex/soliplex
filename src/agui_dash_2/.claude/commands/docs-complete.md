@@ -99,11 +99,22 @@ Mark a spec as DONE and add completion records.
       4. For each "yes", create ADR file using `docs/recipes/adr-recipe.md` template
       5. Link new ADRs in spec's Related section
 
-   k. **Lessons Extraction**:
-      1. Extract "Lessons Learned" from work log completion entry
-      2. For each lesson, ask user to categorize:
+   k. **Lessons Check** (PROMPT):
+      1. Scan ALL work log sessions for "### Lessons Learned" sections
+      2. Check if any sessions have uncategorized lessons (not yet in docs/lessons/)
+      3. If ALL sessions say "None this session": prompt user
+         ```
+         No lessons documented across {N} sessions.
+         Before completing, consider:
+         - Did anything take longer than expected?
+         - Did you change approach mid-work?
+         - Any unexpected behavior discovered?
+
+         Add lesson? [y/n]
+         ```
+      4. For any uncategorized lessons, ask user to categorize:
          - riverpod, testing, architecture, flutter, or general
-      3. Append to `docs/lessons/{category}.md` with format:
+      5. Append to `docs/lessons/{category}.md` with format:
          ```markdown
          ## {Lesson title}
          - **Source:** SPEC:{spec-name}
@@ -111,8 +122,28 @@ Mark a spec as DONE and add completion records.
          - **Lesson:** {the insight}
          - **Date:** YYYY-MM-DD
          ```
+      6. Update `docs/lessons/README.md` "Current Lessons" section
 
-   l. **Deferred Items Prompt**:
+   l. **Technical Debt Check**:
+      1. Scan work log for "### Debt/Redesign Candidates" sections
+      2. Verify any DEBT: items mentioned are in `docs/BACKLOG.md`
+      3. Check spec for "## Technical Debt Discovered" section
+      4. If debt discovered but not in BACKLOG: add it now
+      5. If no debt sections found: prompt user
+         ```
+         No technical debt documented.
+         Did you notice any code that should be redesigned?
+         [y/n]
+         ```
+
+   m. **Update Document Index**:
+      1. Update `docs/INDEX.md` last-used dates for:
+         - The spec being completed
+         - The work log
+         - Any ADRs referenced
+         - Any lessons files modified
+
+   n. **Deferred Items Prompt**:
       1. Check work log for "Deferred Items" or unchecked "Next" items
       2. List them to user:
          ```
@@ -135,7 +166,9 @@ Mark a spec as DONE and add completion records.
    - "Tests: {count} test files, {coverage}% coverage on touched files"
    - "ADRs created: {count or 'none'}"
    - "Lessons added: {count} to {categories}"
+   - "Technical debt tracked: {count or 'none'}"
    - "Follow-up specs: {count or 'none'}"
+   - "Document index updated"
    - Show summary of what was accomplished
 
 ## Version Guidelines

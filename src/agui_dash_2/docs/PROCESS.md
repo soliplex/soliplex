@@ -12,6 +12,8 @@ This system tracks work through a structured lifecycle with clear audit trails. 
 ```
 docs/
 ├── PROCESS.md          # This file - lifecycle overview
+├── INDEX.md            # Document registry with last-used tracking
+├── BACKLOG.md          # Technical debt tracking
 ├── adr/                # Architecture Decision Records
 │   └── NNNN-title.md
 ├── specs/              # Feature specifications
@@ -19,6 +21,7 @@ docs/
 ├── work-logs/          # Per-feature work history
 │   └── feature-name.md
 ├── lessons/            # Aggregated lessons learned (by category)
+│   ├── README.md       # Lessons index and criteria
 │   ├── riverpod.md
 │   ├── testing.md
 │   ├── architecture.md
@@ -69,6 +72,21 @@ docs/
 - **Lifecycle**: Append-only, extracted at spec completion
 - **Naming**: `{category}.md` (riverpod, testing, architecture, flutter, general)
 - **Collection**: Automatic via `/docs-complete`
+- **Criteria**: See `docs/lessons/README.md` for what qualifies
+
+### Document Index (`docs/INDEX.md`)
+- **Audience**: Human/Machine
+- **Purpose**: Track document usage and identify stale docs
+- **Lifecycle**: Updated when docs are read/used
+- **Staleness**: <30 days active, 30-90 days review, >90 days stale
+- **Command**: `/docs-index` shows sorted by staleness
+
+### Technical Debt Backlog (`docs/BACKLOG.md`)
+- **Audience**: Human
+- **Purpose**: Track redesign candidates and technical debt
+- **Lifecycle**: Append when discovered, update when resolved
+- **Format**: `DEBT:{name}` with priority and status
+- **Collection**: Captured during work sessions (see work-log-recipe.md)
 
 ## Workflow
 
