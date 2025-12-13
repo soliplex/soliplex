@@ -3,11 +3,12 @@
 | Field | Value |
 |-------|-------|
 | ID | SPEC:sse-transport-unification |
-| Status | PLANNED |
+| Status | SUPERSEDED |
 | Created | 2025-12-13 |
 | Updated | 2025-12-13 |
 | Version | 0.1.0 |
 | Author | runyaga |
+| Superseded By | SPEC:network-transport-layer |
 
 ## Summary
 

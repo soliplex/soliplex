@@ -1,23 +1,12 @@
-import 'package:ag_ui/ag_ui.dart' as ag_ui;
-
-import 'cancel_token.dart';
-
 /// Abstract interface for network transport.
 ///
 /// This abstraction allows pluggable networking backends:
-/// - HttpTransport: Web-compatible using ag_ui.AgUiClient
+/// - HttpTransport: Web-compatible using http.Client
 /// - Future: NativeTransport for NSURLSession, etc.
+///
+/// Note: SSE streaming (runAgent) is handled separately via AgUiClient
+/// in ServerConnectionState. This interface is for HTTP POST/cancel only.
 abstract class NetworkTransport {
-  /// Run an agent and return a stream of events.
-  ///
-  /// The [cancelToken] can be used to abort the operation.
-  /// Throws [CancelledException] if cancelled.
-  Stream<ag_ui.BaseEvent> runAgent({
-    required String endpoint,
-    required ag_ui.RunAgentInput input,
-    CancelToken? cancelToken,
-  });
-
   /// Cancel an active run on the server.
   ///
   /// This notifies the server to stop processing. The client-side

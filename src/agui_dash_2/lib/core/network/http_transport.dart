@@ -1,90 +1,67 @@
-import 'dart:async';
 import 'dart:convert';
 
-import 'package:ag_ui/ag_ui.dart' as ag_ui;
 import 'package:http/http.dart' as http;
 
 import '../utils/debug_log.dart';
 import '../utils/url_builder.dart';
-import 'cancel_token.dart';
+import 'network_inspector.dart';
 import 'network_transport.dart';
+import 'network_transport_layer.dart';
 
-/// HTTP-based network transport using ag_ui.AgUiClient.
+/// HTTP-based network transport for POST requests.
 ///
-/// Web-compatible implementation that wraps the ag_ui package.
+/// Web-compatible implementation using http.Client.
 /// Supports 401 retry with header refresh for token expiration.
+///
+/// Can optionally use a [NetworkTransportLayer] for unified network management.
+/// When a transport layer is provided, HTTP operations delegate to it.
 class HttpTransport implements NetworkTransport {
   final String baseUrl;
-  final http.Client _httpClient;
-  final ag_ui.AgUiClient _agUiClient;
-  Map<String, String>? _headers;
-  final Future<Map<String, String>> Function()? _headerRefresher;
   final UrlBuilder _urlBuilder;
 
+  // Either use transport layer or direct http client
+  final NetworkTransportLayer? _transportLayer;
+  final http.Client? _ownHttpClient;
+  Map<String, String>? _headers;
+  final Future<Map<String, String>> Function()? _headerRefresher;
+  final NetworkInspector? _inspector;
+
+  /// Creates HttpTransport with optional [NetworkTransportLayer].
+  ///
+  /// If [transportLayer] is provided, HTTP operations delegate to it.
+  /// Otherwise, creates its own http.Client (legacy behavior).
   HttpTransport({
     required this.baseUrl,
+    NetworkTransportLayer? transportLayer,
     http.Client? httpClient,
     Map<String, String>? defaultHeaders,
     Future<Map<String, String>> Function()? headerRefresher,
-  })  : _httpClient = httpClient ?? http.Client(),
+    NetworkInspector? inspector,
+  })  : _transportLayer = transportLayer,
+        _ownHttpClient = transportLayer == null ? (httpClient ?? http.Client()) : null,
         _headers = defaultHeaders,
         _headerRefresher = headerRefresher,
         _urlBuilder = UrlBuilder(baseUrl),
-        // Use serverUrl (not apiBaseUrl) because runEndpoint includes the api path.
-        // The ag_ui client replaces the path instead of appending to it.
-        _agUiClient = ag_ui.AgUiClient(
-          config: ag_ui.AgUiClientConfig(baseUrl: UrlBuilder(baseUrl).serverUrl),
-        );
+        _inspector = transportLayer == null ? inspector : null; // Transport layer handles inspector
+
+  /// Creates HttpTransport from a [NetworkTransportLayer].
+  ///
+  /// This is the preferred constructor for new code.
+  factory HttpTransport.fromTransportLayer({
+    required String baseUrl,
+    required NetworkTransportLayer transportLayer,
+  }) {
+    return HttpTransport(
+      baseUrl: baseUrl,
+      transportLayer: transportLayer,
+    );
+  }
 
   /// Current headers for requests.
-  Map<String, String>? get defaultHeaders => _headers;
+  Map<String, String>? get defaultHeaders => _transportLayer?.headers ?? _headers;
 
-  @override
-  Stream<ag_ui.BaseEvent> runAgent({
-    required String endpoint,
-    required ag_ui.RunAgentInput input,
-    CancelToken? cancelToken,
-  }) async* {
-    cancelToken?.throwIfCancelled();
-
-    // Create a broadcast controller to manage cancellation
-    final controller = StreamController<ag_ui.BaseEvent>.broadcast();
-
-    // Listen for cancellation
-    StreamSubscription<void>? cancelSubscription;
-    if (cancelToken != null) {
-      cancelSubscription = cancelToken.onCancel.asStream().listen((_) {
-        DebugLog.network('HttpTransport: Cancel requested, closing stream');
-        controller.close();
-      });
-    }
-
-    try {
-      // Convert to SimpleRunAgentInput for the client
-      final simpleInput = ag_ui.SimpleRunAgentInput(
-        threadId: input.threadId,
-        runId: input.runId,
-        messages: input.messages,
-        tools: input.tools,
-        state: input.state,
-      );
-      final stream = _agUiClient.runAgent(endpoint, simpleInput);
-
-      await for (final event in stream) {
-        if (cancelToken?.isCancelled == true) {
-          DebugLog.network('HttpTransport: Cancelled, stopping yield');
-          break;
-        }
-        yield event;
-      }
-    } on CancelledException {
-      DebugLog.network('HttpTransport: Stream cancelled');
-      rethrow;
-    } finally {
-      await cancelSubscription?.cancel();
-      await controller.close();
-    }
-  }
+  /// The underlying transport layer, if using unified transport.
+  NetworkTransportLayer? get transportLayer => _transportLayer;
 
   @override
   Future<void> cancelRun({
@@ -94,29 +71,71 @@ class HttpTransport implements NetworkTransport {
   }) async {
     // POST to cancel endpoint
     // Server may not support this - fail gracefully
+    final uri = _urlBuilder.cancelRun(roomId, threadId, runId);
+
     try {
-      final uri = _urlBuilder.cancelRun(roomId, threadId, runId);
-      var response = await _httpClient.post(
-        uri,
-        headers: {
+      http.Response response;
+
+      if (_transportLayer != null) {
+        // Use transport layer (handles inspector internally)
+        response = await _transportLayer.post(uri, '{}');
+      } else {
+        // Legacy path: direct http client with inspector
+        final requestHeaders = {
           'Content-Type': 'application/json',
           ...?_headers,
-        },
-        body: '{}',
-      );
+        };
 
-      // 401 retry with header refresh
-      if (response.statusCode == 401 && _headerRefresher != null) {
-        DebugLog.network('HttpTransport: Cancel 401, refreshing headers...');
-        _headers = await _headerRefresher!();
-        response = await _httpClient.post(
-          uri,
-          headers: {
-            'Content-Type': 'application/json',
-            ...?_headers,
-          },
-          body: '{}',
+        final requestId = _inspector?.recordRequest(
+          method: 'POST',
+          uri: uri,
+          headers: requestHeaders,
+          body: {},
         );
+
+        try {
+          response = await _ownHttpClient!.post(
+            uri,
+            headers: requestHeaders,
+            body: '{}',
+          );
+
+          // 401 retry with header refresh
+          if (response.statusCode == 401 && _headerRefresher != null) {
+            DebugLog.network('HttpTransport: Cancel 401, refreshing headers...');
+            _headers = await _headerRefresher();
+            final retryHeaders = {
+              'Content-Type': 'application/json',
+              ...?_headers,
+            };
+            response = await _ownHttpClient.post(
+              uri,
+              headers: retryHeaders,
+              body: '{}',
+            );
+          }
+
+          // Record response for inspector
+          if (requestId != null) {
+            dynamic responseBody;
+            try {
+              responseBody = jsonDecode(response.body);
+            } catch (_) {
+              responseBody = response.body;
+            }
+            _inspector?.recordResponse(
+              requestId: requestId,
+              statusCode: response.statusCode,
+              headers: response.headers,
+              body: responseBody,
+            );
+          }
+        } catch (e) {
+          if (requestId != null) {
+            _inspector?.recordError(requestId: requestId, error: e.toString());
+          }
+          rethrow;
+        }
       }
 
       if (response.statusCode >= 400) {
@@ -135,28 +154,70 @@ class HttpTransport implements NetworkTransport {
     Uri uri,
     Map<String, dynamic> body,
   ) async {
-    var response = await _httpClient.post(
-      uri,
-      headers: {
+    final requestBody = jsonEncode(body);
+    http.Response response;
+
+    if (_transportLayer != null) {
+      // Use transport layer (handles inspector and 401 retry internally)
+      response = await _transportLayer.post(uri, requestBody);
+    } else {
+      // Legacy path: direct http client with inspector
+      final requestHeaders = {
         'Content-Type': 'application/json',
         ...?_headers,
-      },
-      body: jsonEncode(body),
-    );
+      };
 
-    // 401 retry with header refresh (single retry to avoid loops)
-    if (response.statusCode == 401 && _headerRefresher != null) {
-      DebugLog.network('HttpTransport: 401 received, refreshing headers...');
-      _headers = await _headerRefresher!();
-      response = await _httpClient.post(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          ...?_headers,
-        },
-        body: jsonEncode(body),
+      final requestId = _inspector?.recordRequest(
+        method: 'POST',
+        uri: uri,
+        headers: requestHeaders,
+        body: body,
       );
-      DebugLog.network('HttpTransport: Retry after refresh returned ${response.statusCode}');
+
+      try {
+        response = await _ownHttpClient!.post(
+          uri,
+          headers: requestHeaders,
+          body: requestBody,
+        );
+
+        // 401 retry with header refresh (single retry to avoid loops)
+        if (response.statusCode == 401 && _headerRefresher != null) {
+          DebugLog.network('HttpTransport: 401 received, refreshing headers...');
+          _headers = await _headerRefresher();
+          final retryHeaders = {
+            'Content-Type': 'application/json',
+            ...?_headers,
+          };
+          response = await _ownHttpClient.post(
+            uri,
+            headers: retryHeaders,
+            body: requestBody,
+          );
+          DebugLog.network('HttpTransport: Retry after refresh returned ${response.statusCode}');
+        }
+
+        // Record response for inspector
+        if (requestId != null) {
+          dynamic responseBody;
+          try {
+            responseBody = jsonDecode(response.body);
+          } catch (_) {
+            responseBody = response.body;
+          }
+          _inspector?.recordResponse(
+            requestId: requestId,
+            statusCode: response.statusCode,
+            headers: response.headers,
+            body: responseBody,
+          );
+        }
+      } catch (e) {
+        if (requestId != null) {
+          _inspector?.recordError(requestId: requestId, error: e.toString());
+        }
+        rethrow;
+      }
     }
 
     if (response.statusCode >= 400) {
@@ -171,7 +232,8 @@ class HttpTransport implements NetworkTransport {
 
   @override
   Future<void> close() async {
-    _httpClient.close();
+    // Only close own http client; transport layer is managed externally
+    _ownHttpClient?.close();
   }
 }
 
