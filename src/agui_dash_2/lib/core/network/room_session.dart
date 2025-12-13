@@ -41,6 +41,13 @@ class RoomSession {
   String? _activeRunId;
   CancelToken? _cancelToken;
   SessionState _state = SessionState.active;
+  Timer? _inactivityTimer;
+
+  /// Inactivity timeout for backgrounded sessions (default: 24 hours).
+  final Duration inactivityTimeout;
+
+  /// Callback when session times out due to inactivity.
+  void Function()? onInactivityTimeout;
 
   // ==========================================================================
   // MESSAGE STATE (THE source of truth for chat messages)
@@ -105,6 +112,8 @@ class RoomSession {
     this.serverId,
     required this.baseUrl,
     required this.transport,
+    this.inactivityTimeout = const Duration(hours: 24),
+    this.onInactivityTimeout,
   }) : _urlBuilder = UrlBuilder(baseUrl);
 
   // Getters
@@ -143,6 +152,7 @@ class RoomSession {
 
   /// Get connection info for observer.
   ConnectionInfo get connectionInfo => ConnectionInfo(
+        serverId: serverId,
         roomId: roomId,
         threadId: _thread?.id,
         activeRunId: _activeRunId,
@@ -176,6 +186,7 @@ class RoomSession {
     _lastActivity = DateTime.now();
 
     _eventController.add(SessionCreatedEvent(
+      serverId: serverId,
       roomId: roomId,
       threadId: threadId,
     ));
@@ -228,6 +239,7 @@ class RoomSession {
     final endpoint = _urlBuilder.runEndpoint(roomId, _thread!.id, _activeRunId!);
 
     _eventController.add(RunStartedEvent(
+      serverId: serverId,
       roomId: roomId,
       threadId: _thread!.id,
       runId: _activeRunId!,
@@ -245,6 +257,7 @@ class RoomSession {
       _lastActivity = DateTime.now();
 
       _eventController.add(RunCompletedEvent(
+        serverId: serverId,
         roomId: roomId,
         threadId: _thread!.id,
         runId: _activeRunId!,
@@ -256,6 +269,7 @@ class RoomSession {
 
       if (e is CancelledException) {
         _eventController.add(RunCancelledEvent(
+          serverId: serverId,
           roomId: roomId,
           threadId: _thread!.id,
           runId: _activeRunId!,
@@ -263,6 +277,7 @@ class RoomSession {
         ));
       } else {
         _eventController.add(RunFailedEvent(
+          serverId: serverId,
           roomId: roomId,
           threadId: _thread!.id,
           runId: _activeRunId!,
@@ -326,10 +341,14 @@ class RoomSession {
 
     if (_thread != null) {
       _eventController.add(SessionSuspendedEvent(
+        serverId: serverId,
         roomId: roomId,
         threadId: _thread!.id,
       ));
     }
+
+    // Start inactivity timer when backgrounded
+    _startInactivityTimer();
   }
 
   /// Resume the session.
@@ -339,14 +358,76 @@ class RoomSession {
     }
 
     DebugLog.network('RoomSession: Resuming session for room $roomId');
+
+    // Cancel inactivity timer when resuming
+    _cancelInactivityTimer();
+
     _state = SessionState.active;
     _lastActivity = DateTime.now();
 
     if (_thread != null) {
       _eventController.add(SessionResumedEvent(
+        serverId: serverId,
         roomId: roomId,
         threadId: _thread!.id,
       ));
+    }
+  }
+
+  // ==========================================================================
+  // INACTIVITY TIMER
+  // ==========================================================================
+  //
+  // NOTE: On mobile platforms (Android/iOS), Timer does not fire reliably when
+  // the app is suspended by the OS. This timer is for *session* backgrounding
+  // (switching between rooms within the active app), not *app* backgrounding.
+  //
+  // For app lifecycle events:
+  // - ConnectionRegistry should check `lastActivity` timestamps on app resume
+  // - Use `isExpired()` to determine if a session should be cleaned up
+  // ==========================================================================
+
+  /// Check if the session has exceeded the inactivity timeout.
+  ///
+  /// Use this for timestamp-based cleanup that works across app suspend/resume.
+  /// Returns true only when:
+  /// - Session is backgrounded
+  /// - AND lastActivity is set
+  /// - AND more than inactivityTimeout has passed since lastActivity
+  bool isExpired() {
+    final activity = _lastActivity;
+    return _state == SessionState.backgrounded &&
+        activity != null &&
+        DateTime.now().difference(activity) > inactivityTimeout;
+  }
+
+  /// Start the inactivity timer for backgrounded sessions.
+  void _startInactivityTimer() {
+    _cancelInactivityTimer();
+
+    _inactivityTimer = Timer(inactivityTimeout, () {
+      if (_state == SessionState.backgrounded) {
+        DebugLog.network(
+          'RoomSession: Inactivity timeout for room $roomId '
+          '(${inactivityTimeout.inHours} hours)',
+        );
+        onInactivityTimeout?.call();
+        // Don't auto-dispose here - let the registry handle it
+      }
+    });
+
+    DebugLog.network(
+      'RoomSession: Started inactivity timer for room $roomId '
+      '(${inactivityTimeout.inHours} hours)',
+    );
+  }
+
+  /// Cancel the inactivity timer.
+  void _cancelInactivityTimer() {
+    if (_inactivityTimer != null) {
+      _inactivityTimer!.cancel();
+      _inactivityTimer = null;
+      DebugLog.network('RoomSession: Cancelled inactivity timer for room $roomId');
     }
   }
 
@@ -758,12 +839,14 @@ class RoomSession {
 
     DebugLog.network('RoomSession: Disposing session for room $roomId');
 
+    _cancelInactivityTimer();
     _cancelToken?.cancel('Session disposed');
     _thread?.dispose();
     _thread = null;
     _state = SessionState.disposed;
 
     _eventController.add(SessionDisposedEvent(
+      serverId: serverId,
       roomId: roomId,
       threadId: threadId,
     ));
