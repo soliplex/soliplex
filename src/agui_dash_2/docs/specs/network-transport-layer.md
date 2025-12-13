@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | ID | SPEC:network-transport-layer |
-| Status | IN_PROGRESS |
+| Status | DONE |
 | Created | 2025-12-13 |
 | Updated | 2025-12-13 |
 | Version | 0.1.0 |
@@ -39,22 +39,22 @@ Problems:
 
 ## Requirements
 
-- [ ] Create NetworkTransportLayer class owning http.Client and AgUiClient
-- [ ] Remove dead code from HttpTransport (_agUiClient, runAgent)
-- [ ] Remove AgUiClient from ServerConnectionState
-- [ ] Route SSE through NetworkTransportLayer
-- [ ] NetworkInspector observes all traffic via transport layer
-- [ ] Support 401 retry for SSE streams
-- [ ] Maintain RoomSession/Thread API compatibility
+- [x] Create NetworkTransportLayer class owning http.Client and AgUiClient
+- [x] Remove dead code from HttpTransport (_agUiClient, runAgent)
+- [x] Remove AgUiClient from ServerConnectionState (now uses transport layer)
+- [x] Route SSE through NetworkTransportLayer
+- [x] NetworkInspector observes all traffic via transport layer
+- [ ] Support 401 retry for SSE streams (deferred - requires ag_ui changes)
+- [x] Maintain RoomSession/Thread API compatibility
 
 ## Acceptance Criteria
 
-- [ ] AC1: Single AgUiClient instance per server (in NetworkTransportLayer)
-- [ ] AC2: NetworkInspector shows SSE stream entries
-- [ ] AC3: SSE entries display: endpoint, duration, event count, status
-- [ ] AC4: 401 during SSE triggers header refresh and retry
-- [ ] AC5: HttpTransport has no AgUiClient references (dead code removed)
-- [ ] AC-TEST: Unit tests exist for NetworkTransportLayer
+- [x] AC1: Single AgUiClient instance per server (in NetworkTransportLayer)
+- [x] AC2: NetworkInspector shows SSE stream entries
+- [x] AC3: SSE entries display: endpoint, duration, event count, status
+- [ ] AC4: 401 during SSE triggers header refresh and retry (deferred - ag_ui handles SSE internally)
+- [x] AC5: HttpTransport has no AgUiClient references (dead code removed)
+- [x] AC-TEST: Unit tests exist for NetworkTransportLayer
 
 ## Architecture
 
@@ -114,26 +114,38 @@ SSE  ──► HttpTransport ──► NetworkTransportLayer ──► NetworkIn
 
 ## Completion Record
 
-*Fill in when status → DONE*
-
 | Field | Value |
 |-------|-------|
-| Completed | |
-| Final Version | |
+| Completed | 2025-12-13 |
+| Final Version | 0.1.0 |
 
 ### Files Modified
 
--
+- `lib/core/network/network_transport_layer.dart` - **NEW** - Core transport layer class
+- `lib/core/network/network_transport.dart` - Removed `runAgent()` from interface
+- `lib/core/network/http_transport.dart` - Removed dead code, added transport layer support
+- `lib/core/network/server_connection_state.dart` - Factory constructor, uses transport layer
+- `lib/infrastructure/quick_agui/thread.dart` - Added `RunAgentDelegate`, `Thread.withDelegate()`
+- `lib/core/network/room_session.dart` - Named parameters for `initialize()`
+- `lib/core/network/connection_manager.dart` - Pass transport layer to session
 
 ### Tests
 
--
+- `test/core/network/network_transport_layer_test.dart` - 9 tests for NetworkTransportLayer
+- `test/core/network/room_session_state_test.dart` - Updated for named parameter syntax
+- `test/core/network/room_session_enhanced_test.dart` - Updated for named parameter syntax
 
 ### Coverage
 
 | File | Before | After | Delta |
 |------|--------|-------|-------|
-| | | | |
+| http_transport.dart | 56% | n/a | Dead code removed |
+| network_transport_layer.dart | n/a | New | New file |
 
 ### Notes
+
+- AC4 (401 retry for SSE) deferred - requires changes to ag_ui package since it handles SSE internally
+- SSE streams are recorded as single entries with metadata (method: 'SSE', event count, duration)
+- Backward compatibility maintained via legacy `agUiClient` path in tests
+- Debug logs confirm SSE lifecycle: start, event count, completion/error
 

@@ -4,7 +4,7 @@
 |-------|-------|
 | Spec | SPEC:network-transport-layer |
 | Created | 2025-12-13 |
-| Status | active |
+| Status | completed |
 
 ---
 
@@ -105,6 +105,41 @@ Add unit tests for NetworkTransportLayer.
 - **All passing**: Yes
 
 ### Next
-- [ ] Manual verification: SSE entries appear in NetworkInspector UI
+- [x] Manual verification: SSE entries appear in NetworkInspector UI
+
+---
+
+## 2025-12-13 - Session 4 (Verification)
+
+### Context
+Manual verification of SSE entries in NetworkInspector UI. Discovered and fixed a URL construction bug.
+
+### Bug Found
+- **Issue**: URLs malformed as `http://localhost:8000api/v1/...` (missing `/`)
+- **Cause**: `NetworkTransportLayer.runAgent()` concatenated serverUrl and endpoint without path separator
+- **Fix**: Normalize endpoint to ensure leading `/`:
+  ```dart
+  final normalizedEndpoint = endpoint.startsWith('/') ? endpoint : '/$endpoint';
+  final uri = Uri.parse('${_urlBuilder.serverUrl}$normalizedEndpoint');
+  ```
+
+### Verification Results
+- App launched successfully on macOS
+- SSE streams completing correctly:
+  - Room `joker`: 309 events
+  - Room `u28`: 121 events
+  - Room `faux`: 14 events
+- Debug logs show proper SSE lifecycle:
+  - `[NET] NetworkTransportLayer: SSE stream starting for api/v1/rooms/...`
+  - `[NET] NetworkTransportLayer: SSE stream completed (N events)`
+
+### Commits
+- `bae83db`: fix: Normalize SSE endpoint URL path separator in NetworkTransportLayer
+
+### Status
+- SSE wiring: ✅ Complete
+- NetworkTransportLayer tests: ✅ Complete (9 tests)
+- URL construction: ✅ Fixed
+- Manual verification: ✅ SSE streams working
 
 ---
