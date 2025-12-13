@@ -94,8 +94,8 @@ class _ChatContentState extends ConsumerState<ChatContent> {
       return;
     }
 
-    // Get current canvas state to send with request
-    final canvasState = ref.read(canvasProvider);
+    // Get current canvas state to send with request (per-room state)
+    final canvasState = ref.read(activeCanvasProvider);
 
     try {
       await connectionManager.chat(
@@ -108,7 +108,8 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         },
         onCanvasUpdate: (operation, widgetName, data) {
           if (!mounted) return;
-          final canvasNotifier = ref.read(canvasProvider.notifier);
+          final canvasNotifier = ref.read(activeCanvasNotifierProvider);
+          if (canvasNotifier == null) return; // No room selected
           switch (operation) {
             case 'clear':
               canvasNotifier.clear();
@@ -120,7 +121,8 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         },
         onContextUpdate: (eventType, {String? summary, Map<String, dynamic>? data}) {
           if (!mounted) return;
-          final contextNotifier = ref.read(contextPaneProvider.notifier);
+          final contextNotifier = ref.read(activeContextPaneNotifierProvider);
+          if (contextNotifier == null) return; // No room selected
           switch (eventType) {
             case 'userMessage':
               contextNotifier.addTextMessage(summary ?? '', isUser: true);
@@ -192,8 +194,8 @@ class _ChatContentState extends ConsumerState<ChatContent> {
   ) {
     final connectionManager = ref.read(connectionManagerProvider);
     final session = connectionManager.getSession(roomId);
-    final canvasNotifier = ref.read(canvasProvider.notifier);
-    final contextNotifier = ref.read(contextPaneProvider.notifier);
+    final canvasNotifier = ref.read(activeCanvasNotifierProvider);
+    final contextNotifier = ref.read(activeContextPaneNotifierProvider);
 
     if (toolName == 'genui_render') {
       final widgetName = args['widget_name'] as String? ?? 'Widget';
@@ -206,22 +208,24 @@ class _ChatContentState extends ConsumerState<ChatContent> {
           data: data,
         ),
       );
-      contextNotifier.addGenUiRender(widgetName);
+      contextNotifier?.addGenUiRender(widgetName);
       return {'rendered': true, 'widget': widgetName};
     } else if (toolName == 'canvas_render') {
       final widgetName = args['widget_name'] as String? ?? 'Widget';
       final data = args['data'] as Map<String, dynamic>? ?? {};
       final position = args['position'] as String? ?? 'append';
 
-      switch (position) {
-        case 'clear':
-          canvasNotifier.clear();
-        case 'replace':
-          canvasNotifier.replaceAll(widgetName, data);
-        default:
-          canvasNotifier.addItem(widgetName, data);
+      if (canvasNotifier != null) {
+        switch (position) {
+          case 'clear':
+            canvasNotifier.clear();
+          case 'replace':
+            canvasNotifier.replaceAll(widgetName, data);
+          default:
+            canvasNotifier.addItem(widgetName, data);
+        }
       }
-      contextNotifier.addCanvasRender(widgetName, position);
+      contextNotifier?.addCanvasRender(widgetName, position);
       return {'rendered': true, 'widget': widgetName, 'position': position};
     }
 
@@ -393,7 +397,7 @@ class _ChatContentState extends ConsumerState<ChatContent> {
 
   void _showCanvasState(RoomSession session) {
     session.addUserMessage('/canvas');
-    final canvasState = ref.read(canvasProvider);
+    final canvasState = ref.read(activeCanvasProvider);
     session.addSystemMessage(canvasState.toSummary());
   }
 
