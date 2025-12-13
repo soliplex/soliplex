@@ -47,7 +47,7 @@ class _TrackedMarkdownImageState extends ConsumerState<TrackedMarkdownImage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !_registered) {
         _registered = true;
-        ref.read(imageLoadTrackerProvider).trackImage(
+        ref.read(imageLoadTrackerProvider.notifier).trackImage(
               widget.messageId,
               widget.imageUrl,
             );
@@ -60,7 +60,7 @@ class _TrackedMarkdownImageState extends ConsumerState<TrackedMarkdownImage> {
       _completed = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          ref.read(imageLoadTrackerProvider).markLoaded(
+          ref.read(imageLoadTrackerProvider.notifier).markLoaded(
                 widget.messageId,
                 widget.imageUrl,
               );
@@ -74,7 +74,7 @@ class _TrackedMarkdownImageState extends ConsumerState<TrackedMarkdownImage> {
       _completed = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          ref.read(imageLoadTrackerProvider).markError(
+          ref.read(imageLoadTrackerProvider.notifier).markError(
                 widget.messageId,
                 widget.imageUrl,
               );

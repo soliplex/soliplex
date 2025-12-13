@@ -1,4 +1,6 @@
-class SsoConfig {
+import 'package:equatable/equatable.dart';
+
+class SsoConfig extends Equatable {
   const SsoConfig({
     required this.id,
     required this.title,
@@ -28,4 +30,9 @@ class SsoConfig {
   final String clientId;
   final String redirectUrl;
   final List<String> scopes;
+
+  @override
+  List<Object?> get props => [
+    id, title, endpoint, tokenEndpoint, loginUrl, clientId, redirectUrl, scopes,
+  ];
 }

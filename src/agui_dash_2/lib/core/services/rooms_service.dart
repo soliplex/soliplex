@@ -117,6 +117,12 @@ class RoomsNotifier extends StateNotifier<RoomsState> {
 
   /// Refresh rooms list.
   Future<void> refresh() => fetchRooms();
+
+  @override
+  void dispose() {
+    _httpClient.close();
+    super.dispose();
+  }
 }
 
 /// Provider for rooms state.

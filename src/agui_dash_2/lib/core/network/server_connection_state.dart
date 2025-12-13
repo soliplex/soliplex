@@ -46,13 +46,20 @@ class ServerConnectionState {
   bool _disposed = false;
 
   /// Creates a new server connection state.
+  ///
+  /// [headerRefresher] is called on 401 to refresh auth headers.
   ServerConnectionState({
     required this.serverId,
     required this.baseUrl,
     this.headers,
     HttpTransport? transport,
+    Future<Map<String, String>> Function()? headerRefresher,
   })  : urlBuilder = UrlBuilder(baseUrl),
-        transport = transport ?? HttpTransport(baseUrl: baseUrl, defaultHeaders: headers),
+        transport = transport ?? HttpTransport(
+          baseUrl: baseUrl,
+          defaultHeaders: headers,
+          headerRefresher: headerRefresher,
+        ),
         agUiClient = ag_ui.AgUiClient(
           config: ag_ui.AgUiClientConfig(
             baseUrl: UrlBuilder(baseUrl).serverUrl,

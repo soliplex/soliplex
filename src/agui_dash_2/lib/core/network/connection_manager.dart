@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/chat_models.dart';
+import '../providers/app_providers.dart';
 import '../services/local_tools_service.dart';
 import '../utils/debug_log.dart';
 import 'connection_events.dart';
@@ -28,6 +29,9 @@ typedef LocalToolNotifier = void Function(
   String status,
 );
 
+/// Callback to refresh auth headers on 401.
+typedef HeaderRefresher = Future<Map<String, String>> Function(String serverId);
+
 /// Facade over [ConnectionRegistry] for backward compatibility.
 ///
 /// This class provides the same API as the original ConnectionManager
@@ -47,6 +51,9 @@ typedef LocalToolNotifier = void Function(
 class ConnectionManager extends ChangeNotifier {
   /// Connection registry for multi-server support.
   final ConnectionRegistry _registry;
+
+  /// Callback to refresh auth headers on 401.
+  final HeaderRefresher? _headerRefresher;
 
   /// Currently active server ID.
   String? _activeServerId;
@@ -81,7 +88,9 @@ class ConnectionManager extends ChangeNotifier {
     ConnectionRegistry? registry,
     String baseUrl = '',
     Map<String, String>? headers,
-  }) : _registry = registry ?? ConnectionRegistry() {
+    HeaderRefresher? headerRefresher,
+  }) : _registry = registry ?? ConnectionRegistry(),
+       _headerRefresher = headerRefresher {
     // Listen to registry changes
     _registry.addListener(_onRegistryChanged);
 
@@ -112,8 +121,18 @@ class ConnectionManager extends ChangeNotifier {
 
     DebugLog.network('ConnectionManager: Switching server to $newBaseUrl (id: $serverId)');
 
+    // Create header refresher bound to this server ID
+    final serverHeaderRefresher = _headerRefresher != null
+        ? () => _headerRefresher!(serverId)
+        : null;
+
     // Connect to the server (or get existing connection)
-    _registry.connectServer(serverId, newBaseUrl, headers: headers);
+    _registry.connectServer(
+      serverId,
+      newBaseUrl,
+      headers: headers,
+      headerRefresher: serverHeaderRefresher,
+    );
     _activeServerId = serverId;
     _registry.focusServer(serverId);
 
@@ -481,7 +500,12 @@ class ConnectionManager extends ChangeNotifier {
 /// Persists for app lifetime - NOT server-scoped.
 final connectionManagerProvider = ChangeNotifierProvider<ConnectionManager>((ref) {
   final registry = ref.read(connectionRegistryProvider);
-  final manager = ConnectionManager(registry: registry);
+  final authManager = ref.read(authManagerProvider);
+
+  final manager = ConnectionManager(
+    registry: registry,
+    headerRefresher: (serverId) => authManager.getAuthHeaders(serverId),
+  );
   ref.onDispose(() => manager.dispose());
   return manager;
 });

@@ -43,11 +43,15 @@ class ChatUser extends Equatable {
 /// Type of chat message content.
 enum MessageType { text, genUi, loading, error, toolCall, toolCallGroup }
 
+/// Status of a tool call execution.
+enum ToolCallStatus { executing, completed, error }
+
 /// Summary of a tool call for grouped display.
 class ToolCallSummary extends Equatable {
   final String toolCallId;
   final String toolName;
-  final String status; // 'executing' | 'completed' | 'error:...'
+  final ToolCallStatus status;
+  final String? errorMessage;
   final DateTime startedAt;
   final DateTime? completedAt;
 
@@ -55,30 +59,32 @@ class ToolCallSummary extends Equatable {
     required this.toolCallId,
     required this.toolName,
     required this.status,
+    this.errorMessage,
     required this.startedAt,
     this.completedAt,
   });
 
-  bool get isExecuting => status == 'executing';
-  bool get isCompleted => status == 'completed';
-  bool get isError => status.startsWith('error:');
-  String? get errorMessage => isError ? status.substring(6) : null;
+  bool get isExecuting => status == ToolCallStatus.executing;
+  bool get isCompleted => status == ToolCallStatus.completed;
+  bool get isError => status == ToolCallStatus.error;
 
   ToolCallSummary copyWith({
-    String? status,
+    ToolCallStatus? status,
+    String? errorMessage,
     DateTime? completedAt,
   }) {
     return ToolCallSummary(
       toolCallId: toolCallId,
       toolName: toolName,
       status: status ?? this.status,
+      errorMessage: errorMessage ?? this.errorMessage,
       startedAt: startedAt,
       completedAt: completedAt ?? this.completedAt,
     );
   }
 
   @override
-  List<Object?> get props => [toolCallId, toolName, status, startedAt, completedAt];
+  List<Object?> get props => [toolCallId, toolName, status, errorMessage, startedAt, completedAt];
 }
 
 /// Represents a message in the chat.

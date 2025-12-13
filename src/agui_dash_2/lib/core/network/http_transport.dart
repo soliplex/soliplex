@@ -12,24 +12,32 @@ import 'network_transport.dart';
 /// HTTP-based network transport using ag_ui.AgUiClient.
 ///
 /// Web-compatible implementation that wraps the ag_ui package.
+/// Supports 401 retry with header refresh for token expiration.
 class HttpTransport implements NetworkTransport {
   final String baseUrl;
   final http.Client _httpClient;
   final ag_ui.AgUiClient _agUiClient;
-  final Map<String, String>? defaultHeaders;
+  Map<String, String>? _headers;
+  final Future<Map<String, String>> Function()? _headerRefresher;
   final UrlBuilder _urlBuilder;
 
   HttpTransport({
     required this.baseUrl,
     http.Client? httpClient,
-    this.defaultHeaders,
+    Map<String, String>? defaultHeaders,
+    Future<Map<String, String>> Function()? headerRefresher,
   })  : _httpClient = httpClient ?? http.Client(),
+        _headers = defaultHeaders,
+        _headerRefresher = headerRefresher,
         _urlBuilder = UrlBuilder(baseUrl),
         // Use serverUrl (not apiBaseUrl) because runEndpoint includes the api path.
         // The ag_ui client replaces the path instead of appending to it.
         _agUiClient = ag_ui.AgUiClient(
           config: ag_ui.AgUiClientConfig(baseUrl: UrlBuilder(baseUrl).serverUrl),
         );
+
+  /// Current headers for requests.
+  Map<String, String>? get defaultHeaders => _headers;
 
   @override
   Stream<ag_ui.BaseEvent> runAgent({
@@ -88,14 +96,28 @@ class HttpTransport implements NetworkTransport {
     // Server may not support this - fail gracefully
     try {
       final uri = _urlBuilder.cancelRun(roomId, threadId, runId);
-      final response = await _httpClient.post(
+      var response = await _httpClient.post(
         uri,
         headers: {
           'Content-Type': 'application/json',
-          ...?defaultHeaders,
+          ...?_headers,
         },
         body: '{}',
       );
+
+      // 401 retry with header refresh
+      if (response.statusCode == 401 && _headerRefresher != null) {
+        DebugLog.network('HttpTransport: Cancel 401, refreshing headers...');
+        _headers = await _headerRefresher!();
+        response = await _httpClient.post(
+          uri,
+          headers: {
+            'Content-Type': 'application/json',
+            ...?_headers,
+          },
+          body: '{}',
+        );
+      }
 
       if (response.statusCode >= 400) {
         DebugLog.network('HttpTransport: Cancel request returned ${response.statusCode}');
@@ -113,14 +135,29 @@ class HttpTransport implements NetworkTransport {
     Uri uri,
     Map<String, dynamic> body,
   ) async {
-    final response = await _httpClient.post(
+    var response = await _httpClient.post(
       uri,
       headers: {
         'Content-Type': 'application/json',
-        ...?defaultHeaders,
+        ...?_headers,
       },
       body: jsonEncode(body),
     );
+
+    // 401 retry with header refresh (single retry to avoid loops)
+    if (response.statusCode == 401 && _headerRefresher != null) {
+      DebugLog.network('HttpTransport: 401 received, refreshing headers...');
+      _headers = await _headerRefresher!();
+      response = await _httpClient.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          ...?_headers,
+        },
+        body: jsonEncode(body),
+      );
+      DebugLog.network('HttpTransport: Retry after refresh returned ${response.statusCode}');
+    }
 
     if (response.statusCode >= 400) {
       throw HttpTransportException(

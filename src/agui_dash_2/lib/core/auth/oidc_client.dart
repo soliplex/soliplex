@@ -147,7 +147,6 @@ class OidcClient implements http.Client {
               .transform(const LineSplitter());
 
           try {
-            final errorResponse = StringBuffer();
             await for (final value in stream.where(
               (event) => event.isNotEmpty,
             )) {
@@ -160,15 +159,6 @@ class OidcClient implements http.Client {
 
               final decoded = jsonDecode(dataLines.last);
               yield onSuccess(decoded);
-            } // end of await for
-            if (errorResponse.isNotEmpty) {
-              final decoded = jsonDecode(errorResponse.toString());
-              if (decoded is List) {
-                yield* Stream<T>.error(decoded.first as Map<String, dynamic>);
-              } else {
-                yield* Stream<T>.error(decoded as Map<String, dynamic>);
-              }
-              yield* Stream<T>.error(decoded);
             }
           } catch (error, stackTrace) {
             debugPrint('Error occurred while handling stream');

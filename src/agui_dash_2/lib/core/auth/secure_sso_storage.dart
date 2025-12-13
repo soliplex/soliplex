@@ -61,6 +61,7 @@ class SecureSsoStorage {
 
   Future<void> deleteSsoConfig() async {
     await _storage.delete(_ssoIdKey);
+    await _storage.delete(_ssoTitleKey);
     await _storage.delete(_ssoEndpointKey);
     await _storage.delete(_ssoTokenEndpointKey);
     await _storage.delete(_ssoLoginUriKey);

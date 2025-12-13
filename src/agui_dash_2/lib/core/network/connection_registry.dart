@@ -84,10 +84,13 @@ class ConnectionRegistry extends ChangeNotifier {
   ///
   /// If the server is already connected, returns the existing [ServerConnectionState].
   /// Otherwise creates a new connection.
+  ///
+  /// [headerRefresher] is called on 401 to refresh auth headers.
   ServerConnectionState connectServer(
     String serverId,
     String baseUrl, {
     Map<String, String>? headers,
+    Future<Map<String, String>> Function()? headerRefresher,
   }) {
     _throwIfDisposed();
 
@@ -102,6 +105,7 @@ class ConnectionRegistry extends ChangeNotifier {
       serverId: serverId,
       baseUrl: baseUrl,
       headers: headers,
+      headerRefresher: headerRefresher,
     );
     _servers[serverId] = serverState;
 
@@ -115,10 +119,13 @@ class ConnectionRegistry extends ChangeNotifier {
   ///
   /// Creates the server connection and/or session if they don't exist.
   /// This is the primary way to get sessions in the multi-connection architecture.
+  ///
+  /// [headerRefresher] is called on 401 to refresh auth headers.
   RoomSession getSession(
     ServerRoomKey key, {
     String? baseUrl,
     Map<String, String>? headers,
+    Future<Map<String, String>> Function()? headerRefresher,
   }) {
     _throwIfDisposed();
 
@@ -129,7 +136,12 @@ class ConnectionRegistry extends ChangeNotifier {
           'Server ${key.serverId} not connected and no baseUrl provided',
         );
       }
-      serverState = connectServer(key.serverId, baseUrl, headers: headers);
+      serverState = connectServer(
+        key.serverId,
+        baseUrl,
+        headers: headers,
+        headerRefresher: headerRefresher,
+      );
     }
 
     return serverState.getOrCreateSession(key.roomId);
