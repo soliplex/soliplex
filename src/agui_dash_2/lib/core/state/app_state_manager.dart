@@ -184,6 +184,71 @@ class AppStateManager {
     _stateSubject.add(const AppStateNoServer());
   }
 
+  // ===========================================================================
+  // Server History Operations (for ServerHistoryWidget)
+  // ===========================================================================
+
+  /// Get the server history list.
+  /// For reactive updates, use serverHistoryProvider.
+  List<ServerConnection> get serverHistory => _serverRegistry.serverHistory;
+
+  /// Remove a server from history.
+  /// Emits state update after removal.
+  Future<void> removeServerFromHistory(String serverId) async {
+    DebugLog.service('AppStateManager: Removing server $serverId from history');
+    await _serverRegistry.removeServer(serverId);
+
+    // If we removed the current server, emit new state
+    if (currentState.server?.id == serverId) {
+      final newCurrent = _serverRegistry.currentServer;
+      if (newCurrent == null) {
+        _stateSubject.add(const AppStateNoServer());
+      } else {
+        // Re-initialize for new server
+        await initialize();
+      }
+    } else {
+      // Just re-emit current state to trigger provider rebuild
+      _stateSubject.add(currentState);
+    }
+  }
+
+  /// Select a server from history.
+  /// Probes and transitions to appropriate state.
+  Future<void> selectServerFromHistory(String serverId) async {
+    DebugLog.service('AppStateManager: Selecting server $serverId from history');
+
+    try {
+      final server = await _serverRegistry.setCurrentServer(serverId);
+
+      if (!server.requiresAuth) {
+        _stateSubject.add(AppStateReady(server: server));
+        return;
+      }
+
+      // Check for valid token
+      final hasValidToken = await _authManager.hasValidToken(server.id);
+      if (hasValidToken) {
+        final userInfo = await _authManager.getUserInfo(server);
+        _stateSubject.add(AppStateReady(
+          server: server,
+          userName: userInfo?.name,
+          userEmail: userInfo?.email,
+        ));
+      } else {
+        // Need to probe server to get OIDC providers
+        final serverInfo = await _serverRegistry.probeServer(server.url);
+        _stateSubject.add(AppStateNeedsAuth(
+          server: server,
+          providers: serverInfo.oidcProviders,
+        ));
+      }
+    } catch (e) {
+      DebugLog.error('AppStateManager: Error selecting server: $e');
+      _stateSubject.add(AppStateError('Failed to select server: $e'));
+    }
+  }
+
   void dispose() {
     _stateSubject.close();
   }

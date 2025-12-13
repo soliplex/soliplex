@@ -23,7 +23,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../network/server_room_key.dart';
 import '../services/activity_status_service.dart';
 import '../services/canvas_service.dart';
-import '../services/chat_service.dart';
 import '../services/context_pane_service.dart';
 import '../services/rooms_service.dart' show selectedRoomProvider;
 import 'app_providers.dart';
@@ -42,18 +41,6 @@ final activeServerRoomKeyProvider = Provider<ServerRoomKey?>((ref) {
 
   if (server == null || roomId == null) return null;
   return ServerRoomKey(serverId: server.id, roomId: roomId);
-});
-
-// =============================================================================
-// CHAT PANEL
-// =============================================================================
-
-/// Provider for chat state.
-///
-/// Watches [currentServerFromAppStateProvider] - chat clears when server changes.
-final chatProvider = StateNotifierProvider<ChatNotifier, ChatState>((ref) {
-  final server = ref.watch(currentServerFromAppStateProvider);
-  return ChatNotifier(serverId: server?.id);
 });
 
 // =============================================================================

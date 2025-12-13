@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../services/server_config_service.dart';
+import '../services/secure_storage_service.dart' show secureStorageProvider;
 import 'oidc_auth_interactor.dart';
 import 'secure_sso_storage.dart';
 import 'secure_storage_gateway.dart';

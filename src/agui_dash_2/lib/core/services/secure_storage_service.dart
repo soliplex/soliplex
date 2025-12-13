@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../utils/debug_log.dart';
@@ -319,3 +320,13 @@ extension TokenStorageExtension on SecureStorageService {
     return await read(StorageKeys.currentServerId);
   }
 }
+
+// =============================================================================
+// Provider
+// =============================================================================
+
+/// Provider for SecureStorageService.
+/// Singleton - persists for app lifetime.
+final secureStorageProvider = Provider<SecureStorageService>((ref) {
+  return SecureStorageFactory.create();
+});

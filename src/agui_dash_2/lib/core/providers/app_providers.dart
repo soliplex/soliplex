@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/auth_providers.dart';
 import '../models/server_models.dart';
 import '../services/auth_manager.dart';
-import '../services/server_config_service.dart' show secureStorageProvider;
+import '../services/secure_storage_service.dart' show secureStorageProvider;
 import '../services/server_registry.dart';
 import '../state/app_state.dart';
 import '../state/app_state_manager.dart';
@@ -83,4 +83,13 @@ final isAppReadyProvider = Provider<bool>((ref) {
 final needsAuthFromAppStateProvider = Provider<bool>((ref) {
   final stateAsync = ref.watch(appStateStreamProvider);
   return stateAsync.whenOrNull(data: (state) => state.needsAuth) ?? false;
+});
+
+/// Server history list.
+/// Rebuilds when app state changes (which happens after server operations).
+final serverHistoryProvider = Provider<List<ServerConnection>>((ref) {
+  // Watch the app state stream to trigger rebuilds when servers change
+  ref.watch(appStateStreamProvider);
+  final manager = ref.read(appStateManagerProvider);
+  return manager.serverHistory;
 });

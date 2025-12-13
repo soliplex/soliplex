@@ -1,10 +1,8 @@
-// ignore_for_file: deprecated_member_use_from_same_package
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/server_models.dart';
 import '../../core/providers/app_providers.dart';
-import '../../core/services/server_config_service.dart' show serverConfigProvider, serverHistoryProvider;
 
 /// Widget displaying saved server connections.
 ///
@@ -80,7 +78,7 @@ class ServerHistoryWidget extends ConsumerWidget {
     );
 
     if (confirmed == true && context.mounted) {
-      await ref.read(serverConfigProvider).removeServer(server.id);
+      await ref.read(appStateManagerProvider).removeServerFromHistory(server.id);
     }
   }
 }
@@ -226,7 +224,7 @@ class ServerHistoryPopup extends ConsumerWidget {
             ),
             selected: isSelected,
             onTap: () {
-              ref.read(serverConfigProvider).setCurrentServer(server.id);
+              ref.read(appStateManagerProvider).selectServerFromHistory(server.id);
               Navigator.pop(context);
             },
           );

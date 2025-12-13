@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/server_models.dart';
 import '../../core/providers/app_providers.dart';
-import '../../core/services/server_config_service.dart' show serverHistoryProvider;
 import '../../core/utils/api_constants.dart';
 import 'server_history_widget.dart';
 import 'oidc_provider_selector.dart';
