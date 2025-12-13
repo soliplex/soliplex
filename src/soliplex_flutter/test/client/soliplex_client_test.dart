@@ -229,10 +229,10 @@ void main() {
         mockHttpClient = createMockClient((request) async {
           if (request.url.path == '/api/v1/rooms') {
             return http.Response(
-              jsonEncode([
-                {'id': 'room1', 'name': 'Test Room'},
-                {'id': 'room2', 'name': 'Another Room'},
-              ]),
+              jsonEncode({
+                'room1': {'id': 'room1', 'name': 'Test Room'},
+                'room2': {'id': 'room2', 'name': 'Another Room'},
+              }),
               200,
             );
           }
@@ -251,7 +251,7 @@ void main() {
       test('handles empty list', () async {
         mockHttpClient = createMockClient((request) async {
           if (request.url.path == '/api/v1/rooms') {
-            return http.Response(jsonEncode([]), 200);
+            return http.Response(jsonEncode({}), 200);
           }
           return http.Response('Not found', 404);
         });
@@ -314,18 +314,20 @@ void main() {
         mockHttpClient = createMockClient((request) async {
           if (request.url.path == '/api/v1/rooms/room1/agui') {
             return http.Response(
-              jsonEncode([
-                {
-                  'id': 'thread1',
-                  'room_id': 'room1',
-                  'name': 'Thread 1',
-                },
-                {
-                  'id': 'thread2',
-                  'room_id': 'room1',
-                  'name': 'Thread 2',
-                },
-              ]),
+              jsonEncode({
+                'threads': [
+                  {
+                    'id': 'thread1',
+                    'room_id': 'room1',
+                    'name': 'Thread 1',
+                  },
+                  {
+                    'id': 'thread2',
+                    'room_id': 'room1',
+                    'name': 'Thread 2',
+                  },
+                ],
+              }),
               200,
             );
           }
