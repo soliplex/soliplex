@@ -2,11 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mocktail/mocktail.dart';
 
-import 'package:agui_dash_2/core/models/chat_models.dart';
-import 'package:agui_dash_2/core/network/room_session.dart';
-import 'package:agui_dash_2/core/providers/panel_providers.dart';
-import 'package:agui_dash_2/core/services/canvas_service.dart';
-import 'package:agui_dash_2/features/chat/services/slash_command_service.dart';
+import 'package:soliplex/core/models/chat_models.dart';
+import 'package:soliplex/core/network/room_session.dart';
+import 'package:soliplex/core/providers/panel_providers.dart';
+import 'package:soliplex/core/services/canvas_service.dart';
+import 'package:soliplex/features/chat/services/slash_command_service.dart';
 
 // Mocks
 class MockRef extends Mock implements Ref {}

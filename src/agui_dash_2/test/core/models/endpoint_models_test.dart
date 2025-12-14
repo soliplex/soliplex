@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:agui_dash_2/core/models/endpoint_models.dart';
+import 'package:soliplex/core/models/endpoint_models.dart';
 
 void main() {
   group('AgUiEndpoint', () {

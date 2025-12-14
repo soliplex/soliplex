@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
-import 'package:agui_dash_2/core/network/cancel_token.dart';
-import 'package:agui_dash_2/core/network/network_transport.dart';
+import 'package:soliplex/core/network/cancel_token.dart';
+import 'package:soliplex/core/network/network_transport.dart';
 
 /// A fake network transport for testing.
 ///

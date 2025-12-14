@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:agui_dash_2/core/chat/completions_models.dart';
+import 'package:soliplex/core/chat/completions_models.dart';
 
 void main() {
   group('CompletionMessage', () {

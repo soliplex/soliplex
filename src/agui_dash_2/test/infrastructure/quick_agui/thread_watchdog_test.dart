@@ -1,6 +1,6 @@
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
-import 'package:agui_dash_2/core/network/cancel_token.dart';
-import 'package:agui_dash_2/infrastructure/quick_agui/thread.dart';
+import 'package:soliplex/core/network/cancel_token.dart';
+import 'package:soliplex/infrastructure/quick_agui/thread.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Tests for the watchdog timer that detects server hangs.

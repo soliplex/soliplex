@@ -1,4 +1,4 @@
-import 'package:agui_dash_2/core/config/connection_config.dart';
+import 'package:soliplex/core/config/connection_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

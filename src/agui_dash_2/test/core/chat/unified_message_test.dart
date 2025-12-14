@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:agui_dash_2/core/chat/unified_message.dart';
+import 'package:soliplex/core/chat/unified_message.dart';
 
 void main() {
   group('MessageRole', () {

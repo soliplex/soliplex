@@ -1,6 +1,6 @@
 import 'dart:math';
 
-import 'package:agui_dash_2/core/network/server_room_key.dart';
+import 'package:soliplex/core/network/server_room_key.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Property-based tests for ServerRoomKey.

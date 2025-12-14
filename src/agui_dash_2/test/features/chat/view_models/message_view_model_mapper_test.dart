@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:agui_dash_2/core/models/chat_models.dart';
-import 'package:agui_dash_2/core/models/error_types.dart';
-import 'package:agui_dash_2/features/chat/view_models/chat_message_view_model.dart';
-import 'package:agui_dash_2/features/chat/view_models/message_view_model_mapper.dart';
+import 'package:soliplex/core/models/chat_models.dart';
+import 'package:soliplex/core/models/error_types.dart';
+import 'package:soliplex/features/chat/view_models/chat_message_view_model.dart';
+import 'package:soliplex/features/chat/view_models/message_view_model_mapper.dart';
 
 void main() {
   group('MessageViewModelMapper', () {

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:agui_dash_2/core/services/secure_storage_service.dart';
+import 'package:soliplex/core/services/secure_storage_service.dart';
 
 /// In-memory implementation for testing
 class TestSecureStorageService implements SecureStorageService {

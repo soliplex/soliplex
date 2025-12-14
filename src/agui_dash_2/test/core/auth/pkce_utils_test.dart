@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:agui_dash_2/core/auth/pkce_utils.dart';
+import 'package:soliplex/core/auth/pkce_utils.dart';
 
 void main() {
   group('PkceUtils', () {

@@ -1,5 +1,5 @@
-import 'package:agui_dash_2/core/network/http_transport.dart';
-import 'package:agui_dash_2/core/network/network_transport_layer.dart';
+import 'package:soliplex/core/network/http_transport.dart';
+import 'package:soliplex/core/network/network_transport_layer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';

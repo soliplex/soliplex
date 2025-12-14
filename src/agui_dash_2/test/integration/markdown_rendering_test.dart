@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:agui_dash_2/features/chat/widgets/streaming_markdown_widget.dart';
+import 'package:soliplex/features/chat/widgets/streaming_markdown_widget.dart';
 
 void main() {
   testWidgets('StreamingMarkdownWidget renders static markdown correctly using flutter_markdown_plus', (WidgetTester tester) async {

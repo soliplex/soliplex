@@ -1,7 +1,7 @@
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
-import 'package:agui_dash_2/core/network/connection_events.dart';
-import 'package:agui_dash_2/core/network/http_transport.dart';
-import 'package:agui_dash_2/core/network/room_session.dart';
+import 'package:soliplex/core/network/connection_events.dart';
+import 'package:soliplex/core/network/http_transport.dart';
+import 'package:soliplex/core/network/room_session.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';

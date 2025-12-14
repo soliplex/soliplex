@@ -1,7 +1,7 @@
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:agui_dash_2/core/services/tool_execution_service.dart';
+import 'package:soliplex/core/services/tool_execution_service.dart';
 
 void main() {
   group('ToolExecutionNotifier', () {

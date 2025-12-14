@@ -1,4 +1,4 @@
-import 'package:agui_dash_2/core/network/network_inspector_models.dart';
+import 'package:soliplex/core/network/network_inspector_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

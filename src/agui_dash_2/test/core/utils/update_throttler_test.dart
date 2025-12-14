@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:agui_dash_2/core/utils/update_throttler.dart';
+import 'package:soliplex/core/utils/update_throttler.dart';
 
 void main() {
   group('UpdateThrottler', () {

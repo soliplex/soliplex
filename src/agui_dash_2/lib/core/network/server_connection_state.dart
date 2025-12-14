@@ -1,8 +1,8 @@
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
 
-import 'package:agui_dash_2/core/protocol/chat_session.dart';
-import 'package:agui_dash_2/core/protocol/completions_chat_session.dart';
-import 'package:agui_dash_2/core/protocol/completions_client.dart';
+import 'package:soliplex/core/protocol/chat_session.dart';
+import 'package:soliplex/core/protocol/completions_chat_session.dart';
+import 'package:soliplex/core/protocol/completions_client.dart';
 import '../models/endpoint_models.dart';
 import '../services/local_tools_service.dart';
 import '../state/app_state.dart';

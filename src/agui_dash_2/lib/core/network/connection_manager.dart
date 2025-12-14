@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:agui_dash_2/core/protocol/chat_session.dart';
+import 'package:soliplex/core/protocol/chat_session.dart';
 import '../models/chat_models.dart';
 import '../models/endpoint_models.dart';
 import '../providers/app_providers.dart';

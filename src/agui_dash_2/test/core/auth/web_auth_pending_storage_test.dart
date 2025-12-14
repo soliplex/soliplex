@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import 'package:agui_dash_2/core/auth/web_auth_pending_storage.dart';
-import 'package:agui_dash_2/core/services/secure_storage_service.dart';
+import 'package:soliplex/core/auth/web_auth_pending_storage.dart';
+import 'package:soliplex/core/services/secure_storage_service.dart';
 
 class MockSecureStorageService extends Mock implements SecureStorageService {}
 

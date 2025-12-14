@@ -4,8 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-import 'package:agui_dash_2/core/services/completions_probe.dart';
-import 'package:agui_dash_2/core/models/endpoint_models.dart';
+import 'package:soliplex/core/services/completions_probe.dart';
+import 'package:soliplex/core/models/endpoint_models.dart';
 
 void main() {
   group('CompletionsProbeResult', () {

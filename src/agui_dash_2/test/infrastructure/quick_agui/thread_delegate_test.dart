@@ -1,5 +1,5 @@
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
-import 'package:agui_dash_2/infrastructure/quick_agui/thread.dart';
+import 'package:soliplex/infrastructure/quick_agui/thread.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -1,9 +1,9 @@
-import 'package:agui_dash_2/core/models/chat_models.dart';
-import 'package:agui_dash_2/core/network/connection_registry.dart';
-import 'package:agui_dash_2/core/network/network_inspector.dart';
-import 'package:agui_dash_2/core/network/room_session.dart';
-import 'package:agui_dash_2/core/network/server_room_key.dart';
-import 'package:agui_dash_2/core/providers/panel_providers.dart';
+import 'package:soliplex/core/models/chat_models.dart';
+import 'package:soliplex/core/network/connection_registry.dart';
+import 'package:soliplex/core/network/network_inspector.dart';
+import 'package:soliplex/core/network/room_session.dart';
+import 'package:soliplex/core/network/server_room_key.dart';
+import 'package:soliplex/core/providers/panel_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';

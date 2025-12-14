@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:agui_dash_2/core/protocol/completions_stream_parser.dart';
+import 'package:soliplex/core/protocol/completions_stream_parser.dart';
 
 void main() {
   group('CompletionsStreamParser', () {

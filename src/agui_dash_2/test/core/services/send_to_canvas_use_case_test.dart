@@ -2,11 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import 'package:agui_dash_2/core/models/chat_models.dart';
-import 'package:agui_dash_2/core/providers/panel_providers.dart';
-import 'package:agui_dash_2/core/services/canvas_content_service.dart';
-import 'package:agui_dash_2/core/services/canvas_service.dart';
-import 'package:agui_dash_2/core/services/send_to_canvas_use_case.dart';
+import 'package:soliplex/core/models/chat_models.dart';
+import 'package:soliplex/core/providers/panel_providers.dart';
+import 'package:soliplex/core/services/canvas_content_service.dart';
+import 'package:soliplex/core/services/canvas_service.dart';
+import 'package:soliplex/core/services/send_to_canvas_use_case.dart';
 
 class MockCanvasNotifier extends Mock implements CanvasNotifier {}
 

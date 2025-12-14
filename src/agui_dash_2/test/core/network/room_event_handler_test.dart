@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:agui_dash_2/core/network/room_event_handler.dart';
+import 'package:soliplex/core/network/room_event_handler.dart';
 
 void main() {
   group('RoomEventHandler', () {

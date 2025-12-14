@@ -1,7 +1,7 @@
-import 'package:agui_dash_2/core/network/connection_manager.dart';
-import 'package:agui_dash_2/core/network/connection_registry.dart';
-import 'package:agui_dash_2/core/network/http_transport.dart';
-import 'package:agui_dash_2/core/services/local_tools_service.dart';
+import 'package:soliplex/core/network/connection_manager.dart';
+import 'package:soliplex/core/network/connection_registry.dart';
+import 'package:soliplex/core/network/http_transport.dart';
+import 'package:soliplex/core/services/local_tools_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 

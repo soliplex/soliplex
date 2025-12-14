@@ -1,4 +1,4 @@
-import 'package:agui_dash_2/core/network/connection_events.dart';
+import 'package:soliplex/core/network/connection_events.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Phase 2 tests for connection events with serverId support.

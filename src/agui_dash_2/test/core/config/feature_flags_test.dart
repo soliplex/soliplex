@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:agui_dash_2/core/config/feature_flags.dart';
+import 'package:soliplex/core/config/feature_flags.dart';
 
 void main() {
   group('FeatureFlags', () {

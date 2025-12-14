@@ -1,7 +1,7 @@
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
-import 'package:agui_dash_2/core/models/chat_models.dart';
-import 'package:agui_dash_2/core/network/event_processor.dart';
-import 'package:agui_dash_2/core/protocol/agui_event_types.dart'; // Import AgUiEventTypes
+import 'package:soliplex/core/models/chat_models.dart';
+import 'package:soliplex/core/network/event_processor.dart';
+import 'package:soliplex/core/protocol/agui_event_types.dart'; // Import AgUiEventTypes
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

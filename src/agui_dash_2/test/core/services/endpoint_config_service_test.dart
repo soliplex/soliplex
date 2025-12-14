@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:agui_dash_2/core/models/saved_endpoint.dart';
-import 'package:agui_dash_2/core/models/endpoint_models.dart';
-import 'package:agui_dash_2/core/services/endpoint_config_service.dart';
-import 'package:agui_dash_2/core/services/secure_storage_service.dart';
+import 'package:soliplex/core/models/saved_endpoint.dart';
+import 'package:soliplex/core/models/endpoint_models.dart';
+import 'package:soliplex/core/services/endpoint_config_service.dart';
+import 'package:soliplex/core/services/secure_storage_service.dart';
 
 /// In-memory storage for testing.
 class MockSecureStorage implements SecureStorageService {
