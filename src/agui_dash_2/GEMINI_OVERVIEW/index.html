@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AG-UI Dash 2 - System Overview</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            border-bottom: 2px solid #eaeaea;
+            padding-bottom: 10px;
+            color: #2c3e50;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+        }
+        h3 {
+            color: #7f8c8d;
+        }
+        .diagram-container {
+            margin: 40px 0;
+            padding: 20px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            background-color: #fff;
+            overflow-x: auto;
+        }
+        .layer-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .layer-title {
+            font-weight: bold;
+            color: #007bff;
+            margin-bottom: 5px;
+        }
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: Consolas, Monaco, "Andale Mono", monospace;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AG-UI Dash 2 - System Component Interactions</h1>
+        
+        <p>This document provides a high-level overview of the architectural layers, key subsystems, and component interactions within the application.</p>
+
+        <div class="diagram-container">
+            <div class="mermaid">
+graph TD
+    %% Subsystems
+    subgraph UI_Layer [UI Layer]
+        ChatScreen[ChatScreen]
+        SetupScreen[ServerSetupScreen]
+    end
+
+    subgraph State_Layer [State Management (Riverpod)]
+        AppStateManager[AppStateManager]
+        SessionController[SessionLifecycleController]
+        ChatController[ChatScreenController]
+        RoomsNotifier[RoomsNotifier]
+    end
+
+    subgraph Service_Domain_Layer [Service & Domain Layer]
+        ConnectionRegistry[ConnectionRegistry]
+        RoomSession[RoomSession]
+        EventProcessor[EventProcessor]
+        AuthManager[AuthManager]
+    end
+
+    subgraph Network_Infra_Layer [Network & Infrastructure]
+        HttpTransport[HttpTransport]
+        NetworkTransportLayer[NetworkTransportLayer]
+        Thread[Thread (quick_agui)]
+    end
+
+    subgraph External [External]
+        Server[Soliplex Server / AG-UI]
+    end
+
+    %% Interactions - Initialization & Auth
+    SetupScreen -->|User Input| AppStateManager
+    AppStateManager -->|Auth/Config| ConnectionRegistry
+    AppStateManager -->|Token Check| AuthManager
+
+    %% Interactions - Chat Session Lifecycle
+    ChatScreen -->|Watches| SessionController
+    SessionController -->|Manage| ConnectionRegistry
+    ConnectionRegistry -->|Create/Get| RoomSession
+    SessionController -->|Fetch| RoomsNotifier
+
+    %% Interactions - Messaging (Outbound)
+    ChatScreen -->|User Action| ChatController
+    ChatController -->|SendMessage| RoomSession
+    RoomSession -->|StartRun| Thread
+    Thread -->|HTTP POST| HttpTransport
+    HttpTransport -->|API Call| Server
+
+    %% Interactions - Messaging (Inbound / Event Loop)
+    Server -->|SSE Stream| NetworkTransportLayer
+    NetworkTransportLayer -->|Stream| Thread
+    Thread -->|Event Stream| RoomSession
+    RoomSession -->|Process Event| EventProcessor
+    EventProcessor -->|State Delta| RoomSession
+    RoomSession -->|Notify| ChatController
+    ChatController -->|Update State| ChatScreen
+
+    %% Styling
+    classDef ui fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef state fill:#fff3e0,stroke:#e65100,stroke-width:2px;
+    classDef service fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px;
+    classDef net fill:#f3e5f5,stroke:#4a148c,stroke-width:2px;
+    classDef ext fill:#eeeeee,stroke:#212121,stroke-width:2px,stroke-dasharray: 5 5;
+
+    class ChatScreen,SetupScreen ui;
+    class AppStateManager,SessionController,ChatController,RoomsNotifier state;
+    class ConnectionRegistry,RoomSession,EventProcessor,AuthManager service;
+    class HttpTransport,NetworkTransportLayer,Thread net;
+    class Server ext;
+            </div>
+        </div>
+
+        <h2>Subsystem Overview</h2>
+
+        <div class="layer-box">
+            <div class="layer-title">1. UI Layer (lib/features)</div>
+            <p><strong>Components:</strong> <code>ChatScreen</code>, <code>ServerSetupScreen</code></p>
+            <p><strong>Role:</strong> Reactive views that bind to Riverpod providers. They display state and capture user intent but contain no business logic.</p>
+        </div>
+
+        <div class="layer-box">
+            <div class="layer-title">2. State Management Layer (lib/core/state & controllers)</div>
+            <p><strong>Components:</strong> <code>AppStateManager</code>, <code>SessionLifecycleController</code>, <code>ChatScreenController</code></p>
+            <p><strong>Role:</strong> The orchestration layer. <code>AppStateManager</code> controls global app state (auth, server connection). Feature controllers (like <code>ChatScreenController</code>) bridge the UI to specific domain services.</p>
+        </div>
+
+        <div class="layer-box">
+            <div class="layer-title">3. Service & Domain Layer (lib/core/services & network)</div>
+            <p><strong>Components:</strong> <code>ConnectionRegistry</code>, <code>RoomSession</code>, <code>EventProcessor</code></p>
+            <p><strong>Role:</strong> The core business logic.</p>
+            <ul>
+                <li><strong><code>ConnectionRegistry</code>:</strong> A service locator that manages multiple server connections and <code>RoomSession</code> instances.</li>
+                <li><strong><code>RoomSession</code>:</strong> The "brain" of a chat room, maintaining message history and active state.</li>
+                <li><strong><code>EventProcessor</code>:</strong> A functional core component that strictly transforms state based on incoming server events (e.g., handling text deltas, tool calls).</li>
+            </ul>
+        </div>
+
+        <div class="layer-box">
+            <div class="layer-title">4. Network & Infrastructure Layer (lib/infrastructure & core/network)</div>
+            <p><strong>Components:</strong> <code>NetworkTransportLayer</code>, <code>HttpTransport</code>, <code>Thread</code> (from quick_agui)</p>
+            <p><strong>Role:</strong> Handles physical communication. <code>NetworkTransportLayer</code> wraps HTTP and SSE clients, providing a single point for observability (<code>NetworkInspector</code>) and auth-refresh logic.</p>
+        </div>
+
+        <h2>Key Data Flows</h2>
+        <ul>
+            <li><strong>Initialization:</strong> <code>AppStateManager</code> initializes the <code>ConnectionRegistry</code>. When a server is selected, <code>SessionLifecycleController</code> ensures a <code>RoomSession</code> is created for the active room.</li>
+            <li><strong>Outbound (Sending):</strong> User input moves from <code>ChatScreen</code> → <code>ChatScreenController</code> → <code>RoomSession</code> → <code>Thread</code> → <code>HttpTransport</code> → <strong>Server</strong>.</li>
+            <li><strong>Inbound (Receiving):</strong> Server Events (SSE) flow from <strong>Server</strong> → <code>NetworkTransportLayer</code> → <code>Thread</code> → <code>RoomSession</code>. The <code>RoomSession</code> uses <code>EventProcessor</code> to calculate the new state, applying changes that propagate back up the stack to update the UI.</li>
+        </ul>
+    </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+</body>
+</html>

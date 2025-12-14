@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_streaming_text_markdown/flutter_streaming_text_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/services/markdown_hooks.dart';
@@ -137,10 +137,9 @@ class _StreamingMarkdownWidgetState
     // malformed content (e.g., unclosed code blocks from interrupted streams)
     final sanitizedText = _sanitizeMarkdown(widget.text);
 
-    return SelectionArea(
-      child: MarkdownBody(
+    return MarkdownBody(
         data: sanitizedText,
-        selectable: false, // Use SelectionArea wrapper instead
+        selectable: false, // Disable selection to test stability
         styleSheet: MarkdownStyleSheet(
           p: widget.textStyle ??
               TextStyle(color: colorScheme.onSurface, fontSize: 14),
@@ -191,12 +190,10 @@ class _StreamingMarkdownWidgetState
             launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication);
           }
         },
-        sizedImageBuilder: (config) {
+        imageBuilder: (uri, title, alt) {
           return TrackedMarkdownImage(
-            imageUrl: config.uri.toString(),
+            imageUrl: uri.toString(),
             messageId: widget.messageId,
-            width: config.width,
-            height: config.height,
           );
         },
         builders: {
@@ -213,8 +210,7 @@ class _StreamingMarkdownWidgetState
             messageId: widget.messageId,
           ),
         },
-      ),
-    );
+      );
   }
 }
 

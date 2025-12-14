@@ -11,6 +11,7 @@ import '../protocol/chat_session.dart';
 import '../services/local_tools_service.dart';
 import '../state/app_state.dart';
 import '../utils/debug_log.dart';
+import '../utils/update_throttler.dart';
 import '../utils/url_builder.dart';
 import 'cancel_token.dart';
 import 'connection_events.dart';
@@ -142,6 +143,9 @@ class RoomSession implements ChatSession {
   /// Event handler for side effects (canvas, context pane, activity).
   RoomEventHandler _eventHandler = const NoOpRoomEventHandler();
 
+  /// Throttler for message updates to prevent UI overwhelm.
+  late final UpdateThrottler _throttler;
+
   RoomSession({
     required this.roomId,
     this.serverId,
@@ -157,6 +161,15 @@ class RoomSession implements ChatSession {
     if (appStateStream != null) {
       _appStateSubscription = appStateStream.listen(_handleAppStateChange);
     }
+    
+    _throttler = UpdateThrottler(
+      duration: const Duration(milliseconds: 50),
+      onUpdate: () {
+        if (!_messageController.isClosed) {
+          _messageController.add(List.unmodifiable(_messages));
+        }
+      },
+    );
   }
 
   // Getters
@@ -800,9 +813,7 @@ class RoomSession implements ChatSession {
 
   /// Notify listeners of message changes.
   void _notifyMessageUpdate() {
-    if (!_messageController.isClosed) {
-      _messageController.add(List.unmodifiable(_messages));
-    }
+    _throttler.notify();
   }
 
   /// Add a user message.
@@ -1291,6 +1302,7 @@ class RoomSession implements ChatSession {
     _appStateSubscription = null;
 
     _cancelInactivityTimer();
+    _throttler.dispose();
     _cancelToken?.cancel('Session disposed');
     _thread?.dispose();
     _thread = null;
