@@ -9,9 +9,12 @@ import '../utils/debug_log.dart';
 import '../utils/http_config.dart';
 import 'oidc_auth_token_response.dart';
 import 'oidc_token_application_mixin.dart';
+import 'pkce_utils.dart';
 import 'secure_sso_storage.dart';
 import 'secure_token_storage.dart';
 import 'sso_config.dart';
+import 'web_auth_callback_handler.dart';
+import 'web_auth_pending_storage.dart';
 
 // Re-export the base class and interface for external use
 export 'oidc_token_application_mixin.dart'
@@ -200,22 +203,29 @@ class OidcTokenValidationException implements Exception {
       'is refresh token null: $refreshTokenNull\n';
 }
 
-/// Web OIDC implementation using HTTP-based token refresh.
+/// Web OIDC implementation using Authorization Code + PKCE flow.
 ///
-/// On web, the initial authorization redirects the browser to the OIDC provider,
-/// then back to the app with tokens in the URL. Token refresh is handled via
-/// direct HTTP POST to the token endpoint.
+/// Web authentication is a two-phase process:
+/// 1. **Redirect Out**: Generate PKCE, store state, redirect to OIDC provider
+/// 2. **Callback**: App reloads at /auth/callback, code is exchanged for tokens
+///
+/// The two phases happen in different app instances (page reloads between them).
+///
+/// Token refresh is handled via direct HTTP POST to the token endpoint.
 ///
 /// Optionally accepts [NetworkInspector] for traffic observability.
 class OidcWebAuthInteractor extends OidcAuthInteractorBase {
   final NetworkInspector? _inspector;
+  final WebAuthPendingStorage? _pendingStorage;
 
   OidcWebAuthInteractor(
     SecureSsoStorage ssoStorage,
     SecureTokenStorage tokenStorage,
     Duration tokenExpirationBuffer, {
     NetworkInspector? inspector,
+    WebAuthPendingStorage? pendingStorage,
   })  : _inspector = inspector,
+        _pendingStorage = pendingStorage,
         super(
           ssoStorage: ssoStorage,
           tokenStorage: tokenStorage,
@@ -227,17 +237,59 @@ class OidcWebAuthInteractor extends OidcAuthInteractorBase {
     String serverId,
     SsoConfig config,
   ) async {
-    DebugLog.service('OidcWebAuthInteractor: Setting sso config for $serverId');
+    DebugLog.auth('OidcWebAuthInteractor: Starting PKCE auth flow for $serverId');
+
+    // Store SSO config for use after callback
     await setSsoConfig(serverId, config);
-    await launchUrl(config.loginUrl, webOnlyWindowName: '_self');
-    // On web, this returns immediately with empty values.
-    // The actual tokens come via URL redirect handled elsewhere.
-    return OidcAuthTokenResponse(
-      idToken: '',
-      accessToken: '',
-      accessTokenExpiration: DateTime.now(),
-      refreshToken: '',
-    );
+
+    // Generate PKCE challenge
+    final pkce = PkceUtils.generateChallenge();
+    final state = PkceUtils.generateState();
+    DebugLog.auth('OidcWebAuthInteractor: Generated PKCE challenge and state');
+
+    // Store pending auth for callback
+    if (_pendingStorage != null) {
+      await _pendingStorage.savePendingAuth(PendingWebAuth(
+        serverId: serverId,
+        providerId: config.id,
+        codeVerifier: pkce.codeVerifier,
+        state: state,
+        tokenEndpoint: config.tokenEndpoint,
+        clientId: config.clientId,
+        redirectUrl: config.redirectUrl,
+        createdAt: DateTime.now(),
+      ));
+    }
+
+    // Build auth URL with PKCE parameters
+    final authUrl = _buildAuthUrl(config, pkce.codeChallenge, state);
+    DebugLog.auth('OidcWebAuthInteractor: Redirecting to OIDC provider');
+
+    // Launch auth URL in same window (replaces current page)
+    await launchUrl(authUrl, webOnlyWindowName: '_self');
+
+    // Signal that redirect is happening - the app will reload at /auth/callback
+    // The callback handler will exchange the code for tokens
+    throw OidcWebRedirectException(serverId);
+  }
+
+  /// Build the authorization URL with PKCE parameters
+  Uri _buildAuthUrl(SsoConfig config, String codeChallenge, String state) {
+    final baseUrl = config.loginUrl;
+
+    // Merge PKCE parameters with any existing query parameters
+    final params = Map<String, String>.from(baseUrl.queryParameters);
+    params.addAll({
+      'client_id': config.clientId,
+      'redirect_uri': config.redirectUrl,
+      'response_type': 'code',
+      'scope': config.scopes.join(' '),
+      'state': state,
+      'code_challenge': codeChallenge,
+      'code_challenge_method': 'S256',
+    });
+
+    return baseUrl.replace(queryParameters: params);
   }
 
   @override

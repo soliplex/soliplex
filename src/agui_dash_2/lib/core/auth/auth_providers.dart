@@ -8,6 +8,8 @@ import 'oidc_auth_interactor.dart';
 import 'secure_sso_storage.dart';
 import 'secure_storage_gateway.dart';
 import 'secure_token_storage.dart';
+import 'web_auth_callback_handler.dart';
+import 'web_auth_pending_storage.dart';
 
 /// Default token expiration buffer (refresh tokens 5 minutes before expiry)
 const _tokenExpirationBuffer = Duration(minutes: 5);
@@ -35,6 +37,24 @@ final flutterAppAuthProvider = Provider<FlutterAppAuth>((ref) {
   return const FlutterAppAuth();
 });
 
+/// Provider for WebAuthPendingStorage (web only, but safe to access on all platforms)
+final webAuthPendingStorageProvider = Provider<WebAuthPendingStorage>((ref) {
+  final storage = ref.watch(secureStorageProvider);
+  return WebAuthPendingStorage(storage);
+});
+
+/// Provider for WebAuthCallbackHandler (web only, but safe to access on all platforms)
+final webAuthCallbackHandlerProvider = Provider<WebAuthCallbackHandler>((ref) {
+  final pendingStorage = ref.watch(webAuthPendingStorageProvider);
+  final tokenStorage = ref.watch(secureTokenStorageProvider);
+  final inspector = ref.read(networkInspectorProvider);
+  return WebAuthCallbackHandler(
+    pendingStorage: pendingStorage,
+    tokenStorage: tokenStorage,
+    inspector: inspector,
+  );
+});
+
 /// Provider for OidcAuthInteractor (platform-aware)
 final oidcAuthInteractorProvider = Provider<OidcAuthInteractor>((ref) {
   final ssoStorage = ref.watch(secureSsoStorageProvider);
@@ -42,11 +62,13 @@ final oidcAuthInteractorProvider = Provider<OidcAuthInteractor>((ref) {
   final inspector = ref.read(networkInspectorProvider);
 
   if (kIsWeb) {
+    final pendingStorage = ref.watch(webAuthPendingStorageProvider);
     return OidcWebAuthInteractor(
       ssoStorage,
       tokenStorage,
       _tokenExpirationBuffer,
       inspector: inspector,
+      pendingStorage: pendingStorage,
     );
   } else {
     final appAuth = ref.watch(flutterAppAuthProvider);

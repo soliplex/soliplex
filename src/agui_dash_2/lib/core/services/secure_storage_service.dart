@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../utils/debug_log.dart';
+import 'web_local_storage_stub.dart'
+    if (dart.library.js_interop) 'web_local_storage_web.dart' as web_storage;
 
 /// Abstract interface for secure credential storage
 abstract class SecureStorageService {
@@ -197,52 +199,75 @@ class NativeSecureStorageService implements SecureStorageService {
   }
 }
 
-/// Web implementation using in-memory storage with session persistence
-/// Note: For production, consider using encrypted localStorage or IndexedDB
+/// Web implementation using localStorage for persistence.
+///
+/// Tokens persist across page refreshes. Uses window.localStorage
+/// via conditional imports.
 class WebSecureStorageService implements SecureStorageService {
-  final Map<String, String> _storage = {};
+  // In-memory cache to reduce localStorage reads
+  final Map<String, String> _cache = {};
   bool _initialized = false;
 
   WebSecureStorageService() {
-    _loadFromSession();
+    _loadFromLocalStorage();
   }
 
-  void _loadFromSession() {
+  void _loadFromLocalStorage() {
     if (_initialized) return;
     _initialized = true;
-    // On web, we could use window.sessionStorage for session-only persistence
-    // For now, using in-memory only (tokens lost on refresh)
-    // TODO: Implement proper web storage with encryption consideration
+
+    // Load all existing keys into cache
+    final stored = web_storage.webLocalStorageReadAll();
+    _cache.addAll(stored);
+    DebugLog.service(
+      'WebSecureStorageService: Loaded ${_cache.length} keys from localStorage',
+    );
   }
 
   @override
   Future<void> write(String key, String value) async {
-    _storage[key] = value;
+    _cache[key] = value;
+    web_storage.webLocalStorageWrite(key, value);
   }
 
   @override
   Future<String?> read(String key) async {
-    return _storage[key];
+    // Check cache first
+    if (_cache.containsKey(key)) {
+      return _cache[key];
+    }
+    // Fallback to localStorage (in case another tab wrote it)
+    final value = web_storage.webLocalStorageRead(key);
+    if (value != null) {
+      _cache[key] = value;
+    }
+    return value;
   }
 
   @override
   Future<void> delete(String key) async {
-    _storage.remove(key);
+    _cache.remove(key);
+    web_storage.webLocalStorageDelete(key);
   }
 
   @override
   Future<void> deleteAll() async {
-    _storage.clear();
+    _cache.clear();
+    web_storage.webLocalStorageClear();
   }
 
   @override
   Future<bool> containsKey(String key) async {
-    return _storage.containsKey(key);
+    if (_cache.containsKey(key)) return true;
+    return web_storage.webLocalStorageContainsKey(key);
   }
 
   @override
   Future<Map<String, String>> readAll() async {
-    return Map.from(_storage);
+    // Refresh cache from localStorage
+    final stored = web_storage.webLocalStorageReadAll();
+    _cache.addAll(stored);
+    return Map.from(_cache);
   }
 }
 

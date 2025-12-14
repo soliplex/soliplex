@@ -17,10 +17,11 @@ class DebugLog {
       true; // Message ID mapping (critical for second response issue)
   static bool toolsEnabled = false; // Tool execution
   static bool threadEnabled = false; // Thread/SSE stream processing
-  static bool servicesEnabled = false; // Service initialization
+  static bool servicesEnabled = true; // Service initialization - ENABLED FOR DEBUG
   static bool canvasEnabled = false; // Canvas operations
   static bool networkEnabled = true; // Network/connection management
   static bool uiEnabled = false; // UI state changes
+  static bool authEnabled = true; // Authentication flow
 
   static void log(String category, String message) {
     if (!enabled) return;
@@ -87,6 +88,13 @@ class DebugLog {
   static void network(String message) {
     if (enabled && networkEnabled) {
       debugPrint('[NET] $message');
+    }
+  }
+
+  /// Authentication flow
+  static void auth(String message) {
+    if (enabled && authEnabled) {
+      debugPrint('[AUTH] $message');
     }
   }
 

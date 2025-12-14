@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../providers/app_providers.dart';
+import '../utils/debug_log.dart';
+import '../../features/auth/auth_callback_screen.dart';
 import '../../features/chat/chat_screen.dart';
 import '../../features/endpoints/endpoint_list_screen.dart';
 import '../../features/inspector/network_inspector_screen.dart';
@@ -15,32 +18,46 @@ final _shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shell');
 final routerProvider = Provider<GoRouter>((ref) {
   final notifier = RouterNotifier(ref);
   
+  // On web, use the browser URL; otherwise default to /chat
+  final initialLocation = kIsWeb ? null : '/chat';
+
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     refreshListenable: notifier,
-    initialLocation: '/chat',
+    initialLocation: initialLocation,
     debugLogDiagnostics: true,
     redirect: (context, state) {
       final appStateAsync = ref.read(appStateStreamProvider);
       final appState = appStateAsync.valueOrNull;
-      
+      final location = state.matchedLocation;
+      final uri = state.uri;
+
+      DebugLog.auth('Router redirect: location=$location, uri=$uri, appState=$appState');
+
+      // Allow auth callback route to bypass auth guard (handles its own auth)
+      // Check both matchedLocation and uri.path for web compatibility
+      if (location == '/auth/callback' || uri.path == '/auth/callback') {
+        DebugLog.auth('Router: Auth callback detected, bypassing guard');
+        return null;
+      }
+
       // 1. Auth Guard
       if (appState is! AppStateReady) {
-        if (state.matchedLocation != '/setup') {
+        if (location != '/setup') {
+          DebugLog.auth('Router: Not ready, redirecting to /setup');
           return '/setup';
         }
         return null;
       }
-      
-      // 2. Setup Guard
-      // Allow explicit navigation to /setup for switching servers.
-      // if (state.matchedLocation == '/setup') {
-      //   return '/chat';
-      // }
-      
+
       return null;
     },
     routes: [
+      // Auth callback route - handles OIDC redirect (must be before ShellRoute)
+      GoRoute(
+        path: '/auth/callback',
+        builder: (context, state) => const AuthCallbackScreen(),
+      ),
       GoRoute(
         path: '/setup',
         builder: (context, state) => ServerSetupScreen(

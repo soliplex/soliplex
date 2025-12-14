@@ -24,6 +24,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
 
   # AG-UI Protocol SDK (SSE-based) - using soliplex fork with ACTIVITY_SNAPSHOT support
   ag_ui:
@@ -49,6 +51,8 @@ dependencies:
   rxdart: ^0.28.0
   equatable: ^2.0.7
   path_provider: ^2.1.5
+  crypto: ^3.0.6
+  web: ^1.1.0
 
   # Streaming Markdown
   flutter_streaming_text_markdown: ^1.1.0

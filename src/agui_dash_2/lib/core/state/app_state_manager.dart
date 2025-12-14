@@ -1,5 +1,6 @@
 import 'package:rxdart/rxdart.dart';
 
+import '../auth/web_auth_callback_handler.dart';
 import '../models/endpoint_models.dart';
 import '../models/server_models.dart';
 import '../services/auth_manager.dart';
@@ -127,6 +128,10 @@ class AppStateManager {
   }
 
   /// Start OIDC login.
+  ///
+  /// On web, this will throw [OidcWebRedirectException] when the browser
+  /// redirects to the OIDC provider. The app will reload at /auth/callback
+  /// where [initializeWithServer] will be called.
   Future<void> startLogin(OIDCAuthSystem provider) async {
     DebugLog.service('AppStateManager: startLogin() provider=${provider.id}');
     final current = currentState;
@@ -154,11 +159,53 @@ class AppStateManager {
           userEmail: userInfo?.email,
         ),
       );
+    } on OidcWebRedirectException catch (e) {
+      // Web auth redirect - browser is navigating to OIDC provider
+      // Keep Authenticating state - app will reload at /auth/callback
+      DebugLog.auth(
+        'AppStateManager: Web auth redirect for server ${e.serverId}',
+      );
+      // State stays as Authenticating - this is expected on web
     } catch (e) {
       DebugLog.error('AppStateManager: Login failed: $e');
       _stateSubject.add(
         AppStateError('Authentication failed: $e', previousState: current),
       );
+    }
+  }
+
+  /// Initialize the app with a specific server (used after web auth callback).
+  ///
+  /// Called by AuthCallbackScreen after tokens are successfully exchanged.
+  Future<void> initializeWithServer(String serverId) async {
+    DebugLog.service('AppStateManager: initializeWithServer() serverId=$serverId');
+
+    try {
+      await _serverRegistry.initialize();
+      final server = await _serverRegistry.setCurrentServer(serverId);
+
+      // At this point we should have valid tokens from the callback
+      final hasValidToken = await _authManager.hasValidToken(server.id);
+      if (hasValidToken) {
+        final userInfo = await _authManager.getUserInfo(server);
+        DebugLog.service('AppStateManager: Server ready after auth callback');
+        _stateSubject.add(
+          AppStateReady(
+            server: server,
+            userName: userInfo?.name,
+            userEmail: userInfo?.email,
+          ),
+        );
+      } else {
+        // Shouldn't happen - callback should have stored tokens
+        DebugLog.error('AppStateManager: No valid token after callback');
+        _stateSubject.add(
+          AppStateError('Authentication failed: No valid token received'),
+        );
+      }
+    } catch (e) {
+      DebugLog.error('AppStateManager: initializeWithServer error: $e');
+      _stateSubject.add(AppStateError('Failed to initialize: $e'));
     }
   }
 
