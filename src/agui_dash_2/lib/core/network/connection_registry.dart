@@ -146,6 +146,25 @@ class ConnectionRegistry extends ChangeNotifier {
       return serverState;
     }
 
+    // Create server-scoped filtered stream to prevent cross-server event leakage
+    // - skip(1): Avoid BehaviorSubject replay of stale events
+    // - where(): Only pass events for this server or global events (no server)
+    Stream<AppState>? serverFilteredStream;
+    if (_appStateStream != null) {
+      serverFilteredStream = _appStateStream
+          .skip(1) // Skip BehaviorSubject replay
+          .where((state) {
+            final eventServerId = state.server?.id;
+            // Pass global events (no server) OR events for this server
+            final passed = eventServerId == null || eventServerId == serverId;
+            DebugLog.network(
+              'ConnectionRegistry: Stream filter for $serverId - '
+              'eventServerId=$eventServerId, passed=$passed, state=${state.runtimeType}',
+            );
+            return passed;
+          });
+    }
+
     serverState = ServerConnectionState(
       serverId: serverId,
       baseUrl: baseUrl,
@@ -154,7 +173,7 @@ class ConnectionRegistry extends ChangeNotifier {
       inspector: _inspector,
       localToolsService: _localToolsService,
       config: config,
-      appStateStream: _appStateStream,
+      appStateStream: serverFilteredStream,
     );
     _servers[serverId] = serverState;
 

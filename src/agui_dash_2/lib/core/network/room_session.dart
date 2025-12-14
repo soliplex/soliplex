@@ -586,7 +586,7 @@ class RoomSession implements ChatSession {
   /// Suspend the session (backgrounding).
   ///
   /// Transitions to [SessionState.backgrounded].
-  /// Active runs and streaming continue in the background.
+  /// Cancels any active streaming to prevent state conflicts on resume.
   /// Starts inactivity timer to eventually hibernate the session.
   @override
   void suspend() {
@@ -599,6 +599,13 @@ class RoomSession implements ChatSession {
       'RoomSession: Suspending session for room $roomId '
       '(state=$_state, hasActiveRun=$hasActiveRun, runId=$runId, threadId=$threadId)',
     );
+
+    // Cancel active streaming to prevent "Cannot start run while streaming" on resume
+    if (_state == SessionState.streaming && _cancelToken != null) {
+      DebugLog.network('RoomSession: Cancelling streaming due to suspend');
+      _cancelToken!.cancel('Session suspended');
+      _cancelToken = null;
+    }
 
     // Update state to backgrounded
     _state = SessionState.backgrounded;
@@ -672,17 +679,15 @@ class RoomSession implements ChatSession {
     // Cancel inactivity timer when resuming
     _cancelInactivityTimer();
 
-    // If coming from suspended state, we might need to reconnect or refresh logic here
-    // For now, just transitioning back to active/streaming is enough since
-    // Thread manages the SSE connection resilience.
-    
-    // Restore state: if cancel token exists, we are still streaming/processing
+    // Always resume to active state.
+    // Streaming state can only be entered via startRun().
+    // suspend() cancels any active streaming, so we should never have a stale
+    // cancel token here. But clear it defensively to ensure clean state.
     if (_cancelToken != null) {
-      _state = SessionState.streaming;
-      DebugLog.network('RoomSession: Restored to streaming state (active run in progress)');
-    } else {
-      _state = SessionState.active;
+      DebugLog.network('RoomSession: Clearing stale cancel token on resume');
+      _cancelToken = null;
     }
+    _state = SessionState.active;
 
     _lastActivity = DateTime.now();
 
@@ -699,17 +704,13 @@ class RoomSession implements ChatSession {
 
   /// Handle AppState changes for auth awareness.
   ///
-  /// Only reacts to auth events for this session's server.
-  /// Sessions on other servers should not pause/resume when a different
-  /// server's auth state changes.
+  /// The stream is pre-filtered by ConnectionRegistry to only include events
+  /// for this session's server, so no filtering is needed here.
   void _handleAppStateChange(AppState state) {
-    // Only react to auth events for this session's server
-    final eventServerId = state.server?.id;
-    if (eventServerId != null && eventServerId != serverId) {
-      // Auth event is for a different server - ignore it
-      return;
-    }
-
+    DebugLog.network(
+      'RoomSession: _handleAppStateChange for room $roomId (serverId=$serverId) - '
+      'received ${state.runtimeType}, eventServerId=${state.server?.id}',
+    );
     if (state is AppStateNeedsAuth) {
       pauseForAuth();
     } else if (state is AppStateReady) {

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/connection_manager.dart';
-import '../../core/services/rooms_service.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/services/thread_history_service.dart';
 import '../chat/chat_content.dart';

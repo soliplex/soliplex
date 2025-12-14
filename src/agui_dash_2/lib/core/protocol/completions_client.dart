@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'completions_models.dart';
 import 'completions_stream_parser.dart';
 import '../utils/debug_log.dart';

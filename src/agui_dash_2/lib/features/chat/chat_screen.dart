@@ -6,8 +6,6 @@ import 'package:go_router/go_router.dart';
 import '../../app_shell.dart'; // For extension methods (Inspector)
 import '../../core/controllers/session_lifecycle_controller.dart';
 import '../../core/models/layout_mode.dart';
-import '../../core/providers/app_providers.dart';
-import '../../core/providers/panel_providers.dart';
 import '../../core/network/connection_manager.dart';
 import '../../core/services/rooms_service.dart';
 import 'controllers/chat_screen_controller.dart';
