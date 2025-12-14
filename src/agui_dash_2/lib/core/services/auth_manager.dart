@@ -10,6 +10,7 @@ import '../auth/sso_config.dart';
 import '../models/server_models.dart';
 import '../network/network_inspector.dart';
 import '../utils/debug_log.dart';
+import '../utils/http_config.dart';
 import '../utils/url_builder.dart';
 import 'secure_storage_service.dart';
 
@@ -226,7 +227,7 @@ class AuthManager {
     try {
       final response = await _httpClient
           .get(uri, headers: headers)
-          .timeout(const Duration(seconds: 10));
+          .timeout(HttpConfig.defaultTimeout);
 
       // Record response for Network Inspector
       if (requestId != null) {
@@ -248,6 +249,7 @@ class AuthManager {
         _inspector?.recordError(requestId: requestId, error: e.toString());
       }
       DebugLog.error('AuthManager: Failed to fetch user info: $e');
+      rethrow; // Propagate error - auth should fail if user info can't be fetched
     }
     return null;
   }

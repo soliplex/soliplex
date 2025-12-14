@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../models/endpoint_models.dart';
 import '../network/network_inspector.dart';
 import '../utils/debug_log.dart';
+import '../utils/http_config.dart';
 
 /// Result of probing a completions endpoint
 class CompletionsProbeResult extends Equatable {
@@ -148,7 +149,7 @@ class CompletionsProbe {
     try {
       final response = await _httpClient
           .get(modelsUrl, headers: headers)
-          .timeout(const Duration(seconds: 10));
+          .timeout(HttpConfig.completionsProbeTimeout);
 
       _inspector?.recordResponse(
         requestId: requestId ?? '',
@@ -211,7 +212,7 @@ class CompletionsProbe {
             headers: {...headers, 'Content-Type': 'application/json'},
             body: '{}',
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(HttpConfig.completionsProbeTimeout);
 
       _inspector?.recordResponse(
         requestId: requestId ?? '',

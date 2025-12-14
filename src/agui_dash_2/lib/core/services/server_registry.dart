@@ -8,6 +8,7 @@ import '../models/endpoint_models.dart';
 import '../models/server_models.dart';
 import '../network/network_inspector.dart';
 import '../utils/debug_log.dart';
+import '../utils/http_config.dart';
 import '../utils/url_builder.dart';
 import 'secure_storage_service.dart';
 
@@ -107,7 +108,7 @@ class ServerRegistry {
       // Try to fetch /api/login endpoint to discover OIDC providers
       final response = await _httpClient
           .get(loginUrl)
-          .timeout(const Duration(seconds: 10));
+          .timeout(HttpConfig.probeTimeout);
 
       // Record response for Network Inspector
       if (requestId != null) {
@@ -165,7 +166,7 @@ class ServerRegistry {
     try {
       final response = await _httpClient
           .get(roomsUrl)
-          .timeout(const Duration(seconds: 10));
+          .timeout(HttpConfig.probeTimeout);
 
       // Record response for Network Inspector
       if (requestId != null) {

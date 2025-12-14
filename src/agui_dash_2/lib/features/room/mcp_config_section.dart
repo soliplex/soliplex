@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/room_models.dart';
+import '../../core/network/connection_registry.dart';
 import '../../core/services/mcp_token_service.dart';
 import '../../core/providers/app_providers.dart';
 
@@ -429,11 +430,17 @@ class _McpConfigSectionState extends ConsumerState<McpConfigSection> {
         return;
       }
 
+      // Get the transport layer for this server from the connection registry
+      final registry = ref.read(connectionRegistryProvider);
+      final serverState = registry.getServerState(server.id);
+      final transportLayer = serverState?.transportLayer;
+
       final service = ref.read(mcpTokenServiceProvider);
       final token = await service.getToken(
         serverUrl: server.url,
         serverId: server.id,
         roomId: widget.room.id,
+        transportLayer: transportLayer,
       );
 
       setState(() {

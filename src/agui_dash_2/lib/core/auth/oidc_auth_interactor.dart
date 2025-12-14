@@ -4,7 +4,9 @@ import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../network/network_inspector.dart';
 import '../utils/debug_log.dart';
+import '../utils/http_config.dart';
 import 'oidc_auth_token_response.dart';
 import 'oidc_token_application_mixin.dart';
 import 'secure_sso_storage.dart';
@@ -203,12 +205,18 @@ class OidcTokenValidationException implements Exception {
 /// On web, the initial authorization redirects the browser to the OIDC provider,
 /// then back to the app with tokens in the URL. Token refresh is handled via
 /// direct HTTP POST to the token endpoint.
+///
+/// Optionally accepts [NetworkInspector] for traffic observability.
 class OidcWebAuthInteractor extends OidcAuthInteractorBase {
+  final NetworkInspector? _inspector;
+
   OidcWebAuthInteractor(
     SecureSsoStorage ssoStorage,
     SecureTokenStorage tokenStorage,
-    Duration tokenExpirationBuffer,
-  ) : super(
+    Duration tokenExpirationBuffer, {
+    NetworkInspector? inspector,
+  })  : _inspector = inspector,
+        super(
           ssoStorage: ssoStorage,
           tokenStorage: tokenStorage,
           tokenExpirationBuffer: tokenExpirationBuffer,
@@ -259,8 +267,28 @@ class OidcWebAuthInteractor extends OidcAuthInteractorBase {
     final body =
         'grant_type=refresh_token&refresh_token=$refreshToken&client_id=${config.clientId}';
 
+    // Record request for Network Inspector
+    final requestId = _inspector?.recordRequest(
+      method: 'POST',
+      uri: url,
+      headers: headers,
+      body: body,
+    );
+
     try {
-      final response = await http.post(url, headers: headers, body: body);
+      final response = await http
+          .post(url, headers: headers, body: body)
+          .timeout(HttpConfig.oidcTimeout);
+
+      // Record response for Network Inspector
+      if (requestId != null) {
+        _inspector?.recordResponse(
+          requestId: requestId,
+          statusCode: response.statusCode,
+          headers: response.headers,
+          body: response.body,
+        );
+      }
 
       if (response.statusCode == 200) {
         DebugLog.service('OidcWebAuthInteractor: Token refresh successful');
@@ -283,6 +311,10 @@ class OidcWebAuthInteractor extends OidcAuthInteractorBase {
         DebugLog.error('OidcWebAuthInteractor: Response body: ${response.body}');
       }
     } catch (e) {
+      // Record error for Network Inspector
+      if (requestId != null) {
+        _inspector?.recordError(requestId: requestId, error: e.toString());
+      }
       DebugLog.error('OidcWebAuthInteractor: An error occurred: $e');
       rethrow;
     }
@@ -297,8 +329,28 @@ class OidcWebAuthInteractor extends OidcAuthInteractorBase {
     final headers = {'Content-Type': 'application/x-www-form-urlencoded'};
     final body = 'refresh_token=$refreshToken&client_id=${config.clientId}';
 
+    // Record request for Network Inspector
+    final requestId = _inspector?.recordRequest(
+      method: 'POST',
+      uri: url,
+      headers: headers,
+      body: body,
+    );
+
     try {
-      final response = await http.post(url, headers: headers, body: body);
+      final response = await http
+          .post(url, headers: headers, body: body)
+          .timeout(HttpConfig.oidcTimeout);
+
+      // Record response for Network Inspector
+      if (requestId != null) {
+        _inspector?.recordResponse(
+          requestId: requestId,
+          statusCode: response.statusCode,
+          headers: response.headers,
+          body: response.body,
+        );
+      }
 
       if (response.statusCode == 204) {
         DebugLog.service('OidcWebAuthInteractor: Session logout successful');
@@ -310,6 +362,10 @@ class OidcWebAuthInteractor extends OidcAuthInteractorBase {
         DebugLog.error('OidcWebAuthInteractor: Response body: ${response.body}');
       }
     } catch (e) {
+      // Record error for Network Inspector
+      if (requestId != null) {
+        _inspector?.recordError(requestId: requestId, error: e.toString());
+      }
       DebugLog.error('OidcWebAuthInteractor: An error occurred: $e');
       rethrow;
     }

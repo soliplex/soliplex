@@ -30,6 +30,7 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
   final _formKey = GlobalKey<FormState>();
 
   bool _isProbing = false;
+  bool _isSelectingFromHistory = false;
   ServerInfo? _serverInfo;
   String? _error;
 
@@ -64,6 +65,8 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
   }
 
   Future<void> _probeServer() async {
+    // Guard against concurrent operations (e.g., history selection in progress)
+    if (_isSelectingFromHistory) return;
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -268,9 +271,33 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
                   Text('Recent Servers', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 8),
                   ServerHistoryWidget(
-                    onServerSelected: (server) {
-                      _urlController.text = server.url;
-                      _probeServer();
+                    onServerSelected: (server) async {
+                      // Guard against duplicate calls
+                      if (_isSelectingFromHistory) return;
+
+                      // Set flag to prevent _probeServer and duplicate selections
+                      setState(() => _isSelectingFromHistory = true);
+
+                      // Unfocus any text fields to prevent form submission side effects
+                      FocusScope.of(context).unfocus();
+
+                      try {
+                        // Use selectServerFromHistory which handles proper state transitions
+                        // instead of probing which creates a new server entry
+                        final appStateManager = ref.read(appStateManagerProvider);
+                        await appStateManager.selectServerFromHistory(server.id);
+                        // onConnected callback will be triggered by the state change
+                        // if the server doesn't need auth
+                        if (!mounted) return;
+                        final newState = ref.read(currentAppStateProvider);
+                        if (newState is AppStateReady) {
+                          widget.onConnected?.call();
+                        }
+                      } finally {
+                        if (mounted) {
+                          setState(() => _isSelectingFromHistory = false);
+                        }
+                      }
                     },
                   ),
                 ],

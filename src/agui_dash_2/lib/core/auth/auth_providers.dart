@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../network/network_inspector.dart';
 import '../services/secure_storage_service.dart' show secureStorageProvider;
 import 'oidc_auth_interactor.dart';
 import 'secure_sso_storage.dart';
@@ -38,12 +39,14 @@ final flutterAppAuthProvider = Provider<FlutterAppAuth>((ref) {
 final oidcAuthInteractorProvider = Provider<OidcAuthInteractor>((ref) {
   final ssoStorage = ref.watch(secureSsoStorageProvider);
   final tokenStorage = ref.watch(secureTokenStorageProvider);
+  final inspector = ref.read(networkInspectorProvider);
 
   if (kIsWeb) {
     return OidcWebAuthInteractor(
       ssoStorage,
       tokenStorage,
       _tokenExpirationBuffer,
+      inspector: inspector,
     );
   } else {
     final appAuth = ref.watch(flutterAppAuthProvider);

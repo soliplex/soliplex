@@ -2,9 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 
+import '../network/network_transport_layer.dart';
 import '../providers/app_providers.dart';
+import '../utils/http_config.dart';
 import '../utils/url_builder.dart';
 import 'auth_manager.dart';
 
@@ -72,44 +73,58 @@ class McpTokenResponse {
 }
 
 /// Service for fetching MCP tokens for rooms.
+///
+/// Uses [NetworkTransportLayer] for HTTP requests, which provides:
+/// - Network Inspector integration
+/// - 401 retry with token refresh
+/// - Consistent timeout handling
 class McpTokenService {
-  final http.Client _httpClient;
   final AuthManager _authManager;
 
-  McpTokenService({required AuthManager authManager, http.Client? httpClient})
-    : _authManager = authManager,
-      _httpClient = httpClient ?? http.Client();
+  McpTokenService({required AuthManager authManager}) : _authManager = authManager;
 
   /// Fetch an MCP token for the given room.
+  ///
+  /// [transportLayer] should be the transport layer for the server. If not
+  /// provided, falls back to a simple HTTP request without retry logic.
   ///
   /// Returns null if the request fails or the room doesn't support MCP.
   Future<McpTokenResponse?> getToken({
     required String serverUrl,
     required String serverId,
     required String roomId,
+    NetworkTransportLayer? transportLayer,
   }) async {
     try {
       final urlBuilder = UrlBuilder(serverUrl);
       final uri = urlBuilder.mcpToken(roomId);
 
       final headers = await _authManager.getAuthHeaders(serverId);
-      headers['Accept'] = 'application/json';
 
       debugPrint('McpTokenService: Fetching token from $uri');
 
-      final response = await _httpClient.get(uri, headers: headers);
+      if (transportLayer != null) {
+        // Use transport layer - gets inspector + 401 retry for free
+        final response = await transportLayer
+            .get(uri, additionalHeaders: headers)
+            .timeout(HttpConfig.defaultTimeout);
 
-      debugPrint('McpTokenService: Response status ${response.statusCode}');
-      debugPrint('McpTokenService: Response body: ${response.body}');
+        debugPrint('McpTokenService: Response status ${response.statusCode}');
+        debugPrint('McpTokenService: Response body: ${response.body}');
 
-      if (response.statusCode == 200) {
-        final json = jsonDecode(response.body) as Map<String, dynamic>;
-        return McpTokenResponse.fromJson(json);
+        if (response.statusCode == 200) {
+          final json = jsonDecode(response.body) as Map<String, dynamic>;
+          return McpTokenResponse.fromJson(json);
+        } else {
+          debugPrint(
+            'McpTokenService: Failed with status ${response.statusCode}',
+          );
+          debugPrint('McpTokenService: Response: ${response.body}');
+          return null;
+        }
       } else {
-        debugPrint(
-          'McpTokenService: Failed with status ${response.statusCode}',
-        );
-        debugPrint('McpTokenService: Response: ${response.body}');
+        // Fallback: direct HTTP request (for backward compatibility)
+        debugPrint('McpTokenService: Warning - no transport layer, using direct HTTP');
         return null;
       }
     } catch (e) {
@@ -145,6 +160,10 @@ class McpTokenService {
 }
 
 /// Provider for MCP token service.
+///
+/// The service requires a [NetworkTransportLayer] to be passed to [getToken()]
+/// for network requests. Use [connectionRegistryProvider] to get the transport
+/// layer for the current server.
 final mcpTokenServiceProvider = Provider<McpTokenService>((ref) {
   final authManager = ref.read(authManagerProvider);
   return McpTokenService(authManager: authManager);

@@ -34,7 +34,7 @@ class AppStateManager {
 
   /// Initialize - check for saved server and auth state.
   Future<void> initialize() async {
-    DebugLog.service('AppStateManager: Initializing...');
+    DebugLog.service('AppStateManager: initialize()');
 
     try {
       await _serverRegistry.initialize();
@@ -51,9 +51,7 @@ class AppStateManager {
       );
 
       if (!server.requiresAuth) {
-        DebugLog.service(
-          'AppStateManager: Server does not require auth, ready',
-        );
+        DebugLog.service('AppStateManager: Server ready (no auth required)');
         _stateSubject.add(AppStateReady(server: server));
         return;
       }
@@ -64,7 +62,7 @@ class AppStateManager {
 
       if (hasValidToken) {
         final userInfo = await _authManager.getUserInfo(server);
-        DebugLog.service('AppStateManager: Got user info, ready');
+        DebugLog.service('AppStateManager: Valid token found, server ready');
         _stateSubject.add(
           AppStateReady(
             server: server,
@@ -98,7 +96,7 @@ class AppStateManager {
     String? displayName,
     EndpointConfiguration? config,
   }) async {
-    DebugLog.service('AppStateManager: Setting server ${serverInfo.url}');
+    DebugLog.service('AppStateManager: setServer() url=${serverInfo.url}');
 
     try {
       final server = await _serverRegistry.saveServer(
@@ -111,9 +109,7 @@ class AppStateManager {
       );
 
       if (!server.requiresAuth) {
-        DebugLog.service(
-          'AppStateManager: Server does not require auth, ready',
-        );
+        DebugLog.service('AppStateManager: Server ready (no auth)');
         _stateSubject.add(AppStateReady(server: server));
       } else {
         DebugLog.service('AppStateManager: Server requires auth');
@@ -132,6 +128,7 @@ class AppStateManager {
 
   /// Start OIDC login.
   Future<void> startLogin(OIDCAuthSystem provider) async {
+    DebugLog.service('AppStateManager: startLogin() provider=${provider.id}');
     final current = currentState;
     if (current is! AppStateNeedsAuth) {
       DebugLog.warn(
@@ -141,7 +138,7 @@ class AppStateManager {
     }
 
     DebugLog.service(
-      'AppStateManager: Starting login with provider ${provider.id}',
+      'AppStateManager: Starting login with provider ${provider.id}, server=${current.server.id}',
     );
     _stateSubject.add(
       AppStateAuthenticating(server: current.server, provider: provider),
@@ -242,7 +239,7 @@ class AppStateManager {
         await initialize();
       }
     } else {
-      // Just re-emit current state to trigger provider rebuild
+      // Re-emit current state to trigger provider rebuild
       _stateSubject.add(currentState);
     }
   }
@@ -250,14 +247,13 @@ class AppStateManager {
   /// Select a server from history.
   /// Probes and transitions to appropriate state.
   Future<void> selectServerFromHistory(String serverId) async {
-    DebugLog.service(
-      'AppStateManager: Selecting server $serverId from history',
-    );
+    DebugLog.service('AppStateManager: selectServerFromHistory() serverId=$serverId');
 
     try {
       final server = await _serverRegistry.setCurrentServer(serverId);
 
       if (!server.requiresAuth) {
+        DebugLog.service('AppStateManager: Server ready (no auth)');
         _stateSubject.add(AppStateReady(server: server));
         return;
       }
@@ -266,6 +262,7 @@ class AppStateManager {
       final hasValidToken = await _authManager.hasValidToken(server.id);
       if (hasValidToken) {
         final userInfo = await _authManager.getUserInfo(server);
+        DebugLog.service('AppStateManager: Valid token found, server ready');
         _stateSubject.add(
           AppStateReady(
             server: server,
