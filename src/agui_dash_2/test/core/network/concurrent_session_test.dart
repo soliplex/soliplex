@@ -41,7 +41,11 @@ void main() {
 
       // Trigger GenUI update via RoomSession
       session.addGenUiMessage(
-        GenUiContent(toolCallId: 't1', widgetName: 'TestWidget', data: {}),
+        const GenUiContent(
+          toolCallId: 't1',
+          widgetName: 'TestWidget',
+          data: {},
+        ),
       );
 
       // Verify ContextPane provider updated

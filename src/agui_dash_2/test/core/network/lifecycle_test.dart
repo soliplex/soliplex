@@ -100,9 +100,9 @@ void main() {
       final runFuture = session.startRun(messages: []);
 
       // Emit a full message sequence from the "server"
-      streamController.add(ag_ui.TextMessageStartEvent(messageId: 'msg1'));
+      streamController.add(const ag_ui.TextMessageStartEvent(messageId: 'msg1'));
       streamController.add(
-        ag_ui.TextMessageContentEvent(
+        const ag_ui.TextMessageContentEvent(
           messageId: 'msg1',
           delta: 'Hello form background',
         ),

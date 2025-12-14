@@ -4,9 +4,11 @@ packages:
   ag_ui:
     dependency: "direct main"
     description:
-      path: "../../../ag-ui/sdks/community/dart"
-      relative: true
-    source: path
+      path: "sdks/community/dart"
+      ref: HEAD
+      resolved-ref: b7a6fc9922b532596cbae799f683cd38f0ccc9c2
+      url: "https://github.com/soliplex/ag-ui.git"
+    source: git
     version: "0.1.0"
   args:
     dependency: transitive

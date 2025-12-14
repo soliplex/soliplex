@@ -47,11 +47,11 @@ void main() {
         final execution = notifier.getExecution('call-1');
         expect(execution, isNotNull);
         expect(
-          execution!.startedAt.isAfter(before.subtract(Duration(seconds: 1))),
+          execution!.startedAt.isAfter(before.subtract(const Duration(seconds: 1))),
           isTrue,
         );
         expect(
-          execution.startedAt.isBefore(after.add(Duration(seconds: 1))),
+          execution.startedAt.isBefore(after.add(const Duration(seconds: 1))),
           isTrue,
         );
       });
@@ -174,7 +174,7 @@ void main() {
           );
 
           notifier.startExecution('call-1', 'tool_a');
-          async.elapse(Duration(seconds: 30));
+          async.elapse(const Duration(seconds: 30));
           notifier.startExecution('call-2', 'tool_b');
 
           // After 31 more seconds (61 total for call-1)
@@ -183,7 +183,7 @@ void main() {
           expect(notifier.isExecuting('call-2'), isTrue);
 
           // After 30 more seconds (61 total for call-2)
-          async.elapse(Duration(seconds: 30));
+          async.elapse(const Duration(seconds: 30));
           expect(notifier.isExecuting('call-2'), isFalse);
 
           notifier.dispose();
