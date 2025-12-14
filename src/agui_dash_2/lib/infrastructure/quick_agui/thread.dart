@@ -151,12 +151,16 @@ class Thread {
   /// (caller should call again with these results).
   ///
   /// [cancelToken] can be used to cancel the run mid-stream.
+  /// [streamTimeout] sets the watchdog timer duration - if no SSE event
+  /// is received within this duration, throws [StreamTimeoutException].
+  /// Set to null to disable the watchdog (not recommended for production).
   Future<List<ag_ui.ToolMessage>> startRun({
     required String endpoint,
     required String runId,
     List<ag_ui.Message>? messages,
     dynamic state,
     CancelToken? cancelToken,
+    Duration? streamTimeout = const Duration(minutes: 2),
   }) async {
     // Check if disposed before starting
     if (_disposed) {
@@ -164,8 +168,10 @@ class Thread {
       return [];
     }
 
-    // Check if already cancelled
-    cancelToken?.throwIfCancelled();
+    // NOTE: We do NOT throw if already cancelled here.
+    // Instead, we set wasCancelled = true and still consume the stream.
+    // This allows background sessions to receive their results.
+    // The old behavior (throwIfCancelled) broke background result collection.
 
     final run = ag_ui.Run(threadId: id, runId: runId);
     _runs.add(run);
@@ -182,22 +188,72 @@ class Thread {
       tools: _tools,
     );
 
+    // Debug: Log what we're sending
+    DebugLog.thread(' AG-UI request: endpoint=$endpoint');
+    DebugLog.thread(' AG-UI request: threadId=$id, runId=$runId');
+    DebugLog.thread(' AG-UI request: messages=${messageHistory.length}');
+    DebugLog.thread(' AG-UI request: tools=${_tools.map((t) => t.name).toList()}');
+    if (messageHistory.isNotEmpty) {
+      final lastMsg = messageHistory.last;
+      DebugLog.thread(' AG-UI request: lastMessage type=${lastMsg.runtimeType}');
+    }
+
+    // Track if run was cancelled mid-stream.
+    // When cancelled, we continue consuming events (so RoomSession gets them)
+    // but skip tool registration/execution.
+    // Check if already cancelled at start (e.g., session suspended before run began)
+    bool wasCancelled = cancelToken?.isCancelled ?? false;
+    if (wasCancelled) {
+      DebugLog.thread(' Starting with pre-cancelled token, will consume but skip tools');
+    }
+
     try {
       DebugLog.thread(' Starting await for loop on SSE stream');
-      final stream = _getRunAgentStream(endpoint, agentInput);
+      var stream = _getRunAgentStream(endpoint, agentInput);
+
+      // Wrap stream with timeout if enabled and not already cancelled
+      // Timeout resets on each event automatically with Stream.timeout
+      if (streamTimeout != null && !wasCancelled) {
+        stream = stream.timeout(
+          streamTimeout,
+          onTimeout: (sink) {
+            DebugLog.thread(' Stream timeout - no event in $streamTimeout');
+            sink.addError(
+              StreamTimeoutException('No SSE event received', streamTimeout),
+            );
+          },
+        );
+      }
+
       await for (final event in stream) {
         DebugLog.thread(' Received event: ${event.runtimeType}');
-        // Check if disposed during streaming
+
+        // Check if disposed during streaming - SHOULD break the loop
         if (_disposed) {
           DebugLog.thread(' disposed during event stream, stopping');
           break;
         }
-        // Check if cancelled during streaming
-        if (cancelToken?.isCancelled == true) {
-          DebugLog.thread(' cancelled during event stream, stopping');
-          throw CancelledException(cancelToken!.cancelReason);
+
+        // Check if cancelled during streaming - DON'T break, continue consuming
+        // This is critical: events must continue flowing to RoomSession.processEvent()
+        // so that background sessions receive their results when user returns
+        if (cancelToken?.isCancelled == true && !wasCancelled) {
+          DebugLog.thread(
+            ' cancelled during stream, continuing to consume events for background collection',
+          );
+          wasCancelled = true;
+          // Note: Stream.timeout continues but we'll ignore timeout errors after cancel
         }
+
+        // ALWAYS forward events to stepsController so RoomSession gets them
+        // This is the key fix: events flow even after cancel
         _addStep(event);
+
+        // Skip processing (tool registration, message history) if cancelled
+        // Events are still forwarded above, but we don't queue tools for execution
+        if (wasCancelled) {
+          continue;
+        }
 
         switch (event) {
           case ag_ui.TextMessageChunkEvent(
@@ -331,6 +387,9 @@ class Thread {
       if (errorStr.contains('DecodingError') ||
           errorStr.contains('Invalid event type')) {
         DebugLog.thread('Decoding error (continuing): $e');
+      } else if (e is StreamTimeoutException && wasCancelled) {
+        // Ignore timeout errors after cancel - we're just draining
+        DebugLog.thread('Ignoring timeout after cancel: $e');
       } else {
         // If we have pending tools, we should try to execute them despite the error
         // This handles cases where the stream drops after tool calls are sent but before graceful close
@@ -343,6 +402,15 @@ class Thread {
     }
 
     DebugLog.thread(' SSE stream completed, checking for pending tool calls');
+
+    // If cancelled, return empty list - don't execute tools or send results back
+    // The events have already been forwarded to RoomSession for background collection
+    if (wasCancelled) {
+      DebugLog.thread(
+        ' Stream completed after cancel, returning empty tool list (no server round-trip)',
+      );
+      return [];
+    }
 
     // Execute any pending client tools
     final pendingToolCalls = _toolRegistry.pendingCalls;

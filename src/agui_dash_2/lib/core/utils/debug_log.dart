@@ -16,7 +16,7 @@ class DebugLog {
   static bool messageMapping =
       true; // Message ID mapping (critical for second response issue)
   static bool toolsEnabled = false; // Tool execution
-  static bool threadEnabled = false; // Thread/SSE stream processing
+  static bool threadEnabled = true; // Thread/SSE stream processing
   static bool servicesEnabled = true; // Service initialization - ENABLED FOR DEBUG
   static bool canvasEnabled = false; // Canvas operations
   static bool networkEnabled = true; // Network/connection management

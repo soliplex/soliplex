@@ -308,6 +308,7 @@ class NetworkTransportLayer {
         try {
           await for (final event in _agUiClient.runAgent(endpoint, input)) {
             eventCount++;
+            DebugLog.network('NetworkTransportLayer: SSE event #$eventCount: ${event.runtimeType}');
             yield event;
           }
 

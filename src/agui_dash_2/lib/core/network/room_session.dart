@@ -358,10 +358,12 @@ class RoomSession implements ChatSession {
   /// Send a user message and process the response.
   @override
   Future<void> sendMessage(String text, {Map<String, dynamic>? state}) async {
+    DebugLog.network('RoomSession: sendMessage called with text: "${text.substring(0, text.length > 50 ? 50 : text.length)}..."');
+
     if (_state == SessionState.disposed) {
       throw StateError('Session is disposed');
     }
-    
+
     // Add user message locally
     addUserMessage(text);
 
@@ -453,6 +455,7 @@ class RoomSession implements ChatSession {
         runId: currentRunId,
         messages: messages,
         state: state,
+        cancelToken: _cancelToken,
       );
 
       _state = SessionState.active;

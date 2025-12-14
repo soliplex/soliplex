@@ -46,3 +46,17 @@ class CancelledException implements Exception {
   String toString() =>
       reason != null ? 'CancelledException: $reason' : 'CancelledException';
 }
+
+/// Exception thrown when an SSE stream times out (no events received).
+///
+/// This is distinct from [CancelledException] which is user-initiated.
+/// StreamTimeoutException indicates the server stopped responding.
+class StreamTimeoutException implements Exception {
+  final String message;
+  final Duration timeout;
+
+  StreamTimeoutException(this.message, this.timeout);
+
+  @override
+  String toString() => 'StreamTimeoutException: $message (timeout: $timeout)';
+}
