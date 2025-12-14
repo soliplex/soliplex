@@ -122,7 +122,7 @@ void main() {
 
   group('PkceChallenge', () {
     test('toString masks sensitive data', () {
-      final pkce = PkceChallenge(
+      const pkce = PkceChallenge(
         codeVerifier: 'verifier12345678901234567890',
         codeChallenge: 'challenge12345678901234567890',
       );

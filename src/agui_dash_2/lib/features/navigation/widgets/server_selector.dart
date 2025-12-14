@@ -49,7 +49,7 @@ class ServerSelector extends ConsumerWidget {
                                       title: const Text('Switch Server'),
                                       onTap: () {
                                         Navigator.pop(context);
-                                        context.push('/setup');
+                                        context.go('/setup');
                                       },
                                     ),               ],
              );

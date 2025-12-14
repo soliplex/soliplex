@@ -108,7 +108,7 @@ void main() {
         ),
       );
 
-      await Future.delayed(Duration(milliseconds: 10)); // Process event loop
+      await Future.delayed(const Duration(milliseconds: 10)); // Process event loop
 
       expect(session.messages.isNotEmpty, isTrue);
       expect(session.messages.last.text, equals('Hello form background'));

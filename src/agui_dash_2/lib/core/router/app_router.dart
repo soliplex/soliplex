@@ -19,7 +19,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final notifier = RouterNotifier(ref);
   
   // On web, use the browser URL; otherwise default to /chat
-  final initialLocation = kIsWeb ? null : '/chat';
+  const initialLocation = kIsWeb ? null : '/chat';
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
@@ -99,6 +99,6 @@ class RouterNotifier extends ChangeNotifier {
   final Ref _ref;
   
   RouterNotifier(this._ref) {
-    _ref.listen(appStateStreamProvider, (_, __) => notifyListeners());
+    _ref.listen(appStateStreamProvider, (_, next) => notifyListeners());
   }
 }

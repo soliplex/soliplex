@@ -32,7 +32,7 @@ void main() {
       final registry = container.read(connectionRegistryProvider);
       const serverId = 'test-server';
       const roomId = 'room-1';
-      final key = ServerRoomKey(serverId: serverId, roomId: roomId);
+      const key = ServerRoomKey(serverId: serverId, roomId: roomId);
 
       final session = registry.getSession(
         key,
@@ -56,7 +56,7 @@ void main() {
       final registry = container.read(connectionRegistryProvider);
       const serverId = 'test-server';
       const roomId = 'room-2';
-      final key = ServerRoomKey(serverId: serverId, roomId: roomId);
+      const key = ServerRoomKey(serverId: serverId, roomId: roomId);
 
       final session = registry.getSession(
         key,
@@ -78,7 +78,7 @@ void main() {
       final registry = container.read(connectionRegistryProvider);
       const serverId = 'test-server';
       const roomId = 'room-3';
-      final key = ServerRoomKey(serverId: serverId, roomId: roomId);
+      const key = ServerRoomKey(serverId: serverId, roomId: roomId);
 
       final session1 = registry.getSession(
         key,

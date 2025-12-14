@@ -43,7 +43,7 @@ void main() {
           contentService: mockContentService,
         );
 
-        final genUiContent = GenUiContent(
+        const genUiContent = GenUiContent(
           toolCallId: 'tool-123',
           widgetName: 'TestWidget',
           data: {'key': 'value'},
@@ -67,7 +67,7 @@ void main() {
         container = createContainer(canvasNotifier: mockCanvasNotifier);
 
         when(() => mockContentService.analyze(any(), sourceMessageId: any(named: 'sourceMessageId')))
-            .thenReturn(CanvasContentAnalysis(
+            .thenReturn(const CanvasContentAnalysis(
           type: CanvasContentType.plainText,
           widgetName: 'NoteCard',
           data: {'content': 'test content'},

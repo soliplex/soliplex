@@ -58,7 +58,7 @@ class RoomSession implements ChatSession {
   // INTERNAL TOOLS
   // ==========================================================================
 
-  static final _genUiTool = ag_ui.Tool(
+  static const _genUiTool = ag_ui.Tool(
     name: 'genui_render',
     description: 'Render a UI widget',
     parameters: {
@@ -71,7 +71,7 @@ class RoomSession implements ChatSession {
     },
   );
 
-  static final _canvasTool = ag_ui.Tool(
+  static const _canvasTool = ag_ui.Tool(
     name: 'canvas_render',
     description: 'Render content to the side canvas',
     parameters: {

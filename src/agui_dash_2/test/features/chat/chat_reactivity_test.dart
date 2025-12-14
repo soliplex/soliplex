@@ -40,14 +40,14 @@ void main() {
       const roomId = 'room-1';
       final key = ServerRoomKey(serverId: serverId, roomId: roomId);
 
-      final session = registry.getSession(key, baseUrl: 'http://test-server.com');
+      final session = registry.getSession(key, baseUrl: 'http://test-server.com') as RoomSession;
       
       // Select room
       container.read(selectedRoomProvider.notifier).state = roomId;
       await Future.microtask(() {});
 
       // Keep provider alive
-      final sub = container.listen(activeMessageStreamProvider, (_, __) {});
+      final sub = container.listen(activeMessageStreamProvider, (_, next) {});
 
       // Initial state
       final initialAsync = container.read(activeMessageStreamProvider);
@@ -55,7 +55,7 @@ void main() {
       expect(initialAsync.value == null || initialAsync.value!.isEmpty, isTrue);
 
       // Add message
-      (session as RoomSession).addUserMessage('Hello');
+      session.addUserMessage('Hello');
       
       // Wait for stream -> provider propagation
       await Future.delayed(const Duration(milliseconds: 50));
@@ -69,7 +69,7 @@ void main() {
       expect(messages.last.text, equals('Hello'));
       
       // Add another
-      (session as RoomSession).addUserMessage('World');
+      session.addUserMessage('World');
       await Future.delayed(const Duration(milliseconds: 50));
       
       messages = container.read(activeMessageStreamProvider).value!;

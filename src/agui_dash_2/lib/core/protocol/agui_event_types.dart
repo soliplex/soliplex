@@ -1,5 +1,3 @@
-library agui_event_types;
-
 /// Constants for AG-UI event types used across the application.
 ///
 /// Centralizes event type strings to prevent magic string issues and

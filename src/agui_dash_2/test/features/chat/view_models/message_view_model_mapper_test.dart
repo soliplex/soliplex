@@ -61,7 +61,7 @@ void main() {
     });
 
     test('maps GenUiMessage to GenUiViewModel', () {
-      final genUiContent = GenUiContent(
+      const genUiContent = GenUiContent(
         toolCallId: 'tool1',
         widgetName: 'Card',
         data: {'value': 1},
@@ -80,7 +80,7 @@ void main() {
     });
 
     test('maps ErrorMessage to ErrorMessageViewModel', () {
-      final errorInfo = ChatErrorInfo(
+      const errorInfo = ChatErrorInfo(
         type: ChatErrorType.server,
         friendlyMessage: 'Server connection failed',
         technicalDetails: 'Server down',

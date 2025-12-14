@@ -135,11 +135,11 @@ void main() {
           expect(notifier.state.hasActiveExecutions, isTrue);
 
           // Advance time by 59 seconds - should still be active
-          async.elapse(Duration(seconds: 59));
+          async.elapse(const Duration(seconds: 59));
           expect(notifier.state.hasActiveExecutions, isTrue);
 
           // Advance by 2 more seconds (total 61s) - should be cleared
-          async.elapse(Duration(seconds: 2));
+          async.elapse(const Duration(seconds: 2));
           expect(notifier.state.hasActiveExecutions, isFalse);
 
           notifier.dispose();
@@ -157,7 +157,7 @@ void main() {
           notifier.endExecution('call-1');
 
           // Advance past timeout - should not throw or cause issues
-          async.elapse(Duration(seconds: 120));
+          async.elapse(const Duration(seconds: 120));
 
           // State should still be empty (no phantom re-clearing)
           expect(notifier.state.hasActiveExecutions, isFalse);
@@ -178,7 +178,7 @@ void main() {
           notifier.startExecution('call-2', 'tool_b');
 
           // After 31 more seconds (61 total for call-1)
-          async.elapse(Duration(seconds: 31));
+          async.elapse(const Duration(seconds: 31));
           expect(notifier.isExecuting('call-1'), isFalse);
           expect(notifier.isExecuting('call-2'), isTrue);
 
@@ -227,7 +227,7 @@ void main() {
         startedAt: startTime,
       );
 
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       expect(execution.elapsed.inMilliseconds, greaterThanOrEqualTo(40));
     });

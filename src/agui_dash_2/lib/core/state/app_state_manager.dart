@@ -200,7 +200,7 @@ class AppStateManager {
         // Shouldn't happen - callback should have stored tokens
         DebugLog.error('AppStateManager: No valid token after callback');
         _stateSubject.add(
-          AppStateError('Authentication failed: No valid token received'),
+          const AppStateError('Authentication failed: No valid token received'),
         );
       }
     } catch (e) {

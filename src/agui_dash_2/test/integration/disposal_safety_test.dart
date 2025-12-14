@@ -7,12 +7,11 @@ import 'package:agui_dash_2/core/network/network_transport_layer.dart';
 import 'package:agui_dash_2/core/providers/app_providers.dart' as app_providers;
 import 'package:agui_dash_2/core/providers/panel_providers.dart';
 import 'package:agui_dash_2/core/services/rooms_service.dart';
-import 'package:agui_dash_2/core/services/secure_storage_service.dart';
-import 'package:agui_dash_2/core/state/app_state.dart' as app_state;
-import 'package:agui_dash_2/core/state/app_state_manager.dart' as app_state_manager;
-import 'package:agui_dash_2/core/utils/url_builder.dart';
 import 'package:agui_dash_2/features/chat/chat_screen.dart';
-import 'package:agui_dash_2/features/server/server_setup_screen.dart';
+import 'package:agui_dash_2/core/services/secure_storage_service.dart';
+import 'package:agui_dash_2/core/utils/url_builder.dart';
+import 'package:agui_dash_2/core/state/app_state_manager.dart' as app_state_manager;
+import 'package:agui_dash_2/core/state/app_state.dart' as app_state;
 import 'package:agui_dash_2/main.dart';
 import 'package:flutter/material.dart'; // Added for GlobalKey, NavigatorState
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -139,7 +138,6 @@ class MockAppStateManager extends Mock implements app_state_manager.AppStateMana
 void main() {
   testWidgets('App launches and renders ChatScreen without dispose errors', (tester) async {
     final mockInspector = MockNetworkInspector();
-    final mockRoomsNotifier = MockRoomsNotifier();
     final mockAppStateManager = MockAppStateManager();
     final mockStorage = MockSecureStorage();
 

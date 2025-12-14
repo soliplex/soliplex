@@ -39,9 +39,9 @@ void main() {
 
   group('CompletionRequest', () {
     test('creates minimal request', () {
-      final request = CompletionRequest(
+      const request = CompletionRequest(
         model: 'gpt-4',
-        messages: [const CompletionMessage.user('Hello')],
+        messages: const [CompletionMessage.user('Hello')],
       );
 
       expect(request.model, 'gpt-4');
@@ -50,9 +50,9 @@ void main() {
     });
 
     test('serializes to JSON', () {
-      final request = CompletionRequest(
+      const request = CompletionRequest(
         model: 'gpt-4',
-        messages: [const CompletionMessage.user('Hello')],
+        messages: const [CompletionMessage.user('Hello')],
         temperature: 0.7,
         maxTokens: 100,
       );
@@ -68,9 +68,9 @@ void main() {
     });
 
     test('omits null optional fields', () {
-      final request = CompletionRequest(
+      const request = CompletionRequest(
         model: 'gpt-4',
-        messages: [const CompletionMessage.user('Hello')],
+        messages: const [CompletionMessage.user('Hello')],
       );
 
       final json = request.toJson();

@@ -809,7 +809,7 @@ wheels = [
 
 [[package]]
 name = "haiku-rag-slim"
-version = "0.20.1"
+version = "0.20.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docling-core" },
@@ -824,9 +824,9 @@ dependencies = [
     { name = "typer" },
     { name = "watchfiles" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/76/c9/3effd2732a168a5f1244b75e08983ad9eb980ec6d232f161a426342c265d/haiku_rag_slim-0.20.1.tar.gz", hash = "sha256:59d0136ab0a9216618a0618a27302e55340c226ab9c7e7794c0648f81d8e7fbc", size = 90578, upload-time = "2025-12-11T14:32:07.041Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/00/85efe60abc85732451dbec7ffadb529c7e203ff1428553816cb1fd994dc2/haiku_rag_slim-0.20.2.tar.gz", hash = "sha256:78d66535f87b09d1dd0f45183f837c0f0aafbf2049f6e1b7bfd217a6a0d0262c", size = 90789, upload-time = "2025-12-12T08:49:05.308Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4c/c9/f5bd3ea478c5f864a2cce164a26d9fc5b04d26ba7a9cf6e0b74f0e346eb7/haiku_rag_slim-0.20.1-py3-none-any.whl", hash = "sha256:98cb4ad483e91fb5e1a9565ff6de191cfaf6848ec54bd453fe4e556316b3dc17", size = 131274, upload-time = "2025-12-11T14:32:05.162Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/9f/ff0db44166d67b243c29e1797acb9daadd779dbada600a6b9c1930a079d9/haiku_rag_slim-0.20.2-py3-none-any.whl", hash = "sha256:1d2502fd19fa456eadfce49c0f0e540c8a39660c138e450a394600b8172d866d", size = 131652, upload-time = "2025-12-12T08:49:03.769Z" },
 ]
 
 [[package]]
@@ -2565,7 +2565,7 @@ wheels = [
 
 [[package]]
 name = "soliplex"
-version = "0.23.dev0"
+version = "0.24.dev0"
 source = { editable = "." }
 dependencies = [
     { name = "ag-ui-protocol" },
@@ -2574,6 +2574,7 @@ dependencies = [
     { name = "certifi" },
     { name = "fastapi" },
     { name = "fastmcp" },
+    { name = "greenlet" },
     { name = "haiku-rag-slim" },
     { name = "itsdangerous" },
     { name = "jsonpatch" },
@@ -2616,7 +2617,8 @@ requires-dist = [
     { name = "certifi", specifier = ">=2025.11.12" },
     { name = "fastapi" },
     { name = "fastmcp", specifier = ">=2.13.0.2,<2.14" },
-    { name = "haiku-rag-slim", specifier = ">=0.19.6" },
+    { name = "greenlet" },
+    { name = "haiku-rag-slim", specifier = ">=0.20.2" },
     { name = "itsdangerous" },
     { name = "jsonpatch" },
     { name = "jwcrypto" },

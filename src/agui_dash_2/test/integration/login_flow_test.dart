@@ -11,7 +11,6 @@ import 'package:agui_dash_2/core/services/secure_storage_service.dart';
 import 'package:agui_dash_2/core/services/server_registry.dart';
 import 'package:agui_dash_2/core/services/auth_manager.dart';
 import 'package:agui_dash_2/core/network/connection_manager.dart';
-import 'package:agui_dash_2/core/network/room_session.dart';
 import 'package:agui_dash_2/core/utils/url_builder.dart';
 import 'package:agui_dash_2/features/chat/chat_screen.dart';
 import 'package:agui_dash_2/features/server/server_setup_screen.dart';
@@ -100,7 +99,7 @@ class MockSessionLifecycleController extends AsyncNotifier<void> implements Sess
 
 class FakeServerRegistry extends Fake implements ServerRegistry {
   ServerConnection? _currentServer;
-  List<ServerConnection> _serverHistory = [];
+  final _serverHistory = <ServerConnection>[];
 
   @override
   ServerConnection? get currentServer => _currentServer;

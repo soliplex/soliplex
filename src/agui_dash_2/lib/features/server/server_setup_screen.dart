@@ -143,170 +143,163 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Header
-                Icon(
-                  Icons.dns_outlined,
-                  size: 64,
-                  color: theme.colorScheme.primary,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header
+              Icon(
+                Icons.dns_outlined,
+                size: 64,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Connect to Server',
+                style: theme.textTheme.headlineMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Enter the URL of your Soliplex server',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  'Connect to Server',
-                  style: theme.textTheme.headlineMedium,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Enter the URL of your Soliplex server',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
 
-                // URL Input Form
-                Form(
-                  key: _formKey,
-                  child: TextFormField(
-                    controller: _urlController,
-                    validator: _validateUrl,
-                    decoration: InputDecoration(
-                      labelText: 'Server URL',
-                      hintText: ApiConstants.defaultServerUrl,
-                      prefixIcon: const Icon(Icons.link),
-                      border: const OutlineInputBorder(),
-                      suffixIcon: _isProbing
-                          ? const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
+              // URL Input Form
+              Form(
+                key: _formKey,
+                child: TextFormField(
+                  controller: _urlController,
+                  validator: _validateUrl,
+                  decoration: InputDecoration(
+                    labelText: 'Server URL',
+                    hintText: ApiConstants.defaultServerUrl,
+                    prefixIcon: const Icon(Icons.link),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: _isProbing
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
                               ),
-                            )
-                          : null,
-                    ),
-                    keyboardType: TextInputType.url,
-                    textInputAction: TextInputAction.go,
-                    onFieldSubmitted: (_) => _probeServer(),
-                    enabled: !_isProbing,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Error message
-                if (_error != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.errorContainer,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          color: theme.colorScheme.onErrorContainer,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _error!,
-                            style: TextStyle(
-                              color: theme.colorScheme.onErrorContainer,
                             ),
+                          )
+                        : null,
+                  ),
+                  keyboardType: TextInputType.url,
+                  textInputAction: TextInputAction.go,
+                  onFieldSubmitted: (_) => _probeServer(),
+                  enabled: !_isProbing,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Error message
+              if (_error != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.errorContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        color: theme.colorScheme.onErrorContainer,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _error!,
+                          style: TextStyle(
+                            color: theme.colorScheme.onErrorContainer,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                ],
-
-                // Connect button
-                FilledButton.icon(
-                  onPressed: _isProbing ? null : _probeServer,
-                  icon: const Icon(Icons.login),
-                  label: const Text('Connect'),
                 ),
-
-                // OIDC Provider Selection
-                if (oidcProviders.isNotEmpty && serverUrl != null) ...[
-                  const SizedBox(height: 24),
-                  const Divider(),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Choose login method',
-                    style: theme.textTheme.titleMedium,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  OIDCProviderSelector(
-                    providers: oidcProviders,
-                    serverUrl: serverUrl,
-                    onAuthenticated: () {
-                      widget.onConnected?.call();
-                    },
-                  ),
-                ],
-
-                // Server History
-                if (serverHistory.isNotEmpty) ...[
-                  const SizedBox(height: 32),
-                  const Divider(),
-                  const SizedBox(height: 16),
-                  Text('Recent Servers', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  ServerHistoryWidget(
-                    onServerSelected: (server) async {
-                      // Guard against duplicate calls
-                      if (_isSelectingFromHistory) return;
-
-                      // Set flag to prevent _probeServer and duplicate selections
-                      setState(() => _isSelectingFromHistory = true);
-
-                      // Unfocus any text fields to prevent form submission side effects
-                      FocusScope.of(context).unfocus();
-
-                      try {
-                        // Use selectServerFromHistory which handles proper state transitions
-                        // instead of probing which creates a new server entry
-                        final appStateManager = ref.read(appStateManagerProvider);
-                        await appStateManager.selectServerFromHistory(server.id);
-                        // onConnected callback will be triggered by the state change
-                        // if the server doesn't need auth
-                        if (!mounted) return;
-                        final newState = ref.read(currentAppStateProvider);
-                        if (newState is AppStateReady) {
-                          widget.onConnected?.call();
-                        }
-                      } finally {
-                        if (mounted) {
-                          setState(() => _isSelectingFromHistory = false);
-                        }
-                      }
-                    },
-                  ),
-                ],
+                const SizedBox(height: 16),
               ],
-            ),
+
+              // Connect button
+              FilledButton.icon(
+                onPressed: _isProbing ? null : _probeServer,
+                icon: const Icon(Icons.login),
+                label: const Text('Connect'),
+              ),
+
+              // OIDC Provider Selection
+              if (oidcProviders.isNotEmpty && serverUrl != null) ...[
+                const SizedBox(height: 24),
+                const Divider(),
+                const SizedBox(height: 16),
+                Text(
+                  'Choose login method',
+                  style: theme.textTheme.titleMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                OIDCProviderSelector(
+                  providers: oidcProviders,
+                  serverUrl: serverUrl,
+                  onAuthenticated: () {
+                    widget.onConnected?.call();
+                  },
+                ),
+              ],
+
+              // Server History
+              if (serverHistory.isNotEmpty) ...[
+                const SizedBox(height: 32),
+                const Divider(),
+                const SizedBox(height: 16),
+                Text('Recent Servers', style: theme.textTheme.titleMedium),
+                const SizedBox(height: 8),
+                ServerHistoryWidget(
+                  onServerSelected: (server) async {
+                    // Guard against duplicate calls
+                    if (_isSelectingFromHistory) return;
+
+                    // Set flag to prevent _probeServer and duplicate selections
+                    setState(() => _isSelectingFromHistory = true);
+
+                    // Unfocus any text fields to prevent form submission side effects
+                    FocusScope.of(context).unfocus();
+
+                    try {
+                      // Use selectServerFromHistory which handles proper state transitions
+                      // instead of probing which creates a new server entry
+                      final appStateManager = ref.read(appStateManagerProvider);
+                      await appStateManager.selectServerFromHistory(server.id);
+                      // onConnected callback will be triggered by the state change
+                      // if the server doesn't need auth
+                      if (!mounted) return;
+                      final newState = ref.read(currentAppStateProvider);
+                      if (newState is AppStateReady) {
+                        widget.onConnected?.call();
+                      }
+                    } finally {
+                      if (mounted) {
+                        setState(() => _isSelectingFromHistory = false);
+                      }
+                    }
+                  },
+                ),
+              ],
+            ],
           ),
         ),
       ),
