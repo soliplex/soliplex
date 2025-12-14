@@ -218,7 +218,9 @@ void displayEvent(Map<String, dynamic> event, StringBuffer responseBuffer) {
       break;
 
     case 'TOOL_CALL_START':
-      print('  [TOOL_CALL_START] toolCallId=${event['toolCallId']} name=${event['toolCallName']}');
+      print(
+        '  [TOOL_CALL_START] toolCallId=${event['toolCallId']} name=${event['toolCallName']}',
+      );
       break;
 
     case 'TOOL_CALL_ARGS':

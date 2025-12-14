@@ -32,7 +32,10 @@ void main() {
           receivedInput = input;
           return Stream.fromIterable([
             const ag_ui.RunStartedEvent(threadId: 'thread-123', runId: 'run-1'),
-            const ag_ui.RunFinishedEvent(threadId: 'thread-123', runId: 'run-1'),
+            const ag_ui.RunFinishedEvent(
+              threadId: 'thread-123',
+              runId: 'run-1',
+            ),
           ]);
         },
       );
@@ -40,9 +43,7 @@ void main() {
       await thread.startRun(
         endpoint: '/api/v1/agent',
         runId: 'run-1',
-        messages: [
-          const ag_ui.UserMessage(id: 'msg-1', content: 'Hello'),
-        ],
+        messages: [const ag_ui.UserMessage(id: 'msg-1', content: 'Hello')],
         state: {'key': 'value'},
       );
 
@@ -106,8 +107,9 @@ void main() {
       await thread.startRun(endpoint: '/agent', runId: 'run-1');
 
       // Should have one accumulated message
-      final assistantMessages =
-          messages.whereType<ag_ui.AssistantMessage>().toList();
+      final assistantMessages = messages
+          .whereType<ag_ui.AssistantMessage>()
+          .toList();
       expect(assistantMessages.length, equals(1));
       expect(assistantMessages[0].content, equals('Hello world!'));
 
@@ -197,7 +199,10 @@ void main() {
 
       await thread.startRun(endpoint: '/agent', runId: 'run-1');
 
-      expect(receivedInput!.tools!.any((t) => t.name == 'dynamic_tool'), isTrue);
+      expect(
+        receivedInput!.tools!.any((t) => t.name == 'dynamic_tool'),
+        isTrue,
+      );
 
       thread.dispose();
     });

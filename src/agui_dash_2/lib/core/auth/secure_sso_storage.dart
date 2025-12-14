@@ -1,40 +1,40 @@
 import 'secure_storage_gateway.dart';
 import 'sso_config.dart';
 
+/// Storage for SSO configurations, scoped by server ID.
+///
+/// Each server has its own SSO config to prevent state pollution
+/// when switching between multiple OIDC-authenticated servers.
 class SecureSsoStorage {
-  final _ssoIdKey = 'sso.id';
-  final _ssoTitleKey = 'sso.title';
-  final _ssoEndpointKey = 'sso.endpoint';
-  final _ssoTokenEndpointKey = 'sso.token.endpoint';
-  final _ssoLoginUriKey = 'sso.login.uri';
-  final _ssoClientIdStorageKey = 'sso.client.id';
-  final _ssoRedirectUrlStorageKey = 'sso.redirect.url';
-  final _ssoScopesStorageKey = 'sso.scopes';
-
   final SecureStorageGateway _storage;
 
   SecureSsoStorage(this._storage);
 
-  Future<void> setSsoConfig(SsoConfig config) async {
-    await _storage.write(_ssoIdKey, config.id);
-    await _storage.write(_ssoTitleKey, config.title);
-    await _storage.write(_ssoEndpointKey, config.endpoint);
-    await _storage.write(_ssoTokenEndpointKey, config.tokenEndpoint);
-    await _storage.write(_ssoLoginUriKey, config.loginUrl.toString());
-    await _storage.write(_ssoClientIdStorageKey, config.clientId);
-    await _storage.write(_ssoRedirectUrlStorageKey, config.redirectUrl);
-    await _storage.write(_ssoScopesStorageKey, config.scopes.join(','));
+  /// Get storage key scoped to a specific server.
+  String _key(String serverId, String field) => 'sso.$serverId.$field';
+
+  /// Store SSO config for a specific server.
+  Future<void> setSsoConfig(String serverId, SsoConfig config) async {
+    await _storage.write(_key(serverId, 'id'), config.id);
+    await _storage.write(_key(serverId, 'title'), config.title);
+    await _storage.write(_key(serverId, 'endpoint'), config.endpoint);
+    await _storage.write(_key(serverId, 'tokenEndpoint'), config.tokenEndpoint);
+    await _storage.write(_key(serverId, 'loginUri'), config.loginUrl.toString());
+    await _storage.write(_key(serverId, 'clientId'), config.clientId);
+    await _storage.write(_key(serverId, 'redirectUrl'), config.redirectUrl);
+    await _storage.write(_key(serverId, 'scopes'), config.scopes.join(','));
   }
 
-  Future<SsoConfig?> getSsoConfig() async {
-    final id = await _storage.read(_ssoIdKey);
-    final title = await _storage.read(_ssoTitleKey);
-    final endpoint = await _storage.read(_ssoEndpointKey);
-    final tokenEndpoint = await _storage.read(_ssoTokenEndpointKey);
-    final loginUri = await _storage.read(_ssoLoginUriKey);
-    final clientId = await _storage.read(_ssoClientIdStorageKey);
-    final redirectUrl = await _storage.read(_ssoRedirectUrlStorageKey);
-    final scopes = await _storage.read(_ssoScopesStorageKey);
+  /// Retrieve SSO config for a specific server.
+  Future<SsoConfig?> getSsoConfig(String serverId) async {
+    final id = await _storage.read(_key(serverId, 'id'));
+    final title = await _storage.read(_key(serverId, 'title'));
+    final endpoint = await _storage.read(_key(serverId, 'endpoint'));
+    final tokenEndpoint = await _storage.read(_key(serverId, 'tokenEndpoint'));
+    final loginUri = await _storage.read(_key(serverId, 'loginUri'));
+    final clientId = await _storage.read(_key(serverId, 'clientId'));
+    final redirectUrl = await _storage.read(_key(serverId, 'redirectUrl'));
+    final scopes = await _storage.read(_key(serverId, 'scopes'));
 
     if (id == null ||
         title == null ||
@@ -59,14 +59,15 @@ class SecureSsoStorage {
     );
   }
 
-  Future<void> deleteSsoConfig() async {
-    await _storage.delete(_ssoIdKey);
-    await _storage.delete(_ssoTitleKey);
-    await _storage.delete(_ssoEndpointKey);
-    await _storage.delete(_ssoTokenEndpointKey);
-    await _storage.delete(_ssoLoginUriKey);
-    await _storage.delete(_ssoClientIdStorageKey);
-    await _storage.delete(_ssoRedirectUrlStorageKey);
-    await _storage.delete(_ssoScopesStorageKey);
+  /// Delete SSO config for a specific server.
+  Future<void> deleteSsoConfig(String serverId) async {
+    await _storage.delete(_key(serverId, 'id'));
+    await _storage.delete(_key(serverId, 'title'));
+    await _storage.delete(_key(serverId, 'endpoint'));
+    await _storage.delete(_key(serverId, 'tokenEndpoint'));
+    await _storage.delete(_key(serverId, 'loginUri'));
+    await _storage.delete(_key(serverId, 'clientId'));
+    await _storage.delete(_key(serverId, 'redirectUrl'));
+    await _storage.delete(_key(serverId, 'scopes'));
   }
 }

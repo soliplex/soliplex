@@ -133,15 +133,22 @@ class _ServerHistoryTile extends StatelessWidget {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
               const SizedBox(width: 4),
-              Text(
-                server.requiresAuth ? 'Authenticated' : 'Open',
-                style: theme.textTheme.bodySmall,
+              Expanded(
+                child: Text(
+                  server.requiresAuth ? 'Authenticated' : 'Open',
+                  style: theme.textTheme.bodySmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const SizedBox(width: 8),
-              Text(
-                _formatLastConnected(server.lastConnected),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+              Expanded(
+                child: Text(
+                  _formatLastConnected(server.lastConnected),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.end,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],

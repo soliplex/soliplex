@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/models/chat_models.dart';
-import '../../../core/providers/panel_providers.dart';
-import '../../../core/services/canvas_content_service.dart';
+import '../../../core/models/chat_models.dart'; // For ChatUser, GenUiContent, ChatErrorInfo
+import '../../../core/models/error_types.dart';
+import '../../../core/services/feedback_service.dart';
+import '../../../core/services/send_feedback_use_case.dart';
+import '../../../core/services/send_to_canvas_use_case.dart';
+import '../view_models/chat_message_view_model.dart'; // Import ViewModels
 import 'chat_typing_indicator.dart';
 import 'collapsible_thinking_widget.dart';
+import 'feedback_chip.dart';
+import 'feedback_dialog.dart';
 import 'friendly_error_card.dart';
 import 'genui_message_widget.dart';
-import 'message_feedback_chips.dart';
 import 'streaming_markdown_widget.dart';
 import 'tool_call_summary_widget.dart';
 
@@ -18,9 +22,9 @@ import 'tool_call_summary_widget.dart';
 /// Replaces DashChat's message rendering with direct ChatMessage → Widget routing.
 /// No conversion layer needed.
 class ChatMessageBubble extends ConsumerWidget {
-  final ChatMessage message;
-  final ChatMessage? previousMessage;
-  final ChatMessage? nextMessage;
+  final ChatMessageViewModel viewModel; // Now takes a ViewModel
+  final ChatMessageViewModel? previousViewModel;
+  final ChatMessageViewModel? nextViewModel;
   final double maxWidth;
   final void Function(String quotedText)? onQuote;
   final VoidCallback? onToggleThinking;
@@ -30,9 +34,9 @@ class ChatMessageBubble extends ConsumerWidget {
 
   const ChatMessageBubble({
     super.key,
-    required this.message,
-    this.previousMessage,
-    this.nextMessage,
+    required this.viewModel,
+    this.previousViewModel,
+    this.nextViewModel,
     this.maxWidth = double.infinity,
     this.onQuote,
     this.onToggleThinking,
@@ -40,8 +44,8 @@ class ChatMessageBubble extends ConsumerWidget {
     this.onGenUiEvent,
   });
 
-  bool get _isUser => message.user.id == ChatUser.user.id;
-  bool get _isAgent => message.user.id == ChatUser.agent.id;
+  bool get _isUser => viewModel.user.id == ChatUser.user.id;
+  bool get _isAgent => viewModel.user.id == ChatUser.agent.id;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -49,7 +53,8 @@ class ChatMessageBubble extends ConsumerWidget {
     final colorScheme = theme.colorScheme;
 
     // Determine if we should show avatar (first message from this user in a group)
-    final showAvatar = previousMessage?.user.id != message.user.id;
+    // Check if previousViewModel is from the same user.
+    final showAvatar = previousViewModel?.user.id != viewModel.user.id;
 
     return Row(
       mainAxisAlignment: _isUser
@@ -61,7 +66,7 @@ class ChatMessageBubble extends ConsumerWidget {
         if (!_isUser && showAvatar)
           Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: ChatAvatar(user: message.user),
+            child: ChatAvatar(user: viewModel.user),
           )
         else if (!_isUser)
           const SizedBox(width: 40), // Spacer for alignment
@@ -80,19 +85,32 @@ class ChatMessageBubble extends ConsumerWidget {
   }
 
   Widget _buildContent(BuildContext context, ColorScheme colorScheme) {
-    // Route to appropriate builder based on message type
-    return switch (message.type) {
-      MessageType.text => _buildTextMessage(context, colorScheme),
-      MessageType.genUi => _buildGenUiMessage(context),
-      MessageType.error => _buildErrorMessage(context),
-      MessageType.loading => _buildLoadingMessage(context, colorScheme),
-      MessageType.toolCall => _buildToolCallMessage(context),
-      MessageType.toolCallGroup => _buildToolCallGroupMessage(context),
+    // Route to appropriate builder based on ViewModel type
+    return switch (viewModel) {
+      TextMessageViewModel vm => _buildTextMessage(context, colorScheme, vm),
+      GenUiViewModel vm => _buildGenUiMessage(context, vm),
+      ErrorMessageViewModel vm => _buildErrorMessage(context, vm),
+      LoadingMessageViewModel vm => _buildLoadingMessage(
+        context,
+        colorScheme,
+        vm,
+      ),
+      ToolCallViewModel vm => _buildToolCallMessage(context, vm),
+      ToolCallGroupViewModel vm => _buildToolCallGroupMessage(context, vm),
+      _ => _buildDefaultMessage(
+        context,
+        colorScheme,
+        viewModel,
+      ), // Handle unhandled types
     };
   }
 
   /// Build text message with optional thinking and tool calls.
-  Widget _buildTextMessage(BuildContext context, ColorScheme colorScheme) {
+  Widget _buildTextMessage(
+    BuildContext context,
+    ColorScheme colorScheme,
+    TextMessageViewModel vm,
+  ) {
     final bubbleColor = _isUser
         ? colorScheme.primaryContainer
         : colorScheme.surfaceContainerHighest;
@@ -112,68 +130,47 @@ class ChatMessageBubble extends ConsumerWidget {
         children: [
           // Thinking section (for agent messages)
           if (_isAgent &&
-              message.thinkingText != null &&
-              message.thinkingText!.isNotEmpty)
+              vm.thinkingText != null &&
+              vm.thinkingText!.isNotEmpty)
             CollapsibleThinkingWidget(
-              thinkingText: message.thinkingText!,
-              isStreaming: message.isThinkingStreaming,
-              isExpanded:
-                  message.isThinkingExpanded || message.isThinkingStreaming,
+              thinkingText: vm.thinkingText!,
+              isStreaming: vm.isThinkingStreaming,
+              isExpanded: vm.isThinkingExpanded || vm.isThinkingStreaming,
               onToggle: onToggleThinking ?? () {},
             ),
 
           // Main text content
           StreamingMarkdownWidget(
-            text: message.text ?? '',
-            messageId: message.id,
-            isStreaming: message.isStreaming,
+            text: vm.text,
+            messageId: vm.id,
+            isStreaming: vm.isStreaming,
             textStyle: TextStyle(color: textColor),
             onQuote: onQuote,
           ),
 
-          // Tool calls section (for agent messages)
-          if (_isAgent &&
-              message.toolCalls != null &&
-              message.toolCalls!.isNotEmpty)
-            ToolCallSummaryWidget(
-              toolCalls: message.toolCalls!,
-              isExpanded: message.isToolGroupExpanded,
-              onToggle: onToggleToolGroup ?? () {},
-            ),
-
           // Feedback chips and copy button (for finalized agent messages)
-          if (_isAgent && !message.isStreaming)
-            _MessageActionsRow(
-              messageId: message.id,
-              messageText: message.text ?? '',
-            ),
+          if (_isAgent && !vm.isStreaming)
+            _MessageActionsRow(messageId: vm.id, messageText: vm.text),
         ],
       ),
     );
   }
 
   /// Build GenUI widget message.
-  Widget _buildGenUiMessage(BuildContext context) {
-    if (message.genUiContent == null) {
-      return _buildErrorMessage(context);
-    }
-
+  Widget _buildGenUiMessage(BuildContext context, GenUiViewModel vm) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        GenUiMessageWidget(
-          content: message.genUiContent!,
-          onEvent: onGenUiEvent,
-        ),
+        GenUiMessageWidget(content: vm.content, onEvent: onGenUiEvent),
         // Add feedback for agent GenUI messages
         if (_isAgent)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: _MessageActionsRow(
-              messageId: message.id,
-              messageText: '[Widget: ${message.genUiContent!.widgetName}]',
-              genUiContent: message.genUiContent,
+              messageId: vm.id,
+              messageText: '[Widget: ${vm.content.widgetName}]',
+              genUiContent: vm.content,
             ),
           ),
       ],
@@ -181,20 +178,21 @@ class ChatMessageBubble extends ConsumerWidget {
   }
 
   /// Build error message.
-  Widget _buildErrorMessage(BuildContext context) {
-    if (message.errorInfo != null) {
-      return FriendlyErrorCard(
-        errorInfo: message.errorInfo!,
-        fallbackMessage: message.errorMessage,
-      );
-    }
-    return FriendlyErrorCard.fromMessage(
-      message.errorMessage ?? 'An error occurred',
+  Widget _buildErrorMessage(BuildContext context, ErrorMessageViewModel vm) {
+    return FriendlyErrorCard(
+      errorInfo:
+          vm.errorInfo ??
+          ChatErrorInfo.server(message: vm.message, details: vm.message),
+      fallbackMessage: vm.message,
     );
   }
 
   /// Build loading indicator.
-  Widget _buildLoadingMessage(BuildContext context, ColorScheme colorScheme) {
+  Widget _buildLoadingMessage(
+    BuildContext context,
+    ColorScheme colorScheme,
+    LoadingMessageViewModel vm,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -226,22 +224,41 @@ class ChatMessageBubble extends ConsumerWidget {
   }
 
   /// Build compact tool call indicator.
-  Widget _buildToolCallMessage(BuildContext context) {
+  Widget _buildToolCallMessage(BuildContext context, ToolCallViewModel vm) {
     return CompactToolCallIndicator(
-      toolName: message.toolCallName ?? 'Unknown tool',
-      status: message.toolCallStatus ?? 'executing',
+      toolName: vm.toolCallName,
+      status: vm.status,
     );
   }
 
   /// Build grouped tool call summary.
-  Widget _buildToolCallGroupMessage(BuildContext context) {
-    if (message.toolCalls == null || message.toolCalls!.isEmpty) {
-      return const SizedBox.shrink();
-    }
+  Widget _buildToolCallGroupMessage(
+    BuildContext context,
+    ToolCallGroupViewModel vm,
+  ) {
     return ToolCallSummaryWidget(
-      toolCalls: message.toolCalls!,
-      isExpanded: message.isToolGroupExpanded,
+      toolCalls: vm.toolCalls,
+      isExpanded: vm.isExpanded,
       onToggle: onToggleToolGroup ?? () {},
+    );
+  }
+
+  /// Default message builder for unhandled ViewModel types.
+  Widget _buildDefaultMessage(
+    BuildContext context,
+    ColorScheme colorScheme,
+    ChatMessageViewModel vm,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.errorContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        'Unhandled message type: ${vm.runtimeType}',
+        style: TextStyle(color: colorScheme.onErrorContainer),
+      ),
     );
   }
 }
@@ -265,7 +282,6 @@ class _MessageActionsRow extends ConsumerStatefulWidget {
 class _MessageActionsRowState extends ConsumerState<_MessageActionsRow> {
   bool _copied = false;
   bool _sentToCanvas = false;
-  final _contentService = CanvasContentService();
 
   Future<void> _copyToClipboard() async {
     await Clipboard.setData(ClipboardData(text: widget.messageText));
@@ -276,40 +292,50 @@ class _MessageActionsRowState extends ConsumerState<_MessageActionsRow> {
   }
 
   void _sendToCanvas() {
-    final canvasNotifier = ref.read(canvasProvider.notifier);
+    final useCase = ref.read(sendToCanvasUseCaseProvider);
+    final result = useCase.execute(
+      content: widget.messageText,
+      sourceMessageId: widget.messageId,
+      genUiContent: widget.genUiContent,
+    );
 
-    // For GenUI widgets, send the actual widget directly
-    if (widget.genUiContent != null) {
-      final genUi = widget.genUiContent!;
-      canvasNotifier.addItem(genUi.widgetName, genUi.data);
-    } else {
-      // For text messages, analyze and convert
-      if (widget.messageText.isEmpty) return;
-
-      final analysis = _contentService.analyze(
-        widget.messageText,
-        sourceMessageId: widget.messageId,
-      );
-      canvasNotifier.addItem(analysis.widgetName, analysis.data);
+    if (result is SendToCanvasSuccess) {
+      setState(() => _sentToCanvas = true);
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _sentToCanvas = false);
+      });
     }
+  }
 
-    // Show feedback via icon change
-    setState(() => _sentToCanvas = true);
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _sentToCanvas = false);
-    });
+  void _handleFeedback(FeedbackRating rating) {
+    final useCase = ref.read(sendFeedbackUseCaseProvider);
+    useCase.handleFeedbackTap(
+      context: context,
+      messageId: widget.messageId,
+      rating: rating,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final feedbackState = ref.watch(feedbackProvider);
+    final existingFeedback = feedbackState.feedback[widget.messageId];
+    final feedbackModel = FeedbackChipModel(
+      currentRating: existingFeedback?.rating,
+      comment: existingFeedback?.comment,
+    );
 
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          MessageFeedbackChips(messageId: widget.messageId),
+          FeedbackChip(
+            model: feedbackModel,
+            onThumbsUp: () => _handleFeedback(FeedbackRating.positive),
+            onThumbsDown: () => _handleFeedback(FeedbackRating.negative),
+          ),
           const Spacer(),
           // Send to canvas button
           Tooltip(

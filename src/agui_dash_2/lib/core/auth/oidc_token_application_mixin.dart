@@ -20,19 +20,28 @@ class SsoConfigNotSetException implements Exception {
 }
 
 /// Abstract interface for OIDC authentication.
+///
+/// All methods that interact with SSO config require a serverId parameter
+/// to support multi-server authentication without state pollution.
 abstract class OidcAuthInteractor {
   bool useAuth = false;
-  Future<OidcAuthTokenResponse> authorizeAndExchangeCode(SsoConfig config);
-  Future<OidcAuthTokenResponse?> refreshAccessToken(SsoConfig config);
+  Future<OidcAuthTokenResponse> authorizeAndExchangeCode(
+    String serverId,
+    SsoConfig config,
+  );
+  Future<OidcAuthTokenResponse?> refreshAccessToken(
+    String serverId,
+    SsoConfig config,
+  );
   Future<OidcAuthTokenResponse?> getTokenResponse();
   Future<String?> getRefreshToken();
-  Future<SsoConfig?> getSsoConfig();
-  Future<void> setSsoConfig(SsoConfig config);
-  Future<void> clearSsoConfig();
+  Future<SsoConfig?> getSsoConfig(String serverId);
+  Future<void> setSsoConfig(String serverId, SsoConfig config);
+  Future<void> clearSsoConfig(String serverId);
   bool isTokenExpiring(OidcAuthTokenResponse? tokenResponse);
-  Future<void> applyToRequest(http.BaseRequest request);
-  Future<void> applyToHeader(Map<String, String> headers);
-  Future<void> logout(SsoConfig config);
+  Future<void> applyToRequest(String serverId, http.BaseRequest request);
+  Future<void> applyToHeader(String serverId, Map<String, String> headers);
+  Future<void> logout(String serverId, SsoConfig config);
 }
 
 /// Base class with shared implementation for OIDC authentication.
@@ -73,14 +82,16 @@ abstract class OidcAuthInteractorBase implements OidcAuthInteractor {
   Future<String?> getRefreshToken() => tokenStorage.getOidcRefreshToken();
 
   @override
-  Future<SsoConfig?> getSsoConfig() => ssoStorage.getSsoConfig();
+  Future<SsoConfig?> getSsoConfig(String serverId) =>
+      ssoStorage.getSsoConfig(serverId);
 
   @override
-  Future<void> setSsoConfig(SsoConfig config) =>
-      ssoStorage.setSsoConfig(config);
+  Future<void> setSsoConfig(String serverId, SsoConfig config) =>
+      ssoStorage.setSsoConfig(serverId, config);
 
   @override
-  Future<void> clearSsoConfig() => ssoStorage.deleteSsoConfig();
+  Future<void> clearSsoConfig(String serverId) =>
+      ssoStorage.deleteSsoConfig(serverId);
 
   // =========================================================================
   // Token expiration check (shared implementation)
@@ -99,35 +110,38 @@ abstract class OidcAuthInteractorBase implements OidcAuthInteractor {
   // =========================================================================
 
   @override
-  Future<void> applyToRequest(http.BaseRequest request) async {
+  Future<void> applyToRequest(String serverId, http.BaseRequest request) async {
     if (!useAuth) {
       debugPrint('Request to apply token to request with disabled auth');
       return;
     }
 
     final headers = <String, String>{};
-    await _applyTokenToHeaders(headers);
+    await _applyTokenToHeaders(serverId, headers);
     request.headers.addAll(headers);
   }
 
   @override
-  Future<void> applyToHeader(Map<String, String> headers) async {
+  Future<void> applyToHeader(String serverId, Map<String, String> headers) async {
     if (!useAuth) {
       debugPrint('Request to apply token to header with disabled auth');
       return;
     }
 
-    await _applyTokenToHeaders(headers);
+    await _applyTokenToHeaders(serverId, headers);
   }
 
   /// Internal implementation of token application logic.
-  Future<void> _applyTokenToHeaders(Map<String, String> headers) async {
+  Future<void> _applyTokenToHeaders(
+    String serverId,
+    Map<String, String> headers,
+  ) async {
     final currentToken = await getTokenResponse();
     final expiring = isTokenExpiring(currentToken);
 
     if (expiring) {
       debugPrint('Token expired or expiring.');
-      final token = await _refreshOrReauth();
+      final token = await _refreshOrReauth(serverId);
       headers['authorization'] = 'Bearer $token';
     } else {
       debugPrint('Token not expired.');
@@ -139,11 +153,11 @@ abstract class OidcAuthInteractorBase implements OidcAuthInteractor {
   }
 
   /// Attempt to refresh the token, falling back to re-authorization if needed.
-  Future<String> _refreshOrReauth() async {
-    final ssoConfig = await getSsoConfig();
+  Future<String> _refreshOrReauth(String serverId) async {
+    final ssoConfig = await getSsoConfig(serverId);
 
     if (ssoConfig == null) {
-      debugPrint('SSO config has not been set.');
+      debugPrint('SSO config has not been set for server $serverId.');
       throw SsoConfigNotSetException();
     }
 
@@ -151,7 +165,7 @@ abstract class OidcAuthInteractorBase implements OidcAuthInteractor {
     OidcAuthTokenResponse? refreshResponse;
     try {
       debugPrint('Attempting token refresh...');
-      refreshResponse = await refreshAccessToken(ssoConfig);
+      refreshResponse = await refreshAccessToken(serverId, ssoConfig);
     } catch (e) {
       debugPrint('Token refresh failed: $e');
       refreshResponse = null;
@@ -167,7 +181,7 @@ abstract class OidcAuthInteractorBase implements OidcAuthInteractor {
 
     // Refresh failed, need to re-authenticate
     debugPrint('Refresh not successful, re-authenticating...');
-    final newTokenResponse = await authorizeAndExchangeCode(ssoConfig);
+    final newTokenResponse = await authorizeAndExchangeCode(serverId, ssoConfig);
     debugPrint(
       'Signed in again. New expiration: ${newTokenResponse.accessTokenExpiration}',
     );
@@ -179,11 +193,17 @@ abstract class OidcAuthInteractorBase implements OidcAuthInteractor {
   // =========================================================================
 
   @override
-  Future<OidcAuthTokenResponse> authorizeAndExchangeCode(SsoConfig config);
+  Future<OidcAuthTokenResponse> authorizeAndExchangeCode(
+    String serverId,
+    SsoConfig config,
+  );
 
   @override
-  Future<OidcAuthTokenResponse?> refreshAccessToken(SsoConfig config);
+  Future<OidcAuthTokenResponse?> refreshAccessToken(
+    String serverId,
+    SsoConfig config,
+  );
 
   @override
-  Future<void> logout(SsoConfig config);
+  Future<void> logout(String serverId, SsoConfig config);
 }

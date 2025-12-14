@@ -166,6 +166,66 @@ class SessionDisposedEvent extends ConnectionEvent {
   String toString() => 'SessionDisposed(room: $roomId, thread: $threadId)';
 }
 
+// =============================================================================
+// TOOL EXECUTION EVENTS
+// =============================================================================
+
+/// A tool started executing.
+class ToolExecutionStartedEvent extends ConnectionEvent {
+  final String toolCallId;
+  final String toolName;
+  final Map<String, dynamic>? args;
+
+  ToolExecutionStartedEvent({
+    super.serverId,
+    required super.roomId,
+    required this.toolCallId,
+    required this.toolName,
+    this.args,
+    super.timestamp,
+  });
+
+  @override
+  String toString() =>
+      'ToolExecutionStarted(server: $serverId, room: $roomId, tool: $toolName, callId: $toolCallId)';
+}
+
+/// A tool completed execution successfully.
+class ToolExecutionCompletedEvent extends ConnectionEvent {
+  final String toolCallId;
+  final String? result;
+
+  ToolExecutionCompletedEvent({
+    super.serverId,
+    required super.roomId,
+    required this.toolCallId,
+    this.result,
+    super.timestamp,
+  });
+
+  @override
+  String toString() =>
+      'ToolExecutionCompleted(server: $serverId, room: $roomId, callId: $toolCallId)';
+}
+
+/// A tool execution failed with an error.
+class ToolExecutionErrorEvent extends ConnectionEvent {
+  final String toolCallId;
+  final String errorMessage;
+
+  ToolExecutionErrorEvent({
+    super.serverId,
+    required super.roomId,
+    required this.toolCallId,
+    required this.errorMessage,
+    super.timestamp,
+  });
+
+  @override
+  String toString() =>
+      'ToolExecutionError(server: $serverId, room: $roomId, callId: $toolCallId, error: $errorMessage)';
+}
+
 /// State of a session.
 enum SessionState {
   /// Session is active and processing or ready.
@@ -176,6 +236,9 @@ enum SessionState {
 
   /// Session is backgrounded (switched away but preserved).
   backgrounded,
+
+  /// Session is suspended (hibernated, resources released).
+  suspended,
 
   /// Session is disposed and cannot be used.
   disposed,

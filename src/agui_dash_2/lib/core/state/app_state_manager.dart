@@ -1,5 +1,6 @@
 import 'package:rxdart/rxdart.dart';
 
+import '../models/endpoint_models.dart';
 import '../models/server_models.dart';
 import '../services/auth_manager.dart';
 import '../services/server_registry.dart';
@@ -92,13 +93,18 @@ class AppStateManager {
 
   /// Set server (from setup screen).
   /// Probes server and transitions to appropriate state.
-  Future<void> setServer(ServerInfo serverInfo, {String? displayName}) async {
+  Future<void> setServer(
+    ServerInfo serverInfo, {
+    String? displayName,
+    EndpointConfiguration? config,
+  }) async {
     DebugLog.service('AppStateManager: Setting server ${serverInfo.url}');
 
     try {
       final server = await _serverRegistry.saveServer(
         serverInfo,
         displayName: displayName,
+        config: config,
       );
       DebugLog.service(
         'AppStateManager: Saved server ${server.url} with id=${server.id}',
@@ -185,13 +191,11 @@ class AppStateManager {
     ServerInfo serverInfo, {
     String? displayName,
   }) async {
-    final current = currentState;
+    // Note: We do NOT clear tokens here anymore.
+    // Switching servers should preserve session state for the previous server
+    // so we can switch back without re-login.
+    // Explicit logout is required to clear tokens.
     DebugLog.service('AppStateManager: Switching server to ${serverInfo.url}');
-
-    // Clear auth for previous server if we have one
-    if (current.server != null) {
-      await _authManager.clearTokens(current.server!.id);
-    }
 
     await setServer(serverInfo, displayName: displayName);
   }

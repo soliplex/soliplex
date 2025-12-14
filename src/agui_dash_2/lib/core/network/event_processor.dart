@@ -300,7 +300,8 @@ class EventProcessor {
       thinkingBufferUpdate: ThinkingBufferState.empty(),
       contextUpdate: ContextUpdate('runStarted', summary: event.runId),
       activityUpdate: const ActivityUpdate(true),
-      clearDeduplication: true, // Clear tool call/notification dedup state for new run
+      clearDeduplication:
+          true, // Clear tool call/notification dedup state for new run
     );
   }
 

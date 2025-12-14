@@ -1,5 +1,11 @@
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
 
+import 'package:agui_dash_2/core/protocol/chat_session.dart';
+import 'package:agui_dash_2/core/protocol/completions_chat_session.dart';
+import 'package:agui_dash_2/core/protocol/completions_client.dart';
+import '../models/endpoint_models.dart';
+import '../services/local_tools_service.dart';
+import '../state/app_state.dart';
 import '../utils/debug_log.dart';
 import '../utils/url_builder.dart';
 import 'connection_events.dart' show SessionState;
@@ -35,8 +41,17 @@ class ServerConnectionState {
   /// URL builder for this server.
   final UrlBuilder urlBuilder;
 
-  /// Room sessions for this server.
-  final Map<String, RoomSession> sessions = {};
+  /// Local tools service for the session.
+  final LocalToolsService? localToolsService;
+
+  /// Endpoint configuration (defines type and settings).
+  final EndpointConfiguration? config;
+
+  /// Stream of app state changes (for auth awareness).
+  final Stream<AppState>? appStateStream;
+
+  /// Room sessions for this server (polymorphic).
+  final Map<String, ChatSession> sessions = {};
 
   /// Last activity timestamp for timeout tracking.
   DateTime lastActivity;
@@ -54,6 +69,9 @@ class ServerConnectionState {
     required this.headers,
     required NetworkTransportLayer transportLayer,
     required this.transport,
+    this.localToolsService,
+    this.config,
+    this.appStateStream,
   }) : urlBuilder = UrlBuilder(baseUrl),
        _transportLayer = transportLayer,
        lastActivity = DateTime.now() {
@@ -63,9 +81,6 @@ class ServerConnectionState {
   }
 
   /// Creates a new server connection state.
-  ///
-  /// [headerRefresher] is called on 401 to refresh auth headers.
-  /// [inspector] is optional network inspector for traffic capture.
   factory ServerConnectionState({
     required String serverId,
     required String baseUrl,
@@ -74,6 +89,9 @@ class ServerConnectionState {
     NetworkTransportLayer? transportLayer,
     Future<Map<String, String>> Function()? headerRefresher,
     NetworkInspector? inspector,
+    LocalToolsService? localToolsService,
+    EndpointConfiguration? config,
+    Stream<AppState>? appStateStream,
   }) {
     // Create or use provided transport layer
     final layer =
@@ -99,6 +117,9 @@ class ServerConnectionState {
       headers: headers,
       transportLayer: layer,
       transport: httpTransport,
+      localToolsService: localToolsService,
+      config: config,
+      appStateStream: appStateStream,
     );
   }
 
@@ -108,9 +129,6 @@ class ServerConnectionState {
   NetworkTransportLayer get transportLayer => _transportLayer;
 
   /// AG-UI client for SSE streaming.
-  ///
-  /// Obtained from the transport layer for unified network management.
-  /// Prefer using [transportLayer] directly for new code.
   ag_ui.AgUiClient get agUiClient => _transportLayer.agUiClient;
 
   /// Whether this state has been disposed.
@@ -121,7 +139,10 @@ class ServerConnectionState {
 
   /// Number of backgrounded sessions.
   int get backgroundedSessionCount =>
-      sessions.values.where((s) => s.state == SessionState.backgrounded).length;
+      sessions.values.where((s) {
+        if (s is RoomSession) return s.state == SessionState.backgrounded;
+        return false; // Other session types don't support backgrounding logic yet
+      }).length;
 
   /// Updates the last activity timestamp.
   void touch() {
@@ -131,7 +152,7 @@ class ServerConnectionState {
   /// Gets or creates a session for the given room.
   ///
   /// Returns an existing session if one exists, otherwise creates a new one.
-  RoomSession getOrCreateSession(String roomId) {
+  ChatSession getOrCreateSession(String roomId) {
     if (_disposed) {
       throw StateError(
         'Cannot get session from disposed ServerConnectionState',
@@ -145,20 +166,39 @@ class ServerConnectionState {
       return session;
     }
 
-    session = RoomSession(
-      roomId: roomId,
-      serverId: serverId,
-      baseUrl: baseUrl,
-      transport: transport,
-    );
+    if (config is CompletionsEndpoint) {
+      final compConfig = config as CompletionsEndpoint;
+      // Extract API key from headers (injected by SessionLifecycleController)
+      final apiKey = headers?['Authorization']?.replaceFirst('Bearer ', '') ?? '';
+      
+      session = CompletionsChatSession(
+        model: compConfig.model,
+        client: CompletionsClient(
+          baseUrl: baseUrl,
+          apiKey: apiKey,
+          transportLayer: _transportLayer, // Pass the transport layer
+        ),
+      );
+      DebugLog.service('ServerConnectionState: Created completions session for room $roomId');
+    } else {
+      // Default to AG-UI RoomSession
+      session = RoomSession(
+        roomId: roomId,
+        serverId: serverId,
+        baseUrl: baseUrl,
+        transport: transport,
+        localToolsService: localToolsService,
+        appStateStream: appStateStream,
+      );
+      DebugLog.service('ServerConnectionState: Created RoomSession for room $roomId');
+    }
+    
     sessions[roomId] = session;
-
-    DebugLog.service('ServerConnectionState: Created session for room $roomId');
     return session;
   }
 
   /// Gets an existing session, or null if not found.
-  RoomSession? getSession(String roomId) {
+  ChatSession? getSession(String roomId) {
     touch();
     return sessions[roomId];
   }
@@ -181,6 +221,7 @@ class ServerConnectionState {
   /// Gets backgrounded sessions sorted by last activity (oldest first).
   List<RoomSession> getBackgroundedSessionsByAge() {
     final backgrounded = sessions.values
+        .whereType<RoomSession>()
         .where((s) => s.state == SessionState.backgrounded)
         .toList();
     backgrounded.sort((a, b) {

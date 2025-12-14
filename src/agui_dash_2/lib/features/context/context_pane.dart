@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/network/connection_manager.dart';
+import '../../core/network/server_room_key.dart';
 import '../../core/providers/panel_providers.dart';
 import '../../core/services/context_pane_service.dart';
 
@@ -11,11 +13,35 @@ import '../../core/services/context_pane_service.dart';
 /// - Current state snapshot
 /// - Tool results
 class ContextPane extends ConsumerWidget {
-  const ContextPane({super.key});
+  final String? roomId;
+
+  const ContextPane({super.key, this.roomId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final contextState = ref.watch(contextPaneProvider);
+    if (roomId == null) {
+      return const Center(
+        child: Text(
+          'Select a room to view activity',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    final connectionManager = ref.watch(connectionManagerProvider);
+    final serverId = connectionManager.activeServerId;
+
+    if (serverId == null) {
+      return const Center(
+        child: Text(
+          'Not connected',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    final key = ServerRoomKey(serverId: serverId, roomId: roomId!);
+    final contextState = ref.watch(roomContextPaneProvider(key));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -52,7 +78,7 @@ class ContextPane extends ConsumerWidget {
                 tooltip: 'Clear activity',
                 visualDensity: VisualDensity.compact,
                 onPressed: () {
-                  ref.read(contextPaneProvider.notifier).clear();
+                  ref.read(roomContextPaneProvider(key).notifier).clear();
                 },
               ),
             ],

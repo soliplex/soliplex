@@ -58,7 +58,9 @@ void main() {
       var threadCallCount = 0;
 
       // Track POST calls - distinguish thread creation from createRun
-      when(() => mockTransport.post(any(), any())).thenAnswer((invocation) async {
+      when(() => mockTransport.post(any(), any())).thenAnswer((
+        invocation,
+      ) async {
         final uri = invocation.positionalArguments[0] as Uri;
         final path = uri.path;
 
@@ -115,7 +117,9 @@ void main() {
       final mockTransport = MockHttpTransport();
       int runCount = 0;
 
-      when(() => mockTransport.post(any(), any())).thenAnswer((invocation) async {
+      when(() => mockTransport.post(any(), any())).thenAnswer((
+        invocation,
+      ) async {
         final uri = invocation.positionalArguments[0] as Uri;
 
         if (uri.path.contains('/threads')) {
@@ -156,7 +160,9 @@ void main() {
       final mockTransport = MockHttpTransport();
       int threadCallCount = 0;
 
-      when(() => mockTransport.post(any(), any())).thenAnswer((invocation) async {
+      when(() => mockTransport.post(any(), any())).thenAnswer((
+        invocation,
+      ) async {
         threadCallCount++;
         return {
           'thread_id': 'test-thread',

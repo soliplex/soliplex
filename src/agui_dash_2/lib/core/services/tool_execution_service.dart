@@ -1,4 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../providers/server_scoped_notifier.dart';
+
+/// Default timeout for tool executions (60 seconds).
+///
+/// If a tool doesn't complete within this time, it's automatically cleared
+/// to prevent stale indicators from network drops or server crashes.
+const _defaultToolTimeout = Duration(seconds: 60);
 
 /// Represents an actively executing tool call for UI display.
 class ActiveToolExecution {
@@ -43,18 +53,33 @@ class ToolExecutionState {
   }
 }
 
-/// StateNotifier for managing tool execution state.
+/// ServerScopedNotifier for managing tool execution state.
 ///
 /// Tracks which tools are currently executing for UI notifications.
-class ToolExecutionNotifier extends StateNotifier<ToolExecutionState> {
-  ToolExecutionNotifier() : super(const ToolExecutionState());
+/// State is scoped per server+room to prevent cross-contamination.
+class ToolExecutionNotifier extends ServerScopedNotifier<ToolExecutionState> {
+  /// The room ID this notifier tracks (for per-room isolation).
+  final String? roomId;
+
+  /// Timeout timers for auto-clearing stale executions.
+  final Map<String, Timer> _timeoutTimers = {};
+
+  ToolExecutionNotifier({
+    String? serverId,
+    this.roomId,
+  }) : super(const ToolExecutionState(), serverId: serverId);
 
   /// Mark a tool as starting execution.
+  ///
+  /// Schedules a timeout timer to auto-clear if completion never arrives.
   void startExecution(
     String toolCallId,
     String toolName, {
     Map<String, dynamic>? args,
   }) {
+    // Cancel any existing timer for this tool call
+    _cancelTimer(toolCallId);
+
     state = state.copyWith(
       activeExecutions: {
         ...state.activeExecutions,
@@ -66,10 +91,15 @@ class ToolExecutionNotifier extends StateNotifier<ToolExecutionState> {
         ),
       },
     );
+
+    // Schedule timeout to auto-clear stale execution
+    _scheduleTimeout(toolCallId);
   }
 
-  /// Mark a tool as finished executing.
+  /// Mark a tool as finished executing (success or error).
   void endExecution(String toolCallId) {
+    _cancelTimer(toolCallId);
+
     final updated = Map<String, ActiveToolExecution>.from(
       state.activeExecutions,
     );
@@ -79,6 +109,7 @@ class ToolExecutionNotifier extends StateNotifier<ToolExecutionState> {
 
   /// Clear all active executions.
   void clearAll() {
+    _cancelAllTimers();
     state = const ToolExecutionState();
   }
 
@@ -91,9 +122,43 @@ class ToolExecutionNotifier extends StateNotifier<ToolExecutionState> {
   bool isExecuting(String toolCallId) {
     return state.activeExecutions.containsKey(toolCallId);
   }
+
+  /// Schedule a timeout timer for a tool call.
+  ///
+  /// Auto-clears the execution if it hasn't completed within [_defaultToolTimeout].
+  void _scheduleTimeout(String toolCallId) {
+    _timeoutTimers[toolCallId] = Timer(_defaultToolTimeout, () {
+      if (state.activeExecutions.containsKey(toolCallId)) {
+        endExecution(toolCallId);
+      }
+    });
+  }
+
+  /// Cancel the timeout timer for a specific tool call.
+  void _cancelTimer(String toolCallId) {
+    _timeoutTimers[toolCallId]?.cancel();
+    _timeoutTimers.remove(toolCallId);
+  }
+
+  /// Cancel all pending timeout timers.
+  void _cancelAllTimers() {
+    for (final timer in _timeoutTimers.values) {
+      timer.cancel();
+    }
+    _timeoutTimers.clear();
+  }
+
+  @override
+  void dispose() {
+    _cancelAllTimers();
+    super.dispose();
+  }
 }
 
-/// Riverpod provider for tool execution state.
+/// Legacy global provider for tool execution state.
+///
+/// DEPRECATED: Prefer [roomToolExecutionProvider] for per-room state.
+/// This provider exists for backwards compatibility during migration.
 final toolExecutionProvider =
     StateNotifierProvider<ToolExecutionNotifier, ToolExecutionState>((ref) {
       return ToolExecutionNotifier();

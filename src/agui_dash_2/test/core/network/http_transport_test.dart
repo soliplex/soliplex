@@ -66,7 +66,10 @@ void main() {
           transportLayer: layer,
         );
 
-        expect(transport.defaultHeaders, containsPair('Authorization', 'Bearer token'));
+        expect(
+          transport.defaultHeaders,
+          containsPair('Authorization', 'Bearer token'),
+        );
 
         layer.close();
       });
@@ -140,8 +143,13 @@ void main() {
 
         expect(
           () => transport.post(uri, {}),
-          throwsA(isA<HttpTransportException>()
-              .having((e) => e.statusCode, 'statusCode', 404)),
+          throwsA(
+            isA<HttpTransportException>().having(
+              (e) => e.statusCode,
+              'statusCode',
+              404,
+            ),
+          ),
         );
 
         layer.close();
@@ -166,8 +174,13 @@ void main() {
 
         expect(
           () => transport.post(uri, {}),
-          throwsA(isA<HttpTransportException>()
-              .having((e) => e.statusCode, 'statusCode', 500)),
+          throwsA(
+            isA<HttpTransportException>().having(
+              (e) => e.statusCode,
+              'statusCode',
+              500,
+            ),
+          ),
         );
 
         layer.close();

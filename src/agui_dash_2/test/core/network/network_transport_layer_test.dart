@@ -10,8 +10,8 @@ import 'package:mocktail/mocktail.dart';
 class MockAgUiClient extends Mock implements ag_ui.AgUiClient {}
 
 /// Fake SimpleRunAgentInput for registerFallbackValue.
-class FakeSimpleRunAgentInput extends Fake implements ag_ui.SimpleRunAgentInput {
-}
+class FakeSimpleRunAgentInput extends Fake
+    implements ag_ui.SimpleRunAgentInput {}
 
 void main() {
   setUpAll(() {
@@ -218,10 +218,7 @@ void main() {
             messageId: 'm1',
             role: ag_ui.TextMessageRole.assistant,
           ),
-          const ag_ui.TextMessageContentEvent(
-            messageId: 'm1',
-            delta: 'Hello',
-          ),
+          const ag_ui.TextMessageContentEvent(messageId: 'm1', delta: 'Hello'),
           const ag_ui.TextMessageEndEvent(messageId: 'm1'),
           const ag_ui.RunFinishedEvent(threadId: 't1', runId: 'r1'),
         ];
@@ -237,7 +234,9 @@ void main() {
         );
 
         const input = ag_ui.SimpleRunAgentInput(threadId: 't1', runId: 'r1');
-        final receivedEvents = await layer.runAgent('api/v1/agent', input).toList();
+        final receivedEvents = await layer
+            .runAgent('api/v1/agent', input)
+            .toList();
 
         expect(receivedEvents.length, equals(5));
         expect(receivedEvents[0], isA<ag_ui.RunStartedEvent>());
@@ -332,10 +331,8 @@ void main() {
       test('records event count in inspector response', () async {
         final events = List.generate(
           10,
-          (i) => ag_ui.TextMessageContentEvent(
-            messageId: 'm1',
-            delta: 'chunk $i',
-          ),
+          (i) =>
+              ag_ui.TextMessageContentEvent(messageId: 'm1', delta: 'chunk $i'),
         );
 
         when(
@@ -360,9 +357,7 @@ void main() {
       test('records error in inspector on stream failure', () async {
         when(
           () => mockAgUiClient.runAgent(any(), any()),
-        ).thenAnswer(
-          (_) => Stream.error(Exception('SSE connection failed')),
-        );
+        ).thenAnswer((_) => Stream.error(Exception('SSE connection failed')));
 
         final layer = NetworkTransportLayer(
           baseUrl: 'http://localhost:8080',
@@ -401,7 +396,10 @@ void main() {
         await layer.runAgent('/agent', input).toList();
 
         final entry = inspector.entries.first;
-        expect(entry.requestHeaders['Authorization'], equals('Bearer test-token'));
+        expect(
+          entry.requestHeaders['Authorization'],
+          equals('Bearer test-token'),
+        );
 
         layer.close();
       });

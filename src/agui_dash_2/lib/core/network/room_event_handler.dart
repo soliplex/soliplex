@@ -43,10 +43,19 @@ abstract class RoomEventHandler {
   /// [isActive] indicates if the agent is currently processing.
   /// [eventType] is optional description of current activity.
   /// [toolName] is optional name of tool being executed.
-  void onActivityUpdate(
-    bool isActive, {
-    String? eventType,
-    String? toolName,
+  void onActivityUpdate(bool isActive, {String? eventType, String? toolName});
+
+  /// Called when a tool execution starts, completes, or fails.
+  ///
+  /// [toolCallId] is the unique identifier for this tool call.
+  /// [toolName] is the name of the tool being executed.
+  /// [status] is one of: 'executing', 'completed', 'error'.
+  /// [errorMessage] is provided when status is 'error'.
+  void onToolExecution(
+    String toolCallId,
+    String toolName,
+    String status, {
+    String? errorMessage,
   });
 }
 
@@ -73,10 +82,14 @@ class NoOpRoomEventHandler implements RoomEventHandler {
   }) {}
 
   @override
-  void onActivityUpdate(
-    bool isActive, {
-    String? eventType,
-    String? toolName,
+  void onActivityUpdate(bool isActive, {String? eventType, String? toolName}) {}
+
+  @override
+  void onToolExecution(
+    String toolCallId,
+    String toolName,
+    String status, {
+    String? errorMessage,
   }) {}
 }
 
@@ -92,6 +105,9 @@ class RecordingRoomEventHandler implements RoomEventHandler {
 
   /// All activity update calls recorded.
   final List<ActivityUpdateRecord> activityUpdates = [];
+
+  /// All tool execution calls recorded.
+  final List<ToolExecutionRecord> toolExecutions = [];
 
   @override
   void onCanvasUpdate(
@@ -112,12 +128,20 @@ class RecordingRoomEventHandler implements RoomEventHandler {
   }
 
   @override
-  void onActivityUpdate(
-    bool isActive, {
-    String? eventType,
-    String? toolName,
-  }) {
+  void onActivityUpdate(bool isActive, {String? eventType, String? toolName}) {
     activityUpdates.add(ActivityUpdateRecord(isActive, eventType, toolName));
+  }
+
+  @override
+  void onToolExecution(
+    String toolCallId,
+    String toolName,
+    String status, {
+    String? errorMessage,
+  }) {
+    toolExecutions.add(
+      ToolExecutionRecord(toolCallId, toolName, status, errorMessage),
+    );
   }
 
   /// Clear all recorded events.
@@ -125,6 +149,7 @@ class RecordingRoomEventHandler implements RoomEventHandler {
     canvasUpdates.clear();
     contextUpdates.clear();
     activityUpdates.clear();
+    toolExecutions.clear();
   }
 }
 
@@ -153,4 +178,19 @@ class ActivityUpdateRecord {
   final String? toolName;
 
   ActivityUpdateRecord(this.isActive, this.eventType, this.toolName);
+}
+
+/// Record of a tool execution call.
+class ToolExecutionRecord {
+  final String toolCallId;
+  final String toolName;
+  final String status;
+  final String? errorMessage;
+
+  ToolExecutionRecord(
+    this.toolCallId,
+    this.toolName,
+    this.status,
+    this.errorMessage,
+  );
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -42,6 +43,10 @@ class AuthManager {
   final SecureTokenStorage _tokenStorage;
   final http.Client _httpClient;
   final NetworkInspector? _inspector;
+
+  /// Per-server refresh lock to prevent concurrent token refreshes.
+  /// Key is serverId, value is the in-flight refresh Future.
+  final Map<String, Future<bool>> _refreshLocks = {};
 
   AuthManager({
     required SecureStorageService storage,
@@ -91,7 +96,7 @@ class AuthManager {
       // Clear any existing OIDC tokens and config to avoid stale state
       DebugLog.service('AuthManager: Clearing existing OIDC tokens and config');
       await _tokenStorage.deleteOidcAuthTokenResponse();
-      await _oidcInteractor.clearSsoConfig();
+      await _oidcInteractor.clearSsoConfig(server.id);
 
       // Build SsoConfig from OIDCAuthSystem
       final issuerUrl = provider.serverUrl;
@@ -116,8 +121,10 @@ class AuthManager {
       // Use flutter_appauth for native OIDC flow
       DebugLog.service('AuthManager: Calling authorizeAndExchangeCode...');
       final tokenResponse = await _oidcInteractor.authorizeAndExchangeCode(
+        server.id,
         ssoConfig,
       );
+
       DebugLog.service(
         'AuthManager: Got token response, expiry=${tokenResponse.accessTokenExpiration}',
       );
@@ -149,9 +156,9 @@ class AuthManager {
   Future<void> logout(ServerConnection server) async {
     try {
       // Try to logout via OIDC provider
-      final ssoConfig = await _oidcInteractor.getSsoConfig();
+      final ssoConfig = await _oidcInteractor.getSsoConfig(server.id);
       if (ssoConfig != null) {
-        await _oidcInteractor.logout(ssoConfig);
+        await _oidcInteractor.logout(server.id, ssoConfig);
       }
     } catch (e) {
       DebugLog.error('AuthManager: OIDC logout failed: $e');
@@ -246,16 +253,38 @@ class AuthManager {
   }
 
   Future<bool> _tryRefreshToken(String serverId) async {
+    DebugLog.service('AuthManager: Attempting token refresh for server $serverId');
+
+    // If refresh already in progress for this server, wait for it
+    if (_refreshLocks.containsKey(serverId)) {
+      DebugLog.service('AuthManager: Refresh already in progress for $serverId, waiting...');
+      try {
+        await _refreshLocks[serverId];
+      } catch (_) {
+        // Previous refresh failed, check if token exists anyway
+      }
+      return (await _storage.getAccessToken(serverId)) != null;
+    }
+
+    // Create lock for this server
+    final completer = Completer<bool>();
+    _refreshLocks[serverId] = completer.future;
+
     try {
-      final ssoConfig = await _oidcInteractor.getSsoConfig();
+      final ssoConfig = await _oidcInteractor.getSsoConfig(serverId);
       if (ssoConfig == null) {
         DebugLog.warn('AuthManager: No SSO config found for token refresh');
+        completer.complete(false);
         return false;
       }
 
-      final tokenResponse = await _oidcInteractor.refreshAccessToken(ssoConfig);
+      final tokenResponse = await _oidcInteractor.refreshAccessToken(
+        serverId,
+        ssoConfig,
+      );
       if (tokenResponse == null) {
         DebugLog.warn('AuthManager: Token refresh returned null');
+        completer.complete(false);
         return false;
       }
 
@@ -268,10 +297,14 @@ class AuthManager {
       );
 
       DebugLog.service('AuthManager: Token refreshed successfully');
+      completer.complete(true);
       return true;
     } catch (e) {
       DebugLog.error('AuthManager: Token refresh failed: $e');
+      completer.complete(false);
       return false;
+    } finally {
+      _refreshLocks.remove(serverId);
     }
   }
 

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
+import '../models/endpoint_models.dart';
 import '../models/server_models.dart';
 import '../network/network_inspector.dart';
 import '../utils/debug_log.dart';
@@ -135,7 +136,10 @@ class ServerRegistry {
     } on TimeoutException {
       // Record error for Network Inspector
       if (requestId != null) {
-        _inspector?.recordError(requestId: requestId, error: 'Connection timed out');
+        _inspector?.recordError(
+          requestId: requestId,
+          error: 'Connection timed out',
+        );
       }
       return ServerInfo.unreachable(normalizedUrl, 'Connection timed out');
     } catch (e) {
@@ -228,6 +232,7 @@ class ServerRegistry {
   Future<ServerConnection> saveServer(
     ServerInfo serverInfo, {
     String? displayName,
+    EndpointConfiguration? config,
   }) async {
     if (!serverInfo.isReachable) {
       throw StateError('Cannot save unreachable server');
@@ -238,18 +243,21 @@ class ServerRegistry {
       (s) => s.url == serverInfo.url,
       orElse: () => ServerConnection(
         id: const Uuid().v4(),
-        url: serverInfo.url,
-        displayName: displayName,
-        requiresAuth: serverInfo.requiresAuth,
         lastConnected: DateTime.now(),
+        config: config ?? AgUiEndpoint(
+          url: serverInfo.url,
+          label: displayName ?? Uri.parse(serverInfo.url).host,
+          requiresAuth: serverInfo.requiresAuth,
+        ),
       ),
     );
 
-    // Update last connected time
+    // Update last connected time and config
     connection = connection.copyWith(
       lastConnected: DateTime.now(),
       displayName: displayName ?? connection.displayName,
       requiresAuth: serverInfo.requiresAuth,
+      config: config, // Update config if provided
     );
 
     // Update history

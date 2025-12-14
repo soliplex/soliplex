@@ -14,7 +14,9 @@ import '../context/context_pane.dart';
 /// Middle: Chat conversation
 /// Right: Context pane showing state and tool results
 class ThreeColumnLayout extends ConsumerWidget {
-  const ThreeColumnLayout({super.key});
+  final String? roomId;
+
+  const ThreeColumnLayout({super.key, this.roomId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -25,19 +27,23 @@ class ThreeColumnLayout extends ConsumerWidget {
           width: 250,
           child: Container(
             color: Theme.of(context).colorScheme.surfaceContainerLow,
-            child: const _ThreadHistoryPane(),
+            child: _ThreadHistoryPane(roomId: roomId),
           ),
         ),
         const VerticalDivider(width: 1),
         // Chat (middle column - flexible) - ClipRect prevents overflow during scroll
-        const Expanded(child: ClipRect(child: ChatContent())),
+        Expanded(
+          child: ClipRect(
+            child: ChatContent(roomId: roomId),
+          ),
+        ),
         const VerticalDivider(width: 1),
         // Context pane (right column)
         SizedBox(
           width: 300,
           child: Container(
             color: Theme.of(context).colorScheme.surfaceContainerLow,
-            child: const ContextPane(),
+            child: ContextPane(roomId: roomId),
           ),
         ),
       ],
@@ -47,7 +53,9 @@ class ThreeColumnLayout extends ConsumerWidget {
 
 /// Thread history pane that fetches and displays threads from the API.
 class _ThreadHistoryPane extends ConsumerStatefulWidget {
-  const _ThreadHistoryPane();
+  final String? roomId;
+
+  const _ThreadHistoryPane({this.roomId});
 
   @override
   ConsumerState<_ThreadHistoryPane> createState() => _ThreadHistoryPaneState();
@@ -63,10 +71,18 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
     });
   }
 
+  @override
+  void didUpdateWidget(_ThreadHistoryPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.roomId != widget.roomId) {
+      _fetchThreads();
+    }
+  }
+
   void _fetchThreads() {
     final connectionManager = ref.read(connectionManagerProvider);
     final serverId = connectionManager.activeServerId;
-    final roomId = ref.read(selectedRoomProvider);
+    final roomId = widget.roomId;
     if (serverId != null && roomId != null) {
       final params = (serverId: serverId, roomId: roomId);
       ref.read(threadHistoryProvider(params).notifier).fetchThreads();
@@ -76,7 +92,7 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
   @override
   Widget build(BuildContext context) {
     final server = ref.watch(currentServerFromAppStateProvider);
-    final roomId = ref.watch(selectedRoomProvider);
+    final roomId = widget.roomId;
     final connectionManager = ref.watch(connectionManagerProvider);
 
     // If no server or room, show placeholder
@@ -87,7 +103,7 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
     // Get messages from ConnectionManager
     final messages = connectionManager.getMessages(roomId);
     final session = connectionManager.getSession(roomId);
-    final currentThreadId = session.threadId;
+    final currentThreadId = session.connectionInfo.threadId;
 
     // Use ConnectionManager's server ID (URL-derived, not UUID)
     final serverId = connectionManager.activeServerId;
@@ -256,7 +272,7 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
   ) {
     final connectionManager = ref.watch(connectionManagerProvider);
     final session = connectionManager.getSession(roomId);
-    final activeThreadId = session.threadId;
+    final activeThreadId = session.connectionInfo.threadId;
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 4),

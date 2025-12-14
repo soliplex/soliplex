@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/network/connection_manager.dart';
+import '../../core/network/server_room_key.dart';
 import '../../core/providers/panel_providers.dart';
 import '../../core/services/canvas_service.dart';
 import '../../core/services/widget_registry.dart';
@@ -9,12 +11,27 @@ import '../../core/services/widget_registry.dart';
 ///
 /// Renders widgets from the canvas state using the widget registry.
 class CanvasView extends ConsumerWidget {
-  const CanvasView({super.key});
+  final String? roomId;
+
+  const CanvasView({super.key, this.roomId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final canvasState = ref.watch(canvasProvider);
     final registry = ref.watch(widgetRegistryProvider);
+
+    if (roomId == null) {
+      return _buildEmptyCanvas(context);
+    }
+
+    final connectionManager = ref.watch(connectionManagerProvider);
+    final serverId = connectionManager.activeServerId;
+
+    if (serverId == null) {
+      return _buildEmptyCanvas(context);
+    }
+
+    final key = ServerRoomKey(serverId: serverId, roomId: roomId!);
+    final canvasState = ref.watch(roomCanvasProvider(key));
 
     if (canvasState.isEmpty) {
       return _buildEmptyCanvas(context);
@@ -40,7 +57,7 @@ class CanvasView extends ConsumerWidget {
             item: item,
             child: widget ?? _buildUnknownWidget(context, item.widgetName),
             onRemove: () {
-              ref.read(canvasProvider.notifier).removeItem(item.id);
+              ref.read(roomCanvasProvider(key).notifier).removeItem(item.id);
             },
           ),
         );

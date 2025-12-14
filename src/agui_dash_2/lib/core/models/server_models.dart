@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import 'endpoint_models.dart';
+
 /// OIDC authentication provider configuration
 class OIDCAuthSystem extends Equatable {
   final String id;
@@ -94,28 +96,55 @@ class ServerInfo extends Equatable {
 /// A saved server connection with optional credentials
 class ServerConnection extends Equatable {
   final String id;
-  final String url;
-  final String? displayName;
-  final bool requiresAuth;
-  final String? authProviderId;
   final DateTime lastConnected;
   final DateTime? tokenExpiry;
+  final String? authProviderId;
+  
+  /// The configuration for this endpoint.
+  final EndpointConfiguration config;
 
-  // Note: tokens are stored separately in SecureStorage, not in this model
-  // This model is safe to persist to regular storage
+  // Deprecated fields mapped to config for compatibility
+  String get url => config.url;
+  String get label => config.label;
+  String? get displayName => config.label; // Alias for backward compat
+  
+  bool get requiresAuth {
+    if (config is AgUiEndpoint) {
+      return (config as AgUiEndpoint).requiresAuth;
+    }
+    return false;
+  }
 
   const ServerConnection({
     required this.id,
-    required this.url,
-    this.displayName,
-    this.requiresAuth = false,
-    this.authProviderId,
     required this.lastConnected,
+    required this.config,
     this.tokenExpiry,
+    this.authProviderId,
   });
-
-  /// Display name or URL hostname
-  String get label => displayName ?? Uri.parse(url).host;
+  
+  /// Legacy factory for creating AG-UI endpoints directly.
+  factory ServerConnection.agUi({
+    required String id,
+    required String url,
+    String? displayName,
+    bool requiresAuth = true,
+    required DateTime lastConnected,
+    DateTime? tokenExpiry,
+    String? authProviderId,
+  }) {
+    return ServerConnection(
+      id: id,
+      lastConnected: lastConnected,
+      tokenExpiry: tokenExpiry,
+      authProviderId: authProviderId,
+      config: AgUiEndpoint(
+        url: url,
+        label: displayName ?? Uri.parse(url).host,
+        requiresAuth: requiresAuth,
+      ),
+    );
+  }
 
   /// Whether token has expired (if we have expiry info)
   bool get isTokenExpired {
@@ -133,57 +162,82 @@ class ServerConnection extends Equatable {
 
   ServerConnection copyWith({
     String? id,
+    DateTime? lastConnected,
+    DateTime? tokenExpiry,
+    String? authProviderId,
+    EndpointConfiguration? config,
+    // Legacy support for copyWith
     String? url,
     String? displayName,
     bool? requiresAuth,
-    String? authProviderId,
-    DateTime? lastConnected,
-    DateTime? tokenExpiry,
   }) {
+    // If legacy fields are provided, update config if it's AgUiEndpoint
+    EndpointConfiguration newConfig = config ?? this.config;
+    if (newConfig is AgUiEndpoint && (url != null || displayName != null || requiresAuth != null)) {
+      newConfig = AgUiEndpoint(
+        url: url ?? newConfig.url,
+        label: displayName ?? newConfig.label,
+        requiresAuth: requiresAuth ?? newConfig.requiresAuth,
+      );
+    }
+
     return ServerConnection(
       id: id ?? this.id,
-      url: url ?? this.url,
-      displayName: displayName ?? this.displayName,
-      requiresAuth: requiresAuth ?? this.requiresAuth,
-      authProviderId: authProviderId ?? this.authProviderId,
       lastConnected: lastConnected ?? this.lastConnected,
       tokenExpiry: tokenExpiry ?? this.tokenExpiry,
+      authProviderId: authProviderId ?? this.authProviderId,
+      config: newConfig,
     );
   }
 
   factory ServerConnection.fromJson(Map<String, dynamic> json) {
+    // Handle legacy JSON structure
+    if (json['config'] == null) {
+      return ServerConnection(
+        id: json['id'] as String,
+        lastConnected: DateTime.parse(json['last_connected'] as String),
+        tokenExpiry: json['token_expiry'] != null
+            ? DateTime.parse(json['token_expiry'] as String)
+            : null,
+        authProviderId: json['auth_provider_id'] as String?,
+        config: AgUiEndpoint(
+          url: json['url'] as String,
+          label: json['display_name'] as String? ?? 'AG-UI Server',
+          requiresAuth: json['requires_auth'] as bool? ?? false,
+        ),
+      );
+    }
+
     return ServerConnection(
       id: json['id'] as String,
-      url: json['url'] as String,
-      displayName: json['display_name'] as String?,
-      requiresAuth: json['requires_auth'] as bool? ?? false,
-      authProviderId: json['auth_provider_id'] as String?,
       lastConnected: DateTime.parse(json['last_connected'] as String),
       tokenExpiry: json['token_expiry'] != null
           ? DateTime.parse(json['token_expiry'] as String)
           : null,
+      authProviderId: json['auth_provider_id'] as String?,
+      config: EndpointConfiguration.fromJson(json['config'] as Map<String, dynamic>),
     );
   }
 
   Map<String, dynamic> toJson() => {
     'id': id,
-    'url': url,
-    if (displayName != null) 'display_name': displayName,
-    'requires_auth': requiresAuth,
-    if (authProviderId != null) 'auth_provider_id': authProviderId,
     'last_connected': lastConnected.toIso8601String(),
     if (tokenExpiry != null) 'token_expiry': tokenExpiry!.toIso8601String(),
+    if (authProviderId != null) 'auth_provider_id': authProviderId,
+    'config': config.toJson(),
+    // Keep legacy fields for a while? Or just break it?
+    // Breaking it is fine if we migrate on load.
+    // But if we want backward compatibility with older app versions sharing storage...
+    // Let's rely on 'config' being the source of truth.
   };
 
   @override
   List<Object?> get props => [
     id,
-    url,
-    displayName,
-    requiresAuth,
-    authProviderId,
     lastConnected,
     tokenExpiry,
+    authProviderId,
+    config,
   ];
 }
 

@@ -46,7 +46,10 @@ class RoomsNotifier extends StateNotifier<RoomsState> {
   /// Update the transport layer and URL builder.
   ///
   /// Called when server changes to update the network layer.
-  void setTransportLayer(NetworkTransportLayer? transportLayer, String serverUrl) {
+  void setTransportLayer(
+    NetworkTransportLayer? transportLayer,
+    String serverUrl,
+  ) {
     _transportLayer = transportLayer;
     _urlBuilder = UrlBuilder(serverUrl);
   }

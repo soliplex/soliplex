@@ -7,10 +7,12 @@ import '../chat/chat_content.dart';
 ///
 /// This is the default layout mode, displaying just the chat widget.
 class StandardLayout extends ConsumerWidget {
-  const StandardLayout({super.key});
+  final String? roomId;
+
+  const StandardLayout({super.key, this.roomId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return const ChatContent();
+    return ChatContent(roomId: roomId);
   }
 }

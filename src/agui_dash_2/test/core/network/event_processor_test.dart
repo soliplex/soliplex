@@ -576,9 +576,7 @@ void main() {
     });
 
     test('hasChanges detects clearDeduplication', () {
-      const withClear = EventProcessingResult(
-        clearDeduplication: true,
-      );
+      const withClear = EventProcessingResult(clearDeduplication: true);
       expect(withClear.hasChanges, isTrue);
     });
   });

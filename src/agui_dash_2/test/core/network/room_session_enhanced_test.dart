@@ -263,7 +263,7 @@ void main() {
       freshSession.dispose();
     });
 
-    test('returns true when backgrounded and past timeout', () async {
+    test('transitions to suspended when backgrounded and past timeout', () async {
       final mockClient = MockAgUiClient();
       final shortTimeoutSession = RoomSession(
         roomId: 'room',
@@ -281,7 +281,8 @@ void main() {
       // Wait past timeout
       await Future.delayed(const Duration(milliseconds: 100));
 
-      expect(shortTimeoutSession.isExpired(), isTrue);
+      // Timer should have fired and hibernated the session
+      expect(shortTimeoutSession.state, equals(SessionState.suspended));
 
       shortTimeoutSession.dispose();
     });

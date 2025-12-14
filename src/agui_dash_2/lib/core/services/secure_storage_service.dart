@@ -45,6 +45,10 @@ class StorageKeys {
   static String serverTokenExpiry(String serverId) =>
       'server_${serverId}_token_expiry';
 
+  /// Get API key for a specific endpoint (completions endpoints)
+  static String endpointApiKey(String endpointId) =>
+      'endpoint_${endpointId}_api_key';
+
   StorageKeys._();
 }
 
@@ -329,6 +333,33 @@ extension TokenStorageExtension on SecureStorageService {
   /// Get current server ID
   Future<String?> getCurrentServerId() async {
     return await read(StorageKeys.currentServerId);
+  }
+
+  // ===========================================================================
+  // API Key Storage (for Completions endpoints)
+  // ===========================================================================
+
+  /// Store API key for a completions endpoint
+  Future<void> storeApiKey({
+    required String endpointId,
+    required String apiKey,
+  }) async {
+    await write(StorageKeys.endpointApiKey(endpointId), apiKey);
+  }
+
+  /// Get API key for a completions endpoint
+  Future<String?> getApiKey(String endpointId) async {
+    return await read(StorageKeys.endpointApiKey(endpointId));
+  }
+
+  /// Check if an endpoint has an API key stored
+  Future<bool> hasApiKey(String endpointId) async {
+    return await containsKey(StorageKeys.endpointApiKey(endpointId));
+  }
+
+  /// Delete API key for an endpoint
+  Future<void> deleteApiKey(String endpointId) async {
+    await delete(StorageKeys.endpointApiKey(endpointId));
   }
 }
 

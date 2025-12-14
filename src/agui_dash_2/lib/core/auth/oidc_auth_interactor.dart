@@ -1,11 +1,10 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
-
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../utils/debug_log.dart';
 import 'oidc_auth_token_response.dart';
 import 'oidc_token_application_mixin.dart';
 import 'secure_sso_storage.dart';
@@ -29,31 +28,32 @@ class OidcMobileAuthInteractor extends OidcAuthInteractorBase {
     SecureTokenStorage tokenStorage,
     Duration tokenExpirationBuffer,
   ) : super(
-        ssoStorage: ssoStorage,
-        tokenStorage: tokenStorage,
-        tokenExpirationBuffer: tokenExpirationBuffer,
-      );
+          ssoStorage: ssoStorage,
+          tokenStorage: tokenStorage,
+          tokenExpirationBuffer: tokenExpirationBuffer,
+        );
 
   @override
   Future<OidcAuthTokenResponse> authorizeAndExchangeCode(
+    String serverId,
     SsoConfig config,
   ) async {
-    debugPrint('Signing in at ${DateTime.now()}');
+    DebugLog.service('OidcMobileAuthInteractor: Signing in at ${DateTime.now()}');
     final response = await _authorizeAndExchangeCode(config);
     await tokenStorage.setOidcAuthTokenResponse(response);
-    debugPrint('Expiration timestamp: ${response.accessTokenExpiration}');
-    await setSsoConfig(config);
+    DebugLog.service('OidcMobileAuthInteractor: Expiration timestamp: ${response.accessTokenExpiration}');
+    await setSsoConfig(serverId, config);
     return response;
   }
 
   Future<OidcAuthTokenResponse> _authorizeAndExchangeCode(
     SsoConfig config,
   ) async {
-    debugPrint('_authorizeAndExchangeCode: calling flutter_appauth...');
-    debugPrint('  clientId: ${config.clientId}');
-    debugPrint('  redirectUrl: ${config.redirectUrl}');
-    debugPrint('  issuer: ${config.endpoint}');
-    debugPrint('  scopes: ${config.scopes}');
+    DebugLog.service('OidcMobileAuthInteractor: calling flutter_appauth...');
+    DebugLog.service('  clientId: ${config.clientId}');
+    DebugLog.service('  redirectUrl: ${config.redirectUrl}');
+    DebugLog.service('  issuer: ${config.endpoint}');
+    DebugLog.service('  scopes: ${config.scopes}');
 
     try {
       final result = await _appAuth.authorizeAndExchangeCode(
@@ -66,13 +66,13 @@ class OidcMobileAuthInteractor extends OidcAuthInteractorBase {
         ),
       );
 
-      debugPrint('_authorizeAndExchangeCode: got result from flutter_appauth');
-      debugPrint('  idToken null? ${result.idToken == null}');
-      debugPrint('  accessToken null? ${result.accessToken == null}');
-      debugPrint(
+      DebugLog.service('OidcMobileAuthInteractor: got result from flutter_appauth');
+      DebugLog.service('  idToken null? ${result.idToken == null}');
+      DebugLog.service('  accessToken null? ${result.accessToken == null}');
+      DebugLog.service(
         '  expiration null? ${result.accessTokenExpirationDateTime == null}',
       );
-      debugPrint('  refreshToken null? ${result.refreshToken == null}');
+      DebugLog.service('  refreshToken null? ${result.refreshToken == null}');
 
       _validateTokenResult(
         idToken: result.idToken,
@@ -88,15 +88,18 @@ class OidcMobileAuthInteractor extends OidcAuthInteractorBase {
         refreshToken: result.refreshToken!,
       );
     } catch (e, stack) {
-      debugPrint('_authorizeAndExchangeCode: EXCEPTION: $e');
-      debugPrint('_authorizeAndExchangeCode: Stack: $stack');
+      DebugLog.error('OidcMobileAuthInteractor: EXCEPTION: $e');
+      DebugLog.error('OidcMobileAuthInteractor: Stack: $stack');
       rethrow;
     }
   }
 
   @override
-  Future<OidcAuthTokenResponse?> refreshAccessToken(SsoConfig config) async {
-    debugPrint('Refreshing token.');
+  Future<OidcAuthTokenResponse?> refreshAccessToken(
+    String serverId,
+    SsoConfig config,
+  ) async {
+    DebugLog.service('OidcMobileAuthInteractor: Refreshing token for $serverId.');
     final refreshToken = await tokenStorage.getOidcRefreshToken();
     if (refreshToken == null) {
       return null;
@@ -136,7 +139,7 @@ class OidcMobileAuthInteractor extends OidcAuthInteractorBase {
   }
 
   @override
-  Future<void> logout(SsoConfig config) async {
+  Future<void> logout(String serverId, SsoConfig config) async {
     final tokens = await tokenStorage.getOidcAuthTokenResponse();
 
     await _appAuth.endSession(
@@ -148,7 +151,7 @@ class OidcMobileAuthInteractor extends OidcAuthInteractorBase {
       ),
     );
     await tokenStorage.deleteOidcAuthTokenResponse();
-    await ssoStorage.deleteSsoConfig();
+    await ssoStorage.deleteSsoConfig(serverId);
   }
 
   /// Validate that all required token fields are present.
@@ -206,17 +209,18 @@ class OidcWebAuthInteractor extends OidcAuthInteractorBase {
     SecureTokenStorage tokenStorage,
     Duration tokenExpirationBuffer,
   ) : super(
-        ssoStorage: ssoStorage,
-        tokenStorage: tokenStorage,
-        tokenExpirationBuffer: tokenExpirationBuffer,
-      );
+          ssoStorage: ssoStorage,
+          tokenStorage: tokenStorage,
+          tokenExpirationBuffer: tokenExpirationBuffer,
+        );
 
   @override
   Future<OidcAuthTokenResponse> authorizeAndExchangeCode(
+    String serverId,
     SsoConfig config,
   ) async {
-    debugPrint('Setting sso config');
-    await setSsoConfig(config);
+    DebugLog.service('OidcWebAuthInteractor: Setting sso config for $serverId');
+    await setSsoConfig(serverId, config);
     await launchUrl(config.loginUrl, webOnlyWindowName: '_self');
     // On web, this returns immediately with empty values.
     // The actual tokens come via URL redirect handled elsewhere.
@@ -229,17 +233,20 @@ class OidcWebAuthInteractor extends OidcAuthInteractorBase {
   }
 
   @override
-  Future<OidcAuthTokenResponse?> refreshAccessToken(SsoConfig config) async {
-    debugPrint('Refreshing token.');
+  Future<OidcAuthTokenResponse?> refreshAccessToken(
+    String serverId,
+    SsoConfig config,
+  ) async {
+    DebugLog.service('OidcWebAuthInteractor: Refreshing token for $serverId.');
     final refreshToken = await tokenStorage.getOidcRefreshToken();
-    debugPrint('Refresh token retrieved.');
+    DebugLog.service('OidcWebAuthInteractor: Refresh token retrieved.');
     if (refreshToken == null) {
-      debugPrint('Refreshing token null.');
+      DebugLog.service('OidcWebAuthInteractor: Refreshing token null.');
       return null;
     }
     final response = await _refreshAccessToken(config, refreshToken);
     await tokenStorage.setOidcAuthTokenResponse(response);
-    debugPrint('Set new token response after refreshing token.');
+    DebugLog.service('OidcWebAuthInteractor: Set new token response after refreshing token.');
     return response;
   }
 
@@ -256,14 +263,14 @@ class OidcWebAuthInteractor extends OidcAuthInteractorBase {
       final response = await http.post(url, headers: headers, body: body);
 
       if (response.statusCode == 200) {
-        debugPrint('Token refresh successful');
+        DebugLog.service('OidcWebAuthInteractor: Token refresh successful');
         final newTokens = json.decode(response.body);
 
         final expiration = DateTime.fromMillisecondsSinceEpoch(
           DateTime.now().millisecondsSinceEpoch +
               ((newTokens['expires_in'] ?? 0) as int) * 1000,
         );
-        debugPrint('New expiration: $expiration');
+        DebugLog.service('OidcWebAuthInteractor: New expiration: $expiration');
 
         return OidcAuthTokenResponse(
           idToken: '',
@@ -272,19 +279,19 @@ class OidcWebAuthInteractor extends OidcAuthInteractorBase {
           refreshToken: newTokens['refresh_token'] as String,
         );
       } else {
-        debugPrint('Failed to refresh token: ${response.statusCode}');
-        debugPrint('Response body: ${response.body}');
+        DebugLog.error('OidcWebAuthInteractor: Failed to refresh token: ${response.statusCode}');
+        DebugLog.error('OidcWebAuthInteractor: Response body: ${response.body}');
       }
     } catch (e) {
-      debugPrint('An error occurred: $e');
+      DebugLog.error('OidcWebAuthInteractor: An error occurred: $e');
       rethrow;
     }
-    debugPrint('Refreshing token for ${config.id} with $refreshToken.');
+    DebugLog.error('OidcWebAuthInteractor: Refreshing token for ${config.id} with $refreshToken.');
     throw Exception('Refreshing token failed');
   }
 
   @override
-  Future<void> logout(SsoConfig config) async {
+  Future<void> logout(String serverId, SsoConfig config) async {
     final refreshToken = await tokenStorage.getOidcRefreshToken();
     final url = Uri.parse('${config.endpoint}/protocol/openid-connect/logout');
     final headers = {'Content-Type': 'application/x-www-form-urlencoded'};
@@ -294,16 +301,16 @@ class OidcWebAuthInteractor extends OidcAuthInteractorBase {
       final response = await http.post(url, headers: headers, body: body);
 
       if (response.statusCode == 204) {
-        debugPrint('Session logout successful');
+        DebugLog.service('OidcWebAuthInteractor: Session logout successful');
         await tokenStorage.deleteOidcAuthTokenResponse();
-        await ssoStorage.deleteSsoConfig();
+        await ssoStorage.deleteSsoConfig(serverId);
         return;
       } else {
-        debugPrint('Failed to logout of session: ${response.statusCode}');
-        debugPrint('Response body: ${response.body}');
+        DebugLog.error('OidcWebAuthInteractor: Failed to logout of session: ${response.statusCode}');
+        DebugLog.error('OidcWebAuthInteractor: Response body: ${response.body}');
       }
     } catch (e) {
-      debugPrint('An error occurred: $e');
+      DebugLog.error('OidcWebAuthInteractor: An error occurred: $e');
       rethrow;
     }
     throw Exception('Session logout failed');

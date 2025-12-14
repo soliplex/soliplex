@@ -6,12 +6,22 @@ import 'package:http/http.dart' as http;
 
 import 'oidc_auth_interactor.dart';
 
+/// HTTP client that applies OIDC authentication to requests.
+///
+/// Each client is associated with a specific server (via [serverId])
+/// to ensure the correct auth tokens and SSO config are used.
 class OidcClient implements http.Client {
   final http.Client client;
   final OidcAuthInteractor middleware;
   final int maxRetries;
+  final String serverId;
 
-  OidcClient(this.client, this.middleware, {required this.maxRetries});
+  OidcClient(
+    this.client,
+    this.middleware, {
+    required this.maxRetries,
+    required this.serverId,
+  });
 
   @override
   void close() => client.close();
@@ -24,7 +34,7 @@ class OidcClient implements http.Client {
     Encoding? encoding,
   }) async {
     final requestHeaders = headers ?? {};
-    await middleware.applyToHeader(requestHeaders);
+    await middleware.applyToHeader(serverId, requestHeaders);
     return client.delete(
       url,
       headers: requestHeaders,
@@ -41,7 +51,7 @@ class OidcClient implements http.Client {
   @override
   Future<http.Response> head(Uri url, {Map<String, String>? headers}) async {
     final requestHeaders = headers ?? {};
-    await middleware.applyToHeader(requestHeaders);
+    await middleware.applyToHeader(serverId, requestHeaders);
     return client.head(url, headers: requestHeaders);
   }
 
@@ -53,7 +63,7 @@ class OidcClient implements http.Client {
     Encoding? encoding,
   }) async {
     final requestHeaders = headers ?? {};
-    await middleware.applyToHeader(requestHeaders);
+    await middleware.applyToHeader(serverId, requestHeaders);
     return client.patch(
       url,
       headers: requestHeaders,
@@ -70,7 +80,7 @@ class OidcClient implements http.Client {
     Encoding? encoding,
   }) async {
     final requestHeaders = headers ?? {};
-    await middleware.applyToHeader(requestHeaders);
+    await middleware.applyToHeader(serverId, requestHeaders);
     return client.post(
       url,
       headers: requestHeaders,
@@ -87,7 +97,7 @@ class OidcClient implements http.Client {
     Encoding? encoding,
   }) async {
     final requestHeaders = headers ?? {};
-    await middleware.applyToHeader(requestHeaders);
+    await middleware.applyToHeader(serverId, requestHeaders);
     return client.put(
       url,
       headers: requestHeaders,
@@ -99,20 +109,20 @@ class OidcClient implements http.Client {
   @override
   Future<String> read(Uri url, {Map<String, String>? headers}) async {
     final requestHeaders = headers ?? {};
-    await middleware.applyToHeader(requestHeaders);
+    await middleware.applyToHeader(serverId, requestHeaders);
     return client.read(url, headers: requestHeaders);
   }
 
   @override
   Future<Uint8List> readBytes(Uri url, {Map<String, String>? headers}) async {
     final requestHeaders = headers ?? {};
-    await middleware.applyToHeader(requestHeaders);
+    await middleware.applyToHeader(serverId, requestHeaders);
     return client.readBytes(url, headers: requestHeaders);
   }
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    await middleware.applyToRequest(request);
+    await middleware.applyToRequest(serverId, request);
     return client.send(request);
   }
 
@@ -206,7 +216,7 @@ class OidcClient implements http.Client {
       return post(url, headers: headers, body: body, encoding: encoding);
     }
     final requestHeaders = headers ?? {};
-    await middleware.applyToHeader(requestHeaders);
+    await middleware.applyToHeader(serverId, requestHeaders);
     return client
         .post(url, headers: requestHeaders, body: body, encoding: encoding)
         .timeout(timeLimit);
@@ -221,7 +231,7 @@ class OidcClient implements http.Client {
     for (int attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         final requestHeaders = headers ?? {};
-        await middleware.applyToHeader(requestHeaders);
+        await middleware.applyToHeader(serverId, requestHeaders);
         final response = timeLimit == null
             ? await client.get(url, headers: requestHeaders)
             : await client.get(url, headers: requestHeaders).timeout(timeLimit);

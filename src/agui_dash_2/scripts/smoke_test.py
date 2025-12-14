@@ -10,7 +10,7 @@ Usage:
 
 Examples:
     python scripts/smoke_test.py
-    python scripts/smoke_test.py --base-url https://rag-demo.enfoldsystems.net
+    python scripts/smoke_test.py --base-url https://api.example.com
     python scripts/smoke_test.py --base-url http://localhost:8000 --room-id genui --verbose
 """
 

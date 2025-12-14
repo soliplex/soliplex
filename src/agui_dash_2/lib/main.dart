@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'app_shell.dart';
+import 'core/router/app_router.dart';
 
 void main() {
   runApp(const ProviderScope(child: AgUiDashApp()));
 }
 
-class AgUiDashApp extends StatelessWidget {
+class AgUiDashApp extends ConsumerWidget {
   const AgUiDashApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final router = ref.watch(routerProvider);
+
+    return MaterialApp.router(
       title: 'AG-UI Dashboard',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -30,7 +32,7 @@ class AgUiDashApp extends StatelessWidget {
         useMaterial3: true,
       ),
       themeMode: ThemeMode.system,
-      home: const AppShell(),
+      routerConfig: router,
     );
   }
 }

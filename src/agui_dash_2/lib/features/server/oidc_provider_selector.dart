@@ -30,28 +30,16 @@ class _OIDCProviderSelectorState extends ConsumerState<OIDCProviderSelector> {
   bool _hasCalledOnAuthenticated = false;
 
   @override
-  void initState() {
-    super.initState();
-    // Use listenManual in initState to avoid listener issues in build
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.listenManual(appStateStreamProvider, (previous, next) {
-        final prevState = previous?.valueOrNull;
-        final nextState = next.valueOrNull;
-        debugPrint(
-          'OIDCProviderSelector: App state changed: $prevState -> $nextState',
-        );
-        // Only call onAuthenticated once per auth flow
-        if (nextState is AppStateReady && !_hasCalledOnAuthenticated) {
-          _hasCalledOnAuthenticated = true;
-          debugPrint('OIDCProviderSelector: Calling onAuthenticated callback');
-          widget.onAuthenticated?.call();
-        }
-      });
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
+    ref.listen(appStateStreamProvider, (previous, next) {
+      final nextState = next.valueOrNull;
+      if (nextState is AppStateReady && !_hasCalledOnAuthenticated) {
+        _hasCalledOnAuthenticated = true;
+        debugPrint('OIDCProviderSelector: Calling onAuthenticated callback');
+        widget.onAuthenticated?.call();
+      }
+    });
+
     final appStateAsync = ref.watch(appStateStreamProvider);
     final theme = Theme.of(context);
 

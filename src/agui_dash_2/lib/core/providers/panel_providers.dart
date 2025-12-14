@@ -19,12 +19,17 @@
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:rxdart/rxdart.dart';
 
+import '../models/chat_models.dart';
+import '../network/connection_registry.dart';
 import '../network/server_room_key.dart';
 import '../services/activity_status_service.dart';
 import '../services/canvas_service.dart';
+import '../services/completions_session_manager.dart';
 import '../services/context_pane_service.dart';
 import '../services/rooms_service.dart' show selectedRoomProvider;
+import '../services/tool_execution_service.dart';
 import 'app_providers.dart';
 
 // =============================================================================
@@ -179,4 +184,99 @@ final activeActivityStatusNotifierProvider = Provider<ActivityStatusNotifier?>((
   final key = ref.watch(activeServerRoomKeyProvider);
   if (key == null) return null;
   return ref.read(roomActivityStatusProvider(key).notifier);
+});
+
+// =============================================================================
+// MESSAGE STREAM (Bridge)
+// =============================================================================
+
+/// Per-room message stream provider (family).
+///
+/// Subscribes to the RoomSession's message stream.
+/// This ensures we get updates even if ConnectionManager doesn't notify.
+final roomMessageStreamProvider =
+    StreamProvider.family<List<ChatMessage>, ServerRoomKey>((ref, key) {
+      final registry = ref.watch(connectionRegistryProvider);
+      // We use getSession to ensure it exists and we're subscribed
+      final session = registry.getSession(key);
+      return session.messageStream.startWith(session.messages);
+    });
+
+/// Active message stream for the current room (AG-UI only).
+///
+/// UI watches this to get real-time message updates.
+/// Returns an empty list if no room is selected.
+/// Uses startWith to ensure current state is available immediately.
+///
+/// DEPRECATED: Prefer [unifiedMessageStreamProvider] which handles both modes.
+final activeMessageStreamProvider = Provider<AsyncValue<List<ChatMessage>>>((ref) {
+  final key = ref.watch(activeServerRoomKeyProvider);
+  if (key == null) return const AsyncData([]);
+
+  // We use roomMessageStreamProvider to ensure per-room caching/scoping
+  return ref.watch(roomMessageStreamProvider(key));
+});
+
+/// Unified message stream provider that returns messages from either
+/// AG-UI rooms or completions endpoints based on current mode.
+///
+/// This is the primary provider UI should use for displaying messages.
+/// It automatically switches between:
+/// - AG-UI mode: Messages from [roomMessageStreamProvider] for selected room
+/// - Completions mode: Messages from [completionsMessageStreamProvider]
+final unifiedMessageStreamProvider = Provider<AsyncValue<List<ChatMessage>>>((ref) {
+  final isCompletionsMode = ref.watch(isCompletionsModeProvider);
+
+  if (isCompletionsMode) {
+    // Completions mode - use completions session messages
+    return ref.watch(completionsMessageStreamProvider);
+  } else {
+    // AG-UI mode - use room session messages
+    final key = ref.watch(activeServerRoomKeyProvider);
+    if (key == null) return const AsyncData([]);
+    return ref.watch(roomMessageStreamProvider(key));
+  }
+});
+
+// =============================================================================
+// TOOL EXECUTION
+// =============================================================================
+
+/// Per-room tool execution state provider (family).
+///
+/// Keyed by [ServerRoomKey] - maintains separate tool execution state per room.
+/// This prevents cross-contamination: switching rooms won't show stale tool
+/// indicators from another room.
+///
+/// Use [activeToolExecutionProvider] for UI convenience.
+final roomToolExecutionProvider =
+    StateNotifierProvider.family<
+      ToolExecutionNotifier,
+      ToolExecutionState,
+      ServerRoomKey
+    >(
+      (ref, key) => ToolExecutionNotifier(
+        serverId: key.serverId,
+        roomId: key.roomId,
+      ),
+    );
+
+/// Active tool execution state for current room.
+///
+/// Convenience provider that derives from [roomToolExecutionProvider] using
+/// [activeServerRoomKeyProvider]. Returns empty state if no room selected.
+final activeToolExecutionProvider = Provider<ToolExecutionState>((ref) {
+  final key = ref.watch(activeServerRoomKeyProvider);
+  if (key == null) return const ToolExecutionState();
+  return ref.watch(roomToolExecutionProvider(key));
+});
+
+/// Active tool execution notifier for current room.
+///
+/// Returns the notifier for the current room, or null if no room selected.
+/// Use this to modify tool execution state.
+final activeToolExecutionNotifierProvider = Provider<ToolExecutionNotifier?>((ref) {
+  final key = ref.watch(activeServerRoomKeyProvider);
+  if (key == null) return null;
+  return ref.read(roomToolExecutionProvider(key).notifier);
 });

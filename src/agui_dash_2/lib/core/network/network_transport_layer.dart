@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
 import 'package:http/http.dart' as http;
@@ -18,10 +19,10 @@ import 'network_inspector.dart';
 class NetworkTransportLayer {
   final String baseUrl;
   final http.Client _httpClient;
-  final ag_ui.AgUiClient _agUiClient;
   final UrlBuilder _urlBuilder;
   final NetworkInspector? _inspector;
 
+  ag_ui.AgUiClient _agUiClient;
   Map<String, String>? _headers;
   final Future<Map<String, String>> Function()? _headerRefresher;
 
@@ -39,7 +40,8 @@ class NetworkTransportLayer {
        _headerRefresher = headerRefresher,
        _urlBuilder = UrlBuilder(baseUrl),
        _inspector = inspector,
-       _agUiClient = agUiClient ??
+       _agUiClient =
+           agUiClient ??
            ag_ui.AgUiClient(
              config: ag_ui.AgUiClientConfig(
                baseUrl: UrlBuilder(baseUrl).serverUrl,
@@ -48,6 +50,11 @@ class NetworkTransportLayer {
            ) {
     DebugLog.network('NetworkTransportLayer: Created for $baseUrl');
   }
+
+  /// The underlying HTTP client.
+  ///
+  /// Exposed for cases where raw HTTP access is needed (e.g. CompletionsClient).
+  http.Client get httpClient => _httpClient;
 
   /// Current headers for requests.
   Map<String, String>? get headers => _headers;
@@ -61,16 +68,66 @@ class NetworkTransportLayer {
   /// Whether this transport has been disposed.
   bool get isDisposed => _disposed;
 
+  Future<void>? _refreshFuture;
+
+  /// Handles 401 Unauthorized by refreshing headers.
+  /// Uses a completer lock to ensure only one refresh happens at a time.
+  Future<void> _handle401() async {
+    if (_headerRefresher == null) {
+      DebugLog.network('NetworkTransportLayer: 401 received but no refresher configured.');
+      return;
+    }
+
+    // If already refreshing, wait for it
+    if (_refreshFuture != null) {
+      DebugLog.network(
+        'NetworkTransportLayer: 401 received. Refresh already in progress. Waiting...',
+      );
+      await _refreshFuture;
+      DebugLog.network('NetworkTransportLayer: Waited for existing refresh. Resuming request.');
+      return;
+    }
+
+    DebugLog.network('NetworkTransportLayer: 401 received. Initiating token refresh lock.');
+    final completer = Completer<void>();
+    _refreshFuture = completer.future;
+
+    try {
+      DebugLog.network(
+        'NetworkTransportLayer: Calling header refresher...',
+      );
+      final newHeaders = await _headerRefresher!();
+      DebugLog.network('NetworkTransportLayer: Header refresher returned. Updating headers.');
+      updateHeaders(newHeaders);
+      completer.complete();
+      DebugLog.network('NetworkTransportLayer: Token refresh completed successfully.');
+    } catch (e) {
+      DebugLog.network('NetworkTransportLayer: Token refresh failed with error: $e');
+      completer.completeError(e);
+      rethrow;
+    } finally {
+      _refreshFuture = null;
+      DebugLog.network('NetworkTransportLayer: Refresh lock released.');
+    }
+  }
+
   /// Update the default headers.
   ///
-  /// Note: This updates headers for future requests. The AgUiClient
-  /// uses headers from its config, so we recreate it if needed.
+  /// Recreates the AgUiClient to ensure new headers are used for SSE.
   void updateHeaders(Map<String, String> headers) {
     _headers = headers;
-    // Note: AgUiClient config is immutable, so header updates for SSE
-    // require recreating the client or using per-request headers.
-    // For now, HTTP headers are updated, SSE uses initial config.
-    DebugLog.network('NetworkTransportLayer: Headers updated');
+
+    // Recreate SSE client with new headers
+    _agUiClient = ag_ui.AgUiClient(
+      config: ag_ui.AgUiClientConfig(
+        baseUrl: _urlBuilder.serverUrl,
+        defaultHeaders: _headers ?? {},
+      ),
+    );
+
+    DebugLog.network(
+      'NetworkTransportLayer: Headers updated and SSE client recreated',
+    );
   }
 
   /// Make an HTTP GET request with observable hooks.
@@ -102,10 +159,8 @@ class NetworkTransportLayer {
 
       // 401 retry with header refresh
       if (response.statusCode == 401 && _headerRefresher != null) {
-        DebugLog.network(
-          'NetworkTransportLayer: 401 received on GET, refreshing headers...',
-        );
-        _headers = await _headerRefresher();
+        await _handle401();
+
         final retryHeaders = {
           'Accept': 'application/json',
           ...?_headers,
@@ -172,10 +227,8 @@ class NetworkTransportLayer {
 
       // 401 retry with header refresh
       if (response.statusCode == 401 && _headerRefresher != null) {
-        DebugLog.network(
-          'NetworkTransportLayer: 401 received, refreshing headers...',
-        );
-        _headers = await _headerRefresher();
+        await _handle401();
+
         final retryHeaders = {
           'Content-Type': 'application/json',
           ...?_headers,
@@ -273,6 +326,125 @@ class NetworkTransportLayer {
             headers: {'x-sse-event-count': eventCount.toString()},
             body: {
               'eventCount': eventCount,
+              'durationMs': duration.inMilliseconds,
+            },
+          );
+        }
+      }
+    }
+  }
+
+  /// Make a streaming HTTP POST request for SSE responses.
+  ///
+  /// Used for OpenAI-compatible completions endpoints that return
+  /// Server-Sent Events. Returns a stream of SSE data lines.
+  ///
+  /// Supports 401 retry with header refresh.
+  Stream<String> streamPost(
+    Uri uri,
+    String body, {
+    Map<String, String>? additionalHeaders,
+  }) async* {
+    if (_disposed) {
+      throw StateError('Cannot use disposed NetworkTransportLayer');
+    }
+
+    final requestHeaders = {
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+      ...?_headers,
+      ...?additionalHeaders,
+    };
+
+    final startTime = DateTime.now();
+    var lineCount = 0;
+    String? error;
+
+    // Record request for inspector
+    final requestId = _inspector?.recordRequest(
+      method: 'SSE-POST',
+      uri: uri,
+      headers: requestHeaders,
+      body: body,
+    );
+
+    DebugLog.network('NetworkTransportLayer: SSE POST starting for $uri');
+
+    try {
+      final request = http.Request('POST', uri);
+      request.headers.addAll(requestHeaders);
+      request.body = body;
+
+      final streamedResponse = await _httpClient.send(request);
+
+      // Handle non-success status codes
+      if (streamedResponse.statusCode != 200) {
+        // For 401, try refresh and retry
+        if (streamedResponse.statusCode == 401 && _headerRefresher != null) {
+          await _handle401();
+
+          // Retry with new headers
+          final retryHeaders = {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
+            ...?_headers,
+            ...?additionalHeaders,
+          };
+          final retryRequest = http.Request('POST', uri);
+          retryRequest.headers.addAll(retryHeaders);
+          retryRequest.body = body;
+
+          final retryResponse = await _httpClient.send(retryRequest);
+          if (retryResponse.statusCode != 200) {
+            throw http.ClientException(
+              'SSE POST failed with status ${retryResponse.statusCode}',
+              uri,
+            );
+          }
+
+          // Stream retry response
+          await for (final chunk in retryResponse.stream
+              .transform(const Utf8Decoder())
+              .transform(const LineSplitter())) {
+            lineCount++;
+            yield chunk;
+          }
+        } else {
+          throw http.ClientException(
+            'SSE POST failed with status ${streamedResponse.statusCode}',
+            uri,
+          );
+        }
+      } else {
+        // Stream successful response
+        await for (final chunk in streamedResponse.stream
+            .transform(const Utf8Decoder())
+            .transform(const LineSplitter())) {
+          lineCount++;
+          yield chunk;
+        }
+      }
+
+      DebugLog.network(
+        'NetworkTransportLayer: SSE POST completed ($lineCount lines)',
+      );
+    } catch (e) {
+      error = e.toString();
+      DebugLog.network('NetworkTransportLayer: SSE POST error: $e');
+      rethrow;
+    } finally {
+      // Record completion for inspector
+      if (requestId != null) {
+        final duration = DateTime.now().difference(startTime);
+        if (error != null) {
+          _inspector?.recordError(requestId: requestId, error: error);
+        } else {
+          _inspector?.recordResponse(
+            requestId: requestId,
+            statusCode: 200,
+            headers: {'x-sse-line-count': lineCount.toString()},
+            body: {
+              'lineCount': lineCount,
               'durationMs': duration.inMilliseconds,
             },
           );

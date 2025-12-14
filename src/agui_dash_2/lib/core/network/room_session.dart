@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
 
@@ -6,6 +7,9 @@ import '../../infrastructure/quick_agui/thread.dart';
 import '../../infrastructure/quick_agui/tool_call_state.dart';
 import '../models/chat_models.dart';
 import '../models/error_types.dart';
+import '../protocol/chat_session.dart';
+import '../services/local_tools_service.dart';
+import '../state/app_state.dart';
 import '../utils/debug_log.dart';
 import '../utils/url_builder.dart';
 import 'cancel_token.dart';
@@ -24,11 +28,12 @@ import 'server_room_key.dart';
 /// - Event processing (AG-UI events → ChatMessage)
 /// - Active run tracking
 /// - Cancellation support
-class RoomSession {
+class RoomSession implements ChatSession {
   final String roomId;
   final String? serverId;
   final String baseUrl;
   final HttpTransport transport;
+  final LocalToolsService? localToolsService;
   final UrlBuilder _urlBuilder;
   final EventProcessor _eventProcessor;
 
@@ -37,12 +42,51 @@ class RoomSession {
   CancelToken? _cancelToken;
   SessionState _state = SessionState.active;
   Timer? _inactivityTimer;
+  StreamSubscription<ag_ui.BaseEvent>? _eventSubscription;
+  StreamSubscription<AppState>? _appStateSubscription;
+
+  /// Lock to prevent concurrent initialization.
+  Completer<void>? _initializeLock;
 
   /// Inactivity timeout for backgrounded sessions (default: 24 hours).
   final Duration inactivityTimeout;
 
   /// Callback when session times out due to inactivity.
   void Function()? onInactivityTimeout;
+
+  // ==========================================================================
+  // INTERNAL TOOLS
+  // ==========================================================================
+
+  static final _genUiTool = ag_ui.Tool(
+    name: 'genui_render',
+    description: 'Render a UI widget',
+    parameters: {
+      'type': 'object',
+      'properties': {
+        'widget_name': {'type': 'string'},
+        'data': {'type': 'object'},
+      },
+      'required': ['widget_name'],
+    },
+  );
+
+  static final _canvasTool = ag_ui.Tool(
+    name: 'canvas_render',
+    description: 'Render content to the side canvas',
+    parameters: {
+      'type': 'object',
+      'properties': {
+        'widget_name': {'type': 'string'},
+        'data': {'type': 'object'},
+        'position': {
+          'type': 'string',
+          'enum': ['append', 'replace', 'clear'],
+        },
+      },
+      'required': ['widget_name'],
+    },
+  );
 
   // ==========================================================================
   // MESSAGE STATE (THE source of truth for chat messages)
@@ -103,11 +147,17 @@ class RoomSession {
     this.serverId,
     required this.baseUrl,
     required this.transport,
+    this.localToolsService,
     this.inactivityTimeout = const Duration(hours: 24),
     this.onInactivityTimeout,
     EventProcessor? eventProcessor,
+    Stream<AppState>? appStateStream,
   }) : _urlBuilder = UrlBuilder(baseUrl),
-       _eventProcessor = eventProcessor ?? const EventProcessor();
+       _eventProcessor = eventProcessor ?? const EventProcessor() {
+    if (appStateStream != null) {
+      _appStateSubscription = appStateStream.listen(_handleAppStateChange);
+    }
+  }
 
   // Getters
   String? get threadId => _thread?.id;
@@ -115,6 +165,7 @@ class RoomSession {
   SessionState get state => _state;
   bool get isActive =>
       _state == SessionState.active || _state == SessionState.streaming;
+  @override
   bool get isStreaming => _state == SessionState.streaming;
   bool get isDisposed => _state == SessionState.disposed;
   DateTime? get lastActivity => _lastActivity;
@@ -126,6 +177,7 @@ class RoomSession {
       : null;
 
   /// The authoritative list of messages for this room.
+  @override
   List<ChatMessage> get messages => List.unmodifiable(_messages);
 
   /// Set the event handler for canvas, context, and activity updates.
@@ -137,6 +189,7 @@ class RoomSession {
   }
 
   /// Stream of message updates (UI subscribes to this).
+  @override
   Stream<List<ChatMessage>> get messageStream => _messageController.stream;
 
   /// Whether the agent is currently typing (streaming a message).
@@ -163,12 +216,15 @@ class RoomSession {
     lastActivity: _lastActivity,
   );
 
-  /// Initialize the session by creating a thread.
+  /// Initialize the session by creating a thread and subscribing to events.
   ///
   /// Pass [transportLayer] to route SSE through NetworkTransportLayer
   /// for observability via NetworkInspector.
   ///
   /// Pass [agUiClient] for legacy/test usage (SSE not observable).
+  ///
+  /// This method is idempotent and thread-safe. Concurrent calls will wait
+  /// for the first initialization to complete.
   Future<void> initialize({
     NetworkTransportLayer? transportLayer,
     ag_ui.AgUiClient? agUiClient,
@@ -182,48 +238,91 @@ class RoomSession {
       throw StateError('Cannot initialize disposed session');
     }
 
-    // Create thread via HTTP
-    final response = await transport.post(_urlBuilder.createThread(roomId), {});
-
-    final threadId = response['thread_id'] as String?;
-    if (threadId == null) {
-      throw StateError('Server did not return thread_id');
+    // Already initialized
+    if (_thread != null) {
+      DebugLog.network('RoomSession: Already initialized for room $roomId');
+      return;
     }
 
-    // Get initial run ID
-    final runs = response['runs'] as Map<String, dynamic>?;
-    if (runs == null || runs.isEmpty) {
-      throw StateError('Server did not return any runs');
+    // Initialization in progress - wait for it
+    if (_initializeLock != null) {
+      DebugLog.network('RoomSession: Waiting for initialization of room $roomId');
+      await _initializeLock!.future;
+      return;
     }
-    _activeRunId = runs.keys.first;
 
-    // Create Thread instance with runAgent delegate
-    final RunAgentDelegate runAgentDelegate;
-    if (transportLayer != null) {
-      runAgentDelegate = transportLayer.runAgent;
-      DebugLog.network(
-        'RoomSession: Created thread $threadId with transport layer',
+    // Start initialization with lock
+    _initializeLock = Completer<void>();
+    DebugLog.network('RoomSession: Starting initialization for room $roomId');
+
+    try {
+      // Create thread via HTTP
+      final response = await transport.post(_urlBuilder.createThread(roomId), {});
+
+      final threadId = response['thread_id'] as String?;
+      if (threadId == null) {
+        throw StateError('Server did not return thread_id');
+      }
+
+      // Get initial run ID
+      final runs = response['runs'] as Map<String, dynamic>?;
+      if (runs == null || runs.isEmpty) {
+        throw StateError('Server did not return any runs');
+      }
+      _activeRunId = runs.keys.first;
+
+      // Create Thread instance with runAgent delegate
+      final RunAgentDelegate runAgentDelegate;
+      if (transportLayer != null) {
+        runAgentDelegate = transportLayer.runAgent;
+        DebugLog.network(
+          'RoomSession: Created thread $threadId with transport layer',
+        );
+      } else {
+        // Wrap legacy client as delegate for backward compatibility
+        runAgentDelegate = (endpoint, input) =>
+            agUiClient!.runAgent(endpoint, input);
+        DebugLog.network(
+          'RoomSession: Created thread $threadId with legacy client',
+        );
+      }
+      _thread = Thread(id: threadId, runAgent: runAgentDelegate);
+
+      // Register internal UI tools
+      addTool(_genUiTool, executeInternalTool, fireAndForget: true);
+      addTool(_canvasTool, executeInternalTool, fireAndForget: true);
+
+      // Register local tools if service available
+      if (localToolsService != null) {
+        _registerTools(localToolsService!);
+      }
+
+      // Subscribe to event stream immediately (persistent subscription)
+      _eventSubscription?.cancel();
+      _eventSubscription = _thread!.stepsStream.listen(
+        processEvent,
+        onError: (e) => DebugLog.network('RoomSession: Event stream error: $e'),
+        onDone: () => DebugLog.network('RoomSession: Event stream done'),
       );
-    } else {
-      // Wrap legacy client as delegate for backward compatibility
-      runAgentDelegate = (endpoint, input) =>
-          agUiClient!.runAgent(endpoint, input);
-      DebugLog.network(
-        'RoomSession: Created thread $threadId with legacy client',
+
+      _lastActivity = DateTime.now();
+
+      _eventController.add(
+        SessionCreatedEvent(
+          serverId: serverId,
+          roomId: roomId,
+          threadId: threadId,
+        ),
       );
+
+      DebugLog.network('RoomSession: Created thread $threadId for room $roomId');
+      _initializeLock?.complete();
+    } catch (e) {
+      _initializeLock?.completeError(e);
+      rethrow;
+    } finally {
+      _initializeLock = null;
     }
-    _thread = Thread(id: threadId, runAgent: runAgentDelegate);
-    _lastActivity = DateTime.now();
-
-    _eventController.add(
-      SessionCreatedEvent(
-        serverId: serverId,
-        roomId: roomId,
-        threadId: threadId,
-      ),
-    );
-
-    DebugLog.network('RoomSession: Created thread $threadId for room $roomId');
   }
 
   /// Create a new run for the thread.
@@ -251,6 +350,55 @@ class RoomSession {
     return runId;
   }
 
+  /// Send a user message and process the response.
+  @override
+  Future<void> sendMessage(String text, {Map<String, dynamic>? state}) async {
+    if (_state == SessionState.disposed) {
+      throw StateError('Session is disposed');
+    }
+    
+    // Add user message locally
+    addUserMessage(text);
+
+    // Need to initialize? Should be handled by lifecycle controller, 
+    // but we can check here.
+    if (_thread == null) {
+      throw StateError('Session not initialized');
+    }
+
+    final userMsg = ag_ui.UserMessage(
+      id: 'user-${DateTime.now().millisecondsSinceEpoch}',
+      content: text,
+    );
+
+    await createRun();
+
+    var toolResults = await startRun(
+      messages: [userMsg],
+      state: state,
+    );
+
+    while (toolResults.isNotEmpty && _state != SessionState.disposed) {
+      DebugLog.network(
+        'RoomSession: Processing ${toolResults.length} tool results',
+      );
+
+      final newRunId = await createRun();
+      if (_state == SessionState.disposed) break;
+      
+      toolResults = await sendToolResults(
+        runId: newRunId,
+        toolMessages: toolResults,
+      );
+    }
+  }
+
+  /// Cancel the current operation.
+  @override
+  Future<void> cancel() async {
+    await cancelActiveRun();
+  }
+
   /// Start a chat run with the given message.
   ///
   /// Returns tool results if any client tools were executed.
@@ -264,31 +412,40 @@ class RoomSession {
     if (_state == SessionState.disposed) {
       throw StateError('Session is disposed');
     }
+    if (isStreaming) {
+      throw StateError('Cannot start run while session is streaming');
+    }
 
     _cancelToken = CancelToken();
     _state = SessionState.streaming;
     _lastActivity = DateTime.now();
 
+    // Capture IDs locally to avoid race condition on dispose/cancel
+    final currentThreadId = _thread!.id;
+    final currentRunId = _activeRunId!;
+
     // Relative endpoint for AG-UI client (without base URL)
     final endpoint = _urlBuilder.runEndpoint(
       roomId,
-      _thread!.id,
-      _activeRunId!,
+      currentThreadId,
+      currentRunId,
     );
 
-    _eventController.add(
-      RunStartedEvent(
-        serverId: serverId,
-        roomId: roomId,
-        threadId: _thread!.id,
-        runId: _activeRunId!,
-      ),
-    );
+    if (!_eventController.isClosed) {
+      _eventController.add(
+        RunStartedEvent(
+          serverId: serverId,
+          roomId: roomId,
+          threadId: currentThreadId,
+          runId: currentRunId,
+        ),
+      );
+    }
 
     try {
       final toolResults = await _thread!.startRun(
         endpoint: endpoint,
-        runId: _activeRunId!,
+        runId: currentRunId,
         messages: messages,
         state: state,
       );
@@ -296,39 +453,43 @@ class RoomSession {
       _state = SessionState.active;
       _lastActivity = DateTime.now();
 
-      _eventController.add(
-        RunCompletedEvent(
-          serverId: serverId,
-          roomId: roomId,
-          threadId: _thread!.id,
-          runId: _activeRunId!,
-        ),
-      );
+      if (!_eventController.isClosed) {
+        _eventController.add(
+          RunCompletedEvent(
+            serverId: serverId,
+            roomId: roomId,
+            threadId: currentThreadId,
+            runId: currentRunId,
+          ),
+        );
+      }
 
       return toolResults;
     } catch (e) {
       _state = SessionState.active;
 
-      if (e is CancelledException) {
-        _eventController.add(
-          RunCancelledEvent(
-            serverId: serverId,
-            roomId: roomId,
-            threadId: _thread!.id,
-            runId: _activeRunId!,
-            reason: e.reason,
-          ),
-        );
-      } else {
-        _eventController.add(
-          RunFailedEvent(
-            serverId: serverId,
-            roomId: roomId,
-            threadId: _thread!.id,
-            runId: _activeRunId!,
-            error: e.toString(),
-          ),
-        );
+      if (!_eventController.isClosed) {
+        if (e is CancelledException) {
+          _eventController.add(
+            RunCancelledEvent(
+              serverId: serverId,
+              roomId: roomId,
+              threadId: currentThreadId,
+              runId: currentRunId,
+              reason: e.reason,
+            ),
+          );
+        } else {
+          _eventController.add(
+            RunFailedEvent(
+              serverId: serverId,
+              roomId: roomId,
+              threadId: currentThreadId,
+              runId: currentRunId,
+              error: e.toString(),
+            ),
+          );
+        }
       }
       rethrow;
     } finally {
@@ -378,14 +539,71 @@ class RoomSession {
     }
   }
 
-  /// Suspend the session (backgrounding).
-  void suspend() {
-    if (_state == SessionState.disposed) return;
+  /// Execute an internal tool (e.g., UI rendering).
+  Future<String> executeInternalTool(ag_ui.ToolCall call) async {
+    Map<String, dynamic> args = {};
+    try {
+      if (call.function.arguments.isNotEmpty) {
+        args = jsonDecode(call.function.arguments) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      DebugLog.network('RoomSession: Failed to parse tool args: $e');
+    }
 
-    DebugLog.network('RoomSession: Suspending session for room $roomId');
+    handleLocalToolExecution(call.id, call.function.name, 'executing');
+
+    try {
+      if (call.function.name == 'genui_render') {
+        final widgetName = args['widget_name'] as String? ?? 'Widget';
+        final data = args['data'] as Map<String, dynamic>? ?? {};
+        addGenUiMessage(
+          GenUiContent(toolCallId: call.id, widgetName: widgetName, data: data),
+        );
+        handleLocalToolExecution(call.id, call.function.name, 'completed');
+        return jsonEncode({'rendered': true, 'widget': widgetName});
+      } else if (call.function.name == 'canvas_render') {
+        final widgetName = args['widget_name'] as String? ?? 'Widget';
+        final data = args['data'] as Map<String, dynamic>? ?? {};
+        final position = args['position'] as String? ?? 'append';
+
+        dispatchCanvasUpdate(position, widgetName, data);
+
+        handleLocalToolExecution(call.id, call.function.name, 'completed');
+        return jsonEncode({
+          'rendered': true,
+          'widget': widgetName,
+          'position': position,
+        });
+      } else {
+        throw Exception('Unknown internal tool: ${call.function.name}');
+      }
+    } catch (e) {
+      handleLocalToolExecution(call.id, call.function.name, 'error: $e');
+      return jsonEncode({'error': e.toString()});
+    }
+  }
+
+  /// Suspend the session (backgrounding).
+  ///
+  /// Transitions to [SessionState.backgrounded].
+  /// Active runs and streaming continue in the background.
+  /// Starts inactivity timer to eventually hibernate the session.
+  @override
+  void suspend() {
+    if (_state == SessionState.disposed || _state == SessionState.suspended) return;
+
+    final hasActiveRun = _cancelToken != null;
+    final threadId = _thread?.id;
+    final runId = _activeRunId;
+    DebugLog.network(
+      'RoomSession: Suspending session for room $roomId '
+      '(state=$_state, hasActiveRun=$hasActiveRun, runId=$runId, threadId=$threadId)',
+    );
+
+    // Update state to backgrounded
     _state = SessionState.backgrounded;
 
-    if (_thread != null) {
+    if (_thread != null && !_eventController.isClosed) {
       _eventController.add(
         SessionSuspendedEvent(
           serverId: serverId,
@@ -399,21 +617,76 @@ class RoomSession {
     _startInactivityTimer();
   }
 
+  /// Hibernate the session (deep sleep).
+  ///
+  /// Called by inactivity timer. Cancels active runs, closes streams,
+  /// and releases resources to save memory/battery.
+  /// Equivalent to the old suspend() behavior.
+  void hibernate() {
+    if (_state == SessionState.disposed) return;
+
+    DebugLog.network('RoomSession: Hibernating session for room $roomId');
+
+    // Cancel active run if streaming
+    if (_cancelToken != null) {
+      DebugLog.network(
+        'RoomSession: Cancelling active run $_activeRunId due to hibernation',
+      );
+      _cancelToken!.cancel('Session hibernated');
+      _cancelToken = null;
+
+      // Emit run cancelled event so UI can update
+      if (_activeRunId != null && _thread != null && !_eventController.isClosed) {
+        _eventController.add(
+          RunCancelledEvent(
+            serverId: serverId,
+            roomId: roomId,
+            threadId: _thread!.id,
+            runId: _activeRunId!,
+            reason: 'Session hibernated',
+          ),
+        );
+      }
+      _activeRunId = null;
+    }
+
+    _state = SessionState.suspended;
+    _cancelInactivityTimer();
+  }
+
   /// Resume the session.
+  @override
   void resume() {
     if (_state == SessionState.disposed) {
       throw StateError('Cannot resume disposed session');
     }
 
-    DebugLog.network('RoomSession: Resuming session for room $roomId');
+    final hasActiveRun = _cancelToken != null;
+    final threadId = _thread?.id;
+    final previousState = _state;
+    DebugLog.network(
+      'RoomSession: Resuming session for room $roomId '
+      '(previousState=$previousState, hasActiveRun=$hasActiveRun, threadId=$threadId)',
+    );
 
     // Cancel inactivity timer when resuming
     _cancelInactivityTimer();
 
-    _state = SessionState.active;
+    // If coming from suspended state, we might need to reconnect or refresh logic here
+    // For now, just transitioning back to active/streaming is enough since
+    // Thread manages the SSE connection resilience.
+    
+    // Restore state: if cancel token exists, we are still streaming/processing
+    if (_cancelToken != null) {
+      _state = SessionState.streaming;
+      DebugLog.network('RoomSession: Restored to streaming state (active run in progress)');
+    } else {
+      _state = SessionState.active;
+    }
+
     _lastActivity = DateTime.now();
 
-    if (_thread != null) {
+    if (_thread != null && !_eventController.isClosed) {
       _eventController.add(
         SessionResumedEvent(
           serverId: serverId,
@@ -424,18 +697,45 @@ class RoomSession {
     }
   }
 
+  /// Handle AppState changes for auth awareness.
+  ///
+  /// Only reacts to auth events for this session's server.
+  /// Sessions on other servers should not pause/resume when a different
+  /// server's auth state changes.
+  void _handleAppStateChange(AppState state) {
+    // Only react to auth events for this session's server
+    final eventServerId = state.server?.id;
+    if (eventServerId != null && eventServerId != serverId) {
+      // Auth event is for a different server - ignore it
+      return;
+    }
+
+    if (state is AppStateNeedsAuth) {
+      pauseForAuth();
+    } else if (state is AppStateReady) {
+      resumeFromAuth();
+    }
+  }
+
+  /// Pause processing due to auth failure.
+  void pauseForAuth() {
+    DebugLog.network('RoomSession: Pausing for auth (room $roomId)');
+    // We could pause the thread event loop here if Thread supported it.
+    // For now, we rely on the transport layer to hold requests or fail.
+    // If we wanted to be more aggressive, we could cancel active runs,
+    // but the goal is to survive transient auth issues.
+  }
+
+  /// Resume processing after auth success.
+  void resumeFromAuth() {
+    DebugLog.network('RoomSession: Resuming from auth (room $roomId)');
+    // If we had paused queues, we would resume them here.
+  }
+
   // ==========================================================================
   // INACTIVITY TIMER
   // ==========================================================================
-  //
-  // NOTE: On mobile platforms (Android/iOS), Timer does not fire reliably when
-  // the app is suspended by the OS. This timer is for *session* backgrounding
-  // (switching between rooms within the active app), not *app* backgrounding.
-  //
-  // For app lifecycle events:
-  // - ConnectionRegistry should check `lastActivity` timestamps on app resume
-  // - Use `isExpired()` to determine if a session should be cleaned up
-  // ==========================================================================
+  // ... (rest of file)
 
   /// Check if the session has exceeded the inactivity timeout.
   ///
@@ -462,7 +762,9 @@ class RoomSession {
           '(${inactivityTimeout.inHours} hours)',
         );
         onInactivityTimeout?.call();
-        // Don't auto-dispose here - let the registry handle it
+        
+        // Hibernate session to release resources
+        hibernate();
       }
     });
 
@@ -738,6 +1040,8 @@ class RoomSession {
   }
 
   /// Handle local tool execution notification.
+  ///
+  /// Emits tool execution events for UI consumption.
   void handleLocalToolExecution(
     String toolCallId,
     String toolName,
@@ -749,7 +1053,50 @@ class RoomSession {
       return;
     }
 
-    _eventHandler.onContextUpdate('localToolExecution', summary: '$toolName: $status');
+    _eventHandler.onContextUpdate(
+      'localToolExecution',
+      summary: '$toolName: $status',
+    );
+
+    // Notify event handler for provider updates (tool execution indicator)
+    final errorMessage = status.startsWith('error') ? status : null;
+    _eventHandler.onToolExecution(
+      toolCallId,
+      toolName,
+      status,
+      errorMessage: errorMessage,
+    );
+
+    // Emit tool execution events for external observers
+    if (!_eventController.isClosed) {
+      if (status == 'executing') {
+        _eventController.add(
+          ToolExecutionStartedEvent(
+            serverId: serverId,
+            roomId: roomId,
+            toolCallId: toolCallId,
+            toolName: toolName,
+          ),
+        );
+      } else if (status == 'completed') {
+        _eventController.add(
+          ToolExecutionCompletedEvent(
+            serverId: serverId,
+            roomId: roomId,
+            toolCallId: toolCallId,
+          ),
+        );
+      } else if (status.startsWith('error')) {
+        _eventController.add(
+          ToolExecutionErrorEvent(
+            serverId: serverId,
+            roomId: roomId,
+            toolCallId: toolCallId,
+            errorMessage: status,
+          ),
+        );
+      }
+    }
 
     // Add or update tool call message in chat
     if (status == 'executing') {
@@ -764,6 +1111,17 @@ class RoomSession {
         }
       }
     }
+  }
+
+  /// Dispatch a canvas update event.
+  ///
+  /// Used by tools (like canvas_render) to update the canvas state.
+  void dispatchCanvasUpdate(
+    String operation,
+    String widgetName,
+    Map<String, dynamic> data,
+  ) {
+    _eventHandler.onCanvasUpdate(operation, widgetName, data);
   }
 
   // ==========================================================================
@@ -803,11 +1161,76 @@ class RoomSession {
     _thread?.addTool(tool, executor, fireAndForget: fireAndForget);
   }
 
+  /// Register tools from LocalToolsService.
+  void _registerTools(LocalToolsService service) {
+    for (final toolDef in service.tools) {
+      if (_state == SessionState.disposed) return;
+      // Skip internal UI tools (handled by RoomSession)
+      // We assume internal tools are already registered in initialize()
+      if (toolDef.name == 'canvas_render' || toolDef.name == 'genui_render') continue;
+
+      final agTool = ag_ui.Tool(
+        name: toolDef.name,
+        description: toolDef.description,
+        parameters: toolDef.parameters,
+      );
+
+      addTool(agTool, (call) async {
+        if (_state == SessionState.disposed) return jsonEncode({'error': 'disposed'});
+        Map<String, dynamic> args = {};
+        try {
+          if (call.function.arguments.isNotEmpty) {
+            args = jsonDecode(call.function.arguments) as Map<String, dynamic>;
+          }
+        } catch (e) {
+          DebugLog.network('RoomSession: Failed to parse tool args: $e');
+        }
+
+        handleLocalToolExecution(
+          call.id,
+          call.function.name,
+          'executing',
+        );
+        
+        final result = await service.executeTool(
+          call.id,
+          call.function.name,
+          args,
+        );
+
+        if (_state == SessionState.disposed) return jsonEncode({'error': 'disposed'});
+
+        if (result.success) {
+          handleLocalToolExecution(
+            call.id,
+            call.function.name,
+            'completed',
+          );
+          return jsonEncode(result.result);
+        } else {
+          handleLocalToolExecution(
+            call.id,
+            call.function.name,
+            'error',
+          );
+          return jsonEncode({'error': result.error});
+        }
+      });
+    }
+  }
+
   /// Dispose the session and release resources.
+  @override
   void dispose() {
     if (_state == SessionState.disposed) return;
 
     DebugLog.network('RoomSession: Disposing session for room $roomId');
+
+    _eventSubscription?.cancel(); // Cancel stream subscription
+    _eventSubscription = null;
+    
+    _appStateSubscription?.cancel();
+    _appStateSubscription = null;
 
     _cancelInactivityTimer();
     _cancelToken?.cancel('Session disposed');
@@ -815,15 +1238,19 @@ class RoomSession {
     _thread = null;
     _state = SessionState.disposed;
 
-    _eventController.add(
-      SessionDisposedEvent(
-        serverId: serverId,
-        roomId: roomId,
-        threadId: threadId,
-      ),
-    );
+    if (!_eventController.isClosed) {
+      _eventController.add(
+        SessionDisposedEvent(
+          serverId: serverId,
+          roomId: roomId,
+          threadId: threadId,
+        ),
+      );
+      _eventController.close();
+    }
 
-    _eventController.close();
-    _messageController.close();
+    if (!_messageController.isClosed) {
+      _messageController.close();
+    }
   }
 }

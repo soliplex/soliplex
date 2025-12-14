@@ -20,10 +20,18 @@ class DebugLog {
   static bool servicesEnabled = false; // Service initialization
   static bool canvasEnabled = false; // Canvas operations
   static bool networkEnabled = true; // Network/connection management
+  static bool uiEnabled = false; // UI state changes
 
   static void log(String category, String message) {
     if (!enabled) return;
     debugPrint('[$category] $message');
+  }
+
+  /// UI state changes
+  static void ui(String message) {
+    if (enabled && uiEnabled) {
+      debugPrint('[UI] $message');
+    }
   }
 
   /// AG-UI event processing

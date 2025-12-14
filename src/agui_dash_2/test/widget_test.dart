@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:agui_dash_2/main.dart';
@@ -19,8 +20,8 @@ void main() {
     expect(find.text('AG-UI Dashboard'), findsOneWidget);
   });
 
-  test('AgUiDashApp is a StatelessWidget', () {
+  test('AgUiDashApp is a ConsumerWidget', () {
     const app = AgUiDashApp();
-    expect(app, isA<StatelessWidget>());
+    expect(app, isA<ConsumerWidget>());
   });
 }

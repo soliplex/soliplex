@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/models/chat_models.dart';
+import '../view_models/chat_message_view_model.dart';
+import '../view_models/message_view_model_mapper.dart';
 import 'chat_message_bubble.dart';
 import 'chat_typing_indicator.dart';
 
@@ -12,8 +14,7 @@ import 'chat_typing_indicator.dart';
 /// - Typing indicator
 /// - Direct ChatMessage access (no conversion layer)
 class ChatMessageList extends StatefulWidget {
-  final List<ChatMessage> messages;
-  final bool isAgentTyping;
+  final List<ChatMessage> messages; // Still takes domain messages
   final ScrollController? scrollController;
   final double maxBubbleWidth;
   final void Function(String quotedText)? onQuote;
@@ -29,7 +30,6 @@ class ChatMessageList extends StatefulWidget {
   const ChatMessageList({
     super.key,
     required this.messages,
-    this.isAgentTyping = false,
     this.scrollController,
     this.maxBubbleWidth = double.infinity,
     this.onQuote,
@@ -46,6 +46,8 @@ class ChatMessageList extends StatefulWidget {
 class _ChatMessageListState extends State<ChatMessageList> {
   late ScrollController _scrollController;
   bool _isNearBottom = true;
+  List<ChatMessageViewModel> _viewModels = [];
+  final MessageViewModelMapper _mapper = MessageViewModelMapper();
 
   // Threshold for "near bottom" detection (in pixels)
   static const double _nearBottomThreshold = 100;
@@ -55,6 +57,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
     super.initState();
     _scrollController = widget.scrollController ?? ScrollController();
     _scrollController.addListener(_onScroll);
+    _mapMessagesToViewModels();
   }
 
   @override
@@ -67,12 +70,21 @@ class _ChatMessageListState extends State<ChatMessageList> {
     super.dispose();
   }
 
+  /// Maps incoming ChatMessages to ViewModels.
+  void _mapMessagesToViewModels() {
+    _viewModels = widget.messages.map((msg) => _mapper.map(msg)).toList();
+  }
+
   @override
   void didUpdateWidget(ChatMessageList oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Auto-scroll when new messages arrive and we're near bottom
-    if (widget.messages.length > oldWidget.messages.length && _isNearBottom) {
-      _scrollToBottom();
+    if (widget.messages != oldWidget.messages) {
+      // Re-map messages when the underlying list changes
+      _mapMessagesToViewModels();
+      // Auto-scroll when new messages arrive and we're near bottom
+      if (widget.messages.length > oldWidget.messages.length && _isNearBottom) {
+        _scrollToBottom();
+      }
     }
   }
 
@@ -98,9 +110,16 @@ class _ChatMessageListState extends State<ChatMessageList> {
 
   @override
   Widget build(BuildContext context) {
-    // Calculate total item count: messages + typing indicator + welcome widget
+    // Determine if agent is typing from the view models
+    final isAgentTyping = _viewModels.any(
+      (vm) =>
+          vm.user.id == ChatUser.agent.id &&
+          (vm is TextMessageViewModel && vm.isStreaming),
+    );
+
+    // Calculate total item count: view models + typing indicator + welcome widget
     final hasWelcome = widget.welcomeWidget != null;
-    final baseCount = widget.messages.length + (widget.isAgentTyping ? 1 : 0);
+    final baseCount = _viewModels.length + (isAgentTyping ? 1 : 0);
     final itemCount = baseCount + (hasWelcome ? 1 : 0);
 
     if (itemCount == 0) {
@@ -115,7 +134,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
       itemBuilder: (context, index) {
         // In reverse mode, index 0 is the bottom (newest)
         // If typing, index 0 shows typing indicator
-        if (widget.isAgentTyping && index == 0) {
+        if (isAgentTyping && index == 0) {
           return const Padding(
             key: ValueKey('typing-indicator'),
             padding: EdgeInsets.only(bottom: 8),
@@ -132,41 +151,45 @@ class _ChatMessageListState extends State<ChatMessageList> {
           );
         }
 
-        // Adjust index for messages (account for typing indicator)
-        final messageIndex = widget.isAgentTyping ? index - 1 : index;
+        // Adjust index for view models (account for typing indicator)
+        final viewModelIndex = isAgentTyping ? index - 1 : index;
 
-        // Since list is reversed, we need to access messages from the end
-        // index 0 (or 1 if typing) = last message
-        final actualIndex = widget.messages.length - 1 - messageIndex;
+        // Since list is reversed, we need to access view models from the end
+        // index 0 (or 1 if typing) = last view model
+        final actualIndex = _viewModels.length - 1 - viewModelIndex;
 
-        if (actualIndex < 0 || actualIndex >= widget.messages.length) {
+        if (actualIndex < 0 || actualIndex >= _viewModels.length) {
           return const SizedBox.shrink();
         }
 
-        final message = widget.messages[actualIndex];
+        final viewModel = _viewModels[actualIndex];
 
-        // Get previous/next messages for context (optional, for grouping)
-        final previousMessage = actualIndex > 0
-            ? widget.messages[actualIndex - 1]
+        // Get previous/next view models for context (optional, for grouping)
+        final previousViewModel = actualIndex > 0
+            ? _viewModels[actualIndex - 1]
             : null;
-        final nextMessage = actualIndex < widget.messages.length - 1
-            ? widget.messages[actualIndex + 1]
+        final nextViewModel = actualIndex < _viewModels.length - 1
+            ? _viewModels[actualIndex + 1]
             : null;
 
         return Padding(
-          key: ValueKey(message.id),
+          key: viewModel.key, // Use ViewModel's key
           padding: const EdgeInsets.only(bottom: 8),
           child: ChatMessageBubble(
-            message: message,
-            previousMessage: previousMessage,
-            nextMessage: nextMessage,
+            viewModel: viewModel, // Pass ViewModel
+            previousViewModel: previousViewModel,
+            nextViewModel: nextViewModel,
             maxWidth: widget.maxBubbleWidth,
             onQuote: widget.onQuote,
-            onToggleThinking: widget.onToggleThinking != null
-                ? () => widget.onToggleThinking!(message.id)
+            onToggleThinking:
+                widget.onToggleThinking != null &&
+                    viewModel is TextMessageViewModel
+                ? () => widget.onToggleThinking!(viewModel.id)
                 : null,
-            onToggleToolGroup: widget.onToggleToolGroup != null
-                ? () => widget.onToggleToolGroup!(message.id)
+            onToggleToolGroup:
+                widget.onToggleToolGroup != null &&
+                    viewModel is ToolCallGroupViewModel
+                ? () => widget.onToggleToolGroup!(viewModel.id)
                 : null,
             onGenUiEvent: widget.onGenUiEvent,
           ),
@@ -192,7 +215,7 @@ extension ChatMessageListScrolling on ScrollController {
 
     animateTo(
       estimatedPosition,
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 200),
       curve: Curves.easeOut,
     );
   }

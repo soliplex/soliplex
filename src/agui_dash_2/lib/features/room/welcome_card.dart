@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/models/room_models.dart';
+import '../chat/widgets/suggestion_chip.dart';
 
 /// An animated welcome card displayed when entering a room with no messages.
 ///
@@ -167,8 +168,8 @@ class _WelcomeCardState extends State<WelcomeCard>
                     spacing: 8,
                     runSpacing: 8,
                     children: widget.room.suggestions.map((suggestion) {
-                      return _SuggestionChip(
-                        suggestion: suggestion,
+                      return SuggestionChip.welcome(
+                        text: suggestion,
                         onTap: () => widget.onSuggestionTap?.call(suggestion),
                       );
                     }).toList(),
@@ -183,52 +184,3 @@ class _WelcomeCardState extends State<WelcomeCard>
   }
 }
 
-class _SuggestionChip extends StatelessWidget {
-  final String suggestion;
-  final VoidCallback? onTap;
-
-  const _SuggestionChip({required this.suggestion, this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: colorScheme.outline.withValues(alpha: 0.3),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.chat_bubble_outline,
-                size: 14,
-                color: colorScheme.primary,
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  suggestion,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: colorScheme.onSurface),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

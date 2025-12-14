@@ -1,12 +1,13 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:ag_ui/ag_ui.dart' as ag_ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:agui_dash_2/core/protocol/chat_session.dart';
 import '../models/chat_models.dart';
+import '../models/endpoint_models.dart';
 import '../providers/app_providers.dart';
+import '../providers/panel_providers.dart';
 import '../services/local_tools_service.dart';
 import '../utils/debug_log.dart';
 import 'connection_events.dart';
@@ -16,14 +17,6 @@ import 'room_session.dart';
 import 'server_connection_state.dart';
 import 'server_room_key.dart';
 
-/// UI tool handler callback type.
-typedef UiToolHandler =
-    Future<Map<String, dynamic>> Function(
-      String toolCallId,
-      String toolName,
-      Map<String, dynamic> args,
-    );
-
 /// Local tool execution notifier callback type.
 typedef LocalToolNotifier =
     void Function(String toolCallId, String toolName, String status);
@@ -32,21 +25,6 @@ typedef LocalToolNotifier =
 typedef HeaderRefresher = Future<Map<String, String>> Function(String serverId);
 
 /// Facade over [ConnectionRegistry] for backward compatibility.
-///
-/// This class provides the same API as the original ConnectionManager
-/// while delegating to the multi-server ConnectionRegistry internally.
-///
-/// Key changes from original:
-/// - `switchServer()` is now NON-DESTRUCTIVE (sessions preserved per server)
-/// - Added `focusServer()` for multi-server switching
-/// - All session operations delegate to registry
-///
-/// Handles:
-/// - Session pool per server (via ConnectionRegistry)
-/// - Server switching (non-destructive, preserves sessions)
-/// - Room switching with state preservation
-/// - Run cancellation
-/// - Connection observability
 class ConnectionManager extends ChangeNotifier {
   /// Connection registry for multi-server support.
   final ConnectionRegistry _registry;
@@ -61,8 +39,8 @@ class ConnectionManager extends ChangeNotifier {
   final StreamController<ConnectionEvent> _eventController =
       StreamController<ConnectionEvent>.broadcast();
 
-  /// Tools that should be handled by the UI layer.
-  static const _uiTools = {'canvas_render', 'genui_render'};
+  /// Track if manager is disposed to prevent updates after disposal.
+  bool _disposed = false;
 
   /// Whether the manager has been configured with a server.
   bool get isConfigured =>
@@ -82,7 +60,7 @@ class ConnectionManager extends ChangeNotifier {
       ? _registry.getServerState(_activeServerId!)
       : null;
 
-  /// Max backgrounded sessions before LRU eviction (delegated to registry config).
+  /// Max backgrounded sessions before LRU eviction.
   int get maxBackgroundedSessions => 5;
 
   ConnectionManager({
@@ -92,61 +70,61 @@ class ConnectionManager extends ChangeNotifier {
     HeaderRefresher? headerRefresher,
   }) : _registry = registry ?? ConnectionRegistry(),
        _headerRefresher = headerRefresher {
-    // Listen to registry changes
     _registry.addListener(_onRegistryChanged);
-
-    // If baseUrl provided, connect immediately (backward compat)
     if (baseUrl.isNotEmpty) {
       switchServer(baseUrl, headers: headers);
     }
   }
 
   void _onRegistryChanged() {
+    if (_disposed) return;
     notifyListeners();
   }
 
   /// Switch to a different server (NON-DESTRUCTIVE).
   ///
-  /// Creates or retrieves a server connection. Sessions on other servers
-  /// are preserved (not destroyed like the old implementation).
-  ///
-  /// Call this when the user selects a different server.
-  void switchServer(String newBaseUrl, {Map<String, String>? headers}) {
-    // Generate a server ID from the URL (or use provided ID)
-    final serverId = _serverIdFromUrl(newBaseUrl);
+  /// [serverId] optional explicitly provided ID (e.g. from saved state).
+  /// If not provided, one is generated from the URL.
+  void switchServer(
+    String newBaseUrl, {
+    Map<String, String>? headers,
+    String? serverId,
+    EndpointConfiguration? config,
+  }) {
+    if (_disposed) return;
+    
+    // Use provided ID or generate from URL
+    final targetServerId = serverId ?? _serverIdFromUrl(newBaseUrl);
 
-    if (_activeServerId == serverId) {
+    if (_activeServerId == targetServerId) {
       DebugLog.network('ConnectionManager: Server unchanged, skipping switch');
       return;
     }
 
     DebugLog.network(
-      'ConnectionManager: Switching server to $newBaseUrl (id: $serverId)',
+      'ConnectionManager: Switching server to $newBaseUrl (id: $targetServerId)',
     );
 
-    // Create header refresher bound to this server ID
     final serverHeaderRefresher = _headerRefresher != null
-        ? () => _headerRefresher(serverId)
+        ? () => _headerRefresher(targetServerId)
         : null;
 
-    // Connect to the server (or get existing connection)
     _registry.connectServer(
-      serverId,
+      targetServerId,
       newBaseUrl,
       headers: headers,
       headerRefresher: serverHeaderRefresher,
+      config: config,
     );
-    _activeServerId = serverId;
-    _registry.focusServer(serverId);
+    _activeServerId = targetServerId;
+    _registry.focusServer(targetServerId);
 
     notifyListeners();
   }
 
-  /// Focus a different server by ID (for multi-server support).
-  ///
-  /// Unlike [switchServer], this only changes the active server
-  /// without connecting to a new one.
+  /// Focus a different server by ID.
   void focusServer(String serverId) {
+    if (_disposed) return;
     if (!_registry.hasServer(serverId)) {
       throw StateError(
         'Server $serverId not connected. Call switchServer() first.',
@@ -171,13 +149,12 @@ class ConnectionManager extends ChangeNotifier {
 
   /// Generate a server ID from a URL.
   String _serverIdFromUrl(String url) {
-    // Extract host:port as ID (e.g., "localhost:8080")
     final uri = Uri.parse(url);
     return '${uri.host}:${uri.port}';
   }
 
   // Getters
-  RoomSession? get activeSession {
+  ChatSession? get activeSession {
     final roomId = activeRoomId;
     final serverId = _activeServerId;
     if (roomId == null || serverId == null) return null;
@@ -186,17 +163,19 @@ class ConnectionManager extends ChangeNotifier {
     );
   }
 
-  /// Stream of connection events for observability.
+  /// Stream of connection events.
   Stream<ConnectionEvent> get events => _eventController.stream;
 
-  /// Get all active connections info (for current server).
+  /// Get all active connections info.
   List<ConnectionInfo> get activeConnections {
     final serverState = _activeServerState;
     if (serverState == null) return [];
-    return serverState.sessions.values.map((s) => s.connectionInfo).toList();
+    return serverState.sessions.values
+        .map((s) => s.connectionInfo)
+        .toList();
   }
 
-  /// Get connection info for a specific room (on current server).
+  /// Get connection info for a specific room.
   ConnectionInfo? getConnectionInfo(String roomId) {
     if (_activeServerId == null) return null;
     final session = _registry.getExistingSession(
@@ -205,45 +184,54 @@ class ConnectionManager extends ChangeNotifier {
     return session?.connectionInfo;
   }
 
-  /// Get or create a session for a room (on current server).
-  RoomSession getSession(String roomId) {
+  /// Get or create a session for a room.
+  ChatSession getSession(String roomId) {
     if (_activeServerId == null) {
       throw StateError('No server configured. Call switchServer() first.');
     }
 
     final key = ServerRoomKey(serverId: _activeServerId!, roomId: roomId);
     final session = _registry.getSession(key);
-
-    // Forward session events (subscribe if new)
     _subscribeToSession(session);
-
     return session;
   }
 
-  /// Track subscriptions for proper cleanup.
   final Map<String, StreamSubscription<ConnectionEvent>> _sessionSubscriptions =
       {};
 
-  void _subscribeToSession(RoomSession session) {
-    final sessionKey = '${session.serverId}:${session.roomId}';
+  void _subscribeToSession(ChatSession session) {
+    if (_disposed) return;
+    
+    // We need serverId and roomId for the key. 
+    // ChatSession interface doesn't guarantee serverId is in connectionInfo?
+    // RoomSession has serverId property.
+    // connectionInfo has serverId.
+    final info = session.connectionInfo;
+    final sessionKey = '${info.serverId ?? activeServerId}:${info.roomId}';
+    
     if (_sessionSubscriptions.containsKey(sessionKey)) return;
 
-    _sessionSubscriptions[sessionKey] = session.events.listen(
-      _eventController.add,
-    );
+    _sessionSubscriptions[sessionKey] = session.events.listen((event) {
+      if (_disposed) return;
+      _eventController.add(event);
+      // Clean up subscription if session is disposed
+      if (event is SessionDisposedEvent) {
+        _sessionSubscriptions.remove(sessionKey)?.cancel();
+      }
+    });
   }
 
-  /// Get messages for a room (reads from RoomSession).
+  /// Get messages for a room.
   List<ChatMessage> getMessages(String roomId) {
     return getSession(roomId).messages;
   }
 
-  /// Get message stream for a room (for UI subscription).
+  /// Get message stream for a room.
   Stream<List<ChatMessage>> getMessageStream(String roomId) {
     return getSession(roomId).messageStream;
   }
 
-  /// Check if agent is typing in a room.
+  /// Check if agent is typing.
   bool isAgentTyping(String roomId) {
     if (_activeServerId == null) return false;
     final session = _registry.getExistingSession(
@@ -252,10 +240,9 @@ class ConnectionManager extends ChangeNotifier {
     return session?.isAgentTyping ?? false;
   }
 
-  /// Switch to a different room (on current server).
-  ///
-  /// Suspends the current session (if any) and resumes or creates the new one.
-  Future<RoomSession> switchRoom(String newRoomId) async {
+  /// Switch to a different room.
+  Future<ChatSession> switchRoom(String newRoomId) async {
+    if (_disposed) throw StateError('ConnectionManager is disposed');
     if (_activeServerId == null) {
       throw StateError('No server configured. Call switchServer() first.');
     }
@@ -264,7 +251,6 @@ class ConnectionManager extends ChangeNotifier {
     final previousRoomId = _registry.activeRoomId;
 
     if (previousRoomId == newRoomId) {
-      // Already on this room
       return getSession(newRoomId);
     }
 
@@ -272,10 +258,7 @@ class ConnectionManager extends ChangeNotifier {
       'ConnectionManager: Switching from $previousRoomId to $newRoomId',
     );
 
-    // Use registry's setActive which handles suspend/resume
     _registry.setActive(key);
-
-    // Get the session and subscribe
     final newSession = getSession(newRoomId);
 
     _eventController.add(
@@ -286,43 +269,37 @@ class ConnectionManager extends ChangeNotifier {
       ),
     );
 
-    notifyListeners();
+    if (!_disposed) notifyListeners();
     return newSession;
   }
 
-  /// Initialize a session for a room (create thread).
+  /// Initialize a session for a room.
   Future<void> initializeSession(String roomId) async {
+    if (_disposed) return;
     final serverState = _activeServerState;
     if (serverState == null) {
       throw StateError('No server configured. Call switchServer() first.');
     }
 
     final session = getSession(roomId);
-    if (session.threadId == null) {
-      await session.initialize(transportLayer: serverState.transportLayer);
-      notifyListeners();
+    if (session is RoomSession) {
+      if (session.threadId == null) {
+        await session.initialize(transportLayer: serverState.transportLayer);
+        if (!_disposed) notifyListeners();
+      }
     }
   }
 
   /// Chat in a room.
-  ///
-  /// Handles the full conversation flow including tool execution.
-  /// Events are processed by RoomSession and messages are updated automatically.
-  /// Subscribe to getMessageStream(roomId) to receive message updates.
-  ///
-  /// [uiToolHandler] is called for canvas_render and genui_render tools
-  /// which need access to UI state.
-  ///
-  /// [onLocalToolExecution] is called when local tools start/complete.
   Future<void> chat({
     required String roomId,
     required String userMessage,
     required LocalToolsService localToolsService,
-    UiToolHandler? uiToolHandler,
     LocalToolNotifier? onLocalToolExecution,
-    RoomEventHandler? eventHandler,
+    @Deprecated('Handled by registry') RoomEventHandler? eventHandler,
     Map<String, dynamic>? state,
   }) async {
+    if (_disposed) throw StateError('ConnectionManager is disposed');
     if (!isConfigured) {
       throw StateError(
         'ConnectionManager not configured. Call switchServer() first.',
@@ -331,69 +308,25 @@ class ConnectionManager extends ChangeNotifier {
 
     final session = getSession(roomId);
 
-    // Set up event handler for side effects
-    if (eventHandler != null) {
+    // Legacy handler support
+    if (eventHandler != null && session is RoomSession) {
       session.setEventHandler(eventHandler);
     }
 
-    // Initialize if needed
-    if (session.threadId == null) {
-      await initializeSession(roomId);
-    }
-
-    // Add user message to session
-    session.addUserMessage(userMessage);
-
-    // Register tools
-    _registerTools(
-      session,
-      localToolsService,
-      uiToolHandler,
-      onLocalToolExecution,
-    );
-
-    // Listen to event streams - session processes events internally
-    StreamSubscription<ag_ui.BaseEvent>? stepsSub;
-
-    try {
-      stepsSub = session.stepsStream?.listen((event) {
-        session.processEvent(event);
-      });
-
-      // Create user message for AG-UI
-      final userMsg = ag_ui.UserMessage(
-        id: 'user-${DateTime.now().millisecondsSinceEpoch}',
-        content: userMessage,
-      );
-
-      // Create fresh run for this message (fixes multi-message bug)
-      await session.createRun();
-
-      // Start run
-      var toolResults = await session.startRun(
-        messages: [userMsg],
-        state: state,
-      );
-
-      // Tool result loop
-      while (toolResults.isNotEmpty) {
-        DebugLog.network(
-          'ConnectionManager: Processing ${toolResults.length} tool results',
-        );
-
-        final newRunId = await session.createRun();
-        toolResults = await session.sendToolResults(
-          runId: newRunId,
-          toolMessages: toolResults,
-        );
+    if (session is RoomSession) {
+      if (session.threadId == null) {
+        await initializeSession(roomId);
       }
-    } finally {
-      await stepsSub?.cancel();
+      // Note: We ignore tool registration here because RoomSession handles it in initialize.
+      // We also ignore 'state' map for now unless we extend ChatSession.
     }
+
+    await session.sendMessage(userMessage, state: state);
   }
 
-  /// Cancel the active run for a room.
+  /// Cancel the active run.
   Future<void> cancelRun(String roomId) async {
+    if (_disposed) return;
     if (_activeServerId == null) {
       DebugLog.network('ConnectionManager: No server configured');
       return;
@@ -407,149 +340,71 @@ class ConnectionManager extends ChangeNotifier {
       return;
     }
 
-    await session.cancelActiveRun();
-    notifyListeners();
+    await session.cancel();
+    if (!_disposed) notifyListeners();
   }
 
   /// Clear messages for a room.
   void clearMessages(String roomId) {
+    if (_disposed) return;
     if (_activeServerId == null) return;
     final session = _registry.getExistingSession(
       ServerRoomKey(serverId: _activeServerId!, roomId: roomId),
     );
-    session?.clearMessages();
-    notifyListeners();
+    // Only RoomSession supports manual clear for now
+    if (session is RoomSession) {
+      session.clearMessages();
+    }
+    if (!_disposed) notifyListeners();
   }
 
-  /// Load messages for a room (for history restoration).
+  /// Load messages for a room.
   void loadMessages(String roomId, List<ChatMessage> messages) {
+    if (_disposed) return;
     final session = getSession(roomId);
-    session.loadMessages(messages);
-  }
-
-  /// Register tools with a session.
-  void _registerTools(
-    RoomSession session,
-    LocalToolsService localToolsService,
-    UiToolHandler? uiToolHandler,
-    LocalToolNotifier? onLocalToolExecution,
-  ) {
-    for (final toolDef in localToolsService.tools) {
-      final agTool = ag_ui.Tool(
-        name: toolDef.name,
-        description: toolDef.description,
-        parameters: toolDef.parameters,
-      );
-
-      final isFireAndForget = _uiTools.contains(toolDef.name);
-
-      session.addTool(agTool, (call) async {
-        Map<String, dynamic> args = {};
-        try {
-          if (call.function.arguments.isNotEmpty) {
-            args = jsonDecode(call.function.arguments) as Map<String, dynamic>;
-          }
-        } catch (e) {
-          DebugLog.network('ConnectionManager: Failed to parse tool args: $e');
-        }
-
-        // UI tools (canvas_render, genui_render)
-        if (_uiTools.contains(call.function.name) && uiToolHandler != null) {
-          session.handleLocalToolExecution(
-            call.id,
-            call.function.name,
-            'executing',
-          );
-          try {
-            final result = await uiToolHandler(
-              call.id,
-              call.function.name,
-              args,
-            );
-            session.handleLocalToolExecution(
-              call.id,
-              call.function.name,
-              'completed',
-            );
-            return jsonEncode(result);
-          } catch (e) {
-            session.handleLocalToolExecution(
-              call.id,
-              call.function.name,
-              'error: $e',
-            );
-            return jsonEncode({'error': e.toString()});
-          }
-        }
-
-        // Regular tools
-        session.handleLocalToolExecution(
-          call.id,
-          call.function.name,
-          'executing',
-        );
-        final result = await localToolsService.executeTool(
-          call.id,
-          call.function.name,
-          args,
-        );
-
-        if (result.success) {
-          session.handleLocalToolExecution(
-            call.id,
-            call.function.name,
-            'completed',
-          );
-          return jsonEncode(result.result);
-        } else {
-          session.handleLocalToolExecution(
-            call.id,
-            call.function.name,
-            'error',
-          );
-          return jsonEncode({'error': result.error});
-        }
-      }, fireAndForget: isFireAndForget);
+    if (session is RoomSession) {
+      session.loadMessages(messages);
     }
   }
 
-  /// Dispose a specific room session (on current server).
+  /// Dispose a specific room session.
   void disposeSession(String roomId) {
+    if (_disposed) return;
     final serverState = _activeServerState;
     if (serverState == null) return;
 
     serverState.disposeSession(roomId);
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   /// Remove a server and all its sessions.
   void removeServer(String serverId) {
+    if (_disposed) return;
     _registry.removeServer(serverId);
     if (_activeServerId == serverId) {
       _activeServerId = null;
     }
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   /// Dispose all sessions and the manager.
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     _registry.removeListener(_onRegistryChanged);
 
-    // Cancel all session subscriptions
     for (final subscription in _sessionSubscriptions.values) {
       subscription.cancel();
     }
     _sessionSubscriptions.clear();
 
     _eventController.close();
-    // Note: Don't dispose registry here - it may be shared
     super.dispose();
   }
 }
 
 /// Singleton provider for ConnectionManager.
-/// Persists for app lifetime - NOT server-scoped.
 final connectionManagerProvider = ChangeNotifierProvider<ConnectionManager>((
   ref,
 ) {
@@ -560,6 +415,27 @@ final connectionManagerProvider = ChangeNotifierProvider<ConnectionManager>((
     registry: registry,
     headerRefresher: (serverId) => authManager.getAuthHeaders(serverId),
   );
-  ref.onDispose(() => manager.dispose());
+
+  // Listen for lifecycle events and update activity status
+  final subscription = manager.events.listen((event) {
+    final serverId = event.serverId;
+    if (serverId == null) return;
+
+    final key = ServerRoomKey(serverId: serverId, roomId: event.roomId);
+
+    if (event is RunStartedEvent) {
+      ref.read(roomActivityStatusProvider(key).notifier).startActivity();
+    } else if (event is RunCompletedEvent || event is RunFailedEvent) {
+      ref.read(roomActivityStatusProvider(key).notifier).stopActivity();
+    } else if (event is RunCancelledEvent) {
+      ref.read(roomActivityStatusProvider(key).notifier).stopActivity();
+    }
+  });
+
+  ref.onDispose(() {
+    subscription.cancel();
+    manager.dispose();
+  });
+
   return manager;
 });

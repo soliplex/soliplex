@@ -3,10 +3,17 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:agui_dash_2/core/protocol/chat_session.dart';
 import '../config/connection_config.dart';
+import '../models/endpoint_models.dart';
+import '../providers/app_providers.dart'; // For appStateManagerProvider
+import '../state/app_state.dart';
+import '../services/local_tools_service.dart';
 import '../utils/debug_log.dart';
 import 'connection_events.dart' show SessionState;
 import 'network_inspector.dart';
+import 'riverpod_room_event_handler.dart';
+import 'room_event_handler.dart';
 import 'room_session.dart';
 import 'server_connection_state.dart';
 import 'server_room_key.dart';
@@ -31,6 +38,15 @@ class ConnectionRegistry extends ChangeNotifier {
   /// Network inspector for traffic capture (optional).
   final NetworkInspector? _inspector;
 
+  /// Local tools service for tool execution.
+  final LocalToolsService? _localToolsService;
+
+  /// Stream of app state changes.
+  final Stream<AppState>? _appStateStream;
+
+  /// Factory for creating event handlers for sessions.
+  final RoomEventHandler Function(ServerRoomKey key)? _eventHandlerFactory;
+
   /// Currently active server ID.
   String? _activeServerId;
 
@@ -46,9 +62,18 @@ class ConnectionRegistry extends ChangeNotifier {
   /// Creates a new connection registry.
   ///
   /// [inspector] is optional network inspector for traffic capture.
-  ConnectionRegistry({ConnectionConfig? config, NetworkInspector? inspector})
-    : _config = config ?? ConnectionConfig.defaultConfig,
-      _inspector = inspector {
+  /// [eventHandlerFactory] creates handlers for session state updates.
+  ConnectionRegistry({
+    ConnectionConfig? config,
+    NetworkInspector? inspector,
+    LocalToolsService? localToolsService,
+    Stream<AppState>? appStateStream,
+    RoomEventHandler Function(ServerRoomKey key)? eventHandlerFactory,
+  }) : _config = config ?? ConnectionConfig.defaultConfig,
+       _inspector = inspector,
+       _localToolsService = localToolsService,
+       _appStateStream = appStateStream,
+       _eventHandlerFactory = eventHandlerFactory {
     _startCleanupTimer();
     DebugLog.service('ConnectionRegistry: Created with config $_config');
   }
@@ -99,12 +124,22 @@ class ConnectionRegistry extends ChangeNotifier {
     String baseUrl, {
     Map<String, String>? headers,
     Future<Map<String, String>> Function()? headerRefresher,
+    EndpointConfiguration? config,
   }) {
     _throwIfDisposed();
 
     var serverState = _servers[serverId];
     if (serverState != null) {
       serverState.touch();
+      
+      // Update headers if provided (Fix for stale auth)
+      if (headers != null) {
+         DebugLog.network('ConnectionRegistry: Reusing server $serverId. Updating headers.');
+         serverState.transportLayer.updateHeaders(headers);
+      } else {
+         DebugLog.network('ConnectionRegistry: Reusing server $serverId. No new headers provided.');
+      }
+
       DebugLog.service(
         'ConnectionRegistry: Returning existing server $serverId',
       );
@@ -117,6 +152,9 @@ class ConnectionRegistry extends ChangeNotifier {
       headers: headers,
       headerRefresher: headerRefresher,
       inspector: _inspector,
+      localToolsService: _localToolsService,
+      config: config,
+      appStateStream: _appStateStream,
     );
     _servers[serverId] = serverState;
 
@@ -134,11 +172,12 @@ class ConnectionRegistry extends ChangeNotifier {
   /// This is the primary way to get sessions in the multi-connection architecture.
   ///
   /// [headerRefresher] is called on 401 to refresh auth headers.
-  RoomSession getSession(
+  ChatSession getSession(
     ServerRoomKey key, {
     String? baseUrl,
     Map<String, String>? headers,
     Future<Map<String, String>> Function()? headerRefresher,
+    EndpointConfiguration? config,
   }) {
     _throwIfDisposed();
 
@@ -154,14 +193,24 @@ class ConnectionRegistry extends ChangeNotifier {
         baseUrl,
         headers: headers,
         headerRefresher: headerRefresher,
+        config: config,
       );
     }
 
-    return serverState.getOrCreateSession(key.roomId);
+    final session = serverState.getOrCreateSession(key.roomId);
+
+    // Inject event handler if configured (only for RoomSessions)
+    if (_eventHandlerFactory case final factory?) {
+      if (session is RoomSession) {
+        session.setEventHandler(factory(key));
+      }
+    }
+
+    return session;
   }
 
   /// Gets an existing session, or null if not found.
-  RoomSession? getExistingSession(ServerRoomKey key) {
+  ChatSession? getExistingSession(ServerRoomKey key) {
     return _servers[key.serverId]?.getSession(key.roomId);
   }
 
@@ -171,7 +220,7 @@ class ConnectionRegistry extends ChangeNotifier {
   void setActive(ServerRoomKey key) {
     _throwIfDisposed();
 
-    // Suspend previous active session if different
+    // Suspend previous active/streaming session if different
     if (_activeServerId != null && _activeRoomId != null) {
       final previousKey = ServerRoomKey(
         serverId: _activeServerId!,
@@ -179,7 +228,9 @@ class ConnectionRegistry extends ChangeNotifier {
       );
       if (previousKey != key) {
         final previousSession = getExistingSession(previousKey);
-        if (previousSession != null && previousSession.isActive) {
+        if (previousSession != null &&
+            (previousSession.state == SessionState.active ||
+             previousSession.state == SessionState.streaming)) {
           previousSession.suspend();
         }
       }
@@ -215,6 +266,9 @@ class ConnectionRegistry extends ChangeNotifier {
   }
 
   /// Focuses a specific server (sets it as active, no room change).
+  ///
+  /// When switching to a different server, suspends all active sessions
+  /// on the previous server to prevent orphaned SSE streams.
   void focusServer(String serverId) {
     _throwIfDisposed();
 
@@ -222,11 +276,47 @@ class ConnectionRegistry extends ChangeNotifier {
       throw StateError('Server $serverId not connected');
     }
 
+    final previousServerId = _activeServerId;
+
+    // If switching to a different server, suspend sessions on the old server
+    if (previousServerId != null && previousServerId != serverId) {
+      DebugLog.network(
+        'ConnectionRegistry: Server switch $previousServerId -> $serverId, suspending old sessions',
+      );
+      final previousServerState = _servers[previousServerId];
+      if (previousServerState != null) {
+        final suspendedCount = _suspendServerSessions(previousServerState);
+        DebugLog.network(
+          'ConnectionRegistry: Suspended $suspendedCount sessions on $previousServerId',
+        );
+      }
+    }
+
     _activeServerId = serverId;
     _servers[serverId]?.touch();
 
     DebugLog.service('ConnectionRegistry: Focused server $serverId');
     notifyListeners();
+  }
+
+  /// Suspends all active or streaming sessions on a server.
+  /// Returns the count of sessions suspended.
+  int _suspendServerSessions(ServerConnectionState serverState) {
+    int count = 0;
+    for (final entry in serverState.sessions.entries) {
+      final roomId = entry.key;
+      final session = entry.value;
+      // Suspend both active AND streaming sessions (streaming = has active run)
+      if (session.state == SessionState.active ||
+          session.state == SessionState.streaming) {
+        DebugLog.network(
+          'ConnectionRegistry: Suspending session for room $roomId (state=${session.state})',
+        );
+        session.suspend();
+        count++;
+      }
+    }
+    return count;
   }
 
   /// Removes a server and disposes all its sessions.
@@ -371,7 +461,18 @@ final connectionRegistryProvider = Provider<ConnectionRegistry>((ref) {
   final config = ref.watch(connectionConfigProvider);
   // Use read (not watch) - inspector changes shouldn't rebuild registry
   final inspector = ref.read(networkInspectorProvider);
-  final registry = ConnectionRegistry(config: config, inspector: inspector);
+  final localToolsService = ref.read(localToolsServiceProvider);
+  final appStateManager = ref.read(appStateManagerProvider);
+
+  // Create registry with RiverpodRoomEventHandler factory
+  final registry = ConnectionRegistry(
+    config: config,
+    inspector: inspector,
+    localToolsService: localToolsService,
+    appStateStream: appStateManager.state,
+    eventHandlerFactory: (key) => RiverpodRoomEventHandler(ref, key),
+  );
+
   ref.onDispose(() => registry.dispose());
   return registry;
 });

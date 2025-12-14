@@ -63,7 +63,11 @@ void main() {
       });
 
       test('records activity updates', () {
-        handler.onActivityUpdate(true, eventType: 'ToolCallStart', toolName: 'get_location');
+        handler.onActivityUpdate(
+          true,
+          eventType: 'ToolCallStart',
+          toolName: 'get_location',
+        );
         handler.onActivityUpdate(false);
 
         expect(handler.activityUpdates, hasLength(2));
@@ -93,14 +97,18 @@ void main() {
 
     group('Record classes', () {
       test('CanvasUpdateRecord stores all fields', () {
-        final record = CanvasUpdateRecord('replace', 'myWidget', {'foo': 'bar'});
+        final record = CanvasUpdateRecord('replace', 'myWidget', {
+          'foo': 'bar',
+        });
         expect(record.operation, equals('replace'));
         expect(record.widgetName, equals('myWidget'));
         expect(record.data, equals({'foo': 'bar'}));
       });
 
       test('ContextUpdateRecord stores all fields', () {
-        final record = ContextUpdateRecord('toolCall', 'summary text', {'detail': 123});
+        final record = ContextUpdateRecord('toolCall', 'summary text', {
+          'detail': 123,
+        });
         expect(record.eventType, equals('toolCall'));
         expect(record.summary, equals('summary text'));
         expect(record.data, equals({'detail': 123}));
@@ -114,7 +122,11 @@ void main() {
       });
 
       test('ActivityUpdateRecord stores all fields', () {
-        final record = ActivityUpdateRecord(true, 'ThinkingStart', 'think_tool');
+        final record = ActivityUpdateRecord(
+          true,
+          'ThinkingStart',
+          'think_tool',
+        );
         expect(record.isActive, isTrue);
         expect(record.eventType, equals('ThinkingStart'));
         expect(record.toolName, equals('think_tool'));

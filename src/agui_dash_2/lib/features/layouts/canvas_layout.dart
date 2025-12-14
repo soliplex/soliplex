@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/network/connection_manager.dart';
+import '../../core/network/server_room_key.dart';
 import '../../core/providers/panel_providers.dart';
 import '../canvas/canvas_view.dart';
 import '../chat/chat_content.dart';
@@ -10,7 +12,9 @@ import '../chat/chat_content.dart';
 /// Agent can push widgets to the canvas via tool calls.
 /// The canvas displays rendered widgets in a scrollable list.
 class CanvasLayout extends ConsumerWidget {
-  const CanvasLayout({super.key});
+  final String? roomId;
+
+  const CanvasLayout({super.key, this.roomId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -48,27 +52,39 @@ class CanvasLayout extends ConsumerWidget {
                       icon: const Icon(Icons.clear_all),
                       tooltip: 'Clear canvas',
                       onPressed: () {
-                        ref.read(canvasProvider.notifier).clear();
+                        if (roomId != null) {
+                          final serverId = ref.read(connectionManagerProvider).activeServerId;
+                          if (serverId != null) {
+                            final key = ServerRoomKey(serverId: serverId, roomId: roomId!);
+                            ref.read(roomCanvasProvider(key).notifier).clear();
+                          }
+                        }
                       },
                     ),
                   ],
                 ),
               ),
               // Canvas content
-              const Expanded(child: CanvasView()),
+              Expanded(child: CanvasView(roomId: roomId)),
             ],
           ),
         ),
         // Divider
         const VerticalDivider(width: 1),
         // Chat area (1/3 width) - ClipRect prevents overflow during scroll
-        const Expanded(flex: 1, child: ClipRect(child: ChatContent())),
+        Expanded(flex: 1, child: ClipRect(child: ChatContent(roomId: roomId))),
       ],
     );
   }
 
   Widget _buildItemCount(BuildContext context, WidgetRef ref) {
-    final canvasState = ref.watch(canvasProvider);
+    if (roomId == null) return const SizedBox.shrink();
+    
+    final serverId = ref.watch(connectionManagerProvider).activeServerId;
+    if (serverId == null) return const SizedBox.shrink();
+
+    final key = ServerRoomKey(serverId: serverId, roomId: roomId!);
+    final canvasState = ref.watch(roomCanvasProvider(key));
     final count = canvasState.items.length;
 
     if (count == 0) return const SizedBox.shrink();

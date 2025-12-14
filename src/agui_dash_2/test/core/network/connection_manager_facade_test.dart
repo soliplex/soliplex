@@ -2,6 +2,7 @@ import 'package:agui_dash_2/core/network/connection_events.dart';
 import 'package:agui_dash_2/core/network/connection_manager.dart';
 import 'package:agui_dash_2/core/network/connection_registry.dart';
 import 'package:agui_dash_2/core/network/http_transport.dart';
+import 'package:agui_dash_2/core/network/room_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -189,7 +190,7 @@ void main() {
       test('getSession creates session on current server', () {
         manager.switchServer('http://localhost:8080');
 
-        final session = manager.getSession('room1');
+        final session = manager.getSession('room1') as RoomSession;
 
         expect(session.roomId, equals('room1'));
         expect(session.serverId, equals('localhost:8080'));
@@ -212,7 +213,7 @@ void main() {
         manager.switchServer('http://localhost:8080');
         await manager.switchRoom('room1');
 
-        final session = manager.activeSession;
+        final session = manager.activeSession as RoomSession?;
 
         expect(session, isNotNull);
         expect(session!.roomId, equals('room1'));

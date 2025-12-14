@@ -59,6 +59,53 @@ class StreamingMarkdownWidget extends ConsumerStatefulWidget {
 
 class _StreamingMarkdownWidgetState
     extends ConsumerState<StreamingMarkdownWidget> {
+  /// Sanitize markdown to prevent flutter_markdown crashes.
+  ///
+  /// The flutter_markdown package fails with assertion `_inlines.isEmpty`
+  /// when content has unclosed inline elements. This happens when streams
+  /// are interrupted mid-message, leaving partial markdown.
+  ///
+  /// This function ensures:
+  /// - Code blocks (```) are properly closed
+  /// - Inline code (`) has matching delimiters
+  String _sanitizeMarkdown(String text) {
+    if (text.isEmpty) return text;
+
+    var result = text;
+
+    // Count fenced code blocks (```) - must be even
+    final fencePattern = RegExp(r'^```', multiLine: true);
+    final fenceCount = fencePattern.allMatches(result).length;
+    if (fenceCount.isOdd) {
+      // Close the unclosed code block
+      result = '$result\n```';
+    }
+
+    // For inline code, count backticks outside of code blocks
+    // This is tricky - for now, just ensure the total is manageable
+    // by checking if there's an odd number of single backticks
+    // that aren't part of triple backticks
+    final lines = result.split('\n');
+    var inCodeBlock = false;
+    var inlineBackticks = 0;
+
+    for (final line in lines) {
+      if (line.startsWith('```')) {
+        inCodeBlock = !inCodeBlock;
+      } else if (!inCodeBlock) {
+        // Count backticks in this line (simple heuristic)
+        inlineBackticks += '`'.allMatches(line).length;
+      }
+    }
+
+    // If odd number of inline backticks, append one to close
+    if (inlineBackticks.isOdd) {
+      result = '$result`';
+    }
+
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
     final hooks = ref.watch(markdownHooksProvider);
@@ -86,82 +133,87 @@ class _StreamingMarkdownWidgetState
   Widget _buildStaticMarkdown(BuildContext context, MarkdownHooks hooks) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return MarkdownBody(
-      data: widget.text,
-      selectable: true,
-      styleSheet: MarkdownStyleSheet(
-        p:
-            widget.textStyle ??
-            TextStyle(color: colorScheme.onSurface, fontSize: 14),
-        code: TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 13,
-          color: colorScheme.onSurface,
-          backgroundColor: colorScheme.surfaceContainerHighest,
-        ),
-        codeblockDecoration: BoxDecoration(
-          color: colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        a: TextStyle(
-          color: colorScheme.primary,
-          decoration: TextDecoration.underline,
-        ),
-        h1: TextStyle(
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
-          color: colorScheme.onSurface,
-        ),
-        h2: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-          color: colorScheme.onSurface,
-        ),
-        h3: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: colorScheme.onSurface,
-        ),
-        blockquoteDecoration: BoxDecoration(
-          color: colorScheme.surfaceContainerHighest,
-          border: Border(
-            left: BorderSide(color: colorScheme.primary, width: 4),
-          ),
-        ),
-        blockquotePadding: const EdgeInsets.all(12),
-        listBullet: TextStyle(color: colorScheme.onSurface),
-      ),
-      onTapLink: (text, href, title) {
-        // Fire the hook callback
-        hooks.onLinkTap?.call(href, text, widget.messageId);
+    // Sanitize markdown to prevent flutter_markdown crashes from
+    // malformed content (e.g., unclosed code blocks from interrupted streams)
+    final sanitizedText = _sanitizeMarkdown(widget.text);
 
-        // Default behavior: open in browser
-        if (href != null) {
-          launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication);
-        }
-      },
-      sizedImageBuilder: (config) {
-        return TrackedMarkdownImage(
-          imageUrl: config.uri.toString(),
-          messageId: widget.messageId,
-          width: config.width,
-          height: config.height,
-        );
-      },
-      builders: {
-        'pre': MarkdownCodeBlockBuilder(
-          onCopy: (code, language) {
-            hooks.onCodeCopy?.call(code, language, widget.messageId);
-          },
-          onQuote: widget.onQuote != null
-              ? (quotedText) {
-                  hooks.onQuote?.call(quotedText, widget.messageId);
-                  widget.onQuote?.call(quotedText);
-                }
-              : null,
-          messageId: widget.messageId,
-        ),
-      },
+    return SelectionArea(
+      child: MarkdownBody(
+        data: sanitizedText,
+        selectable: false, // Use SelectionArea wrapper instead
+        styleSheet: MarkdownStyleSheet(
+          p: widget.textStyle ??
+              TextStyle(color: colorScheme.onSurface, fontSize: 14),
+          code: TextStyle(
+            fontFamily: 'monospace',
+            fontSize: 13,
+            color: colorScheme.onSurface,
+            backgroundColor: colorScheme.surfaceContainerHighest,
+          ),
+          codeblockDecoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          a: TextStyle(
+            color: colorScheme.primary,
+            decoration: TextDecoration.underline,
+          ),
+          h1: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: colorScheme.onSurface,
+          ),
+          h2: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: colorScheme.onSurface,
+          ),
+          h3: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: colorScheme.onSurface,
+          ),
+          blockquoteDecoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest,
+            border: Border(
+              left: BorderSide(color: colorScheme.primary, width: 4),
+            ),
+          ),
+          blockquotePadding: const EdgeInsets.all(12),
+          listBullet: TextStyle(color: colorScheme.onSurface),
+        ), // Missing parenthesis here
+        onTapLink: (text, href, title) {
+          // Fire the hook callback
+          hooks.onLinkTap?.call(href, text, widget.messageId);
+
+          // Default behavior: open in browser
+          if (href != null) {
+            launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication);
+          }
+        },
+        sizedImageBuilder: (config) {
+          return TrackedMarkdownImage(
+            imageUrl: config.uri.toString(),
+            messageId: widget.messageId,
+            width: config.width,
+            height: config.height,
+          );
+        },
+        builders: {
+          'pre': MarkdownCodeBlockBuilder(
+            onCopy: (code, language) {
+              hooks.onCodeCopy?.call(code, language, widget.messageId);
+            },
+            onQuote: widget.onQuote != null
+                ? (quotedText) {
+                    hooks.onQuote?.call(quotedText, widget.messageId);
+                    widget.onQuote?.call(quotedText);
+                  }
+                : null,
+            messageId: widget.messageId,
+          ),
+        },
+      ),
     );
   }
 }

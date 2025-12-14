@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/services/tool_execution_service.dart';
+import '../../../core/providers/panel_providers.dart';
 
 /// Widget that displays active tool executions.
 ///
 /// Shows a subtle notification bar when tools are executing,
 /// with a spinner and the tool name(s).
+///
+/// Uses [activeToolExecutionProvider] for per-room scoped state,
+/// ensuring tool indicators are isolated per room/server.
 class ToolExecutionIndicator extends ConsumerWidget {
   const ToolExecutionIndicator({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final execState = ref.watch(toolExecutionProvider);
+    final execState = ref.watch(activeToolExecutionProvider);
 
     if (!execState.hasActiveExecutions) {
       return const SizedBox.shrink();
@@ -77,12 +80,14 @@ class ToolExecutionIndicator extends ConsumerWidget {
 }
 
 /// A more compact version of the indicator for tight spaces.
+///
+/// Uses [activeToolExecutionProvider] for per-room scoped state.
 class ToolExecutionChip extends ConsumerWidget {
   const ToolExecutionChip({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final execState = ref.watch(toolExecutionProvider);
+    final execState = ref.watch(activeToolExecutionProvider);
 
     if (!execState.hasActiveExecutions) {
       return const SizedBox.shrink();
