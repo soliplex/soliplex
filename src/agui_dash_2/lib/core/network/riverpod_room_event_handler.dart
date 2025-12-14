@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/panel_providers.dart';
+import '../protocol/agui_event_types.dart'; // Import AgUiEventTypes
 import 'room_event_handler.dart';
 import 'server_room_key.dart';
 
@@ -45,29 +46,29 @@ class RiverpodRoomEventHandler implements RoomEventHandler {
     final notifier = ref.read(roomContextPaneProvider(key).notifier);
 
     switch (eventType) {
-      case 'userMessage':
+      case AgUiEventTypes.userMessage:
         notifier.addTextMessage(summary ?? '', isUser: true);
-      case 'textMessage':
+      case AgUiEventTypes.textMessage:
         notifier.addTextMessage(summary ?? '', isUser: false);
-      case 'runStarted':
+      case AgUiEventTypes.runStarted:
         notifier.addAgUiEvent('Run Started', summary: summary);
-      case 'runFinished':
+      case AgUiEventTypes.runFinished:
         notifier.addAgUiEvent('Run Finished');
-      case 'toolCall':
+      case AgUiEventTypes.toolCallStart:
         notifier.addToolCall(summary ?? 'tool', summary: 'started');
-      case 'toolResult':
+      case AgUiEventTypes.toolResult:
         notifier.addAgUiEvent('Tool Result');
-      case 'genUiRender':
+      case AgUiEventTypes.genUiRender:
         notifier.addGenUiRender(summary ?? 'Widget');
-      case 'stateSnapshot':
+      case AgUiEventTypes.stateSnapshot:
         if (data != null) notifier.updateState(data);
-      case 'stateDelta':
+      case AgUiEventTypes.stateDelta:
         if (data != null) notifier.applyDelta(data);
-      case 'thinking':
+      case AgUiEventTypes.thinking:
         notifier.addAgUiEvent('Thinking');
-      case 'error':
+      case AgUiEventTypes.runError:
         notifier.addAgUiEvent('Error', summary: summary);
-      case 'localToolExecution':
+      case AgUiEventTypes.localToolExecution:
         final parts = summary?.split(': ') ?? [];
         if (parts.length >= 2) {
           notifier.addLocalToolExecution(parts[0], status: parts[1]);

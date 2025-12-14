@@ -102,6 +102,11 @@ class WidgetRegistry {
     register('MarkdownCard', (context, data, onEvent) {
       return MarkdownCardWidget.fromData(data, onEvent);
     });
+
+    // Alias 'display' to MarkdownCard for generic content display
+    register('display', (context, data, onEvent) {
+      return MarkdownCardWidget.fromData(data, onEvent);
+    });
   }
 
   /// Register a widget builder for a given name.

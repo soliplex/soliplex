@@ -44,15 +44,14 @@ class ServerSelector extends ConsumerWidget {
                        context.push('/settings');
                      },
                    ),
-                 ListTile(
-                   leading: const Icon(Icons.swap_horiz),
-                   title: const Text('Switch Server'),
-                   onTap: () {
-                     Navigator.pop(context);
-                     context.go('/setup');
-                   },
-                 ),
-               ],
+                                    ListTile(
+                                      leading: const Icon(Icons.swap_horiz),
+                                      title: const Text('Switch Server'),
+                                      onTap: () {
+                                        Navigator.pop(context);
+                                        context.push('/setup');
+                                      },
+                                    ),               ],
              );
          });
       },

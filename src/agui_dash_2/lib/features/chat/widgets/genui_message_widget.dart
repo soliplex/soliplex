@@ -60,6 +60,7 @@ class GenUiMessageWidget extends ConsumerWidget {
   }
 
   Widget _buildUnknownWidget(BuildContext context, WidgetRegistry registry) {
+    debugPrint('GenUiMessageWidget: Unknown widget encountered: ${content.widgetName}');
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

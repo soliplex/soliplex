@@ -163,22 +163,15 @@ class LocalToolsService {
   /// Create the get_my_location tool definition.
   LocalToolDefinition _createGetMyLocationTool() {
     return LocalToolDefinition(
-      name: 'get_my_location',
-      description:
-          'Get the current GPS location of the device. Returns latitude, longitude, accuracy, and other location data.',
+      name: 'get_location',
+      description: 'Get the user\'s current location (lat, long)',
       parameters: {
         'type': 'object',
-        'properties': {
-          'high_accuracy': {
-            'type': 'boolean',
-            'description':
-                'Whether to request high accuracy GPS (may take longer)',
-            'default': false,
-          },
-        },
-        'required': [],
+        'properties': {},
       },
-      execute: _executeGetMyLocation,
+      execute: (args) async {
+        return await _executeGetMyLocation(args);
+      },
     );
   }
 

@@ -96,7 +96,7 @@ class NetworkTransportLayer {
       DebugLog.network(
         'NetworkTransportLayer: Calling header refresher...',
       );
-      final newHeaders = await _headerRefresher!();
+      final newHeaders = await _headerRefresher();
       DebugLog.network('NetworkTransportLayer: Header refresher returned. Updating headers.');
       updateHeaders(newHeaders);
       completer.complete();
@@ -300,15 +300,36 @@ class NetworkTransportLayer {
       'NetworkTransportLayer: SSE stream starting for $endpoint',
     );
 
-    try {
-      await for (final event in _agUiClient.runAgent(endpoint, input)) {
-        eventCount++;
-        yield event;
-      }
+    int retryCount = 0;
+    const maxRetries = 3;
 
-      DebugLog.network(
-        'NetworkTransportLayer: SSE stream completed ($eventCount events)',
-      );
+    try {
+      while (true) {
+        try {
+          await for (final event in _agUiClient.runAgent(endpoint, input)) {
+            eventCount++;
+            yield event;
+          }
+
+          DebugLog.network(
+            'NetworkTransportLayer: SSE stream completed ($eventCount events)',
+          );
+          break; // Stream completed successfully
+        } catch (e) {
+          // Only retry if we haven't yielded any events yet and haven't hit the limit
+          if (eventCount > 0 || retryCount >= maxRetries) {
+            rethrow;
+          }
+
+          retryCount++;
+          DebugLog.network(
+            'NetworkTransportLayer: SSE stream failed (attempt $retryCount/$maxRetries). Retrying... Error: $e',
+          );
+
+          // Exponential backoff: 500ms, 1000ms, 1500ms...
+          await Future.delayed(Duration(milliseconds: 500 * retryCount));
+        }
+      }
     } catch (e) {
       error = e.toString();
       DebugLog.network('NetworkTransportLayer: SSE stream error: $e');

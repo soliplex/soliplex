@@ -1,7 +1,9 @@
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
+import 'package:collection/collection.dart'; // Import for firstWhereOrNull
 
 import '../models/chat_models.dart';
 import '../models/error_types.dart';
+import '../protocol/agui_event_types.dart'; // Import AgUiEventTypes
 import '../utils/debug_log.dart';
 
 // =============================================================================
@@ -238,7 +240,7 @@ class EventProcessor {
 
       case ag_ui.ToolCallResultEvent():
         return const EventProcessingResult(
-          contextUpdate: ContextUpdate('toolResult'),
+          contextUpdate: ContextUpdate(AgUiEventTypes.toolResult),
         );
 
       case ag_ui.StateSnapshotEvent():
@@ -248,17 +250,12 @@ class EventProcessor {
         return _processStateDelta(event);
 
       case ag_ui.ActivitySnapshotEvent():
-        return EventProcessingResult(
-          contextUpdate: ContextUpdate(
-            'activitySnapshot',
-            summary: '${event.activities.length} activities',
-          ),
-        );
+        return _processActivitySnapshot(event);
 
       case ag_ui.ThinkingStartEvent():
         return const EventProcessingResult(
-          contextUpdate: ContextUpdate('thinking'),
-          activityUpdate: ActivityUpdate(true, eventType: 'Thinking'),
+          contextUpdate: ContextUpdate(AgUiEventTypes.thinking),
+          activityUpdate: ActivityUpdate(true, eventType: AgUiEventTypes.thinking),
         );
 
       case ag_ui.ThinkingTextMessageStartEvent():
@@ -298,7 +295,7 @@ class EventProcessor {
     DebugLog.agui('RunStarted runId=${event.runId}');
     return EventProcessingResult(
       thinkingBufferUpdate: ThinkingBufferState.empty(),
-      contextUpdate: ContextUpdate('runStarted', summary: event.runId),
+      contextUpdate: ContextUpdate(AgUiEventTypes.runStarted, summary: event.runId),
       activityUpdate: const ActivityUpdate(true),
       clearDeduplication:
           true, // Clear tool call/notification dedup state for new run
@@ -368,7 +365,7 @@ class EventProcessor {
       textBuffersUpdate: MapUpdate(puts: {aguiMessageId: StringBuffer()}),
       thinkingBufferUpdate: newThinkingBuffer,
       thinkingMessageIdsUpdate: thinkingIdsUpdate,
-      activityUpdate: const ActivityUpdate(true, eventType: 'TextMessageStart'),
+      activityUpdate: const ActivityUpdate(true, eventType: AgUiEventTypes.textMessageStart),
     );
   }
 
@@ -423,17 +420,30 @@ class EventProcessor {
       ],
       messageIdMapUpdate: MapUpdate(removes: {aguiMessageId}),
       textBuffersUpdate: MapUpdate(removes: {aguiMessageId}),
-      contextUpdate: ContextUpdate('textMessage', summary: text),
+      contextUpdate: ContextUpdate(AgUiEventTypes.textMessage, summary: text),
     );
   }
 
   EventProcessingResult _processToolCallStart(ag_ui.ToolCallStartEvent event) {
-    DebugLog.tool('ToolCallStart: ${event.toolCallName}');
+    DebugLog.tool('ToolCallStart: ${event.toolCallName} (id=${event.toolCallId})');
+    
+    // Create visible chat message for ALL tool calls
+    final chatMessage = ChatMessage.toolCall(
+      user: ChatUser.agent,
+      toolName: event.toolCallName,
+      toolCallId: event.toolCallId,
+      status: 'executing',
+    );
+    
     return EventProcessingResult(
-      contextUpdate: ContextUpdate('toolCall', summary: event.toolCallName),
+      messageMutations: [AddMessage(chatMessage)],
+      // Store mapping: toolCallId -> chatMessageId
+      // We use the toolCallId from the event as the key
+      messageIdMapUpdate: MapUpdate(puts: {event.toolCallId: chatMessage.id}),
+      contextUpdate: ContextUpdate(AgUiEventTypes.toolCallStart, summary: event.toolCallName),
       activityUpdate: ActivityUpdate(
         true,
-        eventType: 'ToolCallStart',
+        eventType: AgUiEventTypes.toolCallStart,
         toolName: event.toolCallName,
       ),
     );
@@ -442,7 +452,7 @@ class EventProcessor {
   EventProcessingResult _processStateSnapshot(ag_ui.StateSnapshotEvent event) {
     final stateData = event.snapshot as Map<String, dynamic>? ?? {};
     return EventProcessingResult(
-      contextUpdate: ContextUpdate('stateSnapshot', data: stateData),
+      contextUpdate: ContextUpdate(AgUiEventTypes.stateSnapshot, data: stateData),
     );
   }
 
@@ -450,11 +460,10 @@ class EventProcessor {
     final delta = event.delta as List<dynamic>? ?? [];
     if (delta.isNotEmpty && delta.first is Map<String, dynamic>) {
       return EventProcessingResult(
-        contextUpdate: ContextUpdate(
-          'stateDelta',
-          data: delta.first as Map<String, dynamic>,
-        ),
-      );
+                  contextUpdate: ContextUpdate(
+                    AgUiEventTypes.stateDelta,
+                    data: delta.first as Map<String, dynamic>,
+                  ),      );
     }
     return EventProcessingResult.empty;
   }
@@ -548,7 +557,7 @@ class EventProcessor {
   EventProcessingResult _processRunFinished(ag_ui.RunFinishedEvent event) {
     DebugLog.agui('RunFinished runId=${event.runId}');
     return const EventProcessingResult(
-      contextUpdate: ContextUpdate('runFinished'),
+      contextUpdate: ContextUpdate(AgUiEventTypes.runFinished),
       activityUpdate: ActivityUpdate(false),
     );
   }
@@ -569,8 +578,65 @@ class EventProcessor {
 
     return EventProcessingResult(
       messageMutations: [AddMessage(errorMessage)],
-      contextUpdate: ContextUpdate('error', summary: event.message),
+      contextUpdate: ContextUpdate(AgUiEventTypes.runError, summary: event.message),
       activityUpdate: const ActivityUpdate(false),
+    );
+  }
+
+  EventProcessingResult _processActivitySnapshot(ag_ui.ActivitySnapshotEvent event) {
+    String? activeEventType;
+    String? activeToolName;
+
+    // Helper to safely get type from activity map
+    String? getType(dynamic activity) {
+      if (activity is Map) {
+        return activity['type'] as String?;
+      }
+      return null;
+    }
+
+    // Helper to safely get tool name from activity map
+    String? getToolName(dynamic activity) {
+      if (activity is Map) {
+        return activity['toolCallName'] as String?;
+      }
+      return null;
+    }
+
+    // Prioritize tool calls for displaying status
+    final activeTool = event.activities.firstWhereOrNull(
+      (a) => getType(a) == AgUiEventTypes.toolCallStart,
+    );
+    if (activeTool != null) {
+      activeEventType = AgUiEventTypes.toolCallStart;
+      activeToolName = getToolName(activeTool);
+    } else {
+      // Fallback to thinking or text message start
+      final activeThinking = event.activities.firstWhereOrNull(
+        (a) => getType(a) == AgUiEventTypes.thinking,
+      );
+      if (activeThinking != null) {
+        activeEventType = AgUiEventTypes.thinking;
+      } else {
+        final activeTextMessage = event.activities.firstWhereOrNull(
+          (a) => getType(a) == AgUiEventTypes.textMessageStart,
+        );
+        if (activeTextMessage != null) {
+          activeEventType = AgUiEventTypes.textMessageStart;
+        }
+      }
+    }
+
+    return EventProcessingResult(
+      contextUpdate: ContextUpdate(
+        AgUiEventTypes.activitySnapshot,
+        summary: '${event.activities.length} activities',
+      ),
+      activityUpdate: ActivityUpdate(
+        activeEventType != null, // isActive if any relevant activity found
+        eventType: activeEventType,
+        toolName: activeToolName,
+      ),
     );
   }
 }

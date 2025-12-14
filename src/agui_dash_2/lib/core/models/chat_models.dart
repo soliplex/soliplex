@@ -105,6 +105,7 @@ class ChatMessage extends Equatable {
   final String? errorMessage;
   final ChatErrorInfo? errorInfo;
   final bool isStreaming;
+  final String? toolCallId;
   final String? toolCallName;
   final String? toolCallStatus;
 
@@ -127,6 +128,7 @@ class ChatMessage extends Equatable {
     this.errorMessage,
     this.errorInfo,
     this.isStreaming = false,
+    this.toolCallId,
     this.toolCallName,
     this.toolCallStatus,
     this.thinkingText,
@@ -167,6 +169,7 @@ class ChatMessage extends Equatable {
       user: user,
       genUiContent: content,
       type: MessageType.genUi,
+      toolCallId: content.toolCallId,
       createdAt: createdAt,
     );
   }
@@ -208,6 +211,7 @@ class ChatMessage extends Equatable {
     String? id,
     required ChatUser user,
     required String toolName,
+    String? toolCallId,
     String status = 'executing',
     DateTime? createdAt,
   }) {
@@ -216,6 +220,7 @@ class ChatMessage extends Equatable {
       user: user,
       type: MessageType.toolCall,
       toolCallName: toolName,
+      toolCallId: toolCallId,
       toolCallStatus: status,
       createdAt: createdAt,
     );
@@ -250,6 +255,7 @@ class ChatMessage extends Equatable {
     String? errorMessage,
     ChatErrorInfo? errorInfo,
     bool? isStreaming,
+    String? toolCallId,
     String? toolCallName,
     String? toolCallStatus,
     String? thinkingText,
@@ -268,6 +274,7 @@ class ChatMessage extends Equatable {
       errorMessage: errorMessage ?? this.errorMessage,
       errorInfo: errorInfo ?? this.errorInfo,
       isStreaming: isStreaming ?? this.isStreaming,
+      toolCallId: toolCallId ?? this.toolCallId,
       toolCallName: toolCallName ?? this.toolCallName,
       toolCallStatus: toolCallStatus ?? this.toolCallStatus,
       thinkingText: thinkingText ?? this.thinkingText,
@@ -289,6 +296,7 @@ class ChatMessage extends Equatable {
     errorMessage,
     errorInfo,
     isStreaming,
+    toolCallId,
     toolCallName,
     toolCallStatus,
     thinkingText,

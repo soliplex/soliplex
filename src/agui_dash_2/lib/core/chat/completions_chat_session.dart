@@ -61,10 +61,7 @@ class CompletionsChatSession implements ChatSession {
   Stream<List<UnifiedMessage>> get messageStream => _messageController.stream;
 
   @override
-  bool get isStreaming => _isStreaming;
-
-  @override
-  Stream<bool> get streamingStatusStream => _streamingController.stream;
+  bool get isGenerating => _isStreaming;
 
   @override
   Future<void> sendMessage(String content) async {

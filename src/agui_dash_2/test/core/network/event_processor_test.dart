@@ -1,6 +1,7 @@
 import 'package:ag_ui/ag_ui.dart' as ag_ui;
 import 'package:agui_dash_2/core/models/chat_models.dart';
 import 'package:agui_dash_2/core/network/event_processor.dart';
+import 'package:agui_dash_2/core/protocol/agui_event_types.dart'; // Import AgUiEventTypes
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -24,7 +25,7 @@ void main() {
 
         expect(result.thinkingBufferUpdate, isNotNull);
         expect(result.thinkingBufferUpdate!.isBuffering, isFalse);
-        expect(result.contextUpdate?.eventType, equals('runStarted'));
+        expect(result.contextUpdate?.eventType, equals(AgUiEventTypes.runStarted));
         expect(result.contextUpdate?.summary, equals('run-123'));
         expect(result.activityUpdate?.isActive, isTrue);
       });
@@ -70,7 +71,7 @@ void main() {
 
         // Should emit activity update
         expect(result.activityUpdate?.isActive, isTrue);
-        expect(result.activityUpdate?.eventType, equals('TextMessageStart'));
+        expect(result.activityUpdate?.eventType, equals(AgUiEventTypes.textMessageStart));
       });
 
       test('applies buffered thinking to new message', () {
@@ -206,7 +207,7 @@ void main() {
         expect(result.textBuffersUpdate?.removes, contains('agui-msg-1'));
 
         // Should emit context update
-        expect(result.contextUpdate?.eventType, equals('textMessage'));
+        expect(result.contextUpdate?.eventType, equals(AgUiEventTypes.textMessage));
       });
 
       test('returns empty result for unmapped message', () {
@@ -227,10 +228,8 @@ void main() {
 
         final result = processor.process(emptyState, event);
 
-        expect(result.contextUpdate?.eventType, equals('toolCall'));
-        expect(result.contextUpdate?.summary, equals('search_database'));
-        expect(result.activityUpdate?.isActive, isTrue);
-        expect(result.activityUpdate?.eventType, equals('ToolCallStart'));
+        expect(result.contextUpdate?.eventType, equals(AgUiEventTypes.toolCallStart));
+        expect(result.activityUpdate?.eventType, equals(AgUiEventTypes.toolCallStart));
         expect(result.activityUpdate?.toolName, equals('search_database'));
       });
     });
@@ -388,7 +387,7 @@ void main() {
 
         final result = processor.process(emptyState, event);
 
-        expect(result.contextUpdate?.eventType, equals('runFinished'));
+        expect(result.contextUpdate?.eventType, equals(AgUiEventTypes.runFinished));
         expect(result.activityUpdate?.isActive, isFalse);
       });
     });
@@ -408,7 +407,7 @@ void main() {
         expect(addMutation.message.type, equals(MessageType.error));
 
         // Should emit context update
-        expect(result.contextUpdate?.eventType, equals('error'));
+        expect(result.contextUpdate?.eventType, equals(AgUiEventTypes.runError));
         expect(result.contextUpdate?.summary, equals('Internal server error'));
 
         // Should stop activity
@@ -424,7 +423,7 @@ void main() {
 
         final result = processor.process(emptyState, event);
 
-        expect(result.contextUpdate?.eventType, equals('stateSnapshot'));
+        expect(result.contextUpdate?.eventType, equals(AgUiEventTypes.stateSnapshot));
         expect(
           result.contextUpdate?.data,
           equals({'key': 'value', 'count': 42}),
@@ -432,26 +431,82 @@ void main() {
       });
     });
 
-    group('StateDeltaEvent', () {
-      test('emits context update with delta data', () {
-        const event = ag_ui.StateDeltaEvent(
-          delta: [
-            {'updated': true},
-          ],
-        );
+    group('ActivitySnapshotEvent', () {
+      test('emits context and activity updates', () {
+        const event = ag_ui.ActivitySnapshotEvent(activities: [
+          {
+            'type': AgUiEventTypes.toolCallStart,
+            'toolCallName': 'get_location',
+          },
+        ]);
 
         final result = processor.process(emptyState, event);
 
-        expect(result.contextUpdate?.eventType, equals('stateDelta'));
-        expect(result.contextUpdate?.data, equals({'updated': true}));
+        expect(result.contextUpdate?.eventType, equals(AgUiEventTypes.activitySnapshot));
+        expect(result.contextUpdate?.summary, equals('1 activities'));
+        expect(result.activityUpdate?.isActive, isTrue);
+        expect(result.activityUpdate?.eventType, equals(AgUiEventTypes.toolCallStart));
+        expect(result.activityUpdate?.toolName, equals('get_location'));
+      });
+      
+      test('prioritizes toolCall over thinking', () {
+        const event = ag_ui.ActivitySnapshotEvent(activities: [
+          {'type': AgUiEventTypes.thinking},
+          {
+            'type': AgUiEventTypes.toolCallStart,
+            'toolCallName': 'search_web',
+          },
+        ]);
+
+        final result = processor.process(emptyState, event);
+
+        expect(result.activityUpdate?.isActive, isTrue);
+        expect(result.activityUpdate?.eventType, equals(AgUiEventTypes.toolCallStart));
+        expect(result.activityUpdate?.toolName, equals('search_web'));
       });
 
-      test('returns empty for empty delta', () {
-        const event = ag_ui.StateDeltaEvent(delta: []);
+      test('falls back to thinking if no tool call', () {
+        const event = ag_ui.ActivitySnapshotEvent(activities: [
+          {'type': AgUiEventTypes.thinking},
+          {'type': 'other'},
+        ]);
 
         final result = processor.process(emptyState, event);
 
-        expect(result, equals(EventProcessingResult.empty));
+        expect(result.activityUpdate?.isActive, isTrue);
+        expect(result.activityUpdate?.eventType, equals(AgUiEventTypes.thinking));
+        expect(result.activityUpdate?.toolName, isNull);
+      });
+
+      test('falls back to textMessageStart if no tool call or thinking', () {
+        const event = ag_ui.ActivitySnapshotEvent(activities: [
+          {'type': AgUiEventTypes.textMessageStart},
+          {'type': 'other'},
+        ]);
+
+        final result = processor.process(emptyState, event);
+
+        expect(result.activityUpdate?.isActive, isTrue);
+        expect(result.activityUpdate?.eventType, equals(AgUiEventTypes.textMessageStart));
+        expect(result.activityUpdate?.toolName, isNull);
+      });
+
+      test('is inactive if no relevant activities', () {
+        const event = ag_ui.ActivitySnapshotEvent(activities: [
+          {'type': 'other'},
+        ]);
+
+        final result = processor.process(emptyState, event);
+
+        expect(result.activityUpdate?.isActive, isFalse);
+      });
+
+      test('is inactive for empty activities list', () {
+        const event = ag_ui.ActivitySnapshotEvent(activities: []);
+
+        final result = processor.process(emptyState, event);
+
+        expect(result.activityUpdate?.isActive, isFalse);
       });
     });
 

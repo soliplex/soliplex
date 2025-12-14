@@ -36,7 +36,7 @@ class SessionLifecycleController extends AsyncNotifier<void> {
   void _initializeMarkdownHooks() {
     final hooks = ref.read(markdownHooksProvider);
 
-    hooks.onLinkTap ??= (href, text, messageId) {
+    hooks.onLinkTap ??= (href, _text, _messageId) {
       if (href != null) {
         launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication);
       }

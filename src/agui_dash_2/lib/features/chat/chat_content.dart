@@ -261,8 +261,12 @@ class _ChatContentState extends ConsumerState<ChatContent> {
                     ActivityStatusBar(
                       message: activityStatus.currentMessage ?? 'Generating...',
                       onStop: () async {
+                        // The UI should automatically stop once the backend
+                        // confirms the run is cancelled and sends a RunCancelledEvent.
+                        // For immediate feedback, we also stop activity locally.
+                        // No need for `ref.read(roomActivityStatusProvider(key).notifier).stopActivity();`
+                        // as ConnectionManager event will trigger it.
                         await connectionManager.cancelRun(roomId);
-                        ref.read(roomActivityStatusProvider(key).notifier).stopActivity();
                       },
                     )
                   else

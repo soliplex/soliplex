@@ -7,7 +7,6 @@ import 'package:agui_dash_2/core/protocol/chat_session.dart';
 import '../config/connection_config.dart';
 import '../models/endpoint_models.dart';
 import '../providers/app_providers.dart'; // For appStateManagerProvider
-import '../state/app_state.dart';
 import '../services/local_tools_service.dart';
 import '../utils/debug_log.dart';
 import 'connection_events.dart' show SessionState;

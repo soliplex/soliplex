@@ -332,7 +332,13 @@ class Thread {
           errorStr.contains('Invalid event type')) {
         DebugLog.thread('Decoding error (continuing): $e');
       } else {
-        rethrow;
+        // If we have pending tools, we should try to execute them despite the error
+        // This handles cases where the stream drops after tool calls are sent but before graceful close
+        if (_toolRegistry.pendingCalls.isNotEmpty) {
+           DebugLog.thread('Stream error but pending tools found. Proceeding to execution. Error: $e');
+        } else {
+           rethrow;
+        }
       }
     }
 

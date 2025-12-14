@@ -1,3 +1,5 @@
+import '../protocol/agui_event_types.dart';
+
 /// Configuration for activity status indicator messages.
 ///
 /// Defines personality messages shown during response generation,
@@ -38,17 +40,17 @@ class ActivityStatusConfig {
       'Considering options...',
     ],
     eventMessages: {
-      'Thinking': [
+      AgUiEventTypes.thinking: [
         'Deep in thought...',
         'Reasoning through this...',
         'Contemplating...',
       ],
-      'TextMessageStart': [
+      AgUiEventTypes.textMessageStart: [
         'Composing response...',
         'Writing...',
         'Formulating answer...',
       ],
-      'ToolCallStart': ['Using a tool...', 'Taking action...', 'Executing...'],
+      AgUiEventTypes.toolCallStart: ['Using a tool...', 'Taking action...', 'Executing...'],
       'ToolCallEnd': ['Tool completed...', 'Processing result...'],
     },
     toolMessages: {

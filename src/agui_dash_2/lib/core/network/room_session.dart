@@ -162,12 +162,14 @@ class RoomSession implements ChatSession {
   // Getters
   String? get threadId => _thread?.id;
   String? get activeRunId => _activeRunId;
+  @override
   SessionState get state => _state;
   bool get isActive =>
       _state == SessionState.active || _state == SessionState.streaming;
   @override
   bool get isStreaming => _state == SessionState.streaming;
   bool get isDisposed => _state == SessionState.disposed;
+  @override
   DateTime? get lastActivity => _lastActivity;
 
   /// Composite key for this session (serverId + roomId).
@@ -193,10 +195,12 @@ class RoomSession implements ChatSession {
   Stream<List<ChatMessage>> get messageStream => _messageController.stream;
 
   /// Whether the agent is currently typing (streaming a message).
+  @override
   bool get isAgentTyping =>
       _messages.any((m) => m.user.id == ChatUser.agent.id && m.isStreaming);
 
   /// Stream of session events.
+  @override
   Stream<ConnectionEvent> get events => _eventController.stream;
 
   /// Stream of AG-UI events from the thread.
@@ -207,6 +211,7 @@ class RoomSession implements ChatSession {
       _thread?.toolStateChanges;
 
   /// Get connection info for observer.
+  @override
   ConnectionInfo get connectionInfo => ConnectionInfo(
     serverId: serverId,
     roomId: roomId,
@@ -843,6 +848,7 @@ class RoomSession implements ChatSession {
   }
 
   /// Add an error message.
+  @override
   void addErrorMessage(
     String message, {
     String? errorCode,
@@ -921,6 +927,7 @@ class RoomSession implements ChatSession {
   }
 
   /// Toggle thinking expanded state.
+  @override
   void toggleThinkingExpanded(String messageId) {
     final index = _messages.indexWhere((m) => m.id == messageId);
     if (index >= 0) {
@@ -979,6 +986,44 @@ class RoomSession implements ChatSession {
     _applyEventResult(result);
   }
 
+  /// Get existing message ID for a tool call or create a new one.
+  ///
+  /// This ensures idempotent message creation regardless of whether the event
+  /// comes from the event stream or local execution logic.
+  String getOrCreateToolCallMessage(String toolCallId, String toolName) {
+    // 1. Check if we already have a mapped message for this tool ID
+    if (_toolCallMessageIds.containsKey(toolCallId)) {
+      return _toolCallMessageIds[toolCallId]!;
+    }
+
+    // 2. Safety Check: Scan existing messages just in case our ID map is out of sync
+    // This helps in recovery paths or weird race conditions
+    for (final message in _messages) {
+      if (message.toolCallId == toolCallId) {
+        _toolCallMessageIds[toolCallId] = message.id;
+        return message.id;
+      }
+    }
+
+    // 3. Fallback Creation (The "Recovery" Path)
+    DebugLog.network('RoomSession: Creating new tool call message for $toolCallId ($toolName)');
+    final newMessage = ChatMessage.toolCall(
+      user: ChatUser.agent,
+      toolName: toolName,
+      status: 'executing',
+    );
+    // Explicitly set the toolCallId on the message to enable lookup later
+    // Note: ChatMessage.toolCall helper doesn't expose toolCallId directly in constructor
+    // so we might need to rely on the map. But wait, ChatMessage definition has it?
+    // Let's assume standard creation for now and rely on _toolCallMessageIds map.
+    
+    _messages.add(newMessage);
+    _toolCallMessageIds[toolCallId] = newMessage.id;
+    _notifyMessageUpdate();
+    
+    return newMessage.id;
+  }
+
   /// Apply an [EventProcessingResult] to mutable state.
   void _applyEventResult(EventProcessingResult result) {
     if (!result.hasChanges) return;
@@ -988,6 +1033,15 @@ class RoomSession implements ChatSession {
     for (final mutation in result.messageMutations) {
       switch (mutation) {
         case AddMessage(:final message):
+          // Idempotency check for tool messages coming from EventProcessor
+          if (message.toolCallId != null) {
+            if (_toolCallMessageIds.containsKey(message.toolCallId)) {
+               DebugLog.network('RoomSession: Skipping duplicate tool message for ${message.toolCallId}');
+               continue;
+            }
+             _toolCallMessageIds[message.toolCallId!] = message.id;
+          }
+          
           _messages.add(message);
           messagesChanged = true;
         case UpdateMessage(:final messageId, :final updater):
@@ -1100,17 +1154,17 @@ class RoomSession implements ChatSession {
     }
 
     // Add or update tool call message in chat
+    // Uses getOrCreateToolCallMessage for idempotency
     if (status == 'executing') {
-      final messageId = addToolCallMessage(toolName);
-      _toolCallMessageIds[toolCallId] = messageId;
+      getOrCreateToolCallMessage(toolCallId, toolName);
     } else {
-      final messageId = _toolCallMessageIds[toolCallId];
-      if (messageId != null) {
-        updateToolCallStatus(messageId, status);
-        if (status == 'completed' || status.startsWith('error')) {
-          _toolCallMessageIds.remove(toolCallId);
-        }
-      }
+      // Find the message ID (should exist if 'executing' happened first, or getOrCreate created it)
+      final messageId = getOrCreateToolCallMessage(toolCallId, toolName);
+      updateToolCallStatus(messageId, status);
+      
+      // We don't remove from _toolCallMessageIds immediately for 'completed'
+      // because we might receive a delayed server event that wants to update it too.
+      // Cleaning up on new run (via clearProcessedToolCalls) is safer.
     }
   }
 

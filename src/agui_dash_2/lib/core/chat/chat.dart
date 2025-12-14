@@ -12,7 +12,5 @@
 library;
 
 export 'chat_session.dart';
-export 'unified_message.dart';
-export 'agui_chat_session.dart';
 export 'completions_chat_session.dart';
-export 'completions_models.dart';
+export 'unified_message.dart';
