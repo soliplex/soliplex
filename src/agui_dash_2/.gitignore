@@ -44,5 +44,7 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 pubspec_overrides.yaml
-#docs/
+docs/
 *.md
+
+
