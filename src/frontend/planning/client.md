@@ -1,6 +1,19 @@
 # Client
 
-Pure Dart component for backend communication via HTTP and AG-UI protocols.
+Pure Dart package (`soliplex_client`) for backend communication via HTTP and AG-UI protocols.
+
+## Package Structure
+
+| Package | Type | Contents |
+|---------|------|----------|
+| `soliplex_client` | Pure Dart | Core client, DartHttpAdapter, all business logic |
+| `soliplex_client_native` | Flutter | Native HTTP adapters (v1.1) |
+
+```
+packages/
+├── soliplex_client/           # Pure Dart - this spec
+└── soliplex_client_native/    # Flutter - v1.1 scope
+```
 
 ## Architecture
 
@@ -8,28 +21,28 @@ Pure Dart component for backend communication via HTTP and AG-UI protocols.
 
 ```
 ┌─────────────────────────────────────────┐
-│ Layer 3: SoliplexApi                    │
+│ Layer 3: SoliplexApi                    │  soliplex_client
 │ - Room/Thread/Run CRUD operations       │
 └───────────────────┬─────────────────────┘
                     │
 ┌───────────────────▼─────────────────────┐
-│ Layer 2: HttpTransport                  │
+│ Layer 2: HttpTransport                  │  soliplex_client
 │ - JSON serialization, timeout handling  │
 └───────────────────┬─────────────────────┘
                     │
 ┌───────────────────▼─────────────────────┐
-│ Layer 1: HttpClientAdapter (interface)  │
+│ Layer 1: HttpClientAdapter (interface)  │  soliplex_client
 │ - Abstract HTTP operations (DI)         │
 └───────────────────┬─────────────────────┘
                     │
 ┌───────────────────▼─────────────────────┐
 │ Layer 0: Platform Implementations       │
-│ - DartHttpAdapter (default)             │
-│ - CupertinoHttpAdapter (iOS/macOS)      │
-│ - AndroidHttpAdapter (Android)          │
-│ - WindowsHttpAdapter (Windows)          │
-│ - LinuxHttpAdapter (Linux)              │
-│ - WebHttpAdapter (Web)                  │
+│ - DartHttpAdapter (default)             │  soliplex_client
+│ - CupertinoHttpAdapter (iOS/macOS)      │  ┐
+│ - AndroidHttpAdapter (Android)          │  │ soliplex_client_native
+│ - WindowsHttpAdapter (Windows)          │  │ (v1.1)
+│ - LinuxHttpAdapter (Linux)              │  │
+│ - WebHttpAdapter (Web)                  │  ┘
 └─────────────────────────────────────────┘
 ```
 
@@ -67,14 +80,28 @@ abstract class HttpClientAdapter {
 
 ### Platform Implementations
 
-| Adapter | Platform | Client | Benefits |
-|---------|----------|--------|----------|
-| `DartHttpAdapter` | All | package:http | Default fallback |
-| `CupertinoHttpAdapter` | iOS/macOS | NSURLSession | Native certs, background transfers, HTTP/2 |
-| `AndroidHttpAdapter` | Android | OkHttp | Native certs, HTTP/2, connection pooling |
-| `WindowsHttpAdapter` | Windows | WinHTTP | Native cert store, proxy settings |
-| `LinuxHttpAdapter` | Linux | libcurl | Native certs, HTTP/2 |
-| `WebHttpAdapter` | Web | fetch API | Browser cookies, CORS |
+| Adapter | Package | Platform | Native Client |
+|---------|---------|----------|---------------|
+| `DartHttpAdapter` | `soliplex_client` | All | package:http |
+| `CupertinoHttpAdapter` | `soliplex_client_native` | iOS/macOS | NSURLSession |
+| `AndroidHttpAdapter` | `soliplex_client_native` | Android | OkHttp |
+| `WindowsHttpAdapter` | `soliplex_client_native` | Windows | WinHTTP |
+| `LinuxHttpAdapter` | `soliplex_client_native` | Linux | libcurl |
+| `WebHttpAdapter` | `soliplex_client_native` | Web | fetch API |
+
+### Adapter Injection
+
+```dart
+// Default (pure Dart)
+final client = SoliplexClient(baseUrl: 'https://api.example.com');
+
+// With native adapter (v1.1)
+import 'package:soliplex_client_native/soliplex_client_native.dart';
+final client = SoliplexClient(
+  baseUrl: 'https://api.example.com',
+  httpAdapter: createPlatformAdapter(),  // Auto-detects platform
+);
+```
 
 ## Error Handling
 
@@ -127,29 +154,53 @@ abstract class HttpClientAdapter {
 | 1 | Models & errors | ChatMessage, Room, ThreadInfo, RunInfo, all exceptions |
 | 2 | HTTP foundation | HttpClientAdapter, DartHttpAdapter, HttpTransport, UrlBuilder, CancelToken |
 | 3 | API layer | SoliplexApi (CRUD) |
-| 4 | Sessions | ConnectionManager, RoomSession |
-| 5 | AG-UI protocol | Thread, message buffers, tool registry |
+| 4 | AG-UI protocol | Thread, message buffers, tool registry |
+| 5 | Sessions | ConnectionManager, RoomSession |
 | 6 | Facade | SoliplexClient, chat() flow |
-
-**Note:** Native adapters (Cupertino, Android, Windows, Linux) are v1.1 scope.
 
 ## File Structure
 
 ```
-lib/client/
-├── soliplex_client.dart
-├── api/soliplex_api.dart
-├── models/{chat_message,room,thread_info,run_info}.dart
-├── session/{connection_manager,room_session}.dart
-├── agui/{thread,buffers,tool_registry}.dart
-├── http/{http_client_adapter,http_transport,adapters/}.dart
-└── utils/{url_builder,cancel_token}.dart
+packages/soliplex_client/
+├── lib/
+│   ├── soliplex_client.dart           # Public API exports
+│   └── src/
+│       ├── api/soliplex_api.dart
+│       ├── models/
+│       │   ├── chat_message.dart
+│       │   ├── room.dart
+│       │   ├── thread_info.dart
+│       │   └── run_info.dart
+│       ├── session/
+│       │   ├── connection_manager.dart
+│       │   └── room_session.dart
+│       ├── agui/
+│       │   ├── thread.dart
+│       │   ├── buffers.dart
+│       │   └── tool_registry.dart
+│       ├── http/
+│       │   ├── http_client_adapter.dart
+│       │   ├── dart_http_adapter.dart
+│       │   └── http_transport.dart
+│       ├── errors/
+│       │   └── exceptions.dart
+│       └── utils/
+│           ├── url_builder.dart
+│           └── cancel_token.dart
+├── test/
+└── pubspec.yaml
 ```
 
 ## Dependencies
 
 ```yaml
+# soliplex_client/pubspec.yaml
+name: soliplex_client
+description: Pure Dart client for Soliplex backend
+
 dependencies:
   http: ^1.2.0
   ag_ui: ^0.1.0
 ```
+
+**Note:** Native adapters are in separate `soliplex_client_native` package (v1.1 scope).
