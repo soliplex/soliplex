@@ -11,17 +11,29 @@
 
 ---
 
+## Packages
+
+| Package | Type | Version | Description |
+|---------|------|---------|-------------|
+| `soliplex_client` | Pure Dart | v1.0 | HTTP/AG-UI client, models, sessions |
+| `soliplex_client_native` | Flutter | v1.1 | Native HTTP adapters (iOS, Android, Windows, Linux, Web) |
+| `soliplex_core` | Flutter | v1.0 P4 | Core frontend extracted (providers, config, registries) |
+
+---
+
 ## v1.0 - Core Functionality
 
 ### Priority 1: Client (6 Phases)
+
+**Package:** `soliplex_client` (Pure Dart)
 
 | Phase | Goal |
 |-------|------|
 | 1 | Models & errors |
 | 2 | HTTP foundation (HttpClientAdapter, DartHttpAdapter, HttpTransport) |
 | 3 | API layer (SoliplexApi) |
-| 4 | Sessions (ConnectionManager, RoomSession) |
-| 5 | AG-UI protocol (Thread, buffers, tool registry) |
+| 4 | AG-UI protocol (Thread, buffers, tool registry) |
+| 5 | Sessions (ConnectionManager, RoomSession) |
 | 6 | Facade (SoliplexClient) |
 
 ### Priority 2: Core Frontend (4 Phases)
@@ -60,7 +72,10 @@ Depends on: Core Frontend phase 2
 **History**: Thread deletion/renaming/grouping
 **Detail**: Event export, chat message linking
 **Core**: Token refresh, desktop polish
-**Network**: Native HTTP adapters (Cupertino, Android, Windows, Linux), certificate pinning
+**Network** (`soliplex_client_native` package):
+- Native HTTP adapters (Cupertino, Android, Windows, Linux, Web)
+- Certificate pinning
+- Platform auto-detection via `createPlatformAdapter()`
 
 ---
 

@@ -1,6 +1,6 @@
 # Core Frontend
 
-Flutter infrastructure using the `client` component for backend interactions.
+Flutter infrastructure using the `soliplex_client` package for backend interactions.
 
 ## Responsibilities
 
@@ -140,7 +140,11 @@ class RouteDefinition {
 
 ```yaml
 dependencies:
+  soliplex_client:
+    path: ../soliplex_client    # Or published version
   flutter_riverpod: ^2.5.0
   go_router: ^14.0.0
   flutter_secure_storage: ^9.0.0
+  # Optional for native HTTP adapters (v1.1):
+  # soliplex_client_native: ^1.0.0
 ```

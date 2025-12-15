@@ -12,7 +12,7 @@ Cross-platform Flutter frontend for Soliplex AI-powered RAG system.
 planning/
 ├── ROADMAP.md                 - Version roadmap and future enhancements
 ├── BRANDING-APPROACH.md       - White-label extensibility design
-├── client.md                  - Pure Dart HTTP/AGUI client
+├── client.md                  - soliplex_client package spec (Pure Dart)
 ├── core_frontend.md           - Flutter infrastructure (Riverpod, navigation)
 ├── external_backend_service.md - Backend API reference
 ├── REVERSE_ENGINEERED.md      - Prototype architecture reference
@@ -41,7 +41,12 @@ planning/
 └──────────────────┬──────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────┐
-│              Client (Pure Dart)              │
+│      soliplex_client (Pure Dart package)    │
+└──────────────────────────────────────────────┘
+         ▲ (optional, v1.1)
+┌────────┴─────────────────────────────────────┐
+│  soliplex_client_native (Flutter package)    │
+│  Native HTTP adapters                        │
 └──────────────────────────────────────────────┘
 ```
 
@@ -59,18 +64,18 @@ planning/
 
 ## Implementation Order (v1.0)
 
-### Priority 1: Client (Network/Transport)
+### Priority 1: Client (`soliplex_client` package)
 
-**CURRENT FOCUS** - Complete before moving to UI
+**CURRENT FOCUS** - Pure Dart package, complete before moving to UI
 
 | Phase | Goal |
 |-------|------|
 | 1 | Models & errors |
-| 2 | URL & HTTP foundation |
-| 3 | API layer |
-| 4 | Session management |
-| 5 | AG-UI protocol |
-| 6 | Facade & integration |
+| 2 | HTTP foundation (HttpClientAdapter, DartHttpAdapter, HttpTransport) |
+| 3 | API layer (SoliplexApi) |
+| 4 | AG-UI protocol (Thread, buffers, tool registry) |
+| 5 | Sessions (ConnectionManager, RoomSession) |
+| 6 | Facade (SoliplexClient) |
 
 ### Priority 2: Core Frontend
 
