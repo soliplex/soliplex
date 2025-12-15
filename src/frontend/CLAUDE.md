@@ -12,7 +12,9 @@ Cross-platform Flutter frontend for Soliplex AI-powered RAG system.
 planning/
 ├── ROADMAP.md                 - Version roadmap and future enhancements
 ├── BRANDING-APPROACH.md       - White-label extensibility design
-├── client.md                  - soliplex_client package spec (Pure Dart)
+├── client.md                  - soliplex_client package overview
+├── client-spec.md             - Detailed implementation spec
+├── client-worklog.md          - Progress tracking (resume here)
 ├── core_frontend.md           - Flutter infrastructure (Riverpod, navigation)
 ├── external_backend_service.md - Backend API reference
 ├── REVERSE_ENGINEERED.md      - Prototype architecture reference
