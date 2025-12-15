@@ -2,19 +2,17 @@ name: Flutter Test & Coverage
 
 on:
   push:
-    branches: [main, agui_dash_2]
+    branches: [main]
     paths:
-      - 'src/agui_dash_2/**'
       - 'src/flutter/**'
   pull_request:
     branches: [main]
     paths:
-      - 'src/agui_dash_2/**'
       - 'src/flutter/**'
 
 defaults:
   run:
-    working-directory: src/agui_dash_2
+    working-directory: src/flutter
 
 jobs:
   test:
