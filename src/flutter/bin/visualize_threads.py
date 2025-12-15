@@ -9,15 +9,17 @@ Examples:
     python visualize_threads.py joker
     python visualize_threads.py genui --base-url http://localhost:8000/api/v1
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import sys
 from datetime import datetime
-from typing import Optional
-from urllib.request import Request, urlopen
-from urllib.error import HTTPError, URLError
+from urllib.error import HTTPError
+from urllib.error import URLError
+from urllib.request import Request
+from urllib.request import urlopen
 
 
 def fetch_json(url: str, token: str) -> dict:
@@ -42,25 +44,32 @@ def format_timestamp(ts: str | None) -> str:
     """Format ISO timestamp to readable format."""
     if not ts:
         return "?"
+
+    ts_no_zulu = ts.replace("Z", "+00:00")
+
     try:
-        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-        return dt.strftime("%Y-%m-%d %H:%M:%S")
-    except:
-        return ts[:19] if ts else "?"
+        dt = datetime.fromisoformat(ts_no_zulu)
+    except ValueError:
+        return ts[:19]
+
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def truncate(text: str, max_len: int = 60) -> str:
     """Truncate text with ellipsis."""
     if len(text) <= max_len:
         return text
-    return text[:max_len - 3] + "..."
+    return text[: max_len - 3] + "..."
 
 
 def reconstruct_text_message(events: list, message_id: str) -> str:
     """Reconstruct full text from TEXT_MESSAGE_CONTENT events."""
     parts = []
     for event in events:
-        if event.get("type") == "TEXT_MESSAGE_CONTENT" and event.get("messageId") == message_id:
+        if (
+            event.get("type") == "TEXT_MESSAGE_CONTENT"
+            and event.get("messageId") == message_id
+        ):
             parts.append(event.get("delta", ""))
     return "".join(parts)
 
@@ -91,14 +100,14 @@ def visualize_thread(thread_data: dict, verbose: bool = False):
     thread_name = metadata.get("name") if metadata else None
 
     # Thread header
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     if thread_name:
         print(f"📋 THREAD: {thread_name}")
         print(f"   ID: {thread_id}")
     else:
         print(f"📋 THREAD: {thread_id}")
     print(f"   Created: {created}")
-    print(f"{'='*80}")
+    print(f"{'=' * 80}")
 
     runs = thread_data.get("runs", {})
     if not runs:
@@ -113,14 +122,16 @@ def visualize_thread(thread_data: dict, verbose: bool = False):
         run_input = run_data.get("run_input", {})
         events = run_data.get("events", [])
 
-        print(f"\n  ┌─ Run {run_idx} ─────────────────────────────────────────────")
+        print(
+            f"\n  ┌─ Run {run_idx} ───────────────────────────────────────────"
+        )
         print(f"  │ ID: {run_id}")
         print(f"  │ Created: {run_created}")
 
         # Show user message if present
         user_msg = get_user_message_from_run_input(run_input)
         if user_msg:
-            print(f"  │")
+            print("  │")
             print(f"  │ 👤 USER: {truncate(user_msg, 65)}")
 
         # Process events
@@ -136,7 +147,7 @@ def visualize_thread(thread_data: dict, verbose: bool = False):
                     tool_calls[tc_id] = {
                         "name": event.get("toolCallName"),
                         "args": "",
-                        "result": None
+                        "result": None,
                     }
                 elif event_type == "TOOL_CALL_ARGS":
                     tc_id = event.get("toolCallId")
@@ -152,8 +163,8 @@ def visualize_thread(thread_data: dict, verbose: bool = False):
 
             # Display tool calls
             if tool_calls:
-                print(f"  │")
-                for tc_id, tc_data in tool_calls.items():
+                print("  │")
+                for _tc_id, tc_data in tool_calls.items():
                     print(f"  │ 🔧 TOOL: {tc_data['name']}")
                     if tc_data["args"]:
                         args_display = truncate(tc_data["args"], 55)
@@ -167,11 +178,11 @@ def visualize_thread(thread_data: dict, verbose: bool = False):
                 if role == "assistant":
                     full_text = reconstruct_text_message(events, msg_id)
                     if full_text:
-                        print(f"  │")
-                        print(f"  │ 🤖 ASSISTANT:")
+                        print("  │")
+                        print("  │ 🤖 ASSISTANT:")
                         # Show first few lines
                         lines = full_text.strip().split("\n")
-                        for i, line in enumerate(lines[:5]):
+                        for line in lines[:5]:
                             print(f"  │    {truncate(line, 65)}")
                         if len(lines) > 5:
                             print(f"  │    ... ({len(lines) - 5} more lines)")
@@ -182,12 +193,12 @@ def visualize_thread(thread_data: dict, verbose: bool = False):
                 for event in events:
                     t = event.get("type", "UNKNOWN")
                     event_types[t] = event_types.get(t, 0) + 1
-                print(f"  │")
+                print("  │")
                 print(f"  │ Events: {dict(event_types)}")
         else:
-            print(f"  │ (no events)")
+            print("  │ (no events)")
 
-        print(f"  └{'─'*60}")
+        print(f"  └{'─' * 60}")
 
 
 def main():
@@ -198,22 +209,18 @@ def main():
     parser.add_argument(
         "--base-url",
         default="http://localhost:8000/api/v1",
-        help="Base URL for the API (default: http://localhost:8000/api/v1)"
+        help="Base URL for the API (default: http://localhost:8000/api/v1)",
     )
     parser.add_argument(
-        "--token",
-        default="test",
-        help="Auth token (default: test)"
+        "--token", default="test", help="Auth token (default: test)"
     )
     parser.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         action="store_true",
-        help="Show verbose output including event counts"
+        help="Show verbose output including event counts",
     )
-    parser.add_argument(
-        "--thread",
-        help="Show only a specific thread ID"
-    )
+    parser.add_argument("--thread", help="Show only a specific thread ID")
 
     args = parser.parse_args()
 
@@ -245,7 +252,7 @@ def main():
         thread_data = fetch_json(thread_url, args.token)
         visualize_thread(thread_data, verbose=args.verbose)
 
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print(f"Total: {len(threads)} thread(s)")
 
 

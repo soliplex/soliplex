@@ -11,7 +11,8 @@ Usage:
 Examples:
     python scripts/smoke_test.py
     python scripts/smoke_test.py --base-url https://api.example.com
-    python scripts/smoke_test.py --base-url http://localhost:8000 --room-id genui --verbose
+    python scripts/smoke_test.py --base-url http://localhost:8000 \
+        --room-id genui --verbose
 """
 
 import argparse
@@ -20,13 +21,14 @@ import sys
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
-from urllib.parse import urljoin
 
 try:
     import requests
 except ImportError:
-    print("Error: 'requests' package required. Install with: pip install requests")
+    print(
+        "Error: 'requests' package required. "
+        "Install with: pip install requests"
+    )
     sys.exit(1)
 
 
@@ -43,12 +45,13 @@ class TestResult:
     status: TestStatus
     message: str
     duration_ms: float
-    response_code: Optional[int] = None
-    details: Optional[str] = None
+    response_code: int | None = None
+    details: str | None = None
 
 
 class Colors:
     """ANSI color codes for terminal output."""
+
     GREEN = "\033[92m"
     RED = "\033[91m"
     YELLOW = "\033[93m"
@@ -70,7 +73,7 @@ class SmokeTestHarness:
         self,
         base_url: str,
         room_id: str = "genui",
-        auth_token: Optional[str] = None,
+        auth_token: str | None = None,
         verbose: bool = False,
         timeout: int = 10,
     ):
@@ -83,14 +86,15 @@ class SmokeTestHarness:
         self.results: list[TestResult] = []
 
         # State for dependent tests
-        self.thread_id: Optional[str] = None
-        self.run_id: Optional[str] = None
+        self.thread_id: str | None = None
+        self.run_id: str | None = None
 
     def _normalize_url(self, url: str) -> str:
         """Normalize URL to bare server format (no /api suffix)."""
         url = url.strip().rstrip("/")
         # Strip /api and version suffix
         import re
+
         url = re.sub(r"/api(/v\d+)?$", "", url)
         return url
 
@@ -121,9 +125,9 @@ class SmokeTestHarness:
         method: str,
         endpoint: str,
         expected_codes: list[int],
-        body: Optional[dict] = None,
-        skip_if: Optional[str] = None,
-    ) -> tuple[TestResult, Optional[dict]]:
+        body: dict | None = None,
+        skip_if: str | None = None,
+    ) -> tuple[TestResult, dict | None]:
         """Run a single endpoint test. Returns (result, response_json)."""
         if skip_if:
             return TestResult(
@@ -159,10 +163,12 @@ class SmokeTestHarness:
                 message = f"HTTP {response.status_code}"
             elif response.status_code == 401:
                 status = TestStatus.WARN
-                message = "Auth required (401) - endpoint exists but needs token"
+                message = (
+                    "Auth required (401) - endpoint exists but needs token"
+                )
             elif response.status_code == 404:
                 status = TestStatus.FAIL
-                message = f"Endpoint not found (404)"
+                message = "Endpoint not found (404)"
             else:
                 status = TestStatus.FAIL
                 message = f"Unexpected HTTP {response.status_code}"
@@ -245,7 +251,10 @@ class SmokeTestHarness:
             )
 
     def test_rooms_list(self) -> TestResult:
-        """Test GET /api/v1/rooms - List all rooms."""
+        """Test GET /api/v1/rooms
+
+        - List all rooms.
+        """
         result, _ = self._run_test(
             name="GET /rooms",
             method="GET",
@@ -255,7 +264,10 @@ class SmokeTestHarness:
         return result
 
     def test_room_details(self) -> TestResult:
-        """Test GET /api/v1/rooms/{room_id} - Get room details."""
+        """Test GET /api/v1/rooms/{room_id}
+
+        - Get room details.
+        """
         result, _ = self._run_test(
             name=f"GET /rooms/{self.room_id}",
             method="GET",
@@ -265,7 +277,10 @@ class SmokeTestHarness:
         return result
 
     def test_room_threads(self) -> TestResult:
-        """Test GET /api/v1/rooms/{room_id}/agui - List threads in room."""
+        """Test GET /api/v1/rooms/{room_id}/agui
+
+        - List threads in room.
+        """
         result, _ = self._run_test(
             name=f"GET /rooms/{self.room_id}/agui",
             method="GET",
@@ -275,7 +290,10 @@ class SmokeTestHarness:
         return result
 
     def test_create_thread(self) -> TestResult:
-        """Test POST /api/v1/rooms/{room_id}/agui - Create thread."""
+        """Test POST /api/v1/rooms/{room_id}/agui
+
+        - Create thread.
+        """
         result, data = self._run_test(
             name=f"POST /rooms/{self.room_id}/agui",
             method="POST",
@@ -290,31 +308,47 @@ class SmokeTestHarness:
             runs = data.get("runs", {})
             if runs:
                 self.run_id = list(runs.keys())[0]
-            self._log(f"Created thread: {self.thread_id}, run: {self.run_id}", "info")
+            self._log(
+                f"Created thread: {self.thread_id}, run: {self.run_id}", "info"
+            )
 
         return result
 
     def test_get_thread(self) -> TestResult:
-        """Test GET /api/v1/rooms/{room_id}/agui/{thread_id} - Get thread details."""
-        skip_reason = None if self.thread_id else "No thread_id from previous test"
+        """Test GET /api/v1/rooms/{room_id}/agui/{thread_id}
+
+        - Get thread details.
+        """
+        skip_reason = (
+            None if self.thread_id else "No thread_id from previous test"
+        )
 
         result, _ = self._run_test(
             name=f"GET /rooms/{self.room_id}/agui/{{thread_id}}",
             method="GET",
-            endpoint=f"/rooms/{self.room_id}/agui/{self.thread_id}" if self.thread_id else "",
+            endpoint=f"/rooms/{self.room_id}/agui/{self.thread_id}"
+            if self.thread_id
+            else "",
             expected_codes=[200],
             skip_if=skip_reason,
         )
         return result
 
     def test_create_run(self) -> TestResult:
-        """Test POST /api/v1/rooms/{room_id}/agui/{thread_id} - Create run."""
-        skip_reason = None if self.thread_id else "No thread_id from previous test"
+        """Test POST /api/v1/rooms/{room_id}/agui/{thread_id}
+
+        - Create run.
+        """
+        skip_reason = (
+            None if self.thread_id else "No thread_id from previous test"
+        )
 
         result, data = self._run_test(
             name=f"POST /rooms/{self.room_id}/agui/{{thread_id}}",
             method="POST",
-            endpoint=f"/rooms/{self.room_id}/agui/{self.thread_id}" if self.thread_id else "",
+            endpoint=f"/rooms/{self.room_id}/agui/{self.thread_id}"
+            if self.thread_id
+            else "",
             expected_codes=[200, 201],
             body={},
             skip_if=skip_reason,
@@ -330,7 +364,10 @@ class SmokeTestHarness:
         return result
 
     def test_get_run(self) -> TestResult:
-        """Test GET /api/v1/rooms/{room_id}/agui/{thread_id}/{run_id} - Get run details."""
+        """Test GET /api/v1/rooms/{room_id}/agui/{thread_id}/{run_id}
+
+        - Get run details.
+        """
         skip_reason = None
         if not self.thread_id:
             skip_reason = "No thread_id from previous test"
@@ -341,14 +378,18 @@ class SmokeTestHarness:
             name=f"GET /rooms/{self.room_id}/agui/{{thread_id}}/{{run_id}}",
             method="GET",
             endpoint=f"/rooms/{self.room_id}/agui/{self.thread_id}/{self.run_id}"
-            if self.thread_id and self.run_id else "",
+            if self.thread_id and self.run_id
+            else "",
             expected_codes=[200],
             skip_if=skip_reason,
         )
         return result
 
     def test_cancel_run(self) -> TestResult:
-        """Test POST /api/v1/rooms/{room_id}/agui/{thread_id}/{run_id}/cancel - Cancel run."""
+        """Test POST /api/v1/rooms/{room_id}/agui/{thread_id}/{run_id}/cancel
+
+        - Cancel run.
+        """
         skip_reason = None
         if not self.thread_id:
             skip_reason = "No thread_id from previous test"
@@ -356,11 +397,16 @@ class SmokeTestHarness:
             skip_reason = "No run_id from previous test"
 
         result, _ = self._run_test(
-            name=f"POST .../{{thread_id}}/{{run_id}}/cancel",
+            name="POST .../{thread_id}/{run_id}/cancel",
             method="POST",
             endpoint=f"/rooms/{self.room_id}/agui/{self.thread_id}/{self.run_id}/cancel"
-            if self.thread_id and self.run_id else "",
-            expected_codes=[200, 204, 404],  # 404 is ok if run already finished
+            if self.thread_id and self.run_id
+            else "",
+            expected_codes=[
+                200,
+                204,
+                404,
+            ],  # 404 is ok if run already finished
             body={},
             skip_if=skip_reason,
         )
@@ -376,14 +422,14 @@ class SmokeTestHarness:
 
         tests = [
             self.test_server_reachable,
-            self.test_rooms_list,          # GET /rooms
-            self.test_room_details,        # GET /rooms/{id}
-            self.test_room_threads,        # GET /rooms/{id}/agui (list threads)
-            self.test_create_thread,       # POST /rooms/{id}/agui
-            self.test_get_thread,          # GET /rooms/{id}/agui/{thread_id}
-            self.test_create_run,          # POST /rooms/{id}/agui/{thread_id}
-            self.test_get_run,             # GET /rooms/{id}/agui/{thread_id}/{run_id}
-            self.test_cancel_run,          # POST .../cancel
+            self.test_rooms_list,  # GET /rooms
+            self.test_room_details,  # GET /rooms/{id}
+            self.test_room_threads,  # GET /rooms/{id}/agui (list threads)
+            self.test_create_thread,  # POST /rooms/{id}/agui
+            self.test_get_thread,  # GET /rooms/{id}/agui/{thread_id}
+            self.test_create_run,  # POST /rooms/{id}/agui/{thread_id}
+            self.test_get_run,  # GET /rooms/{id}/agui/{thread_id}/{run_id}
+            self.test_cancel_run,  # POST .../cancel
         ]
 
         for test_fn in tests:
@@ -392,8 +438,15 @@ class SmokeTestHarness:
             self._print_result(result)
 
             # Stop early if server is unreachable
-            if result.name == "Server Reachable" and result.status == TestStatus.FAIL:
-                print(f"\n{colorize('Aborting: Server not reachable', Colors.RED)}")
+            if (
+                result.name == "Server Reachable"
+                and result.status == TestStatus.FAIL
+            ):
+                abort_text = colorize(
+                    "Aborting: Server not reachable",
+                    Colors.RED,
+                )
+                print(f"\n{abort_text}")
                 break
 
         return self.results
@@ -406,7 +459,9 @@ class SmokeTestHarness:
             TestStatus.SKIP: Colors.GRAY,
             TestStatus.WARN: Colors.YELLOW,
         }
-        status_str = colorize(f"[{result.status.value}]", status_colors[result.status])
+        status_str = colorize(
+            f"[{result.status.value}]", status_colors[result.status]
+        )
         duration_str = colorize(f"({result.duration_ms:.0f}ms)", Colors.GRAY)
 
         print(f"  {status_str} {result.name}: {result.message} {duration_str}")
@@ -444,7 +499,11 @@ class SmokeTestHarness:
             print(f"\n{colorize('SMOKE TEST FAILED', Colors.RED)}")
             return 1
         elif warned > 0:
-            print(f"\n{colorize('SMOKE TEST PASSED WITH WARNINGS', Colors.YELLOW)}")
+            warn_txt = colorize(
+                "SMOKE TEST PASSED WITH WARNINGS",
+                Colors.YELLOW,
+            )
+            print(f"\n{warn_txt}")
             return 0
         else:
             print(f"\n{colorize('SMOKE TEST PASSED', Colors.GREEN)}")
@@ -472,7 +531,8 @@ def main():
         help="Bearer token for authenticated endpoints",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable verbose output with response details",
     )
