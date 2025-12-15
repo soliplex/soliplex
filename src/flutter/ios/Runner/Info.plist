@@ -32,7 +32,6 @@
         <string>Your location is processed locally on your device to provide app features. We do not track you or send location data to external servers.</string>
         <key>NSLocationWhenInUseUsageDescription</key>
         <string>Your location is used locally in the background to support app functionality. This data remains on your device and is not used for tracking or telemetry.</string>
-        <string>This app needs access to your location for the get_my_location tool.</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
