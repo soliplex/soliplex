@@ -522,7 +522,7 @@ async def post_room_agui_thread_id_run_id_meta(
 
 
 @util.logfire_span("DELETE /v1/rooms/{room_id}/agui/{thread_id}")
-@router.post("/v1/rooms/{room_id}/agui/{thread_id}")
+@router.delete("/v1/rooms/{room_id}/agui/{thread_id}")
 async def delete_room_agui_thread_id(
     request: fastapi.Request,
     room_id: str,
