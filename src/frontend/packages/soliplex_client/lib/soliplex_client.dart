@@ -4,3 +4,4 @@ library soliplex_client;
 export 'src/errors/errors.dart';
 export 'src/http/http.dart';
 export 'src/models/models.dart';
+export 'src/utils/utils.dart';
