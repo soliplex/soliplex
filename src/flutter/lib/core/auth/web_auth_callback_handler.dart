@@ -5,6 +5,7 @@ import 'package:soliplex/core/auth/web_auth_callback_stub.dart'
     if (dart.library.js_interop) 'web_auth_callback_web.dart'
     as platform;
 import 'package:soliplex/core/auth/web_auth_pending_storage.dart';
+import 'package:soliplex/core/services/secure_storage_service.dart';
 import 'package:soliplex/core/utils/debug_log.dart';
 
 /// Result of processing an auth callback
@@ -53,11 +54,13 @@ class WebAuthCallbackHandler {
   WebAuthCallbackHandler({
     required WebAuthPendingStorage pendingStorage,
     required SecureTokenStorage tokenStorage,
+    required this.secureStorageService,
   }) : _pendingStorage = pendingStorage,
        _tokenStorage = tokenStorage;
 
   final WebAuthPendingStorage _pendingStorage;
   final SecureTokenStorage _tokenStorage;
+  final SecureStorageService secureStorageService;
 
   /// Check if we're on an auth callback URL
   bool isAuthCallback() => platform.isAuthCallback();
@@ -154,9 +157,33 @@ class WebAuthCallbackHandler {
       refreshToken: params.refreshToken ?? '',
     );
 
-    // Store tokens
+    // Store tokens using server-specific keys for AuthManager compatibility
+    DebugLog.auth(
+      'WebAuthCallbackHandler: Storing tokens for server ${pending.serverId}',
+    );
+    DebugLog.auth(
+      'WebAuthCallbackHandler: Access token length: '
+      '${params.accessToken!.length}',
+    );
+    await secureStorageService.storeTokens(
+      serverId: pending.serverId,
+      accessToken: params.accessToken!,
+      refreshToken: params.refreshToken,
+      expiresAt: expiration,
+    );
+
+    // Also store in the legacy format for backward compatibility
     await _tokenStorage.setOidcAuthTokenResponse(tokens);
     DebugLog.auth('WebAuthCallbackHandler: Tokens stored successfully');
+
+    // Verify storage
+    final storedToken = await secureStorageService.getAccessToken(
+      pending.serverId,
+    );
+    DebugLog.auth(
+      'WebAuthCallbackHandler: Verification - stored token present: '
+      '${storedToken != null}',
+    );
 
     // Clear pending auth
     await _pendingStorage.clearPendingAuth();
