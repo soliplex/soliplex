@@ -9,27 +9,95 @@
 | Phase | Status | Progress |
 |-------|--------|----------|
 | 1. Models & Errors | Complete | 100% |
-| 2. HTTP Foundation | In Progress | 67% (DM2-DM3 done, DM4 pending) |
+| 2. HTTP Foundation | Complete | 100% (DM2, DM3, DM4 done) |
 | 3. API Layer | Not Started | 0% |
 | 4. AG-UI Protocol | Not Started | 0% |
 | 5. Sessions | Not Started | 0% |
 | 6. Facade | Not Started | 0% |
 
-**Overall:** 3/8 developer milestones complete (DM1, DM2, DM3)
+**Overall:** 4/8 developer milestones complete (DM1, DM2, DM3, DM4)
 
 ---
 
 ## Current Focus
 
-**Phase:** 2 - HTTP Foundation (DM2-DM4)
+**Phase:** 3 - API Layer (DM5)
 
-**Working on:** Ready to start DM4 (HTTP Transport, UrlBuilder, CancelToken)
+**Working on:** Ready to start DM5 (SoliplexApi CRUD operations)
 
 **Blocked by:** N/A
 
 ---
 
 ## Session Log
+
+### Session: 2024-12-16 - DM4 Complete
+
+**Duration:** ~1.5 hours
+
+**Accomplished:**
+
+- Implemented HTTP Transport layer (DM4)
+- Created `CancelToken` class for request cancellation:
+  - Completer-based async notification
+  - `isCancelled`, `reason` properties
+  - `cancel([reason])`, `throwIfCancelled()` methods
+  - `whenCancelled` future for async waiting
+  - Single-use, idempotent cancel behavior
+- Created `UrlBuilder` utility class:
+  - URL construction with path normalization
+  - Support for `path`, `pathSegments`, `queryParameters`
+  - Auto-handles leading/trailing slashes
+  - Query parameter encoding via Dart's Uri
+- Created `HttpTransport` class:
+  - JSON serialization wrapper around `HttpClientAdapter`
+  - Automatic JSON encoding/decoding for request and response bodies
+  - HTTP status code to exception mapping:
+    - 401/403 → AuthException
+    - 404 → NotFoundException
+    - 4xx/5xx → ApiException
+  - Request cancellation via `CancelToken` (checked before and after requests)
+  - Streaming support with cancellation via `requestStream()`
+  - Generic `fromJson` converter support
+  - Configurable timeout with per-request override
+- Added comprehensive tests (51 new tests, 219 total)
+- Achieved 100% test coverage on all DM4 files
+
+**Files Created:**
+
+- `lib/src/utils/cancel_token.dart` - Cancellation token (76 lines)
+- `lib/src/utils/url_builder.dart` - URL builder (107 lines)
+- `lib/src/utils/utils.dart` - Barrel export
+- `lib/src/http/http_transport.dart` - HTTP transport layer (304 lines)
+- `test/utils/cancel_token_test.dart` - 20 tests
+- `test/utils/url_builder_test.dart` - 25 tests
+- `test/http/http_transport_test.dart` - 51 tests (including pause/resume)
+
+**Files Modified:**
+
+- `lib/src/http/http.dart` - Added export for http_transport
+- `lib/soliplex_client.dart` - Added export for utils
+
+**Verification:**
+
+- `flutter analyze`: No issues found (zero errors, warnings, hints)
+- `flutter test`: 219 tests passing
+- Test coverage: 100% on all DM4 files (cancel_token, url_builder, http_transport)
+
+**Key Design Decisions:**
+
+- Completer-based CancelToken for async notification
+- Path normalization in UrlBuilder (strip leading/trailing slashes)
+- JSON encoding only for Map<String, dynamic> bodies
+- CancelToken checked both before and after adapter request
+- Stream wrapping with pause/resume support for cancellation
+- Error message extraction from JSON response bodies (message, error, detail fields)
+
+**Next Session:**
+
+- Start DM5 (API Layer): SoliplexApi with CRUD operations
+
+---
 
 ### Session: 2024-12-16 - DM3 Complete
 
@@ -247,7 +315,7 @@
 
 ### Phase 2: HTTP Foundation
 
-**Status:** In Progress (DM2-DM3 complete, DM4 pending)
+**Status:** Complete (DM2, DM3, DM4 done)
 
 **Files to Create:**
 
@@ -257,9 +325,10 @@
 - [x] `lib/src/http/http.dart` (barrel) ✓ DM2
 - [x] `lib/src/http/http_observer.dart` ✓ DM3
 - [x] `lib/src/http/observable_http_adapter.dart` ✓ DM3
-- [ ] `lib/src/http/http_transport.dart` (DM4)
-- [ ] `lib/src/utils/url_builder.dart` (DM4)
-- [ ] `lib/src/utils/cancel_token.dart` (DM4)
+- [x] `lib/src/http/http_transport.dart` ✓ DM4
+- [x] `lib/src/utils/url_builder.dart` ✓ DM4
+- [x] `lib/src/utils/cancel_token.dart` ✓ DM4
+- [x] `lib/src/utils/utils.dart` (barrel) ✓ DM4
 
 **Tests to Create:**
 
@@ -267,9 +336,9 @@
 - [x] `test/http/dart_http_adapter_test.dart` ✓ DM2 (32 tests)
 - [x] `test/http/http_observer_test.dart` ✓ DM3 (30 tests)
 - [x] `test/http/observable_http_adapter_test.dart` ✓ DM3 (27 tests)
-- [ ] `test/http/http_transport_test.dart` (DM4)
-- [ ] `test/http/url_builder_test.dart` (DM4)
-- [ ] `test/http/cancel_token_test.dart` (DM4)
+- [x] `test/http/http_transport_test.dart` ✓ DM4 (51 tests)
+- [x] `test/utils/url_builder_test.dart` ✓ DM4 (25 tests)
+- [x] `test/utils/cancel_token_test.dart` ✓ DM4 (20 tests)
 
 **Acceptance Criteria:**
 
@@ -281,16 +350,16 @@
 - [x] ObservableHttpAdapter notifies observers on all HTTP activity ✓ DM3
 - [x] Multiple observers can be registered ✓ DM3
 - [x] Observer error handling (observer throws doesn't break request) ✓ DM3
-- [ ] UrlBuilder produces correct paths (DM4)
-- [ ] CancelToken cancels requests (DM4)
-- [ ] HttpTransport maps HTTP status codes to exceptions (DM4)
-- [x] 85%+ test coverage ✓ (100% achieved)
+- [x] UrlBuilder produces correct paths ✓ DM4
+- [x] CancelToken cancels requests ✓ DM4
+- [x] HttpTransport maps HTTP status codes to exceptions ✓ DM4
+- [x] 85%+ test coverage ✓ (100% achieved on all files)
 
 **Notes:**
 
 - DM2 complete: AdapterResponse, HttpClientAdapter interface, DartHttpAdapter implementation
 - DM3 complete: HttpObserver interface, 5 event models, ObservableHttpAdapter decorator
-- Test cancellation edge cases (DM4)
+- DM4 complete: CancelToken, UrlBuilder, HttpTransport with 100% test coverage
 
 ---
 
@@ -431,6 +500,9 @@
 | 2024-12-16 | Adapter-level exception conversion | DartHttpAdapter converts platform exceptions (TimeoutException, SocketException) to NetworkException. HTTP status codes handled at transport layer. |
 | 2024-12-16 | Event-based HttpObserver | Observer pattern with immutable event objects. Observers are passive - cannot modify requests. Enables network inspector without coupling to adapter implementation. |
 | 2024-12-16 | Observer error isolation | ObservableHttpAdapter catches and ignores exceptions from observers. Observer failures never break HTTP requests. |
+| 2024-12-16 | Completer-based CancelToken | Uses Dart Completer for async notification. Single-use token (once cancelled, stays cancelled). `whenCancelled` future allows async waiting for cancellation. |
+| 2024-12-16 | HttpTransport exception mapping | Maps HTTP status codes to typed exceptions: 401/403 → AuthException, 404 → NotFoundException, 4xx/5xx → ApiException. NetworkException passed through from adapter. |
+| 2024-12-16 | Stream cancellation with pause/resume | Wrapped streams support pause/resume and cancellation. CancelToken emits CancelledException to stream on cancel. |
 
 ---
 
@@ -461,4 +533,4 @@ To pick up where you left off:
 
 ---
 
-*Last updated: 2024-12-16 (DM3 Complete)*
+*Last updated: 2024-12-16 (DM4 Complete)*
