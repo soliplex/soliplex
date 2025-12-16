@@ -17,7 +17,7 @@ packages/
 
 ## Architecture
 
-### Network Stack (4 Layers)
+### Network Stack (5 Layers)
 
 ```
 ┌─────────────────────────────────────────┐
@@ -34,7 +34,13 @@ packages/
 │ Layer 1: HttpClientAdapter (interface)  │  soliplex_client
 │ - Abstract HTTP operations (DI)         │
 └───────────────────┬─────────────────────┘
-                    │
+                    │ implements
+┌───────────────────▼─────────────────────┐
+│ Layer 0.5: ObservableHttpAdapter        │  soliplex_client
+│ - Decorator wrapping any adapter        │
+│ - Notifies HttpObserver on all activity │
+└───────────────────┬─────────────────────┘
+                    │ wraps
 ┌───────────────────▼─────────────────────┐
 │ Layer 0: Platform Implementations       │
 │ - DartHttpAdapter (default)             │  soliplex_client
@@ -119,6 +125,8 @@ final client = SoliplexClient(
 |-----------|----------------|
 | `UrlBuilder` | URL construction with normalization |
 | `HttpTransport` | JSON wrapper using HttpClientAdapter |
+| `HttpObserver` | Interface for observing HTTP activity |
+| `ObservableHttpAdapter` | Decorator that notifies observers on all HTTP traffic |
 | `ConnectionManager` | Server switching, session pooling |
 | `RoomSession` | Per-room message state, event processing |
 | `Thread` | AG-UI protocol, tool registration |
@@ -152,7 +160,7 @@ final client = SoliplexClient(
 | Phase | Goal | Components |
 |-------|------|------------|
 | 1 | Models & errors | ChatMessage, Room, ThreadInfo, RunInfo, all exceptions |
-| 2 | HTTP foundation | HttpClientAdapter, DartHttpAdapter, HttpTransport, UrlBuilder, CancelToken |
+| 2 | HTTP foundation | HttpClientAdapter, DartHttpAdapter, HttpObserver, ObservableHttpAdapter, HttpTransport, UrlBuilder, CancelToken |
 | 3 | API layer | SoliplexApi (CRUD) |
 | 4 | AG-UI protocol | Thread, message buffers, tool registry |
 | 5 | Sessions | ConnectionManager, RoomSession |
@@ -181,6 +189,8 @@ packages/soliplex_client/
 │       ├── http/
 │       │   ├── http_client_adapter.dart
 │       │   ├── dart_http_adapter.dart
+│       │   ├── http_observer.dart
+│       │   ├── observable_http_adapter.dart
 │       │   └── http_transport.dart
 │       ├── errors/
 │       │   └── exceptions.dart
@@ -201,6 +211,14 @@ description: Pure Dart client for Soliplex backend
 dependencies:
   http: ^1.2.0
   ag_ui: ^0.1.0
+  meta: ^1.9.0
+
+dev_dependencies:
+  very_good_analysis: ^6.0.0
+  test: ^1.24.0
+  mocktail: ^1.0.0
 ```
+
+**Linting:** Use `very_good_analysis`. Run `dart format .` and `dart analyze` before commits.
 
 **Note:** Native adapters are in separate `soliplex_client_native` package (v1.1 scope).

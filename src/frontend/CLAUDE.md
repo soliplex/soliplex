@@ -12,8 +12,7 @@ Cross-platform Flutter frontend for Soliplex AI-powered RAG system.
 planning/
 ├── ROADMAP.md                 - Version roadmap and future enhancements
 ├── BRANDING-APPROACH.md       - White-label extensibility design
-├── client.md                  - soliplex_client package overview
-├── client-spec.md             - Detailed implementation spec
+├── client.md                  - soliplex_client package spec
 ├── client-worklog.md          - Progress tracking (resume here)
 ├── core_frontend.md           - Flutter infrastructure (Riverpod, navigation)
 ├── external_backend_service.md - Backend API reference
@@ -109,6 +108,11 @@ current_canvas (3) ─┘
 
 - Test coverage: 85%+
 - Run `flutter analyze` and `dart format` before commits
+- Make sure there are no linter errors or warnings in the project
+- Follow strict Flutter linting (`very_good_analysis` library)
 - All tests must pass
-- Follow strict Flutter linting
 - KISS, YAGNI, SOLID principles
+
+## Terminology
+
+- Milestone a significant, specific point in time that marks the completion of a major phase with deliverables that are testable by end user.

@@ -147,4 +147,12 @@ dependencies:
   flutter_secure_storage: ^9.0.0
   # Optional for native HTTP adapters (v1.1):
   # soliplex_client_native: ^1.0.0
+
+dev_dependencies:
+  very_good_analysis: ^6.0.0
+  flutter_test:
+    sdk: flutter
+  mocktail: ^1.0.0
 ```
+
+**Linting:** Use `very_good_analysis`. Run `flutter analyze` and `dart format .` before commits.
