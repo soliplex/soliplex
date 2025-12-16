@@ -480,7 +480,13 @@ void main() {
 
         await completer.future;
 
-        expect(chunks, equals([[1, 2, 3], [4, 5, 6]]));
+        expect(
+          chunks,
+          equals([
+            [1, 2, 3],
+            [4, 5, 6],
+          ]),
+        );
       });
 
       test('emits NetworkException on HTTP error status', () async {
@@ -568,7 +574,12 @@ void main() {
         controller.add([4, 5, 6]);
         await Future<void>.delayed(const Duration(milliseconds: 10));
 
-        expect(chunks, equals([[1, 2, 3]]));
+        expect(
+          chunks,
+          equals([
+            [1, 2, 3],
+          ]),
+        );
 
         await controller.close();
       });
@@ -708,7 +719,12 @@ void main() {
         expect(capturedRequest?.method, equals('POST'));
         expect(capturedRequest?.body, equals('{"key":"value"}'));
         expect(capturedRequest?.headers['X-Custom'], equals('header'));
-        expect(chunks, equals([[1, 2, 3]]));
+        expect(
+          chunks,
+          equals([
+            [1, 2, 3],
+          ]),
+        );
       });
     });
 
