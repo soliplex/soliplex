@@ -62,6 +62,7 @@
 
 **Files to Create:**
 - [ ] `packages/soliplex_client/pubspec.yaml`
+- [ ] `packages/soliplex_client/analysis_options.yaml`
 - [ ] `packages/soliplex_client/lib/soliplex_client.dart`
 - [ ] `packages/soliplex_client/lib/src/models/room.dart`
 - [ ] `packages/soliplex_client/lib/src/models/thread_info.dart`
@@ -83,11 +84,15 @@
 - [ ] All models serialize to JSON
 - [ ] `copyWith` works correctly
 - [ ] Exceptions have meaningful messages
+- [ ] `dart format .` produces no changes
+- [ ] `dart analyze` shows zero warnings/errors
+- [ ] `dart test` passes
 - [ ] 100% test coverage on models
 
 **Notes:**
 - Need JSON fixtures from backend API responses
 - Check backend for exact field names and types
+- Use `very_good_analysis` for strict linting
 
 ---
 
@@ -99,6 +104,8 @@
 - [ ] `lib/src/http/adapter_response.dart`
 - [ ] `lib/src/http/http_client_adapter.dart`
 - [ ] `lib/src/http/dart_http_adapter.dart`
+- [ ] `lib/src/http/http_observer.dart`
+- [ ] `lib/src/http/observable_http_adapter.dart`
 - [ ] `lib/src/http/http_transport.dart`
 - [ ] `lib/src/utils/url_builder.dart`
 - [ ] `lib/src/utils/cancel_token.dart`
@@ -107,6 +114,8 @@
 - [ ] `test/http/url_builder_test.dart`
 - [ ] `test/http/cancel_token_test.dart`
 - [ ] `test/http/dart_http_adapter_test.dart`
+- [ ] `test/http/http_observer_test.dart`
+- [ ] `test/http/observable_http_adapter_test.dart`
 - [ ] `test/http/http_transport_test.dart`
 - [ ] `test/mocks/mock_http_client.dart`
 
@@ -114,13 +123,18 @@
 - [ ] UrlBuilder produces correct paths
 - [ ] CancelToken cancels requests
 - [ ] DartHttpAdapter handles all HTTP methods
+- [ ] HttpObserver interface defined with all callbacks
+- [ ] ObservableHttpAdapter notifies observers on all HTTP activity
+- [ ] Multiple observers can be registered
 - [ ] HttpTransport maps errors correctly
-- [ ] SSE streaming works
+- [ ] SSE streaming works with observer notifications
 - [ ] 90% test coverage
 
 **Notes:**
 - Test cancellation edge cases
 - Test timeout behavior
+- Test observer notification order
+- Test observer error handling (observer throws shouldn't break request)
 
 ---
 
@@ -239,6 +253,7 @@
 | 2024-12-15 | AG-UI before Sessions | Thread is used by RoomSession |
 | 2024-12-15 | Immutable models | Predictable state, better for testing |
 | 2024-12-15 | Stream-based events | Natural fit for Dart async, works with Riverpod |
+| 2024-12-15 | ObservableHttpAdapter (Layer 0.5) | Decorator pattern enables observing ALL HTTP traffic regardless of which platform adapter is used. Network inspector can see everything. |
 
 ---
 
@@ -252,8 +267,7 @@
 
 ## Resources
 
-- **Spec:** `planning/client-spec.md`
-- **Overview:** `planning/client.md`
+- **Spec:** `planning/client.md`
 - **Backend API:** `planning/external_backend_service.md`
 - **Prototype:** `../soliplex_flutter/lib/client/`
 - **AG-UI Docs:** (link to ag_ui package docs)
