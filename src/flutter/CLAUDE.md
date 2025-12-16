@@ -9,6 +9,7 @@ Project-specific instructions for Claude Code when working on this codebase.
 - **APP_FEATURES.md** - Planned, in-progress, and completed app features (feedback chips, notes pad, etc.)
 - **GENUI-WIDGETS.md** - Widget system documentation (registry, creating widgets, semantic IDs, limitations)
 - **STATE_MANAGEMENT.md** - Riverpod state management patterns (server-scoped providers, adding new panels)
+- **docs/AUTH_FLOWS.md** - Authentication flows (web backend-mediated, mobile PKCE, configuration, troubleshooting)
 - **docs/PROCESS.md** - Documentation lifecycle process (specs, ADRs, work logs)
 
 ## Documentation Lifecycle System
