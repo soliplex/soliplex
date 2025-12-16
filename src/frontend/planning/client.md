@@ -157,14 +157,18 @@ final client = SoliplexClient(
 
 ## Implementation Phases
 
-| Phase | Goal | Components |
-|-------|------|------------|
-| 1 | Models & errors | ChatMessage, Room, ThreadInfo, RunInfo, all exceptions |
-| 2 | HTTP foundation | HttpClientAdapter, DartHttpAdapter, HttpObserver, ObservableHttpAdapter, HttpTransport, UrlBuilder, CancelToken |
-| 3 | API layer | SoliplexApi (CRUD) |
-| 4 | AG-UI protocol | Thread, message buffers, tool registry |
-| 5 | Sessions | ConnectionManager, RoomSession |
-| 6 | Facade | SoliplexClient, chat() flow |
+Each phase maps to a Developer Milestone (DM). See `ROADMAP.md` for full milestone details.
+
+| Phase | Goal | Components | Milestone |
+|-------|------|------------|-----------|
+| 1 | Models & errors | ChatMessage, Room, ThreadInfo, RunInfo, all exceptions | DM1 |
+| 2a | HTTP adapter | HttpClientAdapter (interface), DartHttpAdapter | DM2 |
+| 2b | Network observer | HttpObserver (interface), ObservableHttpAdapter (decorator) | DM3 |
+| 2c | HTTP transport | HttpTransport, UrlBuilder, CancelToken | DM4 |
+| 3 | API layer | SoliplexApi (CRUD) | DM5 |
+| 4 | AG-UI protocol | Thread, message buffers, tool registry | DM6 |
+| 5 | Sessions | ConnectionManager, RoomSession | DM7 |
+| 6 | Facade | SoliplexClient, chat() flow | DM8 |
 
 ## File Structure
 

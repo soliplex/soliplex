@@ -23,29 +23,85 @@
 
 ## v1.0 - Core Functionality
 
-### Priority 1: Client (6 Phases)
+### Milestones
+
+v1.0 uses a two-tier milestone system:
+- **Developer Milestones (DM)**: Client library work, verified by unit tests (85%+ coverage)
+- **App Milestones (AM)**: End-user testable features
+
+#### Developer Milestones (DM) - Client Package
+
+| # | Name | Components | Test Criteria |
+|---|------|------------|---------------|
+| **DM1** | Models & Errors | ChatMessage, Room, ThreadInfo, RunInfo, all exceptions | 100% model coverage |
+| **DM2** | HTTP Adapter | HttpClientAdapter (interface), DartHttpAdapter | Request/response cycle works |
+| **DM3** | Network Observer | HttpObserver (interface), ObservableHttpAdapter (decorator) | HTTP traffic observable |
+| **DM4** | HTTP Transport | HttpTransport, UrlBuilder, CancelToken | JSON serialization, URL building, cancellation |
+| **DM5** | API Layer | SoliplexApi (CRUD) | Can fetch rooms, threads via API |
+| **DM6** | AG-UI Protocol | Thread, TextMessageBuffer, ToolCallReceptionBuffer, ToolRegistry | Event streaming works |
+| **DM7** | Sessions | ConnectionManager, RoomSession | Multi-room management works |
+| **DM8** | Facade | SoliplexClient, chat() flow | Integration tests pass |
+
+#### App Milestones (AM) - End-User Testable
+
+| # | Name | Phases | Requires DM | User Can Test |
+|---|------|--------|-------------|---------------|
+| **AM1** | App Shell | Core P1 | DM1 | Launch app, navigate, authenticate |
+| **AM2** | Connected Data | - | DM1-DM5 | See real rooms & threads from backend |
+| **AM3** | Working Chat | Core P2, Chat P1, History P1 | DM6 | Send message, receive AI response |
+| **AM4** | Full Chat | Chat P2-P3, History P2-P4 | - | Streaming, markdown, thread management |
+| **AM5** | Inspector | Detail P1-P4 | - | Events, thinking, tool calls, state |
+| **AM6** | Canvas | Current Canvas P1-P3, Permanent Canvas P1-P3 | - | State snapshots, pin items |
+| **AM7** | Polish | Core P3-P4 | DM7-DM8 | Multi-room, white-label ready |
+
+#### Milestone Dependencies
+
+```text
+            DM Track (Developer Milestones)
+DM1 → DM2 → DM3 → DM4 → DM5 → DM6 → DM7 → DM8
+ │                        │      │          │
+ ▼                        ▼      ▼          ▼
+AM1 ──────────────────► AM2 ─► AM3 ────────AM7
+(App Shell)         (Connected) (Chat)    (Polish)
+                                 │
+                    ┌────────────┼────────────┐
+                    ▼            ▼            ▼
+                  AM4          AM5          AM6
+                (Full Chat) (Inspector)  (Canvas)
+                    │            │            │
+                    └────────────┴────────────┘
+                                 │
+                                 ▼
+                               AM7
+```
+
+---
+
+### Priority 1: Client (Phases → DM1-DM8)
 
 **Package:** `soliplex_client` (Pure Dart)
 
-| Phase | Goal |
-|-------|------|
-| 1 | Models & errors |
-| 2 | HTTP foundation (HttpClientAdapter, DartHttpAdapter, HttpTransport) |
-| 3 | API layer (SoliplexApi) |
-| 4 | AG-UI protocol (Thread, buffers, tool registry) |
-| 5 | Sessions (ConnectionManager, RoomSession) |
-| 6 | Facade (SoliplexClient) |
+| Phase | Goal | Milestone |
+|-------|------|-----------|
+| 1 | Models & errors | DM1 |
+| 2a | HTTP adapter interface + DartHttpAdapter | DM2 |
+| 2b | HttpObserver + ObservableHttpAdapter | DM3 |
+| 2c | HttpTransport, UrlBuilder, CancelToken | DM4 |
+| 3 | API layer (SoliplexApi) | DM5 |
+| 4 | AG-UI protocol (Thread, buffers, tool registry) | DM6 |
+| 5 | Sessions (ConnectionManager, RoomSession) | DM7 |
+| 6 | Facade (SoliplexClient) | DM8 |
 
 ### Priority 2: Core Frontend (4 Phases)
 
-Depends on: Client phases 1-4
+Depends on: DM1 (AM1), DM6 (AM3)
 
-| Phase | Goal |
-|-------|------|
-| 1 | Project setup, auth, navigation |
-| 2 | ActiveRunNotifier + extensions |
-| 3 | Extensibility: SoliplexConfig, SoliplexRegistry |
-| 4 | Polish, extract to `soliplex_core` package |
+| Phase | Goal | Milestone |
+|-------|------|-----------|
+| 1 | Project setup, auth, navigation | AM1 |
+| 2 | ActiveRunNotifier + extensions | AM3 |
+| 3 | Extensibility: SoliplexConfig, SoliplexRegistry | AM7 |
+| 4 | Polish, extract to `soliplex_core` package | AM7 |
 
 **Extensibility (Level 2):**
 - `SoliplexConfig`: Branding, feature flags, default routes, servers
@@ -54,15 +110,15 @@ Depends on: Client phases 1-4
 
 ### Priority 3: UI Components
 
-Depends on: Core Frontend phase 2
+Depends on: AM3 (Core Frontend phase 2)
 
-| Component | Phases |
-|-----------|--------|
-| history | 4 |
-| chat | 3 |
-| detail | 4 |
-| current_canvas | 3 |
-| permanent_canvas | 3 |
+| Component | Phases | Milestone |
+|-----------|--------|-----------|
+| history | 4 | AM3 (P1), AM4 (P2-P4) |
+| chat | 3 | AM3 (P1), AM4 (P2-P3) |
+| detail | 4 | AM5 |
+| current_canvas | 3 | AM6 |
+| permanent_canvas | 3 | AM6 |
 
 ---
 
