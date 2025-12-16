@@ -96,7 +96,7 @@ Cloud sync, offline support, push notifications
 
 ## Dependencies
 
-```
+```text
 v1.0 → v1.1 (Native adapters, UX polish)
      → v1.2 (Power features)
           → v2.0 (Cloud, offline)

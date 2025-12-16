@@ -36,7 +36,7 @@
 **Duration:** N/A (planning only)
 
 **Accomplished:**
-- Created package specification (`client-spec.md`)
+- Created package specification (`client.md`)
 - Created this work log
 - Defined all interfaces and data models
 - Established testing strategy

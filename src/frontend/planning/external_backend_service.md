@@ -70,4 +70,4 @@ All authenticated endpoints use `Authorization: Bearer <token>`.
 
 ## Reference
 
-- OpenAPI docs: `http://localhost:8000/docs`
+- OpenAPI docs: <http://localhost:8000/docs>

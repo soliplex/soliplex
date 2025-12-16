@@ -9,7 +9,7 @@ Pure Dart package (`soliplex_client`) for backend communication via HTTP and AG-
 | `soliplex_client` | Pure Dart | Core client, DartHttpAdapter, all business logic |
 | `soliplex_client_native` | Flutter | Native HTTP adapters (v1.1) |
 
-```
+```text
 packages/
 ├── soliplex_client/           # Pure Dart - this spec
 └── soliplex_client_native/    # Flutter - v1.1 scope
@@ -19,7 +19,7 @@ packages/
 
 ### Network Stack (5 Layers)
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │ Layer 3: SoliplexApi                    │  soliplex_client
 │ - Room/Thread/Run CRUD operations       │
@@ -54,7 +54,7 @@ packages/
 
 ### Session Management
 
-```
+```text
 SoliplexClient (facade) → ConnectionManager → RoomSession → Thread
 ```
 
@@ -168,7 +168,7 @@ final client = SoliplexClient(
 
 ## File Structure
 
-```
+```text
 packages/soliplex_client/
 ├── lib/
 │   ├── soliplex_client.dart           # Public API exports
