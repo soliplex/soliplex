@@ -11,12 +11,6 @@ import 'package:soliplex/features/inspector/network_inspector_screen.dart';
 import 'package:soliplex/features/navigation/app_scaffold.dart';
 import 'package:soliplex/features/server/server_setup_screen.dart';
 
-/// Check if URL has auth callback tokens (web only).
-bool _hasAuthTokenParams(Uri uri) {
-  return uri.queryParameters.containsKey('token') ||
-      uri.queryParameters.containsKey('access_token');
-}
-
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 final _shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shell');
 
@@ -41,13 +35,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         'Router redirect: location=$location, uri=$uri, appState=$appState',
       );
 
-      // Web auth callback: tokens arrive at /?token=... (hash routing)
-      // Redirect to /auth/callback to process them
-      if (kIsWeb && _hasAuthTokenParams(uri)) {
-        if (location != '/auth/callback') {
-          DebugLog.auth('Router: Auth tokens detected, redirecting');
-          return '/auth/callback?${uri.query}';
-        }
+      // Auth callback route bypasses auth guard (handles its own auth)
+      // With hash routing: /#/auth/callback?token=...
+      if (location == '/auth/callback') {
         DebugLog.auth('Router: At auth callback, bypassing guard');
         return null;
       }
