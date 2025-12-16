@@ -30,9 +30,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       final appState = appStateAsync.valueOrNull;
       final location = state.matchedLocation;
       final uri = state.uri;
+      final fullPath = state.fullPath;
+      final queryParams = state.uri.queryParameters;
 
       DebugLog.auth(
-        'Router redirect: location=$location, uri=$uri, appState=$appState',
+        'Router redirect: location=$location, fullPath=$fullPath, '
+        'uri=$uri, queryParams=$queryParams, appState=$appState',
       );
 
       // Auth callback route bypasses auth guard (handles its own auth)

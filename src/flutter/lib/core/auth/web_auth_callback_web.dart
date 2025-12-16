@@ -1,7 +1,33 @@
 import 'dart:js_interop';
 
 import 'package:soliplex/core/auth/callback_params.dart';
+import 'package:soliplex/core/utils/debug_log.dart';
 import 'package:web/web.dart' as web;
+
+/// Cached callback params captured at app startup.
+/// This is needed because GoRouter may modify window.location.hash before
+/// we can read it in the AuthCallbackScreen.
+CallbackParams? _cachedCallbackParams;
+
+/// Capture callback params from URL at app startup.
+/// Call this BEFORE GoRouter initializes to preserve the original URL params.
+void captureCallbackParamsEarly() {
+  DebugLog.auth('captureCallbackParamsEarly: Capturing URL params at startup');
+  _cachedCallbackParams = extractCallbackParams();
+  DebugLog.auth(
+    'captureCallbackParamsEarly: Cached params: $_cachedCallbackParams',
+  );
+}
+
+/// Get the cached callback params captured at startup.
+/// Returns null if [captureCallbackParamsEarly] was not called.
+CallbackParams? getCachedCallbackParams() => _cachedCallbackParams;
+
+/// Clear the cached callback params after they've been processed.
+void clearCachedCallbackParams() {
+  DebugLog.auth('clearCachedCallbackParams: Clearing cached params');
+  _cachedCallbackParams = null;
+}
 
 /// Web implementation for auth callback URL handling.
 ///
@@ -15,19 +41,29 @@ import 'package:web/web.dart' as web;
 Map<String, String> _getQueryParams() {
   // First check regular query string
   final search = web.window.location.search;
+  DebugLog.auth('_getQueryParams: search="$search"');
   if (search.isNotEmpty) {
-    return Uri.splitQueryString(search.substring(1));
+    final params = Uri.splitQueryString(search.substring(1));
+    DebugLog.auth('_getQueryParams: Found params in search: ${params.keys}');
+    return params;
   }
 
   // Check hash fragment for query params (hash routing: #/path?query)
   final hash = web.window.location.hash;
+  DebugLog.auth('_getQueryParams: hash="$hash"');
   if (hash.isNotEmpty) {
     final queryIndex = hash.indexOf('?');
+    DebugLog.auth('_getQueryParams: queryIndex=$queryIndex');
     if (queryIndex != -1) {
-      return Uri.splitQueryString(hash.substring(queryIndex + 1));
+      final queryString = hash.substring(queryIndex + 1);
+      DebugLog.auth('_getQueryParams: queryString="$queryString"');
+      final params = Uri.splitQueryString(queryString);
+      DebugLog.auth('_getQueryParams: Found params in hash: ${params.keys}');
+      return params;
     }
   }
 
+  DebugLog.auth('_getQueryParams: No params found');
   return {};
 }
 
@@ -36,7 +72,12 @@ Map<String, String> _getQueryParams() {
 /// With hash-based routing, tokens may be in hash: /#/auth/callback?token=...
 bool isAuthCallback() {
   final params = _getQueryParams();
-  return params.containsKey('token') || params.containsKey('access_token');
+  final hasToken = params.containsKey('token');
+  final hasAccessToken = params.containsKey('access_token');
+  DebugLog.auth(
+    'isAuthCallback: hasToken=$hasToken, hasAccessToken=$hasAccessToken',
+  );
+  return hasToken || hasAccessToken;
 }
 
 /// Extract callback parameters from URL.
