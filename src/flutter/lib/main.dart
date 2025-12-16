@@ -1,12 +1,20 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:soliplex/core/auth/web_auth_callback_stub.dart'
+    if (dart.library.js_interop) 'package:soliplex/core/auth/web_auth_callback_web.dart'
+    as platform;
 import 'package:soliplex/core/router/app_router.dart';
 
 void main() {
-  // Use hash-based URLs on web (e.g., /#/chat)
-  // This is Flutter's default - no special configuration needed
-  // OIDC callback redirects to /?token=... and hash routing handles the rest
+  // On web, capture auth callback params BEFORE GoRouter initializes.
+  // GoRouter may modify window.location.hash when matching routes,
+  // so we need to preserve the original URL params.
+  if (kIsWeb) {
+    platform.captureCallbackParamsEarly();
+  }
+
   runApp(const ProviderScope(child: AgUiDashApp()));
 }
 

@@ -74,15 +74,25 @@ class WebAuthCallbackHandler {
     DebugLog.auth('WebAuthCallbackHandler: Checking for callback...');
     DebugLog.auth('WebAuthCallbackHandler: Current path: ${getCurrentPath()}');
 
-    // Check if we're on the callback URL
-    if (!isAuthCallback()) {
+    // First check cached params (captured at app startup before GoRouter
+    // potentially modified the URL)
+    final cachedParams = platform.getCachedCallbackParams();
+    DebugLog.auth('WebAuthCallbackHandler: Cached params: $cachedParams');
+
+    // Use cached params if available, otherwise check current URL
+    CallbackParams params;
+    if (cachedParams != null && cachedParams is! NoCallbackParams) {
+      params = cachedParams;
+      // Clear cached params after reading to prevent re-processing
+      platform.clearCachedCallbackParams();
+    } else if (isAuthCallback()) {
+      params = platform.extractCallbackParams();
+    } else {
       DebugLog.auth('WebAuthCallbackHandler: Not on callback URL');
       return AuthCallbackNotDetected();
     }
 
-    // Extract parameters from URL
-    final params = platform.extractCallbackParams();
-    DebugLog.auth('WebAuthCallbackHandler: Extracted params - $params');
+    DebugLog.auth('WebAuthCallbackHandler: Using params - $params');
 
     // Route to appropriate handler based on callback type
     switch (params) {

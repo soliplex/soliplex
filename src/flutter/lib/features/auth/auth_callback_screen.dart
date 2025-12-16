@@ -28,7 +28,9 @@ class _AuthCallbackScreenState extends ConsumerState<AuthCallbackScreen> {
   @override
   void initState() {
     super.initState();
+    DebugLog.auth('AuthCallbackScreen.initState() called');
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      DebugLog.auth('AuthCallbackScreen: postFrameCallback executing');
       _processCallback();
     });
   }
