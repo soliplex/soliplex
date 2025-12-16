@@ -1,0 +1,253 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:http/http.dart' as http;
+import 'package:soliplex_client/src/errors/exceptions.dart';
+import 'package:soliplex_client/src/http/adapter_response.dart';
+import 'package:soliplex_client/src/http/http_client_adapter.dart';
+
+/// Default HTTP adapter using `package:http`.
+///
+/// Works on all Dart platforms except web (which requires a different adapter).
+/// Provides timeout handling, automatic body encoding, and exception
+/// conversion.
+///
+/// Example:
+/// ```dart
+/// final adapter = DartHttpAdapter();
+/// try {
+///   final response = await adapter.request(
+///     'POST',
+///     Uri.parse('https://api.example.com/data'),
+///     body: {'key': 'value'},
+///     headers: {'Authorization': 'Bearer token'},
+///   );
+///   print(response.body);
+/// } on NetworkException catch (e) {
+///   print('Network error: ${e.message}');
+/// } finally {
+///   adapter.close();
+/// }
+/// ```
+class DartHttpAdapter implements HttpClientAdapter {
+  /// Creates a Dart HTTP adapter.
+  ///
+  /// Parameters:
+  /// - [client]: Optional [http.Client] to use. Creates a new one if not
+  ///   provided.
+  /// - [defaultTimeout]: Default timeout for requests. Defaults to 30 seconds.
+  DartHttpAdapter({
+    http.Client? client,
+    this.defaultTimeout = const Duration(seconds: 30),
+  }) : _client = client ?? http.Client();
+
+  final http.Client _client;
+
+  /// Default timeout for requests when not specified per-request.
+  final Duration defaultTimeout;
+
+  bool _closed = false;
+
+  @override
+  Future<AdapterResponse> request(
+    String method,
+    Uri uri, {
+    Map<String, String>? headers,
+    Object? body,
+    Duration? timeout,
+  }) async {
+    _checkNotClosed();
+
+    final effectiveTimeout = timeout ?? defaultTimeout;
+    final request = _createRequest(method, uri, headers, body);
+
+    try {
+      final streamedResponse = await _client.send(request).timeout(
+        effectiveTimeout,
+        onTimeout: () {
+          throw TimeoutException(
+            'Request timed out after ${effectiveTimeout.inSeconds}s',
+            effectiveTimeout,
+          );
+        },
+      );
+
+      final bodyBytes = await streamedResponse.stream.toBytes().timeout(
+        effectiveTimeout,
+        onTimeout: () {
+          throw TimeoutException(
+            'Response body timed out after ${effectiveTimeout.inSeconds}s',
+            effectiveTimeout,
+          );
+        },
+      );
+
+      return AdapterResponse(
+        statusCode: streamedResponse.statusCode,
+        bodyBytes: Uint8List.fromList(bodyBytes),
+        headers: _normalizeHeaders(streamedResponse.headers),
+        reasonPhrase: streamedResponse.reasonPhrase,
+      );
+    } on TimeoutException catch (e, stackTrace) {
+      throw NetworkException(
+        message: e.message ?? 'Request timed out',
+        isTimeout: true,
+        originalError: e,
+        stackTrace: stackTrace,
+      );
+    } on SocketException catch (e, stackTrace) {
+      throw NetworkException(
+        message: 'Connection failed: ${e.message}',
+        originalError: e,
+        stackTrace: stackTrace,
+      );
+    } on HttpException catch (e, stackTrace) {
+      throw NetworkException(
+        message: 'HTTP error: ${e.message}',
+        originalError: e,
+        stackTrace: stackTrace,
+      );
+    } on http.ClientException catch (e, stackTrace) {
+      throw NetworkException(
+        message: 'Client error: ${e.message}',
+        originalError: e,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  @override
+  Stream<List<int>> requestStream(
+    String method,
+    Uri uri, {
+    Map<String, String>? headers,
+    Object? body,
+  }) {
+    _checkNotClosed();
+
+    final request = _createRequest(method, uri, headers, body);
+
+    late StreamController<List<int>> controller;
+    StreamSubscription<List<int>>? subscription;
+
+    controller = StreamController<List<int>>(
+      onListen: () async {
+        try {
+          final streamedResponse = await _client.send(request);
+
+          // Check for HTTP errors before streaming
+          if (streamedResponse.statusCode >= 400) {
+            controller.addError(
+              NetworkException(
+                message: 'HTTP ${streamedResponse.statusCode}: '
+                    '${streamedResponse.reasonPhrase}',
+              ),
+            );
+            await controller.close();
+            return;
+          }
+
+          subscription = streamedResponse.stream.listen(
+            controller.add,
+            onError: (Object error, StackTrace stackTrace) {
+              if (error is SocketException) {
+                controller.addError(
+                  NetworkException(
+                    message: 'Connection lost: ${error.message}',
+                    originalError: error,
+                    stackTrace: stackTrace,
+                  ),
+                );
+              } else {
+                controller.addError(error, stackTrace);
+              }
+            },
+            onDone: controller.close,
+            cancelOnError: true,
+          );
+        } on SocketException catch (e, stackTrace) {
+          controller.addError(
+            NetworkException(
+              message: 'Connection failed: ${e.message}',
+              originalError: e,
+              stackTrace: stackTrace,
+            ),
+          );
+          await controller.close();
+        } on http.ClientException catch (e, stackTrace) {
+          controller.addError(
+            NetworkException(
+              message: 'Client error: ${e.message}',
+              originalError: e,
+              stackTrace: stackTrace,
+            ),
+          );
+          await controller.close();
+        }
+      },
+      onCancel: () async {
+        await subscription?.cancel();
+      },
+    );
+
+    return controller.stream;
+  }
+
+  @override
+  void close() {
+    if (!_closed) {
+      _closed = true;
+      _client.close();
+    }
+  }
+
+  /// Creates an HTTP request with the given parameters.
+  http.Request _createRequest(
+    String method,
+    Uri uri,
+    Map<String, String>? headers,
+    Object? body,
+  ) {
+    final request = http.Request(method.toUpperCase(), uri);
+
+    if (headers != null) {
+      request.headers.addAll(headers);
+    }
+
+    if (body != null) {
+      if (body is String) {
+        // Set content-type before body to prevent http package from overriding
+        request.headers['content-type'] ??= 'text/plain; charset=utf-8';
+        request.body = body;
+      } else if (body is List<int>) {
+        request.headers['content-type'] ??= 'application/octet-stream';
+        request.bodyBytes = body;
+      } else if (body is Map<String, dynamic>) {
+        // Set content-type before body to prevent http package from overriding
+        request.headers['content-type'] ??= 'application/json; charset=utf-8';
+        request.body = jsonEncode(body);
+      } else {
+        throw ArgumentError(
+          'Unsupported body type: ${body.runtimeType}. '
+          'Use String, List<int>, or Map<String, dynamic>.',
+        );
+      }
+    }
+
+    return request;
+  }
+
+  /// Normalizes headers by converting keys to lowercase.
+  Map<String, String> _normalizeHeaders(Map<String, String> headers) {
+    return headers.map((key, value) => MapEntry(key.toLowerCase(), value));
+  }
+
+  /// Checks that the adapter has not been closed.
+  void _checkNotClosed() {
+    if (_closed) {
+      throw StateError('Cannot use DartHttpAdapter after close() was called');
+    }
+  }
+}
