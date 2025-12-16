@@ -5,6 +5,7 @@ This document outlines three levels of increasingly sophisticated integration fo
 ## Overview
 
 The goal is to allow consumers to:
+
 - Wire in custom panels
 - Add custom slash commands
 - Register custom widgets
@@ -78,6 +79,7 @@ Consumer registers custom components via typed registries at startup.
 ### What They Can Customize
 
 Everything from Level 1, plus:
+
 - **Custom GenUI widgets**: Register new widget builders
 - **Custom slash commands**: Add command handlers
 - **Custom panels**: Register panel providers with layouts
@@ -174,6 +176,7 @@ Consumers build self-contained plugins that integrate via lifecycle hooks and ca
 ### What They Can Customize
 
 Everything from Levels 1 & 2, plus:
+
 - **Message interceptors**: Transform/filter messages before display
 - **Event hooks**: React to app lifecycle events
 - **Protocol extensions**: Custom message types, tool handlers
@@ -348,26 +351,31 @@ my_app/
 The following existing patterns inform this design:
 
 ### Panel System
+
 - **Location**: `lib/core/providers/panel_providers.dart`
 - **Pattern**: Server-scoped notifiers with `.family` providers keyed by `ServerRoomKey`
 - **Existing panels**: Canvas, Context Pane, Activity Status, Tool Execution, Message Stream
 
 ### Widget Registry
+
 - **Location**: `lib/core/services/widget_registry.dart`
 - **Pattern**: Name-to-builder mapping, already extensible via `register()` method
 - **Existing widgets**: InfoCard, MetricDisplay, DataList, SearchWidget, etc.
 
 ### Slash Commands
+
 - **Location**: `lib/features/chat/services/slash_command_service.dart`
 - **Pattern**: Currently hardcoded switch statement - needs refactoring for Level 2+
 - **Existing commands**: /search, /list, /demo, /canvas, /help
 
 ### Routing
+
 - **Location**: `lib/core/router/app_router.dart`
 - **Pattern**: GoRouter with shell route, auth guard redirect
 - **Existing routes**: /setup, /auth/callback, /chat, /chat/:roomId, /settings, /inspector
 
 ### Configuration
+
 - **Location**: `lib/main.dart`, `lib/app_shell.dart`
 - **Pattern**: Runtime-driven via providers, no external config files currently
 
@@ -376,6 +384,7 @@ The following existing patterns inform this design:
 ## Recommended Approach
 
 Start with **Level 2** as the target architecture:
+
 1. It provides meaningful extensibility without over-engineering
 2. The registry pattern aligns with existing `WidgetRegistry` design
 3. Plugin lifecycle (Level 3) can be added later if demand exists

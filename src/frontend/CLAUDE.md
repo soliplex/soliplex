@@ -66,6 +66,7 @@ planning/
 ## Implementation Order (v1.0)
 
 v1.0 uses a two-tier milestone system:
+
 - **Developer Milestones (DM1-DM8)**: Client library work, verified by unit tests (85%+ coverage)
 - **App Milestones (AM1-AM7)**: End-user testable features
 
@@ -116,12 +117,100 @@ Depends on: AM3 (Core Frontend phase 2)
 ## Development Rules
 
 - Test coverage: 85%+
-- Run `flutter analyze` and `dart format` before commits
-- Make sure there are no linter errors or warnings in the project
 - Follow strict Flutter linting (`very_good_analysis` library)
-- All tests must pass
 - KISS, YAGNI, SOLID principles
+- When adding a new Flutter or Dart package, add a `.gitignore` file based on: <https://github.com/flutter/flutter/blob/master/.gitignore>
 
 ## Terminology
 
 - Milestone a significant, specific point in time that marks the completion of a major phase with deliverables that are testable by end user.
+
+## Code Quality Requirements
+
+### Analyzer: Zero Tolerance Policy
+
+**`flutter analyze` must report ZERO errors and ZERO warnings.**
+
+This is mandatory for all code changes:
+
+- Run `flutter analyze` before committing
+- Fix all errors AND warnings immediately
+- Info-level hints are allowed but should be addressed when practical
+- **No exceptions** - warnings are not "acceptable technical debt"
+
+```bash
+# Check before committing
+flutter analyze
+
+# Expected output: "No issues found!"
+```
+
+**Why this matters:**
+
+- Analyzer warnings often indicate real bugs (null safety violations, unused variables, type mismatches)
+- Warnings accumulate quickly - "just one" becomes hundreds
+- Treating analyzer as strictly as tests prevents regression
+- Clean analyzer output makes code review faster
+
+### Tests: All Must Pass
+
+All tests must pass before any code is considered complete:
+
+```bash
+flutter test
+```
+
+### Formatter
+
+Code should be formatted before commits:
+
+```bash
+dart format lib test
+```
+
+### Markdown Linting
+
+All markdown files must pass markdownlint with zero errors:
+
+```bash
+npx markdownlint-cli "**/*.md"
+```
+
+**Configuration:** `.markdownlint.json` at project root.
+
+**Disabled rules** (stylistic preferences):
+
+- `MD013` - Line length (allows flexible formatting)
+- `MD024` - Duplicate headings (needed for repeated section patterns)
+- `MD033` - Inline HTML (allows HTML when needed)
+- `MD036` - Emphasis as heading (allows **bold** labels)
+- `MD041` - First line heading (CLAUDE.md starts with `#`)
+- `MD060` - Table column style (allows compact tables)
+
+**Key enforced rules:**
+
+- `MD022` - Headings must have blank lines around them
+- `MD032` - Lists must have blank lines around them
+
+## Git Recommendations
+
+### Files to Commit
+
+Always commit these configuration files:
+
+- `.markdownlint.json` - Markdown linting rules
+- `analysis_options.yaml` - Dart analyzer rules
+- `pubspec.yaml` - Package dependencies
+
+### Files to Gitignore
+
+Standard Flutter/Dart ignores (see `packages/soliplex_client/.gitignore`):
+
+- `.dart_tool/`
+- `build/`
+- `.packages`
+- `pubspec.lock` (for packages, not apps)
+- `*.iml`
+- `.idea/`
+
+**Never gitignore** project configuration files like `.markdownlint.json` - they ensure team consistency.

@@ -141,7 +141,7 @@ class RouteDefinition {
 ```yaml
 dependencies:
   soliplex_client:
-    path: ../soliplex_client    # Or published version
+    path: packages/soliplex_client    # Or published version
   flutter_riverpod: ^2.5.0
   go_router: ^14.0.0
   flutter_secure_storage: ^9.0.0
@@ -149,7 +149,7 @@ dependencies:
   # soliplex_client_native: ^1.0.0
 
 dev_dependencies:
-  very_good_analysis: ^6.0.0
+  very_good_analysis: ^10.0.0
   flutter_test:
     sdk: flutter
   mocktail: ^1.0.0
