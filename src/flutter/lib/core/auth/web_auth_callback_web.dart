@@ -7,21 +7,15 @@ import 'package:web/web.dart' as web;
 ///
 /// Provides functions to detect and extract auth callback parameters from URL.
 
-/// Pattern to match auth callback URLs: /api/auth/{system}
-final _authCallbackPattern = RegExp(r'^/api/auth/([^/]+)$');
-
-/// Check if the current URL is an auth callback
+/// Check if the current URL has auth callback tokens.
+///
+/// With hash-based routing, OIDC redirects to /?token=... and the hash
+/// handles client-side routing. We detect callbacks by token presence.
 bool isAuthCallback() {
-  final path = web.window.location.pathname;
-  return _authCallbackPattern.hasMatch(path);
-}
-
-/// Extract the system/provider ID from the callback URL.
-/// Returns null if not on a callback URL.
-String? extractSystemFromPath() {
-  final path = web.window.location.pathname;
-  final match = _authCallbackPattern.firstMatch(path);
-  return match?.group(1);
+  final search = web.window.location.search;
+  if (search.isEmpty) return false;
+  final params = Uri.splitQueryString(search.substring(1));
+  return params.containsKey('token') || params.containsKey('access_token');
 }
 
 /// Extract callback parameters from URL.
