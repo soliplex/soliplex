@@ -35,7 +35,7 @@ v1.0 uses a two-tier milestone system:
 | # | Name | Components | Test Criteria | Status |
 |---|------|------------|---------------|--------|
 | **DM1** | Models & Errors | ChatMessage, Room, ThreadInfo, RunInfo, all exceptions | 100% model coverage | Done |
-| **DM2** | HTTP Adapter | HttpClientAdapter (interface), DartHttpAdapter | Request/response cycle works | - |
+| **DM2** | HTTP Adapter | HttpClientAdapter (interface), DartHttpAdapter, AdapterResponse | Request/response cycle works | Done |
 | **DM3** | Network Observer | HttpObserver (interface), ObservableHttpAdapter (decorator) | HTTP traffic observable | - |
 | **DM4** | HTTP Transport | HttpTransport, UrlBuilder, CancelToken | JSON serialization, URL building, cancellation | - |
 | **DM5** | API Layer | SoliplexApi (CRUD) | Can fetch rooms, threads via API | - |
