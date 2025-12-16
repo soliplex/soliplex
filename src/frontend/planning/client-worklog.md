@@ -9,13 +9,13 @@
 | Phase | Status | Progress |
 |-------|--------|----------|
 | 1. Models & Errors | Complete | 100% |
-| 2. HTTP Foundation | In Progress | 33% (DM2 done, DM3-DM4 pending) |
+| 2. HTTP Foundation | In Progress | 67% (DM2-DM3 done, DM4 pending) |
 | 3. API Layer | Not Started | 0% |
 | 4. AG-UI Protocol | Not Started | 0% |
 | 5. Sessions | Not Started | 0% |
 | 6. Facade | Not Started | 0% |
 
-**Overall:** 2/8 developer milestones complete (DM1, DM2)
+**Overall:** 3/8 developer milestones complete (DM1, DM2, DM3)
 
 ---
 
@@ -23,13 +23,73 @@
 
 **Phase:** 2 - HTTP Foundation (DM2-DM4)
 
-**Working on:** Ready to start DM3 (Network Observer)
+**Working on:** Ready to start DM4 (HTTP Transport, UrlBuilder, CancelToken)
 
 **Blocked by:** N/A
 
 ---
 
 ## Session Log
+
+### Session: 2024-12-16 - DM3 Complete
+
+**Duration:** ~1 hour
+
+**Accomplished:**
+
+- Implemented Network Observer layer (DM3)
+- Created `HttpObserver` interface with 5 lifecycle callbacks:
+  - `onRequest()` - called when request is sent
+  - `onResponse()` - called when response is received
+  - `onError()` - called on network errors
+  - `onStreamStart()` - called when streaming begins
+  - `onStreamEnd()` - called when streaming ends
+- Created 5 immutable event model classes:
+  - `HttpEvent` - base class with requestId and timestamp
+  - `HttpRequestEvent` - method, uri, headers
+  - `HttpResponseEvent` - statusCode, duration, bodySize, isSuccess helper
+  - `HttpErrorEvent` - method, uri, exception, duration
+  - `HttpStreamStartEvent` - method, uri
+  - `HttpStreamEndEvent` - bytesReceived, duration, error, isSuccess helper
+- Created `ObservableHttpAdapter` decorator:
+  - Wraps any `HttpClientAdapter` implementation
+  - Notifies registered observers on all HTTP activity
+  - Observer errors are caught and ignored (don't break requests)
+  - Supports custom request ID generator for correlation
+  - Tracks bytes received for streaming
+- Added comprehensive tests (57 new tests, 168 total)
+- Achieved 100% test coverage on all files
+
+**Files Created:**
+
+- `lib/src/http/http_observer.dart` - Observer interface + event models (41 lines)
+- `lib/src/http/observable_http_adapter.dart` - Decorator implementation (59 lines)
+- `test/http/http_observer_test.dart` - 30 tests for event models
+- `test/http/observable_http_adapter_test.dart` - 27 tests for decorator
+
+**Files Modified:**
+
+- `lib/src/http/http.dart` - Added exports for new classes
+
+**Verification:**
+
+- `flutter analyze`: No issues found (zero errors, warnings, hints)
+- `flutter test`: 168 tests passing
+- Test coverage: 100% (380/380 lines across all files)
+
+**Key Design Decisions:**
+
+- Event-based observer pattern (passive observers, no request modification)
+- Decorator pattern for composition (works with any HttpClientAdapter)
+- Error isolation (observer failures don't break HTTP requests)
+- Privacy-aware (no body logging by default, just body size)
+- Request ID correlation across all events for same request
+
+**Next Session:**
+
+- Start DM4 (HTTP Transport): HttpTransport, UrlBuilder, CancelToken
+
+---
 
 ### Session: 2024-12-16 - DM2 Complete
 
@@ -187,7 +247,7 @@
 
 ### Phase 2: HTTP Foundation
 
-**Status:** In Progress (DM2 complete, DM3-DM4 pending)
+**Status:** In Progress (DM2-DM3 complete, DM4 pending)
 
 **Files to Create:**
 
@@ -195,8 +255,8 @@
 - [x] `lib/src/http/http_client_adapter.dart` ✓ DM2
 - [x] `lib/src/http/dart_http_adapter.dart` ✓ DM2
 - [x] `lib/src/http/http.dart` (barrel) ✓ DM2
-- [ ] `lib/src/http/http_observer.dart` (DM3)
-- [ ] `lib/src/http/observable_http_adapter.dart` (DM3)
+- [x] `lib/src/http/http_observer.dart` ✓ DM3
+- [x] `lib/src/http/observable_http_adapter.dart` ✓ DM3
 - [ ] `lib/src/http/http_transport.dart` (DM4)
 - [ ] `lib/src/utils/url_builder.dart` (DM4)
 - [ ] `lib/src/utils/cancel_token.dart` (DM4)
@@ -205,8 +265,8 @@
 
 - [x] `test/http/adapter_response_test.dart` ✓ DM2 (43 tests)
 - [x] `test/http/dart_http_adapter_test.dart` ✓ DM2 (32 tests)
-- [ ] `test/http/http_observer_test.dart` (DM3)
-- [ ] `test/http/observable_http_adapter_test.dart` (DM3)
+- [x] `test/http/http_observer_test.dart` ✓ DM3 (30 tests)
+- [x] `test/http/observable_http_adapter_test.dart` ✓ DM3 (27 tests)
 - [ ] `test/http/http_transport_test.dart` (DM4)
 - [ ] `test/http/url_builder_test.dart` (DM4)
 - [ ] `test/http/cancel_token_test.dart` (DM4)
@@ -217,20 +277,20 @@
 - [x] Request timeout behavior works correctly ✓ DM2
 - [x] Network exceptions converted properly ✓ DM2
 - [x] Streaming requests work for SSE support ✓ DM2
+- [x] HttpObserver interface defined with all callbacks ✓ DM3
+- [x] ObservableHttpAdapter notifies observers on all HTTP activity ✓ DM3
+- [x] Multiple observers can be registered ✓ DM3
+- [x] Observer error handling (observer throws doesn't break request) ✓ DM3
 - [ ] UrlBuilder produces correct paths (DM4)
 - [ ] CancelToken cancels requests (DM4)
-- [ ] HttpObserver interface defined with all callbacks (DM3)
-- [ ] ObservableHttpAdapter notifies observers on all HTTP activity (DM3)
-- [ ] Multiple observers can be registered (DM3)
 - [ ] HttpTransport maps HTTP status codes to exceptions (DM4)
-- [ ] 85%+ test coverage
+- [x] 85%+ test coverage ✓ (100% achieved)
 
 **Notes:**
 
 - DM2 complete: AdapterResponse, HttpClientAdapter interface, DartHttpAdapter implementation
+- DM3 complete: HttpObserver interface, 5 event models, ObservableHttpAdapter decorator
 - Test cancellation edge cases (DM4)
-- Test observer notification order (DM3)
-- Test observer error handling (observer throws shouldn't break request) (DM3)
 
 ---
 
@@ -369,6 +429,8 @@
 | 2024-12-16 | Bytes-first AdapterResponse | Store bodyBytes as Uint8List, provide body getter for UTF-8 decoding. Handles binary responses correctly. |
 | 2024-12-16 | Content-type before body | Set content-type header before setting body to prevent package:http from overriding user-specified values. |
 | 2024-12-16 | Adapter-level exception conversion | DartHttpAdapter converts platform exceptions (TimeoutException, SocketException) to NetworkException. HTTP status codes handled at transport layer. |
+| 2024-12-16 | Event-based HttpObserver | Observer pattern with immutable event objects. Observers are passive - cannot modify requests. Enables network inspector without coupling to adapter implementation. |
+| 2024-12-16 | Observer error isolation | ObservableHttpAdapter catches and ignores exceptions from observers. Observer failures never break HTTP requests. |
 
 ---
 
@@ -399,4 +461,4 @@ To pick up where you left off:
 
 ---
 
-*Last updated: 2024-12-16 (DM2 Complete)*
+*Last updated: 2024-12-16 (DM3 Complete)*
