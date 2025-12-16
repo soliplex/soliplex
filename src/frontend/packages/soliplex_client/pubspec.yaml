@@ -1,0 +1,14 @@
+name: soliplex_client
+description: Pure Dart client for Soliplex backend HTTP and AG-UI APIs
+version: 1.0.0-dev
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  meta: ^1.9.0
+
+dev_dependencies:
+  mocktail: ^1.0.0
+  test: ^1.24.0
+  very_good_analysis: ^10.0.0
