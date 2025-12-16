@@ -3,12 +3,15 @@
 // These functions are no-ops on non-web platforms.
 // On web, the actual implementation in web_auth_callback_web.dart is used.
 
+import 'package:soliplex/core/auth/callback_params.dart';
+
 /// Check if the current URL is an auth callback
 bool isAuthCallback() => false;
 
-/// Extract callback parameters from URL
-/// Returns (code, state, error)
-(String?, String?, String?) extractCallbackParams() => (null, null, null);
+/// Extract callback parameters from URL.
+///
+/// On non-web platforms, this always returns [NoCallbackParams].
+CallbackParams extractCallbackParams() => const NoCallbackParams();
 
 /// Get the current URL path
 String getCurrentPath() => '';

@@ -50,11 +50,9 @@ final webAuthPendingStorageProvider = Provider<WebAuthPendingStorage>((ref) {
 final webAuthCallbackHandlerProvider = Provider<WebAuthCallbackHandler>((ref) {
   final pendingStorage = ref.watch(webAuthPendingStorageProvider);
   final tokenStorage = ref.watch(secureTokenStorageProvider);
-  final inspector = ref.read(networkInspectorProvider);
   return WebAuthCallbackHandler(
     pendingStorage: pendingStorage,
     tokenStorage: tokenStorage,
-    inspector: inspector,
   );
 });
 

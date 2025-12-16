@@ -111,6 +111,7 @@ class AuthManager {
         clientId: provider.clientId,
         redirectUrl: _getRedirectUrl(),
         scopes: scopes,
+        serverBaseUrl: server.url, // For web backend-mediated OAuth
       );
 
       // Enable auth on the interactor

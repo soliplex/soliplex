@@ -10,6 +10,7 @@ class SsoConfig extends Equatable {
     required this.clientId,
     required this.redirectUrl,
     required this.scopes,
+    this.serverBaseUrl,
   });
 
   SsoConfig.newEndpoint(Uri newLoginUrl, SsoConfig old)
@@ -20,7 +21,8 @@ class SsoConfig extends Equatable {
       loginUrl = newLoginUrl,
       clientId = old.clientId,
       redirectUrl = old.redirectUrl,
-      scopes = old.scopes;
+      scopes = old.scopes,
+      serverBaseUrl = old.serverBaseUrl;
 
   final String id;
   final String title;
@@ -30,6 +32,12 @@ class SsoConfig extends Equatable {
   final String clientId;
   final String redirectUrl;
   final List<String> scopes;
+
+  /// The Soliplex backend server URL.
+  ///
+  /// Used for web authentication to redirect through the backend-mediated
+  /// OAuth flow instead of directly to the OIDC provider.
+  final String? serverBaseUrl;
 
   @override
   List<Object?> get props => [
@@ -41,5 +49,6 @@ class SsoConfig extends Equatable {
     clientId,
     redirectUrl,
     scopes,
+    serverBaseUrl,
   ];
 }
