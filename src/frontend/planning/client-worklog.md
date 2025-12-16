@@ -10,26 +10,85 @@
 |-------|--------|----------|
 | 1. Models & Errors | Complete | 100% |
 | 2. HTTP Foundation | Complete | 100% (DM2, DM3, DM4 done) |
-| 3. API Layer | Not Started | 0% |
+| 3. API Layer | Complete | 100% (DM5 done) |
 | 4. AG-UI Protocol | Not Started | 0% |
 | 5. Sessions | Not Started | 0% |
 | 6. Facade | Not Started | 0% |
 
-**Overall:** 4/8 developer milestones complete (DM1, DM2, DM3, DM4)
+**Overall:** 5/8 developer milestones complete (DM1, DM2, DM3, DM4, DM5)
 
 ---
 
 ## Current Focus
 
-**Phase:** 3 - API Layer (DM5)
+**Phase:** 4 - AG-UI Protocol (DM6)
 
-**Working on:** Ready to start DM5 (SoliplexApi CRUD operations)
+**Working on:** Ready to start DM6 (Thread, buffers, tool registry)
 
 **Blocked by:** N/A
 
 ---
 
 ## Session Log
+
+### Session: 2024-12-16 - DM5 Complete (Final)
+
+**Duration:** ~2 hours
+
+**Accomplished:**
+
+- Implemented API Layer (DM5)
+- Created `SoliplexApi` class with 8 CRUD methods:
+  - `getRooms()` - GET /api/v1/rooms
+  - `getRoom(roomId)` - GET /api/v1/rooms/{roomId}
+  - `getThreads(roomId)` - GET /api/v1/rooms/{roomId}/agui
+  - `getThread(roomId, threadId)` - GET /api/v1/rooms/{roomId}/agui/{threadId}
+  - `createThread(roomId)` - POST /api/v1/rooms/{roomId}/agui (returns ThreadInfo)
+  - `deleteThread(roomId, threadId)` - DELETE /api/v1/rooms/{roomId}/agui/{threadId}
+  - `createRun(roomId, threadId)` - POST /api/v1/rooms/{roomId}/agui/{threadId} (returns RunInfo)
+  - `getRun(roomId, threadId, runId)` - GET /api/v1/rooms/{roomId}/agui/{threadId}/{runId}
+- Input validation for empty IDs (throws ArgumentError)
+- CancelToken support on all methods
+- Exception propagation from transport layer
+- Comprehensive test coverage (~30 tests for SoliplexApi)
+
+**Refactoring:**
+
+- Removed `CreateThreadResult` model - `createThread()` returns `ThreadInfo` directly
+- Removed `CreateRunResult` model - `createRun()` returns `RunInfo` directly
+- Backend responses normalized internally (`thread_id` → `id`, `run_id` → `id`)
+- Simpler API surface - callers don't need to know about backend response format
+
+**Files Created:**
+
+- `lib/src/api/soliplex_api.dart` - API class with 8 CRUD methods (~200 lines)
+- `lib/src/api/api.dart` - Barrel export
+- `test/api/soliplex_api_test.dart` - 30 tests for API methods
+
+**Files Modified:**
+
+- `lib/soliplex_client.dart` - Added export for api.dart
+
+**Verification:**
+
+- `flutter analyze`: No issues found (zero errors, warnings, hints)
+- `flutter test`: 385 tests passing
+- Test coverage: 100% on all DM5 files
+
+**Key Design Decisions:**
+
+- `createThread()` returns `ThreadInfo` (normalized from backend's `thread_id`)
+- `createRun()` returns `RunInfo` (normalized from backend's `run_id`)
+- No intermediate result types needed - API returns domain models directly
+- Input validation throws ArgumentError for empty IDs
+- All methods accept optional CancelToken for request cancellation
+- Transport-level exceptions propagate unchanged
+
+**Next Session:**
+
+- Start DM6 (AG-UI Protocol): Thread, TextMessageBuffer, ToolCallReceptionBuffer, ToolRegistry
+
+---
 
 ### Session: 2024-12-16 - DM4 Complete
 
@@ -365,30 +424,31 @@
 
 ### Phase 3: API Layer
 
-**Status:** Not Started
+**Status:** Complete (DM5 done)
 
-**Files to Create:**
+**Files Created:**
 
-- [ ] `lib/src/api/soliplex_api.dart`
+- [x] `lib/src/api/soliplex_api.dart` ✓ DM5
+- [x] `lib/src/api/api.dart` (barrel) ✓ DM5
 
-**Tests to Create:**
+**Tests Created:**
 
-- [ ] `test/api/soliplex_api_test.dart`
-- [ ] `test/fixtures/rooms.json`
-- [ ] `test/fixtures/threads.json`
-- [ ] `test/mocks/mock_transport.dart`
+- [x] `test/api/soliplex_api_test.dart` ✓ DM5 (30 tests)
 
 **Acceptance Criteria:**
 
-- [ ] All CRUD operations work
-- [ ] Errors mapped to exceptions
-- [ ] Cancellation works
-- [ ] 90% test coverage
+- [x] All 8 CRUD operations work (rooms, threads, runs)
+- [x] Errors mapped to exceptions (propagated from transport)
+- [x] Cancellation works via CancelToken
+- [x] 100% test coverage on DM5 files
 
 **Notes:**
 
-- Mock transport for unit tests
-- Integration tests against real backend (optional)
+- MockHttpTransport using mocktail for unit tests
+- `createThread()` returns `ThreadInfo` (normalized from backend's `thread_id`)
+- `createRun()` returns `RunInfo` (normalized from backend's `run_id`)
+- No intermediate result types - API returns domain models directly
+- Input validation for empty IDs throws ArgumentError
 
 ---
 
@@ -533,4 +593,4 @@ To pick up where you left off:
 
 ---
 
-*Last updated: 2024-12-16 (DM4 Complete)*
+*Last updated: 2024-12-16 (DM5 Complete)*

@@ -21,8 +21,11 @@ packages/
 
 ```text
 ┌─────────────────────────────────────────┐
-│ Layer 3: SoliplexApi                    │  DM5 (pending)
+│ Layer 3: SoliplexApi                    │  DM5 ✓
 │ - Room/Thread/Run CRUD operations       │
+│ - 8 methods: getRooms, getRoom,         │
+│   getThreads, getThread, createThread,  │
+│   deleteThread, createRun, getRun       │
 └───────────────────┬─────────────────────┘
                     │
 ┌───────────────────▼─────────────────────┐
@@ -139,7 +142,7 @@ final client = SoliplexClient(
 | `HttpTransport` | JSON wrapper using HttpClientAdapter | Done |
 | `UrlBuilder` | URL construction with normalization | Done |
 | `CancelToken` | Request cancellation | Done |
-| `SoliplexApi` | Room/Thread/Run CRUD operations | - |
+| `SoliplexApi` | Room/Thread/Run CRUD operations | Done |
 | `Thread` | AG-UI protocol, tool registration | - |
 | `ConnectionManager` | Server switching, session pooling | - |
 | `RoomSession` | Per-room message state, event processing | - |
@@ -152,7 +155,7 @@ final client = SoliplexClient(
 | `ToolCallInfo` | id, name, arguments, result, status |
 | `Room` | id, name, config |
 | `ThreadInfo` | id, createdAt, runs |
-| `RunInfo` | id, createdAt, metadata |
+| `RunInfo` | id, threadId, status, createdAt, metadata |
 
 ## API Methods (SoliplexApi)
 
@@ -177,7 +180,7 @@ Each phase maps to a Developer Milestone (DM). See `ROADMAP.md` for full milesto
 | 2a | HTTP adapter | HttpClientAdapter (interface), DartHttpAdapter, AdapterResponse | DM2 | Done |
 | 2b | Network observer | HttpObserver (interface), ObservableHttpAdapter (decorator) | DM3 | Done |
 | 2c | HTTP transport | HttpTransport, UrlBuilder, CancelToken | DM4 | Done |
-| 3 | API layer | SoliplexApi (CRUD) | DM5 | - |
+| 3 | API layer | SoliplexApi | DM5 | Done |
 | 4 | AG-UI protocol | Thread, message buffers, tool registry | DM6 | - |
 | 5 | Sessions | ConnectionManager, RoomSession | DM7 | - |
 | 6 | Facade | SoliplexClient, chat() flow | DM8 | - |
@@ -189,7 +192,8 @@ packages/soliplex_client/
 ├── lib/
 │   ├── soliplex_client.dart           # Public API exports
 │   └── src/
-│       ├── api/                        # DM5
+│       ├── api/                        # DM5 ✓
+│       │   ├── api.dart                # Barrel export
 │       │   └── soliplex_api.dart
 │       ├── agui/                       # DM6
 │       │   ├── thread.dart
@@ -220,6 +224,8 @@ packages/soliplex_client/
 │           ├── url_builder.dart
 │           └── utils.dart              # Barrel export
 ├── test/
+│   ├── api/
+│   │   └── soliplex_api_test.dart
 │   ├── errors/
 │   │   └── exceptions_test.dart
 │   ├── http/
