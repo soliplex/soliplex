@@ -38,7 +38,7 @@ v1.0 uses a two-tier milestone system:
 | **DM2** | HTTP Adapter | HttpClientAdapter (interface), DartHttpAdapter, AdapterResponse | Request/response cycle works | Done |
 | **DM3** | Network Observer | HttpObserver (interface), ObservableHttpAdapter (decorator) | HTTP traffic observable | Done |
 | **DM4** | HTTP Transport | HttpTransport, UrlBuilder, CancelToken | JSON serialization, URL building, cancellation | Done |
-| **DM5** | API Layer | SoliplexApi (CRUD) | Can fetch rooms, threads via API | - |
+| **DM5** | API Layer | SoliplexApi (CRUD) | Can fetch rooms, threads via API | Done |
 | **DM6** | AG-UI Protocol | Thread, TextMessageBuffer, ToolCallReceptionBuffer, ToolRegistry | Event streaming works | - |
 | **DM7** | Sessions | ConnectionManager, RoomSession | Multi-room management works | - |
 | **DM8** | Facade | SoliplexClient, chat() flow | Integration tests pass | - |
