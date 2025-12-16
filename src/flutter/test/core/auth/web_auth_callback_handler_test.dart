@@ -5,22 +5,28 @@ import 'package:soliplex/core/auth/oidc_auth_token_response.dart';
 import 'package:soliplex/core/auth/secure_token_storage.dart';
 import 'package:soliplex/core/auth/web_auth_callback_handler.dart';
 import 'package:soliplex/core/auth/web_auth_pending_storage.dart';
+import 'package:soliplex/core/services/secure_storage_service.dart';
 
 class MockWebAuthPendingStorage extends Mock implements WebAuthPendingStorage {}
 
 class MockSecureTokenStorage extends Mock implements SecureTokenStorage {}
 
+class MockSecureStorageService extends Mock implements SecureStorageService {}
+
 void main() {
   late MockWebAuthPendingStorage mockPendingStorage;
   late MockSecureTokenStorage mockTokenStorage;
+  late MockSecureStorageService mockSecureStorageService;
   late WebAuthCallbackHandler handler;
 
   setUp(() {
     mockPendingStorage = MockWebAuthPendingStorage();
     mockTokenStorage = MockSecureTokenStorage();
+    mockSecureStorageService = MockSecureStorageService();
     handler = WebAuthCallbackHandler(
       pendingStorage: mockPendingStorage,
       tokenStorage: mockTokenStorage,
+      secureStorageService: mockSecureStorageService,
     );
   });
 
