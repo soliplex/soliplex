@@ -65,42 +65,51 @@ planning/
 
 ## Implementation Order (v1.0)
 
+v1.0 uses a two-tier milestone system:
+- **Developer Milestones (DM1-DM8)**: Client library work, verified by unit tests (85%+ coverage)
+- **App Milestones (AM1-AM7)**: End-user testable features
+
+See `planning/ROADMAP.md` for full milestone details and dependency graph.
+
 ### Priority 1: Client (`soliplex_client` package)
 
 **CURRENT FOCUS** - Pure Dart package, complete before moving to UI
 
-| Phase | Goal |
-|-------|------|
-| 1 | Models & errors |
-| 2 | HTTP foundation (HttpClientAdapter, DartHttpAdapter, HttpTransport) |
-| 3 | API layer (SoliplexApi) |
-| 4 | AG-UI protocol (Thread, buffers, tool registry) |
-| 5 | Sessions (ConnectionManager, RoomSession) |
-| 6 | Facade (SoliplexClient) |
+| Phase | Goal | Milestone |
+|-------|------|-----------|
+| 1 | Models & errors | DM1 |
+| 2a | HTTP adapter interface + DartHttpAdapter | DM2 |
+| 2b | HttpObserver + ObservableHttpAdapter | DM3 |
+| 2c | HttpTransport, UrlBuilder, CancelToken | DM4 |
+| 3 | API layer (SoliplexApi) | DM5 |
+| 4 | AG-UI protocol (Thread, buffers, tool registry) | DM6 |
+| 5 | Sessions (ConnectionManager, RoomSession) | DM7 |
+| 6 | Facade (SoliplexClient) | DM8 |
 
 ### Priority 2: Core Frontend
 
-Depends on: Client phases 1-4
+Depends on: DM1 (AM1), DM6 (AM3)
 
-| Phase | Goal |
-|-------|------|
-| 1 | Project setup, auth, navigation |
-| 2 | ActiveRunNotifier + extensions |
-| 3 | Extensibility (SoliplexConfig, SoliplexRegistry) |
-| 4 | Polish, extract to `soliplex_core` package |
+| Phase | Goal | Milestone |
+|-------|------|-----------|
+| 1 | Project setup, auth, navigation | AM1 |
+| 2 | ActiveRunNotifier + extensions | AM3 |
+| 3 | Extensibility (SoliplexConfig, SoliplexRegistry) | AM7 |
+| 4 | Polish, extract to `soliplex_core` package | AM7 |
 
 ### Priority 3: UI Components (Parallel)
 
-Depends on: Core Frontend phase 2
+Depends on: AM3 (Core Frontend phase 2)
 
-```text
-history (4) ─┐
-chat (3) ────┼─► permanent_canvas (3)
-detail (4) ──┤
-current_canvas (3) ─┘
-```
+| Component | Phases | Milestone |
+|-----------|--------|-----------|
+| history | 4 | AM3 (P1), AM4 (P2-P4) |
+| chat | 3 | AM3 (P1), AM4 (P2-P3) |
+| detail | 4 | AM5 |
+| current_canvas | 3 | AM6 |
+| permanent_canvas | 3 | AM6 |
 
-**Key dependency**: core_frontend Phase 2 must include `ActiveRunState` extensions (`rawEvents`, `stateItems`, `currentActivity`) before detail and current_canvas can function.
+**Key dependency**: Core Frontend Phase 2 (AM3) must include `ActiveRunState` extensions (`rawEvents`, `stateItems`, `currentActivity`) before detail and current_canvas can function.
 
 **Future versions**: See `planning/ROADMAP.md` for v1.1, v1.2, and v2.0 feature plans.
 
