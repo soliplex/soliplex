@@ -4,7 +4,7 @@
 
 | Version | Theme | Status |
 |---------|-------|--------|
-| v1.0 | Core Functionality | In Planning |
+| v1.0 | Core Functionality | In Progress |
 | v1.1 | Enhanced UX + Native Network | Future |
 | v1.2 | Power User Features | Future |
 | v2.0 | Advanced Features | Future |
@@ -26,21 +26,22 @@
 ### Milestones
 
 v1.0 uses a two-tier milestone system:
+
 - **Developer Milestones (DM)**: Client library work, verified by unit tests (85%+ coverage)
 - **App Milestones (AM)**: End-user testable features
 
 #### Developer Milestones (DM) - Client Package
 
-| # | Name | Components | Test Criteria |
-|---|------|------------|---------------|
-| **DM1** | Models & Errors | ChatMessage, Room, ThreadInfo, RunInfo, all exceptions | 100% model coverage |
-| **DM2** | HTTP Adapter | HttpClientAdapter (interface), DartHttpAdapter | Request/response cycle works |
-| **DM3** | Network Observer | HttpObserver (interface), ObservableHttpAdapter (decorator) | HTTP traffic observable |
-| **DM4** | HTTP Transport | HttpTransport, UrlBuilder, CancelToken | JSON serialization, URL building, cancellation |
-| **DM5** | API Layer | SoliplexApi (CRUD) | Can fetch rooms, threads via API |
-| **DM6** | AG-UI Protocol | Thread, TextMessageBuffer, ToolCallReceptionBuffer, ToolRegistry | Event streaming works |
-| **DM7** | Sessions | ConnectionManager, RoomSession | Multi-room management works |
-| **DM8** | Facade | SoliplexClient, chat() flow | Integration tests pass |
+| # | Name | Components | Test Criteria | Status |
+|---|------|------------|---------------|--------|
+| **DM1** | Models & Errors | ChatMessage, Room, ThreadInfo, RunInfo, all exceptions | 100% model coverage | Done |
+| **DM2** | HTTP Adapter | HttpClientAdapter (interface), DartHttpAdapter | Request/response cycle works | - |
+| **DM3** | Network Observer | HttpObserver (interface), ObservableHttpAdapter (decorator) | HTTP traffic observable | - |
+| **DM4** | HTTP Transport | HttpTransport, UrlBuilder, CancelToken | JSON serialization, URL building, cancellation | - |
+| **DM5** | API Layer | SoliplexApi (CRUD) | Can fetch rooms, threads via API | - |
+| **DM6** | AG-UI Protocol | Thread, TextMessageBuffer, ToolCallReceptionBuffer, ToolRegistry | Event streaming works | - |
+| **DM7** | Sessions | ConnectionManager, RoomSession | Multi-room management works | - |
+| **DM8** | Facade | SoliplexClient, chat() flow | Integration tests pass | - |
 
 #### App Milestones (AM) - End-User Testable
 
@@ -104,6 +105,7 @@ Depends on: DM1 (AM1), DM6 (AM3)
 | 4 | Polish, extract to `soliplex_core` package | AM7 |
 
 **Extensibility (Level 2):**
+
 - `SoliplexConfig`: Branding, feature flags, default routes, servers
 - `SoliplexRegistry`: Custom widgets, slash commands, panels, routes
 - `PanelRegistry`, `CommandRegistry`, `RouteDefinition` abstractions
@@ -129,6 +131,7 @@ Depends on: AM3 (Core Frontend phase 2)
 **Detail**: Event export, chat message linking
 **Core**: Token refresh, desktop polish
 **Network** (`soliplex_client_native` package):
+
 - Native HTTP adapters (Cupertino, Android, Windows, Linux, Web)
 - Certificate pinning
 - Platform auto-detection via `createPlatformAdapter()`

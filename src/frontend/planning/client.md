@@ -218,7 +218,7 @@ dependencies:
   meta: ^1.9.0
 
 dev_dependencies:
-  very_good_analysis: ^6.0.0
+  very_good_analysis: ^10.0.0
   test: ^1.24.0
   mocktail: ^1.0.0
 ```
