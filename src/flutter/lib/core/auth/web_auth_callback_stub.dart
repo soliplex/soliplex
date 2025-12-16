@@ -5,12 +5,9 @@
 
 import 'package:soliplex/core/auth/callback_params.dart';
 
-/// Check if the current URL is an auth callback
+/// Check if the current URL has auth callback tokens.
+/// On non-web platforms, this always returns false.
 bool isAuthCallback() => false;
-
-/// Extract the system/provider ID from the callback URL.
-/// On non-web platforms, this always returns null.
-String? extractSystemFromPath() => null;
 
 /// Extract callback parameters from URL.
 ///

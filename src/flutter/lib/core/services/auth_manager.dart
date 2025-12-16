@@ -204,7 +204,8 @@ class AuthManager {
 
   String _getRedirectUrl(String providerId) {
     if (kIsWeb) {
-      return Uri.base.replace(path: '/api/auth/$providerId').toString();
+      // Just return "/" - backend will redirect to root with tokens
+      return '/';
     } else {
       return 'ai.soliplex.client://callback';
     }

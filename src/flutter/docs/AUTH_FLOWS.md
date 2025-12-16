@@ -34,7 +34,7 @@ oidc_auth_systems:
 The app auto-discovers providers via `GET /api/login`. No app-side OIDC configuration is needed.
 
 **Platform-specific redirect URIs:**
-- Web: `/api/auth/{system}` (e.g., `http://localhost:8000/api/auth/keycloak`)
+- Web: `/` (hash-based routing - tokens arrive at `/?token=...`)
 - Mobile/desktop: `ai.soliplex.client://callback`
 
 ### Keycloak Client Configuration
@@ -48,7 +48,7 @@ Register the following redirect URIs in your Keycloak client:
 | iOS/Android | `ai.soliplex.client://callback` |
 | Desktop | `ai.soliplex.client://callback` |
 
-Note: For web, `{system}` is the provider ID (e.g., `keycloak`, `josce`). The backend handles the OAuth callback at `/api/auth/{system}` and redirects to the frontend with tokens.
+Note: The backend's OAuth callback is at `/api/auth/{system}`. After exchanging the code for tokens, the backend redirects to the frontend's `return_to` URL (which is `/`) with tokens in query params.
 
 **Keycloak Client Settings:**
 - Client Protocol: `openid-connect`
@@ -129,18 +129,19 @@ Web browsers cannot perform OAuth token exchange directly due to CORS restrictio
 | `GET /api/login/{system}?return_to=...` | Initiate OAuth flow |
 | `GET /api/auth/{system}` | OAuth callback - backend receives auth code, exchanges for tokens, redirects to `return_to` with tokens |
 
-### Web Callback Flow
+### Web Callback Flow (Hash-Based Routing)
 
-1. Frontend redirects to `/api/login/{system}?return_to=/api/auth/{system}`
+1. Frontend redirects to `/api/login/{system}?return_to=/`
 2. Backend redirects to OIDC provider
 3. User authenticates
-4. OIDC provider redirects to backend callback
+4. OIDC provider redirects to backend callback (`/api/auth/{system}`)
 5. Backend exchanges code for tokens
 6. Backend redirects to `return_to` URL with tokens as query params:
    ```
-   /api/auth/{system}?token={access_token}&refresh_token={refresh_token}&expires_in={seconds}
+   /?token={access_token}&refresh_token={refresh_token}&expires_in={seconds}
    ```
-7. Flutter app (at `/api/auth/{system}`) extracts tokens and stores them
+7. Flutter app detects tokens, redirects to `/#/auth/callback?token=...`
+8. AuthCallbackScreen processes and stores tokens, navigates to `/#/chat`
 
 ### Key Files
 

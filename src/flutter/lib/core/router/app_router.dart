@@ -11,6 +11,12 @@ import 'package:soliplex/features/inspector/network_inspector_screen.dart';
 import 'package:soliplex/features/navigation/app_scaffold.dart';
 import 'package:soliplex/features/server/server_setup_screen.dart';
 
+/// Check if URL has auth callback tokens (web only).
+bool _hasAuthTokenParams(Uri uri) {
+  return uri.queryParameters.containsKey('token') ||
+      uri.queryParameters.containsKey('access_token');
+}
+
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 final _shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shell');
 
@@ -35,10 +41,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         'Router redirect: location=$location, uri=$uri, appState=$appState',
       );
 
-      // Allow auth callback route to bypass auth guard (handles its own auth)
-      // Web auth callback is /api/auth/{system} (e.g., /api/auth/keycloak)
-      if (uri.path.startsWith('/api/auth/')) {
-        DebugLog.auth('Router: Auth callback detected, bypassing guard');
+      // Web auth callback: tokens arrive at /?token=... (hash routing)
+      // Redirect to /auth/callback to process them
+      if (kIsWeb && _hasAuthTokenParams(uri)) {
+        if (location != '/auth/callback') {
+          DebugLog.auth('Router: Auth tokens detected, redirecting');
+          return '/auth/callback?${uri.query}';
+        }
+        DebugLog.auth('Router: At auth callback, bypassing guard');
         return null;
       }
 
@@ -55,9 +65,9 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       // Auth callback route - handles OIDC redirect (must be before ShellRoute)
-      // Web auth callback is /api/auth/{system} (e.g., /api/auth/keycloak)
+      // Tokens arrive in query params: /#/auth/callback?token=...
       GoRoute(
-        path: '/api/auth/:system',
+        path: '/auth/callback',
         builder: (context, state) => const AuthCallbackScreen(),
       ),
       GoRoute(
