@@ -240,7 +240,7 @@ class _MessageEnricher implements MessageInterceptor {
 
 ### Plugin Lifecycle
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                    App Startup                          │
 ├─────────────────────────────────────────────────────────┤
@@ -307,7 +307,7 @@ class PluginContext {
 
 ### Package Structure for Consumers
 
-```
+```text
 my_app/
 ├── lib/
 │   ├── main.dart              # App entry point

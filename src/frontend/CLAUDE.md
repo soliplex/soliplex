@@ -8,7 +8,7 @@ Cross-platform Flutter frontend for Soliplex AI-powered RAG system.
 
 ## Planning Files
 
-```
+```text
 planning/
 ├── ROADMAP.md                 - Version roadmap and future enhancements
 ├── BRANDING-APPROACH.md       - White-label extensibility design
@@ -29,7 +29,7 @@ planning/
 
 ### 3-Layer Structure
 
-```
+```text
 ┌─────────────────────────────────────────────┐
 │              UI Components                   │
 │  (Chat, History, Detail, Canvas)            │
@@ -93,7 +93,7 @@ Depends on: Client phases 1-4
 
 Depends on: Core Frontend phase 2
 
-```
+```text
 history (4) ─┐
 chat (3) ────┼─► permanent_canvas (3)
 detail (4) ──┤
