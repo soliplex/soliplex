@@ -7,10 +7,21 @@ import 'package:web/web.dart' as web;
 ///
 /// Provides functions to detect and extract auth callback parameters from URL.
 
+/// Pattern to match auth callback URLs: /api/auth/{system}
+final _authCallbackPattern = RegExp(r'^/api/auth/([^/]+)$');
+
 /// Check if the current URL is an auth callback
 bool isAuthCallback() {
   final path = web.window.location.pathname;
-  return path == '/auth/callback' || path.endsWith('/auth/callback');
+  return _authCallbackPattern.hasMatch(path);
+}
+
+/// Extract the system/provider ID from the callback URL.
+/// Returns null if not on a callback URL.
+String? extractSystemFromPath() {
+  final path = web.window.location.pathname;
+  final match = _authCallbackPattern.firstMatch(path);
+  return match?.group(1);
 }
 
 /// Extract callback parameters from URL.

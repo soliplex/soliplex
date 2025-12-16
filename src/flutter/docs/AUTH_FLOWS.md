@@ -33,9 +33,9 @@ oidc_auth_systems:
 
 The app auto-discovers providers via `GET /api/login`. No app-side OIDC configuration is needed.
 
-**Environment-specific settings:**
-- Web redirect URI is determined automatically from `Uri.base`
-- Mobile/desktop use the custom URL scheme `ai.soliplex.client://callback`
+**Platform-specific redirect URIs:**
+- Web: `/api/auth/{system}` (e.g., `http://localhost:8000/api/auth/keycloak`)
+- Mobile/desktop: `ai.soliplex.client://callback`
 
 ### Keycloak Client Configuration
 
@@ -43,10 +43,12 @@ Register the following redirect URIs in your Keycloak client:
 
 | Platform | Redirect URI |
 |----------|-------------|
-| Web (production) | `https://your-app.com/auth/callback` |
-| Web (development) | `http://localhost:3000/auth/callback` |
+| Web (production) | `https://your-backend.com/api/auth/{system}` |
+| Web (development) | `http://localhost:8000/api/auth/{system}` |
 | iOS/Android | `ai.soliplex.client://callback` |
 | Desktop | `ai.soliplex.client://callback` |
+
+Note: For web, `{system}` is the provider ID (e.g., `keycloak`, `josce`). The backend handles the OAuth callback at `/api/auth/{system}` and redirects to the frontend with tokens.
 
 **Keycloak Client Settings:**
 - Client Protocol: `openid-connect`
@@ -125,23 +127,31 @@ Web browsers cannot perform OAuth token exchange directly due to CORS restrictio
 |----------|---------|
 | `GET /api/login` | Discover available OIDC providers |
 | `GET /api/login/{system}?return_to=...` | Initiate OAuth flow |
-| `GET /api/auth/{system}` | OAuth callback (backend receives this) |
+| `GET /api/auth/{system}` | OAuth callback - backend receives auth code, exchanges for tokens, redirects to `return_to` with tokens |
 
-### Callback URL Parameters
+### Web Callback Flow
 
-After successful authentication, the backend redirects to:
-```
-{return_to}?token={access_token}&refresh_token={refresh_token}&expires_in={seconds}&refresh_expires_in={seconds}
-```
+1. Frontend redirects to `/api/login/{system}?return_to=/api/auth/{system}`
+2. Backend redirects to OIDC provider
+3. User authenticates
+4. OIDC provider redirects to backend callback
+5. Backend exchanges code for tokens
+6. Backend redirects to `return_to` URL with tokens as query params:
+   ```
+   /api/auth/{system}?token={access_token}&refresh_token={refresh_token}&expires_in={seconds}
+   ```
+7. Flutter app (at `/api/auth/{system}`) extracts tokens and stores them
 
 ### Key Files
 
 | File | Purpose |
 |------|---------|
+| `lib/core/services/auth_manager.dart` | Builds redirect URL (`/api/auth/{system}` for web) |
 | `lib/core/auth/oidc_auth_interactor.dart` | `OidcWebAuthInteractor` - initiates backend redirect |
 | `lib/core/auth/web_auth_callback_handler.dart` | Handles callback, extracts tokens |
-| `lib/core/auth/web_auth_callback_web.dart` | Web-specific URL parameter extraction |
+| `lib/core/auth/web_auth_callback_web.dart` | Detects `/api/auth/{system}` callback URL, extracts params |
 | `lib/core/auth/callback_params.dart` | Callback parameter types |
+| `lib/core/router/app_router.dart` | Routes `/api/auth/:system` to `AuthCallbackScreen` |
 
 ## Mobile/Desktop Authentication Flow (Direct PKCE)
 
