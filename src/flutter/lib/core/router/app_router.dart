@@ -36,8 +36,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       );
 
       // Allow auth callback route to bypass auth guard (handles its own auth)
-      // Check both matchedLocation and uri.path for web compatibility
-      if (location == '/auth/callback' || uri.path == '/auth/callback') {
+      // Web auth callback is /api/auth/{system} (e.g., /api/auth/keycloak)
+      if (uri.path.startsWith('/api/auth/')) {
         DebugLog.auth('Router: Auth callback detected, bypassing guard');
         return null;
       }
@@ -55,8 +55,9 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       // Auth callback route - handles OIDC redirect (must be before ShellRoute)
+      // Web auth callback is /api/auth/{system} (e.g., /api/auth/keycloak)
       GoRoute(
-        path: '/auth/callback',
+        path: '/api/auth/:system',
         builder: (context, state) => const AuthCallbackScreen(),
       ),
       GoRoute(

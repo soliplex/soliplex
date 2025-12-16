@@ -109,7 +109,7 @@ class AuthManager {
         tokenEndpoint: '$issuerUrl/protocol/openid-connect/token',
         loginUrl: Uri.parse('$issuerUrl/protocol/openid-connect/auth'),
         clientId: provider.clientId,
-        redirectUrl: _getRedirectUrl(),
+        redirectUrl: _getRedirectUrl(provider.id),
         scopes: scopes,
         serverBaseUrl: server.url, // For web backend-mediated OAuth
       );
@@ -202,9 +202,9 @@ class AuthManager {
     return {'Authorization': 'Bearer $token'};
   }
 
-  String _getRedirectUrl() {
+  String _getRedirectUrl(String providerId) {
     if (kIsWeb) {
-      return Uri.base.replace(path: '/auth/callback').toString();
+      return Uri.base.replace(path: '/api/auth/$providerId').toString();
     } else {
       return 'ai.soliplex.client://callback';
     }
