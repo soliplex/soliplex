@@ -21,29 +21,37 @@ packages/
 
 ```text
 ┌─────────────────────────────────────────┐
-│ Layer 3: SoliplexApi                    │  soliplex_client
+│ Layer 3: SoliplexApi                    │  DM5 (pending)
 │ - Room/Thread/Run CRUD operations       │
 └───────────────────┬─────────────────────┘
                     │
 ┌───────────────────▼─────────────────────┐
-│ Layer 2: HttpTransport                  │  soliplex_client
-│ - JSON serialization, timeout handling  │
+│ Layer 2: HttpTransport                  │  DM4 ✓
+│ - JSON serialization/deserialization    │
+│ - HTTP status → exception mapping       │
+│ - Request timeout handling              │
+│ - Streaming with cancellation           │
+│   ┌───────────────────────────────┐     │
+│   │ Utils: UrlBuilder, CancelToken│     │
+│   └───────────────────────────────┘     │
 └───────────────────┬─────────────────────┘
-                    │
+                    │ uses
 ┌───────────────────▼─────────────────────┐
-│ Layer 1: HttpClientAdapter (interface)  │  soliplex_client
+│ Layer 1: HttpClientAdapter (interface)  │  DM2 ✓
 │ - Abstract HTTP operations (DI)         │
+│ - Returns AdapterResponse               │
 └───────────────────┬─────────────────────┘
                     │ implements
 ┌───────────────────▼─────────────────────┐
-│ Layer 0.5: ObservableHttpAdapter        │  soliplex_client
+│ Layer 0.5: ObservableHttpAdapter        │  DM3 ✓
 │ - Decorator wrapping any adapter        │
 │ - Notifies HttpObserver on all activity │
+│ - Request/response/error/stream events  │
 └───────────────────┬─────────────────────┘
                     │ wraps
 ┌───────────────────▼─────────────────────┐
 │ Layer 0: Platform Implementations       │
-│ - DartHttpAdapter (default)             │  soliplex_client
+│ ✓ DartHttpAdapter (default)             │  soliplex_client (DM2)
 │ - CupertinoHttpAdapter (iOS/macOS)      │  ┐
 │ - AndroidHttpAdapter (Android)          │  │ soliplex_client_native
 │ - WindowsHttpAdapter (Windows)          │  │ (v1.1)
@@ -121,16 +129,20 @@ final client = SoliplexClient(
 
 ## Core Components
 
-| Component | Responsibility |
-|-----------|----------------|
-| `UrlBuilder` | URL construction with normalization |
-| `HttpTransport` | JSON wrapper using HttpClientAdapter |
-| `HttpObserver` | Interface for observing HTTP activity |
-| `ObservableHttpAdapter` | Decorator that notifies observers on all HTTP traffic |
-| `ConnectionManager` | Server switching, session pooling |
-| `RoomSession` | Per-room message state, event processing |
-| `Thread` | AG-UI protocol, tool registration |
-| `CancelToken` | Request cancellation |
+| Component | Responsibility | Status |
+|-----------|----------------|--------|
+| `AdapterResponse` | HTTP response model with status helpers | Done |
+| `HttpClientAdapter` | Abstract HTTP operations interface (DI) | Done |
+| `DartHttpAdapter` | Default HTTP adapter using package:http | Done |
+| `HttpObserver` | Interface for observing HTTP activity | Done |
+| `ObservableHttpAdapter` | Decorator that notifies observers on all HTTP traffic | Done |
+| `HttpTransport` | JSON wrapper using HttpClientAdapter | Done |
+| `UrlBuilder` | URL construction with normalization | Done |
+| `CancelToken` | Request cancellation | Done |
+| `SoliplexApi` | Room/Thread/Run CRUD operations | - |
+| `Thread` | AG-UI protocol, tool registration | - |
+| `ConnectionManager` | Server switching, session pooling | - |
+| `RoomSession` | Per-room message state, event processing | - |
 
 ## Data Models
 
@@ -159,16 +171,16 @@ final client = SoliplexClient(
 
 Each phase maps to a Developer Milestone (DM). See `ROADMAP.md` for full milestone details.
 
-| Phase | Goal | Components | Milestone |
-|-------|------|------------|-----------|
-| 1 | Models & errors | ChatMessage, Room, ThreadInfo, RunInfo, all exceptions | DM1 |
-| 2a | HTTP adapter | HttpClientAdapter (interface), DartHttpAdapter | DM2 |
-| 2b | Network observer | HttpObserver (interface), ObservableHttpAdapter (decorator) | DM3 |
-| 2c | HTTP transport | HttpTransport, UrlBuilder, CancelToken | DM4 |
-| 3 | API layer | SoliplexApi (CRUD) | DM5 |
-| 4 | AG-UI protocol | Thread, message buffers, tool registry | DM6 |
-| 5 | Sessions | ConnectionManager, RoomSession | DM7 |
-| 6 | Facade | SoliplexClient, chat() flow | DM8 |
+| Phase | Goal | Components | Milestone | Status |
+|-------|------|------------|-----------|--------|
+| 1 | Models & errors | ChatMessage, Room, ThreadInfo, RunInfo, all exceptions | DM1 | Done |
+| 2a | HTTP adapter | HttpClientAdapter (interface), DartHttpAdapter, AdapterResponse | DM2 | Done |
+| 2b | Network observer | HttpObserver (interface), ObservableHttpAdapter (decorator) | DM3 | Done |
+| 2c | HTTP transport | HttpTransport, UrlBuilder, CancelToken | DM4 | Done |
+| 3 | API layer | SoliplexApi (CRUD) | DM5 | - |
+| 4 | AG-UI protocol | Thread, message buffers, tool registry | DM6 | - |
+| 5 | Sessions | ConnectionManager, RoomSession | DM7 | - |
+| 6 | Facade | SoliplexClient, chat() flow | DM8 | - |
 
 ## File Structure
 
@@ -177,31 +189,53 @@ packages/soliplex_client/
 ├── lib/
 │   ├── soliplex_client.dart           # Public API exports
 │   └── src/
-│       ├── api/soliplex_api.dart
-│       ├── models/
-│       │   ├── chat_message.dart
-│       │   ├── room.dart
-│       │   ├── thread_info.dart
-│       │   └── run_info.dart
-│       ├── session/
-│       │   ├── connection_manager.dart
-│       │   └── room_session.dart
-│       ├── agui/
+│       ├── api/                        # DM5
+│       │   └── soliplex_api.dart
+│       ├── agui/                       # DM6
 │       │   ├── thread.dart
 │       │   ├── buffers.dart
 │       │   └── tool_registry.dart
-│       ├── http/
-│       │   ├── http_client_adapter.dart
-│       │   ├── dart_http_adapter.dart
-│       │   ├── http_observer.dart
-│       │   ├── observable_http_adapter.dart
-│       │   └── http_transport.dart
-│       ├── errors/
+│       ├── errors/                     # DM1 ✓
+│       │   ├── errors.dart             # Barrel export
 │       │   └── exceptions.dart
-│       └── utils/
+│       ├── http/                       # DM2, DM3, DM4 ✓
+│       │   ├── adapter_response.dart
+│       │   ├── dart_http_adapter.dart
+│       │   ├── http.dart               # Barrel export
+│       │   ├── http_client_adapter.dart
+│       │   ├── http_observer.dart
+│       │   ├── http_transport.dart
+│       │   └── observable_http_adapter.dart
+│       ├── models/                     # DM1 ✓
+│       │   ├── chat_message.dart
+│       │   ├── models.dart             # Barrel export
+│       │   ├── room.dart
+│       │   ├── run_info.dart
+│       │   └── thread_info.dart
+│       ├── session/                    # DM7
+│       │   ├── connection_manager.dart
+│       │   └── room_session.dart
+│       └── utils/                      # DM4 ✓
+│           ├── cancel_token.dart
 │           ├── url_builder.dart
-│           └── cancel_token.dart
+│           └── utils.dart              # Barrel export
 ├── test/
+│   ├── errors/
+│   │   └── exceptions_test.dart
+│   ├── http/
+│   │   ├── adapter_response_test.dart
+│   │   ├── dart_http_adapter_test.dart
+│   │   ├── http_observer_test.dart
+│   │   ├── http_transport_test.dart
+│   │   └── observable_http_adapter_test.dart
+│   ├── models/
+│   │   ├── chat_message_test.dart
+│   │   ├── room_test.dart
+│   │   ├── run_info_test.dart
+│   │   └── thread_info_test.dart
+│   └── utils/
+│       ├── cancel_token_test.dart
+│       └── url_builder_test.dart
 └── pubspec.yaml
 ```
 
