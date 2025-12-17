@@ -1,4 +1,5 @@
 import dataclasses
+from urllib import parse as urlparse
 
 import fastapi
 from authlib.integrations import starlette_client
@@ -102,23 +103,25 @@ async def get_auth_system(
     # them
     return_to = request.query_params.get("return_to", "/")
 
-    # Check if return_to contains a hash fragment
-    if "#" in return_to:
-        # Split at the hash to handle hash-based routing
-        base_url, hash_fragment = return_to.split("#", 1)
-        # Add query params before the hash
-        return_to = f"{base_url}?token={access_token}"
-        return_to += f"&refresh_token={refresh_token}"
-        return_to += f"&expires_in={expires_in}"
-        return_to += f"&refresh_expires_in={refresh_expires_in}"
-        # Re-add the hash fragment
-        return_to += f"#{hash_fragment}"
-    else:
-        # No hash - standard query param append
-        return_to += f"?token={access_token}"
-        return_to += f"&refresh_token={refresh_token}"
-        return_to += f"&expires_in={expires_in}"
-        return_to += f"&refresh_expires_in={refresh_expires_in}"
+    components = urlparse.urlparse(return_to)
+    qs = urlparse.urlencode(
+        dict(
+            token=access_token,
+            refresh_token=refresh_token,
+            expires_in=expires_in,
+            refresh_expires_in=refresh_expires_in,
+        )
+    )
+    return_to = urlparse.urlunparse(
+        (
+            components.scheme,
+            components.netloc,
+            components.path,
+            components.params,
+            qs,
+            components.fragment,
+        )
+    )
 
     return responses.RedirectResponse(return_to)
 
