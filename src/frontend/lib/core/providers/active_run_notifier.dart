@@ -25,10 +25,13 @@ class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
   /// Creates an active run notifier.
   ActiveRunNotifier({
     required HttpTransport transport,
+    required UrlBuilder urlBuilder,
   })  : _transport = transport,
+        _urlBuilder = urlBuilder,
         super(const ActiveRunState.idle());
 
   final HttpTransport _transport;
+  final UrlBuilder _urlBuilder;
   Thread? _thread;
   CancelToken? _cancelToken;
   StreamSubscription<AgUiEvent>? _eventSubscription;
@@ -60,6 +63,7 @@ class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
     _cancelToken = CancelToken();
     _thread = Thread(
       transport: _transport,
+      urlBuilder: _urlBuilder,
       roomId: roomId,
       threadId: threadId,
     );

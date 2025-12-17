@@ -8,6 +8,7 @@ import 'package:soliplex_client/src/agui/tool_registry.dart';
 import 'package:soliplex_client/src/http/http_transport.dart';
 import 'package:soliplex_client/src/models/chat_message.dart';
 import 'package:soliplex_client/src/utils/cancel_token.dart';
+import 'package:soliplex_client/src/utils/url_builder.dart';
 
 /// Status of an AG-UI thread run.
 enum ThreadRunStatus {
@@ -53,13 +54,16 @@ class Thread {
   /// Creates a thread for the given room and thread IDs.
   Thread({
     required HttpTransport transport,
+    required UrlBuilder urlBuilder,
     required this.roomId,
     required this.threadId,
     ToolRegistry? toolRegistry,
   })  : _transport = transport,
+        _urlBuilder = urlBuilder,
         _toolRegistry = toolRegistry;
 
   final HttpTransport _transport;
+  final UrlBuilder _urlBuilder;
   final ToolRegistry? _toolRegistry;
 
   /// The room this thread belongs to.
@@ -128,8 +132,8 @@ class Thread {
 
     try {
       // Build the SSE endpoint URI
-      final uri = Uri.parse(
-        '/api/v1/rooms/$roomId/agui/$threadId/$runId',
+      final uri = _urlBuilder.build(
+        pathSegments: ['rooms', roomId, 'agui', threadId, runId],
       );
 
       // Prepare request body

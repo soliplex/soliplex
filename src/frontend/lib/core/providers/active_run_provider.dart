@@ -31,7 +31,11 @@ import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 final activeRunNotifierProvider =
     StateNotifierProvider<ActiveRunNotifier, ActiveRunState>((ref) {
   final transport = ref.watch(httpTransportProvider);
-  return ActiveRunNotifier(transport: transport);
+  final urlBuilder = ref.watch(urlBuilderProvider);
+  return ActiveRunNotifier(
+    transport: transport,
+    urlBuilder: urlBuilder,
+  );
 });
 
 /// Provider for tracking new thread intent.
