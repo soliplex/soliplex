@@ -71,7 +71,7 @@ class _RoomInfoContent extends ConsumerWidget {
       for (final tool in localTools)
         tool.name: RoomTool(
           id: tool.name,
-          kind: 'local',
+          kind: tool.name,
           toolName: tool.name,
           description: tool.description,
           extraParameters: tool.parameters,
