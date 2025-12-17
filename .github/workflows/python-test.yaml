@@ -1,4 +1,4 @@
-name: Run soliplex unit tests / linting
+name: Python back-end tests/coverage/linting
 
 on:
   push:

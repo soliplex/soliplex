@@ -330,6 +330,11 @@ async def test_get_room_agui_thread_id(
             "thread_metadata", None
         )
 
+    test_run.awaitable_attrs.thread = _awaitable(
+        "thread",
+        test_thread,
+    )
+
     run_agent_input = mock.Mock(spec_set=["to_agui_model"])
     run_agent_input.to_agui_model.return_value = run_input
     test_run.awaitable_attrs.run_agent_input = _awaitable(
@@ -459,6 +464,11 @@ async def test_get_room_agui_thread_id_run_id(
     else:
         test_run.parent_run_id = None
 
+    test_run.awaitable_attrs.thread = _awaitable(
+        "thread",
+        test_thread,
+    )
+
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     token = object()
@@ -562,6 +572,10 @@ async def test_post_room_agui(
     test_run.awaitable_attrs.run_agent_input = _awaitable(
         "run_agent_input",
         run_agent_input,
+    )
+    test_run.awaitable_attrs.thread = _awaitable(
+        "thread",
+        test_thread,
     )
 
     found = await agui_views.post_room_agui(

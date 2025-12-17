@@ -156,6 +156,7 @@ async def get_room_agui_thread_id(
     a_thread_runs = {}
 
     for a_run in await thread.list_runs():
+        await a_run.awaitable_attrs.thread
         a_thread_runs[a_run.run_id] = models.AGUI_Run.from_run(
             a_run=a_run,
             a_run_input=await _get_run_input(a_run),
@@ -203,6 +204,8 @@ async def get_room_agui_thread_id_run_id(
             detail=exc.args,
         ) from None
 
+    await run.awaitable_attrs.thread
+
     return models.AGUI_Run.from_run(
         a_run=run,
         a_run_input=await _get_run_input(run),
@@ -248,6 +251,7 @@ async def post_room_agui(
     run_map = {}
 
     for run in await thread.list_runs():
+        await run.awaitable_attrs.thread
         run_meta = await run.awaitable_attrs.run_metadata
         run_map[run.run_id] = models.AGUI_Run.from_run(
             a_run=run,
