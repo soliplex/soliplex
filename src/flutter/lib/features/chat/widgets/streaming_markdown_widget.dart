@@ -161,42 +161,68 @@ class _StreamingMarkdownWidgetState
   /// This function ensures:
   /// - Code blocks (```) are properly closed
   /// - Inline code (`) has matching delimiters
+  /// - Brackets ([) and Parentheses (() are balanced (simple heuristic)
   String _sanitizeMarkdown(String text) {
     if (text.isEmpty) return text;
 
-    var result = text;
+    final sb = StringBuffer(text);
+    var inFence = false;
+    var inInlineCode = false;
+    var openBrackets = 0;
+    var openParens = 0;
 
-    // Count fenced code blocks (```) - must be even
-    final fencePattern = RegExp('^```', multiLine: true);
-    final fenceCount = fencePattern.allMatches(result).length;
-    if (fenceCount.isOdd) {
-      // Close the unclosed code block
-      result = '$result\n```';
-    }
+    for (var i = 0; i < text.length; i++) {
+      final char = text[i];
 
-    // For inline code, count backticks outside of code blocks
-    // This is tricky - for now, just ensure the total is manageable
-    // by checking if there's an odd number of single backticks
-    // that aren't part of triple backticks
-    final lines = result.split('\n');
-    var inCodeBlock = false;
-    var inlineBackticks = 0;
+      if (char == '`') {
+        final isFence =
+            i + 2 < text.length && text[i + 1] == '`' && text[i + 2] == '`';
 
-    for (final line in lines) {
-      if (line.startsWith('```')) {
-        inCodeBlock = !inCodeBlock;
-      } else if (!inCodeBlock) {
-        // Count backticks in this line (simple heuristic)
-        inlineBackticks += '`'.allMatches(line).length;
+        if (inFence) {
+          if (isFence) {
+            inFence = false;
+            i += 2;
+          }
+        } else if (inInlineCode) {
+          if (!isFence) {
+            inInlineCode = false;
+          }
+        } else {
+          if (isFence) {
+            inFence = true;
+            i += 2;
+          } else {
+            inInlineCode = true;
+          }
+        }
+        continue;
+      }
+
+      if (inFence || inInlineCode) continue;
+
+      if (char == '[') {
+        openBrackets++;
+      } else if (char == ']') {
+        if (openBrackets > 0) openBrackets--;
+      } else if (char == '(') {
+        openParens++;
+      } else if (char == ')') {
+        if (openParens > 0) openParens--;
       }
     }
 
-    // If odd number of inline backticks, append one to close
-    if (inlineBackticks.isOdd) {
-      result = '$result`';
+    if (inFence) sb.write('\n```');
+    if (inInlineCode) sb.write('`');
+    while (openBrackets > 0) {
+      sb.write(']');
+      openBrackets--;
+    }
+    while (openParens > 0) {
+      sb.write(')');
+      openParens--;
     }
 
-    return result;
+    return sb.toString();
   }
 
   @override
