@@ -202,6 +202,66 @@ class NetworkTransportLayer {
     }
   }
 
+  /// Make an HTTP HEAD request with observable hooks.
+  ///
+  /// Supports 401 retry with header refresh.
+  Future<http.Response> head(
+    Uri uri, {
+    Map<String, String>? additionalHeaders,
+  }) async {
+    if (_disposed) {
+      throw StateError('Cannot use disposed NetworkTransportLayer');
+    }
+
+    final requestHeaders = {
+      ...?_headers,
+      ...?additionalHeaders,
+    };
+
+    // Record request for inspector
+    final requestId = _inspector?.recordRequest(
+      method: 'HEAD',
+      uri: uri,
+      headers: requestHeaders,
+    );
+
+    try {
+      var response = await _httpClient.head(uri, headers: requestHeaders);
+
+      // 401 retry with header refresh
+      if (response.statusCode == 401 && _headerRefresher != null) {
+        await _handle401();
+
+        final retryHeaders = {
+          ...?_headers,
+          ...?additionalHeaders,
+        };
+        response = await _httpClient.head(uri, headers: retryHeaders);
+        DebugLog.network(
+          'NetworkTransportLayer: HEAD retry returned ${response.statusCode}',
+        );
+      }
+
+      // Record response for inspector
+      if (requestId != null) {
+        _inspector?.recordResponse(
+          requestId: requestId,
+          statusCode: response.statusCode,
+          headers: response.headers,
+          body: response.body,
+        );
+      }
+
+      return response;
+    } on Object catch (e) {
+      // Record error for inspector
+      if (requestId != null) {
+        _inspector?.recordError(requestId: requestId, error: e.toString());
+      }
+      rethrow;
+    }
+  }
+
   /// Make an HTTP POST request with observable hooks.
   ///
   /// Supports 401 retry with header refresh.

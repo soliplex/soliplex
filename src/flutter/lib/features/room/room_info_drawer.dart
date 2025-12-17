@@ -7,6 +7,7 @@ import 'package:soliplex/features/room/capability_badges.dart';
 import 'package:soliplex/features/room/mcp_config_section.dart';
 import 'package:soliplex/features/room/system_prompt_viewer.dart';
 import 'package:soliplex/features/room/tools_list.dart';
+import 'package:soliplex/features/room/widgets/background_image_section.dart';
 import 'package:soliplex/features/room/widgets/document_list_dialog.dart';
 
 /// A drawer showing detailed room information.
@@ -175,7 +176,21 @@ class _RoomInfoContent extends ConsumerWidget {
               // Capability badges
               const _SectionHeader(title: 'Capabilities'),
               const SizedBox(height: 8),
+              if (room.tools.isNotEmpty || clientToolsMap.isNotEmpty) ...[
+                Text(
+                  // ignore: lines_longer_than_80_chars (auto-documented)
+                  '${room.tools.length} server tools, ${clientToolsMap.length} client tools',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               CapabilityBadges(room: room),
+              const SizedBox(height: 20),
+
+              // Background Image
+              BackgroundImageSection(room: room),
               const SizedBox(height: 20),
 
               // Model info

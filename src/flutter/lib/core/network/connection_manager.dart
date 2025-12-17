@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:soliplex/core/models/chat_models.dart';
 import 'package:soliplex/core/models/endpoint_models.dart';
 import 'package:soliplex/core/network/connection_events.dart';
@@ -151,6 +152,24 @@ class ConnectionManager extends ChangeNotifier {
   String _serverIdFromUrl(String url) {
     final uri = Uri.parse(url);
     return '${uri.host}:${uri.port}';
+  }
+
+  /// Make an authenticated GET request to the active server.
+  Future<http.Response> get(Uri uri) async {
+    final serverState = _activeServerState;
+    if (serverState == null) {
+      throw StateError('No active server configured');
+    }
+    return serverState.transportLayer.get(uri);
+  }
+
+  /// Make an authenticated HEAD request to the active server.
+  Future<http.Response> head(Uri uri) async {
+    final serverState = _activeServerState;
+    if (serverState == null) {
+      throw StateError('No active server configured');
+    }
+    return serverState.transportLayer.head(uri);
   }
 
   // Getters
