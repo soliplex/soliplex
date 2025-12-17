@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
+import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 
 /// Provider for threads in a specific room.
 ///
@@ -33,3 +34,25 @@ final threadsProvider = FutureProvider.family<List<ThreadInfo>, String>(
 ///
 /// Updated by navigation when user selects a thread.
 final currentThreadIdProvider = StateProvider<String?>((ref) => null);
+
+/// Provider for the currently selected thread.
+///
+/// Returns null if no thread is selected, no room is selected, or thread not found.
+final currentThreadProvider = Provider<ThreadInfo?>((ref) {
+  final threadId = ref.watch(currentThreadIdProvider);
+  if (threadId == null) return null;
+
+  final roomId = ref.watch(currentRoomIdProvider);
+  if (roomId == null) return null;
+
+  final threadsAsync = ref.watch(threadsProvider(roomId));
+  return threadsAsync.whenOrNull(
+    data: (threads) {
+      try {
+        return threads.firstWhere((thread) => thread.id == threadId);
+      } catch (_) {
+        return null;
+      }
+    },
+  );
+});
