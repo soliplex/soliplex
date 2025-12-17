@@ -17,6 +17,9 @@ dependencies:
   # Navigation
   go_router: ^14.7.1
 
+  # HTTP client (for backend health checks)
+  http: ^1.2.0
+
   # Utilities
   meta: ^1.15.0
 

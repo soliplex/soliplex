@@ -1,20 +1,29 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soliplex_client/soliplex_client.dart';
-import 'package:soliplex_frontend/core/providers/mock_data.dart';
+import 'package:soliplex_frontend/core/providers/api_provider.dart';
 
 /// Provider for list of rooms.
 ///
-/// AM1: Returns hardcoded mock data.
-/// AM2: Replace with `api.getRooms()`.
+/// Fetches rooms from the backend API using [SoliplexApi.getRooms].
+/// The result is automatically cached by Riverpod until explicitly refreshed.
+///
+/// **Usage**:
+/// ```dart
+/// // Read rooms
+/// final roomsAsync = ref.watch(roomsProvider);
+///
+/// // Refresh rooms
+/// ref.refresh(roomsProvider);
+/// ```
+///
+/// **Error Handling**:
+/// Throws [SoliplexException] subtypes which should be handled in the UI:
+/// - [NetworkException]: Connection failures, timeouts
+/// - [AuthException]: 401/403 authentication errors (AM7+)
+/// - [ApiException]: Other server errors
 final roomsProvider = FutureProvider<List<Room>>((ref) async {
-  // Simulate network delay
-  await Future<void>.delayed(const Duration(milliseconds: 300));
-
-  // TODO(AM2): Replace with real API call
-  // final api = ref.watch(soliplexApiProvider);
-  // return await api.getRooms();
-
-  return MockData.rooms;
+  final api = ref.watch(apiProvider);
+  return api.getRooms();
 });
 
 /// Provider for currently selected room ID.

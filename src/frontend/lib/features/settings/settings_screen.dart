@@ -46,8 +46,7 @@ class SettingsScreen extends ConsumerWidget {
             subtitle: const Text('Not configured'),
             trailing: Chip(
               label: const Text('AM7'),
-              backgroundColor:
-                  Theme.of(context).colorScheme.secondaryContainer,
+              backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
             ),
             enabled: false,
           ),
