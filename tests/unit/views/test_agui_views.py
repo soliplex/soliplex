@@ -97,6 +97,7 @@ def test_run():
         parent_run_id=None,
         run_metadata=None,
         created=NOW,
+        finished=None,
         awaitable_attrs=mock.AsyncMock(),
         instance=True,
     )

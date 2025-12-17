@@ -118,6 +118,7 @@ AGUI_RUNS = {
         thread_id=AGUI_THREAD_ID,
         run_id=AGUI_RUN_ID,
         created=NOW,
+        finished=None,
         parent_run_id=None,
         run_metadata=None,
         run_input=EMPTY_AGUI_RUN_INPUT.model_copy(deep=True),
@@ -822,12 +823,14 @@ def test_aguirunmetadata_from_run_metadata(run_metadata, exp_label):
         (AGUI_RUN_METADATA, RUN_LABEL),
     ],
 )
+@pytest.mark.parametrize("w_finished", [False, True])
 @pytest.mark.parametrize("w_events", [False, True])
 @pytest.mark.parametrize("w_parent", [False, True])
 def test_aguirun_from_run(
     run_input,
     w_parent,
     w_events,
+    w_finished,
     run_metadata,
     exp_label,
 ):
@@ -835,6 +838,7 @@ def test_aguirun_from_run(
         thread_id=AGUI_THREAD_ID,
         run_id=AGUI_RUN_ID,
         created=NOW,
+        finished=NOW if w_finished else None,
         parent_run_id=AGUI_PARENT_RUN_ID if w_parent else None,
         run_input=run_input,
     )
