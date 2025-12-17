@@ -1,4 +1,3 @@
-
 /// Abstract interface for network transport.
 ///
 /// This abstraction allows pluggable networking backends:
