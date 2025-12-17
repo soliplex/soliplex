@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:soliplex/core/config/feature_flags.dart';
 import 'package:soliplex/core/providers/app_providers.dart';
+import 'package:soliplex/core/utils/debug_log.dart';
 
 class ServerSelector extends ConsumerWidget {
   const ServerSelector({super.key});
@@ -11,6 +12,10 @@ class ServerSelector extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentServer = ref.watch(currentServerFromAppStateProvider);
+    DebugLog.service(
+      'ServerSelector: currentServer=${currentServer?.label}, '
+      'requiresAuth=${currentServer?.requiresAuth}',
+    );
     final enableEndpointManagement = ref.watch(
       enableEndpointManagementProvider,
     );
