@@ -20,8 +20,8 @@ Web (primary), iOS, Android, macOS, Windows, Linux
 | Provider | Type | Purpose |
 |----------|------|---------|
 | `configProvider` | StateProvider | App configuration |
-| `clientProvider` | Provider | SoliplexClient instance |
-| `authStateProvider` | StateProvider | Auth state |
+| `clientProvider` | Provider | SoliplexClient instance (AM7+) |
+| `authStateProvider` | StateProvider | Auth state (AM7+) |
 | `roomsProvider` | FutureProvider | Room list |
 | `currentRoomProvider` | StateProvider | Selected room |
 | `threadsProvider` | FutureProvider | Thread list for room |
@@ -129,12 +129,12 @@ class RouteDefinition {
 
 ## Implementation Phases
 
-| Phase | Goal |
-|-------|------|
-| 1 | Project setup, auth, navigation, placeholder screens |
-| 2 | ActiveRunNotifier with full event handling, ActiveRunState extensions |
-| 3 | Extensibility: SoliplexConfig, SoliplexRegistry, registries |
-| 4 | Polish, extract to `soliplex_core` package |
+| Phase | Goal | Milestone | Status |
+|-------|------|-----------|--------|
+| 1 | Project setup, navigation (NO AUTH) | AM1 | - |
+| 2 | ActiveRunNotifier + extensions | AM3 | - |
+| 3 | Authentication + Extensibility: SoliplexConfig, SoliplexRegistry | AM7 | - |
+| 4 | Multi-room, extract to `soliplex_core` package | AM8 | - |
 
 ## Dependencies
 

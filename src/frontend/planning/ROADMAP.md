@@ -45,15 +45,16 @@ v1.0 uses a two-tier milestone system:
 
 #### App Milestones (AM) - End-User Testable
 
-| # | Name | Phases | Requires DM | User Can Test |
-|---|------|--------|-------------|---------------|
-| **AM1** | App Shell | Core P1 | DM1 | Launch app, navigate, authenticate |
-| **AM2** | Connected Data | - | DM1-DM5 | See real rooms & threads from backend |
-| **AM3** | Working Chat | Core P2, Chat P1, History P1 | DM6 | Send message, receive AI response |
-| **AM4** | Full Chat | Chat P2-P3, History P2-P4 | - | Streaming, markdown, thread management |
-| **AM5** | Inspector | Detail P1-P4 | - | Events, thinking, tool calls, state |
-| **AM6** | Canvas | Current Canvas P1-P3, Permanent Canvas P1-P3 | - | State snapshots, pin items |
-| **AM7** | Polish | Core P3-P4 | DM7-DM8 | Multi-room, white-label ready |
+| # | Name | Phases | Requires DM | User Can Test | Status |
+|---|------|--------|-------------|---------------|--------|
+| **AM1** | App Shell | Core P1 | DM1 | Launch app, navigate | ✅ Done |
+| **AM2** | Connected Data | - | DM1-DM5 | See real rooms & threads from backend | - |
+| **AM3** | Working Chat | Core P2, Chat P1, History P1 | DM6 | Send message, receive AI response | - |
+| **AM4** | Full Chat | Chat P2-P3, History P2-P4 | - | Streaming, markdown, thread management | - |
+| **AM5** | Inspector | Detail P1-P4 | - | Events, thinking, tool calls, state | - |
+| **AM6** | Canvas | Current Canvas P1-P3, Permanent Canvas P1-P3 | - | State snapshots, pin items | - |
+| **AM7*** | Authentication | - | DM7-DM8 | Login, token refresh | - |
+| **AM8*** | Polish | Core P3-P4 | DM7-DM8 | Multi-room, white-label ready | - |
 
 #### Milestone Dependencies
 
@@ -62,8 +63,8 @@ v1.0 uses a two-tier milestone system:
 DM1 → DM2 → DM3 → DM4 → DM5 → DM6 → DM7 → DM8
  │                        │      │          │
  ▼                        ▼      ▼          ▼
-AM1 ──────────────────► AM2 ─► AM3 ────────AM7
-(App Shell)         (Connected) (Chat)    (Polish)
+AM1 ──────────────────► AM2 ─► AM3 ──────────
+(App Shell)         (Connected) (Chat)
                                  │
                     ┌────────────┼────────────┐
                     ▼            ▼            ▼
@@ -99,7 +100,7 @@ Depends on: DM1 (AM1), DM6 (AM3)
 
 | Phase | Goal | Milestone |
 |-------|------|-----------|
-| 1 | Project setup, auth, navigation | AM1 |
+| 1 | Project setup, navigation | AM1 |
 | 2 | ActiveRunNotifier + extensions | AM3 |
 | 3 | Extensibility: SoliplexConfig, SoliplexRegistry | AM7 |
 | 4 | Polish, extract to `soliplex_core` package | AM7 |
