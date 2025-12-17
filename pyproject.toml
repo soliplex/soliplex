@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "soliplex"
-version = "0.25dev0"
+version = "0.25"
 description = "<ALAN FILL THIS IN>"
 authors = [{ name = "Enfold", email = "info@enfoldsystems.net" }]
 readme = "README.md"
