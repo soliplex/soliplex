@@ -176,28 +176,10 @@ class _RoomInfoContent extends ConsumerWidget {
               // Capability badges
               const _SectionHeader(title: 'Capabilities'),
               const SizedBox(height: 8),
-              if (room.tools.isNotEmpty || clientToolsMap.isNotEmpty) ...[
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    if (room.tools.isNotEmpty)
-                      _CustomBadge(
-                        label: '${room.tools.length} Server',
-                        icon: Icons.dns_outlined,
-                        color: const Color(0xFF2563EB),
-                      ),
-                    if (clientToolsMap.isNotEmpty)
-                      _CustomBadge(
-                        label: '${clientToolsMap.length} Client',
-                        icon: Icons.devices,
-                        color: const Color(0xFF059669),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-              ],
-              CapabilityBadges(room: room),
+              CapabilityBadges(
+                room: room,
+                clientToolCount: clientToolsMap.length,
+              ),
               const SizedBox(height: 20),
 
               // Background Image
@@ -460,44 +442,6 @@ class _FeatureRow extends StatelessWidget {
             enabled ? Icons.check_circle : Icons.cancel_outlined,
             size: 18,
             color: enabled ? Colors.green : colorScheme.onSurfaceVariant,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CustomBadge extends StatelessWidget {
-  const _CustomBadge({
-    required this.label,
-    required this.icon,
-    required this.color,
-  });
-  final String label;
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: color),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
           ),
         ],
       ),
