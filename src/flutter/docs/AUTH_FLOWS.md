@@ -265,9 +265,14 @@ Both platforms refresh tokens automatically before API calls when expiring withi
 
 ### Web Logout
 
-1. POST to Keycloak's logout endpoint with refresh token
-2. Clear stored tokens locally
-3. Redirect to login screen
+1. Clear stored tokens locally first (to ensure session termination)
+2. Redirect browser to OIDC provider's logout endpoint (front-channel)
+   - Parameters:
+     - `post_logout_redirect_uri`: Back to app (must be absolute URI)
+     - `id_token_hint`: Included if available (backend flow may omit this)
+     - `client_id`: Fallback if `id_token_hint` is missing
+3. OIDC provider clears session cookies
+4. OIDC provider redirects back to application (or shows logout confirmation)
 
 ### Mobile Logout
 
