@@ -530,7 +530,7 @@ async def delete_room_agui_thread_id(
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
-) -> models.AGUI_Run:
+) -> fastapi.Response:
     """Delete an AGUI thread within the given room"""
     user_name = await _check_user_in_room(
         room_id=room_id,
