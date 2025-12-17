@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart' as md;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_smooth_markdown/flutter_smooth_markdown.dart' as smooth;
+import 'package:flutter_smooth_markdown/flutter_smooth_markdown.dart';
 import 'package:soliplex/core/services/markdown_hooks.dart';
 import 'package:soliplex/features/chat/widgets/markdown_code_block.dart';
 import 'package:soliplex/features/chat/widgets/tracked_markdown_image.dart';
@@ -10,7 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 /// Widget that renders markdown with streaming animation support.
 ///
-/// Uses [smooth.SmoothMarkdown] for robust, crash-free streaming rendering.
+/// Uses [SmoothMarkdown] for robust, crash-free rendering.
 class StreamingMarkdownWidget extends ConsumerStatefulWidget {
   const StreamingMarkdownWidget({
     required this.text,
@@ -48,96 +47,43 @@ class _StreamingMarkdownWidgetState
     final hooks = ref.watch(markdownHooksProvider);
     final colorScheme = Theme.of(context).colorScheme;
 
-    // Use SmoothMarkdown for streaming to handle partial updates gracefully
-    // and provide typing animation.
-    if (widget.isStreaming) {
-      return smooth.SmoothMarkdown(
-        data: widget.text,
-        styleSheet: smooth.MarkdownStyleSheet(
-          paragraphStyle:
-              widget.textStyle ??
-              TextStyle(color: colorScheme.onSurface, fontSize: 14),
-          inlineCodeStyle: TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 13,
-            color: colorScheme.onSurface,
-            backgroundColor: colorScheme.surfaceContainerHighest,
-          ),
-          codeBlockStyle: TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 13,
-            color: colorScheme.onSurface,
-            // Background is handled by decoration
-          ),
-          codeBlockDecoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          linkStyle: TextStyle(
-            color: colorScheme.primary,
-            decoration: TextDecoration.underline,
-          ),
-          h1Style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: colorScheme.onSurface,
-          ),
-          h2Style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: colorScheme.onSurface,
-          ),
-          h3Style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: colorScheme.onSurface,
-          ),
-          blockquoteDecoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest,
-            border: Border(
-              left: BorderSide(color: colorScheme.primary, width: 4),
-            ),
-          ),
-          blockquotePadding: const EdgeInsets.all(12),
-          listBulletStyle: TextStyle(color: colorScheme.onSurface),
-        ),
-      );
-    }
-
-    // Use static MarkdownBody for finished messages to ensure full
-    // interactivity (copy/paste, etc) which might be limited in the
-    // streaming widget.
-    return md.MarkdownBody(
+    return SmoothMarkdown(
       data: widget.text,
-      styleSheet: md.MarkdownStyleSheet(
-        p:
+      styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+        paragraphStyle:
             widget.textStyle ??
             TextStyle(color: colorScheme.onSurface, fontSize: 14),
-        code: TextStyle(
+        inlineCodeStyle: TextStyle(
           fontFamily: 'monospace',
           fontSize: 13,
           color: colorScheme.onSurface,
           backgroundColor: colorScheme.surfaceContainerHighest,
         ),
-        codeblockDecoration: BoxDecoration(
+        codeBlockStyle: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 13,
+          color: colorScheme.onSurface,
+          // Background is handled by decoration
+        ),
+        codeBlockDecoration: BoxDecoration(
           color: colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(8),
         ),
-        a: TextStyle(
+        linkStyle: TextStyle(
           color: colorScheme.primary,
           decoration: TextDecoration.underline,
         ),
-        h1: TextStyle(
+        h1Style: TextStyle(
           fontSize: 24,
           fontWeight: FontWeight.bold,
           color: colorScheme.onSurface,
         ),
-        h2: TextStyle(
+        h2Style: TextStyle(
           fontSize: 20,
           fontWeight: FontWeight.bold,
           color: colorScheme.onSurface,
         ),
-        h3: TextStyle(
+        h3Style: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.bold,
           color: colorScheme.onSurface,
@@ -149,22 +95,28 @@ class _StreamingMarkdownWidgetState
           ),
         ),
         blockquotePadding: const EdgeInsets.all(12),
-        listBullet: TextStyle(color: colorScheme.onSurface),
+        listBulletStyle: TextStyle(color: colorScheme.onSurface),
       ),
-      onTapLink: (text, href, title) {
-        hooks.onLinkTap?.call(href, text, widget.messageId);
-        if (href != null) {
-          launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication);
-        }
+      onTapLink: (href) {
+        hooks.onLinkTap?.call(href, href, widget.messageId);
+        launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication);
       },
-      imageBuilder: (uri, title, alt) {
+      imageBuilder: (uri, alt, title) {
+        // Sanitize URI (remove surrounding angle brackets if present)
+        var sanitizedUri = uri.trim();
+        if (sanitizedUri.startsWith('<') && sanitizedUri.endsWith('>')) {
+          sanitizedUri = sanitizedUri.substring(1, sanitizedUri.length - 1);
+        }
+
         return TrackedMarkdownImage(
-          imageUrl: uri.toString(),
+          imageUrl: sanitizedUri,
           messageId: widget.messageId,
         );
       },
-      builders: {
-        'pre': MarkdownCodeBlockBuilder(
+      codeBuilder: (code, language) {
+        return StyledCodeBlock(
+          code: code,
+          language: language,
           onCopy: (code, language) {
             hooks.onCodeCopy?.call(code, language, widget.messageId);
           },
@@ -174,8 +126,7 @@ class _StreamingMarkdownWidgetState
                   widget.onQuote?.call(quotedText);
                 }
               : null,
-          messageId: widget.messageId,
-        ),
+        );
       },
     );
   }

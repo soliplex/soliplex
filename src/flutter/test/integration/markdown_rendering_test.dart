@@ -6,7 +6,7 @@ import 'package:soliplex/features/chat/widgets/streaming_markdown_widget.dart';
 void main() {
   testWidgets(
     // ignore: lines_longer_than_80_chars (auto-documented)
-    'StreamingMarkdownWidget renders static markdown correctly using flutter_markdown_plus', // ignore: lines_longer_than_80_chars
+    'StreamingMarkdownWidget renders static markdown correctly using flutter_smooth_markdown', // ignore: lines_longer_than_80_chars
     (WidgetTester tester) async {
       // Define markdown with various elements
       const markdownContent = '**Bold Text**';
@@ -18,8 +18,7 @@ void main() {
               body: StreamingMarkdownWidget(
                 text: markdownContent,
                 messageId: 'test-msg-1',
-                isStreaming:
-                    false, // Use static rendering path (flutter_markdown_plus)
+                isStreaming: false, // Use static rendering path
               ),
             ),
           ),
@@ -28,8 +27,11 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Verify key markdown elements are rendered
-      expect(find.text('Bold Text'), findsOneWidget);
+      // Find the RichText widget and verify its content
+      final richTextFinder = find.byType(RichText);
+      expect(richTextFinder, findsOneWidget);
+      final RichText richText = tester.widget(richTextFinder);
+      expect(richText.text.toPlainText(), contains('Bold Text'));
     },
   );
 
@@ -55,7 +57,10 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    // Verify it doesn't crash and renders the content
-    expect(find.text('Some text'), findsOneWidget);
+    // Find the RichText widget and verify its content
+    final richTextFinder = find.byType(RichText);
+    expect(richTextFinder, findsOneWidget);
+    final RichText richText = tester.widget(richTextFinder);
+    expect(richText.text.toPlainText(), contains('Some text'));
   });
 }

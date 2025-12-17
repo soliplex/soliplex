@@ -21,7 +21,6 @@ dependencies:
     sdk: flutter
   flutter_appauth: ^9.0.1
   flutter_map: ^7.0.2
-  flutter_markdown_plus: ^1.0.5
   flutter_riverpod: ^2.6.1
   flutter_secure_storage: ^9.2.2
   flutter_smooth_markdown: ^0.5.2

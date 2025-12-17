@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:flutter_smooth_markdown/flutter_smooth_markdown.dart';
 import 'package:flutter_streaming_text_markdown/flutter_streaming_text_markdown.dart';
 
 /// Collapsible thinking section that appears above message content.
@@ -123,22 +123,22 @@ class CollapsibleThinkingWidget extends StatelessWidget {
                   ),
                 ),
               )
-            : MarkdownBody(
+            : SmoothMarkdown(
                 data: thinkingText,
-                selectable: true,
-                styleSheet: MarkdownStyleSheet(
-                  p: TextStyle(
+                styleSheet:
+                    MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                  paragraphStyle: TextStyle(
                     color: colorScheme.onSurfaceVariant,
                     fontSize: 13,
                     height: 1.5,
                   ),
-                  code: TextStyle(
+                  inlineCodeStyle: TextStyle(
                     fontFamily: 'monospace',
                     fontSize: 12,
                     color: colorScheme.onSurfaceVariant,
                     backgroundColor: colorScheme.surfaceContainerHighest,
                   ),
-                  codeblockDecoration: BoxDecoration(
+                  codeBlockDecoration: BoxDecoration(
                     color: colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(6),
                   ),
