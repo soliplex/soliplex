@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:soliplex/core/models/room_models.dart';
 import 'package:soliplex/core/network/connection_manager.dart';
+import 'package:soliplex/core/utils/debug_log.dart';
 import 'package:soliplex/core/utils/url_builder.dart';
 
 class BackgroundImageSection extends ConsumerStatefulWidget {
@@ -44,6 +45,12 @@ class _BackgroundImageSectionState
 
     try {
       final response = await connectionManager.get(uri);
+      DebugLog.service(
+        'BG Image: Status ${response.statusCode}, '
+        'Length ${response.bodyBytes.length}, '
+        'Type ${response.headers['content-type']}',
+      );
+
       if (mounted) {
         setState(() {
           _isConfigured = response.statusCode == 200;
@@ -54,6 +61,7 @@ class _BackgroundImageSectionState
         });
       }
     } on Object catch (e) {
+      DebugLog.error('BG Image: Error $e');
       if (mounted) {
         setState(() {
           _isConfigured = false;
@@ -138,6 +146,30 @@ class _BackgroundImageSectionState
                       fit: BoxFit.cover,
                       width: double.infinity,
                       height: 150,
+                      errorBuilder: (context, error, stackTrace) {
+                        DebugLog.error('BG Image Render Error: $error');
+                        return Container(
+                          height: 150,
+                          width: double.infinity,
+                          color: colorScheme.errorContainer,
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.broken_image,
+                                  color: colorScheme.error,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Failed to render image',
+                                  style: TextStyle(color: colorScheme.error),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
               ],
