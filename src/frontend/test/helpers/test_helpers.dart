@@ -14,7 +14,10 @@ class MockSoliplexApi extends Mock implements SoliplexApi {}
 class MockActiveRunNotifier extends ActiveRunNotifier {
   /// Creates a mock notifier with an initial state.
   MockActiveRunNotifier({required ActiveRunState initialState})
-      : super(transport: MockHttpTransport()) {
+      : super(
+          transport: MockHttpTransport(),
+          urlBuilder: UrlBuilder('https://example.com'),
+        ) {
     state = initialState;
   }
 }

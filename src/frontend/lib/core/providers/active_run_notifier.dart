@@ -147,23 +147,21 @@ class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
         state = state.copyWith(rawEvents: updatedRawEvents);
 
       case RunFinishedEvent():
-        // Run finished successfully
+        // Run finished successfully - reset streaming state
         state = state.copyWith(
           status: ThreadRunStatus.finished,
+          // ignore: avoid_redundant_argument_values
           isTextStreaming: false,
-          streamingText: null,
-          currentMessageId: null,
           rawEvents: updatedRawEvents,
         );
 
       case RunErrorEvent(:final message):
-        // Run encountered an error
+        // Run encountered an error - reset streaming state
         state = state.copyWith(
           status: ThreadRunStatus.error,
           errorMessage: message,
+          // ignore: avoid_redundant_argument_values
           isTextStreaming: false,
-          streamingText: null,
-          currentMessageId: null,
           rawEvents: updatedRawEvents,
         );
 
@@ -188,7 +186,8 @@ class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
 
       case TextMessageEndEvent(:final messageId):
         // Complete the streaming message
-        if (state.currentMessageId == messageId && state.streamingText != null) {
+        final matchesCurrentMessage = state.currentMessageId == messageId;
+        if (matchesCurrentMessage && state.streamingText != null) {
           final newMessage = ChatMessage.text(
             id: messageId,
             user: ChatUser.assistant,
@@ -197,8 +196,7 @@ class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
 
           state = state.copyWith(
             messages: [...state.messages, newMessage],
-            currentMessageId: null,
-            streamingText: null,
+            // ignore: avoid_redundant_argument_values
             isTextStreaming: false,
             rawEvents: updatedRawEvents,
           );
@@ -210,7 +208,6 @@ class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
           id: toolCallId,
           name: toolCallName,
           arguments: '',
-          status: ToolCallStatus.pending,
         );
         state = state.copyWith(
           activeToolCalls: [...state.activeToolCalls, toolCall],

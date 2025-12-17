@@ -12,7 +12,6 @@ void main() {
           (tester) async {
         // Arrange
         final message = TestData.createMessage(
-          user: ChatUser.user,
           text: 'Hello, assistant!',
         );
 
@@ -37,7 +36,6 @@ void main() {
           (tester) async {
         // Arrange
         final message = TestData.createMessage(
-          user: ChatUser.user,
           text: 'Test',
         );
 
@@ -57,7 +55,7 @@ void main() {
             matching: find.byType(Container).first,
           ),
         );
-        final decoration = container.decoration as BoxDecoration;
+        final decoration = container.decoration! as BoxDecoration;
         expect(decoration.color, isNotNull);
         // Primary container color for user messages
       });
@@ -66,7 +64,6 @@ void main() {
           (tester) async {
         // Arrange
         final message = TestData.createMessage(
-          user: ChatUser.user,
           text: 'Typing...',
         );
 
@@ -91,7 +88,6 @@ void main() {
           (tester) async {
         // Arrange
         final message = TestData.createMessage(
-          user: ChatUser.user,
           text: 'Done',
         );
 
@@ -101,7 +97,6 @@ void main() {
             home: Scaffold(
               body: ChatMessageWidget(
                 message: message,
-                isStreaming: false,
               ),
             ),
           ),
@@ -163,7 +158,7 @@ void main() {
             matching: find.byType(Container).first,
           ),
         );
-        final decoration = container.decoration as BoxDecoration;
+        final decoration = container.decoration! as BoxDecoration;
         expect(decoration.color, isNotNull);
         // Surface container color for assistant messages
       });
@@ -308,9 +303,7 @@ void main() {
 
       testWidgets('respects maxWidth constraint', (tester) async {
         // Arrange
-        final message = TestData.createMessage(
-          text: 'Test message',
-        );
+        final message = TestData.createMessage();
 
         // Act
         await tester.pumpWidget(
@@ -331,7 +324,7 @@ void main() {
             matching: find.byType(Container).first,
           ),
         );
-        final constraints = container.constraints as BoxConstraints;
+        final constraints = container.constraints!;
         expect(constraints.maxWidth, 600);
       });
     });

@@ -152,9 +152,9 @@ void main() {
             overrides: [
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: ActiveRunState(
+                  initialState: const ActiveRunState(
                     status: ThreadRunStatus.error,
-                    messages: const [],
+                    messages: [],
                     errorMessage: 'Something went wrong',
                   ),
                 ),

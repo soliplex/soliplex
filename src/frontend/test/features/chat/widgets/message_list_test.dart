@@ -69,7 +69,6 @@ void main() {
         final messages = [
           TestData.createMessage(
             id: 'msg-1',
-            user: ChatUser.user,
             text: 'Hello',
           ),
           TestData.createMessage(
@@ -79,7 +78,6 @@ void main() {
           ),
           TestData.createMessage(
             id: 'msg-3',
-            user: ChatUser.user,
             text: 'How are you?',
           ),
         ];
