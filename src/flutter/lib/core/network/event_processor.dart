@@ -233,9 +233,7 @@ class EventProcessor {
         return EventProcessingResult.empty;
 
       case ag_ui.ToolCallResultEvent():
-        return const EventProcessingResult(
-          contextUpdate: ContextUpdate(AgUiEventTypes.toolResult),
-        );
+        return _processToolCallResult(state, event);
 
       case ag_ui.StateSnapshotEvent():
         return _processStateSnapshot(event);
@@ -249,7 +247,8 @@ class EventProcessor {
       case ag_ui.ThinkingStartEvent():
         return const EventProcessingResult(
           contextUpdate: ContextUpdate(AgUiEventTypes.thinking),
-          activityUpdate: ActivityUpdate(isActive: true,
+          activityUpdate: ActivityUpdate(
+            isActive: true,
             eventType: AgUiEventTypes.thinking,
           ),
         );
@@ -367,7 +366,8 @@ class EventProcessor {
       textBuffersUpdate: MapUpdate(puts: {aguiMessageId: StringBuffer()}),
       thinkingBufferUpdate: newThinkingBuffer,
       thinkingMessageIdsUpdate: thinkingIdsUpdate,
-      activityUpdate: const ActivityUpdate(isActive: true,
+      activityUpdate: const ActivityUpdate(
+        isActive: true,
         eventType: AgUiEventTypes.textMessageStart,
       ),
     );
@@ -450,10 +450,44 @@ class EventProcessor {
         AgUiEventTypes.toolCallStart,
         summary: event.toolCallName,
       ),
-      activityUpdate: ActivityUpdate(isActive: true,
+      activityUpdate: ActivityUpdate(
+        isActive: true,
         eventType: AgUiEventTypes.toolCallStart,
         toolName: event.toolCallName,
       ),
+    );
+  }
+
+  EventProcessingResult _processToolCallResult(
+    EventProcessingState state,
+    ag_ui.ToolCallResultEvent event,
+  ) {
+    // Look up the chat message ID for this tool call
+    final chatMessageId = state.messageIdMap[event.toolCallId];
+
+    if (chatMessageId == null) {
+      DebugLog.warn(
+        'ToolCallResult: NO MAPPING for toolCallId=${event.toolCallId}',
+      );
+      return const EventProcessingResult(
+        contextUpdate: ContextUpdate(AgUiEventTypes.toolResult),
+      );
+    }
+
+    return EventProcessingResult(
+      messageMutations: [
+        UpdateMessage(
+          chatMessageId,
+          (msg) => msg.copyWith(toolCallStatus: 'completed'),
+        ),
+      ],
+      contextUpdate: const ContextUpdate(AgUiEventTypes.toolResult),
+      // We don't explicitly set isActive: false here because other tools might
+      // be running. The ActivityStatusNotifier handles multiple active states
+      // mostly via ActivitySnapshot, but for streaming, we rely on RunFinished
+      // to clear everything, or subsequent starts to update context.
+      // Ideally, we'd have a counter, but for now, we just update the message
+      // status which fixes the inline spinner.
     );
   }
 
@@ -652,7 +686,7 @@ class EventProcessor {
       ),
       activityUpdate: ActivityUpdate(
         // isActive if any relevant activity found
-        isActive: activeEventType != null, 
+        isActive: activeEventType != null,
         eventType: activeEventType,
         toolName: activeToolName,
       ),

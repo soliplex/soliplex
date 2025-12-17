@@ -121,7 +121,6 @@ class UrlBuilder {
   Uri mcpToken(String roomId) =>
       _apiUri([ApiConstants.rooms, roomId, ApiConstants.mcpToken]);
 
-
   // =========================================================================
   // AUTH API
   // =========================================================================

@@ -9,7 +9,6 @@
 /// - CancelToken - Cancellation support for network operations
 library;
 
-
 export 'cancel_token.dart';
 export 'connection_events.dart';
 export 'connection_manager.dart';

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_streaming_text_markdown/flutter_streaming_text_markdown.dart';
 import 'package:soliplex/core/services/markdown_hooks.dart';
 import 'package:soliplex/features/chat/widgets/markdown_code_block.dart';
 import 'package:soliplex/features/chat/widgets/tracked_markdown_image.dart';
@@ -11,9 +11,9 @@ import 'package:url_launcher/url_launcher.dart';
 /// Widget that renders markdown with streaming animation support.
 ///
 /// This widget provides two rendering modes:
-/// - **Streaming mode** (`isStreaming=true`): Uses
-/// [StreamingTextMarkdown.claude()]
-///   for smooth character-by-character animation as text arrives.
+/// - **Streaming mode** (`isStreaming=true`): Uses a custom adaptive
+///   typewriter effect to smoothly reveal text as it arrives, handling
+///   variable network speeds without stuttering.
 /// - **Static mode** (`isStreaming=false`): Uses MarkdownBody with full
 ///   callbacks for links, images, and code blocks.
 ///
@@ -59,7 +59,99 @@ class StreamingMarkdownWidget extends ConsumerStatefulWidget {
 }
 
 class _StreamingMarkdownWidgetState
-    extends ConsumerState<StreamingMarkdownWidget> {
+    extends ConsumerState<StreamingMarkdownWidget>
+    with SingleTickerProviderStateMixin {
+  late final Ticker _ticker;
+  String _displayedText = '';
+  int _currentLength = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize with full text if not streaming, or start from 0 if streaming
+    // (though usually streaming starts with empty text anyway)
+    _currentLength = widget.isStreaming ? 0 : widget.text.length;
+    _displayedText = widget.isStreaming
+        ? ''
+        : widget.text.substring(0, _currentLength); // Safety
+
+    _ticker = createTicker(_onTick);
+    if (widget.isStreaming) {
+      _ticker.start();
+    }
+  }
+
+  @override
+  void didUpdateWidget(StreamingMarkdownWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // Start/Stop ticker based on streaming state
+    if (widget.isStreaming && !_ticker.isActive) {
+      _ticker.start();
+    } else if (!widget.isStreaming && _ticker.isActive) {
+      _ticker.stop();
+      // Snap to full text when streaming stops
+      _currentLength = widget.text.length;
+      _displayedText = widget.text;
+    }
+
+    // If not streaming, always ensure we show full text (e.g. edits/history)
+    if (!widget.isStreaming) {
+      _currentLength = widget.text.length;
+      _displayedText = widget.text;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  void _onTick(Duration elapsed) {
+    final targetLength = widget.text.length;
+
+    // If we've caught up (or text shrank), sync and stop doing work
+    if (_currentLength >= targetLength) {
+      if (_currentLength > targetLength) {
+        // Handle text shrinking (e.g. correction)
+        _currentLength = targetLength;
+        setState(() {
+          _displayedText = widget.text;
+        });
+      }
+      return;
+    }
+
+    // Adaptive Speed Logic:
+    // Determine how many characters to reveal this frame.
+    //
+    // - Base speed: 1 char per frame (~60 chars/sec) - fast but readable type
+    // - Catch-up: If lag is large (burst of data), increase speed proportional
+    //   to distance.
+    final distance = targetLength - _currentLength;
+
+    // Accelerate as distance grows.
+    // Example:
+    // Lag 10 chars -> add 1 char (Base)
+    // Lag 50 chars -> add 1 + 1 = 2 chars
+    // Lag 200 chars -> add 1 + 4 = 5 chars
+    // This ensures we never fall too far behind even with fast tokens.
+    var charsToAdd = 1 + (distance ~/ 40);
+
+    // Cap excessive jumps to avoid jumpiness, unless extremely behind
+    if (charsToAdd > 10) charsToAdd = 10;
+
+    var nextLength = _currentLength + charsToAdd;
+    if (nextLength > targetLength) nextLength = targetLength;
+
+    setState(() {
+      _currentLength = nextLength;
+      // Using substring is efficient enough for typical chat message sizes
+      _displayedText = widget.text.substring(0, _currentLength);
+    });
+  }
+
   /// Sanitize markdown to prevent flutter_markdown crashes.
   ///
   /// The flutter_markdown package fails with assertion `_inlines.isEmpty`
@@ -69,74 +161,92 @@ class _StreamingMarkdownWidgetState
   /// This function ensures:
   /// - Code blocks (```) are properly closed
   /// - Inline code (`) has matching delimiters
+  /// - Brackets ([) and Parentheses (() are balanced (simple heuristic)
   String _sanitizeMarkdown(String text) {
     if (text.isEmpty) return text;
 
-    var result = text;
+    final sb = StringBuffer(text);
+    var inFence = false;
+    var inInlineCode = false;
+    var openBrackets = 0;
+    var openParens = 0;
 
-    // Count fenced code blocks (```) - must be even
-    final fencePattern = RegExp('^```', multiLine: true);
-    final fenceCount = fencePattern.allMatches(result).length;
-    if (fenceCount.isOdd) {
-      // Close the unclosed code block
-      result = '$result\n```';
-    }
+    for (var i = 0; i < text.length; i++) {
+      final char = text[i];
 
-    // For inline code, count backticks outside of code blocks
-    // This is tricky - for now, just ensure the total is manageable
-    // by checking if there's an odd number of single backticks
-    // that aren't part of triple backticks
-    final lines = result.split('\n');
-    var inCodeBlock = false;
-    var inlineBackticks = 0;
+      if (char == '`') {
+        final isFence =
+            i + 2 < text.length && text[i + 1] == '`' && text[i + 2] == '`';
 
-    for (final line in lines) {
-      if (line.startsWith('```')) {
-        inCodeBlock = !inCodeBlock;
-      } else if (!inCodeBlock) {
-        // Count backticks in this line (simple heuristic)
-        inlineBackticks += '`'.allMatches(line).length;
+        if (inFence) {
+          if (isFence) {
+            inFence = false;
+            i += 2;
+          }
+        } else if (inInlineCode) {
+          if (!isFence) {
+            inInlineCode = false;
+          }
+        } else {
+          if (isFence) {
+            inFence = true;
+            i += 2;
+          } else {
+            inInlineCode = true;
+          }
+        }
+        continue;
+      }
+
+      if (inFence || inInlineCode) continue;
+
+      if (char == '[') {
+        openBrackets++;
+      } else if (char == ']') {
+        if (openBrackets > 0) openBrackets--;
+      } else if (char == '(') {
+        openParens++;
+      } else if (char == ')') {
+        if (openParens > 0) openParens--;
       }
     }
 
-    // If odd number of inline backticks, append one to close
-    if (inlineBackticks.isOdd) {
-      result = '$result`';
+    if (inFence) sb.write('\n```');
+    if (inInlineCode) sb.write('`');
+    while (openBrackets > 0) {
+      sb.write(']');
+      openBrackets--;
+    }
+    while (openParens > 0) {
+      sb.write(')');
+      openParens--;
     }
 
-    return result;
+    return sb.toString();
   }
 
   @override
   Widget build(BuildContext context) {
     final hooks = ref.watch(markdownHooksProvider);
-    final colorScheme = Theme.of(context).colorScheme;
 
-    if (widget.isStreaming) {
-      // Streaming mode - use animated markdown
-      return StreamingTextMarkdown.claude(
-        text: widget.text,
-        onComplete: () {
-          hooks.onStreamingComplete?.call();
-        },
-        theme: StreamingTextTheme(
-          textStyle:
-              widget.textStyle ??
-              TextStyle(color: colorScheme.onSurface, fontSize: 14),
-        ),
-      );
-    } else {
-      // Finalized mode - use static markdown with full callbacks
-      return _buildStaticMarkdown(context, hooks);
-    }
+    // Use our custom locally-buffered text for both modes.
+    // When streaming, _displayedText updates frame-by-frame via _onTick.
+    // When static, _displayedText is just widget.text.
+    //
+    // Pass the _sanitizeMarkdown version to the builder to ensure safety.
+    return _buildStaticMarkdown(context, hooks, _displayedText);
   }
 
-  Widget _buildStaticMarkdown(BuildContext context, MarkdownHooks hooks) {
+  Widget _buildStaticMarkdown(
+    BuildContext context,
+    MarkdownHooks hooks,
+    String content,
+  ) {
     final colorScheme = Theme.of(context).colorScheme;
 
     // Sanitize markdown to prevent flutter_markdown crashes from
     // malformed content (e.g., unclosed code blocks from interrupted streams)
-    final sanitizedText = _sanitizeMarkdown(widget.text);
+    final sanitizedText = _sanitizeMarkdown(content);
 
     return MarkdownBody(
       data: sanitizedText,
