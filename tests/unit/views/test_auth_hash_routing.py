@@ -1,11 +1,13 @@
 """Test auth views with hash-based routing."""
 
+from unittest.mock import AsyncMock
+from unittest.mock import Mock
+from unittest.mock import patch
+
 import pytest
 from fastapi import responses
-from unittest.mock import Mock, AsyncMock, patch
 
 from soliplex.views import auth
-from soliplex import auth as auth_module
 
 
 @pytest.mark.anyio

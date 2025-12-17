@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// API constants and default configurations.
 ///
 /// Centralizes all API-related constants to ensure consistency
@@ -6,7 +8,26 @@ class ApiConstants {
   ApiConstants._();
 
   /// Default server URL (bare server, no /api prefix).
-  static const String defaultServerUrl = 'http://localhost:8000';
+  ///
+  /// Priority:
+  /// 1. --dart-define=DEFAULT_SERVER_URL=...
+  /// 2. Web: `scheme://host[:port]`
+  /// 3. Fallback: http://localhost:8000
+  static String get defaultServerUrl {
+    const envUrl = String.fromEnvironment('DEFAULT_SERVER_URL');
+    if (envUrl.isNotEmpty) {
+      return envUrl;
+    }
+
+    if (kIsWeb) {
+      // Use the current origin (scheme://host[:port])
+      // This handles standard ports (80/443) by omitting them,
+      // and keeps custom ports if the app is served from one.
+      return Uri.base.origin;
+    }
+
+    return 'http://localhost:8000';
+  }
 
   /// API version string.
   static const String apiVersion = 'v1';

@@ -98,7 +98,8 @@ async def get_auth_system(
     refresh_expires_in = tokendict["refresh_expires_in"]
 
     # Handle hash-based routing (e.g., /#/auth/callback)
-    # Query params must be placed before the hash fragment for Flutter to see them
+    # Query params must be placed before the hash fragment for Flutter to see
+    # them
     return_to = request.query_params.get("return_to", "/")
     
     # Check if return_to contains a hash fragment

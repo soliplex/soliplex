@@ -62,7 +62,7 @@ class ServerSelector extends ConsumerWidget {
                   title: const Text('Switch Server'),
                   onTap: () {
                     Navigator.pop(context);
-                    context.go('/setup');
+                    context.push('/setup');
                   },
                 ),
                 if (currentServer?.requiresAuth ?? false)
