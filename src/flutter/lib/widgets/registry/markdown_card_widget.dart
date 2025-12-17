@@ -68,6 +68,10 @@ class MarkdownCardWidget extends ConsumerWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final hooks = ref.watch(markdownHooksProvider); // Retrieve hooks
+    
+    // Normalize line endings
+    final normalizedContent =
+        content.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
 
     return Card(
       child: Column(
@@ -115,7 +119,7 @@ class MarkdownCardWidget extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.all(12),
             child: SmoothMarkdown(
-              data: content,
+              data: normalizedContent,
               styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
                 paragraphStyle: theme.textTheme.bodyMedium,
                 h1Style: theme.textTheme.headlineSmall,

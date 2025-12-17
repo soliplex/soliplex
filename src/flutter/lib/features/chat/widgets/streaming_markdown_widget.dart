@@ -47,8 +47,30 @@ class _StreamingMarkdownWidgetState
     final hooks = ref.watch(markdownHooksProvider);
     final colorScheme = Theme.of(context).colorScheme;
 
+    // Normalize line endings to prevent parsing issues with CRLF
+    var normalizedText =
+        widget.text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+
+    // Strip outer markdown code block if present
+    // Matches ```markdown ... ``` or ```md ... ```
+    // Only strip if the body doesn't contain nested fences
+    // (which would mean it's not a single wrapper)
+    final wrapperMatch = RegExp(
+      r'^```(?:markdown|md)\s*\n(.*)\n```\s*$',
+      dotAll: true,
+    ).firstMatch(normalizedText);
+
+    if (wrapperMatch != null) {
+      final body = wrapperMatch.group(1)!;
+      // Safety check: ensure the body doesn't contain fences that
+      // would break structure
+      if (!body.startsWith('```') && !body.contains('\n```')) {
+        normalizedText = body;
+      }
+    }
+
     return SmoothMarkdown(
-      data: widget.text,
+      data: normalizedText,
       styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
         paragraphStyle:
             widget.textStyle ??

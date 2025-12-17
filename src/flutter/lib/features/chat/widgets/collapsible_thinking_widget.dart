@@ -108,13 +108,17 @@ class CollapsibleThinkingWidget extends StatelessWidget {
   }
 
   Widget _buildContent(BuildContext context, ColorScheme colorScheme) {
+    // Normalize line endings
+    final normalizedText =
+        thinkingText.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+
     return Container(
       constraints: const BoxConstraints(maxHeight: 300),
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       child: SingleChildScrollView(
         child: isStreaming
             ? StreamingTextMarkdown.claude(
-                text: thinkingText,
+                text: normalizedText,
                 theme: StreamingTextTheme(
                   textStyle: TextStyle(
                     color: colorScheme.onSurfaceVariant,
@@ -124,9 +128,10 @@ class CollapsibleThinkingWidget extends StatelessWidget {
                 ),
               )
             : SmoothMarkdown(
-                data: thinkingText,
-                styleSheet:
-                    MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                data: normalizedText,
+                styleSheet: MarkdownStyleSheet.fromTheme(
+                  Theme.of(context),
+                ).copyWith(
                   paragraphStyle: TextStyle(
                     color: colorScheme.onSurfaceVariant,
                     fontSize: 13,
