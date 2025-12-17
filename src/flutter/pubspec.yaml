@@ -1,7 +1,7 @@
 name: soliplex
 description: "Soliplex"
 publish_to: 'none'
-version: 0.24.0+4
+version: 0.25.0+5
 
 environment:
   sdk: ">=3.10.0-0 <4.0.0"
