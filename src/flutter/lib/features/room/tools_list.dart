@@ -10,9 +10,13 @@ class ToolsList extends StatefulWidget {
     required this.tools,
     super.key,
     this.initiallyExpanded = false,
+    this.title = 'Tools',
+    this.icon = Icons.build_outlined,
   });
   final Map<String, RoomTool> tools;
   final bool initiallyExpanded;
+  final String title;
+  final IconData icon;
 
   @override
   State<ToolsList> createState() => _ToolsListState();
@@ -49,13 +53,13 @@ class _ToolsListState extends State<ToolsList> {
             child: Row(
               children: [
                 Icon(
-                  Icons.build_outlined,
+                  widget.icon,
                   size: 18,
                   color: colorScheme.primary,
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Tools',
+                  widget.title,
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
