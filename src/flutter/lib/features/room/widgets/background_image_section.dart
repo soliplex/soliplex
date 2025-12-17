@@ -27,7 +27,11 @@ class _BackgroundImageSectionState
   @override
   void initState() {
     super.initState();
-    _checkStatus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _checkStatus();
+      }
+    });
   }
 
   Future<void> _checkStatus() async {
