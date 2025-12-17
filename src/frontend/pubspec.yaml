@@ -21,6 +21,7 @@ dependencies:
   http: ^1.2.0
 
   # Utilities
+  intl: ^0.20.1
   meta: ^1.15.0
 
   # Local package - soliplex_client

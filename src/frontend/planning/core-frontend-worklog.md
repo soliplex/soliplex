@@ -9,21 +9,21 @@
 | Phase | Status | Progress |
 |-------|--------|----------|
 | 1. Project setup, navigation (NO AUTH) | ✅ Complete | 100% |
-| 2. ActiveRunNotifier + extensions | Not Started | 0% |
+| 2. ActiveRunNotifier + extensions | ✅ Complete | 100% |
 | 3. Authentication + Extensibility | Not Started | 0% |
 | 4. Polish, extract to `soliplex_core` | Not Started | 0% |
 
-**Overall:** 1/4 phases complete
+**Overall:** 2/4 phases complete (AM1, AM2, AM3 shipped)
 
 ---
 
 ## Current Focus
 
-**Phase:** AM2 - COMPLETE (Connected Data shipped)
+**Phase:** AM3 - COMPLETE (Working Chat shipped)
 
-**Next Phase:** 2 - ActiveRunNotifier + extensions (AM3)
+**Next Phase:** AM4 (Enhanced Chat) or AM5 (Inspector)
 
-**Blocked by:** DM6 (AG-UI Protocol in soliplex_client)
+**Blocked by:** None
 
 ---
 
@@ -117,6 +117,129 @@
 - Sorted dependencies alphabetically in pubspec.yaml
 - Fixed unnecessary lambdas and redundant default values
 - Added missing code block language markers in documentation
+
+---
+
+### Session 3: 2025-12-17 - AM3 Implementation
+
+**Duration:** Full implementation (~6 hours with parallel agents)
+
+**Completed:**
+
+- ✅ Core state management (ActiveRunState, ActiveRunNotifier)
+- ✅ Chat widgets (ChatPanel, MessageList, ChatInput, ChatMessageWidget)
+- ✅ History widgets (HistoryPanel, ThreadListItem, NewConversationButton)
+- ✅ ThreadScreen integration (responsive layout)
+- ✅ Provider architecture (7 new providers)
+- ✅ Utilities (date formatting, short ID display)
+- ✅ Comprehensive test suite (65 new tests, 129 total)
+
+**Metrics:**
+
+- **Test Coverage:** TBD (awaiting genhtml report generation)
+- **Tests:** 129 passing (0 failures) - +65 new tests for AM3
+- **Analyzer:** 0 errors, 0 warnings (24 info-level linting suggestions)
+- **Files Created:** 13 implementation files, 10 test files
+- **Lines Added:** ~3,000 lines across implementation + tests
+
+**Files Created:**
+
+**Core State:**
+- `lib/core/models/active_run_state.dart` - Immutable state for AG-UI runs
+- `lib/core/providers/active_run_notifier.dart` - StateNotifier for SSE streaming
+- `lib/core/providers/active_run_provider.dart` - Provider definitions
+
+**Chat Feature:**
+- `lib/features/chat/chat_panel.dart` - Main chat UI
+- `lib/features/chat/widgets/message_list.dart` - Scrollable message list
+- `lib/features/chat/widgets/chat_input.dart` - Text input with send logic
+- `lib/features/chat/widgets/chat_message_widget.dart` - Single message display
+
+**History Feature:**
+- `lib/features/history/history_panel.dart` - Thread list panel
+- `lib/features/history/widgets/thread_list_item.dart` - Thread card
+- `lib/features/history/widgets/new_conversation_button.dart` - New thread button
+
+**Utilities:**
+- `lib/shared/utils/date_formatter.dart` - Relative time formatting
+
+**Tests:**
+- `test/core/models/active_run_state_test.dart`
+- `test/core/providers/active_run_notifier_test.dart`
+- `test/core/providers/active_run_provider_test.dart`
+- `test/features/chat/chat_panel_test.dart`
+- `test/features/chat/widgets/message_list_test.dart`
+- `test/features/chat/widgets/chat_input_test.dart`
+- `test/features/chat/widgets/chat_message_widget_test.dart`
+- `test/features/history/history_panel_test.dart`
+- `test/features/history/widgets/thread_list_item_test.dart`
+- `test/shared/utils/date_formatter_test.dart`
+
+**Files Modified:**
+
+- `lib/core/providers/threads_provider.dart` - Added currentThreadProvider
+- `lib/features/thread/thread_screen.dart` - Integrated Chat + History
+- `test/features/thread/thread_screen_test.dart` - Updated for new implementation
+- `test/helpers/test_helpers.dart` - Added createMessage factory, MockActiveRunNotifier
+- `pubspec.yaml` - Added intl package dependency
+
+**Key Decisions:**
+
+- **StateNotifier over StreamNotifier**: Manual Riverpod without code generation
+- **allMessagesProvider pattern**: Merges historical + active run messages declaratively
+- **Auto-scroll on new messages**: ref.listen with post-frame callback
+- **Responsive layout**: Desktop (>=600px) shows History+Chat, Mobile shows Chat only
+- **Thread creation inline**: Create thread on first message send (no separate action)
+- **No historical messages in AM3**: threadMessagesProvider returns empty list (deferred to AM4)
+- **State machine in ActiveRunNotifier**: idle → running → finished/error with proper cleanup
+- **rawEvents and state captured**: Included for AM5 Detail panel (unused in AM3)
+
+**Architecture Highlights:**
+
+- Clean separation: Core (state) → Features (UI) → soliplex_client (protocol)
+- Provider dependency graph:
+  ```
+  httpTransportProvider → activeRunNotifierProvider
+  threadsProvider → currentThreadProvider → allMessagesProvider
+  canSendMessageProvider watches: room, thread, runState, newIntent
+  ```
+- Event processing: Thread class processes AG-UI events internally
+- Lifecycle management: StateNotifier cleanup on dispose, CancelToken for streams
+- Responsive widgets: LayoutBuilder pattern at 600px breakpoint
+
+**Issues Resolved:**
+
+- Fixed StateNotifierProvider override pattern in tests (use MockActiveRunNotifier)
+- Removed createdAt parameter from ChatMessage.text() factory
+- Added currentThreadProvider to threads_provider.dart
+- Fixed package imports (use soliplex_frontend/... not relative)
+- Made ActiveRunState.cancelled constructor const
+- Fixed ThreadScreen test expectations for new implementation
+- Fixed NewConversationButton layout overflow (wrapped text in Expanded)
+- Fixed message list scroll-to-bottom timing with WidgetsBinding.addPostFrameCallback
+- Added intl package for date formatting utilities
+
+**Testing Approach:**
+
+- Mock patterns: MockActiveRunNotifier for state overrides
+- Widget tests: pump() for sync updates, pumpAndSettle() for async
+- Provider tests: ProviderContainer with overrides
+- Comprehensive scenarios: loading, error, empty, streaming, cancellation
+- Edge cases: rapid sends, thread switching, error recovery
+
+**Next Session:**
+
+- Start AM4 (Enhanced Chat) - Markdown rendering, syntax highlighting, message history
+- Or AM5 (Inspector) - Detail panel with rawEvents, state inspection, tool call visualization
+
+**Resume Context:**
+
+- **Tests:** 129 passing, 0 failing ✓
+- **Coverage:** 91.1% (TBD for new files after genhtml generation)
+- **Analyzer:** 0 errors, 0 warnings ✓ (24 info suggestions)
+- **Formatting:** Clean ✓
+- **Git Status:** 23 files modified/created (shown in git diff --stat)
+- **Next Action:** Test AM3 end-to-end with live backend, or proceed to AM4/AM5
 
 ---
 
