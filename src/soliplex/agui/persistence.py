@@ -204,6 +204,12 @@ class Run(Base):
         passive_deletes=True,
     )
 
+    run_usage: Mapped[RunUsage | None] = relationship(
+        back_populates="run",
+        cascade="all, delete",
+        passive_deletes=True,
+    )
+
     run_agent_input: Mapped[RunAgentInput | None] = relationship(
         back_populates="run",
         cascade="all, delete",
@@ -280,6 +286,44 @@ class RunMetadata(Base):
     #   'soliplex.agui.RunMetadata' contract
     #
     label: Mapped[str] = mapped_column()
+
+
+class RunUsage(Base):
+    """Hold optional usage info for an AG-UI run
+
+    'run' is a one-to-one relationship to 'Run' (but optional from
+          the run side).
+
+    'input_tokens', int, required
+    'output_tokens', int, required
+    'requests', int, required
+    'tool_calls', int, required
+    """
+
+    __tablename__ = "run_usage"
+
+    id_: Mapped[int] = mapped_column(primary_key=True)
+    created: Mapped[datetime.datetime] = mapped_column(
+        default=agui_util._timestamp,
+    )
+
+    run_id_: Mapped[int] = mapped_column(
+        ForeignKey("run.id_", ondelete="CASCADE"),
+    )
+    run: Mapped[Run] = relationship(back_populates="run_usage")
+
+    input_tokens: Mapped[int] = mapped_column()
+    output_tokens: Mapped[int] = mapped_column()
+    requests: Mapped[int] = mapped_column()
+    tool_calls: Mapped[int] = mapped_column()
+
+    def as_tuple(self) -> agui_package.RunUsageStats:
+        return agui_package.RunUsageStats(
+            self.input_tokens,
+            self.output_tokens,
+            self.requests,
+            self.tool_calls,
+        )
 
 
 class RunAgentInput(Base):
@@ -737,6 +781,39 @@ class ThreadStorage(agui_package.ThreadStorage):
                 session.add(RunEvent(run=run, data=event.model_dump()))
 
         return events
+
+    async def save_run_usage(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+        input_tokens: int,
+        output_tokens: int,
+        requests: int,
+        tool_calls: int,
+    ):
+        """Save the run usage statistics"""
+        await self._session.commit()
+
+        async with self.session as session:
+            run = await self._find_thread_run(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+                session=session,
+            )
+            session.add(
+                RunUsage(
+                    run=run,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    requests=requests,
+                    tool_calls=tool_calls,
+                )
+            )
 
 
 def get_session(

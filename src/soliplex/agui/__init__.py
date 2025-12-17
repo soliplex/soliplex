@@ -70,6 +70,37 @@ class RunAlreadyStarted(AGUI_Exception):
 #
 
 
+RunUsageStats = collections.namedtuple(
+    "RunUsageStats",
+    [
+        "input_tokens",
+        "output_tokens",
+        "requests",
+        "tool_calls",
+    ],
+)
+
+
+class RunUsage(abc.ABC):
+    """LLM usage for a run"""
+
+    input_tokens: int
+    """LLM input tokens consumed"""
+
+    output_tokens: int
+    """LLM output tokens consumed"""
+
+    requests: int
+    """LLM requests made"""
+
+    tool_calls: int
+    """LLM tool_calls made"""
+
+    @abc.abstractmethod
+    def as_tuple(self) -> RunUsageStats:
+        """Return values as a tuple."""
+
+
 class RunMetadata(abc.ABC):
     """User-defined metadata for a run"""
 
@@ -91,6 +122,9 @@ class Run(abc.ABC):
 
     parent_run_id: str | None
     """ID of the parent run"""
+
+    run_usage: RunUsage | None
+    """Optional LLM usage data for a run"""
 
     run_metadata: RunMetadata | None
     """Optional user-defined metadata for a run"""
@@ -277,6 +311,21 @@ class ThreadStorage(abc.ABC):
         events: AGUI_Events,
     ) -> AGUI_Events:
         """Save the events for a gven run"""
+
+    @abc.abstractmethod
+    async def save_run_usage(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+        input_tokens: int,
+        output_tokens: int,
+        requests: int,
+        tool_calls: int,
+    ):
+        """Save the run usage statistics"""
 
 
 async def get_the_threads(request: fastapi.Request) -> ThreadStorage:

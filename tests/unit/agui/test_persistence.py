@@ -325,6 +325,38 @@ async def test_run_list_events(w_agui_events):
     assert await run.list_events() == w_agui_events
 
 
+@pytest.mark.anyio
+async def test_runusage_as_tuple(the_session):
+    thread = agui_persistence.Thread(
+        room_id=ROOM_ID,
+        user_name=USER_NAME,
+        thread_id=THREAD_UUID,
+    )
+    the_session.add(thread)
+    the_session.commit()
+
+    run = agui_persistence.Run(
+        thread=thread,
+        run_id=RUN_UUID,
+    )
+    the_session.add(run)
+    the_session.commit()
+
+    usage = agui_persistence.RunUsage(
+        run=run,
+        input_tokens=1,
+        output_tokens=2,
+        requests=3,
+        tool_calls=4,
+    )
+    the_session.add(usage)
+    the_session.commit()
+
+    found = usage.as_tuple()
+
+    assert found == (1, 2, 3, 4)
+
+
 @pytest.mark.parametrize(
     "agui_rai",
     [
@@ -834,6 +866,47 @@ async def test_threadstorage_thread_run_cru(the_async_session):
     assert rmd is None
 
     await the_async_session.commit()
+
+    await the_async_session.commit()
+
+    before = await ts.new_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+
+    await the_async_session.commit()
+    before_id = await before.awaitable_attrs.run_id
+
+    usage = await before.awaitable_attrs.run_usage
+    assert usage is None
+
+    await ts.save_run_usage(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=before_id,
+        input_tokens=1,
+        output_tokens=2,
+        requests=3,
+        tool_calls=4,
+    )
+
+    await the_async_session.commit()
+
+    after = await ts.get_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=before_id,
+    )
+
+    after_usage = await after.awaitable_attrs.run_usage
+
+    assert after_usage.input_tokens == 1
+    assert after_usage.output_tokens == 2
+    assert after_usage.requests == 3
+    assert after_usage.tool_calls == 4
 
 
 @pytest.fixture

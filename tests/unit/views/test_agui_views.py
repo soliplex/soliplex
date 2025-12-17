@@ -419,6 +419,7 @@ async def test_get_room_agui_thread_id(
         (UNKNOWN_RUN, raises_httpexc(code=404, match="Unknown run")),
     ],
 )
+@pytest.mark.parametrize("w_usage", [None, (1, 2, 3, 4)])
 @pytest.mark.parametrize("w_events", [[], AGUI_EVENTS])
 @pytest.mark.parametrize("w_parent", [False, True])
 @pytest.mark.parametrize("w_run_meta", [False, True])
@@ -433,6 +434,7 @@ async def test_get_room_agui_thread_id_run_id(
     w_run_meta,
     w_parent,
     w_events,
+    w_usage,
     tsgr_side_effect,
     expectation,
 ):
@@ -464,6 +466,17 @@ async def test_get_room_agui_thread_id_run_id(
         test_run.parent_run_id = TEST_PARENT_RUN_ID
     else:
         test_run.parent_run_id = None
+
+    if w_usage is not None:
+        w_usage = mock.create_autospec(
+            agui_package.RunUsage,
+            input_tokens=w_usage[0],
+            output_tokens=w_usage[1],
+            requests=w_usage[2],
+            tool_calls=w_usage[3],
+        )
+
+    test_run.awaitable_attrs.run_usage = _awaitable("run_usage", w_usage)
 
     test_run.awaitable_attrs.thread = _awaitable(
         "thread",
@@ -825,6 +838,7 @@ async def test_tee_events(w_event_count):
         (ALREADY_STARTED, raises_httpexc(code=400, match="already started")),
     ],
 )
+@pytest.mark.parametrize("w_usage", [False, True])
 @mock.patch("fastapi.responses.StreamingResponse")
 @mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.agui.parser.agui_events_from_dicts")
@@ -841,6 +855,7 @@ async def test_post_room_agui_thread_id_run_id(
     the_threads,
     test_run,
     run_input,
+    w_usage,
     ari_side_effect,
     expectation,
 ):
@@ -928,9 +943,38 @@ async def test_post_room_agui_thread_id_run_id(
         # adapter's 'run_stream' calls its 'on_complete' callback.
         exp_emitter.close.assert_not_awaited()
 
+        # the 'ts.save_run_usage' API does not get called until the
+        # adapter's 'run_stream' calls its 'on_complete' callback.
+        the_threads.save_run_usage.assert_not_awaited()
+
         rs_on_complete = rs_call_0.kwargs["on_complete"]
-        faux_result = object()
+
+        if w_usage:
+            faux_result = mock.Mock()
+            faux_result.usage.return_value = agui_package.RunUsageStats(
+                1,
+                2,
+                3,
+                4,
+            )
+        else:
+            faux_result = object()
+
         await rs_on_complete(faux_result)
+
+        if w_usage:
+            the_threads.save_run_usage.assert_awaited_once_with(
+                user_name=USER_NAME,
+                room_id=TEST_ROOM_ID,
+                thread_id=TEST_THREAD_ID,
+                run_id=TEST_RUN_ID,
+                input_tokens=1,
+                output_tokens=2,
+                requests=3,
+                tool_calls=4,
+            )
+        else:
+            the_threads.save_run_usage.assert_not_awaited()
 
         exp_emitter.close.assert_awaited_once_with()
 
