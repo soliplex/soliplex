@@ -24,7 +24,6 @@ dependencies:
   flutter_markdown_plus: ^1.0.5
   flutter_riverpod: ^2.6.1
   flutter_secure_storage: ^9.2.2
-  flutter_smooth_markdown: ^0.5.2
   flutter_streaming_text_markdown: ^1.1.0
   flutter_svg: ^2.0.17
   flutter_web_plugins:
