@@ -44,8 +44,8 @@ abstract class RoomEventHandler {
   /// eventType is optional description of current activity.
   /// toolName is optional name of tool being executed.
   void onActivityUpdate({
-    required String eventType,
     bool isActive = false,
+    String? eventType,
     String? toolName,
   });
 
@@ -87,8 +87,8 @@ class NoOpRoomEventHandler implements RoomEventHandler {
 
   @override
   void onActivityUpdate({
-    required String eventType,
     bool isActive = false,
+    String? eventType,
     String? toolName,
   }) {}
 
@@ -137,8 +137,8 @@ class RecordingRoomEventHandler implements RoomEventHandler {
 
   @override
   void onActivityUpdate({
-    required String eventType,
     bool isActive = false,
+    String? eventType,
     String? toolName,
   }) {
     activityUpdates.add(
@@ -191,11 +191,11 @@ class ContextUpdateRecord {
 class ActivityUpdateRecord {
   ActivityUpdateRecord({
     required this.isActive,
-    required this.eventType,
+    this.eventType,
     this.toolName,
   });
   final bool isActive;
-  final String eventType;
+  final String? eventType;
   final String? toolName;
 }
 

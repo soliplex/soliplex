@@ -1128,7 +1128,7 @@ class RoomSession implements ChatSession {
       final act = result.activityUpdate!;
       _eventHandler.onActivityUpdate(
         isActive: act.isActive,
-        eventType: act.eventType!,
+        eventType: act.eventType,
         toolName: act.toolName,
       );
     }
