@@ -39,7 +39,7 @@ v1.0 uses a two-tier milestone system:
 | **DM3** | Network Observer | HttpObserver (interface), ObservableHttpAdapter (decorator) | HTTP traffic observable | Done |
 | **DM4** | HTTP Transport | HttpTransport, UrlBuilder, CancelToken | JSON serialization, URL building, cancellation | Done |
 | **DM5** | API Layer | SoliplexApi (CRUD) | Can fetch rooms, threads via API | Done |
-| **DM6** | AG-UI Protocol | Thread, TextMessageBuffer, ToolCallReceptionBuffer, ToolRegistry | Event streaming works | - |
+| **DM6** | AG-UI Protocol | Thread, TextMessageBuffer, ToolCallBuffer, ToolRegistry | Event streaming works | Done |
 | **DM7** | Sessions | ConnectionManager, RoomSession | Multi-room management works | - |
 | **DM8** | Facade | SoliplexClient, chat() flow | Integration tests pass | - |
 
