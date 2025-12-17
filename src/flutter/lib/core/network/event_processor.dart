@@ -249,7 +249,8 @@ class EventProcessor {
       case ag_ui.ThinkingStartEvent():
         return const EventProcessingResult(
           contextUpdate: ContextUpdate(AgUiEventTypes.thinking),
-          activityUpdate: ActivityUpdate(isActive: true,
+          activityUpdate: ActivityUpdate(
+            isActive: true,
             eventType: AgUiEventTypes.thinking,
           ),
         );
@@ -367,7 +368,8 @@ class EventProcessor {
       textBuffersUpdate: MapUpdate(puts: {aguiMessageId: StringBuffer()}),
       thinkingBufferUpdate: newThinkingBuffer,
       thinkingMessageIdsUpdate: thinkingIdsUpdate,
-      activityUpdate: const ActivityUpdate(isActive: true,
+      activityUpdate: const ActivityUpdate(
+        isActive: true,
         eventType: AgUiEventTypes.textMessageStart,
       ),
     );
@@ -450,7 +452,8 @@ class EventProcessor {
         AgUiEventTypes.toolCallStart,
         summary: event.toolCallName,
       ),
-      activityUpdate: ActivityUpdate(isActive: true,
+      activityUpdate: ActivityUpdate(
+        isActive: true,
         eventType: AgUiEventTypes.toolCallStart,
         toolName: event.toolCallName,
       ),
@@ -652,7 +655,7 @@ class EventProcessor {
       ),
       activityUpdate: ActivityUpdate(
         // isActive if any relevant activity found
-        isActive: activeEventType != null, 
+        isActive: activeEventType != null,
         eventType: activeEventType,
         toolName: activeToolName,
       ),

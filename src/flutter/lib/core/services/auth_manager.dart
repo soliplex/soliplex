@@ -60,16 +60,23 @@ class AuthManager {
 
   /// Check if we have a valid (non-expired) token for a server.
   Future<bool> hasValidToken(String serverId) async {
-    DebugLog.service('AuthManager.hasValidToken: checking for serverId=$serverId');
+    DebugLog.service(
+      'AuthManager.hasValidToken: checking for serverId=$serverId',
+    );
     final token = await _storage.getAccessToken(serverId);
-    DebugLog.service('AuthManager.hasValidToken: token found=${token != null}, length=${token?.length ?? 0}');
+    DebugLog.service(
+      'AuthManager.hasValidToken: token found=${token != null}, '
+      'length=${token?.length ?? 0}',
+    );
     if (token == null) return false;
 
     final expiry = await _storage.getTokenExpiry(serverId);
     DebugLog.service('AuthManager.hasValidToken: expiry=$expiry');
     if (expiry != null && DateTime.now().isAfter(expiry)) {
       // Token expired - try refresh
-      DebugLog.service('AuthManager.hasValidToken: token expired, trying refresh');
+      DebugLog.service(
+        'AuthManager.hasValidToken: token expired, trying refresh',
+      );
       return _tryRefreshToken(serverId);
     }
 

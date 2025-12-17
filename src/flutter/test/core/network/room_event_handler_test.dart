@@ -133,7 +133,11 @@ void main() {
       });
 
       test('ActivityUpdateRecord handles null optional fields', () {
-        final record = ActivityUpdateRecord(isActive: false, eventType: 'stop', toolName: null); // ignore: lines_longer_than_80_chars
+        final record = ActivityUpdateRecord(
+          isActive: false,
+          eventType: 'stop',
+          toolName: null,
+        ); // ignore: lines_longer_than_80_chars
         expect(record.isActive, isFalse);
         expect(record.eventType, equals('stop'));
         expect(record.toolName, isNull);

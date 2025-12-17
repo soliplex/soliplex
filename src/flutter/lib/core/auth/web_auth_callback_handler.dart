@@ -158,22 +158,32 @@ class WebAuthCallbackHandler {
     );
 
     // Store tokens using server-specific keys for AuthManager compatibility
-    DebugLog.auth('WebAuthCallbackHandler: Storing tokens for server ${pending.serverId}');
-    DebugLog.auth('WebAuthCallbackHandler: Access token length: ${params.accessToken!.length}');
+    DebugLog.auth(
+      'WebAuthCallbackHandler: Storing tokens for server ${pending.serverId}',
+    );
+    DebugLog.auth(
+      'WebAuthCallbackHandler: Access token length: '
+      '${params.accessToken!.length}',
+    );
     await secureStorageService.storeTokens(
       serverId: pending.serverId,
       accessToken: params.accessToken!,
       refreshToken: params.refreshToken,
       expiresAt: expiration,
     );
-    
+
     // Also store in the legacy format for backward compatibility
     await _tokenStorage.setOidcAuthTokenResponse(tokens);
     DebugLog.auth('WebAuthCallbackHandler: Tokens stored successfully');
-    
+
     // Verify storage
-    final storedToken = await secureStorageService.getAccessToken(pending.serverId);
-    DebugLog.auth('WebAuthCallbackHandler: Verification - stored token present: ${storedToken != null}');
+    final storedToken = await secureStorageService.getAccessToken(
+      pending.serverId,
+    );
+    DebugLog.auth(
+      'WebAuthCallbackHandler: Verification - stored token present: '
+      '${storedToken != null}',
+    );
 
     // Clear pending auth
     await _pendingStorage.clearPendingAuth();
