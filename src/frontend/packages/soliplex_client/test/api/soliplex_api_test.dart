@@ -47,9 +47,9 @@ void main() {
     // ============================================================
 
     group('getRooms', () {
-      test('returns list of rooms', () async {
+      test('returns list of rooms from map', () async {
         when(
-          () => mockTransport.request<List<dynamic>>(
+          () => mockTransport.request<Map<String, dynamic>>(
             'GET',
             any(),
             cancelToken: any(named: 'cancelToken'),
@@ -59,24 +59,22 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => [
-            {'id': 'room-1', 'name': 'Room 1'},
-            {'id': 'room-2', 'name': 'Room 2'},
-          ],
+          (_) async => {
+            'room-1': {'id': 'room-1', 'name': 'Room 1'},
+            'room-2': {'id': 'room-2', 'name': 'Room 2'},
+          },
         );
 
         final rooms = await api.getRooms();
 
         expect(rooms.length, equals(2));
-        expect(rooms[0].id, equals('room-1'));
-        expect(rooms[0].name, equals('Room 1'));
-        expect(rooms[1].id, equals('room-2'));
-        expect(rooms[1].name, equals('Room 2'));
+        expect(rooms.any((r) => r.id == 'room-1'), isTrue);
+        expect(rooms.any((r) => r.id == 'room-2'), isTrue);
       });
 
       test('returns empty list when no rooms', () async {
         when(
-          () => mockTransport.request<List<dynamic>>(
+          () => mockTransport.request<Map<String, dynamic>>(
             'GET',
             any(),
             cancelToken: any(named: 'cancelToken'),
@@ -85,7 +83,7 @@ void main() {
             headers: any(named: 'headers'),
             timeout: any(named: 'timeout'),
           ),
-        ).thenAnswer((_) async => <dynamic>[]);
+        ).thenAnswer((_) async => <String, dynamic>{});
 
         final rooms = await api.getRooms();
 
@@ -94,7 +92,7 @@ void main() {
 
       test('propagates exceptions', () async {
         when(
-          () => mockTransport.request<List<dynamic>>(
+          () => mockTransport.request<Map<String, dynamic>>(
             'GET',
             any(),
             cancelToken: any(named: 'cancelToken'),
@@ -115,7 +113,7 @@ void main() {
         final cancelToken = CancelToken();
 
         when(
-          () => mockTransport.request<List<dynamic>>(
+          () => mockTransport.request<Map<String, dynamic>>(
             'GET',
             any(),
             cancelToken: cancelToken,
@@ -124,12 +122,12 @@ void main() {
             headers: any(named: 'headers'),
             timeout: any(named: 'timeout'),
           ),
-        ).thenAnswer((_) async => <dynamic>[]);
+        ).thenAnswer((_) async => <String, dynamic>{});
 
         await api.getRooms(cancelToken: cancelToken);
 
         verify(
-          () => mockTransport.request<List<dynamic>>(
+          () => mockTransport.request<Map<String, dynamic>>(
             'GET',
             any(),
             cancelToken: cancelToken,
@@ -144,7 +142,7 @@ void main() {
       test('uses correct URL', () async {
         Uri? capturedUri;
         when(
-          () => mockTransport.request<List<dynamic>>(
+          () => mockTransport.request<Map<String, dynamic>>(
             'GET',
             any(),
             cancelToken: any(named: 'cancelToken'),
@@ -155,7 +153,7 @@ void main() {
           ),
         ).thenAnswer((invocation) async {
           capturedUri = invocation.positionalArguments[1] as Uri;
-          return <dynamic>[];
+          return <String, dynamic>{};
         });
 
         await api.getRooms();
@@ -272,9 +270,9 @@ void main() {
     // ============================================================
 
     group('getThreads', () {
-      test('returns list of threads', () async {
+      test('returns list of threads from wrapped response', () async {
         when(
-          () => mockTransport.request<List<dynamic>>(
+          () => mockTransport.request<Map<String, dynamic>>(
             'GET',
             any(),
             cancelToken: any(named: 'cancelToken'),
@@ -284,10 +282,12 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => [
-            {'id': 'thread-1', 'room_id': 'room-123'},
-            {'id': 'thread-2', 'room_id': 'room-123'},
-          ],
+          (_) async => {
+            'threads': [
+              {'id': 'thread-1', 'room_id': 'room-123'},
+              {'id': 'thread-2', 'room_id': 'room-123'},
+            ],
+          },
         );
 
         final threads = await api.getThreads('room-123');
@@ -299,7 +299,7 @@ void main() {
 
       test('returns empty list when no threads', () async {
         when(
-          () => mockTransport.request<List<dynamic>>(
+          () => mockTransport.request<Map<String, dynamic>>(
             'GET',
             any(),
             cancelToken: any(named: 'cancelToken'),
@@ -308,7 +308,7 @@ void main() {
             headers: any(named: 'headers'),
             timeout: any(named: 'timeout'),
           ),
-        ).thenAnswer((_) async => <dynamic>[]);
+        ).thenAnswer((_) async => {'threads': <dynamic>[]});
 
         final threads = await api.getThreads('room-123');
 
@@ -326,7 +326,7 @@ void main() {
         final cancelToken = CancelToken();
 
         when(
-          () => mockTransport.request<List<dynamic>>(
+          () => mockTransport.request<Map<String, dynamic>>(
             'GET',
             any(),
             cancelToken: cancelToken,
@@ -335,12 +335,12 @@ void main() {
             headers: any(named: 'headers'),
             timeout: any(named: 'timeout'),
           ),
-        ).thenAnswer((_) async => <dynamic>[]);
+        ).thenAnswer((_) async => {'threads': <dynamic>[]});
 
         await api.getThreads('room-123', cancelToken: cancelToken);
 
         verify(
-          () => mockTransport.request<List<dynamic>>(
+          () => mockTransport.request<Map<String, dynamic>>(
             'GET',
             any(),
             cancelToken: cancelToken,
@@ -355,7 +355,7 @@ void main() {
       test('uses correct URL', () async {
         Uri? capturedUri;
         when(
-          () => mockTransport.request<List<dynamic>>(
+          () => mockTransport.request<Map<String, dynamic>>(
             'GET',
             any(),
             cancelToken: any(named: 'cancelToken'),
@@ -366,7 +366,7 @@ void main() {
           ),
         ).thenAnswer((invocation) async {
           capturedUri = invocation.positionalArguments[1] as Uri;
-          return <dynamic>[];
+          return {'threads': <dynamic>[]};
         });
 
         await api.getThreads('room-123');

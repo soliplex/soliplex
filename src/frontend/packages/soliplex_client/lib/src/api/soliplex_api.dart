@@ -50,18 +50,23 @@ class SoliplexApi {
   ///
   /// Returns a list of [Room] objects.
   ///
+  /// The backend returns rooms as a map keyed by room ID. This method
+  /// converts the map to a list of Room objects.
+  ///
   /// Throws:
   /// - [AuthException] if not authenticated (401/403)
   /// - [NetworkException] if connection fails
   /// - [ApiException] for other server errors
   /// - [CancelledException] if cancelled via [cancelToken]
   Future<List<Room>> getRooms({CancelToken? cancelToken}) async {
-    final response = await _transport.request<List<dynamic>>(
+    final response = await _transport.request<Map<String, dynamic>>(
       'GET',
       _urlBuilder.build(path: 'rooms'),
       cancelToken: cancelToken,
     );
-    return response
+    // Backend returns a map of room_id -> room object
+    // Convert to list of Room objects
+    return response.values
         .map((e) => Room.fromJson(e as Map<String, dynamic>))
         .toList();
   }
@@ -102,6 +107,9 @@ class SoliplexApi {
   ///
   /// Returns a list of [ThreadInfo] objects for the room.
   ///
+  /// The backend returns threads wrapped in a {"threads": [...]} object.
+  /// This method extracts the threads array.
+  ///
   /// Throws:
   /// - [ArgumentError] if [roomId] is empty
   /// - [NotFoundException] if room not found (404)
@@ -115,12 +123,14 @@ class SoliplexApi {
   }) async {
     _requireNonEmpty(roomId, 'roomId');
 
-    final response = await _transport.request<List<dynamic>>(
+    final response = await _transport.request<Map<String, dynamic>>(
       'GET',
       _urlBuilder.build(pathSegments: ['rooms', roomId, 'agui']),
       cancelToken: cancelToken,
     );
-    return response
+    // Backend returns {"threads": [...]} - extract the threads array
+    final threads = response['threads'] as List<dynamic>;
+    return threads
         .map((e) => ThreadInfo.fromJson(e as Map<String, dynamic>))
         .toList();
   }
