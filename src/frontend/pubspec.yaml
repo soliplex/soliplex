@@ -28,6 +28,10 @@ dependencies:
   soliplex_client:
     path: packages/soliplex_client
 
+  # Local package - soliplex_client_native
+  soliplex_client_native:
+    path: packages/soliplex_client_native
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -49,7 +49,7 @@ v1.0 uses a two-tier milestone system:
 |---|------|--------|-------------|---------------|--------|
 | **AM1** | App Shell | Core P1 | DM1 | Launch app, navigate | ✅ Done |
 | **AM2** | Connected Data | - | DM1-DM5 | See real rooms & threads from backend | ✅ Done |
-| **AM3** | Working Chat | Core P2, Chat P1, History P1 | DM6 | Send message, receive AI response | - |
+| **AM3** | Working Chat | Core P2, Chat P1, History P1 | DM6 | Send message, receive AI response | ✅ Done |
 | **AM4** | Full Chat | Chat P2-P3, History P2-P4 | - | Streaming, markdown, thread management | - |
 | **AM5** | Inspector | Detail P1-P4 | - | Events, thinking, tool calls, state | - |
 | **AM6** | Canvas | Current Canvas P1-P3, Permanent Canvas P1-P3 | - | State snapshots, pin items | - |

@@ -45,7 +45,7 @@ planning/
 ┌──────────────────▼──────────────────────────┐
 │      soliplex_client (Pure Dart package)    │
 └──────────────────────────────────────────────┘
-         ▲ (optional, v1.1)
+         ▲ (included in v1.0)
 ┌────────┴─────────────────────────────────────┐
 │  soliplex_client_native (Flutter package)    │
 │  Native HTTP adapters                        │
@@ -77,7 +77,7 @@ See `planning/ROADMAP.md` for full milestone details and dependency graph.
 
 ### Priority 1: Client (`soliplex_client` package)
 
-**CURRENT FOCUS** - Pure Dart package, complete before moving to UI
+Pure Dart package - Core functionality complete
 
 | Phase | Goal | Milestone | Status |
 |-------|------|-----------|--------|
@@ -94,14 +94,22 @@ See `planning/ROADMAP.md` for full milestone details and dependency graph.
 
 ### Priority 2: Core Frontend
 
-Depends on: DM1 (AM1), DM6 (AM3)
+**CURRENT FOCUS** - Working chat complete (AM3), ready for AM4/AM5
 
 | Phase | Goal | Milestone | Status |
 |-------|------|-----------|--------|
-| 1 | Project setup, navigation (NO AUTH) | AM1 | Not Started |
-| 2 | ActiveRunNotifier + extensions | AM3 | - |
-| 3 | Authentication + Extensibility | AM7 | - |
-| 4 | Multi-room, extract to `soliplex_core` package | AM8 | - |
+| 1 | Project setup, navigation (NO AUTH) | AM1 | ✅ Done |
+| 2 | ActiveRunNotifier + extensions | AM3 | ✅ Done |
+| 3 | Authentication + Extensibility | AM7 | Not Started |
+| 4 | Multi-room, extract to `soliplex_core` package | AM8 | Not Started |
+
+**Completed Milestones:**
+
+- **AM1:** App shell, navigation, 5 screens (38 tests, 89.9% coverage)
+- **AM2:** Real API integration, backend health checks (64 tests, 91.1% coverage)
+- **AM3:** Working chat with streaming, responsive layout (129 tests total)
+
+**Code Quality:** ✅ 0 analyzer issues, 0 warnings, all tests passing
 
 ### Priority 3: UI Components (Parallel)
 
