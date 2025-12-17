@@ -101,7 +101,7 @@ async def get_auth_system(
     # Query params must be placed before the hash fragment for Flutter to see
     # them
     return_to = request.query_params.get("return_to", "/")
-    
+
     # Check if return_to contains a hash fragment
     if "#" in return_to:
         # Split at the hash to handle hash-based routing
@@ -119,7 +119,7 @@ async def get_auth_system(
         return_to += f"&refresh_token={refresh_token}"
         return_to += f"&expires_in={expires_in}"
         return_to += f"&refresh_expires_in={refresh_expires_in}"
-    
+
     return responses.RedirectResponse(return_to)
 
 

@@ -89,6 +89,5 @@ async def openai_chat_completion(
         )
     except Exception as e:
         raise fastapi.HTTPException(
-            status_code=500,
-            detail=f"An internal server error occurred: {e}"
+            status_code=500, detail=f"An internal server error occurred: {e}"
         ) from None
