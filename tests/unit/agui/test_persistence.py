@@ -433,7 +433,9 @@ async def the_async_engine():
 
 @pytest_asyncio.fixture()
 async def the_async_session(the_async_engine):
-    return sqla_asyncio.AsyncSession(bind=the_async_engine)
+    session = sqla_asyncio.AsyncSession(bind=the_async_engine)
+    yield session
+    await session.close()
 
 
 @pytest.mark.asyncio
