@@ -70,6 +70,7 @@ class OidcMobileAuthInteractor extends OidcAuthInteractorBase {
           config.redirectUrl,
           scopes: config.scopes,
           issuer: config.endpoint,
+          preferEphemeralSession: true,
         ),
       );
 
