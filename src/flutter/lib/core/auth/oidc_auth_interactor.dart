@@ -388,56 +388,37 @@ class OidcWebAuthInteractor extends OidcAuthInteractorBase {
 
   @override
   Future<void> logout(String serverId, SsoConfig config) async {
-    final refreshToken = await tokenStorage.getOidcRefreshToken();
-    final url = Uri.parse('${config.endpoint}/protocol/openid-connect/logout');
-    final headers = {'Content-Type': 'application/x-www-form-urlencoded'};
-    final body = 'refresh_token=$refreshToken&client_id=${config.clientId}';
+    DebugLog.service('OidcWebAuthInteractor: Logging out via redirect');
 
-    // Record request for Network Inspector
-    final requestId = _inspector?.recordRequest(
-      method: 'POST',
-      uri: url,
-      headers: headers,
-      body: body,
+    // Get tokens to retrieve ID token for hint
+    final tokens = await tokenStorage.getOidcAuthTokenResponse();
+
+    // Clear local storage immediately
+    await tokenStorage.deleteOidcAuthTokenResponse();
+    await ssoStorage.deleteSsoConfig(serverId);
+
+    // Build logout URL with redirect
+    // We use the front-channel logout (redirect) to ensure cookies are cleared
+    // at IdP
+    final logoutUri = Uri.parse(
+      '${config.endpoint}/protocol/openid-connect/logout',
+    ).replace(
+      queryParameters: {
+        'post_logout_redirect_uri': config.redirectUrl,
+        'client_id': config.clientId,
+        if (tokens != null && tokens.idToken.isNotEmpty)
+          'id_token_hint': tokens.idToken,
+      },
     );
 
-    try {
-      final response = await http
-          .post(url, headers: headers, body: body)
-          .timeout(HttpConfig.oidcTimeout);
+    DebugLog.service(
+      'OidcWebAuthInteractor: Redirecting to logout: $logoutUri',
+    );
 
-      // Record response for Network Inspector
-      if (requestId != null) {
-        _inspector?.recordResponse(
-          requestId: requestId,
-          statusCode: response.statusCode,
-          headers: response.headers,
-          body: response.body,
-        );
-      }
+    // Launch URL in self to redirect browser
+    await launchUrl(logoutUri, webOnlyWindowName: '_self');
 
-      if (response.statusCode == 204) {
-        DebugLog.service('OidcWebAuthInteractor: Session logout successful');
-        await tokenStorage.deleteOidcAuthTokenResponse();
-        await ssoStorage.deleteSsoConfig(serverId);
-        return;
-      } else {
-        DebugLog.error(
-          // ignore: lines_longer_than_80_chars (auto-documented)
-          'OidcWebAuthInteractor: Failed to logout of session: ${response.statusCode}',
-        );
-        DebugLog.error(
-          'OidcWebAuthInteractor: Response body: ${response.body}',
-        );
-      }
-    } on Object catch (e) {
-      // Record error for Network Inspector
-      if (requestId != null) {
-        _inspector?.recordError(requestId: requestId, error: e.toString());
-      }
-      DebugLog.error('OidcWebAuthInteractor: An error occurred: $e');
-      rethrow;
-    }
-    throw Exception('Session logout failed');
+    // Signal that redirect is happening
+    throw OidcWebRedirectException(serverId);
   }
 }

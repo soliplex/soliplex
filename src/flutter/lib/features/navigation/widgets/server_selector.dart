@@ -60,6 +60,39 @@ class ServerSelector extends ConsumerWidget {
                     context.go('/setup');
                   },
                 ),
+                if (currentServer?.requiresAuth ?? false)
+                  ListTile(
+                    leading: const Icon(Icons.logout),
+                    title: const Text('Logout'),
+                    textColor: Theme.of(context).colorScheme.error,
+                    iconColor: Theme.of(context).colorScheme.error,
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Logout?'),
+                          content: const Text(
+                            'Are you sure you want to logout from this server?',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: const Text('Cancel'),
+                            ),
+                            FilledButton(
+                              onPressed: () => Navigator.pop(context, true),
+                              child: const Text('Logout'),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      if (confirmed ?? false) {
+                        await ref.read(appStateManagerProvider).logout();
+                      }
+                    },
+                  ),
               ],
             );
           },
