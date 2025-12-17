@@ -58,12 +58,16 @@ jobs:
       - name: Run soliplex unit tests
         run: |
           pip list
-          py.test
+          #py.test
+          # Temporary: suppress output capture for debugging CI hang
+          py.test -s
       - name: Run soliplex functional tests
         run: |
           pip list
           # 'tests/functional/' is excluded by default
-          py.test --no-cov -m "not needs_llm" tests/functional/
+          #py.test --no-cov -m "not needs_llm" tests/functional/
+          # Temporary: suppress output capture for debugging CI hang
+          py.test -s --no-cov -m "not needs_llm" tests/functional/
       - name: Run ruff linter
         run: |
           ruff check
