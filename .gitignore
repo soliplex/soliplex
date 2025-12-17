@@ -25,3 +25,5 @@ tmp/
 # osx
 .DS_Store
 ._*
+
+.claude/settings.local.json
