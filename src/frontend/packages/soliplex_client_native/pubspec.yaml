@@ -1,0 +1,23 @@
+name: soliplex_client_native
+description: Native HTTP adapters for soliplex_client on iOS and macOS
+version: 1.0.0-dev
+publish_to: none
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.10.0'
+
+dependencies:
+  cupertino_http: ^2.0.0
+  flutter:
+    sdk: flutter
+  http: ^1.2.0
+  meta: ^1.9.0
+  soliplex_client:
+    path: ../soliplex_client
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  mocktail: ^1.0.0
+  very_good_analysis: ^10.0.0

@@ -1,12 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soliplex_client/soliplex_client.dart';
+import 'package:soliplex_client_native/soliplex_client_native.dart';
 import 'package:soliplex_frontend/core/providers/config_provider.dart';
 
 /// Provider for the HTTP transport layer.
 ///
-/// Creates a singleton [HttpTransport] instance with [DartHttpAdapter]
-/// for the app lifetime. The transport is shared across all API clients
-/// to prevent resource leaks and unnecessary HTTP client creation.
+/// Creates a singleton [HttpTransport] instance with platform-optimized adapter
+/// for the app lifetime. Uses CupertinoHttpAdapter (NSURLSession) on macOS/iOS,
+/// DartHttpAdapter on other platforms. Shared across all API clients to prevent
+/// resource leaks and unnecessary HTTP client creation.
 ///
 /// **Lifecycle**: This is a non-autoDispose provider because the HTTP
 /// transport should live for the entire app session. The transport will
@@ -15,7 +17,7 @@ import 'package:soliplex_frontend/core/providers/config_provider.dart';
 /// **Threading**: Safe to call from any isolate. The underlying
 /// [DartHttpAdapter] uses dart:http which is isolate-safe.
 final httpTransportProvider = Provider<HttpTransport>((ref) {
-  final adapter = DartHttpAdapter();
+  final adapter = createPlatformAdapter();
   final transport = HttpTransport(adapter: adapter);
 
   // Register disposal callback to close transport and underlying HTTP client
