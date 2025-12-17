@@ -478,7 +478,9 @@ class RoomSession implements ChatSession {
         cancelToken: _cancelToken,
       );
 
-      _state = SessionState.active;
+      if (_state != SessionState.disposed) {
+        _state = SessionState.active;
+      }
       _lastActivity = DateTime.now();
 
       if (!_eventController.isClosed) {
@@ -494,7 +496,9 @@ class RoomSession implements ChatSession {
 
       return toolResults;
     } on Object catch (e) {
-      _state = SessionState.active;
+      if (_state != SessionState.disposed) {
+        _state = SessionState.active;
+      }
 
       if (!_eventController.isClosed) {
         if (e is CancelledException) {
