@@ -210,7 +210,7 @@ class _OIDCProviderButton extends StatelessWidget {
           children: [
             Icon(icon, size: 20),
             const SizedBox(width: 8),
-            Text('Continue with ${provider.title}'),
+            Text(provider.title),
           ],
         ),
       ),

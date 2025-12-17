@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:soliplex/core/network/connection_manager.dart';
 import 'package:soliplex/core/network/connection_registry.dart';
 import 'package:soliplex/core/network/network_transport_layer.dart';
 import 'package:soliplex/core/utils/url_builder.dart';
@@ -74,12 +75,15 @@ class ThreadHistoryNotifier extends StateNotifier<ThreadHistoryState> {
   ThreadHistoryNotifier({
     required this.baseUrl,
     required this.roomId,
+    required ConnectionManager connectionManager,
     NetworkTransportLayer? transportLayer,
-  }) : _transportLayer = transportLayer,
+  }) : _connectionManager = connectionManager,
+       _transportLayer = transportLayer,
        _urlBuilder = UrlBuilder(baseUrl),
        super(const ThreadHistoryState());
   final String baseUrl;
   final String roomId;
+  final ConnectionManager _connectionManager;
   final NetworkTransportLayer? _transportLayer;
   final UrlBuilder _urlBuilder;
 
@@ -145,6 +149,49 @@ class ThreadHistoryNotifier extends StateNotifier<ThreadHistoryState> {
     }
   }
 
+  /// Delete a thread.
+  Future<void> deleteThread(String threadId) async {
+    try {
+      final uri = _urlBuilder.thread(roomId, threadId);
+      debugPrint('ThreadHistory: Deleting thread $threadId at $uri');
+
+      // Use ConnectionManager to perform the delete
+      final response = await _connectionManager.delete(uri);
+
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        debugPrint('ThreadHistory: Thread deleted successfully');
+
+        // Handle session cleanup if this was the active thread
+        final activeInfo = _connectionManager.getConnectionInfo(roomId);
+        if (activeInfo?.threadId == threadId) {
+          debugPrint(
+            'ThreadHistory: Deleted active thread, clearing session',
+          );
+          _connectionManager.clearMessages(roomId);
+          _connectionManager.disposeSession(roomId);
+        }
+
+        // Remove from local list
+        final updatedThreads =
+            state.threads.where((t) => t.threadId != threadId).toList();
+
+        // If the deleted thread was selected, clear selection
+        final shouldClearSelection = state.selectedThreadId == threadId;
+
+        state = state.copyWith(
+          threads: updatedThreads,
+          clearSelection: shouldClearSelection,
+        );
+      } else {
+        debugPrint(
+          'ThreadHistory: Failed to delete thread: ${response.statusCode}',
+        );
+      }
+    } on Object catch (e) {
+      debugPrint('ThreadHistory: Exception deleting thread: $e');
+    }
+  }
+
   /// Select a thread.
   void selectThread(String? threadId) {
     if (threadId == null) {
@@ -179,10 +226,12 @@ threadHistoryProvider =
     >((ref, params) {
       final registry = ref.read(connectionRegistryProvider);
       final serverState = registry.getServerState(params.serverId);
+      final connectionManager = ref.read(connectionManagerProvider);
 
       return ThreadHistoryNotifier(
         baseUrl: serverState?.baseUrl ?? '',
         roomId: params.roomId,
+        connectionManager: connectionManager,
         transportLayer: serverState?.transportLayer,
       );
     });

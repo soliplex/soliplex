@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:soliplex/core/models/chat_models.dart';
 import 'package:soliplex/core/models/endpoint_models.dart';
 import 'package:soliplex/core/network/connection_events.dart';
@@ -374,6 +375,24 @@ class ConnectionManager extends ChangeNotifier {
 
     serverState.disposeSession(roomId);
     if (!_disposed) notifyListeners();
+  }
+
+  /// Make an HTTP DELETE request using the active server's transport.
+  Future<http.Response> delete(
+    Uri uri, {
+    Map<String, String>? additionalHeaders,
+  }) async {
+    if (_disposed) {
+      throw StateError('ConnectionManager is disposed');
+    }
+    final transport = _activeServerState?.transportLayer;
+    if (transport == null) {
+      throw StateError(
+        'No server configured. Call switchServer() first.',
+      );
+    }
+
+    return transport.delete(uri, additionalHeaders: additionalHeaders);
   }
 
   /// Remove a server and all its sessions.
