@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:soliplex/core/models/room_models.dart';
 import 'package:soliplex/core/network/connection_manager.dart';
-import 'package:soliplex/core/utils/debug_log.dart';
 import 'package:soliplex/core/utils/url_builder.dart';
 
 class BackgroundImageSection extends ConsumerStatefulWidget {
@@ -45,11 +44,6 @@ class _BackgroundImageSectionState
 
     try {
       final response = await connectionManager.get(uri);
-      DebugLog.service(
-        'BG Image: Status ${response.statusCode}, '
-        'Length ${response.bodyBytes.length}, '
-        'Type ${response.headers['content-type']}',
-      );
 
       if (mounted) {
         setState(() {
@@ -61,7 +55,6 @@ class _BackgroundImageSectionState
         });
       }
     } on Object catch (e) {
-      DebugLog.error('BG Image: Error $e');
       if (mounted) {
         setState(() {
           _isConfigured = false;
@@ -122,13 +115,16 @@ class _BackgroundImageSectionState
                 Icons.image_outlined,
                 color: colorScheme.onSurfaceVariant,
               ),
-              childrenPadding: const EdgeInsets.all(16),
+              childrenPadding: const EdgeInsets.all(12),
               children: [
                 if (!_isConfigured)
-                  Text(
-                    'No background image set for this room.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'No background image set for this room.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   )
                 else if (_error != null)
@@ -143,13 +139,12 @@ class _BackgroundImageSectionState
                     borderRadius: BorderRadius.circular(8),
                     child: Image.memory(
                       _imageData!,
-                      fit: BoxFit.cover,
+                      fit: BoxFit.contain,
                       width: double.infinity,
-                      height: 150,
+                      height: 400,
                       errorBuilder: (context, error, stackTrace) {
-                        DebugLog.error('BG Image Render Error: $error');
                         return Container(
-                          height: 150,
+                          height: 200,
                           width: double.infinity,
                           color: colorScheme.errorContainer,
                           child: Center(
