@@ -121,13 +121,23 @@ class UrlBuilder {
   Uri mcpToken(String roomId) =>
       _apiUri([ApiConstants.rooms, roomId, ApiConstants.mcpToken]);
 
-
   // =========================================================================
   // AUTH API
   // =========================================================================
 
   /// GET /api/login - Discover OIDC providers.
   Uri login() => Uri.parse('$_baseUrl/api/${ApiConstants.login}');
+
+  /// GET /api/login/{providerId}?return_to=... - Initiate backend-mediated OAuth.
+  ///
+  /// This endpoint redirects to the OIDC provider, handles the OAuth flow
+  /// server-side, and redirects back to [returnTo] with tokens in query params.
+  /// Used for web authentication to avoid CORS issues.
+  Uri loginWithProvider(String providerId, {required String returnTo}) {
+    return Uri.parse(
+      '$_baseUrl/api/${ApiConstants.login}/$providerId',
+    ).replace(queryParameters: {'return_to': returnTo});
+  }
 
   /// GET /api/user_info - Get user info (with auth token).
   Uri userInfo() => Uri.parse('$_baseUrl/api/${ApiConstants.userInfo}');

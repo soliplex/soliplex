@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_smooth_markdown/flutter_smooth_markdown.dart';
+import 'package:soliplex/core/services/markdown_hooks.dart';
+import 'package:soliplex/features/chat/widgets/markdown_code_block.dart';
+import 'package:soliplex/features/chat/widgets/tracked_markdown_image.dart'; // Added import
+import 'package:url_launcher/url_launcher.dart';
 
 /// MarkdownCard widget for displaying rich markdown content on the canvas.
 ///
@@ -8,12 +13,14 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 /// - Full markdown rendering (headers, lists, links, etc.)
 /// - Copy raw content button
 /// - Selectable text
-class MarkdownCardWidget extends StatelessWidget {
+class MarkdownCardWidget extends ConsumerWidget {
+  // Changed from StatelessWidget
   const MarkdownCardWidget({
     required this.content,
     super.key,
     this.title,
     this.sourceMessageId,
+    this.messageId, // Added messageId to constructor
   });
 
   /// Create from JSON data.
@@ -33,11 +40,15 @@ class MarkdownCardWidget extends StatelessWidget {
       content: data['content'] as String? ?? '',
       title: data['title'] as String?,
       sourceMessageId: data['source_message_id'] as String?,
+      messageId:
+          data['source_message_id']
+              as String?, // Use source_message_id for messageId
     );
   }
   final String content;
   final String? title;
   final String? sourceMessageId;
+  final String? messageId; // Added messageId property
 
   void _copyToClipboard() {
     Clipboard.setData(ClipboardData(text: content));
@@ -52,9 +63,15 @@ class MarkdownCardWidget extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Added WidgetRef ref
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final hooks = ref.watch(markdownHooksProvider); // Retrieve hooks
+    
+    // Normalize line endings
+    final normalizedContent =
+        content.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
 
     return Card(
       child: Column(
@@ -101,24 +118,55 @@ class MarkdownCardWidget extends StatelessWidget {
           // Markdown content
           Padding(
             padding: const EdgeInsets.all(12),
-            child: MarkdownBody(
-              data: content,
-              selectable: true,
+            child: SmoothMarkdown(
+              data: normalizedContent,
               styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
-                p: theme.textTheme.bodyMedium,
-                h1: theme.textTheme.headlineSmall,
-                h2: theme.textTheme.titleLarge,
-                h3: theme.textTheme.titleMedium,
-                code: TextStyle(
+                paragraphStyle: theme.textTheme.bodyMedium,
+                h1Style: theme.textTheme.headlineSmall,
+                h2Style: theme.textTheme.titleLarge,
+                h3Style: theme.textTheme.titleMedium,
+                inlineCodeStyle: TextStyle(
                   fontFamily: 'monospace',
                   fontSize: 13,
                   backgroundColor: colorScheme.surfaceContainerHighest,
                 ),
-                codeblockDecoration: BoxDecoration(
+                codeBlockDecoration: BoxDecoration(
                   color: colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
+              onTapLink: (href) {
+                // Implemented onTapLink
+                hooks.onLinkTap?.call(href, href, messageId ?? '');
+                launchUrl(
+                  Uri.parse(href),
+                  mode: LaunchMode.externalApplication,
+                );
+              },
+              imageBuilder: (uri, alt, title) {
+                // Sanitize URI (remove surrounding angle brackets if present)
+                var sanitizedUri = uri.trim();
+                if (sanitizedUri.startsWith('<') &&
+                    sanitizedUri.endsWith('>')) {
+                  sanitizedUri =
+                      sanitizedUri.substring(1, sanitizedUri.length - 1);
+                }
+
+                return TrackedMarkdownImage(
+                  imageUrl: sanitizedUri,
+                  messageId: messageId ?? '',
+                );
+              },
+              codeBuilder: (code, language) {
+                // Implemented codeBuilder
+                return StyledCodeBlock(
+                  code: code,
+                  language: language,
+                  onCopy: (code, language) {
+                    hooks.onCodeCopy?.call(code, language, messageId ?? '');
+                  },
+                );
+              },
             ),
           ),
         ],

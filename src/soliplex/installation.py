@@ -202,3 +202,5 @@ async def lifespan(
             app.mount(f"/mcp/{mcp_name}", mcp_app, name=f"mcp_{mcp_name}")
 
         yield context
+
+    await engine.dispose()

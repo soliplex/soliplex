@@ -1,15 +1,12 @@
-import 'dart:convert';
-
-import 'package:http/http.dart' as http;
+import 'package:soliplex/core/auth/callback_params.dart';
 import 'package:soliplex/core/auth/oidc_auth_token_response.dart';
 import 'package:soliplex/core/auth/secure_token_storage.dart';
 import 'package:soliplex/core/auth/web_auth_callback_stub.dart'
     if (dart.library.js_interop) 'web_auth_callback_web.dart'
     as platform;
 import 'package:soliplex/core/auth/web_auth_pending_storage.dart';
-import 'package:soliplex/core/network/network_inspector.dart';
+import 'package:soliplex/core/services/secure_storage_service.dart';
 import 'package:soliplex/core/utils/debug_log.dart';
-import 'package:soliplex/core/utils/http_config.dart';
 
 /// Result of processing an auth callback
 sealed class AuthCallbackResult {}
@@ -42,25 +39,28 @@ class AuthCallbackFailure extends AuthCallbackResult {
 /// No callback detected (not on callback URL)
 class AuthCallbackNotDetected extends AuthCallbackResult {}
 
-/// Handles the OIDC authorization callback.
+/// Handles the OIDC authorization callback for web.
 ///
-/// When the browser redirects back from the OIDC provider, this handler:
-/// 1. Extracts the authorization code and state from the URL
-/// 2. Validates the state (CSRF protection)
-/// 3. Exchanges the code for tokens
-/// 4. Stores the tokens
-/// 5. Returns the server ID for navigation
+/// Supports two callback flows:
+/// 1. **Backend-mediated** (web): Tokens are passed directly in URL params
+/// 2. **PKCE** (legacy): Authorization code requires exchange (not used on web)
+///
+/// When the browser redirects back from authentication:
+/// 1. Extracts tokens or error from the URL
+/// 2. Validates we have a pending auth session
+/// 3. Stores the tokens
+/// 4. Returns the server ID for navigation
 class WebAuthCallbackHandler {
   WebAuthCallbackHandler({
     required WebAuthPendingStorage pendingStorage,
     required SecureTokenStorage tokenStorage,
-    NetworkInspector? inspector,
+    required this.secureStorageService,
   }) : _pendingStorage = pendingStorage,
-       _tokenStorage = tokenStorage,
-       _inspector = inspector;
+       _tokenStorage = tokenStorage;
+
   final WebAuthPendingStorage _pendingStorage;
   final SecureTokenStorage _tokenStorage;
-  final NetworkInspector? _inspector;
+  final SecureStorageService secureStorageService;
 
   /// Check if we're on an auth callback URL
   bool isAuthCallback() => platform.isAuthCallback();
@@ -68,45 +68,73 @@ class WebAuthCallbackHandler {
   /// Get current URL path (for logging/debugging)
   String getCurrentPath() => platform.getCurrentPath();
 
-  /// Process the auth callback
+  /// Process the auth callback.
   ///
-  /// Returns AuthCallbackSuccess with server ID and tokens on success,
-  /// AuthCallbackFailure on error, or AuthCallbackNotDetected if not on
+  /// Returns [AuthCallbackSuccess] with server ID and tokens on success,
+  /// [AuthCallbackFailure] on error, or [AuthCallbackNotDetected] if not on
   /// callback URL.
   Future<AuthCallbackResult> handleCallback() async {
     DebugLog.auth('WebAuthCallbackHandler: Checking for callback...');
     DebugLog.auth('WebAuthCallbackHandler: Current path: ${getCurrentPath()}');
 
-    // Check if we're on the callback URL
-    if (!isAuthCallback()) {
+    // First check cached params (captured at app startup before GoRouter
+    // potentially modified the URL)
+    final cachedParams = platform.getCachedCallbackParams();
+    DebugLog.auth('WebAuthCallbackHandler: Cached params: $cachedParams');
+
+    // Use cached params if available, otherwise check current URL
+    CallbackParams params;
+    if (cachedParams != null && cachedParams is! NoCallbackParams) {
+      params = cachedParams;
+      // Clear cached params after reading to prevent re-processing
+      platform.clearCachedCallbackParams();
+    } else if (isAuthCallback()) {
+      params = platform.extractCallbackParams();
+    } else {
       DebugLog.auth('WebAuthCallbackHandler: Not on callback URL');
       return AuthCallbackNotDetected();
     }
 
-    // Extract parameters from URL
-    final (code, state, error) = platform.extractCallbackParams();
-    DebugLog.auth(
-      // ignore: lines_longer_than_80_chars (auto-documented)
-      'WebAuthCallbackHandler: Extracted params - code: ${code != null}, state: ${state != null}, error: $error',
-    );
+    DebugLog.auth('WebAuthCallbackHandler: Using params - $params');
 
-    // Check for error response from OIDC provider
-    if (error != null) {
-      DebugLog.error('WebAuthCallbackHandler: OIDC error: $error');
+    // Route to appropriate handler based on callback type
+    switch (params) {
+      case BackendMediatedCallbackParams():
+        return _handleBackendMediatedCallback(params);
+      case PkceCallbackParams():
+        return _handlePkceCallback(params);
+      case NoCallbackParams():
+        DebugLog.auth('WebAuthCallbackHandler: No callback params found');
+        return AuthCallbackNotDetected();
+    }
+  }
+
+  /// Handle backend-mediated callback (tokens in URL).
+  ///
+  /// The backend has already exchanged the authorization code for tokens
+  /// and redirected back with tokens as URL query parameters.
+  Future<AuthCallbackResult> _handleBackendMediatedCallback(
+    BackendMediatedCallbackParams params,
+  ) async {
+    DebugLog.auth('WebAuthCallbackHandler: Backend-mediated callback');
+
+    // Check for error from backend
+    if (params.hasError) {
+      DebugLog.error('WebAuthCallbackHandler: Backend error: ${params.error}');
       await _pendingStorage.clearPendingAuth();
       platform.clearUrlParams();
-      return AuthCallbackFailure(error: error);
+      return AuthCallbackFailure(error: params.error!);
     }
 
-    // Validate we have code and state
-    if (code == null || state == null) {
-      DebugLog.error('WebAuthCallbackHandler: Missing code or state');
+    // Validate we have an access token
+    if (params.accessToken == null) {
+      DebugLog.error('WebAuthCallbackHandler: Missing access token');
       await _pendingStorage.clearPendingAuth();
       platform.clearUrlParams();
-      return AuthCallbackFailure(error: 'Missing authorization code or state');
+      return AuthCallbackFailure(error: 'Missing access token from server');
     }
 
-    // Get pending auth data
+    // Get pending auth to retrieve serverId
     final pending = await _pendingStorage.getPendingAuth();
     if (pending == null) {
       DebugLog.error('WebAuthCallbackHandler: No pending auth found');
@@ -118,146 +146,85 @@ class WebAuthCallbackHandler {
       );
     }
 
-    // Validate state (CSRF protection)
-    if (pending.state != state) {
-      DebugLog.error('WebAuthCallbackHandler: State mismatch!');
-      await _pendingStorage.clearPendingAuth();
-      platform.clearUrlParams();
-      return AuthCallbackFailure(
-        error: 'State mismatch',
-        description: 'Security validation failed. Please try again.',
-      );
-    }
+    // Calculate expiration
+    final expiresIn = params.expiresIn ?? 3600;
+    final expiration = DateTime.now().add(Duration(seconds: expiresIn));
 
-    DebugLog.auth(
-      'WebAuthCallbackHandler: State validated, exchanging code for tokens...',
+    final tokens = OidcAuthTokenResponse(
+      idToken: '', // Backend doesn't return id_token in URL redirect
+      accessToken: params.accessToken!,
+      accessTokenExpiration: expiration,
+      refreshToken: params.refreshToken ?? '',
     );
 
-    // Exchange code for tokens
-    try {
-      final tokens = await _exchangeCodeForTokens(
-        code: code,
-        codeVerifier: pending.codeVerifier,
-        clientId: pending.clientId,
-        redirectUrl: pending.redirectUrl,
-        tokenEndpoint: pending.tokenEndpoint,
-      );
+    // Store tokens using server-specific keys for AuthManager compatibility
+    DebugLog.auth(
+      'WebAuthCallbackHandler: Storing tokens for server ${pending.serverId}',
+    );
+    DebugLog.auth(
+      'WebAuthCallbackHandler: Access token length: '
+      '${params.accessToken!.length}',
+    );
+    await secureStorageService.storeTokens(
+      serverId: pending.serverId,
+      accessToken: params.accessToken!,
+      refreshToken: params.refreshToken,
+      expiresAt: expiration,
+    );
 
-      // Store tokens
-      await _tokenStorage.setOidcAuthTokenResponse(tokens);
-      DebugLog.auth('WebAuthCallbackHandler: Tokens stored successfully');
+    // Also store in the legacy format for backward compatibility
+    await _tokenStorage.setOidcAuthTokenResponse(tokens);
+    DebugLog.auth('WebAuthCallbackHandler: Tokens stored successfully');
 
-      // Clear pending auth
-      await _pendingStorage.clearPendingAuth();
+    // Verify storage
+    final storedToken = await secureStorageService.getAccessToken(
+      pending.serverId,
+    );
+    DebugLog.auth(
+      'WebAuthCallbackHandler: Verification - stored token present: '
+      '${storedToken != null}',
+    );
 
-      // Clean up URL
-      platform.clearUrlParams();
+    // Clear pending auth
+    await _pendingStorage.clearPendingAuth();
 
-      return AuthCallbackSuccess(serverId: pending.serverId, tokens: tokens);
-    } on Object catch (e) {
-      DebugLog.error('WebAuthCallbackHandler: Token exchange failed: $e');
-      await _pendingStorage.clearPendingAuth();
-      platform.clearUrlParams();
-      return AuthCallbackFailure(
-        error: 'Token exchange failed',
-        description: e.toString(),
-      );
-    }
+    // Clean up URL
+    platform.clearUrlParams();
+
+    return AuthCallbackSuccess(serverId: pending.serverId, tokens: tokens);
   }
 
-  /// Exchange authorization code for tokens using PKCE
-  Future<OidcAuthTokenResponse> _exchangeCodeForTokens({
-    required String code,
-    required String codeVerifier,
-    required String clientId,
-    required String redirectUrl,
-    required String tokenEndpoint,
-  }) async {
-    final url = Uri.parse(tokenEndpoint);
-    final headers = {'Content-Type': 'application/x-www-form-urlencoded'};
+  /// Handle PKCE callback (authorization code in URL).
+  ///
+  /// This flow is not used on web (backend-mediated flow is used instead).
+  /// On web, receiving a PKCE callback indicates a misconfiguration.
+  Future<AuthCallbackResult> _handlePkceCallback(
+    PkceCallbackParams params,
+  ) async {
+    DebugLog.auth('WebAuthCallbackHandler: PKCE callback (unexpected on web)');
 
-    // Build the token request body with PKCE
-    final bodyParams = {
-      'grant_type': 'authorization_code',
-      'code': code,
-      'redirect_uri': redirectUrl,
-      'client_id': clientId,
-      'code_verifier': codeVerifier,
-    };
-    final body = bodyParams.entries
-        .map(
-          (e) =>
-              '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}',
-        )
-        .join('&');
-
-    DebugLog.auth(
-      'WebAuthCallbackHandler: POSTing to token endpoint: $tokenEndpoint',
-    );
-
-    // Record request for Network Inspector
-    final requestId = _inspector?.recordRequest(
-      method: 'POST',
-      uri: url,
-      headers: headers,
-      body: body,
-    );
-
-    try {
-      final response = await http
-          .post(url, headers: headers, body: body)
-          .timeout(HttpConfig.oidcTimeout);
-
-      // Record response for Network Inspector
-      if (requestId != null) {
-        _inspector?.recordResponse(
-          requestId: requestId,
-          statusCode: response.statusCode,
-          headers: response.headers,
-          body: response.body,
-        );
-      }
-
-      if (response.statusCode == 200) {
-        final tokenData = json.decode(response.body) as Map<String, dynamic>;
-        DebugLog.auth('WebAuthCallbackHandler: Token exchange successful');
-
-        // Calculate expiration
-        final expiresIn = tokenData['expires_in'] as int? ?? 3600;
-        final expiration = DateTime.now().add(Duration(seconds: expiresIn));
-
-        return OidcAuthTokenResponse(
-          idToken: tokenData['id_token'] as String? ?? '',
-          accessToken: tokenData['access_token'] as String,
-          accessTokenExpiration: expiration,
-          refreshToken: tokenData['refresh_token'] as String? ?? '',
-        );
-      } else {
-        DebugLog.error(
-          // ignore: lines_longer_than_80_chars (auto-documented)
-          'WebAuthCallbackHandler: Token endpoint returned ${response.statusCode}',
-        );
-        DebugLog.error('WebAuthCallbackHandler: Response: ${response.body}');
-
-        // Try to extract error from response
-        try {
-          final errorData = json.decode(response.body) as Map<String, dynamic>;
-          final errorCode = errorData['error'] as String?;
-          final errorDesc = errorData['error_description'] as String?;
-          throw Exception(
-            '${errorCode ?? 'token_error'}: ${errorDesc ?? response.body}',
-          );
-        } on Object catch (_) {
-          throw Exception('Token endpoint returned ${response.statusCode}');
-        }
-      }
-    } on Object catch (e) {
-      // Record error for Network Inspector
-      if (requestId != null) {
-        _inspector?.recordError(requestId: requestId, error: e.toString());
-      }
-      rethrow;
+    // Check for error from OIDC provider
+    if (params.hasError) {
+      DebugLog.error('WebAuthCallbackHandler: OIDC error: ${params.error}');
+      await _pendingStorage.clearPendingAuth();
+      platform.clearUrlParams();
+      return AuthCallbackFailure(error: params.error!);
     }
+
+    // PKCE flow is not supported on web - the backend should handle
+    // the code exchange and redirect with tokens
+    DebugLog.error(
+      'WebAuthCallbackHandler: PKCE callback not supported on web. '
+      'Backend should redirect with tokens.',
+    );
+    await _pendingStorage.clearPendingAuth();
+    platform.clearUrlParams();
+    return AuthCallbackFailure(
+      error: 'Unsupported authentication flow',
+      description:
+          'Received authorization code instead of tokens. '
+          'Please contact support.',
+    );
   }
 }
 

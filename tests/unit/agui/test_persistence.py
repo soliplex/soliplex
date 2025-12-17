@@ -433,7 +433,9 @@ async def the_async_engine():
 
 @pytest_asyncio.fixture()
 async def the_async_session(the_async_engine):
-    return sqla_asyncio.AsyncSession(bind=the_async_engine)
+    session = sqla_asyncio.AsyncSession(bind=the_async_engine)
+    yield session
+    await session.close()
 
 
 @pytest.mark.asyncio
@@ -845,10 +847,14 @@ def the_engine():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("w_agui_events", [[], TEST_AGUI_RUN_EVENTS])
+@mock.patch("soliplex.agui.util._timestamp")
 async def test_threadstorage_save_run_events(
+    ts,
     the_async_session,
     w_agui_events,
 ):
+    ts.return_value = NOW
+
     # Work around https://github.com/ag-ui-protocol/ag-ui/issues/752
     exp_events = [
         event
@@ -877,6 +883,9 @@ async def test_threadstorage_save_run_events(
     )
 
     await the_async_session.commit()
+
+    finished = await run.awaitable_attrs.finished
+    assert finished == NOW.replace(tzinfo=None)  # sqlalchemy drops zone
 
     db_events = await run.list_events()
 

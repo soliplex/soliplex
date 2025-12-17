@@ -1,4 +1,4 @@
-name: Run soliplex unit tests / linting
+name: Python back-end tests/coverage/linting
 
 on:
   push:
@@ -58,12 +58,13 @@ jobs:
       - name: Run soliplex unit tests
         run: |
           pip list
-          py.test
+          # '-s': suppress py.test output capture to ease debugging CI hangs
+          py.test -s
       - name: Run soliplex functional tests
         run: |
           pip list
-          # 'tests/functional/' is excluded by default
-          py.test --no-cov -m "not needs_llm" tests/functional/
+          # '-s': suppress py.test output capture to ease debugging CI hangs
+          py.test -s --no-cov -m "not needs_llm" tests/functional/
       - name: Run ruff linter
         run: |
           ruff check

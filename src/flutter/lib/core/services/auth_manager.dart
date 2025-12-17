@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:soliplex/core/auth/oidc_auth_interactor.dart';
 import 'package:soliplex/core/auth/secure_token_storage.dart';
 import 'package:soliplex/core/auth/sso_config.dart';
+import 'package:soliplex/core/auth/web_auth_callback_handler.dart';
 import 'package:soliplex/core/models/server_models.dart';
 import 'package:soliplex/core/network/network_inspector.dart';
 import 'package:soliplex/core/services/secure_storage_service.dart';
@@ -60,12 +61,23 @@ class AuthManager {
 
   /// Check if we have a valid (non-expired) token for a server.
   Future<bool> hasValidToken(String serverId) async {
+    DebugLog.service(
+      'AuthManager.hasValidToken: checking for serverId=$serverId',
+    );
     final token = await _storage.getAccessToken(serverId);
+    DebugLog.service(
+      'AuthManager.hasValidToken: token found=${token != null}, '
+      'length=${token?.length ?? 0}',
+    );
     if (token == null) return false;
 
     final expiry = await _storage.getTokenExpiry(serverId);
+    DebugLog.service('AuthManager.hasValidToken: expiry=$expiry');
     if (expiry != null && DateTime.now().isAfter(expiry)) {
       // Token expired - try refresh
+      DebugLog.service(
+        'AuthManager.hasValidToken: token expired, trying refresh',
+      );
       return _tryRefreshToken(serverId);
     }
 
@@ -109,8 +121,9 @@ class AuthManager {
         tokenEndpoint: '$issuerUrl/protocol/openid-connect/token',
         loginUrl: Uri.parse('$issuerUrl/protocol/openid-connect/auth'),
         clientId: provider.clientId,
-        redirectUrl: _getRedirectUrl(),
+        redirectUrl: _getRedirectUrl(provider.id),
         scopes: scopes,
+        serverBaseUrl: server.url, // For web backend-mediated OAuth
       );
 
       // Enable auth on the interactor
@@ -153,19 +166,35 @@ class AuthManager {
 
   /// Logout - clear tokens and OIDC session.
   Future<void> logout(ServerConnection server) async {
+    DebugLog.service('AuthManager: Logout initiated for server ${server.id}');
+    
+    // Clear local tokens FIRST to ensure we are locally logged out
+    // before any potential redirects or network calls.
+    await _storage.clearTokens(server.id);
+    DebugLog.service('AuthManager: Local tokens cleared');
+
     try {
       // Try to logout via OIDC provider
       final ssoConfig = await _oidcInteractor.getSsoConfig(server.id);
+      DebugLog.service('AuthManager: SSO config found: ${ssoConfig != null}');
+      
       if (ssoConfig != null) {
         await _oidcInteractor.logout(server.id, ssoConfig);
+      } else {
+        DebugLog.warn(
+          'AuthManager: Skipping OIDC logout - no SSO config found',
+        );
       }
+    } on OidcWebRedirectException catch (e) {
+      DebugLog.service(
+        'AuthManager: Redirecting for OIDC logout: ${e.serverId}',
+      );
+      // Allow exception to propagate or just return?
+      // Since we are redirecting, the app context is ending.
     } on Object catch (e) {
       DebugLog.error('AuthManager: OIDC logout failed: $e');
       // Continue with local logout even if OIDC logout fails
     }
-
-    // Clear local tokens
-    await _storage.clearTokens(server.id);
 
     // Disable auth on interactor
     _oidcInteractor.useAuth = false;
@@ -201,9 +230,11 @@ class AuthManager {
     return {'Authorization': 'Bearer $token'};
   }
 
-  String _getRedirectUrl() {
+  String _getRedirectUrl(String providerId) {
     if (kIsWeb) {
-      return Uri.base.replace(path: '/auth/callback').toString();
+      // Hash-based routing: redirect to /#/auth/callback with tokens in query
+      // Must be absolute for OIDC logout
+      return '${Uri.base.origin}/#/auth/callback';
     } else {
       return 'ai.soliplex.client://callback';
     }

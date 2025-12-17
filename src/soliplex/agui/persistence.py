@@ -242,6 +242,10 @@ class Run(Base):
         default=agui_util._timestamp,
     )
 
+    finished: Mapped[datetime.datetime | None] = mapped_column(
+        default=None,
+    )
+
     async def list_events(self) -> list[agui_core.Event]:
         return [
             event.to_agui_model()
@@ -725,6 +729,9 @@ class ThreadStorage(agui_package.ThreadStorage):
                 run_id=run_id,
                 session=session,
             )
+
+            run.finished = agui_util._timestamp()
+            session.add(run)
 
             for event in events:
                 session.add(RunEvent(run=run, data=event.model_dump()))

@@ -128,8 +128,9 @@ class RoomsNotifier extends StateNotifier<RoomsState> {
     }
 
     try {
-      final response =
-          await _transportLayer!.get(_urlBuilder.roomDocuments(roomId));
+      final response = await _transportLayer!.get(
+        _urlBuilder.roomDocuments(roomId),
+      );
 
       if (response.statusCode != 200) {
         throw Exception('Failed to fetch documents: ${response.statusCode}');

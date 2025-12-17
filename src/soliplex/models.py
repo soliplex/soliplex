@@ -430,6 +430,7 @@ class AGUI_Run(pydantic.BaseModel):
 
     run_input: agui_core.RunAgentInput | None = KW_ONLY_NONE
     created: datetime.datetime = KW_ONLY_NONE
+    finished: datetime.datetime | None = KW_ONLY_NONE
 
     events: AGUI_Events | None = pydantic.Field(
         kw_only=True,
@@ -449,6 +450,7 @@ class AGUI_Run(pydantic.BaseModel):
             thread_id=a_run.thread_id,
             run_id=a_run.run_id,
             created=a_run.created,
+            finished=a_run.finished,
             parent_run_id=a_run.parent_run_id,
             run_input=a_run_input,
             events=a_run_events,

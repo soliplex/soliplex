@@ -225,7 +225,8 @@ class _RoomInfoContent extends ConsumerWidget {
               ],
 
               // Documents section
-              if (room.hasRag) ...[ // Using hasRag getter from Room model
+              if (room.hasRag) ...[
+                // Using hasRag getter from Room model
                 const _SectionHeader(title: 'Documents'),
                 const SizedBox(height: 8),
                 ListTile(
