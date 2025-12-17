@@ -1,0 +1,21 @@
+include: package:very_good_analysis/analysis_options.6.0.0.yaml
+
+analyzer:
+  exclude:
+    - '**/*.g.dart'
+    - '**/*.freezed.dart'
+    - 'build/**'
+
+  errors:
+    # Treat as errors
+    invalid_annotation_target: error
+
+linter:
+  rules:
+    # Disable for AM1 (add back in AM7)
+    public_member_api_docs: false
+
+    # Additional strictness
+    avoid_print: true
+    prefer_const_constructors: true
+    prefer_const_literals_to_create_immutables: true

@@ -1,0 +1,38 @@
+name: soliplex_frontend
+description: Cross-platform Flutter frontend for Soliplex AI-powered RAG system
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+  flutter: '>=3.35.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management - Manual providers (NO generator)
+  flutter_riverpod: ^2.6.1
+
+  # Navigation
+  go_router: ^14.7.1
+
+  # Utilities
+  meta: ^1.15.0
+
+  # Local package - soliplex_client
+  soliplex_client:
+    path: packages/soliplex_client
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # Testing
+  mocktail: ^1.0.4
+
+  # Linting - Zero tolerance
+  very_good_analysis: ^6.0.0
+
+flutter:
+  uses-material-design: true

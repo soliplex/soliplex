@@ -13,8 +13,9 @@ planning/
 ├── ROADMAP.md                 - Version roadmap and future enhancements
 ├── BRANDING-APPROACH.md       - White-label extensibility design
 ├── client.md                  - soliplex_client package spec
-├── client-worklog.md          - Progress tracking (resume here)
+├── client-worklog.md          - soliplex_client progress tracking
 ├── core_frontend.md           - Flutter infrastructure (Riverpod, navigation)
+├── core-frontend-worklog.md   - Core frontend progress tracking (resume here)
 ├── external_backend_service.md - Backend API reference
 ├── REVERSE_ENGINEERED.md      - Prototype architecture reference
 └── ui/
@@ -68,9 +69,11 @@ planning/
 v1.0 uses a two-tier milestone system:
 
 - **Developer Milestones (DM1-DM8)**: Client library work, verified by unit tests (85%+ coverage)
-- **App Milestones (AM1-AM7)**: End-user testable features
+- **App Milestones (AM1-AM8)**: End-user testable features
 
 See `planning/ROADMAP.md` for full milestone details and dependency graph.
+
+**Note**: Backend runs without authentication for AM1-AM6. AM7 adds authentication UI for future backend auth.
 
 ### Priority 1: Client (`soliplex_client` package)
 
@@ -91,12 +94,12 @@ See `planning/ROADMAP.md` for full milestone details and dependency graph.
 
 Depends on: DM1 (AM1), DM6 (AM3)
 
-| Phase | Goal | Milestone |
-|-------|------|-----------|
-| 1 | Project setup, auth, navigation | AM1 |
-| 2 | ActiveRunNotifier + extensions | AM3 |
-| 3 | Extensibility (SoliplexConfig, SoliplexRegistry) | AM7 |
-| 4 | Polish, extract to `soliplex_core` package | AM7 |
+| Phase | Goal | Milestone | Status |
+|-------|------|-----------|--------|
+| 1 | Project setup, navigation (NO AUTH) | AM1 | Not Started |
+| 2 | ActiveRunNotifier + extensions | AM3 | - |
+| 3 | Authentication + Extensibility | AM7 | - |
+| 4 | Multi-room, extract to `soliplex_core` package | AM8 | - |
 
 ### Priority 3: UI Components (Parallel)
 
@@ -126,39 +129,6 @@ Depends on: AM3 (Core Frontend phase 2)
 - Milestone a significant, specific point in time that marks the completion of a major phase with deliverables that are testable by end user.
 
 ## Code Quality Requirements
-
-### Analyzer: Zero Tolerance Policy
-
-**`flutter analyze` must report ZERO errors and ZERO warnings.**
-
-This is mandatory for all code changes:
-
-- Run `flutter analyze` before committing
-- Fix all errors AND warnings immediately
-- Info-level hints are allowed but should be addressed when practical
-- **No exceptions** - warnings are not "acceptable technical debt"
-
-```bash
-# Check before committing
-flutter analyze
-
-# Expected output: "No issues found!"
-```
-
-**Why this matters:**
-
-- Analyzer warnings often indicate real bugs (null safety violations, unused variables, type mismatches)
-- Warnings accumulate quickly - "just one" becomes hundreds
-- Treating analyzer as strictly as tests prevents regression
-- Clean analyzer output makes code review faster
-
-### Tests: All Must Pass
-
-All tests must pass before any code is considered complete:
-
-```bash
-flutter test
-```
 
 ### Formatter
 
@@ -192,6 +162,38 @@ npx markdownlint-cli "**/*.md"
 - `MD022` - Headings must have blank lines around them
 - `MD032` - Lists must have blank lines around them
 
+### Analyzer: Zero Tolerance Policy
+
+**`flutter analyze` must report ZERO errors and ZERO warnings.**
+
+This is mandatory for all code changes:
+
+- Run `flutter analyze` before committing
+- Fix all errors AND warnings AND hints immediately
+- **No exceptions** - warnings are not "acceptable technical debt"
+
+```bash
+# Check before committing
+flutter analyze
+
+# Expected output: "No issues found!"
+```
+
+**Why this matters:**
+
+- Analyzer warnings often indicate real bugs (null safety violations, unused variables, type mismatches)
+- Warnings accumulate quickly - "just one" becomes hundreds
+- Treating analyzer as strictly as tests prevents regression
+- Clean analyzer output makes code review faster
+
+### Tests: All Must Pass
+
+All tests must pass before any code is considered complete:
+
+```bash
+flutter test
+```
+
 ## Git Recommendations
 
 ### Files to Commit
@@ -214,3 +216,19 @@ Standard Flutter/Dart ignores (see `packages/soliplex_client/.gitignore`):
 - `.idea/`
 
 **Never gitignore** project configuration files like `.markdownlint.json` - they ensure team consistency.
+
+### Dependencies
+
+Keep non-major dependencies up to date:
+
+```bash
+flutter pub upgrade
+cd ./packages/soliplex_client/ && flutter pub upgrade
+```
+
+Check for outdated dependencies (for major version upgrade):
+
+```bash
+flutter pub outdated
+cd ./packages/soliplex_client/ && flutter pub outdated
+```
