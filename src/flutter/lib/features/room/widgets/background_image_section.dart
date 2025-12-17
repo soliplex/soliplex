@@ -18,7 +18,6 @@ class BackgroundImageSection extends ConsumerStatefulWidget {
 
 class _BackgroundImageSectionState
     extends ConsumerState<BackgroundImageSection> {
-  bool _isLoading = false;
   Uint8List? _imageData;
   String? _error;
   bool _isConfigured = false;
@@ -29,12 +28,12 @@ class _BackgroundImageSectionState
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _checkStatus();
+        _loadBackgroundImage();
       }
     });
   }
 
-  Future<void> _checkStatus() async {
+  Future<void> _loadBackgroundImage() async {
     final connectionManager = ref.read(connectionManagerProvider);
     if (!connectionManager.isConfigured) return;
 
@@ -44,58 +43,22 @@ class _BackgroundImageSectionState
     );
 
     try {
-      final response = await connectionManager.head(uri);
+      final response = await connectionManager.get(uri);
       if (mounted) {
         setState(() {
           _isConfigured = response.statusCode == 200;
-          _checkedStatus = true;
-        });
-      }
-    } on Object catch (_) {
-      if (mounted) {
-        setState(() {
-          _isConfigured = false;
-          _checkedStatus = true;
-        });
-      }
-    }
-  }
-
-  Future<void> _fetchImage() async {
-    if (_imageData != null) return;
-
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      final connectionManager = ref.read(connectionManagerProvider);
-      if (!connectionManager.isConfigured) {
-        throw Exception('No active server');
-      }
-
-      final urlBuilder = UrlBuilder(connectionManager.serverUrl);
-      final uri = Uri.parse(
-        '${urlBuilder.apiBaseUrl}/rooms/${widget.room.id}/bg_image',
-      );
-
-      final response = await connectionManager.get(uri);
-      if (response.statusCode == 200) {
-        if (mounted) {
-          setState(() {
+          if (_isConfigured) {
             _imageData = response.bodyBytes;
-            _isLoading = false;
-          });
-        }
-      } else {
-        throw Exception('Failed to load image: ${response.statusCode}');
+          }
+          _checkedStatus = true;
+        });
       }
     } on Object catch (e) {
       if (mounted) {
         setState(() {
+          _isConfigured = false;
           _error = e.toString();
-          _isLoading = false;
+          _checkedStatus = true;
         });
       }
     }
@@ -152,11 +115,6 @@ class _BackgroundImageSectionState
                 color: colorScheme.onSurfaceVariant,
               ),
               childrenPadding: const EdgeInsets.all(16),
-              onExpansionChanged: (expanded) {
-                if (expanded && _isConfigured && _imageData == null) {
-                  _fetchImage();
-                }
-              },
               children: [
                 if (!_isConfigured)
                   Text(
@@ -165,8 +123,6 @@ class _BackgroundImageSectionState
                       color: colorScheme.onSurfaceVariant,
                     ),
                   )
-                else if (_isLoading)
-                  const Center(child: CircularProgressIndicator())
                 else if (_error != null)
                   Text(
                     'Error loading image',
