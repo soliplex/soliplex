@@ -79,16 +79,18 @@ See `planning/ROADMAP.md` for full milestone details and dependency graph.
 
 **CURRENT FOCUS** - Pure Dart package, complete before moving to UI
 
-| Phase | Goal | Milestone |
-|-------|------|-----------|
-| 1 | Models & errors | DM1 |
-| 2a | HTTP adapter interface + DartHttpAdapter | DM2 |
-| 2b | HttpObserver + ObservableHttpAdapter | DM3 |
-| 2c | HttpTransport, UrlBuilder, CancelToken | DM4 |
-| 3 | API layer (SoliplexApi) | DM5 |
-| 4 | AG-UI protocol (Thread, buffers, tool registry) | DM6 |
-| 5 | Sessions (ConnectionManager, RoomSession) | DM7 |
-| 6 | Facade (SoliplexClient) | DM8 |
+| Phase | Goal | Milestone | Status |
+|-------|------|-----------|--------|
+| 1 | Models & errors | DM1 | ✅ Done |
+| 2a | HTTP adapter interface + DartHttpAdapter | DM2 | ✅ Done |
+| 2b | HttpObserver + ObservableHttpAdapter | DM3 | ✅ Done |
+| 2c | HttpTransport, UrlBuilder, CancelToken | DM4 | ✅ Done |
+| 3 | API layer (SoliplexApi) | DM5 | ✅ Done |
+| 4 | AG-UI protocol (Thread, buffers, tool registry) | DM6 | ✅ Done |
+| 5 | Sessions (ConnectionManager, RoomSession) | DM7 | Not Started |
+| 6 | Facade (SoliplexClient) | DM8 | Not Started |
+
+**Progress:** 6/8 developer milestones complete. 587 tests, 100% coverage.
 
 ### Priority 2: Core Frontend
 

@@ -66,8 +66,21 @@ packages/
 ### Session Management
 
 ```text
-SoliplexClient (facade) → ConnectionManager → RoomSession → Thread
+SoliplexClient (facade) → ConnectionManager → RoomSession → Thread (DM6 ✓)
+                DM8              DM7              DM7
 ```
+
+### AG-UI Protocol (DM6 ✓)
+
+Server-Sent Events (SSE) streaming with real-time event processing:
+
+- **18 Event Types**: Run lifecycle, steps, text streaming, tool calls, state/activity updates
+- **Thread**: Orchestrates SSE streams, manages buffers, executes tools
+- **TextMessageBuffer**: Accumulates streaming text messages
+- **ToolCallBuffer**: Tracks concurrent tool calls (start → args → end → result)
+- **ToolRegistry**: Client-side tool registration and execution (supports fire-and-forget)
+- **JSON Patch**: State delta operations (add, replace, remove)
+- **CancelToken Integration**: Stream cancellation support
 
 ## Security
 
@@ -143,7 +156,10 @@ final client = SoliplexClient(
 | `UrlBuilder` | URL construction with normalization | Done |
 | `CancelToken` | Request cancellation | Done |
 | `SoliplexApi` | Room/Thread/Run CRUD operations | Done |
-| `Thread` | AG-UI protocol, tool registration | - |
+| `Thread` | AG-UI SSE streaming, event processing | Done |
+| `TextMessageBuffer` | Text message streaming accumulation | Done |
+| `ToolCallBuffer` | Tool call buffering and tracking | Done |
+| `ToolRegistry` | Client-side tool registration and execution | Done |
 | `ConnectionManager` | Server switching, session pooling | - |
 | `RoomSession` | Per-room message state, event processing | - |
 
@@ -181,7 +197,7 @@ Each phase maps to a Developer Milestone (DM). See `ROADMAP.md` for full milesto
 | 2b | Network observer | HttpObserver (interface), ObservableHttpAdapter (decorator) | DM3 | Done |
 | 2c | HTTP transport | HttpTransport, UrlBuilder, CancelToken | DM4 | Done |
 | 3 | API layer | SoliplexApi | DM5 | Done |
-| 4 | AG-UI protocol | Thread, message buffers, tool registry | DM6 | - |
+| 4 | AG-UI protocol | Thread, TextMessageBuffer, ToolCallBuffer, ToolRegistry | DM6 | Done |
 | 5 | Sessions | ConnectionManager, RoomSession | DM7 | - |
 | 6 | Facade | SoliplexClient, chat() flow | DM8 | - |
 
@@ -195,9 +211,12 @@ packages/soliplex_client/
 │       ├── api/                        # DM5 ✓
 │       │   ├── api.dart                # Barrel export
 │       │   └── soliplex_api.dart
-│       ├── agui/                       # DM6
+│       ├── agui/                       # DM6 ✓
+│       │   ├── agui.dart              # Barrel export
+│       │   ├── agui_event.dart
+│       │   ├── text_message_buffer.dart
 │       │   ├── thread.dart
-│       │   ├── buffers.dart
+│       │   ├── tool_call_buffer.dart
 │       │   └── tool_registry.dart
 │       ├── errors/                     # DM1 ✓
 │       │   ├── errors.dart             # Barrel export
@@ -224,6 +243,12 @@ packages/soliplex_client/
 │           ├── url_builder.dart
 │           └── utils.dart              # Barrel export
 ├── test/
+│   ├── agui/
+│   │   ├── agui_event_test.dart
+│   │   ├── text_message_buffer_test.dart
+│   │   ├── thread_test.dart
+│   │   ├── tool_call_buffer_test.dart
+│   │   └── tool_registry_test.dart
 │   ├── api/
 │   │   └── soliplex_api_test.dart
 │   ├── errors/
@@ -254,7 +279,6 @@ description: Pure Dart client for Soliplex backend
 
 dependencies:
   http: ^1.2.0
-  ag_ui: ^0.1.0
   meta: ^1.9.0
 
 dev_dependencies:
