@@ -12,13 +12,8 @@ import '../../helpers/test_helpers.dart';
 
 void main() {
   group('ThreadScreen', () {
-    final testRoom = TestData.createRoom(
-      id: 'test-room',
-      name: 'Test Room',
-    );
+    final testRoom = TestData.createRoom();
     final testThread = TestData.createThread(
-      id: 'test-thread',
-      roomId: 'test-room',
       name: 'Test Thread',
     );
 
@@ -37,7 +32,8 @@ void main() {
           ),
           overrides: [
             roomsProvider.overrideWith((_) async => [testRoom]),
-            threadsProvider('test-room').overrideWith((_) async => [testThread]),
+            threadsProvider('test-room')
+                .overrideWith((_) async => [testThread]),
             activeRunNotifierProvider.overrideWith(
               (ref) => MockActiveRunNotifier(
                 initialState: const ActiveRunState.idle(),
@@ -69,7 +65,8 @@ void main() {
           ),
           overrides: [
             roomsProvider.overrideWith((_) async => [testRoom]),
-            threadsProvider('test-room').overrideWith((_) async => [testThread]),
+            threadsProvider('test-room')
+                .overrideWith((_) async => [testThread]),
             activeRunNotifierProvider.overrideWith(
               (ref) => MockActiveRunNotifier(
                 initialState: const ActiveRunState.idle(),
@@ -97,7 +94,8 @@ void main() {
           ),
           overrides: [
             roomsProvider.overrideWith((_) async => [testRoom]),
-            threadsProvider('test-room').overrideWith((_) async => [testThread]),
+            threadsProvider('test-room')
+                .overrideWith((_) async => [testThread]),
             activeRunNotifierProvider.overrideWith(
               (ref) => MockActiveRunNotifier(
                 initialState: const ActiveRunState.idle(),
@@ -112,17 +110,13 @@ void main() {
 
       // Should display thread name as title in the AppBar
       final appBar = tester.widget<AppBar>(find.byType(AppBar));
-      final titleWidget = appBar.title as Text;
+      final titleWidget = appBar.title! as Text;
       expect(titleWidget.data, equals('Test Thread'));
     });
 
     testWidgets('displays room name as title when thread has no name',
         (tester) async {
-      final threadWithoutName = TestData.createThread(
-        id: 'test-thread',
-        roomId: 'test-room',
-        // No name
-      );
+      final threadWithoutName = TestData.createThread();
 
       await tester.pumpWidget(
         createTestApp(
@@ -148,20 +142,15 @@ void main() {
 
       // Should display room name as title in the AppBar
       final appBar = tester.widget<AppBar>(find.byType(AppBar));
-      final titleWidget = appBar.title as Text;
+      final titleWidget = appBar.title! as Text;
       expect(titleWidget.data, equals('Test Room'));
     });
 
     testWidgets('displays default title when room name is null',
         (tester) async {
-      final roomWithoutName = TestData.createRoom(
-        id: 'test-room',
-        // name will be 'Test Room' from defaults
-      );
-      final threadWithoutName = TestData.createThread(
-        id: 'test-thread',
-        roomId: 'test-room',
-      );
+      // Room with default name 'Test Room' from TestData.createRoom defaults
+      final roomWithoutName = TestData.createRoom();
+      final threadWithoutName = TestData.createThread();
 
       await tester.pumpWidget(
         createTestApp(
@@ -185,9 +174,10 @@ void main() {
       // Let providers initialize
       await tester.pumpAndSettle();
 
-      // Should display room name as title in the AppBar (TestData.createRoom defaults to 'Test Room')
+      // Should display room name as title in the AppBar
+      // (TestData.createRoom defaults to 'Test Room')
       final appBar = tester.widget<AppBar>(find.byType(AppBar));
-      final titleWidget = appBar.title as Text;
+      final titleWidget = appBar.title! as Text;
       expect(titleWidget.data, equals('Test Room'));
     });
 
@@ -200,7 +190,8 @@ void main() {
           ),
           overrides: [
             roomsProvider.overrideWith((_) async => [testRoom]),
-            threadsProvider('test-room').overrideWith((_) async => [testThread]),
+            threadsProvider('test-room')
+                .overrideWith((_) async => [testThread]),
             activeRunNotifierProvider.overrideWith(
               (ref) => MockActiveRunNotifier(
                 initialState: const ActiveRunState.idle(),
@@ -229,7 +220,8 @@ void main() {
           ),
           overrides: [
             roomsProvider.overrideWith((_) async => [testRoom]),
-            threadsProvider('test-room').overrideWith((_) async => [testThread]),
+            threadsProvider('test-room')
+                .overrideWith((_) async => [testThread]),
             activeRunNotifierProvider.overrideWith(
               (ref) => MockActiveRunNotifier(
                 initialState: const ActiveRunState.idle(),

@@ -101,7 +101,7 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
     if (room != null && thread?.name != null) {
       return thread!.name!;
     } else if (room != null) {
-      return room.name ?? 'Chat';
+      return room.name;
     } else {
       return 'Chat';
     }

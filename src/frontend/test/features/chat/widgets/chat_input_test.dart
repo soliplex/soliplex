@@ -469,8 +469,8 @@ void main() {
 
         // Assert
         final textField = tester.widget<TextField>(find.byType(TextField));
-        final decoration = textField.decoration as InputDecoration;
-        final border = decoration.border as OutlineInputBorder;
+        final decoration = textField.decoration!;
+        final border = decoration.border! as OutlineInputBorder;
         expect(border.borderRadius, BorderRadius.circular(24));
       });
 

@@ -37,7 +37,8 @@ final currentThreadIdProvider = StateProvider<String?>((ref) => null);
 
 /// Provider for the currently selected thread.
 ///
-/// Returns null if no thread is selected, no room is selected, or thread not found.
+/// Returns null if no thread is selected, no room is selected,
+/// or thread not found.
 final currentThreadProvider = Provider<ThreadInfo?>((ref) {
   final threadId = ref.watch(currentThreadIdProvider);
   if (threadId == null) return null;

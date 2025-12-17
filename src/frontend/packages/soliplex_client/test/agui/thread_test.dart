@@ -8,6 +8,7 @@ import 'package:soliplex_client/src/agui/tool_registry.dart';
 import 'package:soliplex_client/src/http/http_transport.dart';
 import 'package:soliplex_client/src/models/chat_message.dart';
 import 'package:soliplex_client/src/utils/cancel_token.dart';
+import 'package:soliplex_client/src/utils/url_builder.dart';
 import 'package:test/test.dart';
 
 class MockHttpTransport extends Mock implements HttpTransport {}
@@ -15,12 +16,15 @@ class MockHttpTransport extends Mock implements HttpTransport {}
 void main() {
   group('Thread', () {
     late MockHttpTransport mockTransport;
+    late UrlBuilder urlBuilder;
     late Thread thread;
 
     setUp(() {
       mockTransport = MockHttpTransport();
+      urlBuilder = UrlBuilder('https://example.com/api/v1');
       thread = Thread(
         transport: mockTransport,
+        urlBuilder: urlBuilder,
         roomId: 'room-123',
         threadId: 'thread-456',
       );
@@ -715,6 +719,7 @@ void main() {
 
         Thread(
           transport: mockTransport,
+          urlBuilder: urlBuilder,
           roomId: 'room-123',
           threadId: 'thread-456',
           toolRegistry: registry,
@@ -757,6 +762,7 @@ void main() {
 
         Thread(
           transport: mockTransport,
+          urlBuilder: urlBuilder,
           roomId: 'room-123',
           threadId: 'thread-456',
           toolRegistry: registry,
