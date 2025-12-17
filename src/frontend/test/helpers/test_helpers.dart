@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:soliplex_client/soliplex_client.dart';
+
+/// Mock SoliplexApi for testing.
+class MockSoliplexApi extends Mock implements SoliplexApi {}
 
 /// Test data factory for creating mock objects.
 class TestData {

@@ -17,7 +17,7 @@ void main() {
       );
 
       expect(find.textContaining('Network error'), findsOneWidget);
-      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+      expect(find.byIcon(Icons.wifi_off), findsOneWidget);
     });
 
     testWidgets('displays not found error message', (tester) async {

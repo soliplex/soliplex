@@ -1,21 +1,31 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soliplex_client/soliplex_client.dart';
-import 'package:soliplex_frontend/core/providers/mock_data.dart';
+import 'package:soliplex_frontend/core/providers/api_provider.dart';
 
 /// Provider for threads in a specific room.
 ///
-/// AM1: Returns hardcoded mock data for room.
-/// AM2: Replace with `api.getThreads(roomId)`.
+/// Fetches threads from the backend API using [SoliplexApi.getThreads].
+/// Each room's threads are cached separately by Riverpod's family provider.
+///
+/// **Usage**:
+/// ```dart
+/// // Read threads for a room
+/// final threadsAsync = ref.watch(threadsProvider('room-id'));
+///
+/// // Refresh threads for a room
+/// ref.refresh(threadsProvider('room-id'));
+/// ```
+///
+/// **Error Handling**:
+/// Throws [SoliplexException] subtypes which should be handled in the UI:
+/// - [NetworkException]: Connection failures, timeouts
+/// - [NotFoundException]: Room not found (404)
+/// - [AuthException]: 401/403 authentication errors (AM7+)
+/// - [ApiException]: Other server errors
 final threadsProvider = FutureProvider.family<List<ThreadInfo>, String>(
   (ref, roomId) async {
-    // Simulate network delay
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-
-    // TODO(AM2): Replace with real API call
-    // final api = ref.watch(soliplexApiProvider);
-    // return await api.getThreads(roomId);
-
-    return MockData.threads[roomId] ?? [];
+    final api = ref.watch(apiProvider);
+    return api.getThreads(roomId);
   },
 );
 
