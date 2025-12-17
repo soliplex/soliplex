@@ -24,10 +24,10 @@
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
-	<key>NSLocationUsageDescription</key>
-	<string>This app needs access to your location for the get_my_location tool.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>This app needs access to your location for the get_my_location tool.</string>
+        <key>NSLocationUsageDescription</key>
+        <string>Your location is processed locally on your device to provide app features. We do not track you or send location data to external servers.</string>
+        <key>NSLocationWhenInUseUsageDescription</key>
+        <string>Your location is used locally in the background to support app functionality. This data remains on your device and is not used for tracking or telemetry.</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
