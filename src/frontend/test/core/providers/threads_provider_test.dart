@@ -278,42 +278,4 @@ void main() {
     });
   });
 
-  group('isNewThreadIntentProvider', () {
-    test('returns false when NoThreadSelected', () {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-
-      final isNewIntent = container.read(isNewThreadIntentProvider);
-
-      expect(isNewIntent, isFalse);
-    });
-
-    test('returns false when ThreadSelected', () {
-      final container = ProviderContainer(
-        overrides: [
-          threadSelectionProvider
-              .overrideWith((ref) => const ThreadSelected('thread-123')),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      final isNewIntent = container.read(isNewThreadIntentProvider);
-
-      expect(isNewIntent, isFalse);
-    });
-
-    test('returns true when NewThreadIntent', () {
-      final container = ProviderContainer(
-        overrides: [
-          threadSelectionProvider
-              .overrideWith((ref) => const NewThreadIntent()),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      final isNewIntent = container.read(isNewThreadIntentProvider);
-
-      expect(isNewIntent, isTrue);
-    });
-  });
 }

@@ -168,11 +168,3 @@ final currentThreadProvider = Provider<ThreadInfo?>((ref) {
     },
   );
 });
-
-/// Provider indicating whether a new thread should be created.
-///
-/// Returns true when the selection is [NewThreadIntent].
-final isNewThreadIntentProvider = Provider<bool>((ref) {
-  final selection = ref.watch(threadSelectionProvider);
-  return selection is NewThreadIntent;
-});
