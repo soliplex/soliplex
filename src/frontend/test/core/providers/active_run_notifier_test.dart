@@ -1,48 +1,58 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_notifier.dart';
+import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
+import 'package:soliplex_frontend/core/providers/api_provider.dart';
 
 import '../../helpers/test_helpers.dart';
 
 void main() {
   group('ActiveRunNotifier', () {
+    late ProviderContainer container;
+
+    setUp(() {
+      container = ProviderContainer(
+        overrides: [
+          httpTransportProvider.overrideWithValue(FakeHttpTransport()),
+          urlBuilderProvider.overrideWithValue(FakeUrlBuilder()),
+        ],
+      );
+    });
+
+    tearDown(() {
+      container.dispose();
+    });
+
     group('initial state', () {
       test('starts in IdleState', () {
-        final notifier = createTestActiveRunNotifier();
-        addTearDown(notifier.dispose);
-
-        expect(notifier.state, isA<IdleState>());
+        final state = container.read(activeRunNotifierProvider);
+        expect(state, isA<IdleState>());
       });
 
       test('isRunning is false initially', () {
-        final notifier = createTestActiveRunNotifier();
-        addTearDown(notifier.dispose);
-
-        expect(notifier.state.isRunning, isFalse);
+        final state = container.read(activeRunNotifierProvider);
+        expect(state.isRunning, isFalse);
       });
     });
 
     group('reset', () {
       test('returns to IdleState', () {
-        final notifier = createTestActiveRunNotifier();
-        addTearDown(notifier.dispose);
+        container.read(activeRunNotifierProvider.notifier).reset();
 
-        notifier.reset();
-
-        expect(notifier.state, isA<IdleState>());
+        final state = container.read(activeRunNotifierProvider);
+        expect(state, isA<IdleState>());
       });
 
       test('clears context', () {
-        final notifier = createTestActiveRunNotifier();
-        addTearDown(notifier.dispose);
+        container.read(activeRunNotifierProvider.notifier).reset();
 
-        notifier.reset();
-
-        expect(notifier.state.messages, isEmpty);
-        expect(notifier.state.rawEvents, isEmpty);
+        final state = container.read(activeRunNotifierProvider);
+        expect(state.messages, isEmpty);
+        expect(state.rawEvents, isEmpty);
       });
     });
 

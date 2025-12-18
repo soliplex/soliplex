@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
-import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 import 'package:soliplex_frontend/features/chat/chat_panel.dart';
@@ -34,11 +33,7 @@ void main() {
             roomsProvider.overrideWith((_) async => [testRoom]),
             threadsProvider('test-room')
                 .overrideWith((_) async => [testThread]),
-            activeRunNotifierProvider.overrideWith(
-              (ref) => MockActiveRunNotifier(
-                initialState: const IdleState(),
-              ),
-            ),
+            activeRunNotifierOverride(const IdleState()),
           ],
         ),
       );
@@ -67,11 +62,7 @@ void main() {
             roomsProvider.overrideWith((_) async => [testRoom]),
             threadsProvider('test-room')
                 .overrideWith((_) async => [testThread]),
-            activeRunNotifierProvider.overrideWith(
-              (ref) => MockActiveRunNotifier(
-                initialState: const IdleState(),
-              ),
-            ),
+            activeRunNotifierOverride(const IdleState()),
           ],
         ),
       );
@@ -95,11 +86,7 @@ void main() {
             roomsProvider.overrideWith((_) async => [testRoom]),
             threadsProvider('test-room')
                 .overrideWith((_) async => [testThread]),
-            activeRunNotifierProvider.overrideWith(
-              (ref) => MockActiveRunNotifier(
-                initialState: const IdleState(),
-              ),
-            ),
+            activeRunNotifierOverride(const IdleState()),
           ],
         ),
       );
@@ -127,11 +114,7 @@ void main() {
             roomsProvider.overrideWith((_) async => [testRoom]),
             threadsProvider('test-room')
                 .overrideWith((_) async => [threadWithoutName]),
-            activeRunNotifierProvider.overrideWith(
-              (ref) => MockActiveRunNotifier(
-                initialState: const IdleState(),
-              ),
-            ),
+            activeRunNotifierOverride(const IdleState()),
           ],
         ),
       );
@@ -161,11 +144,7 @@ void main() {
             roomsProvider.overrideWith((_) async => [roomWithoutName]),
             threadsProvider('test-room')
                 .overrideWith((_) async => [threadWithoutName]),
-            activeRunNotifierProvider.overrideWith(
-              (ref) => MockActiveRunNotifier(
-                initialState: const IdleState(),
-              ),
-            ),
+            activeRunNotifierOverride(const IdleState()),
           ],
         ),
       );
@@ -191,11 +170,7 @@ void main() {
             roomsProvider.overrideWith((_) async => [testRoom]),
             threadsProvider('test-room')
                 .overrideWith((_) async => [testThread]),
-            activeRunNotifierProvider.overrideWith(
-              (ref) => MockActiveRunNotifier(
-                initialState: const IdleState(),
-              ),
-            ),
+            activeRunNotifierOverride(const IdleState()),
           ],
         ),
       );
@@ -221,11 +196,7 @@ void main() {
             roomsProvider.overrideWith((_) async => [testRoom]),
             threadsProvider('test-room')
                 .overrideWith((_) async => [testThread]),
-            activeRunNotifierProvider.overrideWith(
-              (ref) => MockActiveRunNotifier(
-                initialState: const IdleState(),
-              ),
-            ),
+            activeRunNotifierOverride(const IdleState()),
           ],
         ),
       );
