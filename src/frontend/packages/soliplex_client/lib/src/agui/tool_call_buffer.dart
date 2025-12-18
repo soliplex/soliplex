@@ -1,4 +1,3 @@
-import 'package:meta/meta.dart';
 import 'package:soliplex_client/src/models/chat_message.dart';
 
 /// Internal state for a tool call being buffered.
@@ -109,31 +108,4 @@ class ToolCallBuffer {
 
   /// Clears all active tool calls.
   void reset() => _activeToolCalls.clear();
-}
-
-/// Immutable snapshot of a tool call buffer state.
-@immutable
-class ToolCallBufferSnapshot {
-  /// Creates a snapshot with the given state.
-  const ToolCallBufferSnapshot({
-    required this.activeCount,
-    required this.toolCalls,
-  });
-
-  /// Creates a snapshot from a [ToolCallBuffer].
-  factory ToolCallBufferSnapshot.fromBuffer(ToolCallBuffer buffer) {
-    return ToolCallBufferSnapshot(
-      activeCount: buffer.activeCount,
-      toolCalls: buffer.allToolCalls,
-    );
-  }
-
-  /// Number of active tool calls.
-  final int activeCount;
-
-  /// List of tool call info objects.
-  final List<ToolCallInfo> toolCalls;
-
-  /// Whether there are any active tool calls.
-  bool get hasActiveToolCalls => activeCount > 0;
 }
