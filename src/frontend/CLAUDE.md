@@ -126,3 +126,4 @@ flutter test      # All green before any code is complete
 5. Keep `soliplex_client` pure Dart (no Flutter imports)
 6. Platform-specific code goes in `soliplex_client_native`
 7. New Flutter/Dart packages need a `.gitignore` (see <https://github.com/flutter/flutter/blob/master/.gitignore>)
+8. Keep all dependencies up to date: check `pubspec.yaml` in the main app AND each package in `packages/` against <https://pub.dev>
