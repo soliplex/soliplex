@@ -5,10 +5,12 @@ import enum
 import functools
 import importlib
 import inspect
+import itertools
 import json
 import os
 import pathlib
 import random
+import re
 import ssl
 import typing
 import warnings
@@ -21,8 +23,11 @@ from haiku.rag import config as hr_config
 from pydantic_ai import settings as ai_settings
 from pydantic_ai.agent import abstract as ai_ag_abstract
 
-SECRET_PREFIX = "secret:"
 FILE_PREFIX = "file:"
+
+SECRET_PREFIX = "secret:"
+SECRET_PATTERN = rf"{SECRET_PREFIX}(?P<secret_name>\w+)"
+SECRET_RE = re.compile(SECRET_PATTERN)
 
 SYNC_MEMORY_ENGINE_URL = "sqlite://"
 ASYNC_MEMORY_ENGINE_URL = "sqlite+aiosqlite://"
@@ -686,7 +691,7 @@ class HTTP_MCP_ClientToolsetConfig:
         url = self.url
 
         headers = {
-            key: self._installation_config.interpolate_secret(value)
+            key: self._installation_config.interpolate_secrets(value)
             for (key, value) in self.headers.items()
         }
 
@@ -1898,10 +1903,8 @@ class InstallationConfig:
 
         return self._secrets_map
 
-    def get_secret(self, secret_name) -> str:
+    def _resolve_secret(self, secret_name):
         from soliplex import secrets as secrets_module  # avoid cycle
-
-        secret_name = strip_secret_prefix(secret_name)
 
         try:
             secret_config = self.secrets_map[secret_name]
@@ -1910,15 +1913,27 @@ class InstallationConfig:
 
         return secrets_module.get_secret(secret_config)
 
-    def interpolate_secret(self, value):
-        # Support 'Bearer secret:SECRET_NAME' config.
-        if "secret:" in value:
-            tokens = [
-                self.get_secret(token) if "secret:" in token else token
-                for token in value.split(" ")
-            ]
-            value = " ".join(tokens)
-        return value
+    def get_secret(self, secret_name) -> str:
+        """Return the value for a given secret."""
+        secret_name = strip_secret_prefix(secret_name)
+        return self._resolve_secret(secret_name)
+
+    def interpolate_secrets(self, value):
+        """Replace 'secret:<secret_name>' markers w/ secret value
+
+        The marker pattern may appear zero or more times.
+        """
+
+        def resolved_tokens(value):
+            tokens = SECRET_RE.split(value)
+
+            for two_or_one in itertools.batched(tokens, 2, strict=False):
+                yield two_or_one[0]
+
+                if len(two_or_one) == 2:
+                    yield self._resolve_secret(two_or_one[1])
+
+        return "".join(resolved_tokens(value))
 
     #
     # Map values similar to 'os.environ'.

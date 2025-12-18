@@ -2328,7 +2328,7 @@ def test_http_mctc_tool_kwargs(
     w_headers,
 ):
     installation_config.get_secret.return_value = "<secret>"
-    installation_config.interpolate_secret.return_value = "<interp>"
+    installation_config.interpolate_secrets.return_value = "<interp>"
 
     http_mctc = config.HTTP_MCP_ClientToolsetConfig(
         url=HTTP_MCP_URL,
@@ -2368,10 +2368,10 @@ def test_http_mctc_tool_kwargs(
         strict=True,
     ):
         assert f_key == cfg_key
-        assert f_val is installation_config.interpolate_secret.return_value
+        assert f_val is installation_config.interpolate_secrets.return_value
         assert (
             mock.call(cfg_value)
-            in installation_config.interpolate_secret.call_args_list
+            in installation_config.interpolate_secrets.call_args_list
         )
 
 
@@ -4114,15 +4114,26 @@ def test_installationconfig_get_secret(gs, secret_map, expectation):
 
 
 @pytest.mark.parametrize(
-    "value, secret_map, expectation, exp_value",
+    "value, secret_map, expectation, exp_value, exp_gs_configs",
     [
-        ("No secret here", {}, NoRaise, "No secret here"),
-        (f"Foo secret:{SECRET_NAME_1}", {}, RaiseUnknownSecret, None),
+        ("No secret here", {}, NoRaise, "No secret here", ()),
+        (f"Foo secret:{SECRET_NAME_1}", {}, RaiseUnknownSecret, None, ()),
         (
             f"Foo secret:{SECRET_NAME_1}",
             {SECRET_NAME_1: SECRET_CONFIG_1},
             NoRaise,
-            "Foo <secret>",
+            "Foo <secret1>",
+            [SECRET_CONFIG_1],
+        ),
+        (
+            f"PRE|secret:{SECRET_NAME_1}|INTER|secret:{SECRET_NAME_2}|POST",
+            {
+                SECRET_NAME_1: SECRET_CONFIG_1,
+                SECRET_NAME_2: SECRET_CONFIG_2,
+            },
+            NoRaise,
+            "PRE|<secret1>|INTER|<secret2>|POST",
+            [SECRET_CONFIG_1, SECRET_CONFIG_2],
         ),
     ],
 )
@@ -4133,8 +4144,9 @@ def test_installationconfig_interpolate_secret(
     secret_map,
     expectation,
     exp_value,
+    exp_gs_configs,
 ):
-    gs.return_value = "<secret>"
+    gs.side_effect = ["<secret1>", "<secret2>"]
 
     i_config = config.InstallationConfig(
         id="test-ic",
@@ -4142,14 +4154,19 @@ def test_installationconfig_interpolate_secret(
     )
 
     with expectation:
-        found = i_config.interpolate_secret(value)
+        found = i_config.interpolate_secrets(value)
 
     if exp_value is not None:
         assert found == exp_value
         if exp_value == value:
             gs.assert_not_called()
         else:
-            gs.assert_called_once_with(SECRET_CONFIG_1)
+            for f_call, gs_config in zip(
+                gs.call_args_list,
+                exp_gs_configs,
+                strict=True,
+            ):
+                assert f_call == mock.call(gs_config)
     else:
         gs.assert_not_called()
 
