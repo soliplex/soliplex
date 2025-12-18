@@ -1180,6 +1180,21 @@ agent_configs:
       system_prompt: "{SYSTEM_PROMPT}"
 """
 
+TP_DBURI_SYNC = "sqlite:////tmp/testing.sqlite"
+TP_DBURI_ASYNC = "sqlite+aiosqlite:////tmp/testing.sqlite"
+
+W_TP_DBURI_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "_thread_persistence_dburi_sync": TP_DBURI_SYNC,
+    "_thread_persistence_dburi_async": TP_DBURI_ASYNC,
+}
+W_TP_DBURI_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+thread_persistence_dburi:
+    sync: {TP_DBURI_SYNC}
+    async: {TP_DBURI_ASYNC}
+"""
+
 
 @pytest.fixture
 def installation_config():
@@ -4317,6 +4332,42 @@ def test_installationconfig_agent_configs_map_w_existing():
 
 
 @pytest.mark.parametrize(
+    "w_kw, expected",
+    [
+        (
+            BARE_INSTALLATION_CONFIG_KW.copy(),
+            config.SYNC_MEMORY_ENGINE_URL,
+        ),
+        (W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(), TP_DBURI_SYNC),
+    ],
+)
+def test_installationconfig_thread_persistence_dburi_sync(w_kw, expected):
+    installation_config = config.InstallationConfig(**w_kw)
+
+    found = installation_config.thread_persistence_dburi_sync
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "w_kw, expected",
+    [
+        (
+            BARE_INSTALLATION_CONFIG_KW.copy(),
+            config.ASYNC_MEMORY_ENGINE_URL,
+        ),
+        (W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(), TP_DBURI_ASYNC),
+    ],
+)
+def test_installationconfig_thread_persistence_dburi_async(w_kw, expected):
+    installation_config = config.InstallationConfig(**w_kw)
+
+    found = installation_config.thread_persistence_dburi_async
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
     "config_yaml, expected_kw",
     [
         (
@@ -4386,6 +4437,10 @@ def test_installationconfig_agent_configs_map_w_existing():
         (
             W_AGENT_CONFIG_INSTALLATION_CONFIG_YAML,
             W_AGENT_CONFIG_INSTALLATION_CONFIG_KW.copy(),
+        ),
+        (
+            W_TP_DBURI_INSTALLATION_CONFIG_YAML,
+            W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(),
         ),
     ],
 )

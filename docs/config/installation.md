@@ -86,6 +86,20 @@ Please see [this page](agents.md) for details on configuring agents.
 In addition to the values described there, note that the `id` element is
 required here.
 
+## Thread Persistence DBURI
+
+An installation can define a DBURI for the database used to store
+AG-UI threads, runs, events, etc.  This DBURI must be compatible
+with SQLAlchemy's [asyncio extension](
+https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html).
+Dialects known to work include:
+
+- [`aiosqlite`](https://aiosqlite.omnilib.dev/en/stable/index.html)
+- [`asyncpg`](https://magicstack.github.io/asyncpg/current/)
+
+By default, Soliplex configures thread persistence using
+in-memory `aiosqlite` (DBURI `sqlite+aiosqlite://`).
+
 ## OIDC Auth Provider Paths
 
 The `oidc_paths` element specifies one or more filesystem paths to be

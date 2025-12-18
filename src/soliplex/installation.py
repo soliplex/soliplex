@@ -39,6 +39,14 @@ class Installation:
         return self._config.haiku_rag_config
 
     @property
+    def thread_persistence_dburi_sync(self) -> str:
+        return self._config.thread_persistence_dburi_sync
+
+    @property
+    def thread_persistence_dburi_async(self) -> str:
+        return self._config.thread_persistence_dburi_async
+
+    @property
     def auth_disabled(self):
         return len(self._config.oidc_auth_system_configs) == 0
 
@@ -180,9 +188,8 @@ async def lifespan(
     the_installation.resolve_environment()
     the_convos = convos.Conversations()
 
-    # XXX temporary hack!:  should come from the 'i_config'
     engine = sqla_asyncio.create_async_engine(
-        agui_persistence.ASYNC_MEMORY_ENGINE_URL,
+        the_installation.thread_persistence_dburi_async
     )
     async with engine.begin() as connection:
         await connection.run_sync(agui_persistence.Base.metadata.create_all)

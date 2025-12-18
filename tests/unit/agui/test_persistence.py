@@ -10,6 +10,7 @@ from sqlalchemy import orm as sqla_orm
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agui as agui_package
+from soliplex import config
 from soliplex.agui import persistence as agui_persistence
 
 NOW = datetime.datetime.now(datetime.UTC)
@@ -453,7 +454,7 @@ async def test_threadstorage_session(faux_sqlaa_session):
 @pytest_asyncio.fixture()
 async def the_async_engine():
     engine = sqla_asyncio.create_async_engine(
-        agui_persistence.ASYNC_MEMORY_ENGINE_URL,
+        config.ASYNC_MEMORY_ENGINE_URL,
     )
     async with engine.begin() as connection:
         await connection.run_sync(agui_persistence.Base.metadata.create_all)
@@ -911,7 +912,7 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
 @pytest.fixture
 def the_engine():
-    engine = sqlalchemy.create_engine(agui_persistence.SYNC_MEMORY_ENGINE_URL)
+    engine = sqlalchemy.create_engine(config.SYNC_MEMORY_ENGINE_URL)
 
     yield engine
 
@@ -1127,7 +1128,7 @@ def test_get_session(
         assert isinstance(session, sqla_orm.Session)
         assert session.bind is ce.return_value
 
-        ce.assert_called_once_with(agui_persistence.SYNC_MEMORY_ENGINE_URL)
+        ce.assert_called_once_with(config.SYNC_MEMORY_ENGINE_URL)
 
         if init_schema:
             connection = ce.return_value.connect.return_value
@@ -1158,7 +1159,7 @@ async def test_get_async_session(
         assert isinstance(session, sqla_asyncio.AsyncSession)
         assert session.bind is engine
 
-        cae.assert_called_once_with(agui_persistence.ASYNC_MEMORY_ENGINE_URL)
+        cae.assert_called_once_with(config.ASYNC_MEMORY_ENGINE_URL)
 
         if init_schema:
             engine.begin.assert_called_once_with()

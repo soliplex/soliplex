@@ -15,6 +15,7 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 from sqlalchemy.sql import sqltypes as sqla_sqltypes
 
 from soliplex import agui as agui_package
+from soliplex import config
 from soliplex.agui import util as agui_util
 
 AsyncAttrs = sqla_asyncio.AsyncAttrs
@@ -26,9 +27,6 @@ relationship = sqla_orm.relationship
 
 MESSAGE_DESERIALIZER = pydantic.TypeAdapter(agui_core.Message)
 EVENT_DESERIALIZER = pydantic.TypeAdapter(agui_core.Event)
-
-SYNC_MEMORY_ENGINE_URL = "sqlite://"
-ASYNC_MEMORY_ENGINE_URL = "sqlite+aiosqlite://"
 
 # Recommended naming convention used by Alembic, as various different database
 # providers will autogenerate vastly different names making migrations more
@@ -817,7 +815,7 @@ class ThreadStorage(agui_package.ThreadStorage):
 
 
 def get_session(
-    engine_url=SYNC_MEMORY_ENGINE_URL,
+    engine_url=config.SYNC_MEMORY_ENGINE_URL,
     init_schema=False,
     **engine_kwargs,
 ):
@@ -831,7 +829,7 @@ def get_session(
 
 
 async def get_async_session(
-    engine_url=ASYNC_MEMORY_ENGINE_URL,
+    engine_url=config.ASYNC_MEMORY_ENGINE_URL,
     init_schema=False,
     **engine_kwargs,
 ):

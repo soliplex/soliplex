@@ -74,6 +74,8 @@ INSTALLATION_OIDC_AUTH_SYSTEM_CONFIG = config.OIDCAuthSystemConfig(
     client_secret="SHHHHHHH! DON't SHOW ME",
     scope=INSTALLATION_OIDC_AUTH_SYSTEM_SCOPE,
 )
+INSTALLATION_TP_DBURI_SYNC = "sqlite:////tmp/test-models.sqlite"
+INSTALLATION_TP_DBURI_ASYNC = "sqlite+aiosqlite:////tmp/test-models.sqlite"
 
 CONVO_UUID = uuid.uuid4()
 USER_TEXT = "Why is the sky blue?"
@@ -699,6 +701,22 @@ def installation_oidc_auth_system_configs(request):
     return kwargs
 
 
+@pytest.fixture(
+    params=[
+        None,
+        {
+            "_thread_persistence_dburi_sync": INSTALLATION_TP_DBURI_SYNC,
+            "_thread_persistence_dburi_async": INSTALLATION_TP_DBURI_ASYNC,
+        },
+    ]
+)
+def installation_tp_dburi(request):
+    kw = {}
+    if request.param is not None:
+        kw |= request.param
+    return kw
+
+
 def test_installation_from_config(
     installation_secrets,
     installation_environment,
@@ -709,6 +727,7 @@ def test_installation_from_config(
     installation_completion_paths,
     installation_quizzes_paths,
     installation_oidc_auth_system_configs,
+    installation_tp_dburi,
 ):
     installation_config = config.InstallationConfig(
         id=INSTALLATION_ID,
@@ -721,6 +740,7 @@ def test_installation_from_config(
         **installation_completion_paths,
         **installation_quizzes_paths,
         **installation_oidc_auth_system_configs,
+        **installation_tp_dburi,
     )
 
     installation_model = models.Installation.from_config(installation_config)
@@ -791,6 +811,25 @@ def test_installation_from_config(
         )
     else:
         assert installation_model.quizzes_paths == [pathlib.Path("quizzes")]
+
+    if installation_tp_dburi:
+        assert (
+            installation_model.thread_persistence_dburi_sync
+            == installation_tp_dburi["_thread_persistence_dburi_sync"]
+        )
+        assert (
+            installation_model.thread_persistence_dburi_async
+            == installation_tp_dburi["_thread_persistence_dburi_async"]
+        )
+    else:
+        assert (
+            installation_model.thread_persistence_dburi_sync
+            == config.SYNC_MEMORY_ENGINE_URL
+        )
+        assert (
+            installation_model.thread_persistence_dburi_async
+            == config.ASYNC_MEMORY_ENGINE_URL
+        )
 
     for found, expected in zip(
         installation_model.oidc_auth_systems,

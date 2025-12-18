@@ -311,6 +311,8 @@ class Installation(pydantic.BaseModel):
     completion_paths: list[pathlib.Path] = []
     quizzes_paths: list[pathlib.Path] = []
     oidc_auth_systems: list[OIDCAuthSystem] = []
+    thread_persistence_dburi_sync: str | None = None
+    thread_persistence_dburi_async: str | None = None
 
     @classmethod
     def from_config(cls, installation_config: config.InstallationConfig):
@@ -337,6 +339,16 @@ class Installation(pydantic.BaseModel):
             completion_paths=installation_config.completion_paths,
             quizzes_paths=installation_config.quizzes_paths,
             oidc_auth_systems=oidc_auth_systems,
+            # Use the non-property versions here to avoid exposing
+            # interpolated secrets
+            thread_persistence_dburi_sync=(
+                installation_config._thread_persistence_dburi_sync
+                or config.SYNC_MEMORY_ENGINE_URL
+            ),
+            thread_persistence_dburi_async=(
+                installation_config._thread_persistence_dburi_async
+                or config.ASYNC_MEMORY_ENGINE_URL
+            ),
         )
 
 

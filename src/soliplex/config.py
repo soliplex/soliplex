@@ -24,6 +24,9 @@ from pydantic_ai.agent import abstract as ai_ag_abstract
 SECRET_PREFIX = "secret:"
 FILE_PREFIX = "file:"
 
+SYNC_MEMORY_ENGINE_URL = "sqlite://"
+ASYNC_MEMORY_ENGINE_URL = "sqlite+aiosqlite://"
+
 # ============================================================================
 #   Exceptions raised during YAML config processing
 # ============================================================================
@@ -2035,6 +2038,28 @@ class InstallationConfig:
     #
     quizzes_paths: list[pathlib.Path] = None
 
+    #
+    # Thread persistence DB-URI
+    #
+    _thread_persistence_dburi_sync: str = None
+    _thread_persistence_dburi_async: str = None
+
+    @property
+    def thread_persistence_dburi_sync(self):
+        return (
+            SYNC_MEMORY_ENGINE_URL
+            if self._thread_persistence_dburi_sync is None
+            else self._thread_persistence_dburi_sync
+        )
+
+    @property
+    def thread_persistence_dburi_async(self):
+        return (
+            ASYNC_MEMORY_ENGINE_URL
+            if self._thread_persistence_dburi_async is None
+            else self._thread_persistence_dburi_async
+        )
+
     # Set by `from_yaml` factory
     _config_path: pathlib.Path = None
 
@@ -2086,6 +2111,10 @@ class InstallationConfig:
                 for a_config in config.get("agent_configs", ())
             ]
             config["agent_configs"] = agent_configs
+
+            tp_dburi = config.pop("thread_persistence_dburi", {})
+            config["_thread_persistence_dburi_sync"] = tp_dburi.get("sync")
+            config["_thread_persistence_dburi_async"] = tp_dburi.get("async")
 
             return cls(**config)
 
