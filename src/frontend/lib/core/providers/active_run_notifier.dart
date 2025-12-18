@@ -1,8 +1,49 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:meta/meta.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
+
+/// Internal state representing the notifier's resource management.
+///
+/// This sealed class ensures proper lifecycle management of the Thread,
+/// CancelToken, and StreamSubscription without nullable fields.
+sealed class NotifierInternalState {
+  const NotifierInternalState();
+}
+
+/// No active run - initial state or after reset.
+@immutable
+class IdleInternalState extends NotifierInternalState {
+  const IdleInternalState();
+}
+
+/// A run is currently active with associated resources.
+///
+/// Not marked as @immutable because it holds mutable StreamSubscription.
+class RunningInternalState extends NotifierInternalState {
+  RunningInternalState({
+    required this.thread,
+    required this.cancelToken,
+    required this.subscription,
+  });
+
+  /// The Thread handling SSE streaming.
+  final Thread thread;
+
+  /// Token for cancelling the run.
+  final CancelToken cancelToken;
+
+  /// Subscription to the event stream.
+  final StreamSubscription<AgUiEvent> subscription;
+
+  /// Disposes of all resources.
+  Future<void> dispose() async {
+    cancelToken.cancel();
+    await subscription.cancel();
+  }
+}
 
 /// Manages the lifecycle of an active AG-UI run.
 ///
@@ -28,13 +69,11 @@ class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
     required UrlBuilder urlBuilder,
   })  : _transport = transport,
         _urlBuilder = urlBuilder,
-        super(const ActiveRunState.idle());
+        super(const IdleState());
 
   final HttpTransport _transport;
   final UrlBuilder _urlBuilder;
-  Thread? _thread;
-  CancelToken? _cancelToken;
-  StreamSubscription<AgUiEvent>? _eventSubscription;
+  NotifierInternalState _internalState = const IdleInternalState();
 
   /// Starts a new run with the given message.
   ///
@@ -55,13 +94,14 @@ class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
       );
     }
 
-    // Cancel any previous subscription
-    await _eventSubscription?.cancel();
-    _cancelToken?.cancel();
+    // Dispose any previous resources
+    if (_internalState is RunningInternalState) {
+      await (_internalState as RunningInternalState).dispose();
+    }
 
-    // Create new cancel token and thread
-    _cancelToken = CancelToken();
-    _thread = Thread(
+    // Create new resources
+    final cancelToken = CancelToken();
+    final thread = Thread(
       transport: _transport,
       urlBuilder: _urlBuilder,
       roomId: roomId,
@@ -72,46 +112,75 @@ class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
     final runId = 'run_${DateTime.now().millisecondsSinceEpoch}';
 
     // Set running state
-    state = ActiveRunState.running(
+    state = RunningState(
       threadId: threadId,
       runId: runId,
+      context: state.context,
     );
 
     try {
       // Start streaming
-      final eventStream = _thread!.run(
+      final eventStream = thread.run(
         runId: runId,
         userMessage: userMessage,
         initialState: initialState,
-        cancelToken: _cancelToken,
+        cancelToken: cancelToken,
       );
 
       // Process events
-      _eventSubscription = eventStream.listen(
+      // ignore: cancel_subscriptions - stored in _internalState and cancelled
+      final subscription = eventStream.listen(
         _processEvent,
         onError: (Object error, StackTrace stackTrace) {
-          state = state.copyWith(
-            status: ThreadRunStatus.error,
-            errorMessage: error.toString(),
-          );
+          final currentState = state;
+          if (currentState is RunningState) {
+            state = ErrorState(
+              threadId: currentState.threadId,
+              runId: currentState.runId,
+              errorMessage: error.toString(),
+              context: currentState.context,
+            );
+          }
         },
         onDone: () {
           // If stream ends without RUN_FINISHED or RUN_ERROR,
           // mark as finished
-          if (state.isRunning) {
-            state = state.copyWith(status: ThreadRunStatus.finished);
+          final currentState = state;
+          if (currentState is RunningState) {
+            state = FinishedState(
+              threadId: currentState.threadId,
+              runId: currentState.runId,
+              context: currentState.context,
+            );
           }
         },
         cancelOnError: false,
       );
+
+      // Store running state
+      _internalState = RunningInternalState(
+        thread: thread,
+        cancelToken: cancelToken,
+        subscription: subscription,
+      );
     } on CancelledException {
       // User cancelled - already handled in cancelRun
-      state = ActiveRunState.cancelled(messages: state.messages);
-    } catch (e) {
-      state = state.copyWith(
-        status: ThreadRunStatus.error,
-        errorMessage: e.toString(),
+      state = CancelledState(
+        context: state.context,
+        reason: 'Cancelled by user',
       );
+      _internalState = const IdleInternalState();
+    } catch (e) {
+      final currentState = state;
+      if (currentState is RunningState) {
+        state = ErrorState(
+          threadId: currentState.threadId,
+          runId: currentState.runId,
+          errorMessage: e.toString(),
+          context: currentState.context,
+        );
+      }
+      _internalState = const IdleInternalState();
     }
   }
 
@@ -119,116 +188,119 @@ class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
   ///
   /// Preserves all completed messages but clears streaming state.
   Future<void> cancelRun() async {
-    _cancelToken?.cancel();
-    await _eventSubscription?.cancel();
-    _eventSubscription = null;
+    if (_internalState is RunningInternalState) {
+      await (_internalState as RunningInternalState).dispose();
+      _internalState = const IdleInternalState();
+    }
 
-    state = ActiveRunState.cancelled(messages: state.messages);
+    state = CancelledState(
+      context: state.context,
+      reason: 'Cancelled by user',
+    );
   }
 
   /// Resets to idle state, clearing all messages and state.
   void reset() {
-    _cancelToken?.cancel();
-    _eventSubscription?.cancel();
-    _eventSubscription = null;
-    _thread = null;
+    if (_internalState is RunningInternalState) {
+      (_internalState as RunningInternalState).dispose();
+      _internalState = const IdleInternalState();
+    }
 
-    state = const ActiveRunState.idle();
+    state = const IdleState();
   }
 
   /// Processes a single AG-UI event and updates state accordingly.
   void _processEvent(AgUiEvent event) {
-    // Store raw event (for AM5 Detail panel)
-    final updatedRawEvents = [...state.rawEvents, event];
+    final currentState = state;
+    if (currentState is! RunningState) return;
+
+    // Store raw event
+    final updatedContext = currentState.context.copyWith(
+      rawEvents: [...currentState.rawEvents, event],
+    );
 
     switch (event) {
       case RunStartedEvent():
-        // Run started - status already set to running
-        state = state.copyWith(rawEvents: updatedRawEvents);
+        // Run started - just update raw events
+        state = currentState.copyWith(context: updatedContext);
 
       case RunFinishedEvent():
-        // Run finished successfully - reset streaming state
-        state = state.copyWith(
-          status: ThreadRunStatus.finished,
-          // ignore: avoid_redundant_argument_values
-          isTextStreaming: false,
-          rawEvents: updatedRawEvents,
+        // Run finished successfully
+        state = FinishedState(
+          threadId: currentState.threadId,
+          runId: currentState.runId,
+          context: updatedContext,
         );
 
       case RunErrorEvent(:final message):
-        // Run encountered an error - reset streaming state
-        state = state.copyWith(
-          status: ThreadRunStatus.error,
+        // Run encountered an error
+        state = ErrorState(
+          threadId: currentState.threadId,
+          runId: currentState.runId,
           errorMessage: message,
-          // ignore: avoid_redundant_argument_values
-          isTextStreaming: false,
-          rawEvents: updatedRawEvents,
+          context: updatedContext,
         );
 
       case TextMessageStartEvent(:final messageId):
         // Start streaming a new text message
-        state = state.copyWith(
-          currentMessageId: messageId,
-          streamingText: '',
-          isTextStreaming: true,
-          rawEvents: updatedRawEvents,
+        state = currentState.copyWith(
+          context: updatedContext,
+          textStreaming: Streaming(messageId: messageId, text: ''),
         );
 
       case TextMessageContentEvent(:final messageId, :final delta):
         // Append streaming text content
-        if (state.currentMessageId == messageId) {
-          final newText = (state.streamingText ?? '') + delta;
-          state = state.copyWith(
-            streamingText: newText,
-            rawEvents: updatedRawEvents,
+        final streaming = currentState.textStreaming;
+        if (streaming is Streaming && streaming.messageId == messageId) {
+          state = currentState.copyWith(
+            context: updatedContext,
+            textStreaming: Streaming(
+              messageId: messageId,
+              text: streaming.text + delta,
+            ),
           );
         }
 
       case TextMessageEndEvent(:final messageId):
         // Complete the streaming message
-        final matchesCurrentMessage = state.currentMessageId == messageId;
-        if (matchesCurrentMessage && state.streamingText != null) {
-          final newMessage = ChatMessage.text(
+        final streaming = currentState.textStreaming;
+        if (streaming is Streaming && streaming.messageId == messageId) {
+          final newMessage = TextMessage.create(
             id: messageId,
             user: ChatUser.assistant,
-            text: state.streamingText!,
+            text: streaming.text,
           );
-
-          state = state.copyWith(
-            messages: [...state.messages, newMessage],
-            // ignore: avoid_redundant_argument_values
-            isTextStreaming: false,
-            rawEvents: updatedRawEvents,
+          state = currentState.copyWith(
+            context: updatedContext.copyWith(
+              messages: [...currentState.messages, newMessage],
+            ),
+            textStreaming: const NotStreaming(),
           );
         }
 
       case ToolCallStartEvent(:final toolCallId, :final toolCallName):
-        // Tool call started
-        final toolCall = ToolCallInfo(
-          id: toolCallId,
-          name: toolCallName,
-          arguments: '',
-        );
-        state = state.copyWith(
-          activeToolCalls: [...state.activeToolCalls, toolCall],
-          rawEvents: updatedRawEvents,
+        final toolCall = ToolCallInfo(id: toolCallId, name: toolCallName);
+        state = currentState.copyWith(
+          context: updatedContext.copyWith(
+            activeToolCalls: [...currentState.activeToolCalls, toolCall],
+          ),
         );
 
       case ToolCallEndEvent(:final toolCallId):
         // Tool call finished
-        final updatedToolCalls = state.activeToolCalls
+        final updatedToolCalls = currentState.activeToolCalls
             .where((tc) => tc.id != toolCallId)
             .toList();
-        state = state.copyWith(
-          activeToolCalls: updatedToolCalls,
-          rawEvents: updatedRawEvents,
+        state = currentState.copyWith(
+          context: updatedContext.copyWith(activeToolCalls: updatedToolCalls),
         );
 
       case StateSnapshotEvent(:final snapshot):
         // State snapshot received
-        state = state.copyWith(
-          state: Map<String, dynamic>.from(snapshot),
-          rawEvents: updatedRawEvents,
+        state = currentState.copyWith(
+          context: updatedContext.copyWith(
+            state: Map<String, dynamic>.from(snapshot),
+          ),
         );
 
       case StateDeltaEvent():
@@ -242,14 +314,15 @@ class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
       case CustomEvent():
       case UnknownEvent():
         // Store event but don't process (AM3 doesn't need these)
-        state = state.copyWith(rawEvents: updatedRawEvents);
+        state = currentState.copyWith(context: updatedContext);
     }
   }
 
   @override
   void dispose() {
-    _eventSubscription?.cancel();
-    _cancelToken?.cancel();
+    if (_internalState is RunningInternalState) {
+      (_internalState as RunningInternalState).dispose();
+    }
     super.dispose();
   }
 }

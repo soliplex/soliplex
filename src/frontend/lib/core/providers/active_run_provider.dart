@@ -38,14 +38,6 @@ final activeRunNotifierProvider =
   );
 });
 
-/// Provider for tracking new thread intent.
-///
-/// When true, the chat input should create a new thread on send.
-/// When false, use the currently selected thread.
-///
-/// Set this to true when user clicks "New Conversation" button.
-final newThreadIntentProvider = StateProvider<bool>((ref) => false);
-
 /// Provider indicating whether a message can be sent.
 ///
 /// Returns true if:
@@ -65,7 +57,7 @@ final canSendMessageProvider = Provider<bool>((ref) {
   final room = ref.watch(currentRoomProvider);
   final thread = ref.watch(currentThreadProvider);
   final runState = ref.watch(activeRunNotifierProvider);
-  final newIntent = ref.watch(newThreadIntentProvider);
+  final selection = ref.watch(threadSelectionProvider);
 
   // Must have a room selected
   if (room == null) return false;
@@ -76,6 +68,9 @@ final canSendMessageProvider = Provider<bool>((ref) {
   // If thread selected, can send
   if (thread != null) return true;
 
+  // Check selection state
+  if (selection is NewThreadIntent) return true;
+
   // No thread selected - check if room has threads
   final roomId = room.id;
   final threadsAsync = ref.watch(threadsProvider(roomId));
@@ -83,8 +78,7 @@ final canSendMessageProvider = Provider<bool>((ref) {
   return threadsAsync.when(
     data: (threads) {
       // Can send if no threads exist (will create first thread)
-      // OR if new intent is set (will create new thread)
-      return threads.isEmpty || newIntent;
+      return threads.isEmpty;
     },
     loading: () => false,
     error: (_, __) => false,
