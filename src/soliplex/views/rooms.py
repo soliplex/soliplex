@@ -1,3 +1,6 @@
+import base64
+import io
+
 import fastapi
 from fastapi import responses
 from fastapi import security
@@ -161,4 +164,68 @@ async def get_room_documents(
     return models.RoomDocuments(
         room_id=room_id,
         document_set=document_set,
+    )
+
+
+@util.logfire_span("GET /v1/rooms/{room_id}/chunk/{chunk_id}")
+@router.get("/v1/rooms/{room_id}/chunk/{chunk_id}")
+async def get_chunk_visualization(
+    request: fastapi.Request,
+    room_id: str,
+    chunk_id: str,
+    the_installation: installation.Installation = depend_the_installation,
+    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+) -> models.ChunkVisualization:
+    """Return a set of page images for a chunk, highlighting the chunk text"""
+    user = auth.authenticate(the_installation, token)
+
+    try:
+        room_config = the_installation.get_room_config(room_id, user)
+    except KeyError:
+        raise fastapi.HTTPException(
+            status_code=404,
+            detail=f"No such room: {room_id}",
+        ) from None
+
+    images = None
+
+    for tool_config in room_config.tool_configs.values():
+        hr_config = getattr(tool_config, "haiku_rag_config", None)
+
+        if hr_config is not None:
+            hr_client_kw = {
+                "db_path": tool_config.rag_lancedb_path,
+                "config": hr_config,
+            }
+
+            async with rag_client.HaikuRAG(**hr_client_kw) as rag:
+                chunk = await rag.chunk_repository.get_by_id(chunk_id)
+
+                if not chunk:
+                    raise fastapi.HTTPException(
+                        status_code=404, detail=f"Chunk not found: {chunk_id}"
+                    ) from None
+
+                images = await rag.visualize_chunk(chunk_id)
+
+            break
+
+    # Convert PIL images to base64
+    base64_images = []
+
+    if not images:
+        raise fastapi.HTTPException(
+            status_code=404, detail=f"Chunk images not available: {chunk_id}"
+        ) from None
+
+    for img in images:
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        buffer.seek(0)
+        base64_images.append(base64.b64encode(buffer.read()).decode("utf-8"))
+
+    return models.ChunkVisualization(
+        chunk_id=chunk_id,
+        document_uri=chunk.document_uri,
+        images_base_64=base64_images,
     )
