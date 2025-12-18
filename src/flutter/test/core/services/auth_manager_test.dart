@@ -420,17 +420,16 @@ void main() {
         expect(result, equals('valid-token'));
       });
 
-      test('attempts refresh when token expiring soon', () async {
+      test('returns null when refresh fails for expiring token', () async {
         setupTokenExpiryMock(DateTime.now().add(const Duration(minutes: 2)));
         when(
           () => mockOidcInteractor.getSsoConfig(testServerId),
         ).thenAnswer((_) async => null); // Refresh fails
-        setupAccessTokenMock('old-token');
 
         final result = await authManager.getAccessToken(testServerId);
 
-        // Returns old token even if refresh fails
-        expect(result, equals('old-token'));
+        // Returns null when refresh fails to signal re-authentication needed
+        expect(result, isNull);
         verify(() => mockOidcInteractor.getSsoConfig(testServerId)).called(1);
       });
 
