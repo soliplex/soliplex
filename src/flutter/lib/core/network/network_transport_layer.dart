@@ -70,7 +70,8 @@ class NetworkTransportLayer {
   Future<void>? _refreshFuture;
 
   /// Handles 401 Unauthorized by refreshing headers.
-  /// Uses a completer lock to ensure only one refresh happens at a time.
+  /// Uses a cached future to ensure only one refresh happens at a time.
+  /// All concurrent callers await the same future.
   Future<void> _handle401() async {
     if (_headerRefresher == null) {
       DebugLog.network(
@@ -79,7 +80,7 @@ class NetworkTransportLayer {
       return;
     }
 
-    // If already refreshing, wait for it
+    // If already refreshing, wait for the existing operation
     if (_refreshFuture != null) {
       DebugLog.network(
         // ignore: lines_longer_than_80_chars (auto-documented)
@@ -95,30 +96,30 @@ class NetworkTransportLayer {
     DebugLog.network(
       'NetworkTransportLayer: 401 received. Initiating token refresh lock.',
     );
-    final completer = Completer<void>();
-    _refreshFuture = completer.future;
+
+    // Store the refresh operation as a future that all callers can await.
+    // This avoids orphaned completer errors.
+    _refreshFuture = _doRefresh();
 
     try {
-      DebugLog.network('NetworkTransportLayer: Calling header refresher...');
-      final newHeaders = await _headerRefresher();
-      DebugLog.network(
-        'NetworkTransportLayer: Header refresher returned. Updating headers.',
-      );
-      updateHeaders(newHeaders);
-      completer.complete();
-      DebugLog.network(
-        'NetworkTransportLayer: Token refresh completed successfully.',
-      );
-    } on Object catch (e) {
-      DebugLog.network(
-        'NetworkTransportLayer: Token refresh failed with error: $e',
-      );
-      completer.completeError(e);
-      rethrow;
+      await _refreshFuture;
     } finally {
       _refreshFuture = null;
       DebugLog.network('NetworkTransportLayer: Refresh lock released.');
     }
+  }
+
+  /// Performs the actual token refresh.
+  Future<void> _doRefresh() async {
+    DebugLog.network('NetworkTransportLayer: Calling header refresher...');
+    final newHeaders = await _headerRefresher!();
+    DebugLog.network(
+      'NetworkTransportLayer: Header refresher returned. Updating headers.',
+    );
+    updateHeaders(newHeaders);
+    DebugLog.network(
+      'NetworkTransportLayer: Token refresh completed successfully.',
+    );
   }
 
   /// Update the default headers.

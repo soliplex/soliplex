@@ -239,6 +239,52 @@ class AppStateManager {
     );
   }
 
+  /// Handle authentication required (e.g., token refresh failed).
+  ///
+  /// Called when an API request fails with 401 and token refresh fails.
+  /// Transitions to NeedsAuth state so user can re-authenticate.
+  Future<void> requireReauthentication(String serverId) async {
+    DebugLog.service(
+      'AppStateManager: requireReauthentication() serverId=$serverId',
+    );
+
+    final current = currentState;
+
+    // Only handle if we're in Ready state for this server
+    if (current is! AppStateReady || current.server.id != serverId) {
+      DebugLog.warn(
+        'AppStateManager: requireReauthentication called in wrong state or '
+        'for different server. Current: $current, requested: $serverId',
+      );
+      return;
+    }
+
+    try {
+      // Tokens are already cleared by AuthManager when refresh fails
+      // Re-probe server to get OIDC providers
+      final serverInfo = await _serverRegistry.probeServer(current.server.url);
+      DebugLog.service(
+        'AppStateManager: Transitioning to NeedsAuth for re-authentication',
+      );
+      _stateSubject.add(
+        AppStateNeedsAuth(
+          server: current.server,
+          providers: serverInfo.oidcProviders,
+        ),
+      );
+    } on Object catch (e) {
+      DebugLog.error(
+        'AppStateManager: Error during requireReauthentication: $e',
+      );
+      _stateSubject.add(
+        AppStateError(
+          'Re-authentication required but failed to probe server: $e',
+          previousState: current,
+        ),
+      );
+    }
+  }
+
   /// Switch to a different server.
   Future<void> switchServer(
     ServerInfo serverInfo, {

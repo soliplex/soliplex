@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soliplex/core/models/chat_models.dart';
 import 'package:soliplex/core/network/connection_manager.dart';
 import 'package:soliplex/core/network/server_room_key.dart';
+import 'package:soliplex/core/providers/app_providers.dart';
 import 'package:soliplex/core/providers/panel_providers.dart';
+import 'package:soliplex/core/services/auth_manager.dart';
 import 'package:soliplex/core/services/chat_search_service.dart';
 import 'package:soliplex/core/services/local_tools_service.dart';
 import 'package:soliplex/core/services/rooms_service.dart';
@@ -98,6 +100,13 @@ class _ChatContentState extends ConsumerState<ChatContent> {
         localToolsService: localToolsService,
         state: canvasState.toJson(),
       );
+    } on AuthenticationRequiredException catch (e) {
+      DebugLog.error('Authentication required: $e');
+      if (mounted) {
+        // Trigger re-authentication flow
+        final appStateManager = ref.read(appStateManagerProvider);
+        await appStateManager.requireReauthentication(e.serverId);
+      }
     } on Object catch (e) {
       DebugLog.error('Error sending message: $e');
       if (mounted) {
