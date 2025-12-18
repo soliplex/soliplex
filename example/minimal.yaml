@@ -89,6 +89,7 @@ agent_configs:
 # registry, and hence requires additional secrets
 #==========================================================================
 room_paths:
+  - "./rooms/ask_soliplex"
   - "./rooms/haiku"
   - "./rooms/joker"
   - "./rooms/faux"
