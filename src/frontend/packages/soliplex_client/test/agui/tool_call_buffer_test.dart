@@ -223,7 +223,7 @@ void main() {
 
         var toolCall = buffer.getToolCall('tc-1');
         expect(toolCall?.arguments, isEmpty);
-        expect(toolCall?.result, isNull);
+        expect(toolCall?.result, isEmpty);
 
         buffer.appendArgs(callId: 'tc-1', delta: 'args');
         toolCall = buffer.getToolCall('tc-1');
@@ -377,7 +377,7 @@ void main() {
 
         // Complete arguments
         final completed = buffer.completeToolCall(callId: 'tc-1');
-        expect(completed.status, equals(ToolCallStatus.pending));
+        expect(completed.status, equals(ToolCallStatus.executing));
         expect(buffer.isComplete('tc-1'), isTrue);
 
         // Get result
