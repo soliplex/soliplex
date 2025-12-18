@@ -119,9 +119,10 @@ flutter test      # All green before any code is complete
 
 ## Critical Rules
 
-1. Run `dart format lib test` before commits
-2. `flutter analyze` MUST report 0 errors AND 0 warnings
-3. All tests must pass before changes are complete
-4. Keep `soliplex_client` pure Dart (no Flutter imports)
-5. Platform-specific code goes in `soliplex_client_native`
-6. New Flutter/Dart packages need a `.gitignore` (see <https://github.com/flutter/flutter/blob/master/.gitignore>)
+1. Always refer to, and abide by `docs/rules/flutter_rules.md`
+2. Run `dart format lib test` before commits
+3. `flutter analyze` MUST report 0 errors AND 0 warnings
+4. All tests must pass before changes are complete
+5. Keep `soliplex_client` pure Dart (no Flutter imports)
+6. Platform-specific code goes in `soliplex_client_native`
+7. New Flutter/Dart packages need a `.gitignore` (see <https://github.com/flutter/flutter/blob/master/.gitignore>)
