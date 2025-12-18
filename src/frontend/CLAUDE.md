@@ -1,244 +1,127 @@
-# CLAUDE.md
-
-Update this file when the project structure changes.
-
-## Project Overview
+# Soliplex Frontend
 
 Cross-platform Flutter frontend for Soliplex AI-powered RAG system.
 
-## Planning Files
+## Quick Reference
+
+```bash
+flutter test                      # Run all tests (must pass)
+flutter analyze                   # Check issues (must be 0)
+dart format lib test              # Format code
+flutter pub get                   # Install dependencies
+flutter run -d macos              # Run on macOS
+npx markdownlint-cli "**/*.md"    # Lint markdown
+```
+
+## Project Structure
 
 ```text
-planning/
-├── ROADMAP.md                 - Version roadmap and future enhancements
-├── BRANDING-APPROACH.md       - White-label extensibility design
-├── client.md                  - soliplex_client package spec
-├── client-worklog.md          - soliplex_client progress tracking
-├── core_frontend.md           - Flutter infrastructure (Riverpod, navigation)
-├── core-frontend-worklog.md   - Core frontend progress tracking (resume here)
-├── external_backend_service.md - Backend API reference
-├── REVERSE_ENGINEERED.md      - Prototype architecture reference
-└── ui/
-    ├── chat.md                - Message display and input
-    ├── history.md             - Thread list for current room
-    ├── detail.md              - Event log, thinking, tool calls, state
-    ├── current_canvas.md      - Ephemeral AG-UI snapshots
-    └── permanent_canvas.md    - User-pinned items
+lib/
+├── core/                    # Infrastructure layer
+│   ├── models/              # ActiveRunState, AppConfig
+│   ├── providers/           # Riverpod providers (7)
+│   └── router/              # GoRouter configuration
+├── features/                # Feature screens
+│   ├── chat/                # Message display and input
+│   ├── history/             # Thread list sidebar
+│   ├── thread/              # Main chat view (dual-panel)
+│   ├── room/                # Room threads view
+│   └── ...                  # home, rooms, settings, login
+├── shared/                  # Reusable widgets and utilities
+└── main.dart                # Entry point
+
+packages/
+├── soliplex_client/         # Pure Dart: REST API, AG-UI protocol
+└── soliplex_client_native/  # Platform HTTP adapters (Cupertino)
+
+docs/planning/               # Design specs and work logs (see ROADMAP.md)
 ```
 
 ## Architecture
 
-### 3-Layer Structure
+**Three Layers:**
 
-```text
-┌─────────────────────────────────────────────┐
-│              UI Components                   │
-│  (Chat, History, Detail, Canvas)            │
-└──────────────────┬──────────────────────────┘
-                   │
-┌──────────────────▼──────────────────────────┐
-│              Core Frontend                   │
-│  Providers │ Navigation │ AG-UI Processing  │
-│  Config │ Registries (Widget, Panel, Route) │
-└──────────────────┬──────────────────────────┘
-                   │
-┌──────────────────▼──────────────────────────┐
-│      soliplex_client (Pure Dart package)    │
-└──────────────────────────────────────────────┘
-         ▲ (included in v1.0)
-┌────────┴─────────────────────────────────────┐
-│  soliplex_client_native (Flutter package)    │
-│  Native HTTP adapters                        │
-└──────────────────────────────────────────────┘
-```
+1. UI Components - Feature screens and widgets
+2. Core Frontend - Riverpod providers, navigation, AG-UI processing
+3. soliplex_client - Pure Dart package (no Flutter dependency)
 
-**Extensibility**: Core Frontend provides `SoliplexConfig` (branding, features) and `SoliplexRegistry` (custom widgets, commands, panels, routes) for white-label deployments.
+**Patterns:**
 
-### UI Component Scopes
+- Repository: SoliplexApi for backend communication
+- Factory: createPlatformAdapter() for HTTP adapters
+- Observer: HttpObserver for request/response monitoring
+- Buffer: TextMessageBuffer, ToolCallBuffer for streaming
 
-| Component | Scope | Description |
-|-----------|-------|-------------|
-| History | Room | Thread list, auto-selection |
-| Chat | Thread | Messages, streaming, input |
-| Detail | Thread | Events, thinking, tools, state |
-| CurrentCanvas | Thread | Ephemeral StateSnapshot/ActivitySnapshot |
-| PermanentCanvas | Global | Persistent pinned items |
+**State Management:**
 
-## Implementation Order (v1.0)
+- Riverpod (manual providers, no codegen)
+- ActiveRunNotifier orchestrates AG-UI streaming
+- RunContext persists thread/run state
 
-v1.0 uses a two-tier milestone system:
+**UI Component Scopes:**
 
-- **Developer Milestones (DM1-DM8)**: Client library work, verified by unit tests (85%+ coverage)
-- **App Milestones (AM1-AM8)**: End-user testable features
-
-See `planning/ROADMAP.md` for full milestone details and dependency graph.
-
-**Note**: Backend runs without authentication for AM1-AM6. AM7 adds authentication UI for future backend auth.
-
-### Priority 1: Client (`soliplex_client` package)
-
-Pure Dart package - Core functionality complete
-
-| Phase | Goal | Milestone | Status |
-|-------|------|-----------|--------|
-| 1 | Models & errors | DM1 | ✅ Done |
-| 2a | HTTP adapter interface + DartHttpAdapter | DM2 | ✅ Done |
-| 2b | HttpObserver + ObservableHttpAdapter | DM3 | ✅ Done |
-| 2c | HttpTransport, UrlBuilder, CancelToken | DM4 | ✅ Done |
-| 3 | API layer (SoliplexApi) | DM5 | ✅ Done |
-| 4 | AG-UI protocol (Thread, buffers, tool registry) | DM6 | ✅ Done |
-| 5 | Sessions (ConnectionManager, RoomSession) | DM7 | Not Started |
-| 6 | Facade (SoliplexClient) | DM8 | Not Started |
-
-**Progress:** 6/8 developer milestones complete. 587 tests, 100% coverage.
-
-### Priority 2: Core Frontend
-
-**CURRENT FOCUS** - Working chat complete (AM3), ready for AM4/AM5
-
-| Phase | Goal | Milestone | Status |
-|-------|------|-----------|--------|
-| 1 | Project setup, navigation (NO AUTH) | AM1 | ✅ Done |
-| 2 | ActiveRunNotifier + extensions | AM3 | ✅ Done |
-| 3 | Authentication + Extensibility | AM7 | Not Started |
-| 4 | Multi-room, extract to `soliplex_core` package | AM8 | Not Started |
-
-**Completed Milestones:**
-
-- **AM1:** App shell, navigation, 5 screens (38 tests, 89.9% coverage)
-- **AM2:** Real API integration, backend health checks (64 tests, 91.1% coverage)
-- **AM3:** Working chat with streaming, responsive layout (129 tests total)
-
-**Code Quality:** ✅ 0 analyzer issues, 0 warnings, all tests passing
-
-### Priority 3: UI Components (Parallel)
-
-Depends on: AM3 (Core Frontend phase 2)
-
-| Component | Phases | Milestone |
-|-----------|--------|-----------|
-| history | 4 | AM3 (P1), AM4 (P2-P4) |
-| chat | 3 | AM3 (P1), AM4 (P2-P3) |
-| detail | 4 | AM5 |
-| current_canvas | 3 | AM6 |
-| permanent_canvas | 3 | AM6 |
-
-**Key dependency**: Core Frontend Phase 2 (AM3) must include `ActiveRunState` extensions (`rawEvents`, `stateItems`, `currentActivity`) before detail and current_canvas can function.
-
-**Future versions**: See `planning/ROADMAP.md` for v1.1, v1.2, and v2.0 feature plans.
+- History → Room scope (thread list, auto-selection)
+- Chat → Thread scope (messages, streaming, input)
+- Detail → Thread scope (events, thinking, tools, state)
+- Canvas → Global scope (pinned items)
 
 ## Development Rules
 
-- Test coverage: 85%+
-- Follow strict Flutter linting (`very_good_analysis` library)
-- KISS, YAGNI, SOLID principles
-- When adding a new Flutter or Dart package, add a `.gitignore` file based on: <https://github.com/flutter/flutter/blob/master/.gitignore>
+- KISS, YAGNI, SOLID - simple solutions over clever ones
+- Edit existing files; don't create new ones without need
+- Match surrounding code style exactly
+- Prefer editing over rewriting implementations
+- Fix broken things immediately when found
 
-## Terminology
+## Code Quality
 
-- Milestone a significant, specific point in time that marks the completion of a major phase with deliverables that are testable by end user.
-
-## Code Quality Requirements
-
-### Formatter
-
-Code should be formatted before commits:
+**Formatting (run first):**
 
 ```bash
-dart format lib test
+dart format lib test   # Run before commits
 ```
 
-### Markdown Linting
-
-All markdown files must pass markdownlint with zero errors:
+**Zero tolerance on analyzer issues:**
 
 ```bash
-npx markdownlint-cli "**/*.md"
+flutter analyze   # Must report: "No issues found!"
 ```
 
-**Configuration:** `.markdownlint.json` at project root.
+Warnings indicate real bugs. Fix all errors, warnings, AND hints immediately.
 
-**Disabled rules** (stylistic preferences):
-
-- `MD013` - Line length (allows flexible formatting)
-- `MD024` - Duplicate headings (needed for repeated section patterns)
-- `MD033` - Inline HTML (allows HTML when needed)
-- `MD036` - Emphasis as heading (allows **bold** labels)
-- `MD041` - First line heading (CLAUDE.md starts with `#`)
-- `MD060` - Table column style (allows compact tables)
-
-**Key enforced rules:**
-
-- `MD022` - Headings must have blank lines around them
-- `MD032` - Lists must have blank lines around them
-
-### Analyzer: Zero Tolerance Policy
-
-**`flutter analyze` must report ZERO errors and ZERO warnings.**
-
-This is mandatory for all code changes:
-
-- Run `flutter analyze` before committing
-- Fix all errors AND warnings AND hints immediately
-- **No exceptions** - warnings are not "acceptable technical debt"
+**Tests must pass:**
 
 ```bash
-# Check before committing
-flutter analyze
-
-# Expected output: "No issues found!"
+flutter test      # All green before any code is complete
 ```
 
-**Why this matters:**
+**Coverage target:** 85%+
 
-- Analyzer warnings often indicate real bugs (null safety violations, unused variables, type mismatches)
-- Warnings accumulate quickly - "just one" becomes hundreds
-- Treating analyzer as strictly as tests prevents regression
-- Clean analyzer output makes code review faster
+## Testing
 
-### Tests: All Must Pass
+**Helpers** (test/helpers/test_helpers.dart):
 
-All tests must pass before any code is considered complete:
+- `MockSoliplexApi` - API mock for widget tests
+- `TestData` - Factory for test fixtures
+- `pumpWithProviders()` - Wraps widgets with required providers
 
-```bash
-flutter test
-```
+**Patterns:**
 
-## Git Recommendations
+- Mirror lib/ structure in test/
+- Unit tests for models and providers
+- Widget tests for UI components
 
-### Files to Commit
+## Configuration
 
-Always commit these configuration files:
-
+- `pubspec.yaml` - Dependencies
+- `analysis_options.yaml` - Dart analyzer (very_good_analysis)
 - `.markdownlint.json` - Markdown linting rules
-- `analysis_options.yaml` - Dart analyzer rules
-- `pubspec.yaml` - Package dependencies
 
-### Files to Gitignore
+## Critical Rules
 
-Standard Flutter/Dart ignores (see `packages/soliplex_client/.gitignore`):
-
-- `.dart_tool/`
-- `build/`
-- `.packages`
-- `pubspec.lock` (for packages, not apps)
-- `*.iml`
-- `.idea/`
-
-**Never gitignore** project configuration files like `.markdownlint.json` - they ensure team consistency.
-
-### Dependencies
-
-Keep non-major dependencies up to date:
-
-```bash
-flutter pub upgrade
-cd ./packages/soliplex_client/ && flutter pub upgrade
-```
-
-Check for outdated dependencies (for major version upgrade):
-
-```bash
-flutter pub outdated
-cd ./packages/soliplex_client/ && flutter pub outdated
-```
+1. Run `dart format lib test` before commits
+2. `flutter analyze` MUST report 0 errors AND 0 warnings
+3. All tests must pass before changes are complete
+4. Keep `soliplex_client` pure Dart (no Flutter imports)
+5. Platform-specific code goes in `soliplex_client_native`
+6. New Flutter/Dart packages need a `.gitignore` (see <https://github.com/flutter/flutter/blob/master/.gitignore>)
