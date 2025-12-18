@@ -8,7 +8,11 @@ import uuid
 
 import pydantic
 from ag_ui import core as agui_core
-from haiku.rag.graph.common import models as hr_graph_models
+
+try:
+    from haiku.rag.graph.common import models as hr_graph_models
+except ImportError:  # pragma: NO COVER haiku-rag-slim >= 0.21.0
+    from haiku.rag.graph.research import models as hr_graph_models
 
 from soliplex import agui as agui_package
 from soliplex import config
