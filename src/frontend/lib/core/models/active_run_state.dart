@@ -123,22 +123,27 @@ class Streaming extends TextStreaming {
 
 /// State for an active AG-UI run.
 ///
-/// This is a sealed class hierarchy that eliminates nullable fields by
-/// encoding state-specific data in each subclass.
+/// This is a sealed class hierarchy with 3 states:
+/// - [IdleState]: No active run
+/// - [RunningState]: Run is executing
+/// - [CompletedState]: Run finished (success, error, or cancelled)
 ///
 /// Use pattern matching for exhaustive handling:
 /// ```dart
 /// switch (state) {
 ///   case IdleState():
 ///     // No active run
-///   case CancelledState(:final reason):
-///     // Run was cancelled
 ///   case RunningState(:final threadId, :final runId, :final textStreaming):
 ///     // Run is active
-///   case FinishedState(:final threadId, :final runId):
-///     // Run completed successfully
-///   case ErrorState(:final threadId, :final runId, :final errorMessage):
-///     // Run failed with error
+///   case CompletedState(:final result):
+///     switch (result) {
+///       case Success():
+///         // Completed successfully
+///       case Failed(:final errorMessage):
+///         // Failed with error
+///       case Cancelled(:final reason):
+///         // Cancelled by user
+///     }
 /// }
 /// ```
 @immutable
@@ -161,21 +166,8 @@ sealed class ActiveRunState {
   /// Tool calls currently being executed.
   List<ToolCallInfo> get activeToolCalls => context.activeToolCalls;
 
-  // Type check convenience getters
-  /// Whether the run is idle (no active run).
-  bool get isIdle => this is IdleState;
-
-  /// Whether the run was cancelled.
-  bool get isCancelled => this is CancelledState;
-
   /// Whether the run is currently executing.
   bool get isRunning => this is RunningState;
-
-  /// Whether the run has finished successfully.
-  bool get isFinished => this is FinishedState;
-
-  /// Whether the run encountered an error.
-  bool get hasError => this is ErrorState;
 }
 
 /// No run is currently active.
@@ -198,33 +190,6 @@ class IdleState extends ActiveRunState {
 
   @override
   String toString() => 'IdleState(messages: ${messages.length})';
-}
-
-/// The run was cancelled by the user.
-///
-/// Preserves context from the cancelled run.
-@immutable
-class CancelledState extends ActiveRunState {
-  /// Creates a cancelled state with the given reason.
-  const CancelledState({required super.context, required this.reason});
-
-  /// The reason for cancellation (e.g., "Cancelled by user").
-  final String reason;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is CancelledState &&
-          runtimeType == other.runtimeType &&
-          context == other.context &&
-          reason == other.reason;
-
-  @override
-  int get hashCode => Object.hash(runtimeType, context, reason);
-
-  @override
-  String toString() => 'CancelledState(reason: $reason, '
-      'messages: ${messages.length})';
 }
 
 /// A run is currently executing.
@@ -285,14 +250,27 @@ class RunningState extends ActiveRunState {
       'messages: ${messages.length}, textStreaming: $textStreaming)';
 }
 
-/// The run finished successfully.
+/// A run has completed (success, error, or cancelled).
+///
+/// Use [result] to determine the outcome:
+/// ```dart
+/// switch (state.result) {
+///   case Success():
+///     // Completed successfully
+///   case Failed(:final errorMessage):
+///     // Failed with error
+///   case Cancelled(:final reason):
+///     // Cancelled by user
+/// }
+/// ```
 @immutable
-class FinishedState extends ActiveRunState {
-  /// Creates a finished state.
-  const FinishedState({
+class CompletedState extends ActiveRunState {
+  /// Creates a completed state.
+  const CompletedState({
     required this.threadId,
     required this.runId,
     required super.context,
+    required this.result,
   });
 
   /// The ID of the thread this run belonged to.
@@ -301,39 +279,65 @@ class FinishedState extends ActiveRunState {
   /// The ID of the completed run.
   final String runId;
 
+  /// The result of the run.
+  final CompletionResult result;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is FinishedState &&
+      other is CompletedState &&
           runtimeType == other.runtimeType &&
           threadId == other.threadId &&
           runId == other.runId &&
-          context == other.context;
+          context == other.context &&
+          result == other.result;
 
   @override
-  int get hashCode => Object.hash(threadId, runId, context);
+  int get hashCode => Object.hash(threadId, runId, context, result);
 
   @override
-  String toString() => 'FinishedState(threadId: $threadId, runId: $runId, '
-      'messages: ${messages.length})';
+  String toString() => 'CompletedState(threadId: $threadId, runId: $runId, '
+      'result: $result, messages: ${messages.length})';
 }
 
-/// The run encountered an error.
+/// Result of a completed run.
+///
+/// Use pattern matching for exhaustive handling:
+/// ```dart
+/// switch (result) {
+///   case Success():
+///     // Completed successfully
+///   case Failed(:final errorMessage):
+///     // Failed with error
+///   case Cancelled(:final reason):
+///     // Cancelled by user
+/// }
+/// ```
 @immutable
-class ErrorState extends ActiveRunState {
-  /// Creates an error state.
-  const ErrorState({
-    required this.threadId,
-    required this.runId,
-    required this.errorMessage,
-    required super.context,
-  });
+sealed class CompletionResult {
+  const CompletionResult();
+}
 
-  /// The ID of the thread this run belonged to.
-  final String threadId;
+/// The run completed successfully.
+@immutable
+class Success extends CompletionResult {
+  const Success();
 
-  /// The ID of the failed run.
-  final String runId;
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is Success;
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() => 'Success()';
+}
+
+/// The run failed with an error.
+@immutable
+class Failed extends CompletionResult {
+  const Failed({required this.errorMessage});
 
   /// The error message describing what went wrong.
   final String errorMessage;
@@ -341,17 +345,35 @@ class ErrorState extends ActiveRunState {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ErrorState &&
+      other is Failed &&
           runtimeType == other.runtimeType &&
-          threadId == other.threadId &&
-          runId == other.runId &&
-          errorMessage == other.errorMessage &&
-          context == other.context;
+          errorMessage == other.errorMessage;
 
   @override
-  int get hashCode => Object.hash(threadId, runId, errorMessage, context);
+  int get hashCode => Object.hash(runtimeType, errorMessage);
 
   @override
-  String toString() => 'ErrorState(threadId: $threadId, runId: $runId, '
-      'error: $errorMessage, messages: ${messages.length})';
+  String toString() => 'Failed(errorMessage: $errorMessage)';
+}
+
+/// The run was cancelled by the user.
+@immutable
+class Cancelled extends CompletionResult {
+  const Cancelled({required this.reason});
+
+  /// The reason for cancellation.
+  final String reason;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Cancelled &&
+          runtimeType == other.runtimeType &&
+          reason == other.reason;
+
+  @override
+  int get hashCode => Object.hash(runtimeType, reason);
+
+  @override
+  String toString() => 'Cancelled(reason: $reason)';
 }

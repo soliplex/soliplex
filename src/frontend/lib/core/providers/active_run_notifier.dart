@@ -134,11 +134,11 @@ class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
         onError: (Object error, StackTrace stackTrace) {
           final currentState = state;
           if (currentState is RunningState) {
-            state = ErrorState(
+            state = CompletedState(
               threadId: currentState.threadId,
               runId: currentState.runId,
-              errorMessage: error.toString(),
               context: currentState.context,
+              result: Failed(errorMessage: error.toString()),
             );
           }
         },
@@ -147,10 +147,11 @@ class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
           // mark as finished
           final currentState = state;
           if (currentState is RunningState) {
-            state = FinishedState(
+            state = CompletedState(
               threadId: currentState.threadId,
               runId: currentState.runId,
               context: currentState.context,
+              result: const Success(),
             );
           }
         },
@@ -165,21 +166,20 @@ class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
       );
     } on CancelledException {
       // User cancelled - already handled in cancelRun
-      state = CancelledState(
+      state = CompletedState(
+        threadId: threadId,
+        runId: runId,
         context: state.context,
-        reason: 'Cancelled by user',
+        result: const Cancelled(reason: 'Cancelled by user'),
       );
       _internalState = const IdleInternalState();
     } catch (e) {
-      final currentState = state;
-      if (currentState is RunningState) {
-        state = ErrorState(
-          threadId: currentState.threadId,
-          runId: currentState.runId,
-          errorMessage: e.toString(),
-          context: currentState.context,
-        );
-      }
+      state = CompletedState(
+        threadId: threadId,
+        runId: runId,
+        context: state.context,
+        result: Failed(errorMessage: e.toString()),
+      );
       _internalState = const IdleInternalState();
     }
   }
@@ -188,15 +188,21 @@ class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
   ///
   /// Preserves all completed messages but clears streaming state.
   Future<void> cancelRun() async {
+    final currentState = state;
+
     if (_internalState is RunningInternalState) {
       await (_internalState as RunningInternalState).dispose();
       _internalState = const IdleInternalState();
     }
 
-    state = CancelledState(
-      context: state.context,
-      reason: 'Cancelled by user',
-    );
+    if (currentState is RunningState) {
+      state = CompletedState(
+        threadId: currentState.threadId,
+        runId: currentState.runId,
+        context: currentState.context,
+        result: const Cancelled(reason: 'Cancelled by user'),
+      );
+    }
   }
 
   /// Resets to idle state, clearing all messages and state.
@@ -226,19 +232,20 @@ class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
 
       case RunFinishedEvent():
         // Run finished successfully
-        state = FinishedState(
+        state = CompletedState(
           threadId: currentState.threadId,
           runId: currentState.runId,
           context: updatedContext,
+          result: const Success(),
         );
 
       case RunErrorEvent(:final message):
         // Run encountered an error
-        state = ErrorState(
+        state = CompletedState(
           threadId: currentState.threadId,
           runId: currentState.runId,
-          errorMessage: message,
           context: updatedContext,
+          result: Failed(errorMessage: message),
         );
 
       case TextMessageStartEvent(:final messageId):
