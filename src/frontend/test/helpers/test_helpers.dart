@@ -53,13 +53,13 @@ class TestData {
     );
   }
 
-  static ChatMessage createMessage({
+  static TextMessage createMessage({
     String id = 'test-message',
     ChatUser user = ChatUser.user,
     String text = 'Test message',
     bool isStreaming = false,
   }) {
-    return ChatMessage.text(
+    return TextMessage.create(
       id: id,
       user: user,
       text: text,

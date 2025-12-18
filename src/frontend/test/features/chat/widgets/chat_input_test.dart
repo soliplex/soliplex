@@ -29,7 +29,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -91,7 +91,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -123,9 +123,10 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.running(
+                  initialState: const RunningState(
                     threadId: 'test-thread',
                     runId: 'test-run',
+                    context: RunContext.empty,
                   ),
                 ),
               ),
@@ -163,7 +164,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -220,7 +221,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -275,7 +276,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -310,7 +311,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -347,7 +348,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -383,7 +384,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -422,7 +423,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -460,7 +461,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -474,8 +475,7 @@ void main() {
         expect(border.borderRadius, BorderRadius.circular(24));
       });
 
-      testWidgets('send button has primary color when enabled',
-          (tester) async {
+      testWidgets('send button has primary color when enabled', (tester) async {
         // Arrange
         final mockRoom = TestData.createRoom();
         final mockThread = TestData.createThread();
@@ -493,7 +493,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],

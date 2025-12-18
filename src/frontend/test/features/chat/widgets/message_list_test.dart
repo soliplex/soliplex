@@ -25,7 +25,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => null),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -51,7 +51,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => null),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -96,7 +96,7 @@ void main() {
                   .overrideWith((ref) => messages),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -131,7 +131,7 @@ void main() {
                   .overrideWith((ref) => messages),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -163,7 +163,7 @@ void main() {
                   .overrideWith((ref) => messages),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -192,13 +192,13 @@ void main() {
             ),
             overrides: [
               currentThreadProvider.overrideWith((ref) => mockThread),
-              threadMessagesProvider(mockThread.id)
-                  .overrideWith((ref) => []),
+              threadMessagesProvider(mockThread.id).overrideWith((ref) => []),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.running(
+                  initialState: const RunningState(
                     threadId: 'test-thread',
                     runId: 'test-run',
+                    context: RunContext.empty,
                   ),
                 ),
               ),
@@ -211,8 +211,7 @@ void main() {
         expect(find.text('Assistant is thinking...'), findsOneWidget);
       });
 
-      testWidgets('does not show indicator when not streaming',
-          (tester) async {
+      testWidgets('does not show indicator when not streaming', (tester) async {
         // Arrange
         final messages = [
           TestData.createMessage(text: 'Hello'),
@@ -232,7 +231,7 @@ void main() {
                   .overrideWith((ref) => messages),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -264,9 +263,10 @@ void main() {
                   .overrideWith((ref) => messages),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.running(
+                  initialState: const RunningState(
                     threadId: 'test-thread',
                     runId: 'test-run',
+                    context: RunContext.empty,
                   ),
                 ),
               ),
@@ -304,14 +304,14 @@ void main() {
               threadMessagesProvider(mockThread.id).overrideWith((ref) => []),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: ActiveRunState(
+                  initialState: RunningState(
                     threadId: 'test-thread',
                     runId: 'test-run',
-                    status: ThreadRunStatus.running,
-                    messages: messages,
-                    isTextStreaming: true,
-                    currentMessageId: 'msg-1',
-                    streamingText: 'Typing...',
+                    context: RunContext(messages: messages),
+                    textStreaming: const Streaming(
+                      messageId: 'msg-1',
+                      text: 'Typing...',
+                    ),
                   ),
                 ),
               ),
@@ -350,14 +350,14 @@ void main() {
               threadMessagesProvider(mockThread.id).overrideWith((ref) => []),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: ActiveRunState(
+                  initialState: RunningState(
                     threadId: 'test-thread',
                     runId: 'test-run',
-                    status: ThreadRunStatus.running,
-                    messages: messages,
-                    isTextStreaming: true,
-                    currentMessageId: 'msg-2',
-                    streamingText: 'Typing...',
+                    context: RunContext(messages: messages),
+                    textStreaming: const Streaming(
+                      messageId: 'msg-2',
+                      text: 'Typing...',
+                    ),
                   ),
                 ),
               ),
@@ -395,7 +395,7 @@ void main() {
                   .overrideWith((ref) => messages),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -407,8 +407,7 @@ void main() {
         expect(listView.controller, isNotNull);
       });
 
-      testWidgets('scrolls to bottom when new messages arrive',
-          (tester) async {
+      testWidgets('scrolls to bottom when new messages arrive', (tester) async {
         // Arrange
         final initialMessages = [
           TestData.createMessage(id: 'msg-1', text: 'Message 1'),
@@ -428,7 +427,7 @@ void main() {
             }),
             activeRunNotifierProvider.overrideWith(
               (ref) => MockActiveRunNotifier(
-                initialState: const ActiveRunState.idle(),
+                initialState: const IdleState(),
               ),
             ),
           ],
@@ -484,7 +483,7 @@ void main() {
                   .overrideWith((ref) => messages),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -520,7 +519,7 @@ void main() {
                   .overrideWith((ref) => messages),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],

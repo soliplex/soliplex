@@ -13,7 +13,9 @@ import 'package:soliplex_frontend/features/history/history_panel.dart';
 ///
 /// Updates providers on mount:
 /// - Sets [currentRoomIdProvider] to the provided roomId
-/// - Sets [currentThreadIdProvider] to the provided threadId
+/// - Sets [threadSelectionProvider] based on threadId:
+///   - If threadId is 'new', sets [NewThreadIntent]
+///   - Otherwise, sets [ThreadSelected] with the threadId
 ///
 /// Example:
 /// ```dart
@@ -33,7 +35,7 @@ class ThreadScreen extends ConsumerStatefulWidget {
   /// The ID of the room this thread belongs to.
   final String roomId;
 
-  /// The ID of the thread to display.
+  /// The ID of the thread to display, or 'new' for new thread intent.
   final String threadId;
 
   @override
@@ -47,7 +49,15 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
     // Update providers on mount
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(currentRoomIdProvider.notifier).state = widget.roomId;
-      ref.read(currentThreadIdProvider.notifier).state = widget.threadId;
+
+      // Handle 'new' threadId specially
+      if (widget.threadId == 'new') {
+        ref.read(threadSelectionProvider.notifier).state =
+            const NewThreadIntent();
+      } else {
+        ref.read(threadSelectionProvider.notifier).state =
+            ThreadSelected(widget.threadId);
+      }
     });
   }
 
