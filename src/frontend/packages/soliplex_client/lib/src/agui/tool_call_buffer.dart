@@ -72,46 +72,29 @@ class ToolCallBuffer {
   ToolCallInfo? getToolCall(String callId) {
     final state = _activeToolCalls[callId];
     if (state == null) return null;
-    return ToolCallInfo(
-      id: state.id,
-      name: state.name,
-      arguments: state.arguments.toString(),
-      status: state.result.isNotEmpty
-          ? ToolCallStatus.completed
-          : ToolCallStatus.pending,
-      result: state.result,
-    );
+    return _toToolCallInfo(state);
   }
 
   /// All active tool calls as [ToolCallInfo] list.
-  List<ToolCallInfo> get allToolCalls => _activeToolCalls.values
-      .map(
-        (s) => ToolCallInfo(
-          id: s.id,
-          name: s.name,
-          arguments: s.arguments.toString(),
-          status: s.result.isNotEmpty
-              ? ToolCallStatus.completed
-              : ToolCallStatus.pending,
-          result: s.result,
-        ),
-      )
-      .toList();
+  List<ToolCallInfo> get allToolCalls =>
+      _activeToolCalls.values.map(_toToolCallInfo).toList();
 
   /// Removes a tool call and returns its info, or null if not found.
   ToolCallInfo? removeToolCall(String callId) {
     final state = _activeToolCalls.remove(callId);
     if (state == null) return null;
-    return ToolCallInfo(
-      id: state.id,
-      name: state.name,
-      arguments: state.arguments.toString(),
-      status: state.result.isNotEmpty
-          ? ToolCallStatus.completed
-          : ToolCallStatus.pending,
-      result: state.result,
-    );
+    return _toToolCallInfo(state);
   }
+
+  ToolCallInfo _toToolCallInfo(_ToolCallState state) => ToolCallInfo(
+        id: state.id,
+        name: state.name,
+        arguments: state.arguments.toString(),
+        status: state.result.isNotEmpty
+            ? ToolCallStatus.completed
+            : ToolCallStatus.pending,
+        result: state.result,
+      );
 
   /// Whether a tool call with the given ID is active.
   bool isActive(String callId) => _activeToolCalls.containsKey(callId);
