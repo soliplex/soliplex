@@ -238,6 +238,23 @@ async def test_agui_state(the_installation, w_state):
 
 
 @pytest.mark.anyio
+async def test_ask_with_rich_citations_wo_tool_config(the_installation):
+    agui_emitter = mock.create_autospec(rag_agui.AGUIEmitter)
+    deps = agents.AgentDependencies(
+        the_installation=the_installation,
+        user=USER,
+        tool_configs={},
+        agui_emitter=agui_emitter,
+    )
+    ctx = mock.Mock(spec_set=(["deps"]), deps=deps)
+    with pytest.raises(tools.NoToolConfig):
+        await tools.ask_with_rich_citations(
+            ctx=ctx,
+            question=QUESTION,
+        )
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("w_history", [False, True])
 @pytest.mark.parametrize("w_filter", [False, True])
 @mock.patch("soliplex.tools.rag_client")
