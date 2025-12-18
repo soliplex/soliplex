@@ -3,240 +3,135 @@ import 'package:soliplex_client/src/models/chat_message.dart';
 
 /// Internal state for a tool call being buffered.
 class _ToolCallState {
-  _ToolCallState({
-    required this.id,
-    required this.name,
-    this.parentMessageId,
-  }) : startedAt = DateTime.now();
+  _ToolCallState({required this.id, required this.name});
 
   final String id;
   final String name;
-  final String? parentMessageId;
-  final DateTime startedAt;
   final StringBuffer arguments = StringBuffer();
-  String? result;
-  DateTime? completedAt;
+  String result = '';
   bool isComplete = false;
 }
 
 /// Buffer that tracks multiple concurrent tool calls.
-///
-/// Usage:
-/// 1. Call [startToolCall] when TOOL_CALL_START event is received
-/// 2. Call [appendArgs] for each TOOL_CALL_ARGS event
-/// 3. Call [completeToolCall] when TOOL_CALL_END event is received
-/// 4. Call [setResult] when TOOL_CALL_RESULT event is received
-///
-/// Example:
-/// ```dart
-/// final buffer = ToolCallBuffer();
-///
-/// // When TOOL_CALL_START arrives
-/// buffer.startToolCall(callId: 'tc-1', name: 'search');
-///
-/// // When TOOL_CALL_ARGS arrives
-/// buffer.appendArgs(callId: 'tc-1', delta: '{"query":');
-/// buffer.appendArgs(callId: 'tc-1', delta: '"test"}');
-///
-/// // When TOOL_CALL_END arrives
-/// final toolCallInfo = buffer.completeToolCall(callId: 'tc-1');
-///
-/// // When TOOL_CALL_RESULT arrives
-/// buffer.setResult(callId: 'tc-1', result: 'Search results...');
-/// ```
 class ToolCallBuffer {
   final Map<String, _ToolCallState> _activeToolCalls = {};
 
-  /// Returns the number of active (started but not removed) tool calls.
+  /// Number of active tool calls.
   int get activeCount => _activeToolCalls.length;
 
-  /// Returns whether there are any active tool calls.
+  /// Whether there are any active tool calls.
   bool get hasActiveToolCalls => _activeToolCalls.isNotEmpty;
 
-  /// Returns the IDs of all active tool calls.
+  /// List of active tool call IDs.
   List<String> get activeToolCallIds => _activeToolCalls.keys.toList();
 
-  /// Starts tracking a new tool call.
-  ///
-  /// Throws [StateError] if a tool call with the same ID is already active.
-  void startToolCall({
-    required String callId,
-    required String name,
-    String? parentMessageId,
-  }) {
+  /// Starts a new tool call with the given ID and name.
+  void startToolCall({required String callId, required String name}) {
     if (_activeToolCalls.containsKey(callId)) {
-      throw StateError(
-        'Tool call with ID "$callId" is already active. '
-        'Each tool call ID must be unique.',
-      );
+      throw StateError('Tool call "$callId" already active.');
     }
-
-    _activeToolCalls[callId] = _ToolCallState(
-      id: callId,
-      name: name,
-      parentMessageId: parentMessageId,
-    );
+    _activeToolCalls[callId] = _ToolCallState(id: callId, name: name);
   }
 
   /// Appends arguments to an active tool call.
-  ///
-  /// Throws [StateError] if the tool call is not active.
-  void appendArgs({
-    required String callId,
-    required String delta,
-  }) {
+  void appendArgs({required String callId, required String delta}) {
     final state = _activeToolCalls[callId];
-    if (state == null) {
-      throw StateError(
-        'Cannot append arguments to tool call "$callId": not found. '
-        'Call startToolCall() first.',
-      );
-    }
-
-    if (state.isComplete) {
-      throw StateError(
-        'Cannot append arguments to tool call "$callId": already complete. '
-        'Arguments were finalized by completeToolCall().',
-      );
-    }
-
+    if (state == null) throw StateError('Tool call "$callId" not found.');
+    if (state.isComplete) throw StateError('Tool call "$callId" complete.');
     state.arguments.write(delta);
   }
 
-  /// Completes the arguments for a tool call and returns a [ToolCallInfo].
-  ///
-  /// The tool call remains in the buffer until [removeToolCall] is called.
-  ///
-  /// Throws [StateError] if the tool call is not active.
+  /// Marks a tool call as complete and returns its info.
   ToolCallInfo completeToolCall({required String callId}) {
     final state = _activeToolCalls[callId];
-    if (state == null) {
-      throw StateError(
-        'Cannot complete tool call "$callId": not found. '
-        'Call startToolCall() first.',
-      );
-    }
-
-    state
-      ..isComplete = true
-      ..completedAt = DateTime.now();
-
+    if (state == null) throw StateError('Tool call "$callId" not found.');
+    state.isComplete = true;
     return ToolCallInfo(
       id: state.id,
       name: state.name,
       arguments: state.arguments.toString(),
-      startedAt: state.startedAt,
-      completedAt: state.completedAt,
+      status: ToolCallStatus.executing,
     );
   }
 
-  /// Sets the result for a completed tool call and returns updated info.
-  ///
-  /// Throws [StateError] if the tool call is not active.
-  ToolCallInfo setResult({
-    required String callId,
-    required String result,
-  }) {
+  /// Sets the result for a tool call.
+  ToolCallInfo setResult({required String callId, required String result}) {
     final state = _activeToolCalls[callId];
-    if (state == null) {
-      throw StateError(
-        'Cannot set result for tool call "$callId": not found. '
-        'The tool call may have been removed.',
-      );
-    }
-
+    if (state == null) throw StateError('Tool call "$callId" not found.');
     state.result = result;
-
     return ToolCallInfo(
       id: state.id,
       name: state.name,
       arguments: state.arguments.toString(),
       status: ToolCallStatus.completed,
       result: result,
-      startedAt: state.startedAt,
-      completedAt: state.completedAt ?? DateTime.now(),
     );
   }
 
-  /// Gets the current state of a tool call.
-  ///
-  /// Returns null if the tool call is not active.
+  /// Gets info for a specific tool call, or null if not found.
   ToolCallInfo? getToolCall(String callId) {
     final state = _activeToolCalls[callId];
     if (state == null) return null;
-
     return ToolCallInfo(
       id: state.id,
       name: state.name,
       arguments: state.arguments.toString(),
-      status: state.result != null
+      status: state.result.isNotEmpty
           ? ToolCallStatus.completed
           : ToolCallStatus.pending,
       result: state.result,
-      startedAt: state.startedAt,
-      completedAt: state.completedAt,
     );
   }
 
-  /// Gets all currently active tool calls.
-  List<ToolCallInfo> get allToolCalls {
-    return _activeToolCalls.values.map((state) {
-      return ToolCallInfo(
-        id: state.id,
-        name: state.name,
-        arguments: state.arguments.toString(),
-        status: state.result != null
-            ? ToolCallStatus.completed
-            : ToolCallStatus.pending,
-        result: state.result,
-        startedAt: state.startedAt,
-        completedAt: state.completedAt,
-      );
-    }).toList();
-  }
+  /// All active tool calls as [ToolCallInfo] list.
+  List<ToolCallInfo> get allToolCalls => _activeToolCalls.values
+      .map(
+        (s) => ToolCallInfo(
+          id: s.id,
+          name: s.name,
+          arguments: s.arguments.toString(),
+          status: s.result.isNotEmpty
+              ? ToolCallStatus.completed
+              : ToolCallStatus.pending,
+          result: s.result,
+        ),
+      )
+      .toList();
 
-  /// Removes a tool call from the buffer.
-  ///
-  /// Returns the final [ToolCallInfo] if found, null otherwise.
+  /// Removes a tool call and returns its info, or null if not found.
   ToolCallInfo? removeToolCall(String callId) {
     final state = _activeToolCalls.remove(callId);
     if (state == null) return null;
-
     return ToolCallInfo(
       id: state.id,
       name: state.name,
       arguments: state.arguments.toString(),
-      status: state.result != null
+      status: state.result.isNotEmpty
           ? ToolCallStatus.completed
           : ToolCallStatus.pending,
       result: state.result,
-      startedAt: state.startedAt,
-      completedAt: state.completedAt,
     );
   }
 
-  /// Checks if a tool call is active.
+  /// Whether a tool call with the given ID is active.
   bool isActive(String callId) => _activeToolCalls.containsKey(callId);
 
-  /// Checks if a tool call has been completed (TOOL_CALL_END received).
+  /// Whether a tool call is complete.
   bool isComplete(String callId) =>
       _activeToolCalls[callId]?.isComplete ?? false;
 
-  /// Checks if a tool call has a result.
-  bool hasResult(String callId) => _activeToolCalls[callId]?.result != null;
+  /// Whether a tool call has a result.
+  bool hasResult(String callId) =>
+      _activeToolCalls[callId]?.result.isNotEmpty ?? false;
 
-  /// Clears all tool calls from the buffer.
-  void reset() {
-    _activeToolCalls.clear();
-  }
+  /// Clears all active tool calls.
+  void reset() => _activeToolCalls.clear();
 }
 
 /// Immutable snapshot of a tool call buffer state.
-///
-/// Useful for exposing buffer state without allowing modifications.
 @immutable
 class ToolCallBufferSnapshot {
-  /// Creates a new [ToolCallBufferSnapshot] with the given state.
+  /// Creates a snapshot with the given state.
   const ToolCallBufferSnapshot({
     required this.activeCount,
     required this.toolCalls,
@@ -250,10 +145,10 @@ class ToolCallBufferSnapshot {
     );
   }
 
-  /// The number of active tool calls.
+  /// Number of active tool calls.
   final int activeCount;
 
-  /// List of all tool calls in the buffer.
+  /// List of tool call info objects.
   final List<ToolCallInfo> toolCalls;
 
   /// Whether there are any active tool calls.

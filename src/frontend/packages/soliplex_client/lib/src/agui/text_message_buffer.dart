@@ -1,144 +1,270 @@
 import 'package:meta/meta.dart';
 import 'package:soliplex_client/src/models/chat_message.dart';
 
-/// Buffer that accumulates streaming text message content.
+/// Sealed class buffer that accumulates streaming text message content.
+///
+/// Uses a sealed class hierarchy to eliminate nullable fields:
+/// - `InactiveTextBuffer` - no active message being buffered
+/// - `ActiveTextBuffer` - actively buffering a message with required fields
+///
+/// Each operation returns a new buffer instance, preserving immutability.
 ///
 /// Usage:
 /// 1. Call [start] when TEXT_MESSAGE_START event is received
-/// 2. Call [append] for each TEXT_MESSAGE_CONTENT event
-/// 3. Call [complete] when TEXT_MESSAGE_END event is received
+/// 2. Call `append` for each TEXT_MESSAGE_CONTENT event (on ActiveTextBuffer)
+/// 3. Call `complete` when TEXT_MESSAGE_END event is received
 ///
 /// Example:
 /// ```dart
-/// final buffer = TextMessageBuffer();
+/// TextMessageBuffer buffer = TextMessageBuffer.empty;
 ///
 /// // When TEXT_MESSAGE_START arrives
-/// buffer.start(messageId: 'msg-123', user: ChatUser.assistant);
+/// buffer = buffer.start(messageId: 'msg-123');
 ///
-/// // When TEXT_MESSAGE_CONTENT arrives
-/// buffer.append('Hello, ');
-/// buffer.append('world!');
+/// // When TEXT_MESSAGE_CONTENT arrives (buffer is now ActiveTextBuffer)
+/// if (buffer case ActiveTextBuffer active) {
+///   buffer = active.append('Hello, ');
+///   buffer = (buffer as ActiveTextBuffer).append('world!');
+/// }
 ///
 /// // When TEXT_MESSAGE_END arrives
-/// final message = buffer.complete();
-/// // message.text == 'Hello, world!'
+/// if (buffer case ActiveTextBuffer active) {
+///   final (newBuffer, message) = active.complete();
+///   buffer = newBuffer;
+///   // message.text == 'Hello, world!'
+/// }
 /// ```
-class TextMessageBuffer {
-  String? _messageId;
-  ChatUser _user = ChatUser.assistant;
-  final StringBuffer _content = StringBuffer();
-  bool _isActive = false;
+@immutable
+sealed class TextMessageBuffer {
+  const TextMessageBuffer();
+
+  /// An empty, inactive buffer.
+  static const empty = InactiveTextBuffer();
 
   /// Whether the buffer is currently accumulating a message.
-  bool get isActive => _isActive;
+  bool get isActive;
 
-  /// The current message ID being buffered, or null if not active.
-  String? get messageId => _messageId;
-
-  /// The current user for the message being buffered.
-  ChatUser get user => _user;
-
-  /// The current accumulated content.
-  String get currentContent => _content.toString();
+  /// The current accumulated content (empty string if inactive).
+  String get currentContent;
 
   /// Starts buffering a new message.
   ///
-  /// Throws [StateError] if a message is already being buffered.
-  void start({
+  /// Returns an [ActiveTextBuffer] ready to accumulate content.
+  ///
+  /// Throws [StateError] if already active.
+  TextMessageBuffer start({
+    required String messageId,
+    ChatUser user = ChatUser.assistant,
+  });
+
+  /// Resets the buffer, discarding any accumulated content.
+  ///
+  /// Returns an [InactiveTextBuffer].
+  TextMessageBuffer reset() => empty;
+}
+
+/// Inactive buffer state - no message being accumulated.
+///
+/// Use [start] to begin buffering a new message.
+@immutable
+class InactiveTextBuffer extends TextMessageBuffer {
+  /// Creates an inactive buffer.
+  const InactiveTextBuffer();
+
+  @override
+  bool get isActive => false;
+
+  @override
+  String get currentContent => '';
+
+  @override
+  TextMessageBuffer start({
     required String messageId,
     ChatUser user = ChatUser.assistant,
   }) {
-    if (_isActive) {
-      throw StateError(
-        'Cannot start a new message while one is already active. '
-        'Call complete() or reset() first.',
-      );
-    }
-    _messageId = messageId;
-    _user = user;
-    _content.clear();
-    _isActive = true;
+    return ActiveTextBuffer(messageId: messageId, user: user);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is InactiveTextBuffer;
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() => 'InactiveTextBuffer()';
+}
+
+/// Active buffer state - accumulating content for a message.
+///
+/// Use [append] to add content and [complete] to finish the message.
+@immutable
+class ActiveTextBuffer extends TextMessageBuffer {
+  /// Creates an active buffer with the given state.
+  const ActiveTextBuffer({
+    required this.messageId,
+    this.user = ChatUser.assistant,
+    this.content = '',
+  });
+
+  /// The message ID being buffered.
+  final String messageId;
+
+  /// The user for this message.
+  final ChatUser user;
+
+  /// The accumulated content.
+  final String content;
+
+  @override
+  bool get isActive => true;
+
+  @override
+  String get currentContent => content;
+
+  @override
+  TextMessageBuffer start({
+    required String messageId,
+    ChatUser user = ChatUser.assistant,
+  }) {
+    throw StateError(
+      'Cannot start a new message while one is already active. '
+      'Call complete() or reset() first.',
+    );
   }
 
   /// Appends content to the current message.
   ///
-  /// Throws [StateError] if no message is being buffered.
-  void append(String delta) {
-    if (!_isActive) {
-      throw StateError(
-        'Cannot append content when no message is active. '
-        'Call start() first.',
-      );
-    }
-    _content.write(delta);
+  /// Returns a new [ActiveTextBuffer] with the appended content.
+  ActiveTextBuffer append(String delta) {
+    return ActiveTextBuffer(
+      messageId: messageId,
+      user: user,
+      content: content + delta,
+    );
   }
 
-  /// Completes the current message and returns a [ChatMessage].
+  /// Completes the current message and returns a [TextMessage].
   ///
-  /// The buffer is reset after this call.
-  ///
-  /// Throws [StateError] if no message is being buffered.
-  ChatMessage complete() {
-    if (!_isActive) {
-      throw StateError(
-        'Cannot complete a message when none is active. '
-        'Call start() first.',
-      );
-    }
-
-    final message = ChatMessage(
-      id: _messageId!,
-      user: _user,
-      type: MessageType.text,
-      text: _content.toString(),
+  /// Returns a tuple of (reset buffer, completed message).
+  (TextMessageBuffer, TextMessage) complete() {
+    final message = TextMessage(
+      id: messageId,
+      user: user,
+      text: content,
       createdAt: DateTime.now(),
     );
-
-    reset();
-    return message;
+    return (TextMessageBuffer.empty, message);
   }
 
-  /// Resets the buffer, discarding any accumulated content.
-  void reset() {
-    _messageId = null;
-    _user = ChatUser.assistant;
-    _content.clear();
-    _isActive = false;
-  }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ActiveTextBuffer &&
+          runtimeType == other.runtimeType &&
+          messageId == other.messageId &&
+          user == other.user &&
+          content == other.content;
+
+  @override
+  int get hashCode => Object.hash(messageId, user, content);
+
+  @override
+  String toString() => 'ActiveTextBuffer('
+      'messageId: $messageId, '
+      'user: $user, '
+      'content: "$content")';
 }
 
 /// Immutable snapshot of a text message buffer state.
 ///
 /// Useful for exposing buffer state without allowing modifications.
+/// Uses sealed class pattern for type-safe state representation.
 @immutable
-class TextMessageBufferSnapshot {
-  /// Creates a new [TextMessageBufferSnapshot] with the given state.
-  const TextMessageBufferSnapshot({
-    required this.isActive,
+sealed class TextMessageBufferSnapshot {
+  const TextMessageBufferSnapshot();
+
+  /// Creates a snapshot from a [TextMessageBuffer].
+  factory TextMessageBufferSnapshot.fromBuffer(TextMessageBuffer buffer) {
+    return switch (buffer) {
+      InactiveTextBuffer() => const InactiveBufferSnapshot(),
+      ActiveTextBuffer(:final messageId, :final user, :final content) =>
+        ActiveBufferSnapshot(
+          messageId: messageId,
+          user: user,
+          currentContent: content,
+        ),
+    };
+  }
+
+  /// Whether the buffer is currently accumulating a message.
+  bool get isActive;
+
+  /// The current accumulated content.
+  String get currentContent;
+}
+
+/// Snapshot of an inactive buffer.
+@immutable
+class InactiveBufferSnapshot extends TextMessageBufferSnapshot {
+  /// Creates an inactive buffer snapshot.
+  const InactiveBufferSnapshot();
+
+  @override
+  bool get isActive => false;
+
+  @override
+  String get currentContent => '';
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is InactiveBufferSnapshot;
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() => 'InactiveBufferSnapshot()';
+}
+
+/// Snapshot of an active buffer.
+@immutable
+class ActiveBufferSnapshot extends TextMessageBufferSnapshot {
+  /// Creates an active buffer snapshot.
+  const ActiveBufferSnapshot({
     required this.messageId,
     required this.user,
     required this.currentContent,
   });
 
-  /// Creates a snapshot from a [TextMessageBuffer].
-  factory TextMessageBufferSnapshot.fromBuffer(TextMessageBuffer buffer) {
-    return TextMessageBufferSnapshot(
-      isActive: buffer.isActive,
-      messageId: buffer.messageId,
-      user: buffer.user,
-      currentContent: buffer.currentContent,
-    );
-  }
+  /// The message ID being buffered.
+  final String messageId;
 
-  /// Whether the buffer is currently accumulating a message.
-  final bool isActive;
-
-  /// The current message ID being buffered, or null if not active.
-  final String? messageId;
-
-  /// The current user for the message being buffered.
+  /// The user for this message.
   final ChatUser user;
 
-  /// The current accumulated content.
+  @override
   final String currentContent;
+
+  @override
+  bool get isActive => true;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ActiveBufferSnapshot &&
+          runtimeType == other.runtimeType &&
+          messageId == other.messageId &&
+          user == other.user &&
+          currentContent == other.currentContent;
+
+  @override
+  int get hashCode => Object.hash(messageId, user, currentContent);
+
+  @override
+  String toString() => 'ActiveBufferSnapshot('
+      'messageId: $messageId, '
+      'user: $user, '
+      'currentContent: "$currentContent")';
 }

@@ -4,64 +4,57 @@ import 'package:test/test.dart';
 
 void main() {
   group('TextMessageBuffer', () {
-    late TextMessageBuffer buffer;
-
-    setUp(() {
-      buffer = TextMessageBuffer();
-    });
-
-    group('initial state', () {
+    group('initial state (empty)', () {
       test('isActive is false', () {
-        expect(buffer.isActive, isFalse);
+        expect(TextMessageBuffer.empty.isActive, isFalse);
       });
 
-      test('messageId is null', () {
-        expect(buffer.messageId, isNull);
-      });
-
-      test('user defaults to assistant', () {
-        expect(buffer.user, equals(ChatUser.assistant));
+      test('empty is InactiveTextBuffer', () {
+        expect(TextMessageBuffer.empty, isA<InactiveTextBuffer>());
       });
 
       test('currentContent is empty', () {
-        expect(buffer.currentContent, isEmpty);
+        expect(TextMessageBuffer.empty.currentContent, isEmpty);
       });
     });
 
     group('start', () {
-      test('activates the buffer', () {
-        buffer.start(messageId: 'msg-123');
+      test('activates the buffer and returns ActiveTextBuffer', () {
+        final buffer = TextMessageBuffer.empty.start(messageId: 'msg-123');
 
         expect(buffer.isActive, isTrue);
-        expect(buffer.messageId, equals('msg-123'));
+        expect(buffer, isA<ActiveTextBuffer>());
+        expect((buffer as ActiveTextBuffer).messageId, equals('msg-123'));
       });
 
       test('sets the user', () {
-        buffer.start(messageId: 'msg-123', user: ChatUser.user);
+        final buffer = TextMessageBuffer.empty.start(
+          messageId: 'msg-123',
+          user: ChatUser.user,
+        );
 
-        expect(buffer.user, equals(ChatUser.user));
+        expect((buffer as ActiveTextBuffer).user, equals(ChatUser.user));
       });
 
       test('defaults user to assistant', () {
-        buffer.start(messageId: 'msg-123');
+        final buffer = TextMessageBuffer.empty.start(messageId: 'msg-123');
 
-        expect(buffer.user, equals(ChatUser.assistant));
+        expect((buffer as ActiveTextBuffer).user, equals(ChatUser.assistant));
       });
 
       test('clears any previous content', () {
         // Simulate a previous incomplete message
-        buffer
-          ..start(messageId: 'msg-1')
-          ..append('old content')
-          ..reset()
-          // Start a new message
-          ..start(messageId: 'msg-2');
+        var buffer = TextMessageBuffer.empty.start(messageId: 'msg-1');
+        buffer = (buffer as ActiveTextBuffer).append('old content');
+        buffer = buffer.reset();
+        // Start a new message
+        buffer = buffer.start(messageId: 'msg-2');
 
         expect(buffer.currentContent, isEmpty);
       });
 
       test('throws when already active', () {
-        buffer.start(messageId: 'msg-123');
+        final buffer = TextMessageBuffer.empty.start(messageId: 'msg-123');
 
         expect(
           () => buffer.start(messageId: 'msg-456'),
@@ -72,40 +65,35 @@ void main() {
 
     group('append', () {
       test('appends content to the buffer', () {
-        buffer.start(messageId: 'msg-123');
+        var buffer = TextMessageBuffer.empty.start(messageId: 'msg-123')
+            as ActiveTextBuffer;
 
-        expect(
-          (buffer..append('Hello, ')).currentContent,
-          equals('Hello, '),
-        );
+        buffer = buffer.append('Hello, ');
+        expect(buffer.currentContent, equals('Hello, '));
 
-        expect(
-          (buffer..append('world!')).currentContent,
-          equals('Hello, world!'),
-        );
+        buffer = buffer.append('world!');
+        expect(buffer.currentContent, equals('Hello, world!'));
       });
 
       test('handles empty deltas', () {
-        buffer.start(messageId: 'msg-123');
+        var buffer = TextMessageBuffer.empty.start(messageId: 'msg-123')
+            as ActiveTextBuffer;
 
-        expect(
-          (buffer..append('')).currentContent,
-          isEmpty,
-        );
+        buffer = buffer.append('');
+        expect(buffer.currentContent, isEmpty);
 
-        buffer
-          ..append('content')
-          ..append('');
+        buffer = buffer.append('content').append('');
         expect(buffer.currentContent, equals('content'));
       });
 
       test('handles unicode content', () {
-        buffer
-          ..start(messageId: 'msg-123')
-          ..append('Hello ')
-          ..append('\u{1F44B}') // Wave emoji
-          ..append(' ')
-          ..append('\u{4F60}\u{597D}'); // Chinese "hello"
+        var buffer = TextMessageBuffer.empty.start(messageId: 'msg-123')
+            as ActiveTextBuffer;
+        buffer = buffer
+            .append('Hello ')
+            .append('\u{1F44B}') // Wave emoji
+            .append(' ')
+            .append('\u{4F60}\u{597D}'); // Chinese "hello"
 
         expect(
           buffer.currentContent,
@@ -113,65 +101,69 @@ void main() {
         );
       });
 
-      test('throws when not active', () {
-        expect(
-          () => buffer.append('content'),
-          throwsStateError,
-        );
+      test('append not available on InactiveTextBuffer', () {
+        // InactiveTextBuffer doesn't have append method - compile-time safe
+        expect(TextMessageBuffer.empty, isA<InactiveTextBuffer>());
+        // The following would not compile:
+        // TextMessageBuffer.empty.append('content');
       });
     });
 
     group('complete', () {
-      test('returns a ChatMessage with accumulated content', () {
-        buffer
-          ..start(messageId: 'msg-123')
-          ..append('Hello, ')
-          ..append('world!');
+      test('returns a tuple with reset buffer and ChatMessage', () {
+        var buffer = TextMessageBuffer.empty.start(messageId: 'msg-123')
+            as ActiveTextBuffer;
+        buffer = buffer.append('Hello, ').append('world!');
 
-        final message = buffer.complete();
+        final (newBuffer, message) = buffer.complete();
 
+        expect(newBuffer.isActive, isFalse);
+        expect(newBuffer, isA<InactiveTextBuffer>());
         expect(message.id, equals('msg-123'));
         expect(message.user, equals(ChatUser.assistant));
-        expect(message.type, equals(MessageType.text));
+        expect(message, isA<TextMessage>());
         expect(message.text, equals('Hello, world!'));
         expect(message.createdAt, isNotNull);
       });
 
       test('resets the buffer after completion', () {
-        buffer
-          ..start(messageId: 'msg-123')
-          ..append('content')
-          ..complete();
+        var buffer = TextMessageBuffer.empty.start(messageId: 'msg-123')
+            as ActiveTextBuffer;
+        buffer = buffer.append('content');
 
-        expect(buffer.isActive, isFalse);
-        expect(buffer.messageId, isNull);
-        expect(buffer.currentContent, isEmpty);
+        final (newBuffer, _) = buffer.complete();
+
+        expect(newBuffer.isActive, isFalse);
+        expect(newBuffer, isA<InactiveTextBuffer>());
+        expect(newBuffer.currentContent, isEmpty);
       });
 
       test('handles empty content', () {
-        buffer.start(messageId: 'msg-123');
+        final buffer = TextMessageBuffer.empty.start(messageId: 'msg-123')
+            as ActiveTextBuffer;
 
-        final message = buffer.complete();
+        final (_, message) = buffer.complete();
 
         expect(message.text, isEmpty);
       });
 
-      test('throws when not active', () {
-        expect(
-          () => buffer.complete(),
-          throwsStateError,
-        );
+      test('complete not available on InactiveTextBuffer', () {
+        // InactiveTextBuffer doesn't have complete method - compile-time safe
+        expect(TextMessageBuffer.empty, isA<InactiveTextBuffer>());
       });
 
       test('allows starting a new message after completion', () {
-        buffer
-          ..start(messageId: 'msg-1')
-          ..append('first')
-          ..complete()
-          // Should not throw
-          ..start(messageId: 'msg-2')
-          ..append('second');
-        final message = buffer.complete();
+        var buffer = TextMessageBuffer.empty.start(messageId: 'msg-1')
+            as ActiveTextBuffer;
+        buffer = buffer.append('first');
+
+        final (newBuffer1, _) = buffer.complete();
+
+        // Should not throw
+        var buffer2 = newBuffer1.start(messageId: 'msg-2') as ActiveTextBuffer;
+        buffer2 = buffer2.append('second');
+
+        final (_, message) = buffer2.complete();
 
         expect(message.id, equals('msg-2'));
         expect(message.text, equals('second'));
@@ -180,63 +172,65 @@ void main() {
 
     group('reset', () {
       test('clears all state', () {
-        buffer
-          ..start(messageId: 'msg-123', user: ChatUser.user)
-          ..append('content')
-          ..reset();
+        var buffer = TextMessageBuffer.empty.start(
+          messageId: 'msg-123',
+          user: ChatUser.user,
+        ) as ActiveTextBuffer;
+        buffer = buffer.append('content');
+        final resetBuffer = buffer.reset();
 
-        expect(buffer.isActive, isFalse);
-        expect(buffer.messageId, isNull);
-        expect(buffer.user, equals(ChatUser.assistant));
-        expect(buffer.currentContent, isEmpty);
+        expect(resetBuffer.isActive, isFalse);
+        expect(resetBuffer, isA<InactiveTextBuffer>());
+        expect(resetBuffer.currentContent, isEmpty);
       });
 
       test('can be called when not active', () {
         // Should not throw
-        buffer.reset();
+        final buffer = TextMessageBuffer.empty.reset();
 
         expect(buffer.isActive, isFalse);
       });
 
       test('allows starting a new message after reset', () {
-        buffer
-          ..start(messageId: 'msg-1')
-          ..append('old content')
-          ..reset()
-          // Should not throw
-          ..start(messageId: 'msg-2');
+        var buffer = TextMessageBuffer.empty.start(messageId: 'msg-1')
+            as ActiveTextBuffer;
+        buffer = buffer.append('old content');
+        final resetBuffer = buffer.reset();
+        // Should not throw
+        final newBuffer =
+            resetBuffer.start(messageId: 'msg-2') as ActiveTextBuffer;
 
-        expect(buffer.messageId, equals('msg-2'));
-        expect(buffer.currentContent, isEmpty);
+        expect(newBuffer.messageId, equals('msg-2'));
+        expect(newBuffer.currentContent, isEmpty);
       });
     });
 
     group('full lifecycle', () {
       test('handles multiple message cycles', () {
+        TextMessageBuffer buffer = TextMessageBuffer.empty;
+
         // First message
-        buffer
-          ..start(messageId: 'msg-1')
-          ..append('First ')
-          ..append('message');
-        final first = buffer.complete();
+        var active1 = buffer.start(messageId: 'msg-1') as ActiveTextBuffer;
+        active1 = active1.append('First ').append('message');
+        final (buffer1, first) = active1.complete();
+        buffer = buffer1;
 
         // Second message
-        buffer
-          ..start(messageId: 'msg-2', user: ChatUser.user)
-          ..append('Second ')
-          ..append('message');
-        final second = buffer.complete();
+        var active2 = buffer.start(messageId: 'msg-2', user: ChatUser.user)
+            as ActiveTextBuffer;
+        active2 = active2.append('Second ').append('message');
+        final (buffer2, second) = active2.complete();
+        buffer = buffer2;
 
         // Third message with reset
-        buffer
-          ..start(messageId: 'msg-3')
-          ..append('Discarded')
-          ..reset()
-          // Fourth message
-          ..start(messageId: 'msg-4')
-          ..append('Fourth ')
-          ..append('message');
-        final fourth = buffer.complete();
+        var active3 = buffer.start(messageId: 'msg-3') as ActiveTextBuffer;
+        active3 = active3.append('Discarded');
+        buffer = active3.reset();
+
+        // Fourth message
+        var active4 = buffer.start(messageId: 'msg-4') as ActiveTextBuffer;
+        active4 = active4.append('Fourth ').append('message');
+        final (_, fourth) = active4.complete();
 
         expect(first.id, equals('msg-1'));
         expect(first.text, equals('First message'));
@@ -252,61 +246,82 @@ void main() {
 
       test('handles streaming simulation', () {
         // Simulates receiving content character by character
-        buffer.start(messageId: 'stream-1');
+        var buffer = TextMessageBuffer.empty.start(messageId: 'stream-1')
+            as ActiveTextBuffer;
 
         const content = 'Hello, world!';
         for (var i = 0; i < content.length; i++) {
-          buffer.append(content[i]);
+          buffer = buffer.append(content[i]);
         }
 
-        final message = buffer.complete();
+        final (_, message) = buffer.complete();
         expect(message.text, equals(content));
+      });
+    });
+
+    group('equality', () {
+      test('empty buffers are equal', () {
+        expect(TextMessageBuffer.empty, equals(TextMessageBuffer.empty));
+      });
+
+      test('buffers with same state are equal', () {
+        final buffer1 = TextMessageBuffer.empty.start(messageId: 'msg-1');
+        final buffer2 = TextMessageBuffer.empty.start(messageId: 'msg-1');
+        expect(buffer1, equals(buffer2));
+      });
+
+      test('buffers with different state are not equal', () {
+        final buffer1 = TextMessageBuffer.empty.start(messageId: 'msg-1');
+        final buffer2 = TextMessageBuffer.empty.start(messageId: 'msg-2');
+        expect(buffer1, isNot(equals(buffer2)));
       });
     });
   });
 
   group('TextMessageBufferSnapshot', () {
-    test('captures buffer state', () {
-      final buffer = TextMessageBuffer()
-        ..start(messageId: 'msg-123', user: ChatUser.user)
-        ..append('Hello');
+    test('captures active buffer state', () {
+      var buffer = TextMessageBuffer.empty.start(
+        messageId: 'msg-123',
+        user: ChatUser.user,
+      ) as ActiveTextBuffer;
+      buffer = buffer.append('Hello');
 
       final snapshot = TextMessageBufferSnapshot.fromBuffer(buffer);
 
       expect(snapshot.isActive, isTrue);
-      expect(snapshot.messageId, equals('msg-123'));
-      expect(snapshot.user, equals(ChatUser.user));
-      expect(snapshot.currentContent, equals('Hello'));
+      expect(snapshot, isA<ActiveBufferSnapshot>());
+      final activeSnapshot = snapshot as ActiveBufferSnapshot;
+      expect(activeSnapshot.messageId, equals('msg-123'));
+      expect(activeSnapshot.user, equals(ChatUser.user));
+      expect(activeSnapshot.currentContent, equals('Hello'));
     });
 
     test('captures inactive buffer state', () {
-      final buffer = TextMessageBuffer();
-
-      final snapshot = TextMessageBufferSnapshot.fromBuffer(buffer);
+      final snapshot = TextMessageBufferSnapshot.fromBuffer(
+        TextMessageBuffer.empty,
+      );
 
       expect(snapshot.isActive, isFalse);
-      expect(snapshot.messageId, isNull);
-      expect(snapshot.user, equals(ChatUser.assistant));
+      expect(snapshot, isA<InactiveBufferSnapshot>());
       expect(snapshot.currentContent, isEmpty);
     });
 
     test('is independent of buffer changes', () {
-      final buffer = TextMessageBuffer()
-        ..start(messageId: 'msg-123')
-        ..append('Initial');
+      var buffer = TextMessageBuffer.empty.start(messageId: 'msg-123')
+          as ActiveTextBuffer;
+      buffer = buffer.append('Initial');
 
       final snapshot = TextMessageBufferSnapshot.fromBuffer(buffer);
 
-      // Modify buffer
-      buffer.append(' more content');
+      // Modify buffer (immutable - creates new instance)
+      buffer = buffer.append(' more content');
 
       // Snapshot should be unchanged
       expect(snapshot.currentContent, equals('Initial'));
     });
 
-    test('const constructor works', () {
-      const snapshot = TextMessageBufferSnapshot(
-        isActive: true,
+    test('const constructor works for ActiveBufferSnapshot', () {
+      const snapshot = ActiveBufferSnapshot(
         messageId: 'msg-123',
         user: ChatUser.assistant,
         currentContent: 'test',
@@ -314,6 +329,13 @@ void main() {
 
       expect(snapshot.isActive, isTrue);
       expect(snapshot.messageId, equals('msg-123'));
+    });
+
+    test('const constructor works for InactiveBufferSnapshot', () {
+      const snapshot = InactiveBufferSnapshot();
+
+      expect(snapshot.isActive, isFalse);
+      expect(snapshot.currentContent, isEmpty);
     });
   });
 }

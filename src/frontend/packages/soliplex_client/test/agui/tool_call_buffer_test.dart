@@ -46,19 +46,6 @@ void main() {
         expect(buffer.activeToolCallIds, containsAll(['tc-1', 'tc-2']));
       });
 
-      test('stores parentMessageId', () {
-        buffer.startToolCall(
-          callId: 'tc-1',
-          name: 'search',
-          parentMessageId: 'msg-123',
-        );
-
-        final toolCall = buffer.getToolCall('tc-1');
-        expect(toolCall, isNotNull);
-        // Note: parentMessageId is not exposed on ToolCallInfo
-        // It's internal state for the buffer
-      });
-
       test('throws when tool call already exists', () {
         buffer.startToolCall(callId: 'tc-1', name: 'search');
 
@@ -132,9 +119,7 @@ void main() {
         expect(toolCall.id, equals('tc-1'));
         expect(toolCall.name, equals('search'));
         expect(toolCall.arguments, equals('{"query": "test"}'));
-        expect(toolCall.status, equals(ToolCallStatus.pending));
-        expect(toolCall.startedAt, isNotNull);
-        expect(toolCall.completedAt, isNotNull);
+        expect(toolCall.status, equals(ToolCallStatus.executing));
       });
 
       test('marks tool call as complete', () {

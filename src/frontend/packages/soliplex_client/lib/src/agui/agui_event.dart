@@ -62,18 +62,12 @@ enum AgUiEventType {
   /// Parses an event type from a string (e.g., "RUN_STARTED" -> runStarted).
   static AgUiEventType fromString(String value) {
     // Convert SCREAMING_SNAKE_CASE to camelCase
-    final normalized = value
-        .toLowerCase()
-        .split('_')
-        .asMap()
-        .entries
-        .map((e) {
-          if (e.key == 0) return e.value;
-          return e.value.isEmpty
-              ? ''
-              : '${e.value[0].toUpperCase()}${e.value.substring(1)}';
-        })
-        .join();
+    final normalized = value.toLowerCase().split('_').asMap().entries.map((e) {
+      if (e.key == 0) return e.value;
+      return e.value.isEmpty
+          ? ''
+          : '${e.value[0].toUpperCase()}${e.value.substring(1)}';
+    }).join();
 
     return AgUiEventType.values.firstWhere(
       (e) => e.name == normalized,

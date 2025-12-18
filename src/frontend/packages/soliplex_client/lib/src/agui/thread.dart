@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:meta/meta.dart';
 import 'package:soliplex_client/src/agui/agui_event.dart';
 import 'package:soliplex_client/src/agui/text_message_buffer.dart';
 import 'package:soliplex_client/src/agui/tool_call_buffer.dart';
@@ -11,18 +12,103 @@ import 'package:soliplex_client/src/utils/cancel_token.dart';
 import 'package:soliplex_client/src/utils/url_builder.dart';
 
 /// Status of an AG-UI thread run.
-enum ThreadRunStatus {
-  /// No run is active.
-  idle,
+///
+/// Sealed class hierarchy representing all possible run states.
+/// Use pattern matching for exhaustive handling.
+@immutable
+sealed class RunState {
+  /// Creates a run state.
+  const RunState();
+}
 
-  /// A run is currently executing.
-  running,
+/// No run is currently active.
+@immutable
+class NoActiveRun extends RunState {
+  /// Creates a no active run state.
+  const NoActiveRun();
 
-  /// The run finished successfully.
-  finished,
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is NoActiveRun;
 
-  /// The run encountered an error.
-  error,
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() => 'NoActiveRun()';
+}
+
+/// A run is currently executing.
+@immutable
+class ActiveRun extends RunState {
+  /// Creates an active run state.
+  const ActiveRun(this.runId);
+
+  /// The ID of the running run.
+  final String runId;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ActiveRun &&
+          runtimeType == other.runtimeType &&
+          runId == other.runId;
+
+  @override
+  int get hashCode => runId.hashCode;
+
+  @override
+  String toString() => 'ActiveRun(runId: $runId)';
+}
+
+/// The run finished successfully.
+@immutable
+class CompletedRun extends RunState {
+  /// Creates a completed run state.
+  const CompletedRun(this.runId);
+
+  /// The ID of the completed run.
+  final String runId;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CompletedRun &&
+          runtimeType == other.runtimeType &&
+          runId == other.runId;
+
+  @override
+  int get hashCode => runId.hashCode;
+
+  @override
+  String toString() => 'CompletedRun(runId: $runId)';
+}
+
+/// The run encountered an error.
+@immutable
+class FailedRun extends RunState {
+  /// Creates a failed run state.
+  const FailedRun(this.runId, this.errorMessage);
+
+  /// The ID of the failed run.
+  final String runId;
+
+  /// The error message describing the failure.
+  final String errorMessage;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FailedRun &&
+          runtimeType == other.runtimeType &&
+          runId == other.runId &&
+          errorMessage == other.errorMessage;
+
+  @override
+  int get hashCode => Object.hash(runId, errorMessage);
+
+  @override
+  String toString() => 'FailedRun(runId: $runId, errorMessage: $errorMessage)';
 }
 
 /// Manages AG-UI event streaming and state for a conversation thread.
@@ -73,24 +159,34 @@ class Thread {
   final String threadId;
 
   // Buffers for streaming content
-  final TextMessageBuffer _textBuffer = TextMessageBuffer();
+  TextMessageBuffer _textBuffer = TextMessageBuffer.empty;
   final ToolCallBuffer _toolCallBuffer = ToolCallBuffer();
 
   // State
   final List<ChatMessage> _messages = [];
   Map<String, dynamic> _state = {};
-  ThreadRunStatus _runStatus = ThreadRunStatus.idle;
-  String? _runId;
-  String? _errorMessage;
+  RunState _runState = const NoActiveRun();
 
-  /// The current run status.
-  ThreadRunStatus get runStatus => _runStatus;
+  /// The current run state.
+  RunState get runState => _runState;
 
-  /// The current run ID, if a run is active.
-  String? get runId => _runId;
+  /// The current run ID, if a run is active or completed.
+  String? get runId {
+    return switch (_runState) {
+      NoActiveRun() => null,
+      ActiveRun(:final runId) => runId,
+      CompletedRun(:final runId) => runId,
+      FailedRun(:final runId) => runId,
+    };
+  }
 
   /// Error message from the last failed run, if any.
-  String? get errorMessage => _errorMessage;
+  String? get errorMessage {
+    return switch (_runState) {
+      FailedRun(:final errorMessage) => errorMessage,
+      _ => null,
+    };
+  }
 
   /// All messages accumulated during runs on this thread.
   List<ChatMessage> get messages => List.unmodifiable(_messages);
@@ -99,7 +195,7 @@ class Thread {
   Map<String, dynamic> get state => Map.unmodifiable(_state);
 
   /// Whether a run is currently in progress.
-  bool get isRunning => _runStatus == ThreadRunStatus.running;
+  bool get isRunning => _runState is ActiveRun;
 
   /// The text message buffer (for observing streaming state).
   TextMessageBuffer get textBuffer => _textBuffer;
@@ -126,9 +222,7 @@ class Thread {
     CancelToken? cancelToken,
   }) async* {
     // Set run state
-    _runId = runId;
-    _runStatus = ThreadRunStatus.running;
-    _errorMessage = null;
+    _runState = ActiveRun(runId);
 
     try {
       // Build the SSE endpoint URI
@@ -160,20 +254,18 @@ class Thread {
 
         // Check for run completion
         if (event is RunFinishedEvent) {
-          _runStatus = ThreadRunStatus.finished;
+          _runState = CompletedRun(runId);
         } else if (event is RunErrorEvent) {
-          _runStatus = ThreadRunStatus.error;
-          _errorMessage = event.message;
+          _runState = FailedRun(runId, event.message);
         }
       }
 
       // If stream ended without RUN_FINISHED or RUN_ERROR
-      if (_runStatus == ThreadRunStatus.running) {
-        _runStatus = ThreadRunStatus.finished;
+      if (_runState is ActiveRun) {
+        _runState = CompletedRun(runId);
       }
     } catch (e) {
-      _runStatus = ThreadRunStatus.error;
-      _errorMessage = e.toString();
+      _runState = FailedRun(runId, e.toString());
       rethrow;
     }
   }
@@ -202,29 +294,25 @@ class Thread {
         return;
 
       case TextMessageStartEvent(messageId: final messageId):
-        _textBuffer.start(messageId: messageId);
+        _textBuffer = _textBuffer.start(messageId: messageId);
 
       case TextMessageContentEvent(delta: final delta):
-        if (_textBuffer.isActive) {
-          _textBuffer.append(delta);
+        if (_textBuffer case final ActiveTextBuffer active) {
+          _textBuffer = active.append(delta);
         }
 
       case TextMessageEndEvent():
-        if (_textBuffer.isActive) {
-          final message = _textBuffer.complete();
+        if (_textBuffer case final ActiveTextBuffer active) {
+          final (newBuffer, message) = active.complete();
+          _textBuffer = newBuffer;
           _messages.add(message);
         }
 
       case ToolCallStartEvent(
           toolCallId: final callId,
           toolCallName: final name,
-          parentMessageId: final parentId,
         ):
-        _toolCallBuffer.startToolCall(
-          callId: callId,
-          name: name,
-          parentMessageId: parentId,
-        );
+        _toolCallBuffer.startToolCall(callId: callId, name: name);
 
       case ToolCallArgsEvent(toolCallId: final callId, delta: final delta):
         if (_toolCallBuffer.isActive(callId)) {
@@ -278,11 +366,9 @@ class Thread {
   void reset() {
     _messages.clear();
     _state = {};
-    _textBuffer.reset();
+    _textBuffer = TextMessageBuffer.empty;
     _toolCallBuffer.reset();
-    _runStatus = ThreadRunStatus.idle;
-    _runId = null;
-    _errorMessage = null;
+    _runState = const NoActiveRun();
   }
 
   /// Parses an SSE byte stream into AG-UI events.
@@ -335,8 +421,9 @@ class Thread {
 
   /// Completes any pending text message in the buffer.
   void _completePendingTextMessage() {
-    if (_textBuffer.isActive) {
-      final message = _textBuffer.complete();
+    if (_textBuffer case final ActiveTextBuffer active) {
+      final (newBuffer, message) = active.complete();
+      _textBuffer = newBuffer;
       _messages.add(message);
     }
   }
@@ -367,8 +454,7 @@ class Thread {
       if (operation == null || path == null) continue;
 
       // Simple path parsing (handles /key/subkey format)
-      final pathParts =
-          path.split('/').where((p) => p.isNotEmpty).toList();
+      final pathParts = path.split('/').where((p) => p.isNotEmpty).toList();
 
       switch (operation) {
         case 'add':
@@ -433,18 +519,15 @@ class Thread {
   ChatMessage? _parseMessageFromJson(Map<String, dynamic> json) {
     try {
       final id = json['id'] as String? ?? '';
-      final text = json['text'] as String?;
+      final text = json['text'] as String? ?? '';
       final userStr = json['user'] as String? ?? 'assistant';
-
       final user = ChatUser.values.firstWhere(
         (u) => u.name == userStr,
         orElse: () => ChatUser.assistant,
       );
-
-      return ChatMessage(
+      return TextMessage(
         id: id,
         user: user,
-        type: MessageType.text,
         text: text,
         createdAt: DateTime.now(),
       );
