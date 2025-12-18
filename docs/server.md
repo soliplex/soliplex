@@ -89,10 +89,10 @@ Each installation configuration includes a number of rooms that
      export OLLAMA_BASE_URL=http://localhost:11434
      ```
 
-   - The example configuration uses the `qwen3` model.  If using either
+   - The example configuration uses the `gpt-oss` model.  If using either
      Ollama variant, install that model via:
      ```bash
-     ollama pull qwen3:latest
+     ollama pull gpt-oss:latest
      ```
 
 3. Check for missing secrets / environment variables:

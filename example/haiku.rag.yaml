@@ -52,8 +52,17 @@ embeddings:
 
 qa:
   model:
-    name: qwen3:latest
+    name: gpt-oss:latest
     provider: ollama
+
+research:
+  model:
+    name: gpt-oss:latest
+    provider: ollama
+  max_iterations: 2
+  confidence_threshold: 0.7
+  max_concurrency: 1
+
 
 #
 # Omit this section to accept the defaults.
@@ -68,7 +77,15 @@ processing:
 search:
   context_radius: 0
 
+processing:
+  converter: docling-serve  # Use remote conversion
+  chunker: docling-serve    # Use remote chunking
+
 providers:
+  # The docling-serve url if you have not installed the full haiku.rag package.
+  docling_serve:
+    base_url: http://localhost:5001
+
   #
   #  Leave the 'ollama' section commented out to allow it's base URL to be
   #  populated from 'os.environ' when using the 'haiku-rag' CLI.

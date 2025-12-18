@@ -4,7 +4,6 @@ import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:http/http.dart' as http;
 import 'package:soliplex/core/auth/oidc_auth_token_response.dart';
 import 'package:soliplex/core/auth/oidc_token_application_mixin.dart';
-import 'package:soliplex/core/auth/pkce_utils.dart';
 import 'package:soliplex/core/auth/secure_sso_storage.dart';
 import 'package:soliplex/core/auth/secure_token_storage.dart';
 import 'package:soliplex/core/auth/sso_config.dart';
@@ -13,6 +12,7 @@ import 'package:soliplex/core/auth/web_auth_pending_storage.dart';
 import 'package:soliplex/core/network/network_inspector.dart';
 import 'package:soliplex/core/utils/debug_log.dart';
 import 'package:soliplex/core/utils/http_config.dart';
+import 'package:soliplex/core/utils/url_builder.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 // Re-export the base class and interface for external use
@@ -207,11 +207,13 @@ class OidcTokenValidationException implements Exception {
       'is refresh token null: $refreshTokenNull\n';
 }
 
-/// Web OIDC implementation using Authorization Code + PKCE flow.
+/// Web OIDC implementation using backend-mediated OAuth flow.
 ///
-/// Web authentication is a two-phase process:
-/// 1. **Redirect Out**: Generate PKCE, store state, redirect to OIDC provider
-/// 2. **Callback**: App reloads at /auth/callback, code is exchanged for tokens
+/// Web authentication uses a backend-mediated flow to avoid CORS issues:
+/// 1. **Redirect Out**: Redirect to backend `/api/login/{system}` endpoint
+/// 2. **Backend Handles OAuth**: Backend redirects to OIDC provider, exchanges
+///    code for tokens
+/// 3. **Callback**: Backend redirects to app `/auth/callback` with tokens in URL
 ///
 /// The two phases happen in different app instances (page reloads between
 /// them).
@@ -242,25 +244,29 @@ class OidcWebAuthInteractor extends OidcAuthInteractorBase {
     SsoConfig config,
   ) async {
     DebugLog.auth(
-      'OidcWebAuthInteractor: Starting PKCE auth flow for $serverId',
+      'OidcWebAuthInteractor: Starting backend-mediated auth for $serverId',
     );
+
+    // Validate we have the server base URL for backend-mediated flow
+    final serverBaseUrl = config.serverBaseUrl;
+    if (serverBaseUrl == null) {
+      throw StateError(
+        'serverBaseUrl is required for web authentication. '
+        'Ensure AuthManager passes the server URL in SsoConfig.',
+      );
+    }
 
     // Store SSO config for use after callback
     await setSsoConfig(serverId, config);
 
-    // Generate PKCE challenge
-    final pkce = PkceUtils.generateChallenge();
-    final state = PkceUtils.generateState();
-    DebugLog.auth('OidcWebAuthInteractor: Generated PKCE challenge and state');
-
-    // Store pending auth for callback
+    // Store pending auth for callback (simplified - backend handles PKCE)
     if (_pendingStorage != null) {
       await _pendingStorage.savePendingAuth(
         PendingWebAuth(
           serverId: serverId,
           providerId: config.id,
-          codeVerifier: pkce.codeVerifier,
-          state: state,
+          codeVerifier: '', // Not needed - backend handles PKCE
+          state: '', // Not needed - backend handles state
           tokenEndpoint: config.tokenEndpoint,
           clientId: config.clientId,
           redirectUrl: config.redirectUrl,
@@ -269,35 +275,22 @@ class OidcWebAuthInteractor extends OidcAuthInteractorBase {
       );
     }
 
-    // Build auth URL with PKCE parameters
-    final authUrl = _buildAuthUrl(config, pkce.codeChallenge, state);
-    DebugLog.auth('OidcWebAuthInteractor: Redirecting to OIDC provider');
+    // Build backend-mediated auth URL
+    final urlBuilder = UrlBuilder(serverBaseUrl);
+    final authUrl = urlBuilder.loginWithProvider(
+      config.id,
+      returnTo: config.redirectUrl,
+    );
+    DebugLog.auth(
+      'OidcWebAuthInteractor: Redirecting to backend: $authUrl',
+    );
 
     // Launch auth URL in same window (replaces current page)
     await launchUrl(authUrl, webOnlyWindowName: '_self');
 
     // Signal that redirect is happening - the app will reload at /auth/callback
-    // The callback handler will exchange the code for tokens
+    // with tokens in URL params (backend handles the OAuth exchange)
     throw OidcWebRedirectException(serverId);
-  }
-
-  /// Build the authorization URL with PKCE parameters
-  Uri _buildAuthUrl(SsoConfig config, String codeChallenge, String state) {
-    final baseUrl = config.loginUrl;
-
-    // Merge PKCE parameters with any existing query parameters
-    final params = Map<String, String>.from(baseUrl.queryParameters);
-    params.addAll({
-      'client_id': config.clientId,
-      'redirect_uri': config.redirectUrl,
-      'response_type': 'code',
-      'scope': config.scopes.join(' '),
-      'state': state,
-      'code_challenge': codeChallenge,
-      'code_challenge_method': 'S256',
-    });
-
-    return baseUrl.replace(queryParameters: params);
   }
 
   @override
@@ -395,56 +388,37 @@ class OidcWebAuthInteractor extends OidcAuthInteractorBase {
 
   @override
   Future<void> logout(String serverId, SsoConfig config) async {
-    final refreshToken = await tokenStorage.getOidcRefreshToken();
-    final url = Uri.parse('${config.endpoint}/protocol/openid-connect/logout');
-    final headers = {'Content-Type': 'application/x-www-form-urlencoded'};
-    final body = 'refresh_token=$refreshToken&client_id=${config.clientId}';
+    DebugLog.service('OidcWebAuthInteractor: Logging out via redirect');
 
-    // Record request for Network Inspector
-    final requestId = _inspector?.recordRequest(
-      method: 'POST',
-      uri: url,
-      headers: headers,
-      body: body,
+    // Get tokens to retrieve ID token for hint
+    final tokens = await tokenStorage.getOidcAuthTokenResponse();
+
+    // Clear local storage immediately
+    await tokenStorage.deleteOidcAuthTokenResponse();
+    await ssoStorage.deleteSsoConfig(serverId);
+
+    // Build logout URL with redirect
+    // We use the front-channel logout (redirect) to ensure cookies are cleared
+    // at IdP
+    final logoutUri = Uri.parse(
+      '${config.endpoint}/protocol/openid-connect/logout',
+    ).replace(
+      queryParameters: {
+        'post_logout_redirect_uri': config.redirectUrl,
+        'client_id': config.clientId,
+        if (tokens != null && tokens.idToken.isNotEmpty)
+          'id_token_hint': tokens.idToken,
+      },
     );
 
-    try {
-      final response = await http
-          .post(url, headers: headers, body: body)
-          .timeout(HttpConfig.oidcTimeout);
+    DebugLog.service(
+      'OidcWebAuthInteractor: Redirecting to logout: $logoutUri',
+    );
 
-      // Record response for Network Inspector
-      if (requestId != null) {
-        _inspector?.recordResponse(
-          requestId: requestId,
-          statusCode: response.statusCode,
-          headers: response.headers,
-          body: response.body,
-        );
-      }
+    // Launch URL in self to redirect browser
+    await launchUrl(logoutUri, webOnlyWindowName: '_self');
 
-      if (response.statusCode == 204) {
-        DebugLog.service('OidcWebAuthInteractor: Session logout successful');
-        await tokenStorage.deleteOidcAuthTokenResponse();
-        await ssoStorage.deleteSsoConfig(serverId);
-        return;
-      } else {
-        DebugLog.error(
-          // ignore: lines_longer_than_80_chars (auto-documented)
-          'OidcWebAuthInteractor: Failed to logout of session: ${response.statusCode}',
-        );
-        DebugLog.error(
-          'OidcWebAuthInteractor: Response body: ${response.body}',
-        );
-      }
-    } on Object catch (e) {
-      // Record error for Network Inspector
-      if (requestId != null) {
-        _inspector?.recordError(requestId: requestId, error: e.toString());
-      }
-      DebugLog.error('OidcWebAuthInteractor: An error occurred: $e');
-      rethrow;
-    }
-    throw Exception('Session logout failed');
+    // Signal that redirect is happening
+    throw OidcWebRedirectException(serverId);
   }
 }

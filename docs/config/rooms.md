@@ -90,7 +90,7 @@ make the room's calls to the LLM.
 
 ```yaml
 agent:
-    model_name: "qwen3:latest"
+    model_name: "gpt-oss:latest"
     system_prompt: "./prompt.txt"
 ```
 

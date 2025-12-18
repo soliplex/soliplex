@@ -156,11 +156,13 @@ async def get_room_agui_thread_id(
     a_thread_runs = {}
 
     for a_run in await thread.list_runs():
+        await a_run.awaitable_attrs.thread
         a_thread_runs[a_run.run_id] = models.AGUI_Run.from_run(
             a_run=a_run,
             a_run_input=await _get_run_input(a_run),
             a_run_meta=await a_run.awaitable_attrs.run_metadata,
             a_run_events=None,
+            a_run_usage=None,
         )
 
     return models.AGUI_Thread.from_thread(
@@ -203,11 +205,15 @@ async def get_room_agui_thread_id_run_id(
             detail=exc.args,
         ) from None
 
+    await run.awaitable_attrs.thread
+    usage = await run.awaitable_attrs.run_usage
+
     return models.AGUI_Run.from_run(
         a_run=run,
         a_run_input=await _get_run_input(run),
         a_run_meta=await run.awaitable_attrs.run_metadata,
         a_run_events=await run.list_events(),
+        a_run_usage=usage.as_tuple() if usage else None,
     )
 
 
@@ -248,12 +254,14 @@ async def post_room_agui(
     run_map = {}
 
     for run in await thread.list_runs():
+        await run.awaitable_attrs.thread
         run_meta = await run.awaitable_attrs.run_metadata
         run_map[run.run_id] = models.AGUI_Run.from_run(
             a_run=run,
             a_run_input=await _get_run_input(run),
             a_run_meta=run_meta,
             a_run_events=[],
+            a_run_usage=None,
         )
 
     return models.AGUI_Thread(
@@ -441,13 +449,31 @@ async def post_room_agui_thread_id_run_id(
 
     events = []
 
-    async def finish_stream(_result):
+    async def finish_stream(result):
         await emitter.close()
 
-    mpx = agui_mpx.multiplex_streams(
-        agui_adapter.run_stream(deps=agent_deps, on_complete=finish_stream),
-        agui_parser.agui_events_from_dicts(emitter),
+        usage = getattr(result, "usage", None)
+
+        if usage is not None:
+            usage = usage()
+            await the_threads.save_run_usage(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+                requests=usage.requests,
+                tool_calls=usage.tool_calls,
+            )
+
+    agent_stream = agui_adapter.run_stream(
+        deps=agent_deps,
+        on_complete=finish_stream,
     )
+    emitter_stream = agui_parser.agui_events_from_dicts(emitter)
+
+    mpx = agui_mpx.multiplex_streams(agent_stream, emitter_stream)
 
     save_events = functools.partial(
         the_threads.save_run_events,
@@ -522,7 +548,7 @@ async def post_room_agui_thread_id_run_id_meta(
 
 
 @util.logfire_span("DELETE /v1/rooms/{room_id}/agui/{thread_id}")
-@router.post("/v1/rooms/{room_id}/agui/{thread_id}")
+@router.delete("/v1/rooms/{room_id}/agui/{thread_id}")
 async def delete_room_agui_thread_id(
     request: fastapi.Request,
     room_id: str,
@@ -530,7 +556,7 @@ async def delete_room_agui_thread_id(
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
-) -> models.AGUI_Run:
+) -> fastapi.Response:
     """Delete an AGUI thread within the given room"""
     user_name = await _check_user_in_room(
         room_id=room_id,

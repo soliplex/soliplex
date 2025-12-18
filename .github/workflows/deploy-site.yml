@@ -1,0 +1,61 @@
+name: Deploy Site (Docs + WebApp)
+
+on:
+  push:
+    branches: [main, pre-merge]
+    paths:
+      - 'mkdocs.yml'
+      - 'docs/**'
+      - 'src/flutter/**'
+      - '.github/workflows/deploy-site.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Build Documentation ---
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+
+      - name: Install MkDocs Material
+        run: pip install mkdocs-material
+
+      - name: Build Docs
+        run: mkdocs build
+        # Outputs to ./site by default
+
+      # --- Build Flutter Web App ---
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'beta'
+          cache: true
+
+      - name: Install Flutter dependencies
+        working-directory: src/flutter
+        run: flutter pub get
+
+      - name: Build Flutter Web
+        working-directory: src/flutter
+        run: flutter build web --release --base-href /soliplex/webapp/ --no-tree-shake-icons
+
+      # --- Combine ---
+      - name: Merge Web App into Site
+        run: |
+          mkdir -p site/webapp
+          cp -a src/flutter/build/web/. site/webapp/
+          touch site/.nojekyll
+      # --- Deploy ---
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          publish_branch: gh-pages

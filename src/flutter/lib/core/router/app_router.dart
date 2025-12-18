@@ -30,15 +30,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       final appState = appStateAsync.valueOrNull;
       final location = state.matchedLocation;
       final uri = state.uri;
+      final fullPath = state.fullPath;
+      final queryParams = state.uri.queryParameters;
 
       DebugLog.auth(
-        'Router redirect: location=$location, uri=$uri, appState=$appState',
+        'Router redirect: location=$location, fullPath=$fullPath, '
+        'uri=$uri, queryParams=$queryParams, appState=$appState',
       );
 
-      // Allow auth callback route to bypass auth guard (handles its own auth)
-      // Check both matchedLocation and uri.path for web compatibility
-      if (location == '/auth/callback' || uri.path == '/auth/callback') {
-        DebugLog.auth('Router: Auth callback detected, bypassing guard');
+      // Auth callback route bypasses auth guard (handles its own auth)
+      // With hash routing: /#/auth/callback?token=...
+      if (location == '/auth/callback') {
+        DebugLog.auth('Router: At auth callback, bypassing guard');
         return null;
       }
 
@@ -55,6 +58,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       // Auth callback route - handles OIDC redirect (must be before ShellRoute)
+      // Tokens arrive in query params: /#/auth/callback?token=...
       GoRoute(
         path: '/auth/callback',
         builder: (context, state) => const AuthCallbackScreen(),

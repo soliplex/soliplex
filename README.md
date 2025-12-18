@@ -73,6 +73,11 @@ pip install -e .
 ```bash
 source venv/bin/activate
 export OLLAMA_BASE_URL=<your Ollama server / port>
+# Run docling-serve if you have not installed the full haiku.rag
+docker run -p 5001:5001 -d -e DOCLING_SERVE_ENABLE_UI=1 \
+  quay.io/docling-project/docling-serve
+haiku-rag --config example/haiku.rag.yaml \
+  init --db  db/rag/rag.lancedb
 haiku-rag --config example/haiku.rag.yaml \
   add-src --db db/rag/rag.lancedb docs/
 ...

@@ -16,9 +16,8 @@ class Document {
   factory Document.fromJson(Map<String, dynamic> json) {
     return Document(
       id: json['id'] as String,
-      title: (json['title'] as String?) ??
-          (json['uri'] as String?) ??
-          'Untitled',
+      title:
+          (json['title'] as String?) ?? (json['uri'] as String?) ?? 'Untitled',
       uri: json['uri'] as String?,
       metadata: (json['metadata'] as Map<String, dynamic>?) ?? {},
       createdAt: DateTime.parse(json['created_at'] as String),

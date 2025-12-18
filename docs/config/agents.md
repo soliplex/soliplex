@@ -32,7 +32,7 @@ A minimal configuration, without an external prompt file:
 
 ```yaml
 agent:
-    model_name: "qwen3:latest"
+    model_name: "gpt-oss:latest"
     system_prompt: |
         You are a knowledgeable assistant that helps users find information from a document knowledge base.
 
@@ -45,7 +45,7 @@ A minimal configuration, but with the prompt stored in external file:
 
 ```yaml
 agent:
-    model_name: "qwen3:latest"
+    model_name: "gpt-oss:latest"
     system_prompt: "./prompt.txt"
 ```
 
@@ -81,7 +81,7 @@ agent:
           testing.
 
 ```yaml
-model_name: "qwen3:latest"
+model_name: "gpt-oss:latest"
 provider_type: "ollama"
 provider_model_settings:
   temperature: 0.90

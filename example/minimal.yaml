@@ -20,7 +20,6 @@ id: "soliplex-conf-minimal"
 #==========================================================================
 
 secrets:
-
   # ----------------------------------------------------------------------
   # MCP room token generation / validation secret
   #
@@ -38,7 +37,6 @@ secrets:
 #==========================================================================
 
 environment:
-
   - "OLLAMA_BASE_URL"
 
   #------------------------------------------------------------------------
@@ -51,22 +49,19 @@ environment:
   - name: "RAG_LANCE_DB_PATH"
     value: "file:../db/rag"
 
-
 #==========================================================================
 # Global 'haiku-rag' configuration
 #==========================================================================
 
 haiku_rag_config_file: "./haiku.rag.yaml"
 
-
 #==========================================================================
 # Agent configurations
 #==========================================================================
 
 agent_configs:
-
   - id: "default_chat"
-    model_name: "qwen3:latest"
+    model_name: "gpt-oss:latest"
     system_prompt: |
       You are an expert AI assistant specializing in information retrieval.
 
@@ -99,7 +94,6 @@ room_paths:
   - "./rooms/faux"
   - "./rooms/quiztest"
   - "./rooms/research"
-
 #==========================================================================
 # Completions configuration
 #==========================================================================

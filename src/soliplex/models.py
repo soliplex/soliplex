@@ -422,6 +422,22 @@ class AGUI_NewRunRequest(pydantic.BaseModel):
     metadata: AGUI_RunMetadata = KW_ONLY_NONE
 
 
+class AGUI_RunUsage(pydantic.BaseModel):
+    input_tokens: int
+    output_tokens: int
+    requests: int
+    tool_calls: int
+
+    @classmethod
+    def from_tuple(cls, ru_tuple: agui_package.RunUsageStats):
+        return cls(
+            input_tokens=ru_tuple.input_tokens,
+            output_tokens=ru_tuple.output_tokens,
+            requests=ru_tuple.requests,
+            tool_calls=ru_tuple.tool_calls,
+        )
+
+
 class AGUI_Run(pydantic.BaseModel):
     thread_id: str = KW_ONLY
     run_id: str = KW_ONLY
@@ -430,12 +446,14 @@ class AGUI_Run(pydantic.BaseModel):
 
     run_input: agui_core.RunAgentInput | None = KW_ONLY_NONE
     created: datetime.datetime = KW_ONLY_NONE
+    finished: datetime.datetime | None = KW_ONLY_NONE
 
     events: AGUI_Events | None = pydantic.Field(
         kw_only=True,
         default_factory=list,
     )
     metadata: AGUI_RunMetadata | None = KW_ONLY_NONE
+    usage: AGUI_RunUsage | None = KW_ONLY_NONE
 
     @classmethod
     def from_run(
@@ -444,15 +462,20 @@ class AGUI_Run(pydantic.BaseModel):
         a_run_input: agui_core.RunAgentInput | None = None,
         a_run_meta: agui_package.RunMetadata = None,
         a_run_events: list[agui_package.RunEvent] = None,
+        a_run_usage: agui_package.RunUsageStats | None = None,
     ):
         return cls(
             thread_id=a_run.thread_id,
             run_id=a_run.run_id,
             created=a_run.created,
+            finished=a_run.finished,
             parent_run_id=a_run.parent_run_id,
             run_input=a_run_input,
             events=a_run_events,
             metadata=AGUI_RunMetadata.from_run_meta(a_run_meta),
+            usage=(
+                AGUI_RunUsage.from_tuple(a_run_usage) if a_run_usage else None
+            ),
         )
 
 

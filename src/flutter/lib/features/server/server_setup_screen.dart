@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soliplex/core/models/server_models.dart';
 import 'package:soliplex/core/providers/app_providers.dart';
 import 'package:soliplex/core/utils/api_constants.dart';
+import 'package:soliplex/core/utils/debug_log.dart';
 import 'package:soliplex/features/server/oidc_provider_selector.dart';
 import 'package:soliplex/features/server/server_history_widget.dart';
 
@@ -142,6 +143,10 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
     }
 
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -267,11 +272,15 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
                 const SizedBox(height: 8),
                 ServerHistoryWidget(
                   onServerSelected: (server) async {
+                    DebugLog.ui('Server selected from history: ${server.url}');
                     // Guard against duplicate calls
                     if (_isSelectingFromHistory) return;
 
                     // Set flag to prevent _probeServer and duplicate selections
                     setState(() => _isSelectingFromHistory = true);
+
+                    // Update the text field to show what's happening
+                    _urlController.text = server.url;
 
                     // Unfocus any text fields to prevent form submission side
                     // effects

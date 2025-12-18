@@ -8,7 +8,6 @@
 /// - EndpointSelector - Compact selector for chat screen
 library;
 
-
 export 'add_endpoint_dialog.dart';
 export 'endpoint_list_screen.dart';
 export 'endpoint_selector.dart';

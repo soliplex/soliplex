@@ -28,6 +28,12 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+        <key>NSLocationUsageDescription</key>
+        <string>Your location is processed locally on your device to provide app features. We do not track you or send location data to external servers.</string>
+        <key>NSLocationWhenInUseUsageDescription</key>
+        <string>Your location is used locally in the background to support app functionality. This data remains on your device and is not used for tracking or telemetry.</string>
+        <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+        <string>Your location may be accessed in the background to support app features. All location data is processed locally on your device and is never sent to external servers or used for tracking.</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -54,5 +60,7 @@
 			</array>
 		</dict>
 	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

@@ -1,82 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
-import 'package:markdown/markdown.dart' as md;
-
-/// Custom code block builder for flutter_markdown with copy/quote support.
-///
-/// This builder renders code blocks with:
-/// - Language label in header
-/// - Copy button with "Copied!" feedback
-/// - Quote support via context menu on selected text
-///
-/// Usage with MarkdownBody:
-/// ```dart
-/// MarkdownBody(
-///   data: markdownText,
-///   builders: {
-///     'pre': MarkdownCodeBlockBuilder(
-///       onCopy: (code, language) => print('Copied $language code'),
-///       onQuote: (text) => print('Quoted: $text'),
-///     ),
-///   },
-/// )
-/// ```
-class MarkdownCodeBlockBuilder extends MarkdownElementBuilder {
-  MarkdownCodeBlockBuilder({this.onCopy, this.onQuote, this.messageId});
-
-  /// Callback when code is copied
-  final void Function(String code, String? language)? onCopy;
-
-  /// Callback when text is quoted
-  final void Function(String quotedText)? onQuote;
-
-  /// The message ID (for tracking purposes)
-  final String? messageId;
-
-  @override
-  Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
-    // Extract language from info string (e.g., ```dart)
-    String? language;
-    if (element.attributes['class'] != null) {
-      final classes = element.attributes['class']!.split(' ');
-      for (final cls in classes) {
-        if (cls.startsWith('language-')) {
-          language = cls.substring('language-'.length);
-          break;
-        }
-      }
-    }
-
-    final code = element.textContent.trim();
-
-    return _StyledCodeBlock(
-      code: code,
-      language: language,
-      onCopy: onCopy,
-      onQuote: onQuote,
-    );
-  }
-}
 
 /// Styled code block widget with copy button and quote support.
-class _StyledCodeBlock extends StatefulWidget {
-  const _StyledCodeBlock({
+///
+/// Use this in the `codeBuilder` of `SmoothMarkdown`.
+class StyledCodeBlock extends StatefulWidget {
+  const StyledCodeBlock({
     required this.code,
     this.language,
     this.onCopy,
     this.onQuote,
+    super.key,
   });
+
   final String code;
   final String? language;
   final void Function(String code, String? language)? onCopy;
   final void Function(String quotedText)? onQuote;
 
   @override
-  State<_StyledCodeBlock> createState() => _StyledCodeBlockState();
+  State<StyledCodeBlock> createState() => _StyledCodeBlockState();
 }
 
-class _StyledCodeBlockState extends State<_StyledCodeBlock> {
+class _StyledCodeBlockState extends State<StyledCodeBlock> {
   bool _copied = false;
 
   Future<void> _copyCode() async {

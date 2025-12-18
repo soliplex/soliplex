@@ -40,7 +40,7 @@ def joker_agent_factory(
 
     joke_selection_agent = pydantic_ai.Agent(
         model=openai_models.OpenAIChatModel(
-            model_name="qwen3:latest",
+            model_name="gpt-oss:latest",
             provider=provider,
         ),
         system_prompt=JOKER_AGENT_PROMPT,

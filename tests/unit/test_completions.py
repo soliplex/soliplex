@@ -8,7 +8,7 @@ from soliplex import completions
 from soliplex import config
 from soliplex import models
 
-COMPLETION_ID = "testing"
+COMPLETION_ID = "testing-completion"
 SYSTEM_PROMPT = "You are a test"
 MODEL_NAME = "test-model"
 
@@ -59,7 +59,7 @@ tools:
 
 @mock.patch("soliplex.completions.time")
 def test_openai_chunk_repr(time_module):
-    MODEL = "testing"
+    MODEL = "testing-model"
     CHUNK = "Test chunk"
     time_module.time.return_value = 123456.789
 
@@ -177,7 +177,7 @@ async def test_openai_chat_completion(sr_class, scp, w_history, w_exception):
     }
 
     if w_exception:
-        scp.side_effect = ValueError("testing")
+        scp.side_effect = ValueError("testing-stream_chat_responses")
 
     if w_exception:
         with pytest.raises(fastapi.HTTPException):

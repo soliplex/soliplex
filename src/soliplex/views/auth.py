@@ -1,4 +1,5 @@
 import dataclasses
+from urllib import parse as urlparse
 
 import fastapi
 from authlib.integrations import starlette_client
@@ -97,13 +98,31 @@ async def get_auth_system(
     expires_in = tokendict["expires_in"]
     refresh_expires_in = tokendict["refresh_expires_in"]
 
-    # NB: explicitly putting the "query parameters" after the URL,
-    # even if the url ends with an anchor tag (support GoRouter)
+    # Handle hash-based routing (e.g., /#/auth/callback)
+    # Query params must be placed before the hash fragment for Flutter to see
+    # them
     return_to = request.query_params.get("return_to", "/")
-    return_to += f"?token={access_token}"
-    return_to += f"&refresh_token={refresh_token}"
-    return_to += f"&expires_in={expires_in}"
-    return_to += f"&refresh_expires_in={refresh_expires_in}"
+
+    components = urlparse.urlparse(return_to)
+    qs = urlparse.urlencode(
+        dict(
+            token=access_token,
+            refresh_token=refresh_token,
+            expires_in=expires_in,
+            refresh_expires_in=refresh_expires_in,
+        )
+    )
+    return_to = urlparse.urlunparse(
+        (
+            components.scheme,
+            components.netloc,
+            components.path,
+            components.params,
+            qs,
+            components.fragment,
+        )
+    )
+
     return responses.RedirectResponse(return_to)
 
 

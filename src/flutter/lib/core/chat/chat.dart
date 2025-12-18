@@ -11,7 +11,6 @@
 /// - CompletionsChatSession - Session for OpenAI-compatible completions APIs
 library;
 
-
 export 'chat_session.dart';
 export 'completions_chat_session.dart';
 export 'unified_message.dart';

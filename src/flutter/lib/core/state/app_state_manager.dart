@@ -185,9 +185,16 @@ class AppStateManager {
     try {
       await _serverRegistry.initialize();
       final server = await _serverRegistry.setCurrentServer(serverId);
+      DebugLog.service(
+        'AppStateManager: Server ID from registry: ${server.id}',
+      );
 
       // At this point we should have valid tokens from the callback
       final hasValidToken = await _authManager.hasValidToken(server.id);
+      DebugLog.service(
+        'AppStateManager: Checking for token with server.id=${server.id}, '
+        'hasValidToken=$hasValidToken',
+      );
       if (hasValidToken) {
         final userInfo = await _authManager.getUserInfo(server);
         DebugLog.service('AppStateManager: Server ready after auth callback');
