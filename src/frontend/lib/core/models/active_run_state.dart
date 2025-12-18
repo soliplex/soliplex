@@ -324,8 +324,7 @@ class Success extends CompletionResult {
   const Success();
 
   @override
-  bool operator ==(Object other) =>
-      identical(this, other) || other is Success;
+  bool operator ==(Object other) => identical(this, other) || other is Success;
 
   @override
   int get hashCode => runtimeType.hashCode;

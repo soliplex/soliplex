@@ -277,5 +277,4 @@ void main() {
       expect(threadId, isNull);
     });
   });
-
 }
