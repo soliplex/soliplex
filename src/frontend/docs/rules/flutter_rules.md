@@ -164,7 +164,7 @@ developer.log('Message', name: 'myapp.module', error: e, stackTrace: s);
 | Do | Don't |
 |----|-------|
 | `const` constructors | Mutable widgets |
-| Small focused functions | Giant `build()` methods |
+| Small, focused, reusable Widget classes | Giant `build()` methods |
 | Pattern matching | Excessive null checks with `!` |
 | `ListView.builder` | `ListView` with large lists |
 | Fakes/stubs in tests | Heavy mock usage |
