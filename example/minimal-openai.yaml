@@ -95,6 +95,13 @@ agent_configs:
       Always provide code or examples in Markdown blocks.
 
 #==========================================================================
+# Thread peristence:  SQLAlchemy DBURIs
+#==========================================================================
+thread_persistence_dburi:
+  sync: "sqlite://"
+  async: "sqlite+aiosqlite://"
+
+#==========================================================================
 # OIDC authentication provider configuration
 #==========================================================================
 
