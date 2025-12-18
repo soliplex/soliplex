@@ -1,11 +1,12 @@
 import datetime
 
+import pydantic
 import pydantic_ai
 from haiku.rag import client as rag_client
 from haiku.rag.graph import research as rag_research
 from haiku.rag.graph.research import graph as rag_research_graph
 from haiku.rag.graph.research import state as rag_research_state
-from haiku.rag.store.models.chunk import SearchResult
+from haiku.rag.store.models import chunk as rag_store_models_chunk
 
 from soliplex import agents
 from soliplex import agui
@@ -44,7 +45,7 @@ async def get_current_user(
 async def search_documents(
     query: str,
     tool_config: config.SearchDocumentsToolConfig = None,
-) -> list[SearchResult]:
+) -> list[rag_store_models_chunk.SearchResult]:
     """
     Search the document knowledge base for relevant information based on the user's query.
 
@@ -52,7 +53,8 @@ async def search_documents(
         query (str): The search query derived from the user's question.
 
     Returns:
-        list[SearchResult]: A list of search results with content, scores, and citations.
+        list[rag_store_models_chunk.SearchResult]:
+            A list of search results with content, scores, and citations.
     """  # noqa: E501  The first line is important to the LLM.
     if tool_config is None:
         raise NoToolConfig()
@@ -121,3 +123,63 @@ async def agui_state(
 ) -> agui.AGUI_State:
     """Return the AGUI state."""
     return ctx.deps.state
+
+
+class AWRC_AGUI_State(pydantic.BaseModel):
+    filter_documents: models.FilterDocuments | None = None
+    ask_history: models.AskedAndAnswered | None = None
+
+
+async def ask_with_rich_citations(
+    ctx: pydantic_ai.RunContext[agents.AgentDependencies],
+    question: str,
+) -> str:
+    """Use a document knowledge base to answer the user's question.
+
+    Args:
+        question (str): the user's question.
+
+    Returns:
+        The answer to the question, based on the knowledge base.
+    """
+    tool_configs = ctx.deps.tool_configs
+    try:
+        tool_config = tool_configs["ask_with_rich_citations"]
+    except KeyError as exc:
+        raise NoToolConfig() from exc
+
+    agui_emitter = ctx.deps.agui_emitter
+    agui_state = AWRC_AGUI_State.model_validate(ctx.deps.state)
+    agui_emitter.update_state(agui_state)
+    agui_state = agui_state.model_copy(deep=True)
+
+    search_filter = None
+
+    documents = agui_state.filter_documents
+    document_ids = getattr(documents, "document_ids", ()) or ()
+    quoted = [f"'{id}'" for id in document_ids]
+
+    if quoted:
+        search_filter = f"id IN ({', '.join(quoted)})"
+
+    hr_config = tool_config.haiku_rag_config
+
+    async with rag_client.HaikuRAG(
+        db_path=tool_config.rag_lancedb_path,
+        config=hr_config,
+    ) as rag:
+        response, citations = await rag.ask(question, filter=search_filter)
+
+        if agui_state.ask_history is None:
+            agui_state.ask_history = models.AskedAndAnswered()
+
+        agui_state.ask_history.questions.append(
+            models.QuestionResponseCitations(
+                question=question,
+                response=response,
+                citations=citations,
+            )
+        )
+        agui_emitter.update_state(agui_state)
+
+        return response

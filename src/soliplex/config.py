@@ -487,6 +487,52 @@ class RAGResearchToolConfig(ToolConfig, _RAGToolBase):
     kind: str = "research_report"
     tool_name: str = "soliplex.tools.research_report"
 
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config: dict[str, typing.Any],
+    ):
+        try:
+            config["_installation_config"] = installation_config
+            config["_config_path"] = config_path
+
+            instance = cls(**config)
+        except Exception as exc:
+            raise FromYamlException(config_path, "rrtc", config) from exc
+
+        return instance
+
+    def get_extra_parameters(self) -> dict:
+        return (
+            super().get_extra_parameters()
+            | _RAGToolBase.get_extra_parameters(self)
+        )
+
+
+@dataclasses.dataclass
+class AskWithRichCitationsToolConfig(ToolConfig, _RAGToolBase):
+    kind: str = "ask_with_rich_citations"
+    tool_name: str = "soliplex.tools.ask_with_rich_citations"
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config: dict[str, typing.Any],
+    ):
+        try:
+            config["_installation_config"] = installation_config
+            config["_config_path"] = config_path
+
+            instance = cls(**config)
+        except Exception as exc:
+            raise FromYamlException(config_path, "awrctc", config) from exc
+
+        return instance
+
     def get_extra_parameters(self) -> dict:
         return (
             super().get_extra_parameters()
@@ -499,6 +545,7 @@ TOOL_CONFIG_CLASSES_BY_TOOL_NAME = {
     for klass in [
         SearchDocumentsToolConfig,
         RAGResearchToolConfig,
+        AskWithRichCitationsToolConfig,
     ]
 }
 

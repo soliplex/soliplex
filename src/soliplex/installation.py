@@ -120,7 +120,7 @@ class Installation:
             kwargs["agui_emitter"] = hr_agui.AGUIEmitter(
                 thread_id=run_agent_input.thread_id,
                 run_id=run_agent_input.run_id,
-                use_deltas=False,
+                use_deltas=True,
             )
 
         return agents.AgentDependencies(

@@ -177,6 +177,30 @@ W_OVERRIDE_RRTC_CONFIG_YAML = """
     rag_lancedb_override_path: "/path/to/rag.lancedb"
 """
 
+
+# This one raises
+BOGUS_AWRCTC_CONFIG_YAML = """
+    #rag_lancedb_stem: "rag"
+    #rag_lancedb_override_path: "/path/to/rag.lancedb"
+"""
+
+W_STEM_AWRCTC_CONFIG_KW = {
+    "rag_lancedb_stem": "rag",
+    "allow_mcp": True,
+}
+W_STEM_AWRCTC_CONFIG_YAML = """
+    rag_lancedb_stem: "rag"
+    allow_mcp: true
+"""
+
+
+W_OVERRIDE_AWRCTC_CONFIG_KW = {
+    "rag_lancedb_override_path": "/path/to/rag.lancedb",
+}
+W_OVERRIDE_AWRCTC_CONFIG_YAML = """
+    rag_lancedb_override_path: "/path/to/rag.lancedb"
+"""
+
 # This one raises
 BOGUS_STDIO_MCTC_CONFIG_YAML = ""
 
@@ -2023,7 +2047,7 @@ def test_rrtc_from_yaml(
 
     if exp_config is None:
         with pytest.raises(config.FromYamlException) as exc:
-            config.SearchDocumentsToolConfig.from_yaml(
+            config.RAGResearchToolConfig.from_yaml(
                 installation_config=installation_config,
                 config_path=config_path,
                 config=config_dict,
@@ -2043,6 +2067,87 @@ def test_rrtc_from_yaml(
             **exp_config,
         )
         assert rrt_config == expected
+
+
+def test_awrctc_ctor(installation_config, temp_dir):
+    db_rag_path = temp_dir / "db" / "rag"
+    db_rag_path.mkdir(parents=True)
+
+    from_stem = db_rag_path / "stem.lancedb"
+    from_stem.mkdir()
+
+    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_path)}
+    installation_config.get_environment = ic_environ.get
+
+    kw = {
+        "_installation_config": installation_config,
+        "_config_path": temp_dir / "rooms" / "test" / "room_config.yaml",
+        "rag_lancedb_stem": "stem",
+    }
+
+    awrct_config = config.AskWithRichCitationsToolConfig(**kw)
+
+    found = awrct_config.rag_lancedb_path
+    assert found.resolve() == from_stem.resolve()
+
+    expected_ep = {
+        "rag_lancedb_path": from_stem.resolve(),
+    }
+
+    assert awrct_config.get_extra_parameters() == expected_ep
+
+
+@pytest.mark.parametrize(
+    "config_yaml, exp_config",
+    [
+        (BOGUS_AWRCTC_CONFIG_YAML, None),
+        (W_STEM_AWRCTC_CONFIG_YAML, W_STEM_AWRCTC_CONFIG_KW),
+        (W_OVERRIDE_AWRCTC_CONFIG_YAML, W_OVERRIDE_AWRCTC_CONFIG_KW),
+    ],
+)
+def test_awrctc_from_yaml(
+    installation_config,
+    temp_dir,
+    config_yaml,
+    exp_config,
+):
+    db_rag_dir = temp_dir / "db" / "rag"
+    db_rag_dir.mkdir(parents=True)
+
+    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_dir)}
+    installation_config.get_environment = ic_environ.get
+
+    config_dir = temp_dir / "rooms" / "test_room"
+    config_dir.mkdir(parents=True)
+
+    config_path = config_dir / "room_config.yaml"
+    config_path.write_text(config_yaml)
+
+    with config_path.open() as stream:
+        config_dict = yaml.safe_load(stream)
+
+    if exp_config is None:
+        with pytest.raises(config.FromYamlException) as exc:
+            config.AskWithRichCitationsToolConfig.from_yaml(
+                installation_config=installation_config,
+                config_path=config_path,
+                config=config_dict,
+            )
+
+        assert exc.value._config_path == config_path
+
+    else:
+        awrct_config = config.AskWithRichCitationsToolConfig.from_yaml(
+            installation_config=installation_config,
+            config_path=config_path,
+            config=config_dict,
+        )
+        expected = config.AskWithRichCitationsToolConfig(
+            _installation_config=installation_config,
+            _config_path=config_path,
+            **exp_config,
+        )
+        assert awrct_config == expected
 
 
 @pytest.mark.parametrize(
