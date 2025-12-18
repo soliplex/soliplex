@@ -22,8 +22,63 @@ class MockActiveRunNotifier extends ActiveRunNotifier {
   }
 }
 
-/// Mock HttpTransport for testing.
+/// Mock HttpTransport for testing with mocktail.
 class MockHttpTransport extends Mock implements HttpTransport {}
+
+/// Fake HttpTransport for testing without mocktail.
+class FakeHttpTransport implements HttpTransport {
+  @override
+  Duration get defaultTimeout => const Duration(seconds: 30);
+
+  @override
+  Future<T> request<T>(
+    String method,
+    Uri uri, {
+    Object? body,
+    Map<String, String>? headers,
+    Duration? timeout,
+    CancelToken? cancelToken,
+    T Function(Map<String, dynamic>)? fromJson,
+  }) async {
+    return null as T;
+  }
+
+  @override
+  Stream<List<int>> requestStream(
+    String method,
+    Uri uri, {
+    Object? body,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+  }) async* {
+    yield [];
+  }
+
+  @override
+  void close() {}
+}
+
+/// Fake UrlBuilder for testing.
+class FakeUrlBuilder implements UrlBuilder {
+  @override
+  String get baseUrl => 'http://localhost';
+
+  @override
+  Uri build({
+    String? path,
+    List<String>? pathSegments,
+    Map<String, String>? queryParameters,
+  }) =>
+      Uri.parse('http://localhost/${path ?? ''}');
+}
+
+/// Creates an ActiveRunNotifier for testing.
+ActiveRunNotifier createTestActiveRunNotifier() {
+  return ActiveRunNotifier(
+    transport: FakeHttpTransport(),
+    urlBuilder: FakeUrlBuilder(),
+  );
+}
 
 /// Test data factory for creating mock objects.
 class TestData {

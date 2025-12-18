@@ -66,7 +66,7 @@ class ChatPanel extends ConsumerWidget {
         // Message list
         Expanded(
           child: switch (runState) {
-            ErrorState(:final errorMessage) => ErrorDisplay(
+            CompletedState(result: Failed(:final errorMessage)) => ErrorDisplay(
                 error: errorMessage,
                 onRetry: () => _handleRetry(ref),
               ),
