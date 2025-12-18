@@ -205,8 +205,42 @@ void main() {
     });
   });
 
+  group('threadSelectionProvider', () {
+    test('starts with NoThreadSelected', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final selection = container.read(threadSelectionProvider);
+
+      expect(selection, isA<NoThreadSelected>());
+    });
+
+    test('can be updated to ThreadSelected', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      container.read(threadSelectionProvider.notifier).state =
+          const ThreadSelected('thread-123');
+
+      final selection = container.read(threadSelectionProvider);
+      expect(selection, isA<ThreadSelected>());
+      expect((selection as ThreadSelected).threadId, 'thread-123');
+    });
+
+    test('can be updated to NewThreadIntent', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      container.read(threadSelectionProvider.notifier).state =
+          const NewThreadIntent();
+
+      final selection = container.read(threadSelectionProvider);
+      expect(selection, isA<NewThreadIntent>());
+    });
+  });
+
   group('currentThreadIdProvider', () {
-    test('starts with null', () {
+    test('returns null when NoThreadSelected', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
@@ -215,13 +249,71 @@ void main() {
       expect(threadId, isNull);
     });
 
-    test('can be updated', () {
+    test('returns threadId when ThreadSelected', () {
+      final container = ProviderContainer(
+        overrides: [
+          threadSelectionProvider
+              .overrideWith((ref) => const ThreadSelected('thread-123')),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final threadId = container.read(currentThreadIdProvider);
+
+      expect(threadId, 'thread-123');
+    });
+
+    test('returns null when NewThreadIntent', () {
+      final container = ProviderContainer(
+        overrides: [
+          threadSelectionProvider
+              .overrideWith((ref) => const NewThreadIntent()),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final threadId = container.read(currentThreadIdProvider);
+
+      expect(threadId, isNull);
+    });
+  });
+
+  group('isNewThreadIntentProvider', () {
+    test('returns false when NoThreadSelected', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      container.read(currentThreadIdProvider.notifier).state = 'thread-123';
+      final isNewIntent = container.read(isNewThreadIntentProvider);
 
-      expect(container.read(currentThreadIdProvider), 'thread-123');
+      expect(isNewIntent, isFalse);
+    });
+
+    test('returns false when ThreadSelected', () {
+      final container = ProviderContainer(
+        overrides: [
+          threadSelectionProvider
+              .overrideWith((ref) => const ThreadSelected('thread-123')),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final isNewIntent = container.read(isNewThreadIntentProvider);
+
+      expect(isNewIntent, isFalse);
+    });
+
+    test('returns true when NewThreadIntent', () {
+      final container = ProviderContainer(
+        overrides: [
+          threadSelectionProvider
+              .overrideWith((ref) => const NewThreadIntent()),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final isNewIntent = container.read(isNewThreadIntentProvider);
+
+      expect(isNewIntent, isTrue);
     });
   });
 }
