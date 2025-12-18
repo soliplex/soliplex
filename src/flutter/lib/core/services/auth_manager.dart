@@ -133,7 +133,7 @@ class AuthManager {
         tokenEndpoint: '$issuerUrl/protocol/openid-connect/token',
         loginUrl: Uri.parse('$issuerUrl/protocol/openid-connect/auth'),
         clientId: provider.clientId,
-        redirectUrl: _getRedirectUrl(provider.id),
+        redirectUrl: _getRedirectUrl(),
         scopes: scopes,
         serverBaseUrl: server.url, // For web backend-mediated OAuth
       );
