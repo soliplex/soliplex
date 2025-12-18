@@ -843,11 +843,13 @@ async def test_tee_events(w_event_count):
 @mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.agui.parser.agui_events_from_dicts")
 @mock.patch("soliplex.agui.mpx.multiplex_streams")
+@mock.patch("soliplex.agui.compact_event_stream")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
 @mock.patch("soliplex.views.agui.tee_events")
 async def test_post_room_agui_thread_id_run_id(
     tee,
     cura,
+    ces,
     mpx,
     aefd,
     aga,
@@ -927,10 +929,9 @@ async def test_post_room_agui_thread_id_run_id(
             "run_id": TEST_RUN_ID,
         }
 
-        mpx.assert_called_once_with(
-            exp_agent_stream,
-            aefd.return_value,
-        )
+        mpx.assert_called_once_with(ces.return_value, aefd.return_value)
+
+        ces.assert_called_once_with(exp_agent_stream)
 
         aefd.assert_called_once_with(exp_emitter)
 

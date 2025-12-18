@@ -14,6 +14,34 @@ AGUI_EventStream = collections.abc.AsyncIterator[agui_core.Event]
 AGUI_State = dict[str, typing.Any]
 
 
+_COMPACTIBLE_TYPES = {
+    agui_core.EventType.TEXT_MESSAGE_CONTENT,
+    agui_core.EventType.THINKING_TEXT_MESSAGE_CONTENT,
+}
+
+
+async def compact_event_stream(stream: AGUI_EventStream):
+    compacting: agui_core.Event = None
+    compacting_id: str = None
+
+    async for event in stream:
+        if compacting is not None:
+            event_id = getattr(event, "message_id", None)
+            if event.type == compacting.type and event_id == compacting_id:
+                compacting.delta += event.delta
+            else:
+                to_yield, compacting = compacting, None
+                yield to_yield
+                yield event
+
+        else:
+            if event.type in _COMPACTIBLE_TYPES:
+                compacting = event.model_copy()
+                compacting_id = getattr(event, "message_id", None)
+            else:
+                yield event
+
+
 class AGUI_Exception(ValueError):
     status_code = 400
 

@@ -471,9 +471,10 @@ async def post_room_agui_thread_id_run_id(
         deps=agent_deps,
         on_complete=finish_stream,
     )
+    compacted = agui_package.compact_event_stream(agent_stream)
     emitter_stream = agui_parser.agui_events_from_dicts(emitter)
 
-    mpx = agui_mpx.multiplex_streams(agent_stream, emitter_stream)
+    mpx = agui_mpx.multiplex_streams(compacted, emitter_stream)
 
     save_events = functools.partial(
         the_threads.save_run_events,
