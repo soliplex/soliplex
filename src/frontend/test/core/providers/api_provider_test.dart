@@ -3,7 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/models/app_config.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
-import 'package:soliplex_frontend/core/providers/config_provider.dart';
+
+import '../../helpers/test_helpers.dart';
 
 void main() {
   group('httpTransportProvider', () {
@@ -51,7 +52,7 @@ void main() {
 
       final container = ProviderContainer(
         overrides: [
-          configProvider.overrideWith((ref) => testConfig),
+          configProviderOverride(testConfig),
         ],
       );
       addTearDown(container.dispose);
@@ -81,7 +82,7 @@ void main() {
       // Test with config1
       final container1 = ProviderContainer(
         overrides: [
-          configProvider.overrideWith((ref) => config1),
+          configProviderOverride(config1),
         ],
       );
       addTearDown(container1.dispose);
@@ -95,7 +96,7 @@ void main() {
       // Test with config2 in separate container
       final container2 = ProviderContainer(
         overrides: [
-          configProvider.overrideWith((ref) => config2),
+          configProviderOverride(config2),
         ],
       );
       addTearDown(container2.dispose);
@@ -172,7 +173,7 @@ void main() {
       // Test with config1
       final container1 = ProviderContainer(
         overrides: [
-          configProvider.overrideWith((ref) => config1),
+          configProviderOverride(config1),
         ],
       );
       addTearDown(container1.dispose);
@@ -183,7 +184,7 @@ void main() {
       // Test with config2 in separate container
       final container2 = ProviderContainer(
         overrides: [
-          configProvider.overrideWith((ref) => config2),
+          configProviderOverride(config2),
         ],
       );
       addTearDown(container2.dispose);
@@ -206,7 +207,7 @@ void main() {
 
       final container = ProviderContainer(
         overrides: [
-          configProvider.overrideWith((ref) => testConfig),
+          configProviderOverride(testConfig),
         ],
       );
       addTearDown(container.dispose);

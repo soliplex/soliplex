@@ -48,15 +48,14 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
     super.initState();
     // Update providers on mount
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(currentRoomIdProvider.notifier).state = widget.roomId;
+      ref.read(currentRoomIdProvider.notifier).set(widget.roomId);
 
       // Handle 'new' threadId specially
       if (widget.threadId == 'new') {
-        ref.read(threadSelectionProvider.notifier).state =
-            const NewThreadIntent();
+        ref.read(threadSelectionProvider.notifier).set(const NewThreadIntent());
       } else {
-        ref.read(threadSelectionProvider.notifier).state =
-            ThreadSelected(widget.threadId);
+        ref.read(threadSelectionProvider.notifier)
+            .set(ThreadSelected(widget.threadId));
       }
     });
   }

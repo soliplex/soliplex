@@ -26,10 +26,20 @@ final roomsProvider = FutureProvider<List<Room>>((ref) async {
   return api.getRooms();
 });
 
+/// Notifier for currently selected room ID.
+class CurrentRoomIdNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  // ignore: use_setters_to_change_properties
+  void set(String? value) => state = value;
+}
+
 /// Provider for currently selected room ID.
 ///
 /// Updated by navigation when user selects a room.
-final currentRoomIdProvider = StateProvider<String?>((ref) => null);
+final currentRoomIdProvider =
+    NotifierProvider<CurrentRoomIdNotifier, String?>(CurrentRoomIdNotifier.new);
 
 /// Provider for the currently selected room.
 ///

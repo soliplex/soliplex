@@ -81,8 +81,8 @@ class HistoryPanel extends ConsumerWidget {
         if (selection is NoThreadSelected) {
           // Use addPostFrameCallback to avoid setState during build
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            ref.read(threadSelectionProvider.notifier).state =
-                ThreadSelected(threads.first.id);
+            ref.read(threadSelectionProvider.notifier)
+                .set(ThreadSelected(threads.first.id));
           });
         }
 
@@ -130,7 +130,7 @@ class HistoryPanel extends ConsumerWidget {
   ///
   /// Updates the current thread selection to the selected thread.
   void _handleThreadSelection(WidgetRef ref, String threadId) {
-    ref.read(threadSelectionProvider.notifier).state = ThreadSelected(threadId);
+    ref.read(threadSelectionProvider.notifier).set(ThreadSelected(threadId));
   }
 
   /// Handles the "New Conversation" button press.
@@ -138,6 +138,6 @@ class HistoryPanel extends ConsumerWidget {
   /// Sets the selection to [NewThreadIntent], signaling that the next
   /// message should create a new thread.
   void _handleNewConversation(WidgetRef ref) {
-    ref.read(threadSelectionProvider.notifier).state = const NewThreadIntent();
+    ref.read(threadSelectionProvider.notifier).set(const NewThreadIntent());
   }
 }

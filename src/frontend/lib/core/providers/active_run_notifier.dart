@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:meta/meta.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
+import 'package:soliplex_frontend/core/providers/api_provider.dart';
 
 /// Internal state representing the notifier's resource management.
 ///
@@ -62,18 +63,24 @@ class RunningInternalState extends NotifierInternalState {
 ///   userMessage: 'Hello!',
 /// );
 /// ```
-class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
-  /// Creates an active run notifier.
-  ActiveRunNotifier({
-    required HttpTransport transport,
-    required UrlBuilder urlBuilder,
-  })  : _transport = transport,
-        _urlBuilder = urlBuilder,
-        super(const IdleState());
-
-  final HttpTransport _transport;
-  final UrlBuilder _urlBuilder;
+class ActiveRunNotifier extends Notifier<ActiveRunState> {
+  late final HttpTransport _transport;
+  late final UrlBuilder _urlBuilder;
   NotifierInternalState _internalState = const IdleInternalState();
+
+  @override
+  ActiveRunState build() {
+    _transport = ref.watch(httpTransportProvider);
+    _urlBuilder = ref.watch(urlBuilderProvider);
+
+    ref.onDispose(() {
+      if (_internalState is RunningInternalState) {
+        (_internalState as RunningInternalState).dispose();
+      }
+    });
+
+    return const IdleState();
+  }
 
   /// Starts a new run with the given message.
   ///
@@ -325,11 +332,4 @@ class ActiveRunNotifier extends StateNotifier<ActiveRunState> {
     }
   }
 
-  @override
-  void dispose() {
-    if (_internalState is RunningInternalState) {
-      (_internalState as RunningInternalState).dispose();
-    }
-    super.dispose();
-  }
 }

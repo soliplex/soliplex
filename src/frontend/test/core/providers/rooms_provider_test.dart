@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -55,11 +57,23 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      // Act & Assert
-      await expectLater(
-        container.read(roomsProvider.future),
-        throwsA(isA<NetworkException>()),
+      // Act - Wait for state with error using a completer
+      final completer = Completer<AsyncValue<List<Room>>>();
+      container
+        ..listen(roomsProvider, (_, next) {
+          if (next.hasError) {
+            completer.complete(next);
+          }
+        })
+        ..read(roomsProvider); // Trigger the provider
+      final state = await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => container.read(roomsProvider),
       );
+
+      // Assert - In Riverpod 3.0, state.hasError indicates error presence
+      expect(state.hasError, isTrue);
+      expect(state.error, isA<NetworkException>());
     });
 
     test('propagates AuthException from API', () async {
@@ -75,11 +89,23 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      // Act & Assert
-      await expectLater(
-        container.read(roomsProvider.future),
-        throwsA(isA<AuthException>()),
+      // Act - Wait for state with error using a completer
+      final completer = Completer<AsyncValue<List<Room>>>();
+      container
+        ..listen(roomsProvider, (_, next) {
+          if (next.hasError) {
+            completer.complete(next);
+          }
+        })
+        ..read(roomsProvider);
+      final state = await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => container.read(roomsProvider),
       );
+
+      // Assert
+      expect(state.hasError, isTrue);
+      expect(state.error, isA<AuthException>());
     });
 
     test('propagates ApiException from API', () async {
@@ -98,11 +124,23 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      // Act & Assert
-      await expectLater(
-        container.read(roomsProvider.future),
-        throwsA(isA<ApiException>()),
+      // Act - Wait for state with error using a completer
+      final completer = Completer<AsyncValue<List<Room>>>();
+      container
+        ..listen(roomsProvider, (_, next) {
+          if (next.hasError) {
+            completer.complete(next);
+          }
+        })
+        ..read(roomsProvider);
+      final state = await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => container.read(roomsProvider),
       );
+
+      // Assert
+      expect(state.hasError, isTrue);
+      expect(state.error, isA<ApiException>());
     });
 
     test('can be refreshed to fetch fresh data', () async {

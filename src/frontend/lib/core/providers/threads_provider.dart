@@ -108,6 +108,15 @@ class NewThreadIntent extends ThreadSelection {
   String toString() => 'NewThreadIntent()';
 }
 
+/// Notifier for thread selection state.
+class ThreadSelectionNotifier extends Notifier<ThreadSelection> {
+  @override
+  ThreadSelection build() => const NoThreadSelected();
+
+  // ignore: use_setters_to_change_properties
+  void set(ThreadSelection value) => state = value;
+}
+
 /// Provider for current thread selection state.
 ///
 /// Updated by navigation when user selects a thread.
@@ -115,19 +124,17 @@ class NewThreadIntent extends ThreadSelection {
 /// **Usage**:
 /// ```dart
 /// // Select a thread
-/// ref.read(threadSelectionProvider.notifier).state =
-///     ThreadSelected('thread-id');
+/// ref.read(threadSelectionProvider.notifier).set(ThreadSelected('thread-id'));
 ///
 /// // Signal new thread intent
-/// ref.read(threadSelectionProvider.notifier).state =
-///     const NewThreadIntent();
+/// ref.read(threadSelectionProvider.notifier).set(const NewThreadIntent());
 ///
 /// // Clear selection
-/// ref.read(threadSelectionProvider.notifier).state =
-///     const NoThreadSelected();
+/// ref.read(threadSelectionProvider.notifier).set(const NoThreadSelected());
 /// ```
-final threadSelectionProvider = StateProvider<ThreadSelection>(
-  (ref) => const NoThreadSelected(),
+final threadSelectionProvider =
+    NotifierProvider<ThreadSelectionNotifier, ThreadSelection>(
+  ThreadSelectionNotifier.new,
 );
 
 /// Provider for currently selected thread ID.

@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_notifier.dart';
-import 'package:soliplex_frontend/core/providers/api_provider.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 
@@ -29,14 +28,7 @@ import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 /// }
 /// ```
 final activeRunNotifierProvider =
-    StateNotifierProvider<ActiveRunNotifier, ActiveRunState>((ref) {
-  final transport = ref.watch(httpTransportProvider);
-  final urlBuilder = ref.watch(urlBuilderProvider);
-  return ActiveRunNotifier(
-    transport: transport,
-    urlBuilder: urlBuilder,
-  );
-});
+    NotifierProvider<ActiveRunNotifier, ActiveRunState>(ActiveRunNotifier.new);
 
 /// Provider indicating whether a message can be sent.
 ///
@@ -119,7 +111,7 @@ final allMessagesProvider = Provider<List<ChatMessage>>((ref) {
   final historyAsync = ref.watch(threadMessagesProvider(thread.id));
   final runState = ref.watch(activeRunNotifierProvider);
 
-  final history = historyAsync.valueOrNull ?? [];
+  final history = historyAsync.value ?? [];
   return [...history, ...runState.messages];
 });
 

@@ -45,7 +45,7 @@ class RoomsScreen extends ConsumerWidget {
                     room.description != null ? Text(room.description!) : null,
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
-                  ref.read(currentRoomIdProvider.notifier).state = room.id;
+                  ref.read(currentRoomIdProvider.notifier).set(room.id);
                   context.push('/rooms/${room.id}');
                 },
               );

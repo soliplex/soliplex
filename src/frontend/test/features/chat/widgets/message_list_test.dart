@@ -23,11 +23,7 @@ void main() {
             ),
             overrides: [
               currentThreadProvider.overrideWith((ref) => null),
-              activeRunNotifierProvider.overrideWith(
-                (ref) => MockActiveRunNotifier(
-                  initialState: const IdleState(),
-                ),
-              ),
+              activeRunNotifierOverride(const IdleState()),
             ],
           ),
         );
@@ -49,11 +45,7 @@ void main() {
             ),
             overrides: [
               currentThreadProvider.overrideWith((ref) => null),
-              activeRunNotifierProvider.overrideWith(
-                (ref) => MockActiveRunNotifier(
-                  initialState: const IdleState(),
-                ),
-              ),
+              activeRunNotifierOverride(const IdleState()),
             ],
           ),
         );
@@ -94,11 +86,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               threadMessagesProvider(mockThread.id)
                   .overrideWith((ref) => messages),
-              activeRunNotifierProvider.overrideWith(
-                (ref) => MockActiveRunNotifier(
-                  initialState: const IdleState(),
-                ),
-              ),
+              activeRunNotifierOverride(const IdleState()),
             ],
           ),
         );
@@ -129,11 +117,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               threadMessagesProvider(mockThread.id)
                   .overrideWith((ref) => messages),
-              activeRunNotifierProvider.overrideWith(
-                (ref) => MockActiveRunNotifier(
-                  initialState: const IdleState(),
-                ),
-              ),
+              activeRunNotifierOverride(const IdleState()),
             ],
           ),
         );
@@ -161,11 +145,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               threadMessagesProvider(mockThread.id)
                   .overrideWith((ref) => messages),
-              activeRunNotifierProvider.overrideWith(
-                (ref) => MockActiveRunNotifier(
-                  initialState: const IdleState(),
-                ),
-              ),
+              activeRunNotifierOverride(const IdleState()),
             ],
           ),
         );
@@ -193,13 +173,11 @@ void main() {
             overrides: [
               currentThreadProvider.overrideWith((ref) => mockThread),
               threadMessagesProvider(mockThread.id).overrideWith((ref) => []),
-              activeRunNotifierProvider.overrideWith(
-                (ref) => MockActiveRunNotifier(
-                  initialState: const RunningState(
-                    threadId: 'test-thread',
-                    runId: 'test-run',
-                    context: RunContext.empty,
-                  ),
+              activeRunNotifierOverride(
+                const RunningState(
+                  threadId: 'test-thread',
+                  runId: 'test-run',
+                  context: RunContext.empty,
                 ),
               ),
             ],
@@ -229,11 +207,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               threadMessagesProvider(mockThread.id)
                   .overrideWith((ref) => messages),
-              activeRunNotifierProvider.overrideWith(
-                (ref) => MockActiveRunNotifier(
-                  initialState: const IdleState(),
-                ),
-              ),
+              activeRunNotifierOverride(const IdleState()),
             ],
           ),
         );
@@ -261,13 +235,11 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               threadMessagesProvider(mockThread.id)
                   .overrideWith((ref) => messages),
-              activeRunNotifierProvider.overrideWith(
-                (ref) => MockActiveRunNotifier(
-                  initialState: const RunningState(
-                    threadId: 'test-thread',
-                    runId: 'test-run',
-                    context: RunContext.empty,
-                  ),
+              activeRunNotifierOverride(
+                const RunningState(
+                  threadId: 'test-thread',
+                  runId: 'test-run',
+                  context: RunContext.empty,
                 ),
               ),
             ],
@@ -302,16 +274,14 @@ void main() {
               // Don't provide duplicate messages in threadMessagesProvider
               // since they're already in activeRunNotifierProvider.messages
               threadMessagesProvider(mockThread.id).overrideWith((ref) => []),
-              activeRunNotifierProvider.overrideWith(
-                (ref) => MockActiveRunNotifier(
-                  initialState: RunningState(
-                    threadId: 'test-thread',
-                    runId: 'test-run',
-                    context: RunContext(messages: messages),
-                    textStreaming: const Streaming(
-                      messageId: 'msg-1',
-                      text: 'Typing...',
-                    ),
+              activeRunNotifierOverride(
+                RunningState(
+                  threadId: 'test-thread',
+                  runId: 'test-run',
+                  context: RunContext(messages: messages),
+                  textStreaming: const Streaming(
+                    messageId: 'msg-1',
+                    text: 'Typing...',
                   ),
                 ),
               ),
@@ -348,16 +318,14 @@ void main() {
               // Don't provide duplicate messages in threadMessagesProvider
               // since they're already in activeRunNotifierProvider.messages
               threadMessagesProvider(mockThread.id).overrideWith((ref) => []),
-              activeRunNotifierProvider.overrideWith(
-                (ref) => MockActiveRunNotifier(
-                  initialState: RunningState(
-                    threadId: 'test-thread',
-                    runId: 'test-run',
-                    context: RunContext(messages: messages),
-                    textStreaming: const Streaming(
-                      messageId: 'msg-2',
-                      text: 'Typing...',
-                    ),
+              activeRunNotifierOverride(
+                RunningState(
+                  threadId: 'test-thread',
+                  runId: 'test-run',
+                  context: RunContext(messages: messages),
+                  textStreaming: const Streaming(
+                    messageId: 'msg-2',
+                    text: 'Typing...',
                   ),
                 ),
               ),
@@ -393,11 +361,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               threadMessagesProvider(mockThread.id)
                   .overrideWith((ref) => messages),
-              activeRunNotifierProvider.overrideWith(
-                (ref) => MockActiveRunNotifier(
-                  initialState: const IdleState(),
-                ),
-              ),
+              activeRunNotifierOverride(const IdleState()),
             ],
           ),
         );
@@ -413,25 +377,29 @@ void main() {
           TestData.createMessage(id: 'msg-1', text: 'Message 1'),
         ];
 
+        final updatedMessages = [
+          TestData.createMessage(id: 'msg-1', text: 'Message 1'),
+          TestData.createMessage(id: 'msg-2', text: 'Message 2'),
+          TestData.createMessage(id: 'msg-3', text: 'Message 3'),
+        ];
+
         final mockThread = TestData.createThread();
 
-        // Use a StateProvider to allow updating messages dynamically
-        final messagesStateProvider =
-            StateProvider<List<ChatMessage>>((ref) => initialMessages);
+        // Use a flag to track which messages to return
+        // Riverpod 3.0 uses == for update filtering, so we need different
+        // list instances (not a mutated list) to trigger rebuilds
+        var useUpdatedMessages = false;
 
         final container = ProviderContainer(
           overrides: [
             currentThreadProvider.overrideWith((ref) => mockThread),
-            threadMessagesProvider(mockThread.id).overrideWith((ref) {
-              return ref.watch(messagesStateProvider);
+            allMessagesProvider.overrideWith((ref) {
+              return useUpdatedMessages ? updatedMessages : initialMessages;
             }),
-            activeRunNotifierProvider.overrideWith(
-              (ref) => MockActiveRunNotifier(
-                initialState: const IdleState(),
-              ),
-            ),
+            activeRunNotifierOverride(const IdleState()),
           ],
         );
+        addTearDown(container.dispose);
 
         // Act - Initial render
         await tester.pumpWidget(
@@ -444,15 +412,14 @@ void main() {
             ),
           ),
         );
+        await tester.pumpAndSettle();
 
-        // Add more messages by updating the state provider
-        final moreMessages = [
-          ...initialMessages,
-          TestData.createMessage(id: 'msg-2', text: 'Message 2'),
-          TestData.createMessage(id: 'msg-3', text: 'Message 3'),
-        ];
+        expect(find.text('Message 1'), findsOneWidget);
+        expect(find.text('Message 3'), findsNothing);
 
-        container.read(messagesStateProvider.notifier).state = moreMessages;
+        // Update to use new messages and invalidate the provider
+        useUpdatedMessages = true;
+        container.invalidate(allMessagesProvider);
 
         await tester.pumpAndSettle();
 
@@ -481,11 +448,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               threadMessagesProvider(mockThread.id)
                   .overrideWith((ref) => messages),
-              activeRunNotifierProvider.overrideWith(
-                (ref) => MockActiveRunNotifier(
-                  initialState: const IdleState(),
-                ),
-              ),
+              activeRunNotifierOverride(const IdleState()),
             ],
           ),
         );
@@ -517,11 +480,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               threadMessagesProvider(mockThread.id)
                   .overrideWith((ref) => messages),
-              activeRunNotifierProvider.overrideWith(
-                (ref) => MockActiveRunNotifier(
-                  initialState: const IdleState(),
-                ),
-              ),
+              activeRunNotifierOverride(const IdleState()),
             ],
           ),
         );

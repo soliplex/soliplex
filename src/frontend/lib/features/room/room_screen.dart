@@ -51,8 +51,8 @@ class RoomScreen extends ConsumerWidget {
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
-                  ref.read(threadSelectionProvider.notifier).state =
-                      ThreadSelected(thread.id);
+                  ref.read(threadSelectionProvider.notifier)
+                      .set(ThreadSelected(thread.id));
                   context.push('/rooms/$roomId/thread/${thread.id}');
                 },
               );
@@ -69,8 +69,9 @@ class RoomScreen extends ConsumerWidget {
         onPressed: () {
           // Set new thread intent and navigate to thread screen
           // The ChatPanel will create the thread when first message is sent
-          ref.read(threadSelectionProvider.notifier).state =
-              const NewThreadIntent();
+          ref
+              .read(threadSelectionProvider.notifier)
+              .set(const NewThreadIntent());
           context.push('/rooms/$roomId/thread/new');
         },
         child: const Icon(Icons.add),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -62,11 +64,23 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      // Act & Assert
-      await expectLater(
-        container.read(threadsProvider(roomId).future),
-        throwsA(isA<NotFoundException>()),
+      // Act - Wait for state with error using a completer
+      final completer = Completer<AsyncValue<List<ThreadInfo>>>();
+      container
+        ..listen(threadsProvider(roomId), (_, next) {
+          if (next.hasError) {
+            completer.complete(next);
+          }
+        })
+        ..read(threadsProvider(roomId));
+      final state = await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => container.read(threadsProvider(roomId)),
       );
+
+      // Assert
+      expect(state.hasError, isTrue);
+      expect(state.error, isA<NotFoundException>());
     });
 
     test('propagates NetworkException from API', () async {
@@ -83,11 +97,23 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      // Act & Assert
-      await expectLater(
-        container.read(threadsProvider(roomId).future),
-        throwsA(isA<NetworkException>()),
+      // Act - Wait for state with error using a completer
+      final completer = Completer<AsyncValue<List<ThreadInfo>>>();
+      container
+        ..listen(threadsProvider(roomId), (_, next) {
+          if (next.hasError) {
+            completer.complete(next);
+          }
+        })
+        ..read(threadsProvider(roomId));
+      final state = await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => container.read(threadsProvider(roomId)),
       );
+
+      // Assert
+      expect(state.hasError, isTrue);
+      expect(state.error, isA<NetworkException>());
     });
 
     test('propagates ApiException from API', () async {
@@ -107,11 +133,23 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      // Act & Assert
-      await expectLater(
-        container.read(threadsProvider(roomId).future),
-        throwsA(isA<ApiException>()),
+      // Act - Wait for state with error using a completer
+      final completer = Completer<AsyncValue<List<ThreadInfo>>>();
+      container
+        ..listen(threadsProvider(roomId), (_, next) {
+          if (next.hasError) {
+            completer.complete(next);
+          }
+        })
+        ..read(threadsProvider(roomId));
+      final state = await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => container.read(threadsProvider(roomId)),
       );
+
+      // Assert
+      expect(state.hasError, isTrue);
+      expect(state.error, isA<ApiException>());
     });
 
     test('caches threads separately per room', () async {
@@ -219,8 +257,9 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      container.read(threadSelectionProvider.notifier).state =
-          const ThreadSelected('thread-123');
+      container
+          .read(threadSelectionProvider.notifier)
+          .set(const ThreadSelected('thread-123'));
 
       final selection = container.read(threadSelectionProvider);
       expect(selection, isA<ThreadSelected>());
@@ -231,8 +270,9 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      container.read(threadSelectionProvider.notifier).state =
-          const NewThreadIntent();
+      container
+          .read(threadSelectionProvider.notifier)
+          .set(const NewThreadIntent());
 
       final selection = container.read(threadSelectionProvider);
       expect(selection, isA<NewThreadIntent>());
@@ -252,8 +292,7 @@ void main() {
     test('returns threadId when ThreadSelected', () {
       final container = ProviderContainer(
         overrides: [
-          threadSelectionProvider
-              .overrideWith((ref) => const ThreadSelected('thread-123')),
+          threadSelectionProviderOverride(const ThreadSelected('thread-123')),
         ],
       );
       addTearDown(container.dispose);
@@ -266,8 +305,7 @@ void main() {
     test('returns null when NewThreadIntent', () {
       final container = ProviderContainer(
         overrides: [
-          threadSelectionProvider
-              .overrideWith((ref) => const NewThreadIntent()),
+          threadSelectionProviderOverride(const NewThreadIntent()),
         ],
       );
       addTearDown(container.dispose);
