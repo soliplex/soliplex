@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
@@ -14,7 +13,6 @@ import '../../helpers/test_helpers.dart';
 
 void main() {
   group('ChatPanel', () {
-
     group('Layout', () {
       testWidgets('displays message list and chat input', (tester) async {
         // Arrange
@@ -27,7 +25,7 @@ void main() {
               currentRoomProvider.overrideWith((ref) => null),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -50,7 +48,7 @@ void main() {
               currentRoomProvider.overrideWith((ref) => null),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -80,7 +78,7 @@ void main() {
               currentRoomProvider.overrideWith((ref) => null),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -103,9 +101,10 @@ void main() {
             overrides: [
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.running(
+                  initialState: const RunningState(
                     threadId: 'test-thread',
                     runId: 'test-run',
+                    context: RunContext.empty,
                   ),
                 ),
               ),
@@ -128,7 +127,7 @@ void main() {
             overrides: [
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -152,10 +151,11 @@ void main() {
             overrides: [
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState(
-                    status: ThreadRunStatus.error,
-                    messages: [],
+                  initialState: const ErrorState(
+                    threadId: '',
+                    runId: '',
                     errorMessage: 'Something went wrong',
+                    context: RunContext.empty,
                   ),
                 ),
               ),
@@ -178,7 +178,7 @@ void main() {
             overrides: [
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -202,10 +202,11 @@ void main() {
             overrides: [
               currentRoomProvider.overrideWith((ref) => null),
               currentThreadProvider.overrideWith((ref) => null),
-              newThreadIntentProvider.overrideWith((ref) => false),
+              threadSelectionProvider
+                  .overrideWith((ref) => const NoThreadSelected()),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],
@@ -232,7 +233,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               activeRunNotifierProvider.overrideWith(
                 (ref) => MockActiveRunNotifier(
-                  initialState: const ActiveRunState.idle(),
+                  initialState: const IdleState(),
                 ),
               ),
             ],

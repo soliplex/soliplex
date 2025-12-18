@@ -3,15 +3,14 @@ import 'package:flutter/material.dart';
 /// A button that triggers creation of a new conversation thread.
 ///
 /// Displays as a prominent list item at the top of the history panel.
-/// When pressed, clears the current thread selection and sets the
-/// new thread intent flag.
+/// When pressed, signals intent to create a new thread.
 ///
 /// Example:
 /// ```dart
 /// NewConversationButton(
 ///   onPressed: () {
-///     ref.read(currentThreadIdProvider.notifier).state = null;
-///     ref.read(newThreadIntentProvider.notifier).state = true;
+///     ref.read(threadSelectionProvider.notifier).state =
+///         const NewThreadIntent();
 ///   },
 /// )
 /// ```

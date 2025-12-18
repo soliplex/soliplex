@@ -8,8 +8,7 @@ import '../../../helpers/test_helpers.dart';
 void main() {
   group('ChatMessageWidget', () {
     group('User Messages', () {
-      testWidgets('displays user message with right alignment',
-          (tester) async {
+      testWidgets('displays user message with right alignment', (tester) async {
         // Arrange
         final message = TestData.createMessage(
           text: 'Hello, assistant!',
@@ -32,8 +31,7 @@ void main() {
         expect(row.mainAxisAlignment, MainAxisAlignment.end);
       });
 
-      testWidgets('displays user message with blue background',
-          (tester) async {
+      testWidgets('displays user message with blue background', (tester) async {
         // Arrange
         final message = TestData.createMessage(
           text: 'Test',
@@ -192,7 +190,7 @@ void main() {
     group('System Messages', () {
       testWidgets('displays system message centered', (tester) async {
         // Arrange
-        final message = ChatMessage.error(
+        final message = ErrorMessage.create(
           message: 'Operation cancelled',
         );
 
@@ -213,7 +211,7 @@ void main() {
       testWidgets('displays system message with subtle styling',
           (tester) async {
         // Arrange
-        final message = ChatMessage.error(
+        final message = ErrorMessage.create(
           message: 'System notification',
         );
 
@@ -243,7 +241,7 @@ void main() {
     group('Error Messages', () {
       testWidgets('displays error message', (tester) async {
         // Arrange
-        final message = ChatMessage.error(
+        final message = ErrorMessage.create(
           message: 'Something went wrong',
         );
 

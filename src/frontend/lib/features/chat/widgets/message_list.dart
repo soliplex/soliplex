@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/features/chat/widgets/chat_message_widget.dart';
 import 'package:soliplex_frontend/shared/widgets/empty_state.dart';
@@ -111,8 +112,12 @@ class _MessageListState extends ConsumerState<MessageList> {
         }
 
         final message = messages[index];
-        final isCurrentlyStreaming = runState.isTextStreaming &&
-            runState.currentMessageId == message.id;
+        // Check if this message is currently being streamed
+        final isCurrentlyStreaming = switch (runState) {
+          RunningState(textStreaming: Streaming(:final messageId)) =>
+            messageId == message.id,
+          _ => false,
+        };
 
         return ChatMessageWidget(
           key: ValueKey(message.id),

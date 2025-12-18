@@ -61,8 +61,7 @@ class ThreadListItem extends StatelessWidget {
 
     return ListTile(
       selected: isSelected,
-      selectedTileColor:
-          colorScheme.primaryContainer.withValues(alpha: 0.3),
+      selectedTileColor: colorScheme.primaryContainer.withValues(alpha: 0.3),
       onTap: onTap,
       leading: hasActiveRun
           ? SizedBox(

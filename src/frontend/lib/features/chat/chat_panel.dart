@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
@@ -20,7 +21,7 @@ import 'package:soliplex_frontend/shared/widgets/error_display.dart';
 /// The panel integrates with:
 /// - [currentThreadProvider] for the active thread
 /// - [activeRunNotifierProvider] for streaming state
-/// - [newThreadIntentProvider] for new thread creation
+/// - [threadSelectionProvider] for thread selection state
 ///
 /// Example:
 /// ```dart
@@ -64,12 +65,13 @@ class ChatPanel extends ConsumerWidget {
 
         // Message list
         Expanded(
-          child: runState.hasError
-              ? ErrorDisplay(
-                  error: runState.errorMessage ?? 'Unknown error',
-                  onRetry: () => _handleRetry(ref),
-                )
-              : const MessageList(),
+          child: switch (runState) {
+            ErrorState(:final errorMessage) => ErrorDisplay(
+                error: errorMessage,
+                onRetry: () => _handleRetry(ref),
+              ),
+            _ => const MessageList(),
+          },
         ),
 
         // Input
@@ -97,20 +99,18 @@ class ChatPanel extends ConsumerWidget {
     }
 
     var thread = ref.read(currentThreadProvider);
-    final newIntent = ref.read(newThreadIntentProvider);
+    final selection = ref.read(threadSelectionProvider);
 
     // Create new thread if needed
-    if (thread == null || newIntent) {
+    if (thread == null || selection is NewThreadIntent) {
       try {
         final api = ref.read(apiProvider);
         final newThread = await api.createThread(room.id);
         thread = newThread;
 
-        // Update current thread
-        ref.read(currentThreadIdProvider.notifier).state = newThread.id;
-
-        // Clear new intent flag
-        ref.read(newThreadIntentProvider.notifier).state = false;
+        // Update selection to the new thread
+        ref.read(threadSelectionProvider.notifier).state =
+            ThreadSelected(newThread.id);
 
         // Refresh threads list
         ref.invalidate(threadsProvider(room.id));

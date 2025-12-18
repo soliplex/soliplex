@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
@@ -76,19 +77,23 @@ class HistoryPanel extends ConsumerWidget {
         }
 
         // Auto-select first thread if none selected
-        final currentThreadId = ref.watch(currentThreadIdProvider);
-        if (currentThreadId == null) {
+        final selection = ref.watch(threadSelectionProvider);
+        if (selection is NoThreadSelected) {
           // Use addPostFrameCallback to avoid setState during build
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            ref.read(currentThreadIdProvider.notifier).state = threads.first.id;
-            // Clear new thread intent since we have an existing thread
-            ref.read(newThreadIntentProvider.notifier).state = false;
+            ref.read(threadSelectionProvider.notifier).state =
+                ThreadSelected(threads.first.id);
           });
         }
 
         // Get active run state to show indicators
         final activeRunState = ref.watch(activeRunNotifierProvider);
-        final activeThreadId = activeRunState.threadId;
+        // Extract threadId from running state (only RunningState has threadId)
+        final activeThreadId = switch (activeRunState) {
+          RunningState(:final threadId) => threadId,
+          _ => null,
+        };
+        final currentThreadId = ref.watch(currentThreadIdProvider);
 
         return Column(
           children: [
@@ -123,19 +128,16 @@ class HistoryPanel extends ConsumerWidget {
 
   /// Handles selection of a thread.
   ///
-  /// Updates the current thread ID and clears the new thread intent.
+  /// Updates the current thread selection to the selected thread.
   void _handleThreadSelection(WidgetRef ref, String threadId) {
-    ref.read(currentThreadIdProvider.notifier).state = threadId;
-    ref.read(newThreadIntentProvider.notifier).state = false;
+    ref.read(threadSelectionProvider.notifier).state = ThreadSelected(threadId);
   }
 
   /// Handles the "New Conversation" button press.
   ///
-  /// Clears the current thread selection and sets the new thread intent flag.
-  /// This signals to the chat input that the next message should create a
-  /// new thread.
+  /// Sets the selection to [NewThreadIntent], signaling that the next
+  /// message should create a new thread.
   void _handleNewConversation(WidgetRef ref) {
-    ref.read(currentThreadIdProvider.notifier).state = null;
-    ref.read(newThreadIntentProvider.notifier).state = true;
+    ref.read(threadSelectionProvider.notifier).state = const NewThreadIntent();
   }
 }
