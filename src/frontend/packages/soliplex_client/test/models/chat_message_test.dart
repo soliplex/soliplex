@@ -189,6 +189,17 @@ void main() {
   });
 
   group('ChatMessage sealed class', () {
+    test('different message types with same id are not equal', () {
+      final textMsg =
+          TextMessage.create(id: 'same-id', user: ChatUser.user, text: 'Hello');
+      final errorMsg = ErrorMessage.create(id: 'same-id', message: 'Error');
+      final loadingMsg = LoadingMessage.create(id: 'same-id');
+
+      expect(textMsg, isNot(equals(errorMsg)));
+      expect(textMsg, isNot(equals(loadingMsg)));
+      expect(errorMsg, isNot(equals(loadingMsg)));
+    });
+
     test('pattern matching on message types', () {
       final messages = <ChatMessage>[
         TextMessage.create(user: ChatUser.user, text: 'Hello'),
