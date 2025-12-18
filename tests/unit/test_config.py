@@ -965,8 +965,16 @@ id: "{INSTALLATION_ID}"
 
 SECRET_NAME_1 = "TEST_SECRET_ONE"
 SECRET_NAME_2 = "TEST_SECRET_TWO"
+DB_SECRET_NAME = "DBSECRET"
+DB_SECRET_VALUE = "R34ll7#S33KR1T"
+
 SECRET_CONFIG_1 = config.SecretConfig(SECRET_NAME_1)
 SECRET_CONFIG_2 = config.SecretConfig(SECRET_NAME_2)
+DB_SECRET_CONFIG = config.SecretConfig(
+    DB_SECRET_NAME,
+    _resolved=DB_SECRET_VALUE,
+)
+
 SECRET_ENV_VAR = "OTHER_ENV_VAR"
 SECRET_FILE_PATH = "./very_seekrit"
 SECRET_COMAND = "cat"
@@ -1180,7 +1188,13 @@ agent_configs:
       system_prompt: "{SYSTEM_PROMPT}"
 """
 
-TP_DBURI_SYNC = "sqlite:////tmp/testing.sqlite"
+TP_DBURI_SYNC = "sqlite+pysqlite:////tmp/testing.sqlite"
+TP_DBURI_SYNC_W_SECRET = (
+    f"sqlite+pysqlcipher://secret:{DB_SECRET_NAME}//tmp/testing.sqlite"
+)
+TP_DBURI_SYNC_W_SECRET_RESOLVED = (
+    f"sqlite+pysqlcipher://{DB_SECRET_VALUE}//tmp/testing.sqlite"
+)
 TP_DBURI_ASYNC = "sqlite+aiosqlite:////tmp/testing.sqlite"
 
 W_TP_DBURI_INSTALLATION_CONFIG_KW = {
@@ -1192,6 +1206,19 @@ W_TP_DBURI_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
 thread_persistence_dburi:
     sync: {TP_DBURI_SYNC}
+    async: {TP_DBURI_ASYNC}
+"""
+
+W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "_thread_persistence_dburi_sync": TP_DBURI_SYNC_W_SECRET,
+    # aiosqlite doesn't support secrets
+    "_thread_persistence_dburi_async": TP_DBURI_ASYNC,
+}
+W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+thread_persistence_dburi:
+    sync: {TP_DBURI_SYNC_W_SECRET}
     async: {TP_DBURI_ASYNC}
 """
 
@@ -4356,6 +4383,13 @@ def test_installationconfig_agent_configs_map_w_existing():
             config.SYNC_MEMORY_ENGINE_URL,
         ),
         (W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(), TP_DBURI_SYNC),
+        (
+            (
+                W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_KW
+                | {"secrets": [DB_SECRET_CONFIG]}
+            ),
+            TP_DBURI_SYNC_W_SECRET_RESOLVED,
+        ),
     ],
 )
 def test_installationconfig_thread_persistence_dburi_sync(w_kw, expected):

@@ -2059,20 +2059,24 @@ class InstallationConfig:
     _thread_persistence_dburi_sync: str = None
     _thread_persistence_dburi_async: str = None
 
+    def _dburi_w_secret(self, dburi: str | None, default: str) -> str:
+        if dburi is None:
+            return default
+
+        return self.interpolate_secrets(dburi)
+
     @property
     def thread_persistence_dburi_sync(self):
-        return (
-            SYNC_MEMORY_ENGINE_URL
-            if self._thread_persistence_dburi_sync is None
-            else self._thread_persistence_dburi_sync
+        return self._dburi_w_secret(
+            self._thread_persistence_dburi_sync,
+            SYNC_MEMORY_ENGINE_URL,
         )
 
     @property
     def thread_persistence_dburi_async(self):
-        return (
-            ASYNC_MEMORY_ENGINE_URL
-            if self._thread_persistence_dburi_async is None
-            else self._thread_persistence_dburi_async
+        return self._dburi_w_secret(
+            self._thread_persistence_dburi_async,
+            ASYNC_MEMORY_ENGINE_URL,
         )
 
     # Set by `from_yaml` factory
