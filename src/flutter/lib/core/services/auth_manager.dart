@@ -13,6 +13,18 @@ import 'package:soliplex/core/utils/debug_log.dart';
 import 'package:soliplex/core/utils/http_config.dart';
 import 'package:soliplex/core/utils/url_builder.dart';
 
+/// Exception thrown when authentication is required but refresh failed.
+///
+/// This signals that the user needs to re-authenticate.
+class AuthenticationRequiredException implements Exception {
+  const AuthenticationRequiredException(this.serverId);
+  final String serverId;
+
+  @override
+  String toString() =>
+      'Authentication required for server $serverId - token refresh failed';
+}
+
 /// User info retrieved from server.
 class UserInfo {
   const UserInfo({this.id, this.name, this.email});
@@ -177,13 +189,22 @@ class AuthManager {
   }
 
   /// Get current access token (for API calls).
+  ///
+  /// Returns null if no token exists or if the token has expired and
+  /// refresh failed. When refresh fails, the invalid tokens are cleared
+  /// from storage to prevent retrying with stale credentials.
   Future<String?> getAccessToken(String serverId) async {
     // Check if we need to refresh
     final expiry = await _storage.getTokenExpiry(serverId);
     if (expiry != null &&
         DateTime.now().isAfter(expiry.subtract(const Duration(minutes: 5)))) {
       // Token expiring soon, try refresh
-      await _tryRefreshToken(serverId);
+      final refreshed = await _tryRefreshToken(serverId);
+      if (!refreshed) {
+        // Refresh failed - tokens are already cleared in _tryRefreshToken
+        // Return null to signal that re-authentication is needed
+        return null;
+      }
     }
 
     return _storage.getAccessToken(serverId);
@@ -198,6 +219,39 @@ class AuthManager {
       'AuthManager.getAuthHeaders: token=${token != null ? "present (${token.length} chars)" : "null"}',
     );
     if (token == null) return {};
+    return {'Authorization': 'Bearer $token'};
+  }
+
+  /// Force a token refresh and get auth headers.
+  ///
+  /// Used for 401 recovery where we know the current token is invalid.
+  /// Unlike [getAuthHeaders], this ALWAYS attempts a refresh regardless
+  /// of the stored expiry time, and throws [AuthenticationRequiredException]
+  /// if refresh fails.
+  Future<Map<String, String>> forceRefreshAndGetAuthHeaders(
+    String serverId,
+  ) async {
+    DebugLog.network(
+      'AuthManager.forceRefreshAndGetAuthHeaders: serverId=$serverId',
+    );
+
+    final refreshed = await _tryRefreshToken(serverId);
+
+    if (!refreshed) {
+      DebugLog.error(
+        'AuthManager: Force refresh failed for server $serverId',
+      );
+      throw AuthenticationRequiredException(serverId);
+    }
+
+    final token = await _storage.getAccessToken(serverId);
+    if (token == null) {
+      throw AuthenticationRequiredException(serverId);
+    }
+
+    DebugLog.network(
+      'AuthManager.forceRefreshAndGetAuthHeaders: refreshed successfully',
+    );
     return {'Authorization': 'Bearer $token'};
   }
 
@@ -306,6 +360,12 @@ class AuthManager {
       return true;
     } on Object catch (e) {
       DebugLog.error('AuthManager: Token refresh failed: $e');
+      // Clear invalid tokens so we don't retry with stale credentials
+      // This will force re-authentication on the next request
+      await _storage.clearTokens(serverId);
+      DebugLog.service(
+        'AuthManager: Cleared invalid tokens for server $serverId',
+      );
       completer.complete(false);
       return false;
     } finally {

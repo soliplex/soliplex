@@ -104,4 +104,35 @@ The implementation exists but needs rigorous verification.
 - [x] `AuthManager` refresh logic and locking.
 - [x] `OidcWebAuthInteractor` refresh.
 - [x] `OidcMobileAuthInteractor` refresh.
+- [x] Proper failure handling (clear tokens, throw on failure).
 - [ ] Comprehensive Concurrency Tests.
+
+## Bug Fix: Token Refresh Failure Handling (Dec 2025)
+
+### Issue
+
+When the refresh token expired (server returned 400 "Token is not active"), the app would:
+1. Attempt refresh (correct)
+2. Catch the error and log it (correct)
+3. Still return the OLD invalid access token (bug!)
+4. Retry the request with invalid credentials → another 401
+5. Loop indefinitely
+
+### Root Cause
+
+1. `_tryRefreshToken` caught exceptions and returned `false`, but didn't clear the stale tokens
+2. `getAccessToken` only triggered refresh when token was near expiry (5 min buffer), not when 401 was received
+3. `getAuthHeaders` returned empty `{}` when token was null, which NetworkTransportLayer treated as success
+
+### Fix
+
+1. **Clear tokens on refresh failure**: `_tryRefreshToken` now clears tokens from storage when refresh fails, preventing stale credential reuse.
+
+2. **Return null on refresh failure**: `getAccessToken` now returns `null` when refresh was attempted but failed.
+
+3. **Force refresh for 401 recovery**: Added `forceRefreshAndGetAuthHeaders()` method that:
+   - Always attempts a refresh regardless of stored expiry
+   - Throws `AuthenticationRequiredException` on failure
+   - Used as the `headerRefresher` callback for 401 handling
+
+4. **Proper error propagation**: When refresh fails, `AuthenticationRequiredException` is thrown and propagates through `NetworkTransportLayer._handle401()`, allowing proper error handling (e.g., redirect to login).
