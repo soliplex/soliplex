@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
+import 'package:soliplex_frontend/shared/utils/date_formatter.dart';
 import 'package:soliplex_frontend/shared/widgets/empty_state.dart';
 import 'package:soliplex_frontend/shared/widgets/error_display.dart';
 import 'package:soliplex_frontend/shared/widgets/loading_indicator.dart';
@@ -42,9 +43,11 @@ class RoomScreen extends ConsumerWidget {
                 leading: const Icon(Icons.chat),
                 title: Text(thread.name ?? 'Thread ${thread.id}'),
                 subtitle: Text(
-                  thread.createdAt != null
-                      ? 'Created ${_formatDate(thread.createdAt!)}'
-                      : 'No date',
+                  switch (thread.createdAt) {
+                    final createdAt? =>
+                      'Created ${formatRelativeTime(createdAt)}',
+                    null => 'No date',
+                  },
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
@@ -73,9 +76,5 @@ class RoomScreen extends ConsumerWidget {
         child: const Icon(Icons.add),
       ),
     );
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.month}/${date.day}/${date.year}';
   }
 }
