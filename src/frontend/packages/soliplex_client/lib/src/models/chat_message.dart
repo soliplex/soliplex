@@ -1,247 +1,251 @@
 import 'package:meta/meta.dart';
 
-/// Represents a chat message in a conversation.
+/// User type for messages.
+enum ChatUser {
+  /// Human user.
+  user,
+
+  /// AI assistant.
+  assistant,
+
+  /// System-generated message.
+  system,
+}
+
+/// A chat message in a conversation.
 @immutable
-class ChatMessage {
-  /// Creates a chat message.
+sealed class ChatMessage {
+  /// Creates a chat message with the given properties.
   const ChatMessage({
     required this.id,
     required this.user,
-    required this.type,
     required this.createdAt,
-    this.text,
-    this.data,
-    this.isStreaming = false,
-    this.thinkingText,
-    this.isThinkingStreaming = false,
-    this.toolCalls,
-    this.errorMessage,
   });
 
-  /// Create a text message.
-  factory ChatMessage.text({
+  /// Unique identifier for this message.
+  final String id;
+
+  /// The user who sent this message.
+  final ChatUser user;
+
+  /// When this message was created.
+  final DateTime createdAt;
+
+  /// Generates a unique message ID.
+  static String generateId() => 'msg_${DateTime.now().millisecondsSinceEpoch}';
+}
+
+/// A text message.
+@immutable
+class TextMessage extends ChatMessage {
+  /// Creates a text message with all properties.
+  const TextMessage({
+    required super.id,
+    required super.user,
+    required super.createdAt,
+    required this.text,
+    this.isStreaming = false,
+    this.thinkingText = '',
+    this.isThinkingStreaming = false,
+  });
+
+  /// Creates a text message with auto-generated ID and timestamp.
+  factory TextMessage.create({
     required ChatUser user,
     required String text,
     String? id,
     bool isStreaming = false,
   }) {
-    return ChatMessage(
-      id: id ?? _generateId(),
+    return TextMessage(
+      id: id ?? ChatMessage.generateId(),
       user: user,
-      type: MessageType.text,
       text: text,
       isStreaming: isStreaming,
       createdAt: DateTime.now(),
     );
   }
 
-  /// Create an error message.
-  factory ChatMessage.error({required String message, String? id}) {
-    return ChatMessage(
-      id: id ?? _generateId(),
-      user: ChatUser.system,
-      type: MessageType.error,
-      errorMessage: message,
-      createdAt: DateTime.now(),
-    );
-  }
+  /// The message text content.
+  final String text;
 
-  /// Create a tool call message.
-  factory ChatMessage.toolCall({
-    required List<ToolCallInfo> toolCalls,
-    String? id,
-  }) {
-    return ChatMessage(
-      id: id ?? _generateId(),
-      user: ChatUser.assistant,
-      type: MessageType.toolCall,
-      toolCalls: toolCalls,
-      createdAt: DateTime.now(),
-    );
-  }
-
-  /// Create a GenUI message.
-  factory ChatMessage.genUi({
-    required String widgetName,
-    required Map<String, dynamic> data,
-    String? id,
-  }) {
-    return ChatMessage(
-      id: id ?? _generateId(),
-      user: ChatUser.assistant,
-      type: MessageType.genUi,
-      data: {'widget_name': widgetName, ...data},
-      createdAt: DateTime.now(),
-    );
-  }
-
-  /// Unique identifier for the message.
-  final String id;
-
-  /// The user who sent the message.
-  final ChatUser user;
-
-  /// The type of message.
-  final MessageType type;
-
-  /// The text content of the message.
-  final String? text;
-
-  /// Additional data for the message.
-  final Map<String, dynamic>? data;
-
-  /// Whether the message is currently streaming.
+  /// Whether this message is currently streaming.
   final bool isStreaming;
 
-  /// The thinking/reasoning text from the AI.
-  final String? thinkingText;
+  /// The thinking/reasoning text if available.
+  final String thinkingText;
 
-  /// Whether the thinking text is currently streaming.
+  /// Whether thinking text is currently streaming.
   final bool isThinkingStreaming;
 
-  /// Tool calls associated with the message.
-  final List<ToolCallInfo>? toolCalls;
-
-  /// Error message if the message type is error.
-  final String? errorMessage;
-
-  /// When the message was created.
-  final DateTime createdAt;
-
-  static String _generateId() {
-    return 'msg_${DateTime.now().millisecondsSinceEpoch}';
-  }
-
-  /// Creates a copy of this message with the given fields replaced.
-  ChatMessage copyWith({
+  /// Creates a copy with modified properties.
+  TextMessage copyWith({
     String? id,
     ChatUser? user,
-    MessageType? type,
+    DateTime? createdAt,
     String? text,
-    Map<String, dynamic>? data,
     bool? isStreaming,
     String? thinkingText,
     bool? isThinkingStreaming,
-    List<ToolCallInfo>? toolCalls,
-    String? errorMessage,
-    DateTime? createdAt,
   }) {
-    return ChatMessage(
+    return TextMessage(
       id: id ?? this.id,
       user: user ?? this.user,
-      type: type ?? this.type,
+      createdAt: createdAt ?? this.createdAt,
       text: text ?? this.text,
-      data: data ?? this.data,
       isStreaming: isStreaming ?? this.isStreaming,
       thinkingText: thinkingText ?? this.thinkingText,
       isThinkingStreaming: isThinkingStreaming ?? this.isThinkingStreaming,
-      toolCalls: toolCalls ?? this.toolCalls,
-      errorMessage: errorMessage ?? this.errorMessage,
-      createdAt: createdAt ?? this.createdAt,
     );
   }
 
   @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is ChatMessage && other.id == id;
-  }
+  bool operator ==(Object other) =>
+      identical(this, other) || other is TextMessage && other.id == id;
 
   @override
   int get hashCode => id.hashCode;
 
   @override
-  String toString() => 'ChatMessage(id: $id, type: $type, user: $user)';
+  String toString() => 'TextMessage(id: $id, user: $user)';
 }
 
-/// User type for messages.
-enum ChatUser {
-  /// Message from the user.
-  user,
-
-  /// Message from the AI assistant.
-  assistant,
-
-  /// System message.
-  system,
-}
-
-/// Type of message.
-enum MessageType {
-  /// Text message.
-  text,
-
-  /// Error message.
-  error,
-
-  /// Tool call message.
-  toolCall,
-
-  /// Generated UI message.
-  genUi,
-
-  /// Loading indicator message.
-  loading,
-}
-
-/// Information about a tool call.
+/// An error message.
 @immutable
-class ToolCallInfo {
-  /// Creates tool call info.
-  const ToolCallInfo({
-    required this.id,
-    required this.name,
-    this.arguments,
-    this.status = ToolCallStatus.pending,
-    this.result,
-    this.startedAt,
-    this.completedAt,
-  });
+class ErrorMessage extends ChatMessage {
+  /// Creates an error message with all properties.
+  const ErrorMessage({
+    required super.id,
+    required super.createdAt,
+    required this.errorText,
+  }) : super(user: ChatUser.system);
 
-  /// Unique identifier for the tool call.
-  final String id;
+  /// Creates an error message with auto-generated ID and timestamp.
+  factory ErrorMessage.create({required String message, String? id}) {
+    return ErrorMessage(
+      id: id ?? ChatMessage.generateId(),
+      errorText: message,
+      createdAt: DateTime.now(),
+    );
+  }
 
-  /// Name of the tool being called.
-  final String name;
+  /// The error message text.
+  final String errorText;
 
-  /// Arguments passed to the tool.
-  final String? arguments;
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is ErrorMessage && other.id == id;
 
-  /// Current status of the tool call.
-  final ToolCallStatus status;
+  @override
+  int get hashCode => id.hashCode;
 
-  /// Result of the tool call.
-  final String? result;
+  @override
+  String toString() => 'ErrorMessage(id: $id, error: $errorText)';
+}
 
-  /// When the tool call started.
-  final DateTime? startedAt;
+/// A tool call message.
+@immutable
+class ToolCallMessage extends ChatMessage {
+  /// Creates a tool call message with all properties.
+  const ToolCallMessage({
+    required super.id,
+    required super.createdAt,
+    required this.toolCalls,
+  }) : super(user: ChatUser.assistant);
 
-  /// When the tool call completed.
-  final DateTime? completedAt;
-
-  /// Creates a copy of this tool call info with the given fields replaced.
-  ToolCallInfo copyWith({
+  /// Creates a tool call message with auto-generated ID and timestamp.
+  factory ToolCallMessage.create({
+    required List<ToolCallInfo> toolCalls,
     String? id,
-    String? name,
-    String? arguments,
-    ToolCallStatus? status,
-    String? result,
-    DateTime? startedAt,
-    DateTime? completedAt,
   }) {
-    return ToolCallInfo(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      arguments: arguments ?? this.arguments,
-      status: status ?? this.status,
-      result: result ?? this.result,
-      startedAt: startedAt ?? this.startedAt,
-      completedAt: completedAt ?? this.completedAt,
+    return ToolCallMessage(
+      id: id ?? ChatMessage.generateId(),
+      toolCalls: toolCalls,
+      createdAt: DateTime.now(),
+    );
+  }
+
+  /// List of tool calls in this message.
+  final List<ToolCallInfo> toolCalls;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is ToolCallMessage && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+
+  @override
+  String toString() => 'ToolCallMessage(id: $id, calls: ${toolCalls.length})';
+}
+
+/// A generated UI message.
+@immutable
+class GenUiMessage extends ChatMessage {
+  /// Creates a genUI message with all properties.
+  const GenUiMessage({
+    required super.id,
+    required super.createdAt,
+    required this.widgetName,
+    required this.data,
+  }) : super(user: ChatUser.assistant);
+
+  /// Creates a genUI message with auto-generated ID and timestamp.
+  factory GenUiMessage.create({
+    required String widgetName,
+    required Map<String, dynamic> data,
+    String? id,
+  }) {
+    return GenUiMessage(
+      id: id ?? ChatMessage.generateId(),
+      widgetName: widgetName,
+      data: data,
+      createdAt: DateTime.now(),
+    );
+  }
+
+  /// Name of the widget to render.
+  final String widgetName;
+
+  /// Data for the widget.
+  final Map<String, dynamic> data;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is GenUiMessage && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+
+  @override
+  String toString() => 'GenUiMessage(id: $id, widget: $widgetName)';
+}
+
+/// A loading indicator message.
+@immutable
+class LoadingMessage extends ChatMessage {
+  /// Creates a loading message with all properties.
+  const LoadingMessage({
+    required super.id,
+    required super.createdAt,
+  }) : super(user: ChatUser.assistant);
+
+  /// Creates a loading message with auto-generated ID and timestamp.
+  factory LoadingMessage.create({String? id}) {
+    return LoadingMessage(
+      id: id ?? ChatMessage.generateId(),
+      createdAt: DateTime.now(),
     );
   }
 
   @override
-  String toString() => 'ToolCallInfo(id: $id, name: $name, status: $status)';
+  bool operator ==(Object other) =>
+      identical(this, other) || other is LoadingMessage && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+
+  @override
+  String toString() => 'LoadingMessage(id: $id)';
 }
 
 /// Status of a tool call.
@@ -257,4 +261,52 @@ enum ToolCallStatus {
 
   /// Tool call failed.
   failed,
+}
+
+/// Information about a tool call.
+@immutable
+class ToolCallInfo {
+  /// Creates tool call info with the given properties.
+  const ToolCallInfo({
+    required this.id,
+    required this.name,
+    this.arguments = '',
+    this.status = ToolCallStatus.pending,
+    this.result = '',
+  });
+
+  /// Unique identifier for this tool call.
+  final String id;
+
+  /// Name of the tool being called.
+  final String name;
+
+  /// JSON-encoded arguments for the tool.
+  final String arguments;
+
+  /// Current status of the tool call.
+  final ToolCallStatus status;
+
+  /// Result from the tool execution.
+  final String result;
+
+  /// Creates a copy with modified properties.
+  ToolCallInfo copyWith({
+    String? id,
+    String? name,
+    String? arguments,
+    ToolCallStatus? status,
+    String? result,
+  }) {
+    return ToolCallInfo(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      arguments: arguments ?? this.arguments,
+      status: status ?? this.status,
+      result: result ?? this.result,
+    );
+  }
+
+  @override
+  String toString() => 'ToolCallInfo(id: $id, name: $name, status: $status)';
 }

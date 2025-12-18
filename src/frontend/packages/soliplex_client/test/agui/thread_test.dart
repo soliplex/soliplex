@@ -3,7 +3,8 @@ import 'dart:convert';
 
 import 'package:mocktail/mocktail.dart';
 import 'package:soliplex_client/src/agui/agui_event.dart';
-import 'package:soliplex_client/src/agui/thread.dart' show Thread, ThreadRunStatus;
+import 'package:soliplex_client/src/agui/text_message_buffer.dart';
+import 'package:soliplex_client/src/agui/thread.dart';
 import 'package:soliplex_client/src/agui/tool_registry.dart';
 import 'package:soliplex_client/src/http/http_transport.dart';
 import 'package:soliplex_client/src/models/chat_message.dart';
@@ -36,8 +37,8 @@ void main() {
     });
 
     group('initial state', () {
-      test('runStatus is idle', () {
-        expect(thread.runStatus, equals(ThreadRunStatus.idle));
+      test('runState is NoActiveRun', () {
+        expect(thread.runState, isA<NoActiveRun>());
       });
 
       test('runId is null', () {
@@ -68,7 +69,11 @@ void main() {
         );
 
         expect(thread.textBuffer.isActive, isTrue);
-        expect(thread.textBuffer.messageId, equals('msg-1'));
+        expect(thread.textBuffer, isA<ActiveTextBuffer>());
+        expect(
+          (thread.textBuffer as ActiveTextBuffer).messageId,
+          equals('msg-1'),
+        );
       });
 
       test('processes TextMessageContent event', () {
@@ -97,7 +102,10 @@ void main() {
           ..processEvent(const TextMessageEndEvent(messageId: 'msg-1'));
 
         expect(thread.messages, hasLength(1));
-        expect(thread.messages.first.text, equals('Hello, world!'));
+        expect(
+          (thread.messages.first as TextMessage).text,
+          equals('Hello, world!'),
+        );
         expect(thread.textBuffer.isActive, isFalse);
       });
 
@@ -119,7 +127,10 @@ void main() {
 
         expect(thread.messages, hasLength(1));
         expect(thread.messages.first.id, equals('msg-1'));
-        expect(thread.messages.first.text, equals('Hello, world!'));
+        expect(
+          (thread.messages.first as TextMessage).text,
+          equals('Hello, world!'),
+        );
         expect(thread.messages.first.user, equals(ChatUser.assistant));
       });
 
@@ -211,9 +222,11 @@ void main() {
             const StateSnapshotEvent(snapshot: {'existing': 'data'}),
           )
           ..processEvent(
-            const StateDeltaEvent(delta: [
-              {'op': 'add', 'path': '/newKey', 'value': 'newValue'},
-            ],),
+            const StateDeltaEvent(
+              delta: [
+                {'op': 'add', 'path': '/newKey', 'value': 'newValue'},
+              ],
+            ),
           );
 
         expect(thread.state['existing'], equals('data'));
@@ -226,9 +239,11 @@ void main() {
             const StateSnapshotEvent(snapshot: {'key': 'oldValue'}),
           )
           ..processEvent(
-            const StateDeltaEvent(delta: [
-              {'op': 'replace', 'path': '/key', 'value': 'newValue'},
-            ],),
+            const StateDeltaEvent(
+              delta: [
+                {'op': 'replace', 'path': '/key', 'value': 'newValue'},
+              ],
+            ),
           );
 
         expect(thread.state['key'], equals('newValue'));
@@ -242,9 +257,11 @@ void main() {
             ),
           )
           ..processEvent(
-            const StateDeltaEvent(delta: [
-              {'op': 'remove', 'path': '/remove'},
-            ],),
+            const StateDeltaEvent(
+              delta: [
+                {'op': 'remove', 'path': '/remove'},
+              ],
+            ),
           );
 
         expect(thread.state['keep'], equals('this'));
@@ -257,13 +274,15 @@ void main() {
             const StateSnapshotEvent(snapshot: {}),
           )
           ..processEvent(
-            const StateDeltaEvent(delta: [
-              {
-                'op': 'add',
-                'path': '/nested/deep/value',
-                'value': 'found',
-              },
-            ],),
+            const StateDeltaEvent(
+              delta: [
+                {
+                  'op': 'add',
+                  'path': '/nested/deep/value',
+                  'value': 'found',
+                },
+              ],
+            ),
           );
 
         final nested = thread.state['nested'] as Map<String, dynamic>;
@@ -286,10 +305,12 @@ void main() {
 
         // Replace with snapshot
         thread.processEvent(
-          const MessagesSnapshotEvent(messages: [
-            {'id': 'new-1', 'text': 'New message 1', 'user': 'assistant'},
-            {'id': 'new-2', 'text': 'New message 2', 'user': 'user'},
-          ],),
+          const MessagesSnapshotEvent(
+            messages: [
+              {'id': 'new-1', 'text': 'New message 1', 'user': 'assistant'},
+              {'id': 'new-2', 'text': 'New message 2', 'user': 'user'},
+            ],
+          ),
         );
 
         expect(thread.messages, hasLength(2));
@@ -314,7 +335,10 @@ void main() {
           );
 
         expect(thread.messages, hasLength(1));
-        expect(thread.messages.first.text, equals('Incomplete'));
+        expect(
+          (thread.messages.first as TextMessage).text,
+          equals('Incomplete'),
+        );
         expect(thread.textBuffer.isActive, isFalse);
       });
 
@@ -418,9 +442,11 @@ void main() {
           )
           // Try to remove from a non-existent nested path
           ..processEvent(
-            const StateDeltaEvent(delta: [
-              {'op': 'remove', 'path': '/nonexistent/deep/path'},
-            ],),
+            const StateDeltaEvent(
+              delta: [
+                {'op': 'remove', 'path': '/nonexistent/deep/path'},
+              ],
+            ),
           );
 
         // Original state unchanged
@@ -430,11 +456,13 @@ void main() {
 
       test('MessagesSnapshot handles invalid message JSON gracefully', () {
         thread.processEvent(
-          const MessagesSnapshotEvent(messages: [
-            {'id': 'msg-1', 'text': 'Valid message'},
-            {'invalid': 'no id field'}, // Should be skipped
-            {'id': 'msg-2', 'text': 'Another valid'},
-          ],),
+          const MessagesSnapshotEvent(
+            messages: [
+              {'id': 'msg-1', 'text': 'Valid message'},
+              {'invalid': 'no id field'}, // Should be skipped
+              {'id': 'msg-2', 'text': 'Another valid'},
+            ],
+          ),
         );
 
         // Should have 2 valid messages (invalid one skipped)
@@ -445,19 +473,23 @@ void main() {
         // Set up nested state
         thread
           ..processEvent(
-            const StateSnapshotEvent(snapshot: {
-              'level1': {
-                'level2': {
-                  'level3': 'deep value',
+            const StateSnapshotEvent(
+              snapshot: {
+                'level1': {
+                  'level2': {
+                    'level3': 'deep value',
+                  },
                 },
               },
-            },),
+            ),
           )
           // Remove the deeply nested value
           ..processEvent(
-            const StateDeltaEvent(delta: [
-              {'op': 'remove', 'path': '/level1/level2/level3'},
-            ],),
+            const StateDeltaEvent(
+              delta: [
+                {'op': 'remove', 'path': '/level1/level2/level3'},
+              ],
+            ),
           );
 
         // Verify nested structure exists but value is removed
@@ -471,11 +503,16 @@ void main() {
       test('MessagesSnapshot handles message that throws on parse', () {
         // Pass a message with a field that would cause type cast exception
         thread.processEvent(
-          const MessagesSnapshotEvent(messages: [
-            {'id': 'msg-1', 'text': 'Valid'},
-            {'id': 123, 'text': 'Invalid - id should be string'}, // Type error
-            {'id': 'msg-3', 'text': 'Valid'},
-          ],),
+          const MessagesSnapshotEvent(
+            messages: [
+              {'id': 'msg-1', 'text': 'Valid'},
+              {
+                'id': 123,
+                'text': 'Invalid - id should be string',
+              }, // Type error
+              {'id': 'msg-3', 'text': 'Valid'},
+            ],
+          ),
         );
 
         // Should skip the invalid message
@@ -484,9 +521,11 @@ void main() {
 
       test('MessagesSnapshot defaults to assistant for unknown user type', () {
         thread.processEvent(
-          const MessagesSnapshotEvent(messages: [
-            {'id': 'msg-1', 'text': 'From unknown', 'user': 'unknown_role'},
-          ],),
+          const MessagesSnapshotEvent(
+            messages: [
+              {'id': 'msg-1', 'text': 'From unknown', 'user': 'unknown_role'},
+            ],
+          ),
         );
 
         expect(thread.messages, hasLength(1));
@@ -524,19 +563,18 @@ void main() {
           ]),
         );
 
-        final events = await thread
-            .run(runId: 'r1', userMessage: 'Hello')
-            .toList();
+        final events =
+            await thread.run(runId: 'r1', userMessage: 'Hello').toList();
 
         expect(events, hasLength(5));
         expect(events[0], isA<RunStartedEvent>());
         expect(events[4], isA<RunFinishedEvent>());
         expect(thread.messages, hasLength(1));
-        expect(thread.messages.first.text, equals('Hi'));
-        expect(thread.runStatus, equals(ThreadRunStatus.finished));
+        expect((thread.messages.first as TextMessage).text, equals('Hi'));
+        expect(thread.runState, isA<CompletedRun>());
       });
 
-      test('sets runStatus to running during execution', () async {
+      test('sets runState to ActiveRun during execution', () async {
         final completer = Completer<void>();
 
         when(
@@ -577,7 +615,7 @@ void main() {
         expect(runningDuringStream, isTrue);
       });
 
-      test('sets runStatus to error on RunErrorEvent', () async {
+      test('sets runState to FailedRun on RunErrorEvent', () async {
         when(
           () => mockTransport.requestStream(
             any(),
@@ -600,11 +638,11 @@ void main() {
 
         await thread.run(runId: 'r1', userMessage: 'Hello').toList();
 
-        expect(thread.runStatus, equals(ThreadRunStatus.error));
+        expect(thread.runState, isA<FailedRun>());
         expect(thread.errorMessage, equals('Something failed'));
       });
 
-      test('sets runStatus to error on stream exception', () async {
+      test('sets runState to FailedRun on stream exception', () async {
         when(
           () => mockTransport.requestStream(
             any(),
@@ -631,7 +669,7 @@ void main() {
         // Wait for exception to be handled
         await Future<void>.delayed(const Duration(milliseconds: 10));
 
-        expect(thread.runStatus, equals(ThreadRunStatus.error));
+        expect(thread.runState, isA<FailedRun>());
       });
 
       test('handles SSE with [DONE] marker', () async {
@@ -653,9 +691,8 @@ void main() {
           ]),
         );
 
-        final events = await thread
-            .run(runId: 'r1', userMessage: 'Hello')
-            .toList();
+        final events =
+            await thread.run(runId: 'r1', userMessage: 'Hello').toList();
 
         // Should only get RUN_STARTED, [DONE] is ignored
         expect(events, hasLength(1));
@@ -682,13 +719,11 @@ void main() {
           return const Stream.empty();
         });
 
-        await thread
-            .run(
-              runId: 'run-123',
-              userMessage: 'Test message',
-              initialState: {'key': 'value'},
-            )
-            .toList();
+        await thread.run(
+          runId: 'run-123',
+          userMessage: 'Test message',
+          initialState: {'key': 'value'},
+        ).toList();
 
         expect(
           capturedUri?.path,
@@ -810,7 +845,7 @@ void main() {
         expect(thread.state, isEmpty);
         expect(thread.textBuffer.isActive, isFalse);
         expect(thread.toolCallBuffer.activeCount, equals(0));
-        expect(thread.runStatus, equals(ThreadRunStatus.idle));
+        expect(thread.runState, isA<NoActiveRun>());
         expect(thread.runId, isNull);
         expect(thread.errorMessage, isNull);
       });
@@ -829,7 +864,7 @@ void main() {
 
         expect(
           () => thread.messages.add(
-            ChatMessage.text(user: ChatUser.user, text: 'test'),
+            TextMessage.create(user: ChatUser.user, text: 'test'),
           ),
           throwsUnsupportedError,
         );
