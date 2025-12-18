@@ -33,6 +33,16 @@ sealed class ChatMessage {
 
   /// Generates a unique message ID.
   static String generateId() => 'msg_${DateTime.now().millisecondsSinceEpoch}';
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ChatMessage &&
+          runtimeType == other.runtimeType &&
+          id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
 /// A text message.
@@ -99,13 +109,6 @@ class TextMessage extends ChatMessage {
   }
 
   @override
-  bool operator ==(Object other) =>
-      identical(this, other) || other is TextMessage && other.id == id;
-
-  @override
-  int get hashCode => id.hashCode;
-
-  @override
   String toString() => 'TextMessage(id: $id, user: $user)';
 }
 
@@ -130,13 +133,6 @@ class ErrorMessage extends ChatMessage {
 
   /// The error message text.
   final String errorText;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) || other is ErrorMessage && other.id == id;
-
-  @override
-  int get hashCode => id.hashCode;
 
   @override
   String toString() => 'ErrorMessage(id: $id, error: $errorText)';
@@ -166,13 +162,6 @@ class ToolCallMessage extends ChatMessage {
 
   /// List of tool calls in this message.
   final List<ToolCallInfo> toolCalls;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) || other is ToolCallMessage && other.id == id;
-
-  @override
-  int get hashCode => id.hashCode;
 
   @override
   String toString() => 'ToolCallMessage(id: $id, calls: ${toolCalls.length})';
@@ -210,13 +199,6 @@ class GenUiMessage extends ChatMessage {
   final Map<String, dynamic> data;
 
   @override
-  bool operator ==(Object other) =>
-      identical(this, other) || other is GenUiMessage && other.id == id;
-
-  @override
-  int get hashCode => id.hashCode;
-
-  @override
   String toString() => 'GenUiMessage(id: $id, widget: $widgetName)';
 }
 
@@ -236,13 +218,6 @@ class LoadingMessage extends ChatMessage {
       createdAt: DateTime.now(),
     );
   }
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) || other is LoadingMessage && other.id == id;
-
-  @override
-  int get hashCode => id.hashCode;
 
   @override
   String toString() => 'LoadingMessage(id: $id)';

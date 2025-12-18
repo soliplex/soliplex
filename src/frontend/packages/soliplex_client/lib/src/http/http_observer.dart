@@ -85,6 +85,16 @@ abstract class HttpEvent {
 
   /// When this event occurred.
   final DateTime timestamp;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HttpEvent &&
+          runtimeType == other.runtimeType &&
+          requestId == other.requestId;
+
+  @override
+  int get hashCode => requestId.hashCode;
 }
 
 /// Event emitted when a request is sent.
@@ -107,15 +117,6 @@ class HttpRequestEvent extends HttpEvent {
 
   /// Request headers (may be empty).
   final Map<String, String> headers;
-
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is HttpRequestEvent && other.requestId == requestId;
-  }
-
-  @override
-  int get hashCode => requestId.hashCode;
 
   @override
   String toString() => 'HttpRequestEvent($requestId, $method $uri)';
@@ -150,15 +151,6 @@ class HttpResponseEvent extends HttpEvent {
   bool get isSuccess => statusCode >= 200 && statusCode < 300;
 
   @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is HttpResponseEvent && other.requestId == requestId;
-  }
-
-  @override
-  int get hashCode => requestId.hashCode;
-
-  @override
   String toString() => 'HttpResponseEvent($requestId, $statusCode, '
       '${duration.inMilliseconds}ms, ${bodySize}B)';
 }
@@ -189,15 +181,6 @@ class HttpErrorEvent extends HttpEvent {
   final Duration duration;
 
   @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is HttpErrorEvent && other.requestId == requestId;
-  }
-
-  @override
-  int get hashCode => requestId.hashCode;
-
-  @override
   String toString() =>
       'HttpErrorEvent($requestId, $method $uri, ${exception.runtimeType})';
 }
@@ -218,15 +201,6 @@ class HttpStreamStartEvent extends HttpEvent {
 
   /// The request URI.
   final Uri uri;
-
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is HttpStreamStartEvent && other.requestId == requestId;
-  }
-
-  @override
-  int get hashCode => requestId.hashCode;
 
   @override
   String toString() => 'HttpStreamStartEvent($requestId, $method $uri)';
@@ -257,15 +231,6 @@ class HttpStreamEndEvent extends HttpEvent {
 
   /// Whether the stream completed successfully (no error).
   bool get isSuccess => error == null;
-
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is HttpStreamEndEvent && other.requestId == requestId;
-  }
-
-  @override
-  int get hashCode => requestId.hashCode;
 
   @override
   String toString() => 'HttpStreamEndEvent($requestId, '
