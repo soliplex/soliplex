@@ -86,6 +86,7 @@ class Tool(pydantic.BaseModel):
     tool_description: str
     tool_requires: config.ToolRequires  # enum, not dataclass
     allow_mcp: bool
+    agui_feature_names: list[str]
     extra_parameters: dict[str, typing.Any]
 
     @classmethod
@@ -96,6 +97,7 @@ class Tool(pydantic.BaseModel):
             tool_description=tool_config.tool_description,
             tool_requires=tool_config.tool_requires,
             allow_mcp=tool_config.allow_mcp,
+            agui_feature_names=list(tool_config.agui_feature_names),
             extra_parameters=tool_config.get_extra_parameters(),
         )
 
@@ -162,6 +164,20 @@ class FactoryAgent(pydantic.BaseModel):
 Agent = DefaultAgent | FactoryAgent
 
 
+class AGUI_Feature(pydantic.BaseModel):
+    name: str
+    description: str
+    source: config.AGUI_FeatureSource
+
+    @classmethod
+    def from_config(cls, agui_feature: config.AgentConfig):
+        return cls(
+            name=agui_feature.name,
+            description=agui_feature.description,
+            source=agui_feature.source,
+        )
+
+
 class Room(pydantic.BaseModel):
     id: str
     name: str
@@ -173,6 +189,7 @@ class Room(pydantic.BaseModel):
     mcp_client_toolsets: ConfiguredMCPClientToolsets
     quizzes: ConfiguredQuizzes
     agent: Agent
+    agui_feature_names: list[str]
     allow_mcp: bool
 
     @classmethod
@@ -208,6 +225,7 @@ class Room(pydantic.BaseModel):
                 quiz.id: Quiz.from_config(quiz) for quiz in room_config.quizzes
             },
             allow_mcp=room_config.allow_mcp,
+            agui_feature_names=room_config.agui_feature_names,
             agent=agent,
         )
 
@@ -301,6 +319,7 @@ class Installation(pydantic.BaseModel):
     environment: dict[str, str] = {}
     haiku_rag_config_file: pathlib.Path | None = None
     agents: list[DefaultAgent] = []
+    agui_features: list[AGUI_Feature] = []
     oidc_paths: list[pathlib.Path] = []
     room_paths: list[pathlib.Path] = []
     completion_paths: list[pathlib.Path] = []
@@ -323,12 +342,17 @@ class Installation(pydantic.BaseModel):
             DefaultAgent.from_config(agent_config)
             for agent_config in installation_config.agent_configs
         ]
+        agui_features = [
+            AGUI_Feature.from_config(agui_feature)
+            for agui_feature in installation_config.agui_features
+        ]
         return cls(
             id=installation_config.id,
             secrets=secrets,
             environment=installation_config.environment,
             haiku_rag_config_file=installation_config._haiku_rag_config_file,
             agents=agents,
+            agui_features=agui_features,
             oidc_paths=installation_config.oidc_paths,
             room_paths=installation_config.room_paths,
             completion_paths=installation_config.completion_paths,

@@ -11,6 +11,7 @@ import warnings
 from unittest import mock
 from urllib import parse as url_parse
 
+import pydantic
 import pytest
 import yaml
 from haiku.rag import config as hr_config_module
@@ -640,6 +641,10 @@ FULL_ROOM_CONFIG_KW = {
             rag_lancedb_override_path="/dev/null",
             allow_mcp=True,
         ),
+        "ask_with_rich_citations": config.AskWithRichCitationsToolConfig(
+            rag_lancedb_override_path="/dev/null",
+            allow_mcp=False,
+        ),
     },
     "mcp_client_toolset_configs": {
         "stdio_test": config.Stdio_MCP_ClientToolsetConfig(
@@ -679,6 +684,9 @@ tools:
       rag_lancedb_override_path: /dev/null
       search_documents_limit: 1
       allow_mcp: true
+    - tool_name: "soliplex.tools.ask_with_rich_citations"
+      rag_lancedb_override_path: /dev/null
+      allow_mcp: false
 mcp_client_toolsets:
     stdio_test:
       kind: "stdio"
@@ -790,6 +798,11 @@ SECRET_NAME = "TEST_SECRET"
 SECRET_VALUE = "DEADBEEF"
 ENV_VAR_NAME = "TEST_ENV_VAR"
 COMMAND = "cat"
+
+AGUI_FEATURE_NAME = "test_agui_feature"
+AGUI_FEATURE_DESCRIPTION = "This is an AG-UI feature"
+AGUI_FEATURE_DESCRIPTION_EXTRA = "It is a really useful feature"
+AGUI_FEATURE_MODEL_KLASS = "soliplex.agui.features.Testing"
 
 BOGUS_ICMETA_YAML = """\
 meta:
@@ -1060,6 +1073,26 @@ id: "{INSTALLATION_ID}"
 haiku_rag_config_file: "{HAIKU_RAG_CONFIG_FILE}"
 """
 
+AGENT_CONFIG_ID = "agent-config-1"
+
+W_AGENT_CONFIG_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "agent_configs": [
+        config.AgentConfig(
+            AGENT_CONFIG_ID,
+            model_name=MODEL_NAME,
+            system_prompt=SYSTEM_PROMPT,
+        ),
+    ],
+}
+W_AGENT_CONFIG_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+agent_configs:
+    - id: "{AGENT_CONFIG_ID}"
+      model_name: "{MODEL_NAME}"
+      system_prompt: "{SYSTEM_PROMPT}"
+"""
+
 OIDC_PATH_1 = "./oidc"
 OIDC_PATH_2 = "/path/to/other/oidc"
 
@@ -1166,26 +1199,6 @@ W_QUIZZES_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
 quizzes_paths:
     -
-"""
-
-AGENT_CONFIG_ID = "agent-config-1"
-
-W_AGENT_CONFIG_INSTALLATION_CONFIG_KW = {
-    "id": INSTALLATION_ID,
-    "agent_configs": [
-        config.AgentConfig(
-            AGENT_CONFIG_ID,
-            model_name=MODEL_NAME,
-            system_prompt=SYSTEM_PROMPT,
-        ),
-    ],
-}
-W_AGENT_CONFIG_INSTALLATION_CONFIG_YAML = f"""\
-id: "{INSTALLATION_ID}"
-agent_configs:
-    - id: "{AGENT_CONFIG_ID}"
-      model_name: "{MODEL_NAME}"
-      system_prompt: "{SYSTEM_PROMPT}"
 """
 
 TP_DBURI_SYNC = "sqlite+pysqlite:////tmp/testing.sqlite"
@@ -3317,6 +3330,21 @@ def test_roomconfig_sort_key(w_order):
         assert found == ROOM_ID
 
 
+@pytest.mark.parametrize(
+    "rc_kwargs, expected",
+    [
+        (BARE_ROOM_CONFIG_KW.copy(), ()),
+        (FULL_ROOM_CONFIG_KW.copy(), ("filter_documents", "ask_history")),
+    ],
+)
+def test_roomconfig_agui_feature_names(rc_kwargs, expected):
+    room_config = config.RoomConfig(**rc_kwargs)
+
+    found = room_config.agui_feature_names
+
+    assert found == expected
+
+
 @pytest.mark.parametrize("w_config_path", [False, True])
 @pytest.mark.parametrize(
     "room_config_kw",
@@ -3604,6 +3632,44 @@ def test_secretconfig_resolved():
     assert secret.resolved == SECRET_VALUE
 
 
+class FeatureModel(pydantic.BaseModel):
+    """Feature model for testing"""
+
+    foo: str
+    bar: str | None = None
+
+
+@pytest.fixture
+def the_agui_feature():
+    return config.AGUI_Feature(
+        name=AGUI_FEATURE_NAME,
+        model_klass=FeatureModel,
+        source=config.AGUI_FeatureSource.CLIENT,
+    )
+
+
+def test_aguifeature_description(the_agui_feature):
+    found = the_agui_feature.description
+
+    assert found == "Feature model for testing"
+
+
+def test_aguifeature_as_yaml(the_agui_feature):
+    found = the_agui_feature.as_yaml
+
+    assert found == {
+        "name": AGUI_FEATURE_NAME,
+        "description": "Feature model for testing",
+        "source": "client",
+    }
+
+
+def test_aguifeature_json_schema(the_agui_feature):
+    found = the_agui_feature.json_schema
+
+    assert found == FeatureModel.model_json_schema()
+
+
 def test__load_config_yaml_w_missing(temp_dir):
     config_path = temp_dir / "oidc"
     config_path.mkdir()
@@ -3801,12 +3867,12 @@ def test_resolve_environment_entry(
 
 
 @mock.patch("importlib.import_module")
-def test_configmeta__from_dotted_name(im):
+def test__from_dotted_name(im):
     dotted_name = "somemodule.SomeClass"
 
     faux_module = im.return_value = mock.Mock()
 
-    klass = config.ConfigMeta._from_dotted_name(dotted_name)
+    klass = config._from_dotted_name(dotted_name)
 
     assert klass is faux_module.SomeClass
 
@@ -4375,6 +4441,19 @@ def test_installationconfig_agent_configs_map_w_existing():
     assert found is already
 
 
+def test_installationconfig_agui_features(the_agui_feature):
+    i_config = config.InstallationConfig(id="test-ic")
+
+    with mock.patch.dict(
+        "soliplex.config.AGUI_FEATURES_BY_NAME",
+        clear=True,
+        the_agui_feature=the_agui_feature,
+    ):
+        found = i_config.agui_features
+
+    assert found == [the_agui_feature]
+
+
 @pytest.mark.parametrize(
     "w_kw, expected",
     [
@@ -4454,6 +4533,10 @@ def test_installationconfig_thread_persistence_dburi_async(w_kw, expected):
             W_HR_CONFIG_FILE_INSTALLATION_CONFIG_KW.copy(),
         ),
         (
+            W_AGENT_CONFIG_INSTALLATION_CONFIG_YAML,
+            W_AGENT_CONFIG_INSTALLATION_CONFIG_KW.copy(),
+        ),
+        (
             W_OIDC_PATHS_INSTALLATION_CONFIG_YAML,
             W_OIDC_PATHS_INSTALLATION_CONFIG_KW.copy(),
         ),
@@ -4484,10 +4567,6 @@ def test_installationconfig_thread_persistence_dburi_async(w_kw, expected):
         (
             W_QUIZZES_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML,
             W_QUIZZES_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW.copy(),
-        ),
-        (
-            W_AGENT_CONFIG_INSTALLATION_CONFIG_YAML,
-            W_AGENT_CONFIG_INSTALLATION_CONFIG_KW.copy(),
         ),
         (
             W_TP_DBURI_INSTALLATION_CONFIG_YAML,
