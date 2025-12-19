@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 
@@ -78,34 +79,34 @@ class _ChatInputState extends ConsumerState<ChatInput> {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
-            child: TextField(
-              controller: _controller,
-              focusNode: _focusNode,
-              maxLines: null,
-              textInputAction: TextInputAction.newline,
-              decoration: InputDecoration(
-                hintText: canSend
-                    ? 'Type a message...'
-                    : 'Select a room to start chatting',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-              ),
-              enabled: canSend,
-              onSubmitted: canSend ? (_) => _handleSend() : null,
-              // Handle Enter key
-              onChanged: (_) => setState(() {}),
-              // Custom key handling for Shift+Enter
-              onEditingComplete: () {
-                // This is called when Enter is pressed without Shift
-                if (canSend) {
-                  _handleSend();
-                }
+            child: CallbackShortcuts(
+              bindings: {
+                const SingleActivator(LogicalKeyboardKey.enter):
+                    canSend ? _handleSend : () {},
+                const SingleActivator(
+                  LogicalKeyboardKey.escape,
+                ): () => _focusNode.unfocus(),
               },
+              child: TextField(
+                controller: _controller,
+                focusNode: _focusNode,
+                maxLines: null,
+                textInputAction: TextInputAction.newline,
+                decoration: InputDecoration(
+                  hintText: canSend
+                      ? 'Type a message...'
+                      : 'Select a room to start chatting',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                ),
+                enabled: canSend,
+                onChanged: (_) => setState(() {}),
+              ),
             ),
           ),
           const SizedBox(width: 8),
