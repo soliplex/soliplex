@@ -28,3 +28,4 @@ tmp/
 
 # Generated documentation
 docs/reference/client_api/
+docs/reference/server_api.md
