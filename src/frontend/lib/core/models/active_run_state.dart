@@ -25,7 +25,7 @@ class RunContext {
   final List<ChatMessage> messages;
 
   /// All AG-UI events received (for AM5 Detail panel).
-  final List<AgUiEvent> rawEvents;
+  final List<BaseEvent> rawEvents;
 
   /// Latest state snapshot from backend.
   final Map<String, dynamic> state;
@@ -36,7 +36,7 @@ class RunContext {
   /// Creates a copy with the given fields replaced.
   RunContext copyWith({
     List<ChatMessage>? messages,
-    List<AgUiEvent>? rawEvents,
+    List<BaseEvent>? rawEvents,
     Map<String, dynamic>? state,
     List<ToolCallInfo>? activeToolCalls,
   }) {
@@ -158,7 +158,7 @@ sealed class ActiveRunState {
   List<ChatMessage> get messages => context.messages;
 
   /// All AG-UI events received.
-  List<AgUiEvent> get rawEvents => context.rawEvents;
+  List<BaseEvent> get rawEvents => context.rawEvents;
 
   /// Latest state snapshot from backend.
   Map<String, dynamic> get state => context.state;
