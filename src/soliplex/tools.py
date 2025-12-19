@@ -12,6 +12,7 @@ from soliplex import agents
 from soliplex import agui
 from soliplex import config
 from soliplex import models
+from soliplex.agui import features as agui_features
 
 
 class NoToolConfig(ValueError):
@@ -126,8 +127,8 @@ async def agui_state(
 
 
 class AWRC_AGUI_State(pydantic.BaseModel):
-    filter_documents: models.FilterDocuments | None = None
-    ask_history: models.AskedAndAnswered | None = None
+    filter_documents: agui_features.FilterDocuments | None = None
+    ask_history: agui_features.AskedAndAnswered | None = None
 
 
 async def ask_with_rich_citations(
@@ -171,10 +172,10 @@ async def ask_with_rich_citations(
         response, citations = await rag.ask(question, filter=search_filter)
 
         if agui_state.ask_history is None:
-            agui_state.ask_history = models.AskedAndAnswered()
+            agui_state.ask_history = agui_features.AskedAndAnswered()
 
         agui_state.ask_history.questions.append(
-            models.QuestionResponseCitations(
+            agui_features.QuestionResponseCitations(
                 question=question,
                 response=response,
                 citations=citations,

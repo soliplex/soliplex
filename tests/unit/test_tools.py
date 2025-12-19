@@ -7,8 +7,8 @@ from haiku.rag.graph import agui as rag_agui
 from soliplex import agents
 from soliplex import config
 from soliplex import installation
-from soliplex import models
 from soliplex import tools
+from soliplex.agui import features as agui_features
 
 USER = {
     "full_name": "Phreddy Phlyntstone",
@@ -332,10 +332,10 @@ async def test_ask_with_rich_citations(
     if w_history:
         exp_final_history = exp_initial_state.ask_history.model_copy(deep=True)
     else:
-        exp_final_history = models.AskedAndAnswered()
+        exp_final_history = agui_features.AskedAndAnswered()
 
     exp_final_history.questions.append(
-        models.QuestionResponseCitations(
+        agui_features.QuestionResponseCitations(
             question=QUESTION,
             response=ANSWER,
             citations=[],
