@@ -19,6 +19,7 @@ from pydantic_ai import settings as ai_settings
 
 from soliplex import config
 from soliplex import secrets
+from soliplex.agui import features
 
 here = pathlib.Path(__file__).resolve().parent
 
@@ -809,6 +810,7 @@ meta:
     tool_configs:
 """
 BARE_ICMETA_KW = {
+    "agui_features": [],
     "tool_configs": [],
     "mcp_toolset_configs": [],
     "mcp_server_tool_wrappers": [],
@@ -819,7 +821,30 @@ BARE_ICMETA_YAML = """\
 meta:
 """
 
+W_AGUI_FEATURES_ICMETA_KW = {
+    "agui_features": [
+        config.AGUI_FeatureConfigMeta(
+            name="filter_documents",
+            model_klass=features.FilterDocuments,
+            source="client",
+        ),
+    ],
+    "tool_configs": [],
+    "mcp_toolset_configs": [],
+    "mcp_server_tool_wrappers": [],
+    "agent_configs": [],
+    "secret_sources": [],
+}
+W_AGUI_FEATURES_ICMETA_YAML = """\
+meta:
+  agui_features:
+      - name: "filter_documents"
+        model_klass: "soliplex.agui.features.FilterDocuments"
+        source: "client"
+"""
+
 W_TOOL_CONFIGS_ICMETA_KW = {
+    "agui_features": [],
     "tool_configs": [
         config.ConfigMeta(config_klass=config.SearchDocumentsToolConfig),
     ],
@@ -835,6 +860,7 @@ meta:
 """
 
 W_MCP_TOOLSET_CONFIGS_ICMETA_KW = {
+    "agui_features": [],
     "tool_configs": [],
     "mcp_toolset_configs": [
         config.ConfigMeta(config_klass=config.Stdio_MCP_ClientToolsetConfig),
@@ -850,6 +876,7 @@ meta:
 """
 
 W_MCP_SERVER_TOOL_WRAPPER_ICMETA_KW = {
+    "agui_features": [],
     "tool_configs": [],
     "mcp_toolset_configs": [],
     "mcp_server_tool_wrappers": [
@@ -869,6 +896,7 @@ meta:
 """
 
 W_AGENT_CONFIGS_ICMETA_KW = {
+    "agui_features": [],
     "tool_configs": [],
     "mcp_toolset_configs": [],
     "mcp_server_tool_wrappers": [],
@@ -887,6 +915,7 @@ meta:
 
 SECRET_SOURCE_FUNC = lambda source: "SEEKRIT"  # noqa E731
 W_SECRET_SOURCE_ICMETA_KW = {
+    "agui_features": [],
     "tool_configs": [],
     "mcp_toolset_configs": [],
     "mcp_server_tool_wrappers": [],
@@ -907,6 +936,18 @@ meta:
 
 
 FULL_ICMETA_KW = {
+    "agui_features": [
+        config.AGUI_FeatureConfigMeta(
+            name="filter_documents",
+            model_klass=features.FilterDocuments,
+            source="client",
+        ),
+        config.AGUI_FeatureConfigMeta(
+            name="ask_history",
+            model_klass=features.AskedAndAnswered,
+            source="server",
+        ),
+    ],
     "tool_configs": [config.ConfigMeta(config.SearchDocumentsToolConfig)],
     "mcp_toolset_configs": [
         config.ConfigMeta(config.Stdio_MCP_ClientToolsetConfig),
@@ -931,6 +972,13 @@ FULL_ICMETA_KW = {
 }
 FULL_ICMETA_YAML = """\
 meta:
+  agui_features:
+      - name: "filter_documents"
+        model_klass: "soliplex.agui.features.FilterDocuments"
+        source: "client"
+      - name: "ask_history"
+        model_klass: "soliplex.agui.features.AskedAndAnswered"
+        source: "server"
   tool_configs:
       - "soliplex.config.SearchDocumentsToolConfig"
   mcp_toolset_configs:
@@ -3945,6 +3993,7 @@ def test_configmeta_dottedname():
 def patched_soliplex_config():
     with mock.patch.dict(config.__dict__) as patched:
         patched["test_secret_func"] = SECRET_SOURCE_FUNC
+        patched["AGUI_FEATURES_BY_NAME"] = {}
         patched["TOOL_CONFIG_CLASSES_BY_TOOL_NAME"] = {}
         patched["MCP_TOOLSET_CONFIG_CLASSES_BY_KIND"] = {}
         patched["MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME"] = {}
@@ -3959,6 +4008,7 @@ def patched_soliplex_config():
     [
         (BOGUS_ICMETA_YAML, None),
         (BARE_ICMETA_YAML, BARE_ICMETA_KW),
+        (W_AGUI_FEATURES_ICMETA_YAML, W_AGUI_FEATURES_ICMETA_KW),
         (W_TOOL_CONFIGS_ICMETA_YAML, W_TOOL_CONFIGS_ICMETA_KW),
         (W_MCP_TOOLSET_CONFIGS_ICMETA_YAML, W_MCP_TOOLSET_CONFIGS_ICMETA_KW),
         (
@@ -4085,8 +4135,10 @@ def test_installationconfigmeta_from_yaml(
 @pytest.mark.parametrize("w_agent", [False, True])
 @pytest.mark.parametrize("w_mcp_toolsets", [False, True])
 @pytest.mark.parametrize("w_sdtc", [False, True])
+@pytest.mark.parametrize("w_fd", [False, True])
 def test_installationconfigmeta_as_yaml(
     patched_soliplex_config,
+    w_fd,
     w_sdtc,
     w_mcp_toolsets,
     w_agent,
@@ -4095,6 +4147,21 @@ def test_installationconfigmeta_as_yaml(
     icmeta_kw = {}
     expected_dict = copy.deepcopy(BARE_ICMETA_KW)
     icmeta_kw = icmeta_kw.copy()
+
+    if w_fd:
+        feature = config.AGUI_Feature(
+            name="filter_documents",
+            model_klass=features.FilterDocuments,
+            source="server",
+        )
+        config.AGUI_FEATURES_BY_NAME["filter_documents"] = feature
+        expected_dict["agui_features"].append(
+            {
+                "name": "filter_documents",
+                "model_klass": "soliplex.agui.features.FilterDocuments",
+                "source": "server",
+            }
+        )
 
     if w_sdtc:
         config.TOOL_CONFIG_CLASSES_BY_TOOL_NAME[

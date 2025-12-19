@@ -1777,10 +1777,7 @@ class AGUI_FeatureConfigMeta:
     @classmethod
     def from_yaml(cls, yaml_config: str | dict):
         model_klass = yaml_config["model_klass"]
-
-        if isinstance(model_klass, str):
-            yaml_config["model_klass"] = _from_dotted_name(model_klass)
-
+        yaml_config["model_klass"] = _from_dotted_name(model_klass)
         return cls(**yaml_config)
 
 
@@ -1973,6 +1970,14 @@ class InstallationConfigMeta:
 
     @property
     def as_yaml(self) -> dict:
+        agui_feature_entries = [
+            {
+                "name": feature.name,
+                "model_klass": _dotted_name(feature.model_klass),
+                "source": feature.source,
+            }
+            for feature in AGUI_FEATURES_BY_NAME.values()
+        ]
         tool_config_entries = [
             _dotted_name(klass)
             for klass in TOOL_CONFIG_CLASSES_BY_TOOL_NAME.values()
@@ -2003,6 +2008,7 @@ class InstallationConfigMeta:
             for kind, r_func in SECRET_GETTERS_BY_KIND.items()
         ]
         return {
+            "agui_features": agui_feature_entries,
             "tool_configs": tool_config_entries,
             "mcp_toolset_configs": mcp_toolset_config_entries,
             "mcp_server_tool_wrappers": mcp_server_tool_wrapper_entries,
