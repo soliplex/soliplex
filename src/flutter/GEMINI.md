@@ -94,22 +94,25 @@ Panel state (chat, canvas, context pane, activity status) must reset when the se
 
 ## Code Quality Requirements
 
-### Analyzer: Zero Tolerance Policy
+- **Zero Tolerance Policy**: All linters and tests must pass 100%. No warnings or errors are acceptable in commits.
+- **Workflow Order**: Before any commit, follow this sequence (preferring `dart mcp-server` tools when available):
+    1. Format code
+    2. Run analysis (Linter)
+    3. Run tests
+- **Tooling Preference**: Prefer the `dart mcp-server` over direct command line usage for all development tasks (formatting, linting, testing).
+- **Linting**: Always use the latest `very_good_analysis` package. It is the project standard for strict enforcement of best practices.
+
+### Analyzer
 
 **`flutter analyze` must report ZERO errors and ZERO warnings.**
-- Run `flutter analyze` before committing.
+- Run analysis via `dart mcp-server` tools before committing.
 - Fix all errors AND warnings immediately.
 
 ### Tests: All Must Pass
 
-All tests must pass before any code is considered complete:
-```bash
-flutter test
-```
+All tests must pass before any code is considered complete.
 
 ### Formatter
 
-Code should be formatted before commits:
-```bash
-dart format lib test
-```
+Code should be formatted before commits.
+

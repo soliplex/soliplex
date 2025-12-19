@@ -84,7 +84,7 @@ processing:
 providers:
   # The docling-serve url if you have not installed the full haiku.rag package.
   docling_serve:
-    base_url: http://localhost:5001
+    base_url: http://biggysmalls:5001
 
   #
   #  Leave the 'ollama' section commented out to allow it's base URL to be

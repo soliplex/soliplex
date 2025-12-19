@@ -180,6 +180,7 @@ async def ask_with_rich_citations(
                 citations=citations,
             )
         )
+        print(agui_state)
         agui_emitter.update_state(agui_state)
 
         return response
