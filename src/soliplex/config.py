@@ -5,10 +5,12 @@ import enum
 import functools
 import importlib
 import inspect
+import itertools
 import json
 import os
 import pathlib
 import random
+import re
 import ssl
 import typing
 import warnings
@@ -21,8 +23,14 @@ from haiku.rag import config as hr_config
 from pydantic_ai import settings as ai_settings
 from pydantic_ai.agent import abstract as ai_ag_abstract
 
-SECRET_PREFIX = "secret:"
 FILE_PREFIX = "file:"
+
+SECRET_PREFIX = "secret:"
+SECRET_PATTERN = rf"{SECRET_PREFIX}(?P<secret_name>\w+)"
+SECRET_RE = re.compile(SECRET_PATTERN)
+
+SYNC_MEMORY_ENGINE_URL = "sqlite://"
+ASYNC_MEMORY_ENGINE_URL = "sqlite+aiosqlite://"
 
 # ============================================================================
 #   Exceptions raised during YAML config processing
@@ -487,6 +495,52 @@ class RAGResearchToolConfig(ToolConfig, _RAGToolBase):
     kind: str = "research_report"
     tool_name: str = "soliplex.tools.research_report"
 
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config: dict[str, typing.Any],
+    ):
+        try:
+            config["_installation_config"] = installation_config
+            config["_config_path"] = config_path
+
+            instance = cls(**config)
+        except Exception as exc:
+            raise FromYamlException(config_path, "rrtc", config) from exc
+
+        return instance
+
+    def get_extra_parameters(self) -> dict:
+        return (
+            super().get_extra_parameters()
+            | _RAGToolBase.get_extra_parameters(self)
+        )
+
+
+@dataclasses.dataclass
+class AskWithRichCitationsToolConfig(ToolConfig, _RAGToolBase):
+    kind: str = "ask_with_rich_citations"
+    tool_name: str = "soliplex.tools.ask_with_rich_citations"
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config: dict[str, typing.Any],
+    ):
+        try:
+            config["_installation_config"] = installation_config
+            config["_config_path"] = config_path
+
+            instance = cls(**config)
+        except Exception as exc:
+            raise FromYamlException(config_path, "awrctc", config) from exc
+
+        return instance
+
     def get_extra_parameters(self) -> dict:
         return (
             super().get_extra_parameters()
@@ -499,6 +553,7 @@ TOOL_CONFIG_CLASSES_BY_TOOL_NAME = {
     for klass in [
         SearchDocumentsToolConfig,
         RAGResearchToolConfig,
+        AskWithRichCitationsToolConfig,
     ]
 }
 
@@ -636,7 +691,7 @@ class HTTP_MCP_ClientToolsetConfig:
         url = self.url
 
         headers = {
-            key: self._installation_config.interpolate_secret(value)
+            key: self._installation_config.interpolate_secrets(value)
             for (key, value) in self.headers.items()
         }
 
@@ -1848,10 +1903,8 @@ class InstallationConfig:
 
         return self._secrets_map
 
-    def get_secret(self, secret_name) -> str:
+    def _resolve_secret(self, secret_name):
         from soliplex import secrets as secrets_module  # avoid cycle
-
-        secret_name = strip_secret_prefix(secret_name)
 
         try:
             secret_config = self.secrets_map[secret_name]
@@ -1860,15 +1913,27 @@ class InstallationConfig:
 
         return secrets_module.get_secret(secret_config)
 
-    def interpolate_secret(self, value):
-        # Support 'Bearer secret:SECRET_NAME' config.
-        if "secret:" in value:
-            tokens = [
-                self.get_secret(token) if "secret:" in token else token
-                for token in value.split(" ")
-            ]
-            value = " ".join(tokens)
-        return value
+    def get_secret(self, secret_name) -> str:
+        """Return the value for a given secret."""
+        secret_name = strip_secret_prefix(secret_name)
+        return self._resolve_secret(secret_name)
+
+    def interpolate_secrets(self, value):
+        """Replace 'secret:<secret_name>' markers w/ secret value
+
+        The marker pattern may appear zero or more times.
+        """
+
+        def resolved_tokens(value):
+            tokens = SECRET_RE.split(value)
+
+            for two_or_one in itertools.batched(tokens, 2, strict=False):
+                yield two_or_one[0]
+
+                if len(two_or_one) == 2:
+                    yield self._resolve_secret(two_or_one[1])
+
+        return "".join(resolved_tokens(value))
 
     #
     # Map values similar to 'os.environ'.
@@ -1988,6 +2053,32 @@ class InstallationConfig:
     #
     quizzes_paths: list[pathlib.Path] = None
 
+    #
+    # Thread persistence DB-URI
+    #
+    _thread_persistence_dburi_sync: str = None
+    _thread_persistence_dburi_async: str = None
+
+    def _dburi_w_secret(self, dburi: str | None, default: str) -> str:
+        if dburi is None:
+            return default
+
+        return self.interpolate_secrets(dburi)
+
+    @property
+    def thread_persistence_dburi_sync(self):
+        return self._dburi_w_secret(
+            self._thread_persistence_dburi_sync,
+            SYNC_MEMORY_ENGINE_URL,
+        )
+
+    @property
+    def thread_persistence_dburi_async(self):
+        return self._dburi_w_secret(
+            self._thread_persistence_dburi_async,
+            ASYNC_MEMORY_ENGINE_URL,
+        )
+
     # Set by `from_yaml` factory
     _config_path: pathlib.Path = None
 
@@ -2039,6 +2130,10 @@ class InstallationConfig:
                 for a_config in config.get("agent_configs", ())
             ]
             config["agent_configs"] = agent_configs
+
+            tp_dburi = config.pop("thread_persistence_dburi", {})
+            config["_thread_persistence_dburi_sync"] = tp_dburi.get("sync")
+            config["_thread_persistence_dburi_async"] = tp_dburi.get("async")
 
             return cls(**config)
 

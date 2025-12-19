@@ -2,8 +2,159 @@ from unittest import mock
 
 import fastapi
 import pytest
+from ag_ui import core as agui_core
 
 from soliplex import agui as agui_package
+
+MESSAGE_ID_1 = "message-id-1"
+MESSAGE_ID_2 = "message-id-2"
+
+TEXT_START_1 = agui_core.TextMessageStartEvent(message_id=MESSAGE_ID_1)
+TEXT_CONTENT_1_A = agui_core.TextMessageContentEvent(
+    message_id=MESSAGE_ID_1,
+    delta="A ",
+)
+TEXT_CONTENT_1_B = agui_core.TextMessageContentEvent(
+    message_id=MESSAGE_ID_1,
+    delta="B ",
+)
+TEXT_CONTENT_1_C = agui_core.TextMessageContentEvent(
+    message_id=MESSAGE_ID_1,
+    delta="C",
+)
+TEXT_CONTENT_1_AB = agui_core.TextMessageContentEvent(
+    message_id=MESSAGE_ID_1,
+    delta="A B ",
+)
+TEXT_CONTENT_1_ABC = agui_core.TextMessageContentEvent(
+    message_id=MESSAGE_ID_1,
+    delta="A B C",
+)
+TEXT_END_1 = agui_core.TextMessageEndEvent(message_id=MESSAGE_ID_1)
+
+THINK_START = agui_core.ThinkingTextMessageStartEvent()
+THINK_CONTENT_A = agui_core.ThinkingTextMessageContentEvent(
+    delta="A ",
+)
+THINK_CONTENT_B = agui_core.ThinkingTextMessageContentEvent(
+    delta="B ",
+)
+THINK_CONTENT_C = agui_core.ThinkingTextMessageContentEvent(
+    delta="C",
+)
+THINK_CONTENT_AB = agui_core.ThinkingTextMessageContentEvent(
+    delta="A B ",
+)
+THINK_CONTENT_ABC = agui_core.ThinkingTextMessageContentEvent(
+    delta="A B C",
+)
+THINK_END = agui_core.ThinkingTextMessageEndEvent()
+
+
+TEXT_CONTENT_2_D = agui_core.TextMessageContentEvent(
+    message_id=MESSAGE_ID_2,
+    delta="D ",
+)
+
+OTHER = agui_core.RawEvent(event=None, source="test-raw")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "events, expected",
+    [
+        ([], []),
+        (
+            [TEXT_START_1, TEXT_CONTENT_1_A, TEXT_END_1],
+            [TEXT_START_1, TEXT_CONTENT_1_A, TEXT_END_1],
+        ),
+        (
+            [
+                TEXT_START_1,
+                TEXT_CONTENT_1_A,
+                TEXT_CONTENT_1_B,
+                TEXT_CONTENT_1_C,
+                TEXT_END_1,
+            ],
+            [TEXT_START_1, TEXT_CONTENT_1_ABC, TEXT_END_1],
+        ),
+        (
+            [
+                TEXT_START_1,
+                TEXT_CONTENT_1_A,
+                TEXT_CONTENT_1_B,
+                OTHER,
+                TEXT_CONTENT_1_C,
+                TEXT_END_1,
+            ],
+            [
+                TEXT_START_1,
+                TEXT_CONTENT_1_AB,
+                OTHER,
+                TEXT_CONTENT_1_C,
+                TEXT_END_1,
+            ],
+        ),
+        (
+            [
+                TEXT_START_1,
+                TEXT_CONTENT_1_A,
+                TEXT_CONTENT_2_D,
+                TEXT_CONTENT_1_C,
+                TEXT_END_1,
+            ],
+            [
+                TEXT_START_1,
+                TEXT_CONTENT_1_A,
+                TEXT_CONTENT_2_D,
+                TEXT_CONTENT_1_C,
+                TEXT_END_1,
+            ],
+        ),
+        (
+            [THINK_START, THINK_CONTENT_A, THINK_END],
+            [THINK_START, THINK_CONTENT_A, THINK_END],
+        ),
+        (
+            [
+                THINK_START,
+                THINK_CONTENT_A,
+                THINK_CONTENT_B,
+                THINK_CONTENT_C,
+                THINK_END,
+            ],
+            [THINK_START, THINK_CONTENT_ABC, THINK_END],
+        ),
+        (
+            [
+                THINK_START,
+                THINK_CONTENT_A,
+                THINK_CONTENT_B,
+                OTHER,
+                THINK_CONTENT_C,
+                THINK_END,
+            ],
+            [
+                THINK_START,
+                THINK_CONTENT_AB,
+                OTHER,
+                THINK_CONTENT_C,
+                THINK_END,
+            ],
+        ),
+    ],
+)
+async def test_compact_event_stream(events, expected):
+    async def stream():
+        for event in events:
+            yield event
+
+    found = [
+        event async for event in agui_package.compact_event_stream(stream())
+    ]
+
+    for f_event, e_event in zip(found, expected, strict=True):
+        assert f_event == e_event
 
 
 @pytest.mark.anyio

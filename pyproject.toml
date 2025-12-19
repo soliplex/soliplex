@@ -55,6 +55,9 @@ docs = [
     # See https://github.com/mkdocs/mkdocs/issues/4032
     "click != 8.2.2, != 8.3.0",
 ]
+postgres = [
+    "asyncpg",
+]
 tui = [
     "textual",
     "textual-serve",

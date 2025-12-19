@@ -14,6 +14,34 @@ AGUI_EventStream = collections.abc.AsyncIterator[agui_core.Event]
 AGUI_State = dict[str, typing.Any]
 
 
+_COMPACTIBLE_TYPES = {
+    agui_core.EventType.TEXT_MESSAGE_CONTENT,
+    agui_core.EventType.THINKING_TEXT_MESSAGE_CONTENT,
+}
+
+
+async def compact_event_stream(stream: AGUI_EventStream):
+    compacting: agui_core.Event = None
+    compacting_id: str = None
+
+    async for event in stream:
+        if compacting is not None:
+            event_id = getattr(event, "message_id", None)
+            if event.type == compacting.type and event_id == compacting_id:
+                compacting.delta += event.delta
+            else:
+                to_yield, compacting = compacting, None
+                yield to_yield
+                yield event
+
+        else:
+            if event.type in _COMPACTIBLE_TYPES:
+                compacting = event.model_copy()
+                compacting_id = getattr(event, "message_id", None)
+            else:
+                yield event
+
+
 class AGUI_Exception(ValueError):
     status_code = 400
 
@@ -70,6 +98,37 @@ class RunAlreadyStarted(AGUI_Exception):
 #
 
 
+RunUsageStats = collections.namedtuple(
+    "RunUsageStats",
+    [
+        "input_tokens",
+        "output_tokens",
+        "requests",
+        "tool_calls",
+    ],
+)
+
+
+class RunUsage(abc.ABC):
+    """LLM usage for a run"""
+
+    input_tokens: int
+    """LLM input tokens consumed"""
+
+    output_tokens: int
+    """LLM output tokens consumed"""
+
+    requests: int
+    """LLM requests made"""
+
+    tool_calls: int
+    """LLM tool_calls made"""
+
+    @abc.abstractmethod
+    def as_tuple(self) -> RunUsageStats:
+        """Return values as a tuple."""
+
+
 class RunMetadata(abc.ABC):
     """User-defined metadata for a run"""
 
@@ -91,6 +150,9 @@ class Run(abc.ABC):
 
     parent_run_id: str | None
     """ID of the parent run"""
+
+    run_usage: RunUsage | None
+    """Optional LLM usage data for a run"""
 
     run_metadata: RunMetadata | None
     """Optional user-defined metadata for a run"""
@@ -277,6 +339,21 @@ class ThreadStorage(abc.ABC):
         events: AGUI_Events,
     ) -> AGUI_Events:
         """Save the events for a gven run"""
+
+    @abc.abstractmethod
+    async def save_run_usage(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+        input_tokens: int,
+        output_tokens: int,
+        requests: int,
+        tool_calls: int,
+    ):
+        """Save the run usage statistics"""
 
 
 async def get_the_threads(request: fastapi.Request) -> ThreadStorage:

@@ -86,6 +86,66 @@ Please see [this page](agents.md) for details on configuring agents.
 In addition to the values described there, note that the `id` element is
 required here.
 
+## Thread Persistence DBURI
+
+An installation can define two DBURIs for the database used to store
+AG-UI threads, runs, events, etc.
+
+
+### Synchronous DBURI
+
+One DBURI is for sync usage, e.g.  within console scripts.  Examples:
+
+- `sqlite://`
+- `postgresql+psycopg2://user:<password>@dbhost/dbname`
+
+### Asynchronous DBURI
+
+The other DBURI is for async usage, e.g. within the Soliplex server
+process.  Examples:
+
+- `sqlite+aiosqlite://`
+- `postgresql+asyncpg://user:<password>@dbhost/dbname`
+
+This DBURI must be compatible with SQLAlchemy's [asyncio extension](
+https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html).
+Dialects known to work include:
+
+- [`aiosqlite`](https://aiosqlite.omnilib.dev/en/stable/index.html)
+- [`asyncpg`](https://magicstack.github.io/asyncpg/current/)
+
+### Default configuration
+
+By default, Soliplex configures thread persistence using in-memory DBURIS:
+
+- For sync use, `sqlite` (DBURI `sqlite://`)
+- For async use, `aiosqlite` (DBURI `sqlite+aiosqlite://`)
+
+The default configuration is equivalent to this explicit YAML:
+
+```yaml
+thread_persistence_dburi:
+  sync: "sqlite://"
+  async: "sqlite+aiosqlite://"
+```
+
+### Database passwords as secrets
+
+For DBURIs requiring authentication, we would rather not expose the
+password in plain-text configuration.  In this case, we can define a
+Soliplex secret (read [here](./secrets.md)), and use that secret in the DBURI.
+
+```yaml
+secrets:
+    - secret_name: MY_DBURI_SECRET
+      # Configure sources here
+...
+
+thread_persistence_dburi:
+  sync: "postgresql+psycopg2://user:secret:MY_DBURI_SECRET@dbhost/dbname"
+  async: "postgresql+asyncpg://user:secret:MY_DBURI_SECRET@dbhost/dbname"
+```
+
 ## OIDC Auth Provider Paths
 
 The `oidc_paths` element specifies one or more filesystem paths to be

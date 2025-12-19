@@ -12,8 +12,8 @@ from ag_ui import core as agui_core
 
 from soliplex import agui as agui_package
 
-AGUI_EventIterator = abc.AsyncIterator[agui_core.BaseEvent]
-AGUI_EventDictIterator = abc.AsyncIterator[agui_core.BaseEvent]
+AGUI_EventIterator = abc.AsyncIterator[agui_core.Event]
+AGUI_EventDictIterator = abc.AsyncIterator[agui_core.Event]
 
 
 AGUI_EVENT_CLASSES_BY_TYPE = {
@@ -67,7 +67,7 @@ class UnknownJSONEventType(EPSError):
         super().__init__(f"Unknown JSON event type: {event_type}")
 
 
-def agui_event_from_json(json_dict) -> agui_core.BaseEvent:
+def agui_event_from_json(json_dict) -> agui_core.Event:
     try:
         type_ = json_dict["type"]
     except KeyError as exc:
@@ -92,7 +92,7 @@ class NoRunInput(EPSError):
 
 
 class NotRunning(EPSError):
-    def __init__(self, current_status, event: agui_core.BaseEvent):
+    def __init__(self, current_status, event: agui_core.Event):
         self.current_status = current_status
         super().__init__(
             f"Parser not in RUNNING state: {current_status}: ",
@@ -101,7 +101,7 @@ class NotRunning(EPSError):
 
 
 class EPSEventError(EPSError):
-    def __init__(self, msg, event: agui_core.BaseEvent):
+    def __init__(self, msg, event: agui_core.Event):
         self.event = event
         super().__init__(msg)
 
@@ -111,7 +111,7 @@ class InvalidRunStatusWithTarget(EPSEventError):
         self,
         current_status,
         target_status,
-        event: agui_core.BaseEvent,
+        event: agui_core.Event,
     ):
         self.current_status = current_status
         self.target_status = target_status
@@ -123,7 +123,7 @@ class InvalidRunStatusWithTarget(EPSEventError):
 
 
 class StepAlreadyStarted(EPSEventError):
-    def __init__(self, step_name, event: agui_core.BaseEvent):
+    def __init__(self, step_name, event: agui_core.Event):
         self.step_name = step_name
         super().__init__(
             f"Step {step_name} already started",
@@ -132,7 +132,7 @@ class StepAlreadyStarted(EPSEventError):
 
 
 class StepNotStarted(EPSEventError):
-    def __init__(self, step_name, event: agui_core.BaseEvent):
+    def __init__(self, step_name, event: agui_core.Event):
         self.step_name = step_name
         super().__init__(
             f"Step {step_name} not yet started",
@@ -141,7 +141,7 @@ class StepNotStarted(EPSEventError):
 
 
 class MessageAlreadyExists(EPSEventError):
-    def __init__(self, message_id, event: agui_core.BaseEvent):
+    def __init__(self, message_id, event: agui_core.Event):
         self.message_id = message_id
         super().__init__(
             f"Message w/ ID {message_id} already exists",
@@ -150,7 +150,7 @@ class MessageAlreadyExists(EPSEventError):
 
 
 class ToolCallDoesNotExist(EPSEventError):
-    def __init__(self, tool_call_id, event: agui_core.BaseEvent):
+    def __init__(self, tool_call_id, event: agui_core.Event):
         self.tool_call_id = tool_call_id
         super().__init__(
             f"Tool call w/ ID {tool_call_id} does not exist",
@@ -159,7 +159,7 @@ class ToolCallDoesNotExist(EPSEventError):
 
 
 class ToolCallAlreadyExists(EPSEventError):
-    def __init__(self, tool_call_id, event: agui_core.BaseEvent):
+    def __init__(self, tool_call_id, event: agui_core.Event):
         self.tool_call_id = tool_call_id
         super().__init__(
             f"Tool call w/ ID {tool_call_id} already exists",
@@ -168,7 +168,7 @@ class ToolCallAlreadyExists(EPSEventError):
 
 
 class MessageDoesNotExist(EPSEventError):
-    def __init__(self, message_id, event: agui_core.BaseEvent):
+    def __init__(self, message_id, event: agui_core.Event):
         self.message_id = message_id
         super().__init__(
             f"Message w/ ID {message_id} does not exist",
@@ -188,7 +188,7 @@ MessagesByID = dict[str, agui_core.Message]
 ActiveToolCall = tuple[agui_core.ToolCall, agui_core.Message | None]
 ActiveToolCalls = dict[str, ActiveToolCall]
 CompletedToolCalls = set[str]
-Events = list[agui_core.BaseEvent]
+Events = list[agui_core.Event]
 
 IgnorableEventTypes = frozenset[agui_core.EventType]
 
@@ -266,7 +266,7 @@ class EventStreamParser:
         self,
         expected: RunStatus,
         target: RunStatus,
-        event: agui_core.BaseEvent,
+        event: agui_core.Event,
     ):
         if self.run_status != expected:
             raise InvalidRunStatusWithTarget(
@@ -279,14 +279,14 @@ class EventStreamParser:
         self.messages.append(message)
         self.messages_by_id[message.id] = message
 
-    def _log_event(self, event: agui_core.BaseEvent):
+    def _log_event(self, event: agui_core.Event):
         if (
             self.event_log is not None
             and event.type not in self.ignore_event_types
         ):
             self.event_log.append(event)
 
-    def __call__(self, event: agui_core.BaseEvent):
+    def __call__(self, event: agui_core.Event):
         self._log_event(event)
 
         match event.type:

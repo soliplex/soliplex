@@ -151,6 +151,26 @@ def test_installation_haiku_rag_config():
     assert the_installation.haiku_rag_config is i_config.haiku_rag_config
 
 
+def test_installation_thread_persistence_dburi_sync():
+    i_config = mock.create_autospec(config.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    assert (
+        the_installation.thread_persistence_dburi_sync
+        is i_config.thread_persistence_dburi_sync
+    )
+
+
+def test_installation_thread_persistence_dburi_async():
+    i_config = mock.create_autospec(config.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    assert (
+        the_installation.thread_persistence_dburi_async
+        is i_config.thread_persistence_dburi_async
+    )
+
+
 @pytest.mark.parametrize("w_oidc_configs", [[], [object()]])
 def test_installation_auth_disabled(w_oidc_configs):
     i_config = mock.create_autospec(config.InstallationConfig)
@@ -527,6 +547,7 @@ async def test_lifespan(
         secrets=(),
         oidc_paths=["oidc"],
         environment={"OLLAMA_BASE_URL": OLLAMA_BASE_URL},
+        thread_persistence_dburi_async=config.ASYNC_MEMORY_ENGINE_URL,
     )
     load_installation.return_value = i_config
     app = mock.create_autospec(fastapi.FastAPI)

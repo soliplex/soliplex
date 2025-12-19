@@ -10,6 +10,7 @@ from sqlalchemy import orm as sqla_orm
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agui as agui_package
+from soliplex import config
 from soliplex.agui import persistence as agui_persistence
 
 NOW = datetime.datetime.now(datetime.UTC)
@@ -325,6 +326,38 @@ async def test_run_list_events(w_agui_events):
     assert await run.list_events() == w_agui_events
 
 
+@pytest.mark.anyio
+async def test_runusage_as_tuple(the_session):
+    thread = agui_persistence.Thread(
+        room_id=ROOM_ID,
+        user_name=USER_NAME,
+        thread_id=THREAD_UUID,
+    )
+    the_session.add(thread)
+    the_session.commit()
+
+    run = agui_persistence.Run(
+        thread=thread,
+        run_id=RUN_UUID,
+    )
+    the_session.add(run)
+    the_session.commit()
+
+    usage = agui_persistence.RunUsage(
+        run=run,
+        input_tokens=1,
+        output_tokens=2,
+        requests=3,
+        tool_calls=4,
+    )
+    the_session.add(usage)
+    the_session.commit()
+
+    found = usage.as_tuple()
+
+    assert found == (1, 2, 3, 4)
+
+
 @pytest.mark.parametrize(
     "agui_rai",
     [
@@ -421,7 +454,7 @@ async def test_threadstorage_session(faux_sqlaa_session):
 @pytest_asyncio.fixture()
 async def the_async_engine():
     engine = sqla_asyncio.create_async_engine(
-        agui_persistence.ASYNC_MEMORY_ENGINE_URL,
+        config.ASYNC_MEMORY_ENGINE_URL,
     )
     async with engine.begin() as connection:
         await connection.run_sync(agui_persistence.Base.metadata.create_all)
@@ -835,10 +868,51 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     await the_async_session.commit()
 
+    await the_async_session.commit()
+
+    before = await ts.new_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+
+    await the_async_session.commit()
+    before_id = await before.awaitable_attrs.run_id
+
+    usage = await before.awaitable_attrs.run_usage
+    assert usage is None
+
+    await ts.save_run_usage(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=before_id,
+        input_tokens=1,
+        output_tokens=2,
+        requests=3,
+        tool_calls=4,
+    )
+
+    await the_async_session.commit()
+
+    after = await ts.get_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=before_id,
+    )
+
+    after_usage = await after.awaitable_attrs.run_usage
+
+    assert after_usage.input_tokens == 1
+    assert after_usage.output_tokens == 2
+    assert after_usage.requests == 3
+    assert after_usage.tool_calls == 4
+
 
 @pytest.fixture
 def the_engine():
-    engine = sqlalchemy.create_engine(agui_persistence.SYNC_MEMORY_ENGINE_URL)
+    engine = sqlalchemy.create_engine(config.SYNC_MEMORY_ENGINE_URL)
 
     yield engine
 
@@ -1054,7 +1128,7 @@ def test_get_session(
         assert isinstance(session, sqla_orm.Session)
         assert session.bind is ce.return_value
 
-        ce.assert_called_once_with(agui_persistence.SYNC_MEMORY_ENGINE_URL)
+        ce.assert_called_once_with(config.SYNC_MEMORY_ENGINE_URL)
 
         if init_schema:
             connection = ce.return_value.connect.return_value
@@ -1085,7 +1159,7 @@ async def test_get_async_session(
         assert isinstance(session, sqla_asyncio.AsyncSession)
         assert session.bind is engine
 
-        cae.assert_called_once_with(agui_persistence.ASYNC_MEMORY_ENGINE_URL)
+        cae.assert_called_once_with(config.ASYNC_MEMORY_ENGINE_URL)
 
         if init_schema:
             engine.begin.assert_called_once_with()

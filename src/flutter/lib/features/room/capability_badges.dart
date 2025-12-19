@@ -15,10 +15,12 @@ class CapabilityBadges extends StatelessWidget {
     super.key,
     this.compact = false,
     this.onBadgeTap,
+    this.clientToolCount,
   });
   final Room room;
   final bool compact;
   final void Function(CapabilityType)? onBadgeTap;
+  final int? clientToolCount;
 
   @override
   Widget build(BuildContext context) {
@@ -38,18 +40,48 @@ class CapabilityBadges extends StatelessWidget {
       );
     }
 
-    // Tools badge (with count)
-    if (room.toolCount > 0) {
-      badges.add(
-        _CapabilityBadge(
-          type: CapabilityType.tools,
-          label: compact ? '${room.toolCount}T' : '${room.toolCount} Tools',
-          tooltip: 'Has ${room.toolCount} tools available',
-          color: _badgeColor(CapabilityType.tools),
-          icon: Icons.build_outlined,
-          onTap: () => onBadgeTap?.call(CapabilityType.tools),
-        ),
-      );
+    // Tools breakdown
+    if (clientToolCount != null) {
+      // Server Tools
+      if (room.toolCount > 0) {
+        badges.add(
+          _CapabilityBadge(
+            type: CapabilityType.tools,
+            label: compact ? '${room.toolCount}S' : '${room.toolCount} Server',
+            tooltip: '${room.toolCount} server-side tools available',
+            color: const Color(0xFF2563EB), // Blue
+            icon: Icons.dns_outlined,
+            onTap: () => onBadgeTap?.call(CapabilityType.tools),
+          ),
+        );
+      }
+      // Client Tools
+      if (clientToolCount! > 0) {
+        badges.add(
+          _CapabilityBadge(
+            type: CapabilityType.tools,
+            label: compact ? '${clientToolCount}C' : '$clientToolCount Client',
+            tooltip: '$clientToolCount client-side tools available',
+            color: const Color(0xFF059669), // Green
+            icon: Icons.devices,
+            onTap: () => onBadgeTap?.call(CapabilityType.tools),
+          ),
+        );
+      }
+    } else {
+      // Legacy generic Tools badge
+      if (room.toolCount > 0) {
+        badges.add(
+          _CapabilityBadge(
+            type: CapabilityType.tools,
+            label: compact ? '${room.toolCount}T' : '${room.toolCount} Tools',
+            tooltip: 'Has ${room.toolCount} tools available',
+            color: _badgeColor(CapabilityType.tools),
+            icon: Icons.build_outlined,
+            onTap: () => onBadgeTap?.call(CapabilityType.tools),
+          ),
+        );
+      }
     }
 
     // MCP badge (if room has MCP integrations)

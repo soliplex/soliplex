@@ -177,6 +177,30 @@ W_OVERRIDE_RRTC_CONFIG_YAML = """
     rag_lancedb_override_path: "/path/to/rag.lancedb"
 """
 
+
+# This one raises
+BOGUS_AWRCTC_CONFIG_YAML = """
+    #rag_lancedb_stem: "rag"
+    #rag_lancedb_override_path: "/path/to/rag.lancedb"
+"""
+
+W_STEM_AWRCTC_CONFIG_KW = {
+    "rag_lancedb_stem": "rag",
+    "allow_mcp": True,
+}
+W_STEM_AWRCTC_CONFIG_YAML = """
+    rag_lancedb_stem: "rag"
+    allow_mcp: true
+"""
+
+
+W_OVERRIDE_AWRCTC_CONFIG_KW = {
+    "rag_lancedb_override_path": "/path/to/rag.lancedb",
+}
+W_OVERRIDE_AWRCTC_CONFIG_YAML = """
+    rag_lancedb_override_path: "/path/to/rag.lancedb"
+"""
+
 # This one raises
 BOGUS_STDIO_MCTC_CONFIG_YAML = ""
 
@@ -941,8 +965,16 @@ id: "{INSTALLATION_ID}"
 
 SECRET_NAME_1 = "TEST_SECRET_ONE"
 SECRET_NAME_2 = "TEST_SECRET_TWO"
+DB_SECRET_NAME = "DBSECRET"
+DB_SECRET_VALUE = "R34ll7#S33KR1T"
+
 SECRET_CONFIG_1 = config.SecretConfig(SECRET_NAME_1)
 SECRET_CONFIG_2 = config.SecretConfig(SECRET_NAME_2)
+DB_SECRET_CONFIG = config.SecretConfig(
+    DB_SECRET_NAME,
+    _resolved=DB_SECRET_VALUE,
+)
+
 SECRET_ENV_VAR = "OTHER_ENV_VAR"
 SECRET_FILE_PATH = "./very_seekrit"
 SECRET_COMAND = "cat"
@@ -1154,6 +1186,40 @@ agent_configs:
     - id: "{AGENT_CONFIG_ID}"
       model_name: "{MODEL_NAME}"
       system_prompt: "{SYSTEM_PROMPT}"
+"""
+
+TP_DBURI_SYNC = "sqlite+pysqlite:////tmp/testing.sqlite"
+TP_DBURI_SYNC_W_SECRET = (
+    f"sqlite+pysqlcipher://secret:{DB_SECRET_NAME}//tmp/testing.sqlite"
+)
+TP_DBURI_SYNC_W_SECRET_RESOLVED = (
+    f"sqlite+pysqlcipher://{DB_SECRET_VALUE}//tmp/testing.sqlite"
+)
+TP_DBURI_ASYNC = "sqlite+aiosqlite:////tmp/testing.sqlite"
+
+W_TP_DBURI_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "_thread_persistence_dburi_sync": TP_DBURI_SYNC,
+    "_thread_persistence_dburi_async": TP_DBURI_ASYNC,
+}
+W_TP_DBURI_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+thread_persistence_dburi:
+    sync: {TP_DBURI_SYNC}
+    async: {TP_DBURI_ASYNC}
+"""
+
+W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "_thread_persistence_dburi_sync": TP_DBURI_SYNC_W_SECRET,
+    # aiosqlite doesn't support secrets
+    "_thread_persistence_dburi_async": TP_DBURI_ASYNC,
+}
+W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+thread_persistence_dburi:
+    sync: {TP_DBURI_SYNC_W_SECRET}
+    async: {TP_DBURI_ASYNC}
 """
 
 
@@ -2023,7 +2089,7 @@ def test_rrtc_from_yaml(
 
     if exp_config is None:
         with pytest.raises(config.FromYamlException) as exc:
-            config.SearchDocumentsToolConfig.from_yaml(
+            config.RAGResearchToolConfig.from_yaml(
                 installation_config=installation_config,
                 config_path=config_path,
                 config=config_dict,
@@ -2043,6 +2109,87 @@ def test_rrtc_from_yaml(
             **exp_config,
         )
         assert rrt_config == expected
+
+
+def test_awrctc_ctor(installation_config, temp_dir):
+    db_rag_path = temp_dir / "db" / "rag"
+    db_rag_path.mkdir(parents=True)
+
+    from_stem = db_rag_path / "stem.lancedb"
+    from_stem.mkdir()
+
+    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_path)}
+    installation_config.get_environment = ic_environ.get
+
+    kw = {
+        "_installation_config": installation_config,
+        "_config_path": temp_dir / "rooms" / "test" / "room_config.yaml",
+        "rag_lancedb_stem": "stem",
+    }
+
+    awrct_config = config.AskWithRichCitationsToolConfig(**kw)
+
+    found = awrct_config.rag_lancedb_path
+    assert found.resolve() == from_stem.resolve()
+
+    expected_ep = {
+        "rag_lancedb_path": from_stem.resolve(),
+    }
+
+    assert awrct_config.get_extra_parameters() == expected_ep
+
+
+@pytest.mark.parametrize(
+    "config_yaml, exp_config",
+    [
+        (BOGUS_AWRCTC_CONFIG_YAML, None),
+        (W_STEM_AWRCTC_CONFIG_YAML, W_STEM_AWRCTC_CONFIG_KW),
+        (W_OVERRIDE_AWRCTC_CONFIG_YAML, W_OVERRIDE_AWRCTC_CONFIG_KW),
+    ],
+)
+def test_awrctc_from_yaml(
+    installation_config,
+    temp_dir,
+    config_yaml,
+    exp_config,
+):
+    db_rag_dir = temp_dir / "db" / "rag"
+    db_rag_dir.mkdir(parents=True)
+
+    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_dir)}
+    installation_config.get_environment = ic_environ.get
+
+    config_dir = temp_dir / "rooms" / "test_room"
+    config_dir.mkdir(parents=True)
+
+    config_path = config_dir / "room_config.yaml"
+    config_path.write_text(config_yaml)
+
+    with config_path.open() as stream:
+        config_dict = yaml.safe_load(stream)
+
+    if exp_config is None:
+        with pytest.raises(config.FromYamlException) as exc:
+            config.AskWithRichCitationsToolConfig.from_yaml(
+                installation_config=installation_config,
+                config_path=config_path,
+                config=config_dict,
+            )
+
+        assert exc.value._config_path == config_path
+
+    else:
+        awrct_config = config.AskWithRichCitationsToolConfig.from_yaml(
+            installation_config=installation_config,
+            config_path=config_path,
+            config=config_dict,
+        )
+        expected = config.AskWithRichCitationsToolConfig(
+            _installation_config=installation_config,
+            _config_path=config_path,
+            **exp_config,
+        )
+        assert awrct_config == expected
 
 
 @pytest.mark.parametrize(
@@ -2208,7 +2355,7 @@ def test_http_mctc_tool_kwargs(
     w_headers,
 ):
     installation_config.get_secret.return_value = "<secret>"
-    installation_config.interpolate_secret.return_value = "<interp>"
+    installation_config.interpolate_secrets.return_value = "<interp>"
 
     http_mctc = config.HTTP_MCP_ClientToolsetConfig(
         url=HTTP_MCP_URL,
@@ -2248,10 +2395,10 @@ def test_http_mctc_tool_kwargs(
         strict=True,
     ):
         assert f_key == cfg_key
-        assert f_val is installation_config.interpolate_secret.return_value
+        assert f_val is installation_config.interpolate_secrets.return_value
         assert (
             mock.call(cfg_value)
-            in installation_config.interpolate_secret.call_args_list
+            in installation_config.interpolate_secrets.call_args_list
         )
 
 
@@ -3994,15 +4141,26 @@ def test_installationconfig_get_secret(gs, secret_map, expectation):
 
 
 @pytest.mark.parametrize(
-    "value, secret_map, expectation, exp_value",
+    "value, secret_map, expectation, exp_value, exp_gs_configs",
     [
-        ("No secret here", {}, NoRaise, "No secret here"),
-        (f"Foo secret:{SECRET_NAME_1}", {}, RaiseUnknownSecret, None),
+        ("No secret here", {}, NoRaise, "No secret here", ()),
+        (f"Foo secret:{SECRET_NAME_1}", {}, RaiseUnknownSecret, None, ()),
         (
             f"Foo secret:{SECRET_NAME_1}",
             {SECRET_NAME_1: SECRET_CONFIG_1},
             NoRaise,
-            "Foo <secret>",
+            "Foo <secret1>",
+            [SECRET_CONFIG_1],
+        ),
+        (
+            f"PRE|secret:{SECRET_NAME_1}|INTER|secret:{SECRET_NAME_2}|POST",
+            {
+                SECRET_NAME_1: SECRET_CONFIG_1,
+                SECRET_NAME_2: SECRET_CONFIG_2,
+            },
+            NoRaise,
+            "PRE|<secret1>|INTER|<secret2>|POST",
+            [SECRET_CONFIG_1, SECRET_CONFIG_2],
         ),
     ],
 )
@@ -4013,8 +4171,9 @@ def test_installationconfig_interpolate_secret(
     secret_map,
     expectation,
     exp_value,
+    exp_gs_configs,
 ):
-    gs.return_value = "<secret>"
+    gs.side_effect = ["<secret1>", "<secret2>"]
 
     i_config = config.InstallationConfig(
         id="test-ic",
@@ -4022,14 +4181,19 @@ def test_installationconfig_interpolate_secret(
     )
 
     with expectation:
-        found = i_config.interpolate_secret(value)
+        found = i_config.interpolate_secrets(value)
 
     if exp_value is not None:
         assert found == exp_value
         if exp_value == value:
             gs.assert_not_called()
         else:
-            gs.assert_called_once_with(SECRET_CONFIG_1)
+            for f_call, gs_config in zip(
+                gs.call_args_list,
+                exp_gs_configs,
+                strict=True,
+            ):
+                assert f_call == mock.call(gs_config)
     else:
         gs.assert_not_called()
 
@@ -4212,6 +4376,49 @@ def test_installationconfig_agent_configs_map_w_existing():
 
 
 @pytest.mark.parametrize(
+    "w_kw, expected",
+    [
+        (
+            BARE_INSTALLATION_CONFIG_KW.copy(),
+            config.SYNC_MEMORY_ENGINE_URL,
+        ),
+        (W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(), TP_DBURI_SYNC),
+        (
+            (
+                W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_KW
+                | {"secrets": [DB_SECRET_CONFIG]}
+            ),
+            TP_DBURI_SYNC_W_SECRET_RESOLVED,
+        ),
+    ],
+)
+def test_installationconfig_thread_persistence_dburi_sync(w_kw, expected):
+    installation_config = config.InstallationConfig(**w_kw)
+
+    found = installation_config.thread_persistence_dburi_sync
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "w_kw, expected",
+    [
+        (
+            BARE_INSTALLATION_CONFIG_KW.copy(),
+            config.ASYNC_MEMORY_ENGINE_URL,
+        ),
+        (W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(), TP_DBURI_ASYNC),
+    ],
+)
+def test_installationconfig_thread_persistence_dburi_async(w_kw, expected):
+    installation_config = config.InstallationConfig(**w_kw)
+
+    found = installation_config.thread_persistence_dburi_async
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
     "config_yaml, expected_kw",
     [
         (
@@ -4281,6 +4488,10 @@ def test_installationconfig_agent_configs_map_w_existing():
         (
             W_AGENT_CONFIG_INSTALLATION_CONFIG_YAML,
             W_AGENT_CONFIG_INSTALLATION_CONFIG_KW.copy(),
+        ),
+        (
+            W_TP_DBURI_INSTALLATION_CONFIG_YAML,
+            W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(),
         ),
     ],
 )

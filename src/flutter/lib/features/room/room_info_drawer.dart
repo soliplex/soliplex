@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:soliplex/core/models/room_models.dart';
+import 'package:soliplex/core/services/local_tools_service.dart';
 import 'package:soliplex/features/room/capability_badges.dart';
 import 'package:soliplex/features/room/mcp_config_section.dart';
 import 'package:soliplex/features/room/system_prompt_viewer.dart';
 import 'package:soliplex/features/room/tools_list.dart';
+import 'package:soliplex/features/room/widgets/background_image_section.dart';
 import 'package:soliplex/features/room/widgets/document_list_dialog.dart';
 
 /// A drawer showing detailed room information.
@@ -63,6 +65,19 @@ class _RoomInfoContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+
+    // Get client-side tools
+    final localTools = ref.watch(localToolsServiceProvider).tools;
+    final clientToolsMap = <String, RoomTool>{
+      for (final tool in localTools)
+        tool.name: RoomTool(
+          id: tool.name,
+          kind: tool.name,
+          toolName: tool.name,
+          description: tool.description,
+          extraParameters: tool.parameters,
+        ),
+    };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -161,7 +176,14 @@ class _RoomInfoContent extends ConsumerWidget {
               // Capability badges
               const _SectionHeader(title: 'Capabilities'),
               const SizedBox(height: 8),
-              CapabilityBadges(room: room),
+              CapabilityBadges(
+                room: room,
+                clientToolCount: clientToolsMap.length,
+              ),
+              const SizedBox(height: 20),
+
+              // Background Image
+              BackgroundImageSection(room: room),
               const SizedBox(height: 20),
 
               // Model info
@@ -191,9 +213,23 @@ class _RoomInfoContent extends ConsumerWidget {
                 const SizedBox(height: 20),
               ],
 
-              // Tools list
+              // Room Tools list
               if (room.tools.isNotEmpty) ...[
-                ToolsList(tools: room.tools),
+                ToolsList(
+                  tools: room.tools,
+                  title: 'Room Tools',
+                  icon: Icons.cloud_outlined,
+                ),
+                const SizedBox(height: 20),
+              ],
+
+              // Client Tools list
+              if (clientToolsMap.isNotEmpty) ...[
+                ToolsList(
+                  tools: clientToolsMap,
+                  title: 'Client Tools',
+                  icon: Icons.devices,
+                ),
                 const SizedBox(height: 20),
               ],
 

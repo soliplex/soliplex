@@ -165,9 +165,61 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
                       leading: const Icon(Icons.chat_bubble),
                       title: const Text('Current Session'),
                       subtitle: Text('${messages.length} messages'),
-                      trailing: currentThreadId != null
-                          ? const Icon(Icons.cloud_done, size: 16)
-                          : const Icon(Icons.cloud_off, size: 16),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (currentThreadId != null)
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 20),
+                              tooltip: 'Delete current thread',
+                              onPressed: () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('Delete Thread'),
+                                    content: const Text(
+                                      'Delete this thread? '
+                                      '\nThis action cannot be undone.',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(
+                                          context,
+                                          false,
+                                        ),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(
+                                          context,
+                                          true,
+                                        ),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: Theme.of(
+                                            context,
+                                          ).colorScheme.error,
+                                        ),
+                                        child: const Text('Delete'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+
+                                if (confirm ?? false) {
+                                  await ref
+                                      .read(
+                                        threadHistoryProvider(params).notifier,
+                                      )
+                                      .deleteThread(currentThreadId);
+                                }
+                              },
+                            ),
+                          if (currentThreadId != null)
+                            const Icon(Icons.cloud_done, size: 16)
+                          else
+                            const Icon(Icons.cloud_off, size: 16),
+                        ],
+                      ),
                       onTap: currentThreadId != null
                           ? () {
                               // Select this thread
@@ -311,6 +363,43 @@ class _ThreadHistoryPaneState extends ConsumerState<_ThreadHistoryPane> {
                         ).colorScheme.onPrimaryContainer.withValues(alpha: 0.7)
                       : null,
                 ),
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete_outline, size: 20),
+                tooltip: 'Delete thread',
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Delete Thread'),
+                      content: const Text(
+                        'Delete this thread? '
+                        '\nThis action cannot be undone.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Theme.of(
+                              context,
+                            ).colorScheme.error,
+                          ),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirm ?? false) {
+                    await ref
+                        .read(threadHistoryProvider(params).notifier)
+                        .deleteThread(thread.threadId);
+                  }
+                },
               ),
               onTap: () async {
                 // Select thread in history

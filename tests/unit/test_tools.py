@@ -7,6 +7,7 @@ from haiku.rag.graph import agui as rag_agui
 from soliplex import agents
 from soliplex import config
 from soliplex import installation
+from soliplex import models
 from soliplex import tools
 
 USER = {
@@ -234,3 +235,115 @@ async def test_agui_state(the_installation, w_state):
     found = await tools.agui_state(ctx=ctx)
 
     assert found == expected
+
+
+@pytest.mark.anyio
+async def test_ask_with_rich_citations_wo_tool_config(the_installation):
+    agui_emitter = mock.create_autospec(rag_agui.AGUIEmitter)
+    deps = agents.AgentDependencies(
+        the_installation=the_installation,
+        user=USER,
+        tool_configs={},
+        agui_emitter=agui_emitter,
+    )
+    ctx = mock.Mock(spec_set=(["deps"]), deps=deps)
+    with pytest.raises(tools.NoToolConfig):
+        await tools.ask_with_rich_citations(
+            ctx=ctx,
+            question=QUESTION,
+        )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("w_history", [False, True])
+@pytest.mark.parametrize("w_filter", [False, True])
+@mock.patch("soliplex.tools.rag_client")
+async def test_ask_with_rich_citations(
+    rag_client,
+    the_installation,
+    w_filter,
+    w_history,
+):
+    QUESTION = "Which way is up?"
+    ANSWER = "The other way from down"
+
+    hr_class = rag_client.HaikuRAG = mock.MagicMock()
+    hr = hr_class.return_value
+    client = hr.__aenter__.return_value
+    ask = client.ask
+    ask.return_value = ANSWER, []
+
+    state = {}
+
+    if w_filter:
+        state["filter_documents"] = {
+            "document_ids": [
+                "DOCID1",
+                "DOCID2",
+            ],
+        }
+        exp_filter = "id IN ('DOCID1', 'DOCID2')"
+    else:
+        exp_filter = None
+
+    if w_history:
+        state["ask_history"] = {
+            "questions": [
+                {
+                    "question": "Why is the sky blue?",
+                    "response": "Because it isn't orange",
+                    "citations": [],
+                }
+            ],
+        }
+
+    exp_initial_state = tools.AWRC_AGUI_State.model_validate(state)
+
+    emitter = mock.Mock(spec_set=["update_state"])
+    awrctc = mock.create_autospec(
+        config.AskWithRichCitationsToolConfig,
+    )
+
+    deps = agents.AgentDependencies(
+        the_installation=the_installation,
+        user=USER,
+        tool_configs={"ask_with_rich_citations": awrctc},
+        agui_emitter=emitter,
+        state=state,
+    )
+
+    ctx = mock.Mock(spec_set=(["deps"]), deps=deps)
+
+    found = await tools.ask_with_rich_citations(
+        ctx=ctx,
+        question=QUESTION,
+    )
+
+    assert found is ANSWER
+
+    ask.assert_called_once_with(QUESTION, filter=exp_filter)
+
+    us_1, us_2 = emitter.update_state.call_args_list
+
+    (us_1_state,) = us_1.args
+    assert us_1_state == exp_initial_state
+    assert us_1.kwargs == {}
+
+    if w_history:
+        exp_final_history = exp_initial_state.ask_history.model_copy(deep=True)
+    else:
+        exp_final_history = models.AskedAndAnswered()
+
+    exp_final_history.questions.append(
+        models.QuestionResponseCitations(
+            question=QUESTION,
+            response=ANSWER,
+            citations=[],
+        )
+    )
+    exp_final_state = exp_initial_state.model_copy(
+        update={"ask_history": exp_final_history},
+    )
+    (us_2_state,) = us_2.args
+    assert us_2 == mock.call(exp_final_state)
+    assert us_2.kwargs == {}
