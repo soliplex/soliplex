@@ -78,14 +78,19 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
 
   /// Starts a new run with the given message.
   ///
-  /// Creates an AG-UI stream via [AgUiClient] and processes events
-  /// to update the state.
+  /// Two-step process:
+  /// 1. Creates run via API to get backend-generated run_id (or uses provided)
+  /// 2. Streams AG-UI events using that run_id
+  ///
+  /// If [existingRunId] is provided, uses that run instead of creating new.
+  /// Useful when a thread was just created with an initial run.
   ///
   /// Throws [StateError] if a run is already active. Call [cancelRun] first.
   Future<void> startRun({
     required String roomId,
     required String threadId,
     required String userMessage,
+    String? existingRunId,
     Map<String, dynamic>? initialState,
   }) async {
     if (state.isRunning) {
@@ -103,19 +108,35 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
     // Create new resources
     final cancelToken = CancelToken();
 
-    // Generate run ID
-    final runId = 'run_${DateTime.now().millisecondsSinceEpoch}';
+    // Step 1: Get run_id (use existing or create new)
+    final String runId;
+    if (existingRunId != null) {
+      runId = existingRunId;
+    } else {
+      final api = ref.read(apiProvider);
+      final runInfo = await api.createRun(roomId, threadId);
+      runId = runInfo.id;
+    }
 
-    // Set running state
+    // Create user message
+    final userMessageObj = TextMessage.create(
+      id: 'user_${DateTime.now().millisecondsSinceEpoch}',
+      user: ChatUser.user,
+      text: userMessage,
+    );
+
+    // Set running state with user message
     state = RunningState(
       threadId: threadId,
       runId: runId,
-      context: state.context,
+      context: state.context.copyWith(
+        messages: [...state.context.messages, userMessageObj],
+      ),
     );
 
     try {
-      // Build the endpoint URL for the room
-      final endpoint = 'rooms/$roomId/agui/$threadId';
+      // Step 2: Build the streaming endpoint URL with backend run_id
+      final endpoint = 'rooms/$roomId/agui/$threadId/$runId';
 
       // Create the input for the run
       final input = SimpleRunAgentInput(
@@ -123,7 +144,7 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
         runId: runId,
         messages: [
           UserMessage(
-            id: 'user_${DateTime.now().millisecondsSinceEpoch}',
+            id: userMessageObj.id,
             content: userMessage,
           ),
         ],

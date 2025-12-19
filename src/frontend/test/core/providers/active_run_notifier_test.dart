@@ -13,6 +13,7 @@ import '../../helpers/test_helpers.dart';
 
 void main() {
   late MockAgUiClient mockAgUiClient;
+  late MockSoliplexApi mockApi;
 
   setUpAll(() {
     registerFallbackValue(
@@ -23,6 +24,7 @@ void main() {
 
   setUp(() {
     mockAgUiClient = MockAgUiClient();
+    mockApi = MockSoliplexApi();
   });
 
   group('ActiveRunNotifier', () {
@@ -183,5 +185,97 @@ void main() {
       controller.close();
       state.dispose();
     });
+  });
+
+  group('startRun', () {
+    late ProviderContainer container;
+    late StreamController<BaseEvent> eventStreamController;
+
+    setUp(() {
+      eventStreamController = StreamController<BaseEvent>();
+
+      // Mock createRun to return a run with backend-generated ID
+      when(
+        () => mockApi.createRun(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).thenAnswer(
+        (_) async => const RunInfo(
+          id: 'backend-run-id-123',
+          threadId: 'thread-1',
+        ),
+      );
+
+      // Mock runAgent to return our controlled stream
+      when(
+        () => mockAgUiClient.runAgent(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).thenAnswer((_) => eventStreamController.stream);
+
+      container = ProviderContainer(
+        overrides: [
+          apiProvider.overrideWithValue(mockApi),
+          agUiClientProvider.overrideWithValue(mockAgUiClient),
+        ],
+      );
+    });
+
+    tearDown(() {
+      eventStreamController.close();
+      container.dispose();
+    });
+
+    test('displays user message immediately when starting run', () async {
+      const userMessage = 'Hello, world!';
+      const roomId = 'room-1';
+      const threadId = 'thread-1';
+
+      // Start the run
+      await container.read(activeRunNotifierProvider.notifier).startRun(
+            roomId: roomId,
+            threadId: threadId,
+            userMessage: userMessage,
+          );
+
+      // Get the current state
+      final state = container.read(activeRunNotifierProvider);
+
+      // Verify state is running
+      expect(state, isA<RunningState>());
+      expect(state.isRunning, isTrue);
+
+      // Verify user message is in the messages list
+      expect(state.messages.length, 1);
+      final message = state.messages.first;
+      expect(message, isA<TextMessage>());
+      expect(message.user, ChatUser.user);
+      expect((message as TextMessage).text, userMessage);
+    });
+
+    test(
+      'transitions to RunningState with correct thread and run IDs',
+      () async {
+        const roomId = 'room-1';
+        const threadId = 'thread-1';
+
+        await container.read(activeRunNotifierProvider.notifier).startRun(
+              roomId: roomId,
+              threadId: threadId,
+              userMessage: 'Test',
+            );
+
+        final state = container.read(activeRunNotifierProvider);
+
+        expect(state, isA<RunningState>());
+        final runningState = state as RunningState;
+        expect(runningState.threadId, threadId);
+        expect(runningState.runId, 'backend-run-id-123');
+      },
+    );
   });
 }

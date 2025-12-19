@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
@@ -391,15 +392,97 @@ void main() {
           ),
         );
 
+        // Focus the text field
+        await tester.tap(find.byType(TextField));
+        await tester.pump();
+
         await tester.enterText(find.byType(TextField), 'Test message');
         await tester.pump();
 
-        // Submit the text field (simulates Enter key)
-        await tester.testTextInput.receiveAction(TextInputAction.done);
+        // Send Enter key event
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
         await tester.pump();
 
         // Assert
         expect(sentText, 'Test message');
+      });
+    });
+
+    group('Keyboard Shortcuts', () {
+      testWidgets('Shift+Enter adds newline without sending', (tester) async {
+        // Arrange
+        final mockRoom = TestData.createRoom();
+        final mockThread = TestData.createThread();
+        var sendCalled = false;
+
+        // Act
+        await tester.pumpWidget(
+          createTestApp(
+            home: Scaffold(
+              body: ChatInput(
+                onSend: (_) => sendCalled = true,
+              ),
+            ),
+            overrides: [
+              currentRoomProvider.overrideWith((ref) => mockRoom),
+              currentThreadProvider.overrideWith((ref) => mockThread),
+              activeRunNotifierOverride(const IdleState()),
+            ],
+          ),
+        );
+
+        // Focus the text field
+        await tester.tap(find.byType(TextField));
+        await tester.pump();
+
+        // Type some text
+        await tester.enterText(find.byType(TextField), 'Line 1');
+        await tester.pump();
+
+        // Simulate Shift+Enter
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+        await tester.pump();
+
+        // Assert - message should not be sent
+        expect(sendCalled, isFalse);
+      });
+
+      testWidgets('Escape clears focus from input', (tester) async {
+        // Arrange
+        final mockRoom = TestData.createRoom();
+        final mockThread = TestData.createThread();
+
+        // Act
+        await tester.pumpWidget(
+          createTestApp(
+            home: Scaffold(
+              body: ChatInput(
+                onSend: (_) {},
+              ),
+            ),
+            overrides: [
+              currentRoomProvider.overrideWith((ref) => mockRoom),
+              currentThreadProvider.overrideWith((ref) => mockThread),
+              activeRunNotifierOverride(const IdleState()),
+            ],
+          ),
+        );
+
+        // Focus the text field
+        await tester.tap(find.byType(TextField));
+        await tester.pump();
+
+        final textField = tester.widget<TextField>(find.byType(TextField));
+        expect(textField.focusNode?.hasFocus, isTrue);
+
+        // Simulate Escape key
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pump();
+
+        // Assert - focus should be cleared
+        expect(textField.focusNode?.hasFocus, isFalse);
       });
     });
 

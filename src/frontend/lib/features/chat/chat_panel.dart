@@ -151,6 +151,7 @@ class ChatPanel extends ConsumerWidget {
             roomId: room.id,
             threadId: thread.id,
             userMessage: text,
+            existingRunId: thread.initialRunId,
           );
     } on NetworkException catch (e, stackTrace) {
       debugPrint('Failed to send message: Network error - ${e.message}');

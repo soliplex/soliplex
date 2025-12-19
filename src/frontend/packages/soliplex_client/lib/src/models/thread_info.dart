@@ -7,6 +7,7 @@ class ThreadInfo {
   const ThreadInfo({
     required this.id,
     required this.roomId,
+    this.initialRunId,
     this.name,
     this.description,
     this.createdAt,
@@ -36,6 +37,9 @@ class ThreadInfo {
 
   /// ID of the room this thread belongs to.
   final String roomId;
+
+  /// ID of the initial run created with the thread.
+  final String? initialRunId;
 
   /// Optional name of the thread.
   final String? name;
@@ -69,6 +73,7 @@ class ThreadInfo {
   ThreadInfo copyWith({
     String? id,
     String? roomId,
+    String? initialRunId,
     String? name,
     String? description,
     DateTime? createdAt,
@@ -78,6 +83,7 @@ class ThreadInfo {
     return ThreadInfo(
       id: id ?? this.id,
       roomId: roomId ?? this.roomId,
+      initialRunId: initialRunId ?? this.initialRunId,
       name: name ?? this.name,
       description: description ?? this.description,
       createdAt: createdAt ?? this.createdAt,
