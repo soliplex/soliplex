@@ -167,11 +167,7 @@ final currentThreadProvider = Provider<ThreadInfo?>((ref) {
   final threadsAsync = ref.watch(threadsProvider(roomId));
   return threadsAsync.whenOrNull(
     data: (threads) {
-      try {
-        return threads.firstWhere((thread) => thread.id == threadId);
-      } catch (_) {
-        return null;
-      }
+      return threads.where((thread) => thread.id == threadId).firstOrNull;
     },
   );
 });

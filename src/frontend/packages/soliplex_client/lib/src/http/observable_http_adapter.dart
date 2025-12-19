@@ -225,8 +225,14 @@ class ObservableHttpAdapter implements HttpClientAdapter {
     for (final observer in _observers) {
       try {
         notify(observer);
-      } catch (_) {
-        // Ignore observer exceptions - they should not break requests
+      } catch (e, stackTrace) {
+        // Observer threw exception - log but don't break request flow
+        // ignore: avoid_print
+        print(
+          'Warning: HttpObserver ${observer.runtimeType} threw exception: $e',
+        );
+        // ignore: avoid_print
+        print(stackTrace);
       }
     }
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
@@ -114,7 +115,27 @@ class ChatPanel extends ConsumerWidget {
 
         // Refresh threads list
         ref.invalidate(threadsProvider(room.id));
-      } catch (e) {
+      } on NetworkException catch (e, stackTrace) {
+        debugPrint('Failed to create thread: Network error - ${e.message}');
+        debugPrint(stackTrace.toString());
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Network error: ${e.message}')),
+          );
+        }
+        return;
+      } on AuthException catch (e, stackTrace) {
+        debugPrint('Failed to create thread: Auth error - ${e.message}');
+        debugPrint(stackTrace.toString());
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Authentication error: ${e.message}')),
+          );
+        }
+        return;
+      } catch (e, stackTrace) {
+        debugPrint('Failed to create thread: $e');
+        debugPrint(stackTrace.toString());
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Failed to create thread: $e')),
@@ -131,7 +152,25 @@ class ChatPanel extends ConsumerWidget {
             threadId: thread.id,
             userMessage: text,
           );
-    } catch (e) {
+    } on NetworkException catch (e, stackTrace) {
+      debugPrint('Failed to send message: Network error - ${e.message}');
+      debugPrint(stackTrace.toString());
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Network error: ${e.message}')),
+        );
+      }
+    } on AuthException catch (e, stackTrace) {
+      debugPrint('Failed to send message: Auth error - ${e.message}');
+      debugPrint(stackTrace.toString());
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Authentication error: ${e.message}')),
+        );
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Failed to send message: $e');
+      debugPrint(stackTrace.toString());
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to send message: $e')),
