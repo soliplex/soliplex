@@ -198,10 +198,18 @@ class SoliplexApi {
       cancelToken: cancelToken,
     );
 
+    // Extract initial run_id from runs map
+    String? initialRunId;
+    final runs = response['runs'] as Map<String, dynamic>?;
+    if (runs != null && runs.isNotEmpty) {
+      initialRunId = runs.keys.first;
+    }
+
     // Normalize response: backend returns thread_id, we use id
     return ThreadInfo(
       id: response['thread_id'] as String,
       roomId: roomId,
+      initialRunId: initialRunId,
     );
   }
 

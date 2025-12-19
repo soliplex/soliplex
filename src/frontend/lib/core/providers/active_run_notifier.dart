@@ -79,14 +79,18 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
   /// Starts a new run with the given message.
   ///
   /// Two-step process:
-  /// 1. Creates run via API to get backend-generated run_id
+  /// 1. Creates run via API to get backend-generated run_id (or uses provided)
   /// 2. Streams AG-UI events using that run_id
+  ///
+  /// If [existingRunId] is provided, uses that run instead of creating new.
+  /// Useful when a thread was just created with an initial run.
   ///
   /// Throws [StateError] if a run is already active. Call [cancelRun] first.
   Future<void> startRun({
     required String roomId,
     required String threadId,
     required String userMessage,
+    String? existingRunId,
     Map<String, dynamic>? initialState,
   }) async {
     if (state.isRunning) {
@@ -104,10 +108,15 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
     // Create new resources
     final cancelToken = CancelToken();
 
-    // Step 1: Create run to get backend-generated run_id
-    final api = ref.read(apiProvider);
-    final runInfo = await api.createRun(roomId, threadId);
-    final runId = runInfo.id;
+    // Step 1: Get run_id (use existing or create new)
+    final String runId;
+    if (existingRunId != null) {
+      runId = existingRunId;
+    } else {
+      final api = ref.read(apiProvider);
+      final runInfo = await api.createRun(roomId, threadId);
+      runId = runInfo.id;
+    }
 
     // Create user message
     final userMessageObj = TextMessage.create(
