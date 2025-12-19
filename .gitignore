@@ -25,3 +25,6 @@ tmp/
 # osx
 .DS_Store
 ._*
+
+# Generated documentation
+docs/reference/client_api/
