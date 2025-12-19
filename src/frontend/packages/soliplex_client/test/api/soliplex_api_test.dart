@@ -1,5 +1,8 @@
 import 'package:mocktail/mocktail.dart';
-import 'package:soliplex_client/soliplex_client.dart';
+// SoliplexApi uses our local CancelToken, not ag_ui's.
+// Hide ag_ui's CancelToken to avoid ambiguity.
+import 'package:soliplex_client/soliplex_client.dart' hide CancelToken;
+import 'package:soliplex_client/src/utils/cancel_token.dart';
 import 'package:test/test.dart';
 
 class MockHttpTransport extends Mock implements HttpTransport {}

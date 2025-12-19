@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_notifier.dart';
@@ -11,14 +12,26 @@ import 'package:soliplex_frontend/core/providers/api_provider.dart';
 import '../../helpers/test_helpers.dart';
 
 void main() {
+  late MockAgUiClient mockAgUiClient;
+
+  setUpAll(() {
+    registerFallbackValue(
+      const SimpleRunAgentInput(messages: []),
+    );
+    registerFallbackValue(CancelToken());
+  });
+
+  setUp(() {
+    mockAgUiClient = MockAgUiClient();
+  });
+
   group('ActiveRunNotifier', () {
     late ProviderContainer container;
 
     setUp(() {
       container = ProviderContainer(
         overrides: [
-          httpTransportProvider.overrideWithValue(FakeHttpTransport()),
-          urlBuilderProvider.overrideWithValue(FakeUrlBuilder()),
+          agUiClientProvider.overrideWithValue(mockAgUiClient),
         ],
       );
     });
@@ -155,25 +168,15 @@ void main() {
     });
 
     test('RunningInternalState holds resources', () {
-      final transport = FakeHttpTransport();
-      final urlBuilder = FakeUrlBuilder();
-      final thread = Thread(
-        transport: transport,
-        urlBuilder: urlBuilder,
-        roomId: 'room-1',
-        threadId: 'thread-1',
-      );
       final cancelToken = CancelToken();
-      final controller = StreamController<AgUiEvent>();
+      final controller = StreamController<BaseEvent>();
 
       final state = RunningInternalState(
-        thread: thread,
         cancelToken: cancelToken,
         subscription: controller.stream.listen((_) {}),
       );
 
       expect(state, isA<NotifierInternalState>());
-      expect(state.thread, equals(thread));
       expect(state.cancelToken, equals(cancelToken));
 
       // Cleanup

@@ -8,7 +8,7 @@ import 'package:soliplex_frontend/core/providers/api_provider.dart';
 
 /// Internal state representing the notifier's resource management.
 ///
-/// This sealed class ensures proper lifecycle management of the Thread,
+/// This sealed class ensures proper lifecycle management of the AgUiClient,
 /// CancelToken, and StreamSubscription without nullable fields.
 sealed class NotifierInternalState {
   const NotifierInternalState();
@@ -25,19 +25,15 @@ class IdleInternalState extends NotifierInternalState {
 /// Not marked as @immutable because it holds mutable StreamSubscription.
 class RunningInternalState extends NotifierInternalState {
   RunningInternalState({
-    required this.thread,
     required this.cancelToken,
     required this.subscription,
   });
-
-  /// The Thread handling SSE streaming.
-  final Thread thread;
 
   /// Token for cancelling the run.
   final CancelToken cancelToken;
 
   /// Subscription to the event stream.
-  final StreamSubscription<AgUiEvent> subscription;
+  final StreamSubscription<BaseEvent> subscription;
 
   /// Disposes of all resources.
   Future<void> dispose() async {
@@ -49,7 +45,7 @@ class RunningInternalState extends NotifierInternalState {
 /// Manages the lifecycle of an active AG-UI run.
 ///
 /// This notifier:
-/// - Creates [Thread] instances for SSE streaming
+/// - Uses [AgUiClient] for SSE streaming
 /// - Processes AG-UI events from the backend
 /// - Updates state as messages stream in
 /// - Handles cancellation and errors
@@ -64,14 +60,12 @@ class RunningInternalState extends NotifierInternalState {
 /// );
 /// ```
 class ActiveRunNotifier extends Notifier<ActiveRunState> {
-  late final HttpTransport _transport;
-  late final UrlBuilder _urlBuilder;
+  late final AgUiClient _agUiClient;
   NotifierInternalState _internalState = const IdleInternalState();
 
   @override
   ActiveRunState build() {
-    _transport = ref.watch(httpTransportProvider);
-    _urlBuilder = ref.watch(urlBuilderProvider);
+    _agUiClient = ref.watch(agUiClientProvider);
 
     ref.onDispose(() {
       if (_internalState is RunningInternalState) {
@@ -84,7 +78,7 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
 
   /// Starts a new run with the given message.
   ///
-  /// Creates a [Thread], starts SSE streaming, and processes events
+  /// Creates an AG-UI stream via [AgUiClient] and processes events
   /// to update the state.
   ///
   /// Throws [StateError] if a run is already active. Call [cancelRun] first.
@@ -108,12 +102,6 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
 
     // Create new resources
     final cancelToken = CancelToken();
-    final thread = Thread(
-      transport: _transport,
-      urlBuilder: _urlBuilder,
-      roomId: roomId,
-      threadId: threadId,
-    );
 
     // Generate run ID
     final runId = 'run_${DateTime.now().millisecondsSinceEpoch}';
@@ -126,11 +114,26 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
     );
 
     try {
-      // Start streaming
-      final eventStream = thread.run(
+      // Build the endpoint URL for the room
+      final endpoint = 'rooms/$roomId/agui/$threadId';
+
+      // Create the input for the run
+      final input = SimpleRunAgentInput(
+        threadId: threadId,
         runId: runId,
-        userMessage: userMessage,
-        initialState: initialState,
+        messages: [
+          UserMessage(
+            id: 'user_${DateTime.now().millisecondsSinceEpoch}',
+            content: userMessage,
+          ),
+        ],
+        state: initialState,
+      );
+
+      // Start streaming
+      final eventStream = _agUiClient.runAgent(
+        endpoint,
+        input,
         cancelToken: cancelToken,
       );
 
@@ -167,11 +170,10 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
 
       // Store running state
       _internalState = RunningInternalState(
-        thread: thread,
         cancelToken: cancelToken,
         subscription: subscription,
       );
-    } on CancelledException {
+    } on CancellationError {
       // User cancelled - already handled in cancelRun
       state = CompletedState(
         threadId: threadId,
@@ -223,7 +225,7 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
   }
 
   /// Processes a single AG-UI event and updates state accordingly.
-  void _processEvent(AgUiEvent event) {
+  void _processEvent(BaseEvent event) {
     final currentState = state;
     if (currentState is! RunningState) return;
 
@@ -313,7 +315,7 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
         // State snapshot received
         state = currentState.copyWith(
           context: updatedContext.copyWith(
-            state: Map<String, dynamic>.from(snapshot),
+            state: Map<String, dynamic>.from(snapshot as Map),
           ),
         );
 
@@ -323,10 +325,17 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
       case ToolCallArgsEvent():
       case ToolCallResultEvent():
       case ActivitySnapshotEvent():
-      case ActivityDeltaEvent():
       case MessagesSnapshotEvent():
       case CustomEvent():
-      case UnknownEvent():
+      case RawEvent():
+      case TextMessageChunkEvent():
+      case ToolCallChunkEvent():
+      case ThinkingStartEvent():
+      case ThinkingContentEvent():
+      case ThinkingEndEvent():
+      case ThinkingTextMessageStartEvent():
+      case ThinkingTextMessageContentEvent():
+      case ThinkingTextMessageEndEvent():
         // Store event but don't process (AM3 doesn't need these)
         state = currentState.copyWith(context: updatedContext);
     }
