@@ -1740,11 +1740,28 @@ class InstallationConfigMeta:
 
     'tool_configs'
         a list consisting of strings (importable dotted names of tool
-        config classes) or `ConfigMeta' mappings.
+        config classes) or `ConfigMeta' mappings, defining the types
+        of tools which can be configured.
 
     'mcp_toolset_configs'
+        a list consisting of strings (importable dotted names of MCP client
+        toolset config classes) or `ConfigMeta' mappings, defining the types
+        of MCP client toolsets which can be configured.
+
+    'mcp_server_tool_wrappers"
         a list consisting of strings (importable dotted names of MCP
-        toolset config classes) or `ConfigMeta' mappings.
+        server tool wrapper classes) or `ConfigMeta' mappings, defining
+        the types of MCP server tool wrappers which can be configured.
+
+    'agent_configs'
+        a list consisting of strings (importable dotted names of agent
+        config classes) or `ConfigMeta' mappings, defining the
+        types of agents which can be configured.
+
+    'secret_sources'
+        a list consisting of  strings (importable dotted names of secret
+        source classes) or `ConfigMeta' mappings, defining the
+        tyeps of secret sources which can be configured.
 
     After loading, adds the configured classes to the registry mappings
     'TOOL_CONFIG_CLASSES_BY_TOOL_NAME' and
