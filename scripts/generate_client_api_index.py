@@ -18,13 +18,25 @@ def generate_index():
         f.write("# Client API Reference\n\n")
         f.write("## Libraries\n\n")
         for lib in libraries:
-            # Check if library has overview.md or similar
             lib_path = os.path.join(base_dir, lib)
-            if os.path.exists(os.path.join(lib_path, "overview.md")):
-                f.write(f"- [{lib}]({lib}/overview.md)\n")
-            else:
-                # If overview.md doesn't exist, link to the directory itself
-                f.write(f"- [{lib}]({lib}/)\n")
+            
+            # Find the first subdirectory (ClassName)
+            found_overview = False
+            for item in os.listdir(lib_path):
+                sub_path = os.path.join(lib_path, item)
+                if os.path.isdir(sub_path):
+                    overview_path = os.path.join(sub_path, "overview.md")
+                    if os.path.exists(overview_path):
+                        f.write(f"- [{lib}]({lib}/{item}/overview.md)\n")
+                        found_overview = True
+                        break
+            
+            if not found_overview:
+                # Fallback: check if overview.md exists at root (unlikely given discovery) or just list it
+                if os.path.exists(os.path.join(lib_path, "overview.md")):
+                     f.write(f"- [{lib}]({lib}/overview.md)\n")
+                else:
+                     f.write(f"- {lib} (No overview found)\n")
 
     print(f"Generated {index_file}")
 
