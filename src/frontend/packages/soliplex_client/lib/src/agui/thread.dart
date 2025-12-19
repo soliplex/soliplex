@@ -225,15 +225,26 @@ class Thread {
     _runState = ActiveRun(runId);
 
     try {
-      // Build the SSE endpoint URI
+      // Build the SSE endpoint URI (POST to thread, backend generates run_id)
       final uri = _urlBuilder.build(
-        pathSegments: ['rooms', roomId, 'agui', threadId, runId],
+        pathSegments: ['rooms', roomId, 'agui', threadId],
       );
 
-      // Prepare request body
+      // Prepare AG-UI RunAgentInput request body
       final body = <String, dynamic>{
-        'message': userMessage,
-        if (initialState != null) 'state': initialState,
+        'threadId': threadId,
+        'runId': runId,
+        'state': initialState ?? {},
+        'messages': [
+          {
+            'id': 'user-${DateTime.now().millisecondsSinceEpoch}',
+            'role': 'user',
+            'content': userMessage,
+          },
+        ],
+        'tools': <dynamic>[],
+        'context': <dynamic>[],
+        'forwardedProps': null,
       };
 
       // Start the SSE stream
