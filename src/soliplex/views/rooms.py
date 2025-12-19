@@ -206,7 +206,7 @@ async def get_chunk_visualization(
                         status_code=404, detail=f"Chunk not found: {chunk_id}"
                     ) from None
 
-                images = await rag.visualize_chunk(chunk_id)
+                images = await rag.visualize_chunk(chunk)
 
             break
 

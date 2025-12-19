@@ -491,7 +491,7 @@ async def test_get_chunk_visualization(
             images_base_64=PAGES_B64,
         )
 
-        hr_entered.visualize_chunk.assert_called_once_with(CHUNK_ID)
+        hr_entered.visualize_chunk.assert_called_once_with(chunk)
         chunk_repo.get_by_id.assert_called_once_with(CHUNK_ID)
         hr_klass.assert_called_once_with(
             db_path=db_path,
