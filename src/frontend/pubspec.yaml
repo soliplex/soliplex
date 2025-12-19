@@ -11,6 +11,9 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # UI components
+  flutter_markdown: ^0.7.4+1
+
   # State management - Manual providers (NO generator)
   flutter_riverpod: ^3.0.0
 

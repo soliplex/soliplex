@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/features/chat/widgets/chat_message_widget.dart';
@@ -184,6 +185,47 @@ void main() {
         // Assert
         expect(find.text('Typing...'), findsWidgets);
         expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      });
+
+      testWidgets('renders markdown for assistant messages', (tester) async {
+        // Arrange
+        final message = TestData.createMessage(
+          user: ChatUser.assistant,
+          text: '**bold** and *italic* text',
+        );
+
+        // Act
+        await tester.pumpWidget(
+          createTestApp(
+            home: Scaffold(
+              body: ChatMessageWidget(message: message),
+            ),
+          ),
+        );
+
+        // Assert - should use MarkdownBody for assistant messages
+        expect(find.byType(MarkdownBody), findsOneWidget);
+      });
+
+      testWidgets('does not render markdown for user messages',
+          (tester) async {
+        // Arrange
+        final message = TestData.createMessage(
+          text: '**bold** and *italic* text',
+        );
+
+        // Act
+        await tester.pumpWidget(
+          createTestApp(
+            home: Scaffold(
+              body: ChatMessageWidget(message: message),
+            ),
+          ),
+        );
+
+        // Assert - should use Text for user messages, not MarkdownBody
+        expect(find.byType(MarkdownBody), findsNothing);
+        expect(find.text('**bold** and *italic* text'), findsOneWidget);
       });
     });
 
