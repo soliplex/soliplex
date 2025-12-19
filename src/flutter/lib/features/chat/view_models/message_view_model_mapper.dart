@@ -29,6 +29,8 @@ class MessageViewModelMapper {
           thinkingText: message.thinkingText,
           isThinkingStreaming: message.isThinkingStreaming,
           isThinkingExpanded: message.isThinkingExpanded,
+          citations: message.citations,
+          isCitationsExpanded: message.isCitationsExpanded,
         );
       case MessageType.genUi:
         if (message.genUiContent == null) {

@@ -82,6 +82,18 @@ class CompletionsChatSession implements ChatSession {
   }
 
   @override
+  void toggleCitationsExpanded(String messageId) {
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    if (index >= 0) {
+      final msg = _messages[index];
+      _messages[index] = msg.copyWith(
+        isCitationsExpanded: !msg.isCitationsExpanded,
+      );
+      _notifyUpdate();
+    }
+  }
+
+  @override
   Future<void> sendMessage(String text, {Map<String, dynamic>? state}) async {
     // Update activity
     _lastActivity = DateTime.now();

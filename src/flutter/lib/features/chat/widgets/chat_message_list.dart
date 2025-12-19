@@ -16,20 +16,24 @@ import 'package:soliplex/features/chat/widgets/chat_typing_indicator.dart';
 class ChatMessageList extends StatefulWidget {
   const ChatMessageList({
     required this.messages,
+    required this.roomId,
     super.key,
     this.scrollController,
     this.maxBubbleWidth = double.infinity,
     this.onQuote,
     this.onToggleThinking,
+    this.onToggleCitations,
     this.onToggleToolGroup,
     this.onGenUiEvent,
     this.welcomeWidget,
   });
   final List<ChatMessage> messages; // Still takes domain messages
+  final String roomId;
   final ScrollController? scrollController;
   final double maxBubbleWidth;
   final void Function(String quotedText)? onQuote;
   final void Function(String messageId)? onToggleThinking;
+  final void Function(String messageId)? onToggleCitations;
   final void Function(String messageId)? onToggleToolGroup;
   final void Function(String eventName, Map<String, Object?> arguments)?
   onGenUiEvent;
@@ -178,6 +182,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
           padding: const EdgeInsets.only(bottom: 8),
           child: ChatMessageBubble(
             viewModel: viewModel, // Pass ViewModel
+            roomId: widget.roomId,
             previousViewModel: previousViewModel,
             nextViewModel: nextViewModel,
             maxWidth: widget.maxBubbleWidth,
@@ -186,6 +191,11 @@ class _ChatMessageListState extends State<ChatMessageList> {
                 widget.onToggleThinking != null &&
                     viewModel is TextMessageViewModel
                 ? () => widget.onToggleThinking!(viewModel.id)
+                : null,
+            onToggleCitations:
+                widget.onToggleCitations != null &&
+                    viewModel is TextMessageViewModel
+                ? () => widget.onToggleCitations!(viewModel.id)
                 : null,
             onToggleToolGroup:
                 widget.onToggleToolGroup != null &&

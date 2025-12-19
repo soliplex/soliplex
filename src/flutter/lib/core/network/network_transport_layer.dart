@@ -322,6 +322,13 @@ class NetworkTransportLayer {
               // ignore: lines_longer_than_80_chars (auto-documented)
               'NetworkTransportLayer: SSE event #$eventCount: ${event.runtimeType}',
             );
+            // DEBUG: Log raw StateSnapshotEvent data
+            if (event is ag_ui.StateSnapshotEvent) {
+              DebugLog.network(
+                'NetworkTransportLayer: StateSnapshot.snapshot = '
+                '${event.snapshot}',
+              );
+            }
             yield event;
           }
 

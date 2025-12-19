@@ -46,6 +46,10 @@ class UrlBuilder {
   Uri roomDocuments(String roomId) =>
       _apiUri([ApiConstants.rooms, roomId, ApiConstants.documents]);
 
+  /// GET /api/v1/rooms/{roomId}/chunk/{chunkId} - Get chunk visualization.
+  Uri roomChunk(String roomId, String chunkId) =>
+      _apiUri([ApiConstants.rooms, roomId, ApiConstants.chunk, chunkId]);
+
   // =========================================================================
   // AG-UI THREAD API
   // =========================================================================

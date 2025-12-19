@@ -18,6 +18,7 @@ class EventProcessingState {
     required this.textBuffers,
     required this.thinkingMessageIds,
     required this.thinkingBuffer,
+    required this.citationsBuffer,
   });
 
   /// Create empty initial state.
@@ -27,6 +28,7 @@ class EventProcessingState {
     textBuffers: const {},
     thinkingMessageIds: const {},
     thinkingBuffer: ThinkingBufferState.empty(),
+    citationsBuffer: CitationsBufferState.empty(),
   );
 
   /// Current messages list.
@@ -43,6 +45,9 @@ class EventProcessingState {
 
   /// Pending thinking buffer state.
   final ThinkingBufferState thinkingBuffer;
+
+  /// Pending citations buffer state.
+  final CitationsBufferState citationsBuffer;
 }
 
 /// State for buffering thinking text that arrives before a message exists.
@@ -76,6 +81,23 @@ class ThinkingBufferState {
   ThinkingBufferState clear() => const ThinkingBufferState();
 }
 
+/// State for buffering citations that arrive before text message is finalized.
+class CitationsBufferState {
+  const CitationsBufferState({
+    this.citations = const [],
+  });
+
+  factory CitationsBufferState.empty() => const CitationsBufferState();
+  final List<Citation> citations;
+
+  CitationsBufferState withCitations(List<Citation> newCitations) =>
+      CitationsBufferState(citations: newCitations);
+
+  CitationsBufferState clear() => const CitationsBufferState();
+
+  bool get hasCitations => citations.isNotEmpty;
+}
+
 // =============================================================================
 // RESULT TYPES
 // =============================================================================
@@ -88,6 +110,7 @@ class EventProcessingResult {
     this.textBuffersUpdate,
     this.thinkingMessageIdsUpdate,
     this.thinkingBufferUpdate,
+    this.citationsBufferUpdate,
     this.contextUpdate,
     this.activityUpdate,
     this.clearDeduplication = false,
@@ -108,6 +131,9 @@ class EventProcessingResult {
   /// New thinking buffer state (if changed).
   final ThinkingBufferState? thinkingBufferUpdate;
 
+  /// New citations buffer state (if changed).
+  final CitationsBufferState? citationsBufferUpdate;
+
   /// Context update side effect.
   final ContextUpdate? contextUpdate;
 
@@ -127,6 +153,7 @@ class EventProcessingResult {
       textBuffersUpdate != null ||
       thinkingMessageIdsUpdate != null ||
       thinkingBufferUpdate != null ||
+      citationsBufferUpdate != null ||
       contextUpdate != null ||
       activityUpdate != null ||
       clearDeduplication;
@@ -236,7 +263,12 @@ class EventProcessor {
         return _processToolCallResult(state, event);
 
       case ag_ui.StateSnapshotEvent():
-        return _processStateSnapshot(event);
+        // DEBUG: Log raw event.snapshot before processing
+        DebugLog.agui('RAW StateSnapshotEvent.snapshot: ${event.snapshot}');
+        DebugLog.agui(
+          'RAW snapshot type: ${event.snapshot.runtimeType}',
+        );
+        return _processStateSnapshot(state, event);
 
       case ag_ui.StateDeltaEvent():
         return _processStateDelta(event);
@@ -419,12 +451,37 @@ class EventProcessor {
     final text = state.textBuffers[aguiMessageId]?.toString() ?? '';
     DebugLog.chat('Finalized message: ${text.length} chars');
 
+    // Check for buffered citations to attach
+    final hasCitations = state.citationsBuffer.hasCitations;
+    final citations = state.citationsBuffer.citations;
+    if (hasCitations) {
+      DebugLog.agui(
+        'TextMessageEnd: attaching ${citations.length} buffered citations '
+        'to chatId=$chatMessageId',
+      );
+      for (final c in citations) {
+        DebugLog.agui(
+          '  Citation: "${c.displayTitle}" docId=${c.documentId} '
+          'pages=${c.pageNumbers} content=${c.content.length} chars',
+        );
+      }
+    }
+
     return EventProcessingResult(
       messageMutations: [
-        UpdateMessage(chatMessageId, (msg) => msg.copyWith(isStreaming: false)),
+        UpdateMessage(chatMessageId, (msg) {
+          var updated = msg.copyWith(isStreaming: false);
+          if (hasCitations) {
+            updated = updated.copyWith(citations: citations);
+          }
+          return updated;
+        }),
       ],
       messageIdMapUpdate: MapUpdate(removes: {aguiMessageId}),
       textBuffersUpdate: MapUpdate(removes: {aguiMessageId}),
+      // Clear citations buffer after attaching
+      citationsBufferUpdate:
+          hasCitations ? CitationsBufferState.empty() : null,
       contextUpdate: ContextUpdate(AgUiEventTypes.textMessage, summary: text),
     );
   }
@@ -491,9 +548,29 @@ class EventProcessor {
     );
   }
 
-  EventProcessingResult _processStateSnapshot(ag_ui.StateSnapshotEvent event) {
+  EventProcessingResult _processStateSnapshot(
+    EventProcessingState state,
+    ag_ui.StateSnapshotEvent event,
+  ) {
     final stateData = event.snapshot as Map<String, dynamic>? ?? {};
+
+    DebugLog.agui('STATE_SNAPSHOT keys: ${stateData.keys.toList()}');
+
+    // Extract citations from ask_history if present
+    // Note: Citations typically arrive via STATE_DELTA, not STATE_SNAPSHOT
+    final citations = _extractLatestCitations(stateData);
+
+    // Only buffer if we found citations
+    CitationsBufferState? citationsUpdate;
+    if (citations.isNotEmpty) {
+      DebugLog.agui(
+        'StateSnapshot: buffering ${citations.length} citations',
+      );
+      citationsUpdate = CitationsBufferState(citations: citations);
+    }
+
     return EventProcessingResult(
+      citationsBufferUpdate: citationsUpdate,
       contextUpdate: ContextUpdate(
         AgUiEventTypes.stateSnapshot,
         data: stateData,
@@ -501,17 +578,171 @@ class EventProcessor {
     );
   }
 
+  /// Extract citations from the most recent ask_history entry in state data.
+  ///
+  /// The backend emits STATE_SNAPSHOT with structure:
+  /// ```json
+  /// {
+  ///   "ask_history": {
+  ///     "questions": [
+  ///       {
+  ///         "question": "...",
+  ///         "response": "...",
+  ///         "citations": [{ document_id, chunk_id, ... }]
+  ///       }
+  ///     ]
+  ///   }
+  /// }
+  /// ```
+  List<Citation> _extractLatestCitations(Map<String, dynamic> stateData) {
+    try {
+      final askHistory = stateData['ask_history'] as Map<String, dynamic>?;
+      if (askHistory == null) {
+        DebugLog.agui(
+          '_extractLatestCitations: ask_history is null or missing',
+        );
+        return const [];
+      }
+
+      DebugLog.agui('_extractLatestCitations: ask_history keys: '
+          '${askHistory.keys.toList()}');
+
+      final questions = askHistory['questions'] as List<dynamic>?;
+      if (questions == null || questions.isEmpty) {
+        DebugLog.agui('_extractLatestCitations: no questions found');
+        return const [];
+      }
+
+      DebugLog.agui('_extractLatestCitations: found ${questions.length} '
+          'questions');
+
+      // Get the most recent question entry
+      final lastQuestion = questions.last as Map<String, dynamic>;
+      DebugLog.agui('_extractLatestCitations: lastQuestion keys: '
+          '${lastQuestion.keys.toList()}');
+
+      final citationsJson = lastQuestion['citations'] as List<dynamic>? ?? [];
+      DebugLog.agui('_extractLatestCitations: found ${citationsJson.length} '
+          'citations');
+
+      if (citationsJson.isNotEmpty) {
+        DebugLog.agui('_extractLatestCitations: first citation: '
+            '${citationsJson.first}');
+      }
+
+      return citationsJson
+          .map((c) => Citation.fromJson(c as Map<String, dynamic>))
+          .toList();
+    } on Object catch (e) {
+      DebugLog.warn('Failed to extract citations from state: $e');
+      return const [];
+    }
+  }
+
   EventProcessingResult _processStateDelta(ag_ui.StateDeltaEvent event) {
     final delta = event.delta as List<dynamic>? ?? [];
+    DebugLog.agui('STATE_DELTA: ${delta.length} operations');
+
+    // Look for ask_history updates in the delta (JSON Patch RFC 6902)
+    var citations = const <Citation>[];
+    for (final op in delta) {
+      if (op is! Map<String, dynamic>) continue;
+
+      final path = op['path'] as String?;
+      final operation = op['op'] as String?;
+      final value = op['value'];
+
+      DebugLog.agui('STATE_DELTA op: $operation path: $path');
+
+      // Check for ask_history being set/replaced
+      if (path == '/ask_history' &&
+          (operation == 'replace' || operation == 'add') &&
+          value is Map<String, dynamic>) {
+        DebugLog.agui('STATE_DELTA: found ask_history update');
+        citations = _extractCitationsFromAskHistory(value);
+      }
+    }
+
+    // Buffer citations if found
+    CitationsBufferState? citationsUpdate;
+    if (citations.isNotEmpty) {
+      DebugLog.agui(
+        'StateDelta: buffering ${citations.length} citations for next '
+        'text message',
+      );
+      for (final c in citations) {
+        DebugLog.agui(
+          '  Citation: "${c.displayTitle}" docId=${c.documentId} '
+          'pages=${c.pageNumbers}',
+        );
+      }
+      citationsUpdate = CitationsBufferState(citations: citations);
+    }
+
+    // Build context update from first operation (legacy behavior)
+    ContextUpdate? contextUpdate;
     if (delta.isNotEmpty && delta.first is Map<String, dynamic>) {
+      contextUpdate = ContextUpdate(
+        AgUiEventTypes.stateDelta,
+        data: delta.first as Map<String, dynamic>,
+      );
+    }
+
+    if (citationsUpdate != null || contextUpdate != null) {
       return EventProcessingResult(
-        contextUpdate: ContextUpdate(
-          AgUiEventTypes.stateDelta,
-          data: delta.first as Map<String, dynamic>,
-        ),
+        citationsBufferUpdate: citationsUpdate,
+        contextUpdate: contextUpdate,
       );
     }
     return EventProcessingResult.empty;
+  }
+
+  /// Extract citations from an ask_history object.
+  List<Citation> _extractCitationsFromAskHistory(
+    Map<String, dynamic> askHistory,
+  ) {
+    try {
+      DebugLog.agui(
+        '_extractCitationsFromAskHistory: keys: ${askHistory.keys.toList()}',
+      );
+
+      final questions = askHistory['questions'] as List<dynamic>?;
+      if (questions == null || questions.isEmpty) {
+        DebugLog.agui('_extractCitationsFromAskHistory: no questions found');
+        return const [];
+      }
+
+      DebugLog.agui(
+        '_extractCitationsFromAskHistory: found ${questions.length} questions',
+      );
+
+      // Get the most recent question entry
+      final lastQuestion = questions.last as Map<String, dynamic>;
+      DebugLog.agui(
+        '_extractCitationsFromAskHistory: lastQuestion keys: '
+        '${lastQuestion.keys.toList()}',
+      );
+
+      final citationsJson = lastQuestion['citations'] as List<dynamic>? ?? [];
+      DebugLog.agui(
+        '_extractCitationsFromAskHistory: found ${citationsJson.length} '
+        'citations',
+      );
+
+      if (citationsJson.isNotEmpty) {
+        DebugLog.agui(
+          '_extractCitationsFromAskHistory: first citation: '
+          '${citationsJson.first}',
+        );
+      }
+
+      return citationsJson
+          .map((c) => Citation.fromJson(c as Map<String, dynamic>))
+          .toList();
+    } on Object catch (e) {
+      DebugLog.warn('Failed to extract citations from ask_history: $e');
+      return const [];
+    }
   }
 
   EventProcessingResult _processThinkingTextMessageStart(

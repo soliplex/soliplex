@@ -35,6 +35,9 @@ abstract class ChatSession {
   /// Toggle the expanded state of a thinking block in a message.
   void toggleThinkingExpanded(String messageId);
 
+  /// Toggle the expanded state of citations in a message.
+  void toggleCitationsExpanded(String messageId);
+
   /// Send a user message.
   ///
   /// state is an optional map of client-side state (e.g. active canvas data)

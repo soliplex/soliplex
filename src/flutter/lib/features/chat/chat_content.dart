@@ -232,6 +232,7 @@ class _ChatContentState extends ConsumerState<ChatContent> {
                   Expanded(
                     child: ChatMessageList(
                       messages: messages,
+                      roomId: roomId,
                       scrollController: _scrollController,
                       maxBubbleWidth: messageMaxWidth,
                       onQuote: _handleQuote,
@@ -239,6 +240,11 @@ class _ChatContentState extends ConsumerState<ChatContent> {
                         connectionManager
                             .getSession(roomId)
                             .toggleThinkingExpanded(messageId);
+                      },
+                      onToggleCitations: (messageId) {
+                        connectionManager
+                            .getSession(roomId)
+                            .toggleCitationsExpanded(messageId);
                       },
                       onToggleToolGroup: (messageId) {
                         // Tool group toggle
