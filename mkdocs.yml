@@ -60,9 +60,33 @@ plugins:
       python:
         paths: [src]
   llmstxt:
+    full_output: llms-full.txt
     sections:
+      Project Documentation:
+        - index.md
+        - overview.md
+        - server.md
+        - client.md
+        - rag.md
+        - config/agents.md
+        - config/completions.md
+        - config/environment.md
+        - config/filesystem_layout.md
+        - config/installation.md
+        - config/meta.md
+        - config/oidc_providers.md
+        - config/quizzes.md
+        - config/rag.md
+        - config/rooms.md
+        - config/secrets.md
+        - usage.md
       Server API Reference:
         - reference/server_api.md
+      Client API Reference:
+        - reference/client_api/index.md
+        - reference/client_api/**/*.md
+hooks:
+  - scripts/federate_llms_txt.py
 nav:
   - Home: index.md
   - Overview: overview.md
