@@ -1974,7 +1974,7 @@ class InstallationConfigMeta:
             {
                 "name": feature.name,
                 "model_klass": _dotted_name(feature.model_klass),
-                "source": feature.source,
+                "source": str(feature.source),
             }
             for feature in AGUI_FEATURES_BY_NAME.values()
         ]
