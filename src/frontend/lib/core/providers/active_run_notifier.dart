@@ -106,11 +106,20 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
     // Generate run ID
     final runId = 'run_${DateTime.now().millisecondsSinceEpoch}';
 
-    // Set running state
+    // Create user message
+    final userMessageObj = TextMessage.create(
+      id: 'user_${DateTime.now().millisecondsSinceEpoch}',
+      user: ChatUser.user,
+      text: userMessage,
+    );
+
+    // Set running state with user message
     state = RunningState(
       threadId: threadId,
       runId: runId,
-      context: state.context,
+      context: state.context.copyWith(
+        messages: [...state.context.messages, userMessageObj],
+      ),
     );
 
     try {
@@ -123,7 +132,7 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
         runId: runId,
         messages: [
           UserMessage(
-            id: 'user_${DateTime.now().millisecondsSinceEpoch}',
+            id: userMessageObj.id,
             content: userMessage,
           ),
         ],
