@@ -17,11 +17,11 @@ packages/
 
 ## Architecture
 
-### Network Stack (5 Layers)
+### Network Stack
 
 ```text
 ┌─────────────────────────────────────────┐
-│ Layer 3: SoliplexApi                    │  DM5 ✓
+│ SoliplexApi                             │  DM5 ✓
 │ - Room/Thread/Run CRUD operations       │
 │ - 8 methods: getRooms, getRoom,         │
 │   getThreads, getThread, createThread,  │
@@ -29,7 +29,7 @@ packages/
 └───────────────────┬─────────────────────┘
                     │
 ┌───────────────────▼─────────────────────┐
-│ Layer 2: HttpTransport                  │  DM4 ✓
+│ HttpTransport                           │  DM4 ✓
 │ - JSON serialization/deserialization    │
 │ - HTTP status → exception mapping       │
 │ - Request timeout handling              │
@@ -38,43 +38,63 @@ packages/
 │   │ Utils: UrlBuilder, CancelToken│     │
 │   └───────────────────────────────┘     │
 └───────────────────┬─────────────────────┘
-                    │ uses
-┌───────────────────▼─────────────────────┐
-│ Layer 1: HttpClientAdapter (interface)  │  DM2 ✓
-│ - Abstract HTTP operations (DI)         │
-│ - Returns AdapterResponse               │
-└───────────────────┬─────────────────────┘
-                    │ implements
-┌───────────────────▼─────────────────────┐
-│ Layer 0.5: ObservableHttpAdapter        │  DM3 ✓
-│ - Decorator wrapping any adapter        │
-│ - Notifies HttpObserver on all activity │
-│ - Request/response/error/stream events  │
+                    │ uses HttpClientAdapter
+                    ▼
+┌─────────────────────────────────────────┐
+│ ObservableHttpAdapter (optional)        │  DM3 ✓
+│ - Decorator implementing HttpClientAdapter
+│ - Notifies HttpObserver on all traffic  │
 └───────────────────┬─────────────────────┘
                     │ wraps
-┌───────────────────▼─────────────────────┐
-│ Layer 0: Platform Implementations       │
-│ ✓ DartHttpAdapter (default)             │  soliplex_client (DM2)
-│ - CupertinoHttpAdapter (iOS/macOS)      │  ┐
-│ - AndroidHttpAdapter (Android)          │  │ soliplex_client_native
-│ - WindowsHttpAdapter (Windows)          │  │ (v1.1)
-│ - LinuxHttpAdapter (Linux)              │  │
-│ - WebHttpAdapter (Web)                  │  ┘
+                    ▼
+┌─────────────────────────────────────────┐
+│ HttpClientAdapter (interface)           │  DM2 ✓
+│ - Abstract HTTP operations (DI)         │
+│ - Returns AdapterResponse               │
 └─────────────────────────────────────────┘
+                    ▲
+                    │ implements
+        ┌───────────┴───────────┐
+        │                       │
+┌───────┴───────┐  ┌────────────┴────────────────┐
+│DartHttpAdapter│  │ soliplex_client_native:     │
+│ (default)     │  │ ✓ CupertinoHttpAdapter      │
+│               │  │ - AndroidHttpAdapter planned│
+│ package:http  │  │ - WindowsHttpAdapter planned│
+│ All platforms │  │ - LinuxHttpAdapter planned  │
+└───────────────┘  │ - WebHttpAdapter planned    │
+                   └─────────────────────────────┘
 ```
 
-### Session Management
+**Usage patterns:**
+```dart
+// Option 1: Direct adapter
+HttpTransport(adapter: DartHttpAdapter())
+
+// Option 2: With monitoring
+HttpTransport(
+  adapter: ObservableHttpAdapter(
+    adapter: DartHttpAdapter(),  // Wraps DartHttpAdapter
+    observers: [LoggingObserver()],
+  ),
+)
+```
+
+### Session Management (Planned)
 
 ```text
 SoliplexClient (facade) → ConnectionManager → RoomSession → Thread (DM6 ✓)
-                DM8              DM7              DM7
+     DM8 (planned)         DM7 (planned)      DM7 (planned)   (implemented)
 ```
+
+**Current**: Apps use `Thread` directly with `HttpTransport` and `SoliplexApi`.
+**Planned**: Higher-level facade with automatic session management.
 
 ### AG-UI Protocol (DM6 ✓)
 
 Server-Sent Events (SSE) streaming with real-time event processing:
 
-- **18 Event Types**: Run lifecycle, steps, text streaming, tool calls, state/activity updates
+- **19 Event Types**: Run lifecycle, steps, text streaming, tool calls, state/activity updates
 - **Thread**: Orchestrates SSE streams, manages buffers, executes tools
 - **TextMessageBuffer**: Accumulates streaming text messages
 - **ToolCallBuffer**: Tracks concurrent tool calls (start → args → end → result)
@@ -110,14 +130,14 @@ abstract class HttpClientAdapter {
 
 ### Platform Implementations
 
-| Adapter | Package | Platform | Native Client |
-|---------|---------|----------|---------------|
-| `DartHttpAdapter` | `soliplex_client` | All | package:http |
-| `CupertinoHttpAdapter` | `soliplex_client_native` | iOS/macOS | NSURLSession |
-| `AndroidHttpAdapter` | `soliplex_client_native` | Android | OkHttp |
-| `WindowsHttpAdapter` | `soliplex_client_native` | Windows | WinHTTP |
-| `LinuxHttpAdapter` | `soliplex_client_native` | Linux | libcurl |
-| `WebHttpAdapter` | `soliplex_client_native` | Web | fetch API |
+| Adapter | Package | Platform | Native Client | Status |
+|---------|---------|----------|---------------|--------|
+| `DartHttpAdapter` | `soliplex_client` | All | package:http | Done |
+| `CupertinoHttpAdapter` | `soliplex_client_native` | iOS/macOS | NSURLSession | Done |
+| `AndroidHttpAdapter` | `soliplex_client_native` | Android | OkHttp | Planned |
+| `WindowsHttpAdapter` | `soliplex_client_native` | Windows | WinHTTP | Planned |
+| `LinuxHttpAdapter` | `soliplex_client_native` | Linux | libcurl | Planned |
+| `WebHttpAdapter` | `soliplex_client_native` | Web | fetch API | Planned |
 
 ### Adapter Injection
 
@@ -203,6 +223,8 @@ Each phase maps to a Developer Milestone (DM). See `ROADMAP.md` for full milesto
 
 ## File Structure
 
+### Current Implementation (DM1-DM6 Complete)
+
 ```text
 packages/soliplex_client/
 ├── lib/
@@ -235,14 +257,11 @@ packages/soliplex_client/
 │       │   ├── room.dart
 │       │   ├── run_info.dart
 │       │   └── thread_info.dart
-│       ├── session/                    # DM7
-│       │   ├── connection_manager.dart
-│       │   └── room_session.dart
 │       └── utils/                      # DM4 ✓
 │           ├── cancel_token.dart
 │           ├── url_builder.dart
 │           └── utils.dart              # Barrel export
-├── test/
+├── test/                               # Test coverage
 │   ├── agui/
 │   │   ├── agui_event_test.dart
 │   │   ├── text_message_buffer_test.dart
@@ -268,6 +287,17 @@ packages/soliplex_client/
 │       ├── cancel_token_test.dart
 │       └── url_builder_test.dart
 └── pubspec.yaml
+```
+
+### Planned Features (DM7-DM8)
+
+```text
+packages/soliplex_client/lib/src/
+├── session/                    # DM7 - NOT YET IMPLEMENTED
+│   ├── connection_manager.dart # Server switching, session pooling
+│   └── room_session.dart       # Per-room message state
+└── client/                     # DM8 - NOT YET IMPLEMENTED
+    └── soliplex_client.dart    # High-level facade
 ```
 
 ## Dependencies
