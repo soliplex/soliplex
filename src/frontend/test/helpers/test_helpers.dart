@@ -35,6 +35,7 @@ class MockActiveRunNotifier extends Notifier<ActiveRunState>
     required String roomId,
     required String threadId,
     required String userMessage,
+    String? existingRunId,
     Map<String, dynamic>? initialState,
   }) async {}
 

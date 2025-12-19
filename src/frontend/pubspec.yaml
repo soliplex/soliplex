@@ -11,6 +11,10 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # UI components
+  flutter_highlight: ^0.7.0
+  flutter_markdown: ^0.7.4+1
+
   # State management - Manual providers (NO generator)
   flutter_riverpod: ^3.0.0
 
@@ -22,6 +26,7 @@ dependencies:
 
   # Utilities
   intl: ^0.20.1
+  markdown: ^7.0.0
   meta: ^1.15.0
 
   # Local package - soliplex_client

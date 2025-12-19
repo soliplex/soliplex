@@ -102,21 +102,28 @@ class HistoryPanel extends ConsumerWidget {
             ),
             const Divider(height: 1),
             Expanded(
-              child: ListView.builder(
-                itemCount: threads.length,
-                itemBuilder: (context, index) {
-                  final thread = threads[index];
-                  final isSelected = thread.id == currentThreadId;
-                  final hasActiveRun =
-                      activeThreadId != null && activeThreadId == thread.id;
-
-                  return ThreadListItem(
-                    thread: thread,
-                    isSelected: isSelected,
-                    hasActiveRun: hasActiveRun,
-                    onTap: () => _handleThreadSelection(ref, thread.id),
-                  );
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  ref.invalidate(threadsProvider(roomId));
+                  // Wait for the provider to reload
+                  await ref.read(threadsProvider(roomId).future);
                 },
+                child: ListView.builder(
+                  itemCount: threads.length,
+                  itemBuilder: (context, index) {
+                    final thread = threads[index];
+                    final isSelected = thread.id == currentThreadId;
+                    final hasActiveRun =
+                        activeThreadId != null && activeThreadId == thread.id;
+
+                    return ThreadListItem(
+                      thread: thread,
+                      isSelected: isSelected,
+                      hasActiveRun: hasActiveRun,
+                      onTap: () => _handleThreadSelection(ref, thread.id),
+                    );
+                  },
+                ),
               ),
             ),
           ],

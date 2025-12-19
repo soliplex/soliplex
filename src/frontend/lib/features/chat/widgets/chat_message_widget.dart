@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_highlight/flutter_highlight.dart';
+import 'package:flutter_highlight/themes/github.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:markdown/markdown.dart' as md;
 import 'package:soliplex_client/soliplex_client.dart';
 
 /// Widget that displays a single chat message.
@@ -47,16 +51,38 @@ class ChatMessageWidget extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    text,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: message is ErrorMessage
-                          ? theme.colorScheme.error
-                          : isUser
-                              ? theme.colorScheme.onPrimaryContainer
+                  if (isUser)
+                    Text(
+                      text,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: message is ErrorMessage
+                            ? theme.colorScheme.error
+                            : theme.colorScheme.onPrimaryContainer,
+                      ),
+                    )
+                  else
+                    MarkdownBody(
+                      data: text,
+                      styleSheet: MarkdownStyleSheet(
+                        p: theme.textTheme.bodyLarge?.copyWith(
+                          color: message is ErrorMessage
+                              ? theme.colorScheme.error
                               : theme.colorScheme.onSurface,
+                        ),
+                        code: theme.textTheme.bodyMedium?.copyWith(
+                          fontFamily: 'monospace',
+                          backgroundColor:
+                              theme.colorScheme.surfaceContainerHigh,
+                        ),
+                        codeblockDecoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHigh,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      builders: {
+                        'code': CodeBlockBuilder(),
+                      },
                     ),
-                  ),
                   if (isStreaming) ...[
                     const SizedBox(height: 8),
                     _buildStreamingIndicator(theme),
@@ -121,6 +147,35 @@ class ChatMessageWidget extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Custom markdown builder for code blocks with syntax highlighting.
+class CodeBlockBuilder extends MarkdownElementBuilder {
+  @override
+  Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
+    final code = element.textContent;
+    var language = '';
+
+    // Get language from class attribute (e.g., "language-dart")
+    if (element.attributes['class'] != null) {
+      final className = element.attributes['class']!;
+      language = className.replaceFirst('language-', '');
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      child: HighlightView(
+        code,
+        language: language.isEmpty ? 'plaintext' : language,
+        theme: githubTheme,
+        padding: EdgeInsets.zero,
+        textStyle: const TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 14,
+        ),
+      ),
     );
   }
 }
