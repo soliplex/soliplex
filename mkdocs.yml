@@ -59,6 +59,10 @@ plugins:
     handlers:
       python:
         paths: [src]
+  llmstxt:
+    sections:
+      Server API Reference:
+        - reference/server_api.md
 nav:
   - Home: index.md
   - Overview: overview.md
