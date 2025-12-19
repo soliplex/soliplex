@@ -13,6 +13,7 @@ import '../../helpers/test_helpers.dart';
 
 void main() {
   late MockAgUiClient mockAgUiClient;
+  late MockSoliplexApi mockApi;
 
   setUpAll(() {
     registerFallbackValue(
@@ -23,6 +24,7 @@ void main() {
 
   setUp(() {
     mockAgUiClient = MockAgUiClient();
+    mockApi = MockSoliplexApi();
   });
 
   group('ActiveRunNotifier', () {
@@ -192,6 +194,20 @@ void main() {
     setUp(() {
       eventStreamController = StreamController<BaseEvent>();
 
+      // Mock createRun to return a run with backend-generated ID
+      when(
+        () => mockApi.createRun(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).thenAnswer(
+        (_) async => const RunInfo(
+          id: 'backend-run-id-123',
+          threadId: 'thread-1',
+        ),
+      );
+
       // Mock runAgent to return our controlled stream
       when(
         () => mockAgUiClient.runAgent(
@@ -203,6 +219,7 @@ void main() {
 
       container = ProviderContainer(
         overrides: [
+          apiProvider.overrideWithValue(mockApi),
           agUiClientProvider.overrideWithValue(mockAgUiClient),
         ],
       );
@@ -257,8 +274,7 @@ void main() {
         expect(state, isA<RunningState>());
         final runningState = state as RunningState;
         expect(runningState.threadId, threadId);
-        expect(runningState.runId, isNotEmpty);
-        expect(runningState.runId, startsWith('run_'));
+        expect(runningState.runId, 'backend-run-id-123');
       },
     );
   });

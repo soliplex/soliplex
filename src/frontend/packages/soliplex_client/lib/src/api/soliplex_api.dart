@@ -263,6 +263,7 @@ class SoliplexApi {
     final response = await _transport.request<Map<String, dynamic>>(
       'POST',
       _urlBuilder.build(pathSegments: ['rooms', roomId, 'agui', threadId]),
+      body: <String, dynamic>{},
       cancelToken: cancelToken,
     );
 

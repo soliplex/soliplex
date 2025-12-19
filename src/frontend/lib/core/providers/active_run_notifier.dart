@@ -78,8 +78,9 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
 
   /// Starts a new run with the given message.
   ///
-  /// Creates an AG-UI stream via [AgUiClient] and processes events
-  /// to update the state.
+  /// Two-step process:
+  /// 1. Creates run via API to get backend-generated run_id
+  /// 2. Streams AG-UI events using that run_id
   ///
   /// Throws [StateError] if a run is already active. Call [cancelRun] first.
   Future<void> startRun({
@@ -103,8 +104,10 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
     // Create new resources
     final cancelToken = CancelToken();
 
-    // Generate run ID
-    final runId = 'run_${DateTime.now().millisecondsSinceEpoch}';
+    // Step 1: Create run to get backend-generated run_id
+    final api = ref.read(apiProvider);
+    final runInfo = await api.createRun(roomId, threadId);
+    final runId = runInfo.id;
 
     // Create user message
     final userMessageObj = TextMessage.create(
@@ -123,7 +126,7 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
     );
 
     try {
-      // Build the endpoint URL for the room
+      // Step 2: Build the streaming endpoint URL with backend run_id
       final endpoint = 'rooms/$roomId/agui/$threadId/$runId';
 
       // Create the input for the run
