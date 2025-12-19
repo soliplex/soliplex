@@ -67,3 +67,29 @@ uv run mkdocs serve
 ```
 
 This will start a local web server (usually at `http://127.0.0.1:8000`) that automatically rebuilds the site when you make changes to the documentation files.
+
+## LLM Documentation Strategy
+
+We maintain specific documentation artifacts optimized for Large Language Models (LLMs) and AI agents. This "machine-readable" layer allows AI tools to effectively discover and understand the Soliplex codebase.
+
+### The Two-File Architecture
+
+The `mkdocs-llmstxt` plugin generates two distinct files at the site root:
+
+1.  **`llms.txt` (Discovery Layer)**:
+    -   **Purpose**: A lightweight map of the project.
+    -   **Content**: High-level summaries and links to key sections.
+    -   **Use Case**: An agent reads this first to decide *which* specific docs it needs to fetch.
+
+2.  **`llms-full.txt` (Knowledge Layer)**:
+    -   **Purpose**: A comprehensive, expanded knowledge base.
+    -   **Content**: Full text of guides and expanded API definitions (e.g., actual function signatures from `mkdocstrings`).
+    -   **Use Case**: RAG ingestion or filling a large context window for complex reasoning.
+
+### Maintenance & Curation
+
+The contents of these files are controlled via `mkdocs.yml` under the `llmstxt` plugin configuration.
+
+-   **Do not dump everything**: Be selective. Machines need high-value context (Architecture, Core APIs), not necessarily every minor utility widget.
+-   **Server API**: This is our primary focus for machine consumption. We ensure `llms-full.txt` captures the fully rendered Python API definitions.
+-   **User Guides**: We explicitly include Architecture and Configuration guides so the AI understands *how* to use the APIs.
