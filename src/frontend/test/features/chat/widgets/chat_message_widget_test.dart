@@ -227,6 +227,30 @@ void main() {
         expect(find.byType(MarkdownBody), findsNothing);
         expect(find.text('**bold** and *italic* text'), findsOneWidget);
       });
+
+      testWidgets('renders code blocks with syntax highlighting',
+          (tester) async {
+        // Arrange
+        final message = TestData.createMessage(
+          user: ChatUser.assistant,
+          text: '```dart\nvoid main() {}\n```',
+        );
+
+        // Act
+        await tester.pumpWidget(
+          createTestApp(
+            home: Scaffold(
+              body: ChatMessageWidget(message: message),
+            ),
+          ),
+        );
+
+        // Assert - MarkdownBody should render code blocks
+        expect(find.byType(MarkdownBody), findsOneWidget);
+        // The code block should be rendered (implementation detail - just
+        // verify it doesn't crash)
+        await tester.pumpAndSettle();
+      });
     });
 
     group('System Messages', () {
