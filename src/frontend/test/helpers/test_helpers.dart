@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mocktail/mocktail.dart';
 // ignore: implementation_imports, depend_on_referenced_packages
 import 'package:riverpod/src/framework.dart' show Override;
-import 'package:soliplex_client/soliplex_client.dart';
+// Hide ag_ui's CancelToken - HttpTransport uses our local one.
+import 'package:soliplex_client/soliplex_client.dart' hide CancelToken;
+import 'package:soliplex_client/src/utils/cancel_token.dart';
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/models/app_config.dart';
 import 'package:soliplex_frontend/core/providers/active_run_notifier.dart';
@@ -111,6 +113,9 @@ Override threadSelectionProviderOverride(ThreadSelection selection) {
 
 /// Mock HttpTransport for testing with mocktail.
 class MockHttpTransport extends Mock implements HttpTransport {}
+
+/// Mock AgUiClient for testing with mocktail.
+class MockAgUiClient extends Mock implements AgUiClient {}
 
 /// Fake HttpTransport for testing without mocktail.
 class FakeHttpTransport implements HttpTransport {
