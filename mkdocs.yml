@@ -80,6 +80,7 @@ nav:
       - OIDC Authentication: config/oidc_providers.md
   - Usage: usage.md
   - Reference:
+      - Overview: reference/index.md
       - Server API: reference/server_api.md
       - Client API: reference/client_api/index.md
   - Development:
