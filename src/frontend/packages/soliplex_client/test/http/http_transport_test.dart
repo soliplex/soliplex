@@ -3,7 +3,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:mocktail/mocktail.dart';
-import 'package:soliplex_client/soliplex_client.dart';
+// HttpTransport uses our local CancelToken, not ag_ui's.
+// Hide ag_ui's CancelToken to avoid ambiguity.
+import 'package:soliplex_client/soliplex_client.dart' hide CancelToken;
+import 'package:soliplex_client/src/utils/cancel_token.dart';
 import 'package:test/test.dart';
 
 class MockHttpClientAdapter extends Mock implements HttpClientAdapter {}

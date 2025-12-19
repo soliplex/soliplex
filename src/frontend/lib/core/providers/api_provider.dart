@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_client_native/soliplex_client_native.dart';
 import 'package:soliplex_frontend/core/providers/config_provider.dart';
@@ -86,4 +87,43 @@ final apiProvider = Provider<SoliplexApi>((ref) {
   ref.onDispose(api.close);
 
   return api;
+});
+
+/// Provider for the HTTP client adapter.
+///
+/// Creates a platform-optimized adapter (CupertinoHttpAdapter on macOS/iOS,
+/// DartHttpAdapter on other platforms) for the app lifetime.
+final httpAdapterProvider = Provider<HttpClientAdapter>((ref) {
+  final adapter = createPlatformAdapter();
+  ref.onDispose(adapter.close);
+  return adapter;
+});
+
+/// Provider for http.Client that uses our adapter stack.
+///
+/// This bridges our [HttpClientAdapter] to the standard [http.Client]
+/// interface,
+/// allowing libraries like AgUiClient to use our HTTP infrastructure.
+final httpClientProvider = Provider<http.Client>((ref) {
+  final adapter = ref.watch(httpAdapterProvider);
+  final client = AdapterHttpClient(adapter: adapter);
+  ref.onDispose(client.close);
+  return client;
+});
+
+/// Provider for the AG-UI client.
+///
+/// Creates an [AgUiClient] that uses our HTTP stack via [httpClientProvider].
+/// This ensures AG-UI requests go through our platform adapters and observers.
+final agUiClientProvider = Provider<AgUiClient>((ref) {
+  final httpClient = ref.watch(httpClientProvider);
+  final config = ref.watch(configProvider);
+
+  final client = AgUiClient(
+    config: AgUiClientConfig(baseUrl: '${config.baseUrl}/api/v1'),
+    httpClient: httpClient,
+  );
+
+  ref.onDispose(client.close);
+  return client;
 });
