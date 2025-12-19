@@ -51,11 +51,7 @@ final currentRoomProvider = Provider<Room?>((ref) {
   final roomsAsync = ref.watch(roomsProvider);
   return roomsAsync.whenOrNull(
     data: (rooms) {
-      try {
-        return rooms.firstWhere((room) => room.id == roomId);
-      } catch (_) {
-        return null;
-      }
+      return rooms.where((room) => room.id == roomId).firstOrNull;
     },
   );
 });

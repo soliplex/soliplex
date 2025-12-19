@@ -422,8 +422,18 @@ class Thread {
         try {
           final json = jsonDecode(jsonString) as Map<String, dynamic>;
           return AgUiEvent.fromJson(json);
-        } catch (_) {
-          // Failed to parse JSON - skip this event
+        } on FormatException catch (e) {
+          // Invalid JSON - skip this event
+          // ignore: avoid_print
+          print('Warning: Failed to parse SSE event JSON: $e');
+          // ignore: avoid_print
+          print('  Raw data: $jsonString');
+        } catch (e) {
+          // Event parsing failed - skip this event
+          // ignore: avoid_print
+          print('Warning: Failed to parse SSE event: $e');
+          // ignore: avoid_print
+          print('  Raw data: $jsonString');
         }
       }
     }
@@ -542,7 +552,11 @@ class Thread {
         text: text,
         createdAt: DateTime.now(),
       );
-    } catch (_) {
+    } catch (e) {
+      // ignore: avoid_print
+      print('Warning: Failed to parse message from JSON: $e');
+      // ignore: avoid_print
+      print('  JSON: $json');
       return null;
     }
   }
