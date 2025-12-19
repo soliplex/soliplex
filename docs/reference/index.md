@@ -5,11 +5,13 @@ This section contains the API reference documentation for the Soliplex system.
 - [Server API](server_api.md): Python backend API documentation.
 - [Client API](client_api/index.md): Flutter client API documentation.
 
-## LLM Access
+## AI & LLM Entry points
 
-This documentation site provides AI-optimized summary files designed for consumption by Large Language Models (LLMs). We use a **Federated Documentation** strategy to ensure context efficiency.
+These files are optimized for discovery and ingestion by AI agents.
 
-- **[Main Discovery Map](/soliplex/llms.txt)**: A high-level index of all available documentation domains.
-- **[Project Context](/soliplex/llms-project.txt)**: High-level overview, architecture, and configuration guides. Use this to understand *how* Soliplex works.
-- **[Server API Context](/soliplex/llms-server.txt)**: Full Python backend API reference. Use this for backend development and tool creation.
-- **[Client API Context](/soliplex/llms-client.txt)**: Comprehensive Flutter frontend widget and service reference. Use this for UI development.
+- **[Main Discovery Map](/soliplex/llms.txt)**: Start here for a high-level overview.
+- **[Project Documentation](/soliplex/llms-project.txt)**: Global architecture and user guides.
+- **[Server API Reference](/soliplex/llms-server.txt)**: Backend Python API (Full definitions).
+- **[Client API Reference](/soliplex/llms-client.txt)**: Frontend Flutter API (Structured map).
+
+> **Note for Local Agents**: If you are using an AI agent with access to your local filesystem, run the build with `DOCS_MODE=local` to generate absolute filesystem links, or `DOCS_MODE=relative` for relative links (see [Documentation Workflow](../development/documentation.md)).

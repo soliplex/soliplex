@@ -70,26 +70,52 @@ This will start a local web server (usually at `http://127.0.0.1:8000`) that aut
 
 ## LLM Documentation Strategy
 
-We maintain specific documentation artifacts optimized for Large Language Models (LLMs) and AI agents. This "machine-readable" layer allows AI tools to effectively discover and understand the Soliplex codebase.
+This project uses a **Federated Documentation** strategy to provide context-optimized files for AI agents. This prevents token bloat by separating domains (Server vs. Client) and depth (Discovery vs. Knowledge).
 
-### The Two-File Architecture
+### Artifacts
 
-The `mkdocs-llmstxt` plugin generates two distinct files at the site root:
+The build process generates the following files in `site/`:
 
-1.  **`llms.txt` (Discovery Layer)**:
-    -   **Purpose**: A lightweight map of the project.
-    -   **Content**: High-level summaries and links to key sections.
-    -   **Use Case**: An agent reads this first to decide *which* specific docs it needs to fetch.
+| Domain | Map (Discovery) | Content (Knowledge) | Use Case |
+| :--- | :--- | :--- | :--- |
+| **Root** | `llms.txt` | N/A | Entry point. Links to domain maps. |
+| **Project** | `llms-project.txt` | `llms-project-full.txt` | Architecture, Setup, Config. |
+| **Server** | `llms-server.txt` | `llms-server-full.txt` | Python Backend API & Tools. |
+| **Client** | `llms-client.txt` | `llms-client-full.txt` | Flutter Widget Library. |
 
-2.  **`llms-full.txt` (Knowledge Layer)**:
-    -   **Purpose**: A comprehensive, expanded knowledge base.
-    -   **Content**: Full text of guides and expanded API definitions (e.g., actual function signatures from `mkdocstrings`).
-    -   **Use Case**: RAG ingestion or filling a large context window for complex reasoning.
+### Absolute URL Policy
 
-### Maintenance & Curation
+The root `llms.txt` **must use absolute URLs** (e.g., `https://soliplex.github.io/soliplex/llms-project.txt`) for links to domain maps. This ensures the file is portable and works correctly when hosted on GitHub Pages or other sub-path deployments where root-relative links (`/llms-project.txt`) would break. The federation script handles this automatically using the `site_url` from `mkdocs.yml`.
 
-The contents of these files are controlled via `mkdocs.yml` under the `llmstxt` plugin configuration.
+### How it Works
 
--   **Do not dump everything**: Be selective. Machines need high-value context (Architecture, Core APIs), not necessarily every minor utility widget.
--   **Server API**: This is our primary focus for machine consumption. We ensure `llms-full.txt` captures the fully rendered Python API definitions.
--   **User Guides**: We explicitly include Architecture and Configuration guides so the AI understands *how* to use the APIs.
+1.  **Monolith Generation**: `mkdocs-llmstxt` generates a single `llms-full.txt` containing all sections.
+2.  **Federation Script**: A post-build hook (`scripts/federate_llms_txt.py`) runs automatically.
+3.  **Splitting**: The script parses the monolith and splits it into domain-specific files based on section headers defined in `mkdocs.yml`.
+4.  **Curation (Client API)**: The script applies special logic to the Client Map (`llms-client.txt`):
+    -   **Filters Noise**: Removes individual methods, properties, and constructors.
+    -   **Excludes Tests**: Removes any file path containing `_test`, `test/`, or `Test`.
+    -   **Categorizes**: Groups classes into semantic buckets (e.g., "UI Components", "Services & State", "Network & API") based on keyword heuristics defined in `categorize_path` within the script.
+
+### Local vs. Remote Consumption
+
+You can control how links are generated in the root `llms.txt` map to support different agent workflows using the `DOCS_MODE` environment variable:
+
+1.  **Remote (Default)**: Generates absolute HTTP URLs (e.g., `https://.../llms-server.txt`). Ideal for online agents.
+2.  **Local (`DOCS_MODE=local`)**: Generates absolute filesystem paths (e.g., `/Users/me/repo/site/llms-server.txt`). Ideal for local agents (Gemini CLI, Claude Desktop) to robustly find files on disk.
+3.  **Relative (`DOCS_MODE=relative`)**: Generates relative paths (e.g., `llms-server.txt`). Useful for portable archives.
+
+**Example: Building for Local Agents**
+```bash
+DOCS_MODE=local ./scripts/verify_docs.sh
+```
+This enables the agent to read `site/llms.txt` and immediately follow the absolute paths to the domain files.
+
+### Maintenance
+
+To add a new section to a specific domain:
+1.  Add the markdown file to the corresponding section in `mkdocs.yml` under `llmstxt/sections`.
+2.  Ensure the section header matches one of the keys in `scripts/federate_llms_txt.py` if you are adding a new top-level domain.
+
+To adjust the **Client API Categories**:
+-   Edit `categorize_path()` in `scripts/federate_llms_txt.py`. You can add specific keywords or hard-coded overrides for directory names.
