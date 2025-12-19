@@ -124,7 +124,7 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
 
     try {
       // Build the endpoint URL for the room
-      final endpoint = 'rooms/$roomId/agui/$threadId';
+      final endpoint = 'rooms/$roomId/agui/$threadId/$runId';
 
       // Create the input for the run
       final input = SimpleRunAgentInput(
