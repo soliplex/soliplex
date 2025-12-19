@@ -67,6 +67,7 @@ packages/
 ```
 
 **Usage patterns:**
+
 ```dart
 // Option 1: Direct adapter
 HttpTransport(adapter: DartHttpAdapter())
