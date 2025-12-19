@@ -82,6 +82,8 @@ nav:
   - Reference:
       - Server API: reference/server_api.md
       - Client API: reference/client_api/index.md
+  - Development:
+      - Documentation Workflow: development/documentation.md
 markdown_extensions:
   - admonition
   - attr_list

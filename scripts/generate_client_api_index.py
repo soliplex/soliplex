@@ -20,11 +20,11 @@ def generate_index():
         for lib in libraries:
             # Check if library has overview.md or similar
             lib_path = os.path.join(base_dir, lib)
-            # Link to the folder (MkDocs handles index.md inside if present, or we link to overview.md)
             if os.path.exists(os.path.join(lib_path, "overview.md")):
                 f.write(f"- [{lib}]({lib}/overview.md)\n")
             else:
-                f.write(f"- {lib}\n")
+                # If overview.md doesn't exist, link to the directory itself
+                f.write(f"- [{lib}]({lib}/)\n")
 
     print(f"Generated {index_file}")
 
