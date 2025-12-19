@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 /// {
 ///   "id": "p1",
 ///   "title": "Mobile App Redesign",
-///   "description": "Complete overhaul of the customer-facing mobile application",
+///   "description": "Complete overhaul of the mobile application",
 ///   "required_skills": ["Flutter", "Dart", "Figma"],
 ///   "status": "open" | "in_progress" | "completed",
 ///   "matched_skills": ["Flutter", "Dart"] // (optional - skills that match a candidate)
