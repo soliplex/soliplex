@@ -22,11 +22,17 @@ The Soliplex Flutter app provides a cross-platform chat interface that connects 
 src/flutter/
 ├── lib/
 │   ├── main.dart              # App entry point
-│   ├── providers/             # Riverpod providers
-│   ├── services/              # API, SSE, auth services
-│   ├── models/                # Data models
-│   ├── widgets/               # UI components
-│   └── screens/               # Page screens
+│   ├── app_shell.dart         # Root app widget
+│   ├── core/                  # Core functionality
+│   │   ├── auth/              # OIDC authentication
+│   │   ├── models/            # Domain models
+│   │   ├── network/           # AG-UI transport, event processing
+│   │   ├── providers/         # Riverpod providers
+│   │   ├── services/          # Business logic services
+│   │   └── utils/             # Utilities
+│   ├── features/              # Feature modules (chat, room, canvas, etc.)
+│   ├── infrastructure/        # External integrations (quick_agui)
+│   └── widgets/               # Shared UI components
 ├── test/                      # Unit and widget tests
 └── pubspec.yaml               # Dependencies
 ```
@@ -35,13 +41,13 @@ src/flutter/
 
 ### Server-Scoped Providers
 
-Panel state is scoped to server connection:
+Panel state resets when the server changes. Providers watch `currentServerFromAppStateProvider`:
 
 ```dart
-final panelStateProvider = StateNotifierProvider.family<
-    PanelStateNotifier, PanelState, ServerConfig>(
-  (ref, serverConfig) => PanelStateNotifier(serverConfig),
-);
+final myPanelProvider = StateNotifierProvider<MyNotifier, MyState>((ref) {
+  final server = ref.watch(currentServerFromAppStateProvider);
+  return MyNotifier(serverId: server?.id);
+});
 ```
 
 ### Platform-Specific Code
@@ -49,29 +55,28 @@ final panelStateProvider = StateNotifierProvider.family<
 Platform code uses conditional imports:
 
 ```dart
-// Platform-agnostic interface
-abstract class StorageService {
-  Future<void> save(String key, String value);
-}
+// Main file (feedback_service.dart)
+import 'feedback_service_io.dart'
+    if (dart.library.html) 'feedback_service_web.dart' as platform;
 
-// Implementation files
-// storage_io.dart - Mobile/desktop
-// storage_web.dart - Web
+// Platform-agnostic usage
+final content = await platform.loadFeedbackData(roomId);
+await platform.saveFeedbackData(roomId, jsonEncode(data));
 ```
 
 ### AG-UI Event Handling
 
-Events are processed via stream:
+Events are processed via typed pattern matching:
 
 ```dart
-await for (final event in aguiStream) {
-  switch (event.type) {
-    case 'TEXT_MESSAGE_CONTENT':
-      _appendContent(event.delta);
-    case 'TOOL_CALL_START':
-      _showToolCall(event);
-    case 'RUN_FINISHED':
-      _completeRun();
+EventProcessingResult _processEvent(ag_ui.BaseEvent event) {
+  switch (event) {
+    case ag_ui.TextMessageContentEvent():
+      return _appendContent(event.delta);
+    case ag_ui.ToolCallStartEvent():
+      return _processToolCallStart(event);
+    case ag_ui.RunFinishedEvent():
+      return _completeRun();
   }
 }
 ```
@@ -111,7 +116,9 @@ Additional Flutter documentation in the source tree:
 
 | Directory | Purpose |
 |-----------|---------|
-| `lib/providers/` | Riverpod state providers |
-| `lib/services/` | API and stream handling |
-| `lib/widgets/` | Reusable UI components |
-| `lib/screens/` | Full page layouts |
+| `lib/core/providers/` | Riverpod state providers |
+| `lib/core/services/` | Business logic and API handling |
+| `lib/core/network/` | AG-UI transport, event processing |
+| `lib/core/models/` | Domain models |
+| `lib/features/` | Feature modules (chat, room, canvas) |
+| `lib/widgets/` | Shared UI components |
