@@ -4330,7 +4330,8 @@ environment: production
     else:
         exp_obu = "http://localhost:11434"
 
-    hr_config = i_config.haiku_rag_config
+    with mock.patch.dict("os.environ", clear=True):
+        hr_config = i_config.haiku_rag_config
 
     assert isinstance(hr_config, hr_config_module.AppConfig)
     assert hr_config.providers.ollama.base_url == exp_obu
