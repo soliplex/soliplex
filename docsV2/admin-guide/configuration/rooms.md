@@ -8,10 +8,13 @@ Rooms are chat environments with specific agents, tools, and configurations.
 rooms/
 └── research/
     ├── room_config.yaml    # Room configuration
-    └── prompt.txt          # System prompt (optional)
+    ├── prompt.txt          # System prompt (optional)
+    └── haiku.rag.yaml      # RAG config override (optional)
 ```
 
 Directories starting with `.` are ignored.
+
+A room can include `haiku.rag.yaml` to override the installation's RAG configuration. See [RAG](rag.md).
 
 ## Quick Start
 
@@ -187,12 +190,12 @@ Room logo image file:
 logo_image: "./logo.png"
 ```
 
-### sort_key
+### _order
 
-Sort order for room listings:
+Sort order for room listings. Accessed via `sort_key` property.
 
 ```yaml
-sort_key: 10  # Lower numbers appear first
+_order: 10  # Lower numbers appear first
 ```
 
 ### quizzes
@@ -267,7 +270,7 @@ tools:
 id: "research"
 name: "Research Assistant"
 description: "AI-powered document research with citations"
-sort_key: 1
+_order: 1
 
 agent:
   model_name: "gpt-oss:latest"
