@@ -88,6 +88,7 @@ class QuestionInput:
 
     question: str
     domain: str
+    expected_topics: list[str] | None = None  # For judge evaluation
 
 
 @dataclass
@@ -102,6 +103,9 @@ class StructuredAnswer(BaseModel):
 
     topics_found: list[str]
     explanation: str
+    judge_score: float | None = (
+        None  # Pre-computed by answer_question if judge enabled
+    )
 
 
 class JudgeScore(BaseModel):
@@ -146,64 +150,21 @@ class TopicCoverageEvaluator(Evaluator[StructuredAnswer, ExpectedTopics]):
 
 
 class LLMJudgeEvaluator(Evaluator[StructuredAnswer, ExpectedTopics]):
-    """Evaluator that uses an LLM to judge semantic topic coverage."""
+    """Evaluator that reads pre-computed judge score from answer_question."""
 
     def evaluate(
         self, ctx: EvaluatorContext[StructuredAnswer, ExpectedTopics]
     ) -> float:
-        """Use LLM to judge if the answer semantically covers expected topics."""
-        import asyncio
-
+        """Return pre-computed judge score, or fall back to keyword matching."""
         if ctx.expected_output is None:
             return 1.0
 
-        if _judge_agent is None:
-            # Fall back to keyword matching if no judge configured
-            return TopicCoverageEvaluator().evaluate(ctx)
+        # Use pre-computed judge score if available
+        if ctx.output.judge_score is not None:
+            return ctx.output.judge_score
 
-        expected_topics = ctx.expected_output.topics
-        if not expected_topics:
-            return 1.0
-
-        # Build prompt for judge
-        prompt = f"""You are evaluating whether an LLM's answer covers the expected topics.
-
-Expected topics that should be covered (directly or semantically):
-{expected_topics}
-
-LLM's identified topics:
-{ctx.output.topics_found}
-
-LLM's explanation:
-{ctx.output.explanation}
-
-Score from 0.0 to 1.0 based on how well the answer covers the expected topics.
-- 1.0 = All topics covered (exact match or clear semantic equivalent)
-- 0.5 = Half the topics covered
-- 0.0 = No topics covered
-
-Consider semantic equivalents:
-- "Installation Steps" covers "pip install", "venv", "clone"
-- "Environment Variables" covers "env", "secrets"
-- "Prerequisites" may cover "Python", "requirements"
-
-Be generous with semantic matches - if the concept is clearly addressed, count it."""
-
-        try:
-            # Run async judge - create new event loop to avoid conflicts
-            loop = asyncio.new_event_loop()
-            try:
-                result = loop.run_until_complete(_judge_agent.run(prompt))
-            finally:
-                loop.close()
-
-            # Clamp score to valid range
-            score = max(0.0, min(1.0, result.output.score))
-            return score
-        except Exception as e:
-            print(f"Judge error: {e}", file=sys.stderr)
-            # Fall back to keyword matching
-            return TopicCoverageEvaluator().evaluate(ctx)
+        # Fall back to keyword matching
+        return TopicCoverageEvaluator().evaluate(ctx)
 
 
 def validate_docs_build() -> tuple[list[str], list[str]]:
@@ -393,6 +354,42 @@ def create_judge_agent(
     )
 
 
+async def _run_judge(
+    expected_topics: list[str],
+    found_topics: list[str],
+    explanation: str,
+) -> float:
+    """Run LLM judge to evaluate semantic topic coverage."""
+    prompt = f"""You are evaluating whether an LLM's answer covers expected topics.
+
+Expected topics (cover directly or semantically):
+{expected_topics}
+
+LLM's identified topics:
+{found_topics}
+
+LLM's explanation:
+{explanation}
+
+Score 0.0 to 1.0 based on topic coverage:
+- 1.0 = All topics covered (exact or semantic equivalent)
+- 0.5 = Half covered
+- 0.0 = None covered
+
+Consider semantic equivalents generously:
+- "Installation Steps" covers "pip install", "venv", "clone"
+- "Environment Variables" covers "env", "secrets"
+- "Prerequisites" may cover "Python", "requirements"
+"""
+
+    try:
+        result = await _judge_agent.run(prompt)
+        return max(0.0, min(1.0, result.output.score))
+    except Exception as e:
+        print(f"Judge error: {e}", file=sys.stderr)
+        return None  # Will fall back to keyword matching
+
+
 async def answer_question(inputs: QuestionInput) -> StructuredAnswer:
     """Task function that answers a question using documentation."""
     if _agent is None:
@@ -435,8 +432,23 @@ documentation that answer this question."""
             topics_found=["ERROR"],
             explanation=f"Failed to get structured output: {e}",
         )
-    else:
-        return result.output
+
+    answer = result.output
+
+    # Run LLM judge if enabled (expected_topics provided and judge agent exists)
+    if inputs.expected_topics and _judge_agent is not None:
+        judge_score = await _run_judge(
+            expected_topics=inputs.expected_topics,
+            found_topics=answer.topics_found,
+            explanation=answer.explanation,
+        )
+        return StructuredAnswer(
+            topics_found=answer.topics_found,
+            explanation=answer.explanation,
+            judge_score=judge_score,
+        )
+
+    return answer
 
 
 def slugify_question(question: str) -> str:
@@ -489,13 +501,16 @@ def build_dataset(
 
         for idx, q in enumerate(questions[domain], 1):
             slug = slugify_question(q["question"])
+            expected_topics = q["expected_topics"]
             case = Case(
                 name=f"{domain}/{idx:02d}-{slug}",
                 inputs=QuestionInput(
                     question=q["question"],
                     domain=domain,
+                    # Pass expected_topics to task if using judge
+                    expected_topics=expected_topics if use_judge else None,
                 ),
-                expected_output=ExpectedTopics(topics=q["expected_topics"]),
+                expected_output=ExpectedTopics(topics=expected_topics),
                 metadata={
                     "difficulty": q.get("difficulty", "medium"),
                 },
