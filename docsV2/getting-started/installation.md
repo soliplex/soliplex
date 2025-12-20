@@ -123,7 +123,7 @@ flutter doctor
 
 ### Minimal Configuration
 
-The `example/minimal.yaml` file provides a working local setup:
+The `example/minimal.yaml` file provides a working local setup. Key sections:
 
 ```yaml
 id: "soliplex-conf-minimal"
@@ -131,20 +131,40 @@ id: "soliplex-conf-minimal"
 secrets:
   - secret_name: "URL_SAFE_TOKEN_SECRET"
     sources:
-      - kind: "random_chars"
+      - kind: "env_var"
+        env_var_name: "SOLIPLEX_URL_SAFE_TOKEN_SECRET"
+      - kind: "random_chars"  # Fallback if env var not set
 
 environment:
   - "OLLAMA_BASE_URL"
+  - name: "INSTALLATION_PATH"
+    value: "file:."
+  - name: "RAG_LANCE_DB_PATH"
+    value: "file:../db/rag"
+
+haiku_rag_config_file: "./haiku.rag.yaml"
 
 agent_configs:
   - id: "default_chat"
     model_name: "gpt-oss:latest"
     system_prompt: |
-      You are an expert AI assistant.
+      You are an expert AI assistant specializing in information retrieval.
+
+      Your answers should be clear, concise, and ready for production use.
+
+      Always provide code or examples in Markdown blocks.
+
+thread_persistence_dburi:
+  sync: "sqlite://"          # In-memory (threads lost on restart)
+  async: "sqlite+aiosqlite://"
 
 room_paths:
+  - "./rooms/ask_soliplex"
   - "./rooms/haiku"
   - "./rooms/joker"
+  - "./rooms/faux"
+  - "./rooms/quiztest"
+  - "./rooms/research"
 ```
 
 ### Full Configuration
