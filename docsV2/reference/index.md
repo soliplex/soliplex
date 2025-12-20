@@ -16,23 +16,28 @@ Technical reference documentation for Soliplex.
 |---------|-------------|
 | `soliplex-cli serve <config>` | Start the server |
 | `soliplex-cli check-config <config>` | Validate configuration |
+| `soliplex-cli list-secrets <config>` | List configured secrets |
+| `soliplex-cli list-environment <config>` | List environment variables |
 | `soliplex-cli list-rooms <config>` | List configured rooms |
+| `soliplex-cli list-completions <config>` | List completions |
+| `soliplex-cli list-oidc-auth-providers <config>` | List OIDC providers |
+| `soliplex-cli config <config>` | Export merged config as YAML |
 
 ### API Base URL
 
 ```
-http://localhost:8000/api/v1/
+http://localhost:8000/api/
 ```
 
 ### Key Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/rooms` | GET | List available rooms |
-| `/rooms/{id}/agui` | POST | Create new thread |
-| `/rooms/{id}/agui/{thread}/{run}` | POST | Execute run (SSE) |
-| `/login` | GET | Get OIDC providers |
-| `/user_info` | GET | Get current user |
+| `/api/v1/rooms` | GET | List available rooms |
+| `/api/v1/rooms/{room_id}/agui` | POST | Create new thread |
+| `/api/v1/rooms/{room_id}/agui/{thread_id}/{run_id}` | POST | Execute run (SSE) |
+| `/api/login` | GET | Get OIDC providers |
+| `/api/user_info` | GET | Get current user |
 
 ### Configuration Files
 
@@ -41,7 +46,7 @@ http://localhost:8000/api/v1/
 | `installation.yaml` | Main configuration |
 | `rooms/*/room_config.yaml` | Room configuration |
 | `completions/*/completion_config.yaml` | Completion configuration |
-| `oidc/*.yaml` | OIDC provider configuration |
+| `oidc/config.yaml` | OIDC provider configuration |
 | `haiku.rag.yaml` | Global RAG configuration |
 
 ## LLM Entry Points
