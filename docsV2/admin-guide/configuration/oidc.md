@@ -236,11 +236,14 @@ soliplex-cli serve installation.yaml --no-auth-mode
 
 ## Token Refresh
 
-The Flutter app automatically handles token refresh:
+Token refresh is handled client-side. The server returns these values in the callback redirect:
 
-1. Access token expires
-2. App uses refresh token to get new access token
-3. If refresh fails, user is redirected to login
+- `token`: Access token for API calls
+- `refresh_token`: Token for obtaining new access tokens
+- `expires_in`: Access token lifetime (seconds)
+- `refresh_expires_in`: Refresh token lifetime (seconds)
+
+The Flutter app tracks expiration and re-authenticates when needed. There is no server-side refresh endpoint - the client must initiate a new OIDC flow or use the refresh token directly with the identity provider.
 
 ## Secrets Configuration
 
@@ -265,11 +268,17 @@ List available providers:
 {
   "google": {
     "id": "google",
-    "display_name": "Sign in with Google"
+    "title": "Sign in with Google",
+    "server_url": "https://accounts.google.com",
+    "client_id": "your-id.apps.googleusercontent.com",
+    "scope": "openid email profile"
   },
   "corporate": {
     "id": "corporate",
-    "display_name": "Corporate SSO"
+    "title": "Corporate SSO",
+    "server_url": "https://sso.company.com",
+    "client_id": "corporate-client-id",
+    "scope": "openid email profile"
   }
 }
 ```

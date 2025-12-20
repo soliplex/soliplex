@@ -11,7 +11,7 @@ installation.yaml                    # Main entry point
 ├── agent_configs:                   # Global agent configs
 ├── room_paths:                      # → rooms/*/room_config.yaml
 ├── completion_paths:                # → completions/*/completion_config.yaml
-└── oidc_provider_paths:             # → oidc/*.yaml
+└── oidc_paths:                      # → oidc/config.yaml
 ```
 
 ## Sections

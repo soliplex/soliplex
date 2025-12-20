@@ -28,8 +28,8 @@ installation.yaml          # Main configuration file
 │   └── rooms/*/room_config.yaml
 ├── completion_paths       # References to completion configs
 │   └── completions/*/completion_config.yaml
-└── oidc_provider_paths    # References to OIDC configs
-    └── oidc/*.yaml
+└── oidc_paths             # Directories containing oidc/config.yaml
+    └── oidc/config.yaml
 ```
 
 ## Quick Reference
