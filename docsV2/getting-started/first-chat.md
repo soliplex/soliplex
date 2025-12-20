@@ -29,36 +29,38 @@ In development mode (`--no-auth-mode`), you'll be logged in automatically. In pr
 ### Layout Overview
 
 ```
-┌─────────────────────────────────────────────────┐
-│  Room Selector    │     Chat Messages           │
-│  ───────────────  │                             │
-│  > haiku          │  [Thread History]           │
-│    joker          │                             │
-│    research       │  ┌─────────────────────┐    │
-│                   │  │ AI Response         │    │
-│  Thread List      │  │ ...                 │    │
-│  ───────────────  │  └─────────────────────┘    │
-│    Thread 1       │                             │
-│    Thread 2       │  ┌─────────────────────┐    │
-│                   │  │ Type a message...   │    │
-│                   │  └─────────────────────┘    │
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ ☰ │  Thread History  │      Chat Area        │  Context     │
+│   │  ─────────────── │                       │  ──────────  │
+│   │  + [New thread]  │  ┌─────────────────┐  │  State       │
+│   │  Current Session │  │ AI Response     │  │  Events      │
+│   │  Thread 1        │  │ ...             │  │  ...         │
+│   │  Thread 2        │  └─────────────────┘  │              │
+│   │                  │                       │              │
+│   │                  │  ┌─────────────────┐  │              │
+│   │                  │  │ Type message... │  │              │
+│   │                  │  └─────────────────┘  │              │
+└──────────────────────────────────────────────────────────────┘
+       ↑                         ↑                    ↑
+  Navigation drawer         Main chat         Debug/context
+  (☰ opens room list)
 ```
 
 ### Key Elements
 
 | Element | Purpose |
 |---------|---------|
-| **Room Selector** | Switch between different chat rooms |
-| **Thread List** | Access previous conversations |
+| **Navigation (☰)** | Open drawer to select server and room |
+| **Thread History** | Access previous conversations, create new threads |
 | **Chat Area** | View message history and responses |
+| **Context Pane** | View AG-UI state and tool events (development) |
 | **Input Box** | Type and send messages |
 
 ## Sending Your First Message
 
 ### 1. Select a Room
 
-Click on a room name in the sidebar. Each room has different:
+Open the navigation drawer (☰) and click on a room name. Each room has different:
 
 - **AI Model** - Which LLM responds
 - **Tools** - What actions it can perform
@@ -104,28 +106,29 @@ def hello():
 
 ### Tool Calls
 
-When the AI uses a tool, you'll see:
+When the AI uses a tool, you'll see a compact indicator that can be expanded:
 
 ```
-🔧 Using: search_documents
-   Query: "RAG configuration"
-
-📄 Found 3 results...
+Using search_documents... ✓
 ```
+
+Click to expand and see tool details. Multiple tool calls are grouped together.
 
 ### Citations
 
-If using RAG tools, you may see citations:
+If using RAG tools, citations appear in a collapsible section below the response:
 
-> According to the documentation [1], the configuration file...
->
-> [1] installation.md, line 42
+```
+▶ 3 sources
+```
+
+Click to expand and see source documents, page numbers, and content previews. Click page badges to view the original document with highlighted text.
 
 ## Working with Threads
 
 ### Starting a New Thread
 
-Click "New Chat" or the + button to start a fresh conversation.
+Click the + button (with "New thread" tooltip) in the thread list header to start a fresh conversation.
 
 ### Continuing a Thread
 
@@ -133,7 +136,7 @@ Select an existing thread from the list to continue that conversation. The AI re
 
 ### Thread Persistence
 
-Threads are saved automatically. You can close the browser and return later.
+Threads are saved to the configured database. With file-based SQLite (e.g., `sqlite:///threads.db`), you can close the browser and return later. The default `minimal.yaml` uses in-memory SQLite, so threads won't persist across server restarts.
 
 ## Exploring Rooms
 
@@ -141,18 +144,18 @@ Threads are saved automatically. You can close the browser and return later.
 
 | Room | Purpose |
 |------|---------|
-| **haiku** | General chat with RAG search |
-| **joker** | Entertainment - generates jokes |
-| **research** | Deep research with reports |
+| **haiku** | Search documents using Haiku-RAG |
+| **joker** | Joke generator (testing agent delegation) |
+| **research** | Generate research reports using Haiku-RAG |
 
 ### Room Capabilities
 
 Each room may have different tools available:
 
-- `get_current_datetime` - Current time
-- `search_documents` - RAG search
-- `research_report` - Multi-document analysis
-- External MCP tools
+- `get_current_datetime` - Get current date/time
+- `get_current_user` - Get current user profile
+- `search_documents` - RAG vector search
+- `research_report` - Multi-document analysis with synthesis
 
 ## Tips for Better Results
 
