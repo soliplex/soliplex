@@ -24,7 +24,7 @@ Soliplex provides a complete platform for building AI-powered applications:
 ```
 ┌─────────────────┐     ┌─────────────────────────────────────────┐
 │   Flutter App   │────▶│           FastAPI Backend               │
-│  (Web/Mobile)   │ SSE │                                         │
+│(Web/Mobile/Desk)│ SSE │                                         │
 └─────────────────┘     │  ┌─────────────┐    ┌───────────────┐  │
                         │  │ Pydantic AI │───▶│ LLM Provider  │  │
                         │  │   Agents    │    │ (Ollama/OpenAI)│  │
