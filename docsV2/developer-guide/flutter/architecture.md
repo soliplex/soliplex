@@ -10,20 +10,29 @@ lib/
 │   ├── auth/           # OIDC authentication
 │   ├── chat/           # Chat session abstractions
 │   ├── config/         # Connection configuration
+│   ├── controllers/    # UI controllers
 │   ├── models/         # Domain models
 │   ├── network/        # AG-UI transport, event processing
 │   ├── protocol/       # Protocol implementations
 │   ├── providers/      # Riverpod providers
+│   ├── router/         # App routing
 │   ├── services/       # Business logic services
+│   ├── state/          # State management utilities
 │   └── utils/          # Utilities
 ├── features/
-│   ├── chat/           # Chat UI, view models, widgets
-│   ├── room/           # Room selection
+│   ├── auth/           # Authentication UI
 │   ├── canvas/         # Canvas view
+│   ├── chat/           # Chat UI, view models, widgets
 │   ├── context/        # Context pane
 │   ├── endpoints/      # Endpoint management
-│   └── settings/       # App settings
-├── infrastructure/     # External integrations
+│   ├── inspector/      # Debug inspector
+│   ├── keyboard/       # Keyboard shortcuts
+│   ├── layouts/        # Layout components
+│   ├── navigation/     # Navigation UI
+│   ├── notes/          # Room notes
+│   ├── room/           # Room selection
+│   └── server/         # Server management
+├── infrastructure/     # External integrations (quick_agui)
 └── widgets/            # Shared widgets, registry
 ```
 
@@ -109,7 +118,7 @@ void handleEvent(Map<String, dynamic> event) {
   switch (event['type']) {
     case 'STATE_SNAPSHOT':
       // Full state replacement
-      _state = event['state'];
+      _state = event['snapshot'];
       break;
     case 'STATE_DELTA':
       // Incremental JSON Patch update
@@ -197,28 +206,39 @@ final service = platform.createService();
 
 ## Authentication Flow
 
-OIDC authentication with platform-specific handling:
+OIDC authentication uses middleware-based token handling:
 
 ```dart
-class OidcClient {
-  Future<void> login(String providerId) async {
-    // 1. Generate PKCE challenge
-    final pkce = PkceUtils.generate();
+// OidcClient wraps HTTP client with auth middleware
+class OidcClient implements http.Client {
+  final http.Client client;
+  final OidcAuthInteractor middleware;
+  final String serverId;
 
-    // 2. Build authorize URL
-    final authorizeUrl = buildAuthorizeUrl(providerId, pkce);
-
-    // 3. Open browser/webview
-    await launchUrl(authorizeUrl);
-
-    // 4. Handle callback (platform-specific)
-    final token = await waitForCallback();
-
-    // 5. Store securely
-    await secureStorage.saveToken(token);
+  // All HTTP methods apply auth via middleware before executing
+  Future<http.Response> get(Uri url, {Map<String, String>? headers}) async {
+    final requestHeaders = headers ?? {};
+    await middleware.applyToHeader(serverId, requestHeaders);
+    return client.get(url, headers: requestHeaders);
   }
 }
+
+// Auth interactor interface handles token lifecycle
+abstract class OidcAuthInteractor {
+  // Apply Bearer token to headers map
+  Future<void> applyToHeader(String serverId, Map<String, String> headers);
+
+  // Apply Bearer token to HTTP request
+  Future<void> applyToRequest(String serverId, http.BaseRequest request);
+
+  // OAuth flow methods
+  Future<OidcAuthTokenResponse> authorizeAndExchangeCode(String serverId, SsoConfig config);
+  Future<OidcAuthTokenResponse?> refreshAccessToken(String serverId, SsoConfig config);
+  Future<void> logout(String serverId, SsoConfig config);
+}
 ```
+
+Login flow is initiated via browser redirect to the server's `/login/{system}` endpoint.
 
 ## Network Layer
 
@@ -236,20 +256,27 @@ class ConnectionRegistry {
 }
 ```
 
-### HTTP Transport
+### Network Transport Layer
 
 Handles SSE streaming for AG-UI:
 
 ```dart
-class HttpTransport {
-  Stream<AguiEvent> executeRun(RunRequest request) async* {
-    final response = await _client.send(request);
+class NetworkTransportLayer {
+  final ag_ui.AgUiClient _agUiClient;
 
-    await for (final chunk in response.stream) {
-      final events = _parseSSE(chunk);
-      for (final event in events) {
-        yield event;
-      }
+  /// Run an SSE agent stream with observable hooks
+  Stream<ag_ui.BaseEvent> runAgent(
+    String endpoint,
+    ag_ui.SimpleRunAgentInput input,
+  ) async* {
+    final stream = _agUiClient.runAgent(
+      threadId: input.threadId,
+      runId: input.runId,
+      input: input,
+    );
+
+    await for (final event in stream) {
+      yield event;
     }
   }
 }
