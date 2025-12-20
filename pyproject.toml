@@ -78,7 +78,11 @@ markers = [
 ]
 
 [tool.coverage.run]
-omit = []
+omit = [
+    "src/soliplex/cli.py",
+    "src/soliplex/examples.py",
+    "src/soliplex/tui.py",
+]
 
 [tool.coverage.report]
 show_missing = true
