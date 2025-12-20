@@ -55,6 +55,38 @@ repo_url: https://github.com/soliplex/soliplex
 plugins:
   # Material for MkDocs
   search:
+  mkdocstrings:
+    handlers:
+      python:
+        paths: [src]
+  llmstxt:
+    full_output: llms-full.txt
+    sections:
+      Project Documentation:
+        - index.md
+        - overview.md
+        - server.md
+        - client.md
+        - rag.md
+        - config/agents.md
+        - config/completions.md
+        - config/environment.md
+        - config/filesystem_layout.md
+        - config/installation.md
+        - config/meta.md
+        - config/oidc_providers.md
+        - config/quizzes.md
+        - config/rag.md
+        - config/rooms.md
+        - config/secrets.md
+        - usage.md
+      Server API Reference:
+        - reference/server_api.md
+      Client API Reference:
+        - reference/client_api/index.md
+        - reference/client_api/**/*.md
+hooks:
+  - scripts/federate_llms_txt.py
 nav:
   - Home: index.md
   - Overview: overview.md
@@ -75,6 +107,12 @@ nav:
       - Quizzes: config/quizzes.md
       - OIDC Authentication: config/oidc_providers.md
   - Usage: usage.md
+  - Reference:
+      - Overview: reference/index.md
+      - Server API: reference/server_api.md
+      - Client API: reference/client_api/index.md
+  - Development:
+      - Documentation Workflow: development/documentation.md
 markdown_extensions:
   - admonition
   - attr_list

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 /// SkillsCard widget for displaying a person's skills and proficiency levels.
 ///
 /// Data schema:
+/// ```json
 /// {
 ///   "person_id": "u1",
 ///   "name": "John Smith",
@@ -13,8 +14,9 @@ import 'package:flutter/services.dart';
 ///     {"name": "Python", "level": 4},
 ///     {"name": "AWS", "level": 3}
 ///   ],
-///   "avatar_url": "https://..." (optional)
+///   "avatar_url": "https://..." // (optional)
 /// }
+/// ```
 ///
 /// Skill levels: 1-5 (Beginner to Expert)
 class SkillsCardWidget extends StatelessWidget {

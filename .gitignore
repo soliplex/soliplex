@@ -26,5 +26,12 @@ tmp/
 .DS_Store
 ._*
 
+# Generated documentation
+docs/reference/client_api/
+site/
+
+# IDE
 .idea
+
+# coding agents
 .claude/settings.local.json

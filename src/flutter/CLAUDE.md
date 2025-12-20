@@ -1,157 +1,108 @@
-# Claude Code Notes
+# Soliplex Flutter App
 
-Project-specific instructions for Claude Code when working on this codebase.
+Flutter client for Soliplex - a multi-platform chat application with AG-UI protocol support.
+
+## Quick Commands
+
+```bash
+flutter analyze          # Must show "No issues found!"
+flutter test             # All tests must pass
+dart format lib test     # Format before commits
+```
+
+## Architecture Overview
+
+```
+lib/
+├── core/
+│   ├── models/          # Domain models (ChatMessage, Citation, etc.)
+│   ├── network/         # AG-UI protocol, event processing, transport
+│   ├── protocol/        # Chat session abstractions
+│   ├── providers/       # Riverpod providers (panel_providers.dart)
+│   ├── services/        # Business logic services
+│   └── utils/           # API constants, URL builder
+├── features/
+│   ├── chat/            # Chat UI, view models, widgets
+│   ├── room/            # Room selection, welcome cards
+│   └── settings/        # App settings
+├── infrastructure/      # External integrations (quick_agui, dartantic)
+└── widgets/             # Shared widgets (markdown, registry)
+```
 
 ## Reference Documentation
 
-- **SOLIPLEX.md** - Backend API documentation for AG-UI integration (endpoints, request/response schemas, state sync)
-- **QUICK_AGUI.md** - Notes on the quick_agui Flutter library (issues, workarounds, architecture)
-- **APP_FEATURES.md** - Planned, in-progress, and completed app features (feedback chips, notes pad, etc.)
-- **GENUI-WIDGETS.md** - Widget system documentation (registry, creating widgets, semantic IDs, limitations)
-- **STATE_MANAGEMENT.md** - Riverpod state management patterns (server-scoped providers, adding new panels)
-- **docs/AUTH_FLOWS.md** - Authentication flows (web backend-mediated, mobile PKCE, configuration, troubleshooting)
-- **docs/PROCESS.md** - Documentation lifecycle process (specs, ADRs, work logs)
+| Doc | Purpose |
+|-----|---------|
+| `SOLIPLEX.md` | Backend API (AG-UI endpoints, schemas, state sync) |
+| `QUICK_AGUI.md` | quick_agui library issues and workarounds |
+| `APP_FEATURES.md` | Feature tracking (planned → in progress → done) |
+| `GENUI-WIDGETS.md` | Widget registry and GenUI system |
+| `STATE_MANAGEMENT.md` | Riverpod patterns, server-scoped providers |
+| `docs/AUTH_FLOWS.md` | OIDC authentication (web, mobile, desktop) |
 
-## Documentation Lifecycle System
+## Key Patterns
 
-Feature work follows a structured lifecycle with audit trails. See `docs/PROCESS.md` for full details.
+### Server-Scoped Providers
 
-### Quick Reference
+Panel state resets when server changes. Always use `ServerScopedNotifier`:
 
-| Artifact | Location | Purpose |
-|----------|----------|---------|
-| Spec | `docs/specs/{name}.md` | Define what we're building |
-| ADR | `docs/adr/NNNN-{title}.md` | Record why decisions were made |
-| Work Log | `docs/work-logs/{name}.md` | Track when/how work happened |
+```dart
+// In panel_providers.dart
+final myProvider = StateNotifierProvider<MyNotifier, MyState>((ref) {
+  ref.watch(currentServerProvider);  // Required for reset
+  return MyNotifier();
+});
+```
 
-### Workflow
+### Event Processing (AG-UI)
 
-1. **Before starting a feature**: Create or locate the spec in `docs/specs/`
-2. **During work**: Append session entries to `docs/work-logs/{feature}.md`
-3. **When making decisions**: Create ADR in `docs/adr/`, link from spec
-4. **When complete**: Update spec status to DONE, add completion record
+Events flow: `NetworkTransportLayer` → `EventProcessor` → `ChatSession` → UI
 
-### Machine Instructions (Recipes)
+- `STATE_SNAPSHOT`: Full state replacement
+- `STATE_DELTA`: JSON Patch incremental updates
+- Buffer patterns: `ThinkingBufferState`, `CitationsBufferState`
 
-Claude loads these on-demand based on context:
-- `docs/recipes/spec-recipe.md` - Creating/updating specs
-- `docs/recipes/adr-recipe.md` - Creating ADRs
-- `docs/recipes/work-log-recipe.md` - Maintaining work logs
+### View Model Pattern
 
-## Documentation Requirements
+`ChatMessage` (domain) → `MessageViewModelMapper` → `ChatMessageViewModel` (UI)
 
-- Any newly discovered information about `quick_agui` - especially design shortcomings, bugs, or architectural issues - should be documented in `QUICK_AGUI.md`
-- This includes issues like:
-  - Concurrency problems (e.g., shared state causing duplicate processing)
-  - Event streaming edge cases
-  - Tool registration/execution quirks
-  - Any workarounds implemented in the app layer to compensate for library limitations
-- Backend API discoveries should be documented in `SOLIPLEX.md`
-- **Widget system**: When adding new GenUI widgets, update `GENUI-WIDGETS.md`:
-  - Add to the registered widgets table
-  - Document data schema
-  - Add semantic ID logic if widget supports canvas
-- **Feature tracking**: When working on new features, update `APP_FEATURES.md`:
-  - Move features from "Planned" to "In Progress" when starting work
-  - Move features from "In Progress" to "Completed" when done
-  - Add implementation notes, files modified, and any gotchas discovered
+Types: `TextMessageViewModel`, `ToolCallViewModel`, `GenUiViewModel`, `ErrorMessageViewModel`
 
-## Platform-Specific Code (dart:io)
+## Platform-Specific Code
 
-SOLIPLEX must work on **Web**, **Mobile**, and **Desktop**. The `dart:io` package is NOT supported on web.
-
-### Current Platform-Specific Features
+Must work on **Web**, **Mobile**, and **Desktop**. No `dart:io` on web.
 
 | Feature | Approach | Files |
 |---------|----------|-------|
-| Room Notes | Hidden on web (`kIsWeb` check) | `notes_service*.dart`, `chat_screen.dart` |
-| Feedback Storage | Conditional imports (localStorage on web) | `feedback_service*.dart` |
+| Room Notes | Hidden on web (`kIsWeb`) | `notes_service*.dart` |
+| Feedback Storage | Conditional imports | `feedback_service_io.dart`, `feedback_service_web.dart` |
 
-### Naming Convention
-
-- `*_io.dart` - Native implementation using `dart:io`
-- `*_web.dart` - Web implementation using `dart:html` or stubs
-
-### Pattern for New Platform-Specific Code
-
-Use conditional imports to provide platform-specific implementations:
-
+**Pattern:**
 ```dart
-import 'my_service_io.dart' if (dart.library.html) 'my_service_web.dart'
-    as platform;
-
-// Call platform functions
-final data = await platform.loadData();
-await platform.saveData(data);
+import 'my_service_io.dart' if (dart.library.html) 'my_service_web.dart' as platform;
 ```
 
-Both `_io.dart` and `_web.dart` files must export the same function signatures.
+## Adding Features
 
-### When to Use Each Approach
+1. Update `APP_FEATURES.md` status
+2. Add models to `core/models/`
+3. Add event handling to `event_processor.dart`
+4. Create view models in `features/*/view_models/`
+5. Build widgets in `features/*/widgets/`
+6. Write tests in `test/`
 
-1. **Conditional imports** (like FeedbackService): When the feature should work on web with a different storage mechanism (e.g., localStorage).
+## Common Files
 
-2. **Hide UI on web** (like Notes): When the feature fundamentally depends on local file system and doesn't make sense on web. Use `kIsWeb` to hide the UI:
-   ```dart
-   if (!kIsWeb)
-     IconButton(...)
-   ```
+| Task | Files |
+|------|-------|
+| New chat message type | `chat_models.dart`, `event_processor.dart`, `chat_message_view_model.dart`, `message_view_model_mapper.dart`, `chat_message_bubble.dart` |
+| New API endpoint | `api_constants.dart`, `url_builder.dart` |
+| New provider | `panel_providers.dart` (server-scoped) or service file |
+| New GenUI widget | `widgets/registry/`, `GENUI-WIDGETS.md` |
 
-### Adding New dart:io Features
+## Gotchas
 
-1. Never import `dart:io` directly in files that could be compiled for web
-2. Create `*_io.dart` and `*_web.dart` companion files
-3. Use conditional imports in the main service file
-4. If UI should be hidden on web, add `kIsWeb` checks in the UI layer
-5. Document the feature in this table above
-
-## Server-Scoped Provider Pattern
-
-Panel state (chat, canvas, context pane, activity status) must reset when the server changes. See **STATE_MANAGEMENT.md** for full documentation.
-
-**Quick reference:**
-1. Extend `ServerScopedNotifier<State>` for panel notifiers
-2. Declare providers in `lib/core/providers/panel_providers.dart`
-3. Always `ref.watch(currentServerProvider)` in provider declarations
-4. Import providers from `panel_providers.dart`, not service files
-
-## Code Quality Requirements
-
-### Analyzer: Zero Tolerance Policy
-
-**`flutter analyze` must report ZERO errors and ZERO warnings.**
-
-This is mandatory for all code changes:
-- Run `flutter analyze` before committing
-- Fix all errors AND warnings immediately
-- Info-level hints are allowed but should be addressed when practical
-- **No exceptions** - warnings are not "acceptable technical debt"
-
-```bash
-# Check before committing
-flutter analyze
-
-# Expected output: "No issues found!"
-```
-
-**Why this matters:**
-- Analyzer warnings often indicate real bugs (null safety violations, unused variables, type mismatches)
-- Warnings accumulate quickly - "just one" becomes hundreds
-- Treating analyzer as strictly as tests prevents regression
-- Clean analyzer output makes code review faster
-
-### Tests: All Must Pass
-
-All tests must pass before any code is considered complete:
-
-```bash
-flutter test
-```
-
-### Formatter
-
-Code should be formatted before commits:
-
-```bash
-dart format lib test
-```
+- `quick_agui` has concurrency issues - see `QUICK_AGUI.md`
+- Citations come via `STATE_DELTA`, not `STATE_SNAPSHOT`
+- Always pass `roomId` through widget tree for API calls
+- Use `CitationsBufferState` pattern to attach data to next message
