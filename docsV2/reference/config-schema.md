@@ -76,7 +76,7 @@ description: string                 # Required: room description
 
 # Agent configuration
 agent:
-  kind: string                      # "completion" (default) | "factory"
+  kind: string                      # "default" (default) | "factory"
   model_name: string                # LLM model name
   provider_type: string             # "ollama" | "openai"
   provider_base_url: string

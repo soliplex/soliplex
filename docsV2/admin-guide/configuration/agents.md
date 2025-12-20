@@ -12,9 +12,9 @@ agent_configs:
 
 ## Agent Types
 
-### Completion Agent (Standard)
+### Default Agent (Standard)
 
-Uses an LLM provider directly:
+Uses an LLM provider directly (kind: `"default"`, which is the default):
 
 ```yaml
 agent:
@@ -46,15 +46,17 @@ agent_configs:
   - id: "research_agent"
 ```
 
-### model_name (required)
+### model_name
 
-LLM model to use:
+LLM model to use. Falls back to `DEFAULT_AGENT_MODEL` environment variable if not set.
 
 ```yaml
 model_name: "gpt-oss:latest"     # Ollama
 model_name: "gpt-4"              # OpenAI
-model_name: "claude-3-opus"      # Anthropic
+model_name: "gpt-4o"             # OpenAI (via compatible API)
 ```
+
+Note: Only `ollama` and `openai` provider types are supported. For other LLMs (Claude, etc.), use an OpenAI-compatible proxy.
 
 ### provider_type
 
@@ -217,10 +219,14 @@ Factory agents have access to:
 
 ## Agent Caching
 
-Agents are cached by configuration. Identical configurations share the same agent instance:
+Agents are cached by their **ID**. Each room or completion gets a unique agent ID:
+
+- Room agents: `room-{room_id}`
+- Completion agents: `completion-{completion_id}`
 
 ```yaml
-# These two rooms share the same agent instance
+# These two rooms have DIFFERENT agent instances
+# (IDs: "room-room1" and "room-room2")
 rooms/room1/room_config.yaml:
   agent:
     template_id: "default"
@@ -229,6 +235,8 @@ rooms/room2/room_config.yaml:
   agent:
     template_id: "default"
 ```
+
+Global agents defined in `agent_configs` with the same ID will share instances.
 
 ## Complete Example
 
