@@ -5,7 +5,7 @@ Rooms are chat environments with specialized AI assistants.
 ## Selecting a Room
 
 1. Open the Soliplex app
-2. Click the room selector in the sidebar
+2. Open the navigation drawer (☰)
 3. Choose a room from the list
 4. Start chatting!
 
@@ -35,34 +35,38 @@ The AI responds with formatted text, including:
 ### Tool Calls
 
 When the AI uses tools (like searching documents), you'll see:
-- Tool name and status
-- Progress indicators
-- Results summary
+- Collapsible "Used N tools" summary
+- Progress spinner while executing
+- Individual tool status (running, completed, error)
+
+Click to expand and see each tool's name and status.
 
 ### Citations
 
 For RAG-enabled rooms, responses include:
-- Numbered citations
-- Source document links
-- Click to view source content
+- Collapsible citations section below the message
+- Document title and page numbers (for PDFs)
+- Expandable content excerpts
+
+See [Document Search](rag-search.md) for details.
 
 ## Conversation Threads
 
 ### Starting a New Thread
 
-Click "New Thread" to start a fresh conversation.
+Click the **+** button in the threads panel to start a fresh conversation.
 
 ### Thread History
 
 - Previous threads are saved
-- Access from the sidebar
+- Access from the threads panel (three-column layout)
 - Continue where you left off
 
 ### Thread Metadata
 
-- Title (auto-generated or custom)
+- Title (optional, shows thread ID if not set)
 - Created date
-- Message count
+- Last updated date
 
 ## Room Features
 
@@ -70,19 +74,12 @@ Click "New Thread" to start a fresh conversation.
 
 Rooms with document search can:
 - Find relevant information in documents
-- Provide citations
+- Provide citations with source excerpts
 - Answer questions from your knowledge base
-
-### Attachments
-
-If enabled, attach files to your messages:
-1. Click the attachment icon
-2. Select a file
-3. Send with your message
 
 ### Suggestions
 
-Starter questions appear when entering a room. Click to use.
+Starter questions appear when entering a room. Click to use as your first message.
 
 ## Keyboard Shortcuts
 
@@ -90,26 +87,25 @@ Starter questions appear when entering a room. Click to use.
 |----------|--------|
 | `Enter` | Send message |
 | `Shift+Enter` | New line |
-| `Ctrl+/` | Show shortcuts |
-| `Escape` | Cancel typing |
+| `Alt+/` | Show shortcuts |
 
-See [Keyboard Shortcuts](keyboard-shortcuts.md) for more.
+See [Keyboard Shortcuts](keyboard-shortcuts.md) for the complete list.
 
 ## Tips for Effective Chat
 
 1. **Be specific** - Clear questions get better answers
 2. **Provide context** - Help the AI understand your needs
 3. **Use follow-ups** - Build on previous responses
-4. **Check citations** - Verify sources for accuracy
+4. **Check citations** - Expand to verify sources
 5. **Try suggestions** - Room suggestions are tailored to the room's purpose
 
 ## Troubleshooting
 
 ### Slow Responses
 
-- Large language models take time
-- Check your internet connection
+- Large language models take time to process
 - Tool calls add processing time
+- Check your network connection
 
 ### No Response
 
@@ -117,8 +113,8 @@ See [Keyboard Shortcuts](keyboard-shortcuts.md) for more.
 - Check authentication status
 - Try refreshing the page
 
-### Missing Citations
+### No Citations
 
 - Not all rooms have RAG enabled
-- Some questions may not require citations
-- Check room description for capabilities
+- The AI may answer from general knowledge
+- Check room capabilities in the room info panel
