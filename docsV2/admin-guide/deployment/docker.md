@@ -105,30 +105,31 @@ volumes:
 ## Dockerfile
 
 ```dockerfile
-FROM python:3.13-slim
+FROM python:3.13.9
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# Install system-level build dependencies
+RUN \
+  --mount=type=cache,target=/root/.cache/pip \
+  apt-get update && \
+  apt-get install -y \
+    curl \
+    gpg \
+    apt-transport-https \
+    git \
+    rsync \
+    vim \
+    jq \
+    && \
+  pip3 install --upgrade pip
 
-# Install Python dependencies
-COPY pyproject.toml .
-RUN pip install --no-cache-dir -e .
+COPY pyproject.toml /app/pyproject.toml
+COPY src/soliplex /app/src/soliplex
 
-# Copy source
-COPY src/ src/
+RUN pip3 install -e .
 
-# Create non-root user
-RUN useradd -m soliplex
-USER soliplex
-
-EXPOSE 8000
-
-ENTRYPOINT ["soliplex-cli"]
-CMD ["serve", "--help"]
+CMD ["/usr/local/bin/soliplex-cli", "serve", "--host=0.0.0.0", "/app/installation"]
 ```
 
 ## Environment Variables
@@ -401,4 +402,3 @@ volumes:
 ## Source Code
 
 - Dockerfile: `Dockerfile`
-- Docker Compose examples: `docker-compose.yml`
