@@ -13,7 +13,7 @@ Soliplex exposes a REST API for all client interactions. This section documents 
 
 ## Sections
 
-- **[REST Endpoints](rest-endpoints.md)** - Complete endpoint documentation (32 endpoints)
+- **[REST Endpoints](rest-endpoints.md)** - Complete endpoint documentation (25 endpoints)
 - **[AG-UI Protocol](agui-protocol.md)** - Streaming protocol for agent events
 - **[Models](models.md)** - Request/response Pydantic models
 
@@ -33,7 +33,7 @@ Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
 | Module | Count | Key Endpoints |
 |--------|-------|---------------|
 | **AGUI** | 9 | Thread/run management |
-| **Rooms** | 5 | Room config, documents, chunks |
+| **Rooms** | 6 | Room config, documents, chunks, images |
 | **Completions** | 3 | OpenAI-compatible completions |
 | **Auth** | 4 | OIDC flow, user info |
 | **Quizzes** | 2 | Quiz access |
@@ -48,7 +48,7 @@ GET /api/v1/rooms
 # Create thread
 POST /api/v1/rooms/{room_id}/agui
 Content-Type: application/json
-{"run": {"thread_id": "new", "run_id": "run-1"}}
+{"metadata": {"name": "My Thread"}}
 
 # Execute run (SSE stream)
 POST /api/v1/rooms/{room_id}/agui/{thread_id}/{run_id}
@@ -71,18 +71,16 @@ Accept: text/event-stream
 AGUI run execution returns Server-Sent Events:
 
 ```
-event: TEXT_MESSAGE_START
 data: {"type": "TEXT_MESSAGE_START", "message_id": "msg-1"}
 
-event: TEXT_MESSAGE_CONTENT
 data: {"type": "TEXT_MESSAGE_CONTENT", "delta": "Hello"}
 
-event: TEXT_MESSAGE_END
 data: {"type": "TEXT_MESSAGE_END"}
 
-event: RUN_FINISHED
 data: {"type": "RUN_FINISHED"}
 ```
+
+Event type is identified via the `type` field in the JSON payload.
 
 ## Source Files
 
@@ -90,5 +88,8 @@ data: {"type": "RUN_FINISHED"}
 |------|---------|
 | `src/soliplex/views/agui.py` | AGUI endpoints |
 | `src/soliplex/views/rooms.py` | Room endpoints |
+| `src/soliplex/views/completions.py` | Completions endpoints |
 | `src/soliplex/views/auth.py` | Auth endpoints |
+| `src/soliplex/views/quizzes.py` | Quiz endpoints |
+| `src/soliplex/views/installation.py` | Installation endpoint |
 | `src/soliplex/models.py` | Pydantic models |

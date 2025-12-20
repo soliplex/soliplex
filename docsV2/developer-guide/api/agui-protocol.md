@@ -162,20 +162,16 @@ sequenceDiagram
 Events are transmitted as Server-Sent Events:
 
 ```
-event: TEXT_MESSAGE_START
 data: {"type": "TEXT_MESSAGE_START", "message_id": "msg-1"}
 
-event: TEXT_MESSAGE_CONTENT
 data: {"type": "TEXT_MESSAGE_CONTENT", "delta": "Hello, "}
 
-event: TEXT_MESSAGE_CONTENT
 data: {"type": "TEXT_MESSAGE_CONTENT", "delta": "world!"}
 
-event: TEXT_MESSAGE_END
 data: {"type": "TEXT_MESSAGE_END"}
 ```
 
-The `event` field matches the event type, and `data` contains the JSON payload.
+The event type is identified via the `type` field in the JSON payload.
 
 ## Request Format
 
