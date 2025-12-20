@@ -37,13 +37,15 @@ agent:
 
 ```python
 def my_factory(
-    agent_config: config.FactoryAgentConfig = None,  # if with_agent_config=true
+    agent_config: config.FactoryAgentConfig,  # Provided when with_agent_config=true
     tool_configs: config.ToolConfigMap = None,
     mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap = None,
 ) -> pydantic_ai.Agent:
     """Create and return a Pydantic AI agent."""
     pass
 ```
+
+When `with_agent_config: true`, the config system uses `functools.partial` to bind the `agent_config` parameter automatically.
 
 ## Example: Joke Generator
 
@@ -52,23 +54,29 @@ The `joker_agent_factory` demonstrates multi-agent orchestration:
 ```python
 # src/soliplex/examples.py
 
-JOKER_AGENT_PROMPT = """
-You are a world-class comedian and joke curator.
-When users request jokes, use the joke_factory tool.
+JOKER_AGENT_PROMPT = """\
+Use the `joke_factory` to generate some jokes, then choose the best.
+
+You must return just a single joke.
 """
 
 def joker_agent_factory(
-    agent_config: config.FactoryAgentConfig,
+    agent_config,
     tool_configs: config.ToolConfigMap = None,
     mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap = None,
 ):
     installation_config = agent_config._installation_config
 
+    # Create Ollama provider
+    provider_base_url = installation_config.get_environment("OLLAMA_BASE_URL")
+    provider_kw = {"base_url": f"{provider_base_url}/v1"}
+    provider = ollama_providers.OllamaProvider(**provider_kw)
+
     # Primary agent - handles user interaction
     joke_selection_agent = pydantic_ai.Agent(
         model=openai_models.OpenAIChatModel(
-            model_name=installation_config.agent_configs[0].model_name,
-            provider=get_provider(installation_config),
+            model_name="gpt-oss:latest",
+            provider=provider,
         ),
         system_prompt=JOKER_AGENT_PROMPT,
     )
@@ -76,8 +84,8 @@ def joker_agent_factory(
     # Helper agent - generates jokes
     joke_generation_agent = pydantic_ai.Agent(
         model=openai_models.OpenAIChatModel(
-            model_name=installation_config.agent_configs[0].model_name,
-            provider=get_provider(installation_config),
+            model_name="gpt-oss:latest",
+            provider=provider,
         ),
         output_type=list[str],  # Returns list of jokes
     )
@@ -85,20 +93,21 @@ def joker_agent_factory(
     # Register tool on primary agent that uses helper
     @joke_selection_agent.tool
     async def joke_factory(
-        ctx: pydantic_ai.RunContext,
+        ctx: pydantic_ai.RunContext[None],
         count: int,
         topic: str = None,
     ) -> list[str]:
         """Generate jokes using the helper agent."""
-        prompt = f"Generate {count} jokes"
-        if topic:
-            prompt += f" about {topic}"
+        if topic is None:
+            prompt = f"Please generate {count} jokes."
+        else:
+            prompt = f"Please generate {count} jokes about {topic}."
 
-        result = await joke_generation_agent.run(
+        r = await joke_generation_agent.run(
             prompt,
             usage=ctx.usage,  # Share usage tracking
         )
-        return result.output
+        return r.output
 
     return joke_selection_agent
 ```
@@ -108,12 +117,13 @@ def joker_agent_factory(
 ```yaml
 # example/rooms/joker/room_config.yaml
 id: "joker"
-description: "A room that tells jokes"
-
+name: "Joke generator"
+description: "Testing agent delegation"
 agent:
   kind: "factory"
   factory_name: "soliplex.examples.joker_agent_factory"
   with_agent_config: true
+allow_mcp: false
 ```
 
 ## Accessing Installation Config
@@ -218,5 +228,5 @@ def orchestrator_factory(agent_config, tool_configs, mcp_configs):
 
 ## Source Code
 
-- Factory agent implementation: `src/soliplex/config.py` (lines 944-1003)
+- Factory agent implementation: `src/soliplex/config.py` (lines 943-1003)
 - Example factories: `src/soliplex/examples.py`
