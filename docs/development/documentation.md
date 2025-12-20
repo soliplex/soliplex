@@ -14,7 +14,7 @@ The documentation site is built using [MkDocs](https://www.mkdocs.org/) with the
 A single script handles the entire process. To regenerate all documentation and build the final site, run:
 
 ```bash
-./scripts/verify_docs.sh
+./scripts/build_docs.sh
 ```
 
 This script performs the following steps:
@@ -107,7 +107,7 @@ You can control how links are generated in the root `llms.txt` map to support di
 
 **Example: Building for Local Agents**
 ```bash
-DOCS_MODE=local ./scripts/verify_docs.sh
+DOCS_MODE=local ./scripts/build_docs.sh
 ```
 This enables the agent to read `site/llms.txt` and immediately follow the absolute paths to the domain files.
 
