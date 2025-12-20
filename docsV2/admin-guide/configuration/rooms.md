@@ -192,11 +192,13 @@ logo_image: "./logo.png"
 
 ### _order
 
-Sort order for room listings. Accessed via `sort_key` property.
+Sort order for room listings. Accessed via `sort_key` property. Values are strings with lexicographic sorting.
 
 ```yaml
-_order: 10  # Lower numbers appear first
+_order: "10"  # String-based sorting (lexicographic)
 ```
+
+To ensure numeric ordering, use zero-padded strings (e.g., `"01"`, `"02"`, `"10"`).
 
 ### quizzes
 
@@ -270,7 +272,7 @@ tools:
 id: "research"
 name: "Research Assistant"
 description: "AI-powered document research with citations"
-_order: 1
+_order: "01"
 
 agent:
   model_name: "gpt-oss:latest"
