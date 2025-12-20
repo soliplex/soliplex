@@ -6,20 +6,20 @@ Configure logging, metrics, and observability for Soliplex.
 
 ### Log Levels
 
-Configure via environment:
+Configure via CLI option:
 
-```yaml
-environment:
-  - name: "LOG_LEVEL"
-    value: "INFO"  # DEBUG, INFO, WARNING, ERROR
+```bash
+soliplex-cli serve installation.yaml --log-level INFO
 ```
 
 | Level | Use Case |
 |-------|----------|
-| `DEBUG` | Development, troubleshooting |
-| `INFO` | Standard operation |
-| `WARNING` | Production (recommended) |
+| `CRITICAL` | Only critical errors |
 | `ERROR` | Minimal logging |
+| `WARNING` | Production (recommended) |
+| `INFO` | Standard operation |
+| `DEBUG` | Development, troubleshooting |
+| `TRACE` | Verbose debugging |
 
 ### Log Output
 
@@ -39,16 +39,16 @@ soliplex-cli serve installation.yaml 2>&1 | tee app.log
 
 ### Configuration
 
-```yaml
-secrets:
-  - "LOGFIRE_TOKEN"
+Set the `LOGFIRE_TOKEN` environment variable. Soliplex configures Logfire with `send_to_logfire="if-token-present"`, so logging activates automatically when the token is set.
 
-environment:
-  - name: "LOGFIRE_ENVIRONMENT"
-    value: "production"
-  - name: "LOGFIRE_SERVICE_NAME"
-    value: "soliplex"
+```bash
+export LOGFIRE_TOKEN="your-logfire-token"
+soliplex-cli serve installation.yaml
 ```
+
+Optional Logfire environment variables (see [Logfire docs](https://logfire.pydantic.dev/docs/)):
+- `LOGFIRE_ENVIRONMENT` - Environment name (e.g., "production")
+- `LOGFIRE_SERVICE_NAME` - Service name for grouping
 
 ### Features
 
@@ -90,12 +90,20 @@ This creates spans visible in Logfire for:
 curl http://localhost:8000/api/v1/installation
 ```
 
-Expected response:
+Expected response (includes installation configuration):
 ```json
 {
-  "id": "my-installation"
+  "id": "my-installation",
+  "secrets": [],
+  "environment": {},
+  "agents": [],
+  "oidc_auth_systems": [],
+  "room_paths": [],
+  "completion_paths": []
 }
 ```
+
+A successful response with an `id` field indicates the server is running.
 
 ### Comprehensive Health Check
 
@@ -192,17 +200,17 @@ REQUEST_LATENCY = Histogram('soliplex_request_latency_seconds', 'Request latency
 
 ### Enable Debug Logging
 
-```yaml
-environment:
-  - name: "LOG_LEVEL"
-    value: "DEBUG"
+```bash
+soliplex-cli serve installation.yaml --log-level DEBUG
 ```
 
 ### View SSE Streams
 
 ```bash
-curl -N -H "Authorization: Bearer $TOKEN" \
+curl -X POST -N -H "Authorization: Bearer $TOKEN" \
     -H "Accept: text/event-stream" \
+    -H "Content-Type: application/json" \
+    -d '{}' \
     "http://localhost:8000/api/v1/rooms/research/agui/$THREAD/$RUN"
 ```
 
@@ -280,7 +288,7 @@ services:
 
 | Issue | Check |
 |-------|-------|
-| No logs | LOG_LEVEL setting, stdout capture |
+| No logs | `--log-level` setting, stdout capture |
 | Missing traces | LOGFIRE_TOKEN configured |
 | Health check fails | Port binding, firewall |
 | Slow responses | LLM provider, database |
