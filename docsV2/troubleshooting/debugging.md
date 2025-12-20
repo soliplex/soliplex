@@ -66,16 +66,12 @@ arch -arm64 brew install ollama
 
 ### Enable Debug Mode
 
-```yaml
-environment:
-  - name: "LOG_LEVEL"
-    value: "DEBUG"
+Via CLI option:
+```bash
+soliplex-cli serve installation.yaml --log-level debug
 ```
 
-Or via CLI:
-```bash
-LOG_LEVEL=DEBUG soliplex-cli serve installation.yaml
-```
+Available log levels: `critical`, `error`, `warning`, `info`, `debug`, `trace`
 
 ### Log Output
 
@@ -102,9 +98,11 @@ logging.getLogger('httpx').setLevel(logging.DEBUG)
 ### View Raw SSE Events
 
 ```bash
-curl -N \
+curl -X POST -N \
     -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
     -H "Accept: text/event-stream" \
+    -d '{"messages": []}' \
     "http://localhost:8000/api/v1/rooms/research/agui/$THREAD/$RUN"
 ```
 
@@ -161,11 +159,13 @@ soliplex-cli list-rooms installation.yaml
 
 ## Database Debugging
 
+Database location depends on `thread_persistence_dburi` in your installation.yaml.
+
 ### SQLite
 
 ```bash
-# Open database
-sqlite3 data/threads.db
+# Open database (path from thread_persistence_dburi.sync)
+sqlite3 /path/to/threads.db
 
 # List tables
 .tables
@@ -241,8 +241,8 @@ curl http://localhost:8000/api/v1/installation
 ### Check Authentication
 
 ```bash
-# Get token (dev mode)
-curl http://localhost:8000/login
+# Get OIDC providers (dev mode)
+curl http://localhost:8000/api/login
 
 # Use token
 curl -H "Authorization: Bearer $TOKEN" \
