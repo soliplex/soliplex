@@ -111,12 +111,13 @@ npx -y @modelcontextprotocol/server-google-maps
 
 ## Debug Logging
 
-Enable verbose logging:
+Enable verbose logging via CLI option:
 
 ```bash
-# Set log level
-LOG_LEVEL=DEBUG soliplex-cli serve example/minimal.yaml --no-auth-mode
+soliplex-cli serve example/minimal.yaml --no-auth-mode --log-level debug
 ```
+
+Available log levels: `critical`, `error`, `warning`, `info`, `debug`, `trace`
 
 See [Debugging Guide](debugging.md) for more details.
 
