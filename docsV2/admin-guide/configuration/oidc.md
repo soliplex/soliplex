@@ -271,14 +271,16 @@ List available providers:
     "title": "Sign in with Google",
     "server_url": "https://accounts.google.com",
     "client_id": "your-id.apps.googleusercontent.com",
-    "scope": "openid email profile"
+    "scope": "openid email profile",
+    "token_validation_pem": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBg..."
   },
   "corporate": {
     "id": "corporate",
     "title": "Corporate SSO",
     "server_url": "https://sso.company.com",
     "client_id": "corporate-client-id",
-    "scope": "openid email profile"
+    "scope": "openid email profile",
+    "token_validation_pem": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBg..."
   }
 }
 ```
