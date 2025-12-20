@@ -26,9 +26,9 @@ async with agent.run_stream(
 ### With AG-UI Adapter
 
 ```python
-from ag_ui_protocol import AGUIAdapter
+from pydantic_ai.ui import ag_ui as ai_ag_ui
 
-agui_adapter = AGUIAdapter.from_request(request, agent)
+agui_adapter = await ai_ag_ui.AGUIAdapter.from_request(request=request, agent=agent)
 
 agent_stream = agui_adapter.run_stream(
     deps=agent_deps,
@@ -71,8 +71,8 @@ data: {"type": "TOOL_CALL_ARGS", "delta": "{\"query\": \"RAG\"}"}
 event: TOOL_CALL_END
 data: {"type": "TOOL_CALL_END"}
 
-event: TOOL_RESULT
-data: {"type": "TOOL_RESULT", "tool_call_id": "tc-1", "result": "[...]"}
+event: TOOL_CALL_RESULT
+data: {"type": "TOOL_CALL_RESULT", "tool_call_id": "tc-1", "result": "[...]"}
 ```
 
 ### Run Lifecycle Events
@@ -93,7 +93,7 @@ data: {"type": "RUN_ERROR", "error": "Something went wrong"}
 Consecutive text events are compacted to reduce overhead:
 
 ```python
-from ag_ui_protocol import compact_event_stream
+from soliplex.agui import compact_event_stream
 
 # Before: Many small TEXT_MESSAGE_CONTENT events
 # After: Fewer, larger TEXT_MESSAGE_CONTENT events
@@ -105,7 +105,7 @@ compacted = compact_event_stream(agent_stream)
 Combine agent events with emitter events (e.g., research progress):
 
 ```python
-from ag_ui_protocol import multiplex_streams
+from soliplex.agui.mpx import multiplex_streams
 
 # Agent stream + emitter stream
 emitter_stream = agui_parser.agui_events_from_dicts(emitter)
@@ -118,7 +118,7 @@ Full pipeline in `src/soliplex/views/agui.py`:
 
 ```python
 # 1. Create AG-UI adapter
-agui_adapter = AGUIAdapter.from_request(request, agent)
+agui_adapter = await ai_ag_ui.AGUIAdapter.from_request(request=request, agent=agent)
 
 # 2. Create agent dependencies with emitter
 agent_deps = AgentDependencies(
@@ -129,7 +129,7 @@ agent_deps = AgentDependencies(
 )
 
 # 3. Run agent stream
-agent_stream = agui_adapter.run_stream(deps=agent_deps)
+agent_stream = agui_adapter.run_stream(deps=agent_deps, on_complete=finish_callback)
 
 # 4. Compact consecutive text events
 compacted = compact_event_stream(agent_stream)
@@ -161,7 +161,7 @@ await for (final event in aguiStream) {
       _finalizeMessage();
     case 'TOOL_CALL_START':
       _showToolCall(event.toolName);
-    case 'TOOL_RESULT':
+    case 'TOOL_CALL_RESULT':
       _showToolResult(event.result);
     case 'RUN_FINISHED':
       _completeRun();
