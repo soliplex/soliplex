@@ -11,7 +11,7 @@ installation.yaml                    # Main entry point
 ├── agent_configs:                   # Global agent configs
 ├── room_paths:                      # → rooms/*/room_config.yaml
 ├── completion_paths:                # → completions/*/completion_config.yaml
-└── oidc_paths:                      # → oidc/config.yaml
+└── oidc_paths:                      # → oidc/*.yaml
 ```
 
 ## Sections
@@ -74,14 +74,15 @@ Paths can reference files:
 system_prompt: "./prompts/research.md"  # Loads from file
 ```
 
-### Environment Variable Override
+### Environment Variables
 
-Environment variables can override config values:
+Configure environment variables with optional `.env` file override:
 
 ```yaml
 environment:
-  - name: "INSTALLATION_PATH"
-    value: "file:."  # Can be overridden by ENV
+  - "OLLAMA_BASE_URL"                    # Read from .env or os.environ
+  - name: "RAG_LANCE_DB_PATH"
+    value: "file:./db/rag"               # .env can override this value
 ```
 
 ## Example Configurations
