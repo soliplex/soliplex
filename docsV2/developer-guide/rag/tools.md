@@ -7,7 +7,7 @@ Soliplex provides three RAG tools with increasing levels of sophistication.
 | Tool | Purpose | Output | MCP Compatible |
 |------|---------|--------|----------------|
 | `search_documents` | Vector similarity search | Raw search results | Yes |
-| `research_report` | Graph-based deep research | Structured report | Yes |
+| `research_report` | Graph-based deep research | Structured report | No |
 | `ask_with_rich_citations` | QA with inline citations | Answer string with citations | No |
 
 ## search_documents
@@ -22,6 +22,8 @@ async def search_documents(
     tool_config: config.SearchDocumentsToolConfig = None,
 ) -> list[SearchResult]:
     """Search the document knowledge base for relevant information."""
+    hr_config = tool_config.haiku_rag_config
+
     async with rag_client.HaikuRAG(
         db_path=tool_config.rag_lancedb_path,
         config=hr_config,
@@ -45,23 +47,32 @@ tools:
     rag_lancedb_stem: "knowledge"
     search_documents_limit: 10    # Max results (default: 5)
     allow_mcp: true               # Expose via MCP
-    haiku_rag_config:
-      search:
-        context_radius: 2         # Include surrounding chunks
+```
+
+Context expansion is configured in `haiku.rag.yaml`:
+
+```yaml
+# rooms/research/haiku.rag.yaml
+search:
+  context_radius: 2         # Include surrounding chunks
 ```
 
 ### Response Format
 
-Returns a list of `SearchResult` objects:
+Returns a list of `SearchResult` objects from haiku.rag:
 
 ```python
-class SearchResult:
-    chunk_id: str
-    document_id: str
-    document_uri: str
+class SearchResult(BaseModel):
     content: str
     score: float
-    metadata: dict
+    chunk_id: str | None = None
+    document_id: str | None = None
+    document_uri: str | None = None
+    document_title: str | None = None
+    doc_item_refs: list[str] = []
+    page_numbers: list[int] = []
+    headings: list[str] | None = None
+    labels: list[str] = []
 ```
 
 ### Use Case
@@ -82,10 +93,14 @@ async def research_report(
     question: str,
 ) -> rag_research.ResearchReport:
     """Perform research against document knowledge base."""
+    tool_config = ctx.deps.tool_configs["research_report"]
     hr_config = tool_config.haiku_rag_config
     graph = rag_research_graph.build_research_graph(hr_config)
 
-    async with rag_client.HaikuRAG(...) as client:
+    async with rag_client.HaikuRAG(
+        db_path=tool_config.rag_lancedb_path,
+        config=hr_config,
+    ) as client:
         context = rag_research.ResearchContext(
             original_question=question,
         )
@@ -106,20 +121,23 @@ async def research_report(
 tools:
   - tool_name: "soliplex.tools.research_report"
     rag_lancedb_stem: "knowledge"
-    allow_mcp: true
 ```
+
+**Note**: This tool cannot be exposed via MCP because it requires FastAPI context for AG-UI event emission.
 
 ### Response Format
 
-Returns a structured `ResearchReport`:
+Returns a structured `ResearchReport` from haiku.rag:
 
 ```python
-class ResearchReport:
-    question: str
-    answer: str
-    sources: list[Source]
-    confidence: float
-    follow_up_questions: list[str]
+class ResearchReport(BaseModel):
+    title: str                      # Concise title for the research
+    executive_summary: str          # Brief overview of key findings
+    main_findings: list[str]        # Primary findings with supporting evidence
+    conclusions: list[str]          # Evidence-based conclusions
+    limitations: list[str] = []     # Limitations of the research
+    recommendations: list[str] = [] # Actionable recommendations
+    sources_summary: str            # Summary of sources used
 ```
 
 ### Progress Events
@@ -127,15 +145,17 @@ class ResearchReport:
 The research workflow emits progress events via the AG-UI emitter:
 
 ```
-event: CUSTOM
-data: {"type": "RESEARCH_PROGRESS", "step": "Analyzing question..."}
+event: STEP_STARTED
+data: {"type": "STEP_STARTED", "stepName": "analyze_insights"}
 
-event: CUSTOM
-data: {"type": "RESEARCH_PROGRESS", "step": "Searching documents..."}
+event: ACTIVITY_SNAPSHOT
+data: {"type": "ACTIVITY_SNAPSHOT", "activityType": "planning", "content": {...}}
 
-event: CUSTOM
-data: {"type": "RESEARCH_PROGRESS", "step": "Synthesizing answer..."}
+event: STEP_FINISHED
+data: {"type": "STEP_FINISHED", "stepName": "analyze_insights"}
 ```
+
+Steps include: `analyze_insights`, `decide`, `synthesize`.
 
 ### Use Case
 
@@ -218,10 +238,13 @@ Citations are tracked in the `ask_history` state:
         "response": "RAG (Retrieval-Augmented Generation) is...",
         "citations": [
           {
-            "chunk_id": "chunk-123",
             "document_id": "doc-1",
-            "text": "source text...",
-            "page": 5
+            "chunk_id": "chunk-123",
+            "document_uri": "file:///docs/guide.pdf",
+            "document_title": "RAG Guide",
+            "page_numbers": [5, 6],
+            "headings": ["Introduction"],
+            "content": "source text..."
           }
         ]
       }
@@ -276,4 +299,4 @@ async def custom_rag(
 ## Source Code
 
 - Tool implementations: `src/soliplex/tools.py`
-- Tool configurations: `src/soliplex/config.py:456-557`
+- Tool configurations: `src/soliplex/config.py:455-558`
