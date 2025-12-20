@@ -97,20 +97,24 @@ Response:
 Tokens are validated using `itsdangerous.URLSafeTimedSerializer`:
 
 ```python
-class FastMCPTokenProvider(TokenVerifier):
+class FastMCPTokenProvider(fmcp_server_auth.TokenVerifier):
     async def verify_token(self, token: str) -> AccessToken | None:
         if self.auth_disabled:
-            return token  # No-auth mode for development
-
-        validated = validate_url_safe_token(
-            self.secret_key,
-            self.room_id,  # Salt = room ID
-            token,
-            max_age=self.max_age,
-        )
+            validated = token  # No-auth mode for development
+        else:
+            validated = validate_url_safe_token(
+                self.secret_key,
+                self.room_id,  # Salt = room ID
+                token,
+                max_age=self.max_age,
+            )
 
         if validated is not None:
-            return AccessToken(token=token, client_id=self.room_id)
+            return mcp_auth_provider.AccessToken(
+                token=token,
+                client_id=self.room_id,
+                scopes=(),
+            )
 ```
 
 ### Token Configuration
@@ -134,12 +138,12 @@ environment:
 MCP servers are mounted at:
 
 ```
-http://localhost:8000/rooms/{room_id}/mcp/
+http://localhost:8000/mcp/{room_id}
 ```
 
 For example:
-- `http://localhost:8000/rooms/research/mcp/`
-- `http://localhost:8000/rooms/legal/mcp/`
+- `http://localhost:8000/mcp/research`
+- `http://localhost:8000/mcp/legal`
 
 ## Connecting Claude Desktop
 
@@ -153,7 +157,7 @@ Configure Claude Desktop's `claude_desktop_config.json`:
       "args": [
         "-y",
         "@anthropic-ai/mcp-client-cli",
-        "http://localhost:8000/rooms/research/mcp/",
+        "http://localhost:8000/mcp/research",
         "--header",
         "Authorization: Bearer YOUR_MCP_TOKEN"
       ]
@@ -168,30 +172,34 @@ Some tools require wrapping for MCP compatibility:
 
 ```python
 # Config wrapper for query-based tools
+@dataclasses.dataclass
 class WithQueryMCPWrapper:
-    def __init__(self, func, tool_config):
-        self._func = func
-        self._tool_config = tool_config
+    _func: abc.Callable[..., typing.Any]
+    _tool_config: ToolConfig
 
-    def __call__(self, query: str):
-        return self._func(query=query, tool_config=self._tool_config)
+    def __call__(self, query):
+        return self._func(query, tool_config=self._tool_config)
 ```
 
 The wrapper curries in the tool configuration so MCP clients only need to provide the query parameter.
 
 ## Exposed Tools
 
-When a room has MCP enabled, its eligible tools are exposed:
+When a room has MCP enabled, its eligible tools are exposed via `mcp_tool()`:
 
 ```python
-def room_mcp_tools(room_config: RoomConfig) -> list[Tool]:
+def room_mcp_tools(room_config: RoomConfig) -> list[fmcp_tools.Tool]:
     if room_config.allow_mcp:
         return [
-            mcp_tool(tc) for tc in room_config.tool_configs.values()
-            if tc.allow_mcp and tc.tool_requires != FASTAPI_CONTEXT
+            mcpt for mcpt in [
+                mcp_tool(tc) for tc in room_config.tool_configs.values()
+            ]
+            if mcpt is not None
         ]
     return []
 ```
+
+The `mcp_tool()` function checks `allow_mcp` and `tool_requires != FASTAPI_CONTEXT` internally.
 
 ## Development Mode
 
@@ -215,4 +223,4 @@ This allows testing MCP without token configuration. Do not use in production.
 
 - MCP server setup: `src/soliplex/mcp_server.py`
 - Token authentication: `src/soliplex/mcp_auth.py`
-- Tool wrappers: `src/soliplex/config.py:746-767`
+- Tool wrappers: `src/soliplex/config.py:747-767`
