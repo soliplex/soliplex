@@ -6,21 +6,21 @@ This document describes the federated documentation strategy for AI agents (Clau
 
 Soliplex uses a **federated documentation** approach that separates **discovery** (maps) from **knowledge** (content). This optimizes for local agent context windows by allowing agents to:
 
-1. Load a small map file for navigation (~60 KB total)
-2. Selectively load only the content they need (~516 KB total)
+1. Load a small map file for navigation (~27 KB total)
+2. Selectively load only the content they need (~755 KB total)
 
-**Result**: ~88% context window savings for typical tasks.
+**Result**: ~96% context window savings for typical tasks.
 
 ## Architecture
 
 ```
-site/llms.txt (368 B)              ← Entry point
-├── llms-project.txt (1.2 KB)      ← Project map (setup, config)
-│   └── llms-project-full.txt (42 KB)
-├── llms-server.txt (116 B)        ← Server API map (Python)
-│   └── llms-server-full.txt (68 KB)
-└── llms-client.txt (58 KB)        ← Client API map (Flutter)
-    └── llms-client-full.txt (406 KB)
+site/llms.txt                      ← Entry point
+├── llms-project.txt               ← Project map (setup, config)
+│   └── llms-project-full.txt
+├── llms-server.txt                ← Server API map (Python)
+│   └── llms-server-full.txt
+└── llms-client.txt                ← Client API map (Flutter)
+    └── llms-client-full.txt
 ```
 
 ### File Types

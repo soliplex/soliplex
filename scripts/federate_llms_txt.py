@@ -26,11 +26,13 @@ def on_post_build(config, **kwargs):
     mode = os.environ.get("DOCS_MODE")
 
     if mode == "absolute":
-        # Use absolute filesystem paths (Best for local agents with file access)
+        # Use absolute filesystem paths (for local agents with file access)
         site_url = config["site_dir"]
         if not site_url.endswith("/"):
             site_url += "/"
-        print(f"--- Federation: ABSOLUTE MODE (Filesystem Paths: {site_url}) ---")
+        print(
+            f"--- Federation: ABSOLUTE MODE (Filesystem Paths: {site_url}) ---"
+        )
     elif mode == "local":
         # Use localhost URLs (Best for local dev server)
         port = os.environ.get("LOCAL_PORT", "8000")
@@ -104,13 +106,13 @@ def restructure_server_map(content):
         if category not in categories:
             categories[category] = []
 
-        # Create a simple entry (no URL since server map doesn't have per-item URLs)
+        # Create a simple entry (server map doesn't have per-item URLs)
         categories[category].append(f"- `{item_name}`")
 
     # Build output (header is added by split_file, so start with intro)
     output = []
     output.append(
-        "Navigate to specific modules below. For full documentation, see `llms-server-full.txt`."
+        "Navigate to modules below. For full docs, see `llms-server-full.txt`."
     )
     output.append("")
 
@@ -140,14 +142,19 @@ def clean_map_content(content, section_name, site_dir=None, site_url=None):
     if section_name == "Client API Reference":
         # Read the pre-generated map file
         project_root = os.path.dirname(site_dir)
-        map_path = os.path.join(project_root, "docs/reference/client_api/llms-client-map.txt")
-        
+        map_path = os.path.join(
+            project_root, "docs/reference/client_api/llms-client-map.txt"
+        )
+
         if os.path.exists(map_path):
             with open(map_path) as f:
                 map_content = f.read()
-            
+
             # Determine the base path for links
-            is_remote = site_url and (site_url.startswith("http://") or site_url.startswith("https://"))
+            is_remote = site_url and (
+                site_url.startswith("http://")
+                or site_url.startswith("https://")
+            )
             is_relative = site_url == ""
 
             if is_remote:
@@ -156,14 +163,20 @@ def clean_map_content(content, section_name, site_dir=None, site_url=None):
                 docs_api_base = "reference/client_api/"
             else:
                 # Local absolute path mode - link to source docs
-                docs_api_base = os.path.join(project_root, "docs/reference/client_api/")
+                docs_api_base = os.path.join(
+                    project_root, "docs/reference/client_api/"
+                )
 
             def replace_link(match):
                 text = match.group(1)
                 rel_path = match.group(2)
-                if rel_path.startswith("http://") or rel_path.startswith("https://") or rel_path.startswith("/"):
+                if (
+                    rel_path.startswith("http://")
+                    or rel_path.startswith("https://")
+                    or rel_path.startswith("/")
+                ):
                     return f"[{text}]({rel_path})"
-                
+
                 if is_remote:
                     # Strip .md for clean URLs on live sites
                     clean_path = rel_path.replace(".md", "")
@@ -175,11 +188,11 @@ def clean_map_content(content, section_name, site_dir=None, site_url=None):
                 else:
                     full_path = os.path.join(docs_api_base, rel_path)
                     return f"[{text}]({full_path})"
-            
+
             return re.sub(PATTERNS["markdown_link"], replace_link, map_content)
 
     if section_name == "Server API Reference" and site_dir:
-        # Server map is sparse in llms.txt, so we generate from the full content
+        # Server map is sparse in llms.txt, so generate from full content
         full_file = os.path.join(site_dir, "llms-full.txt")
         if os.path.exists(full_file):
             with open(full_file) as f:
@@ -282,7 +295,7 @@ def split_file(source_path, sections, is_map=True, site_url=None):
     found_files = []
     site_dir = os.path.dirname(source_path)
 
-    # Pre-compute code block ranges to avoid matching headers inside code blocks
+    # Pre-compute code block ranges (avoid matching headers inside them)
     code_block_ranges = find_code_block_ranges(content)
 
     for section_name, filename_base in sections.items():
@@ -301,7 +314,7 @@ def split_file(source_path, sections, is_map=True, site_url=None):
 
         start_index = start_match.end()
 
-        # Find the start of the NEXT section (excluding the current one to prevent early stopping)
+        # Find start of NEXT section (exclude current to prevent early stop)
         other_sections = [s for s in sections.keys() if s != section_name]
 
         if other_sections:
@@ -330,7 +343,7 @@ def split_file(source_path, sections, is_map=True, site_url=None):
             section_content = clean_map_content(
                 section_content, section_name, site_dir, site_url
             )
-        
+
         if site_url:
             # Localize URLs if in local mode (or if site_url is set)
             section_content = localize_urls(
@@ -358,10 +371,12 @@ def federate(site_dir, site_url):
     # Pass 1: Split the Map (llms.txt) -> llms-domain.txt
     print("--- Splitting Map ---")
     # Pass site_url so that maps can be localized (e.g. Client API map)
-    domain_maps = split_file(map_file, SECTIONS, is_map=True, site_url=site_url)
+    domain_maps = split_file(
+        map_file, SECTIONS, is_map=True, site_url=site_url
+    )
 
     # Pass 2: Split the Content (llms-full.txt) -> llms-domain-full.txt
-    # Use is_map=False to skip map restructuring, pass site_url for URL localization
+    # is_map=False skips map restructuring; site_url localizes URLs
     print("--- Splitting Content ---")
 
     full_sections = {
@@ -375,7 +390,8 @@ def federate(site_dir, site_url):
         with open(map_file, "w") as f:
             f.write("# Soliplex - AI Discovery Map\n\n")
             f.write(
-                "This file points to domain-specific documentation maps. Select a domain to see available topics.\n\n"
+                "This file points to domain-specific maps. "
+                "Select a domain to see available topics.\n\n"
             )
             f.write("## Domains\n\n")
             for name, filename in domain_maps:

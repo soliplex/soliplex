@@ -4,12 +4,13 @@ Project-specific instructions for Gemini when working on this codebase.
 
 ## Reference Documentation
 
-- **SOLIPLEX.md** - Backend API documentation for AG-UI integration (endpoints, request/response schemas, state sync)
-- **QUICK_AGUI.md** - Notes on the quick_agui Flutter library (issues, workarounds, architecture)
-- **APP_FEATURES.md** - Planned, in-progress, and completed app features (feedback chips, notes pad, etc.)
-- **GENUI-WIDGETS.md** - Widget system documentation (registry, creating widgets, semantic IDs, limitations)
-- **STATE_MANAGEMENT.md** - Riverpod state management patterns (server-scoped providers, adding new panels)
-- **docs/PROCESS.md** - Documentation lifecycle process (specs, ADRs, work logs)
+- **GEMINI_UNDERSTANDING.md** - Deep dive into GenUI architecture, state management, and layout patterns.
+- **PROJECT.md** - Implementation status, available widgets, and server endpoint flow.
+- **SOLIPLEX.md** - Backend API documentation for AG-UI integration (endpoints, request/response schemas, state sync).
+- **APP_FEATURES.md** - Planned, in-progress, and completed app features (feedback chips, notes pad, etc.).
+- **IMPLEMENTATION_STREAMING_MARKDOWN.md** - Technical details on the streaming markdown system and hooks.
+- **LESSONS.md** - Key engineering lessons learned during development (e.g., SSE handling, Riverpod patterns).
+- **docs/PROCESS.md** - Documentation lifecycle process (specs, ADRs, work logs).
 
 ## Documentation Lifecycle System
 
@@ -55,21 +56,13 @@ The following are not native CLI commands, but rather instructions for me to int
 
 ## Documentation Requirements
 
-- Any newly discovered information about `quick_agui` - especially design shortcomings, bugs, or architectural issues - should be documented in `QUICK_AGUI.md`
-- This includes issues like:
-  - Concurrency problems (e.g., shared state causing duplicate processing)
-  - Event streaming edge cases
-  - Tool registration/execution quirks
-  - Any workarounds implemented in the app layer to compensate for library limitations
-- Backend API discoveries should be documented in `SOLIPLEX.md`
-- **Widget system**: When adding new GenUI widgets, update `GENUI-WIDGETS.md`:
-  - Add to the registered widgets table
-  - Document data schema
-  - Add semantic ID logic if widget supports canvas
+- **Backend API discoveries** should be documented in `SOLIPLEX.md`.
+- **New Widgets**: When adding new GenUI widgets, update the table in `PROJECT.md`.
 - **Feature tracking**: When working on new features, update `APP_FEATURES.md`:
-  - Move features from "Planned" to "In Progress" when starting work
-  - Move features from "In Progress" to "Completed" when done
-  - Add implementation notes, files modified, and any gotchas discovered
+  - Move features from "Planned" to "In Progress" when starting work.
+  - Move features from "In Progress" to "Completed" when done.
+  - Add implementation notes, files modified, and any gotchas discovered.
+- **Architectural Changes**: Document major changes in `GEMINI_UNDERSTANDING.md`.
 
 ## Platform-Specific Code (dart:io)
 

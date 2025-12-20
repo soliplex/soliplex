@@ -11,17 +11,17 @@ This document describes the evaluation and quality assurance strategy for LLM-op
 
 | Area | Status | Details |
 |------|--------|---------|
-| Federation structure | ✅ Complete | 3 domains, maps + content, 88.7% token reduction |
+| Federation structure | ✅ Complete | 3 domains, maps + content, 96.4% token reduction |
 | Structural validation | ✅ CI-checked | File existence, link integrity, context efficiency |
 | Script tests | ✅ 57 tests | Federation mechanics covered |
-| Agent guidance | ✅ Basic | CLAUDE.md has quick-access tables |
+| Agent guidance | ✅ Basic | CLAUDE.md and GEMINI.md have quick-access tables |
+| Agent Comprehension | ✅ Implemented | 34 evaluation cases across Project, Server, and Client domains |
 
 ## Gaps to Address
 
-### 1. No Agent Comprehension Testing
-- Can an agent answer questions using the docs?
-- Which questions fail? Where are the gaps?
-- No feedback loop on doc effectiveness
+### 1. Baseline Performance
+- Establish initial pass rate scores for current question bank.
+- Identify which specific questions fail and why.
 
 ### 2. No Coverage Analysis
 - Are all public APIs documented?
@@ -44,8 +44,8 @@ This document describes the evaluation and quality assurance strategy for LLM-op
 **Goal**: Verify agents can actually use the docs
 
 **How it works**:
-1. Define questions per domain with expected topics
-2. Feed question + relevant llms file to Claude API
+1. Define questions per domain with expected topics in `tests/evals/questions.yaml`
+2. Feed question + relevant llms file to LLM API via `scripts/eval_comprehension.py`
 3. Check if response mentions expected topics
 4. Score pass/fail rates, track regression
 
@@ -61,41 +61,32 @@ This document describes the evaluation and quality assurance strategy for LLM-op
 
 ## Implementation
 
-### Files to Create
+### Core Files
 
 | File | Purpose |
 |------|---------|
-| `tests/evals/questions.yaml` | Eval question bank |
-| `scripts/eval_comprehension.py` | LLM comprehension testing |
-| `.github/workflows/docs-eval.yml` | Weekly scheduled eval |
+| `tests/evals/questions.yaml` | Eval question bank (34 cases) |
+| `scripts/eval_comprehension.py` | LLM comprehension testing script |
+| `.github/workflows/docs-eval.yml` | Weekly scheduled eval job |
 
 ### Question Format
 
 ```yaml
 project:
-  - question: "How do I configure OIDC authentication?"
+  - id: "unique-slug"
+    question: "How do I configure OIDC authentication?"
     expected_topics: ["OIDC", "client_id", "discovery_url"]
     source_file: "llms-project-full.txt"
-
-server:
-  - question: "What tools are available for document search?"
-    expected_topics: ["search_documents", "RAGTool"]
-    source_file: "llms-server-full.txt"
-
-client:
-  - question: "How does RoomService connect to the network?"
-    expected_topics: ["RoomSession", "NetworkTransportLayer", "SSE"]
-    source_file: "llms-client-full.txt"
 ```
 
 ### Success Metrics
 
 | Metric | Current | Target |
 |--------|---------|--------|
-| Context efficiency | 88.7% | >85% |
+| Context efficiency | 96.4% | >85% |
 | Link integrity | 100% | 100% |
-| Comprehension eval pass | N/A | >80% |
-| Eval questions per domain | 0 | 10-15 |
+| Comprehension eval pass | Pending | >80% |
+| Eval questions per domain | ~11 | 10-15 |
 
 ---
 

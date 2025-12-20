@@ -155,7 +155,7 @@ class LLMJudgeEvaluator(Evaluator[StructuredAnswer, ExpectedTopics]):
     def evaluate(
         self, ctx: EvaluatorContext[StructuredAnswer, ExpectedTopics]
     ) -> float:
-        """Return pre-computed judge score, or fall back to keyword matching."""
+        """Return pre-computed judge score, or fall back to keywords."""
         if ctx.expected_output is None:
             return 1.0
 
@@ -360,7 +360,7 @@ async def _run_judge(
     explanation: str,
 ) -> float:
     """Run LLM judge to evaluate semantic topic coverage."""
-    prompt = f"""You are evaluating whether an LLM's answer covers expected topics.
+    prompt = f"""You are evaluating whether an LLM answer covers expected topics.
 
 Expected topics (cover directly or semantically):
 {expected_topics}
@@ -380,7 +380,7 @@ Consider semantic equivalents generously:
 - "Installation Steps" covers "pip install", "venv", "clone"
 - "Environment Variables" covers "env", "secrets"
 - "Prerequisites" may cover "Python", "requirements"
-"""
+"""  # noqa: E501
 
     try:
         result = await _judge_agent.run(prompt)
@@ -435,7 +435,7 @@ documentation that answer this question."""
 
     answer = result.output
 
-    # Run LLM judge if enabled (expected_topics provided and judge agent exists)
+    # Run LLM judge if enabled (expected_topics + judge agent exist)
     if inputs.expected_topics and _judge_agent is not None:
         judge_score = await _run_judge(
             expected_topics=inputs.expected_topics,
@@ -621,7 +621,7 @@ def main():
         "--judge",
         "-j",
         action="store_true",
-        help="Use LLM-as-judge for semantic topic matching (slower but more accurate)",
+        help="Use LLM-as-judge for semantic matching (slower, more accurate)",
     )
     parser.add_argument(
         "--concurrency",
@@ -636,8 +636,8 @@ def main():
     if args.provider == "openai" and not os.environ.get("OPENAI_API_KEY"):
         if os.environ.get("OLLAMA_BASE_URL") or os.environ.get("OLLAMA_URL"):
             print(
-                "Note: OLLAMA_BASE_URL/OLLAMA_URL detected without OPENAI_API_KEY. "
-                "Switching provider to 'ollama'.",
+                "Note: OLLAMA_BASE_URL/OLLAMA_URL detected. "
+                "Switching to 'ollama'.",
                 file=sys.stderr,
             )
             args.provider = "ollama"

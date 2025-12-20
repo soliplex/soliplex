@@ -17,7 +17,8 @@ import re
 import sys
 from pathlib import Path
 
-from llms_constants import DOMAINS, PATTERNS
+from llms_constants import DOMAINS
+from llms_constants import PATTERNS
 
 SITE_DIR = Path(__file__).parent.parent / "site"
 DEFAULT_THRESHOLD = 0.15  # Fallback for total calculation
@@ -102,6 +103,44 @@ def check_context_efficiency() -> tuple[list[str], dict]:
     return errors, metrics
 
 
+def check_map_content() -> tuple[list[str], dict]:
+    """Check that map files contain meaningful content (category headers).
+
+    A map file with only a title header but no ## category sections
+    is effectively empty and won't help an LLM navigate the documentation.
+
+    Domains with require_categories=False skip this check.
+    """
+    errors = []
+    metrics = {}
+
+    for domain, config in DOMAINS.items():
+        map_file = SITE_DIR / config["map"]
+        if not map_file.exists():
+            continue
+
+        content = map_file.read_text()
+        lines = content.splitlines()
+
+        # Count category headers (## sections)
+        category_count = sum(1 for line in lines if line.startswith("## "))
+
+        metrics[domain] = {
+            "category_count": category_count,
+            "line_count": len(lines),
+        }
+
+        # Only require categories if domain config specifies it
+        require_categories = config.get("require_categories", True)
+        if require_categories and category_count == 0:
+            errors.append(
+                f"{domain} map has no category headers (##) - "
+                f"map may be empty or malformed"
+            )
+
+    return errors, metrics
+
+
 def check_link_integrity() -> tuple[list[str], int]:
     """Check that links in map files resolve to existing files."""
     errors = []
@@ -174,7 +213,12 @@ def run_validation(json_output: bool = False) -> int:
     results["errors"].extend(errors)
     results["metrics"]["efficiency"] = metrics
 
-    # Check 3: Link integrity
+    # Check 3: Map content (has category headers)
+    errors, content_metrics = check_map_content()
+    results["errors"].extend(errors)
+    results["metrics"]["map_content"] = content_metrics
+
+    # Check 4: Link integrity
     errors, link_count = check_link_integrity()
     results["errors"].extend(errors)
     results["metrics"]["link_count"] = link_count

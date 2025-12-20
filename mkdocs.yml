@@ -1,5 +1,5 @@
 site_name: Soliplex
-site_url: https://soliplex.github.io/soliplex/
+site_url: http://localhost:5678/
 dev_addr: 127.0.0.1:8001
 theme:
   name: material

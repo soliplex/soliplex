@@ -12,16 +12,19 @@ DOMAINS = {
         "map": "llms-project.txt",
         "content": "llms-project-full.txt",
         "threshold": 0.10,  # <10% (mostly links)
+        "require_categories": False,  # flat navigation list
     },
     "server": {
         "map": "llms-server.txt",
         "content": "llms-server-full.txt",
         "threshold": 0.05,  # <5% (categorized index)
+        "require_categories": True,  # API reference needs structure
     },
     "client": {
         "map": "llms-client.txt",
         "content": "llms-client-full.txt",
         "threshold": 0.20,  # <20% (curated semantic index)
+        "require_categories": True,  # API reference needs structure
     },
 }
 
@@ -42,7 +45,7 @@ PATTERNS = {
     "source_file": r"Source code in `([^`]+)`",
     # Remote URL to replace in local mode
     "remote_url": r"https://soliplex\.github\.io/soliplex/",
-    # Client API URL structure: .../reference/client_api/{directory}/{class}/...
+    # Client API URL: .../reference/client_api/{directory}/{class}/...
     "client_api_url": r"\(.*?/reference/client_api/([^/]+)/",
 }
 

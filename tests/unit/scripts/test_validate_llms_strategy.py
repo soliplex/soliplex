@@ -7,6 +7,7 @@ from validate_llms_strategy import (
     check_context_efficiency,
     check_file_existence,
     check_link_integrity,
+    check_map_content,
     estimate_tokens,
 )
 
@@ -253,3 +254,65 @@ class TestDomainConfiguration:
             assert config["map"].startswith("llms-"), f"{domain} map name invalid"
             assert config["map"].endswith(".txt"), f"{domain} map extension invalid"
             assert config["content"].endswith("-full.txt"), f"{domain} content suffix"
+
+
+class TestCheckMapContent:
+    """Tests for map content validation."""
+
+    def test_map_with_only_header_fails(self, tmp_path):
+        """Map file with only a header should fail validation."""
+        import validate_llms_strategy
+
+        original_site_dir = validate_llms_strategy.SITE_DIR
+        try:
+            site_dir = tmp_path / "site"
+            site_dir.mkdir()
+            validate_llms_strategy.SITE_DIR = site_dir
+
+            # Create map with only header (no categories)
+            map_file = site_dir / "llms-server.txt"
+            map_file.write_text(
+                "# Soliplex - Server API Reference\n\n"
+                "Navigate to specific modules below.\n"
+            )
+
+            # Create matching content file
+            content_file = site_dir / "llms-server-full.txt"
+            content_file.write_text("# Server API\n\n## `SomeClass`\n\nDocs here.")
+
+            errors, _ = check_map_content()
+
+            assert len(errors) > 0
+            assert any("server" in e.lower() for e in errors)
+        finally:
+            validate_llms_strategy.SITE_DIR = original_site_dir
+
+    def test_map_with_categories_passes(self, tmp_path):
+        """Map file with category headers should pass validation."""
+        import validate_llms_strategy
+
+        original_site_dir = validate_llms_strategy.SITE_DIR
+        try:
+            site_dir = tmp_path / "site"
+            site_dir.mkdir()
+            validate_llms_strategy.SITE_DIR = site_dir
+
+            # Create map with categories
+            map_file = site_dir / "llms-server.txt"
+            map_file.write_text(
+                "# Soliplex - Server API Reference\n\n"
+                "## Configuration\n"
+                "- `ConfigClass`\n\n"
+                "## Models\n"
+                "- `ModelClass`\n"
+            )
+
+            # Create matching content file
+            content_file = site_dir / "llms-server-full.txt"
+            content_file.write_text("# Server API\n\n## `SomeClass`\n\nDocs here.")
+
+            errors, _ = check_map_content()
+
+            assert len(errors) == 0
+        finally:
+            validate_llms_strategy.SITE_DIR = original_site_dir

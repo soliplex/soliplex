@@ -39,11 +39,14 @@ help:
 	@echo "  DOCS_MODE         absolute|local|relative|remote (default: absolute)"
 	@echo "  LOCAL_PORT        Port for local mode (default: 8000)"
 	@echo "  OPENAI_API_KEY    Required for docs-eval targets"
-	@echo "  OLLAMA_URL        Use Ollama instead (e.g., http://127.0.0.1:11434/v1)"
+	@echo "  OLLAMA_BASE_URL   Ollama server (e.g., http://localhost:11434)"
 	@echo "  LOGFIRE_TOKEN     Enable Logfire tracing for evals"
 	@echo "  PROVIDER          LLM provider: openai (default) or ollama"
 	@echo "  MODEL             Model name (default: gpt-4o-mini or llama3.2)"
 	@echo "  DOMAIN            Eval domain: project, server, or client"
+	@echo "  LIMIT             Limit number of eval questions (default: all)"
+	@echo "  CONCURRENCY       Parallel eval workers (default: 1)"
+	@echo "  JUDGE             Set to 1 for LLM-as-judge semantic matching"
 
 # === Build Targets ===
 
@@ -98,6 +101,15 @@ ifdef MODEL
 endif
 ifdef DOMAIN
   EVAL_ARGS += --domain $(DOMAIN)
+endif
+ifdef LIMIT
+  EVAL_ARGS += --limit $(LIMIT)
+endif
+ifdef CONCURRENCY
+  EVAL_ARGS += --concurrency $(CONCURRENCY)
+endif
+ifdef JUDGE
+  EVAL_ARGS += --judge
 endif
 
 docs-eval-dry:
