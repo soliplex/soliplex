@@ -46,11 +46,11 @@ Every agent receives dependencies at runtime:
 ```python
 @dataclasses.dataclass
 class AgentDependencies:
-    the_installation: Installation    # Access to config
-    user: UserProfile                 # Current user info
-    tool_configs: ToolConfigMap       # Tool configurations
-    agui_emitter: AGUIEmitter         # Event emitter
-    state: AGUI_State                 # Client state
+    the_installation: typing.Any      # installation.Installation
+    user: models.UserProfile = None   # Current user info
+    tool_configs: ToolConfigMap = None  # Tool configurations
+    agui_emitter: typing.Any = None   # AG-UI event emitter
+    state: agui.AGUI_State = field(default_factory=dict)  # Client state
 ```
 
 ### Agent Caching
@@ -59,7 +59,7 @@ Agents are cached by ID to avoid recreation:
 
 ```python
 # First call creates agent, subsequent calls return cached
-agent = get_agent_from_configs(agent_config, tool_configs, mcp_configs)
+agent = get_agent_from_configs(agent_config, tool_configs, mcp_client_toolset_configs)
 ```
 
 ### RunContext in Tools
