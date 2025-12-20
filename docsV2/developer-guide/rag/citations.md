@@ -50,19 +50,24 @@ async def ask_with_rich_citations(
 
 ### Citation Data Model
 
-```python
-class Citation(pydantic.BaseModel):
-    chunk_id: str
-    document_id: str
-    document_uri: str
-    text: str              # The cited text
-    page: int | None       # Page number if available
-    metadata: dict         # Additional metadata
+Citations use the `Citation` model from haiku.rag:
 
+```python
+# From haiku.rag.graph.common.models
+class Citation(pydantic.BaseModel):
+    document_id: str
+    chunk_id: str
+    document_uri: str
+    document_title: str | None = None
+    page_numbers: list[int] = []
+    headings: list[str] | None = None
+    content: str           # The cited text
+
+# Soliplex models wrapping citations
 class QuestionResponseCitations(pydantic.BaseModel):
     question: str
     response: str
-    citations: list[Citation]
+    citations: list[hr_graph_models.Citation] = []
 
 class AskedAndAnswered(pydantic.BaseModel):
     questions: list[QuestionResponseCitations] = []
@@ -70,53 +75,71 @@ class AskedAndAnswered(pydantic.BaseModel):
 
 ## AG-UI State Synchronization
 
-Citations are synchronized to the frontend via AG-UI state events:
+Citations are synchronized to the frontend via AG-UI STATE_DELTA events using JSON Patch RFC 6902 format:
 
 ```
 event: STATE_DELTA
 data: {
   "type": "STATE_DELTA",
-  "delta": {
-    "ask_history": {
-      "questions": [
-        {
-          "question": "What is RAG?",
-          "response": "RAG is...",
-          "citations": [...]
-        }
-      ]
+  "delta": [
+    {
+      "op": "replace",
+      "path": "/ask_history",
+      "value": {
+        "questions": [
+          {
+            "question": "What is RAG?",
+            "response": "RAG is...",
+            "citations": [...]
+          }
+        ]
+      }
     }
-  }
+  ]
 }
 ```
 
-The frontend receives state updates and can display citations alongside responses.
+The frontend receives state updates (as JSON Patch operations) and extracts citations from the `/ask_history` path.
 
 ## Frontend: Displaying Citations
 
 ### Flutter Implementation
 
-The Flutter app listens for state updates and renders citations:
+The Flutter app processes AG-UI events with typed pattern matching:
 
 ```dart
-// Listen for AG-UI state changes
-aguiStream.listen((event) {
-  if (event.type == 'STATE_DELTA') {
-    final askHistory = event.delta['ask_history'];
-    if (askHistory != null) {
-      _updateCitations(askHistory);
+// Event processor handles STATE_DELTA with JSON Patch format
+EventProcessingResult _processStateDelta(ag_ui.StateDeltaEvent event) {
+  final delta = event.delta as List<dynamic>? ?? [];
+
+  for (final op in delta) {
+    final path = op['path'] as String?;
+    final operation = op['op'] as String?;
+    final value = op['value'];
+
+    // Check for ask_history being set/replaced
+    if (path == '/ask_history' &&
+        (operation == 'replace' || operation == 'add') &&
+        value is Map<String, dynamic>) {
+      citations = _extractCitationsFromAskHistory(value);
     }
   }
-});
+  // Buffer citations for attachment to next text message
+  return EventProcessingResult(citationsBufferUpdate: ...);
+}
 
-// Render citation chips
-Widget _buildCitations(List<Citation> citations) {
-  return Wrap(
-    children: citations.map((c) => CitationChip(
-      citation: c,
-      onTap: () => _showChunkVisualization(c.chunkId),
-    )).toList(),
-  );
+// Collapsible citations widget with chunk visualization
+class CollapsibleCitationsWidget extends ConsumerStatefulWidget {
+  final List<Citation> citations;
+  final String roomId;
+
+  void _showChunkVisualization(BuildContext context, Citation citation) {
+    final uri = urlBuilder.roomChunk(roomId, citation.chunkId);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => _ChunkVisualizationDialog(uri: uri, citation: citation),
+    );
+  }
 }
 ```
 
@@ -144,7 +167,7 @@ Authorization: Bearer {token}
 ```json
 {
   "chunk_id": "chunk-abc123",
-  "document_uri": "file:///docs/guide.pdf",
+  "document_uri": "file:///docs/guide.pdf",   // may be null
   "images_base_64": [
     "iVBORw0KGgoAAAANSUhEUgAA...",
     "iVBORw0KGgoAAAANSUhEUgAA..."
@@ -152,26 +175,38 @@ Authorization: Bearer {token}
 }
 ```
 
+The `document_uri` field is optional and may be null.
+
 ### Implementation
 
 ```python
 @router.get("/v1/rooms/{room_id}/chunk/{chunk_id}")
 async def get_chunk_visualization(
+    request: fastapi.Request,
     room_id: str,
     chunk_id: str,
     the_installation: Installation,
     token: HTTPAuthorizationCredentials,
 ) -> ChunkVisualization:
-    async with rag_client.HaikuRAG(...) as rag:
-        chunk = await rag.chunk_repository.get_by_id(chunk_id)
-        images = await rag.visualize_chunk(chunk)
+    user = auth.authenticate(the_installation, token)
+    room_config = the_installation.get_room_config(room_id, user)
+
+    # Find tool with haiku_rag_config
+    for tool_config in room_config.tool_configs.values():
+        hr_config = getattr(tool_config, "haiku_rag_config", None)
+        if hr_config is not None:
+            async with rag_client.HaikuRAG(...) as rag:
+                chunk = await rag.chunk_repository.get_by_id(chunk_id)
+                images = await rag.visualize_chunk(chunk)
+            break
 
     # Convert PIL images to base64
     base64_images = []
     for img in images:
         buffer = io.BytesIO()
         img.save(buffer, format="PNG")
-        base64_images.append(base64.b64encode(buffer.read()).decode())
+        buffer.seek(0)
+        base64_images.append(base64.b64encode(buffer.read()).decode("utf-8"))
 
     return ChunkVisualization(
         chunk_id=chunk_id,
@@ -203,9 +238,9 @@ Users can restrict citations to specific documents:
 # In ask_with_rich_citations
 documents = agui_state.filter_documents
 document_ids = getattr(documents, "document_ids", ()) or ()
+quoted = [f"'{id}'" for id in document_ids]
 
-if document_ids:
-    quoted = [f"'{id}'" for id in document_ids]
+if quoted:
     search_filter = f"id IN ({', '.join(quoted)})"
 
 response, citations = await rag.ask(question, filter=search_filter)
@@ -231,10 +266,13 @@ The `ask_history` state tracks all Q&A interactions in a session:
         "response": "RAG (Retrieval-Augmented Generation) is...",
         "citations": [
           {
-            "chunk_id": "chunk-1",
             "document_id": "doc-1",
-            "text": "Retrieval-Augmented Generation combines...",
-            "page": 12
+            "chunk_id": "chunk-1",
+            "document_uri": "file:///docs/guide.pdf",
+            "document_title": "RAG Guide",
+            "page_numbers": [12, 13],
+            "headings": ["Introduction", "Overview"],
+            "content": "Retrieval-Augmented Generation combines..."
           }
         ]
       },
