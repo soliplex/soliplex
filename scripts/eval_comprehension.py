@@ -190,19 +190,12 @@ Consider semantic equivalents:
 Be generous with semantic matches - if the concept is clearly addressed, count it."""
 
         try:
-            # Run async judge in sync context
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Already in async context, create task
-                import concurrent.futures
-
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    future = pool.submit(
-                        asyncio.run, _judge_agent.run(prompt)
-                    )
-                    result = future.result(timeout=30)
-            else:
-                result = asyncio.run(_judge_agent.run(prompt))
+            # Run async judge - create new event loop to avoid conflicts
+            loop = asyncio.new_event_loop()
+            try:
+                result = loop.run_until_complete(_judge_agent.run(prompt))
+            finally:
+                loop.close()
 
             # Clamp score to valid range
             score = max(0.0, min(1.0, result.output.score))
@@ -689,7 +682,9 @@ def main():
         print("\nRunning evaluation...")
         if args.concurrency > 1:
             print(f"Concurrency: {args.concurrency}")
-    report = dataset.evaluate_sync(answer_question, max_concurrency=args.concurrency)
+    report = dataset.evaluate_sync(
+        answer_question, max_concurrency=args.concurrency
+    )
 
     # Process results
     results = []
