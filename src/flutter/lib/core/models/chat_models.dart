@@ -92,6 +92,106 @@ class ToolCallSummary extends Equatable {
   ];
 }
 
+/// A citation from a RAG knowledge base response.
+///
+/// Contains metadata about the source document and the relevant chunk content.
+class Citation extends Equatable {
+  const Citation({
+    required this.documentId,
+    required this.chunkId,
+    required this.documentUri,
+    required this.content,
+    this.documentTitle,
+    this.pageNumbers = const [],
+    this.headings,
+  });
+
+  /// Create a Citation from JSON data (as received from STATE_SNAPSHOT).
+  factory Citation.fromJson(Map<String, dynamic> json) {
+    return Citation(
+      documentId: json['document_id'] as String? ?? '',
+      chunkId: json['chunk_id'] as String? ?? '',
+      documentUri: json['document_uri'] as String? ?? '',
+      content: json['content'] as String? ?? '',
+      documentTitle: json['document_title'] as String?,
+      pageNumbers: (json['page_numbers'] as List<dynamic>?)
+              ?.map((e) => e as int)
+              .toList() ??
+          const [],
+      headings: (json['headings'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList(),
+    );
+  }
+
+  /// Unique identifier for the source document.
+  final String documentId;
+
+  /// Unique identifier for the specific chunk within the document.
+  final String chunkId;
+
+  /// URI/path to the source document.
+  final String documentUri;
+
+  /// The actual text content of the cited chunk.
+  final String content;
+
+  /// Human-readable title of the document (may be null).
+  final String? documentTitle;
+
+  /// Page numbers where this chunk appears (may be empty).
+  final List<int> pageNumbers;
+
+  /// Section headings leading to this chunk (may be null).
+  final List<String>? headings;
+
+  /// Get a display title, falling back to filename from URI if no title.
+  String get displayTitle {
+    if (documentTitle != null && documentTitle!.isNotEmpty) {
+      return documentTitle!;
+    }
+    // Extract filename from URI
+    final uri = Uri.tryParse(documentUri);
+    if (uri != null && uri.pathSegments.isNotEmpty) {
+      return uri.pathSegments.last;
+    }
+    return 'Unknown Document';
+  }
+
+  /// Format page numbers for display (e.g., "p.1-3" or "p.5").
+  String? get formattedPageNumbers {
+    if (pageNumbers.isEmpty) return null;
+    if (pageNumbers.length == 1) return 'p.${pageNumbers.first}';
+
+    final sorted = [...pageNumbers]..sort();
+    // Check if consecutive
+    var isConsecutive = true;
+    for (var i = 1; i < sorted.length; i++) {
+      if (sorted[i] != sorted[i - 1] + 1) {
+        isConsecutive = false;
+        break;
+      }
+    }
+
+    if (isConsecutive) {
+      return 'p.${sorted.first}-${sorted.last}';
+    } else {
+      return 'p.${sorted.join(', ')}';
+    }
+  }
+
+  @override
+  List<Object?> get props => [
+    documentId,
+    chunkId,
+    documentUri,
+    content,
+    documentTitle,
+    pageNumbers,
+    headings,
+  ];
+}
+
 /// Represents a message in the chat.
 class ChatMessage extends Equatable {
   ChatMessage({
@@ -112,6 +212,8 @@ class ChatMessage extends Equatable {
     this.isThinkingExpanded = false,
     this.toolCalls,
     this.isToolGroupExpanded = false,
+    this.citations = const [],
+    this.isCitationsExpanded = false,
   }) : id = id ?? _uuid.v4(),
        createdAt = createdAt ?? DateTime.now();
 
@@ -240,6 +342,10 @@ class ChatMessage extends Equatable {
   final List<ToolCallSummary>? toolCalls;
   final bool isToolGroupExpanded;
 
+  // Citation fields
+  final List<Citation> citations;
+  final bool isCitationsExpanded;
+
   /// Create a copy with updated fields.
   ChatMessage copyWith({
     String? id,
@@ -259,6 +365,8 @@ class ChatMessage extends Equatable {
     bool? isThinkingExpanded,
     List<ToolCallSummary>? toolCalls,
     bool? isToolGroupExpanded,
+    List<Citation>? citations,
+    bool? isCitationsExpanded,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -278,6 +386,8 @@ class ChatMessage extends Equatable {
       isThinkingExpanded: isThinkingExpanded ?? this.isThinkingExpanded,
       toolCalls: toolCalls ?? this.toolCalls,
       isToolGroupExpanded: isToolGroupExpanded ?? this.isToolGroupExpanded,
+      citations: citations ?? this.citations,
+      isCitationsExpanded: isCitationsExpanded ?? this.isCitationsExpanded,
     );
   }
 
@@ -300,6 +410,8 @@ class ChatMessage extends Equatable {
     isThinkingExpanded,
     toolCalls,
     isToolGroupExpanded,
+    citations,
+    isCitationsExpanded,
   ];
 }
 

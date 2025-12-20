@@ -38,12 +38,16 @@ class TextMessageViewModel extends ChatMessageViewModel {
     this.thinkingText,
     this.isThinkingStreaming = false,
     this.isThinkingExpanded = false,
+    this.citations = const [],
+    this.isCitationsExpanded = false,
   });
   final String text;
   final bool isStreaming;
   final String? thinkingText;
   final bool isThinkingStreaming;
   final bool isThinkingExpanded;
+  final List<Citation> citations;
+  final bool isCitationsExpanded;
 
   @override
   List<Object?> get props => [
@@ -53,6 +57,8 @@ class TextMessageViewModel extends ChatMessageViewModel {
     thinkingText,
     isThinkingStreaming,
     isThinkingExpanded,
+    citations,
+    isCitationsExpanded,
   ];
 }
 

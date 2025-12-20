@@ -144,6 +144,9 @@ class RoomSession implements ChatSession {
   /// Thinking buffer state (managed by EventProcessor).
   ThinkingBufferState _thinkingBuffer = ThinkingBufferState.empty();
 
+  /// Citations buffer state (managed by EventProcessor).
+  CitationsBufferState _citationsBuffer = CitationsBufferState.empty();
+
   // ==========================================================================
   // DEDUPLICATION STATE
   // ==========================================================================
@@ -971,6 +974,19 @@ class RoomSession implements ChatSession {
     }
   }
 
+  /// Toggle citations expanded state.
+  @override
+  void toggleCitationsExpanded(String messageId) {
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    if (index >= 0) {
+      final msg = _messages[index];
+      _messages[index] = msg.copyWith(
+        isCitationsExpanded: !msg.isCitationsExpanded,
+      );
+      _notifyMessageUpdate();
+    }
+  }
+
   /// Clear all messages.
   void clearMessages() {
     _messages.clear();
@@ -979,6 +995,7 @@ class RoomSession implements ChatSession {
     _toolCallMessageIds.clear();
     _thinkingMessageIds.clear();
     _thinkingBuffer = ThinkingBufferState.empty();
+    _citationsBuffer = CitationsBufferState.empty();
     clearProcessedToolCalls();
     _notifyMessageUpdate();
   }
@@ -1009,6 +1026,7 @@ class RoomSession implements ChatSession {
       textBuffers: _textBuffers,
       thinkingMessageIds: _thinkingMessageIds,
       thinkingBuffer: _thinkingBuffer,
+      citationsBuffer: _citationsBuffer,
     );
 
     // Process event (pure function)
@@ -1107,6 +1125,11 @@ class RoomSession implements ChatSession {
     // Apply thinking buffer update
     if (result.thinkingBufferUpdate != null) {
       _thinkingBuffer = result.thinkingBufferUpdate!;
+    }
+
+    // Apply citations buffer update
+    if (result.citationsBufferUpdate != null) {
+      _citationsBuffer = result.citationsBufferUpdate!;
     }
 
     // Notify message listeners

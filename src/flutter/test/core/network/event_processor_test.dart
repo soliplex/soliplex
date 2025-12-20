@@ -81,15 +81,16 @@ void main() {
       });
 
       test('applies buffered thinking to new message', () {
-        const stateWithThinking = EventProcessingState(
-          messages: [],
-          messageIdMap: {},
-          textBuffers: {},
-          thinkingMessageIds: {},
-          thinkingBuffer: ThinkingBufferState(
+        final stateWithThinking = EventProcessingState(
+          messages: const [],
+          messageIdMap: const {},
+          textBuffers: const {},
+          thinkingMessageIds: const {},
+          thinkingBuffer: const ThinkingBufferState(
             bufferedText: 'buffered thinking text',
             isBuffering: true,
           ),
+          citationsBuffer: CitationsBufferState.empty(),
         );
 
         const event = ag_ui.TextMessageStartEvent(messageId: 'agui-msg-1');
@@ -111,16 +112,17 @@ void main() {
       });
 
       test('applies finalized buffered thinking', () {
-        const stateWithFinalizedThinking = EventProcessingState(
-          messages: [],
-          messageIdMap: {},
-          textBuffers: {},
-          thinkingMessageIds: {},
-          thinkingBuffer: ThinkingBufferState(
+        final stateWithFinalizedThinking = EventProcessingState(
+          messages: const [],
+          messageIdMap: const {},
+          textBuffers: const {},
+          thinkingMessageIds: const {},
+          thinkingBuffer: const ThinkingBufferState(
             bufferedText: 'finalized thinking',
             isBuffering: true,
             isFinalized: true,
           ),
+          citationsBuffer: CitationsBufferState.empty(),
         );
 
         const event = ag_ui.TextMessageStartEvent(messageId: 'agui-msg-1');
@@ -149,6 +151,7 @@ void main() {
           textBuffers: {'agui-msg-1': StringBuffer('Hello ')},
           thinkingMessageIds: const {},
           thinkingBuffer: ThinkingBufferState.empty(),
+          citationsBuffer: CitationsBufferState.empty(),
         );
 
         const event = ag_ui.TextMessageContentEvent(
@@ -193,6 +196,7 @@ void main() {
           textBuffers: {'agui-msg-1': StringBuffer('Complete message')},
           thinkingMessageIds: const {},
           thinkingBuffer: ThinkingBufferState.empty(),
+          citationsBuffer: CitationsBufferState.empty(),
         );
 
         const event = ag_ui.TextMessageEndEvent(messageId: 'agui-msg-1');
@@ -262,6 +266,7 @@ void main() {
           textBuffers: const {},
           thinkingMessageIds: const {},
           thinkingBuffer: ThinkingBufferState.empty(),
+          citationsBuffer: CitationsBufferState.empty(),
         );
 
         const event = ag_ui.ThinkingTextMessageStartEvent();
@@ -305,6 +310,7 @@ void main() {
           textBuffers: const {},
           thinkingMessageIds: {'current': messageWithThinking.id},
           thinkingBuffer: ThinkingBufferState.empty(),
+          citationsBuffer: CitationsBufferState.empty(),
         );
 
         const event = ag_ui.ThinkingTextMessageContentEvent(delta: 'new text');
@@ -318,15 +324,16 @@ void main() {
       });
 
       test('appends to buffer when buffering', () {
-        const state = EventProcessingState(
-          messages: [],
-          messageIdMap: {},
-          textBuffers: {},
-          thinkingMessageIds: {},
-          thinkingBuffer: ThinkingBufferState(
+        final state = EventProcessingState(
+          messages: const [],
+          messageIdMap: const {},
+          textBuffers: const {},
+          thinkingMessageIds: const {},
+          thinkingBuffer: const ThinkingBufferState(
             bufferedText: 'buffered ',
             isBuffering: true,
           ),
+          citationsBuffer: CitationsBufferState.empty(),
         );
 
         const event = ag_ui.ThinkingTextMessageContentEvent(delta: 'more');
@@ -355,6 +362,7 @@ void main() {
           textBuffers: const {},
           thinkingMessageIds: {'current': messageWithThinking.id},
           thinkingBuffer: ThinkingBufferState.empty(),
+          citationsBuffer: CitationsBufferState.empty(),
         );
 
         const event = ag_ui.ThinkingTextMessageEndEvent();
@@ -372,15 +380,16 @@ void main() {
       });
 
       test('marks buffer as finalized when buffering', () {
-        const state = EventProcessingState(
-          messages: [],
-          messageIdMap: {},
-          textBuffers: {},
-          thinkingMessageIds: {},
-          thinkingBuffer: ThinkingBufferState(
+        final state = EventProcessingState(
+          messages: const [],
+          messageIdMap: const {},
+          textBuffers: const {},
+          thinkingMessageIds: const {},
+          thinkingBuffer: const ThinkingBufferState(
             bufferedText: 'buffered thinking',
             isBuffering: true,
           ),
+          citationsBuffer: CitationsBufferState.empty(),
         );
 
         const event = ag_ui.ThinkingTextMessageEndEvent();

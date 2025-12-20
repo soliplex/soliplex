@@ -60,4 +60,7 @@ class ApiConstants {
 
   /// Documents path segment.
   static const String documents = 'documents';
+
+  /// Chunk path segment (for chunk visualization).
+  static const String chunk = 'chunk';
 }

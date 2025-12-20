@@ -449,7 +449,9 @@ final connectionManagerProvider = ChangeNotifierProvider<ConnectionManager>((
 
   final manager = ConnectionManager(
     registry: registry,
-    headerRefresher: authManager.getAuthHeaders,
+    // Use forceRefreshAndGetAuthHeaders for 401 recovery - it always attempts
+    // refresh and throws AuthenticationRequiredException on failure
+    headerRefresher: authManager.forceRefreshAndGetAuthHeaders,
   );
 
   // Listen for lifecycle events and update activity status

@@ -9,6 +9,7 @@ import 'package:soliplex/core/services/send_feedback_use_case.dart';
 import 'package:soliplex/core/services/send_to_canvas_use_case.dart';
 import 'package:soliplex/features/chat/view_models/chat_message_view_model.dart'; // Import ViewModels
 import 'package:soliplex/features/chat/widgets/chat_typing_indicator.dart';
+import 'package:soliplex/features/chat/widgets/collapsible_citations_widget.dart';
 import 'package:soliplex/features/chat/widgets/collapsible_thinking_widget.dart';
 import 'package:soliplex/features/chat/widgets/feedback_chip.dart';
 import 'package:soliplex/features/chat/widgets/feedback_dialog.dart';
@@ -25,12 +26,14 @@ import 'package:soliplex/features/chat/widgets/tool_call_summary_widget.dart';
 class ChatMessageBubble extends ConsumerWidget {
   const ChatMessageBubble({
     required this.viewModel,
+    required this.roomId,
     super.key,
     this.previousViewModel,
     this.nextViewModel,
     this.maxWidth = double.infinity,
     this.onQuote,
     this.onToggleThinking,
+    this.onToggleCitations,
     this.onToggleToolGroup,
     this.onGenUiEvent,
   });
@@ -38,8 +41,10 @@ class ChatMessageBubble extends ConsumerWidget {
   final ChatMessageViewModel? previousViewModel;
   final ChatMessageViewModel? nextViewModel;
   final double maxWidth;
+  final String roomId;
   final void Function(String quotedText)? onQuote;
   final VoidCallback? onToggleThinking;
+  final VoidCallback? onToggleCitations;
   final VoidCallback? onToggleToolGroup;
   final void Function(String eventName, Map<String, Object?> arguments)?
   onGenUiEvent;
@@ -155,6 +160,15 @@ class ChatMessageBubble extends ConsumerWidget {
             textStyle: TextStyle(color: textColor),
             onQuote: onQuote,
           ),
+
+          // Citations section (for agent messages with citations)
+          if (_isAgent && vm.citations.isNotEmpty)
+            CollapsibleCitationsWidget(
+              citations: vm.citations,
+              isExpanded: vm.isCitationsExpanded,
+              onToggle: onToggleCitations ?? () {},
+              roomId: roomId,
+            ),
 
           // Feedback chips and copy button (for finalized agent messages)
           if (_isAgent && !vm.isStreaming)
