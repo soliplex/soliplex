@@ -17,8 +17,8 @@ Specify name and value:
 
 ```yaml
 environment:
-  - name: "LOG_LEVEL"
-    value: "INFO"
+  - name: "DEFAULT_AGENT_MODEL"
+    value: "llama3.2"
 ```
 
 ### OS Environment Fallback
@@ -47,6 +47,30 @@ environment:
   - name: "OLLAMA_BASE_URL"
 ```
 
+## Resolution Priority
+
+Environment variables are resolved in the following order (highest to lowest priority):
+
+1. **`.env` file** - A `.env` file in the same directory as the config file
+2. **OS environment** - `os.environ` (used when YAML value is omitted)
+3. **YAML value** - Explicit value in configuration
+
+```
+.env file → os.environ → YAML configured value
+```
+
+### .env File Support
+
+Place a `.env` file in the same directory as your installation config:
+
+```bash
+# .env
+OLLAMA_BASE_URL=http://localhost:11434
+DEFAULT_AGENT_MODEL=llama3.2
+```
+
+Values from `.env` take precedence over both OS environment and YAML-configured values.
+
 ## Common Variables
 
 ### LLM Provider
@@ -54,15 +78,12 @@ environment:
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `OLLAMA_BASE_URL` | Ollama server URL | `http://localhost:11434` |
-| `OPENAI_BASE_URL` | OpenAI API URL (optional) | `https://api.openai.com/v1` |
 
-### Logging
+### Agent Defaults
 
-| Variable | Description | Values |
-|----------|-------------|--------|
-| `LOG_LEVEL` | Logging verbosity | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
-| `LOGFIRE_ENVIRONMENT` | Logfire environment tag | `development`, `production` |
-| `LOGFIRE_SERVICE_NAME` | Logfire service name | `soliplex` |
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DEFAULT_AGENT_MODEL` | Default model when agent `model_name` is not specified | `llama3.2` |
 
 ### MCP
 
@@ -74,20 +95,17 @@ environment:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `INSTALLATION_PATH` | Base path for relative references | `file:.` |
-| `RAG_LANCE_DB_PATH` | Default RAG database directory | `file:../db/rag` |
+| `SOLIPLEX_INSTALLATION_PATH` | Installation config path (CLI fallback) | `/path/to/installation.yaml` |
+| `RAG_LANCE_DB_PATH` | RAG database directory | `file:./db/rag` |
 
 ## File References
 
-Values starting with `file:` are treated as file path references:
+Values starting with `file:` are treated as file path references and resolved relative to the configuration file's directory:
 
 ```yaml
 environment:
-  - name: "INSTALLATION_PATH"
-    value: "file:."  # Current directory
-
   - name: "RAG_LANCE_DB_PATH"
-    value: "file:../db/rag"  # Relative path
+    value: "file:./db/rag"  # Relative to config file
 ```
 
 ## Accessing in Code
@@ -112,31 +130,31 @@ $ soliplex-cli list-environment installation.yaml
 ─────────────────────── Configured environment variables ───────────────────────
 
 - OLLAMA_BASE_URL          : http://localhost:11434
-- LOG_LEVEL                : INFO
-- LOGFIRE_ENVIRONMENT      : development
+- DEFAULT_AGENT_MODEL      : llama3.2
+- RAG_LANCE_DB_PATH        : /absolute/path/to/db/rag
 
 ```
 
-Variables marked "MISSING" are configured but not set.
+Variables marked "MISSING" are configured but not set in `.env` or OS environment.
 
 ## Conditional Configuration
 
-Set different values per environment:
+Use separate config files for different environments:
 
 ```yaml
 # development.yaml
 environment:
-  - name: "LOG_LEVEL"
-    value: "DEBUG"
   - name: "OLLAMA_BASE_URL"
     value: "http://localhost:11434"
+  - name: "DEFAULT_AGENT_MODEL"
+    value: "llama3.2"
 
 # production.yaml
 environment:
-  - name: "LOG_LEVEL"
-    value: "WARNING"
   - name: "OLLAMA_BASE_URL"
     value: "http://gpu-server:11434"
+  - name: "DEFAULT_AGENT_MODEL"
+    value: "llama3.1:70b"
 ```
 
 ## Docker Compose Integration
@@ -147,14 +165,14 @@ services:
   soliplex:
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
-      - LOG_LEVEL=INFO
+      - DEFAULT_AGENT_MODEL=llama3.2
 ```
 
 ```yaml
 # installation.yaml
 environment:
   - "OLLAMA_BASE_URL"
-  - "LOG_LEVEL"
+  - "DEFAULT_AGENT_MODEL"
 ```
 
 ## Best Practices
@@ -169,26 +187,24 @@ environment:
 
 ```yaml
 environment:
-  # LLM Provider
+  # LLM Provider (read from .env or OS environment)
   - "OLLAMA_BASE_URL"
 
-  # Logging
-  - name: "LOG_LEVEL"
-    value: "INFO"
-  - name: "LOGFIRE_ENVIRONMENT"
-    value: "production"
-  - name: "LOGFIRE_SERVICE_NAME"
-    value: "soliplex"
+  # Agent Defaults
+  - name: "DEFAULT_AGENT_MODEL"
+    value: "llama3.2"
 
   # Paths
-  - name: "INSTALLATION_PATH"
-    value: "file:."
   - name: "RAG_LANCE_DB_PATH"
     value: "file:./db/rag"
 
   # MCP
   - name: "MCP_TOKEN_MAX_AGE"
     value: "3600"  # 1 hour
+
+  # Custom application variables
+  - name: "MY_CUSTOM_VAR"
+    value: "custom_value"
 ```
 
 ## Source Code
