@@ -39,8 +39,17 @@ jobs:
       - name: Install dart_doc_markdown
         run: dart pub global activate dart_doc_markdown
 
-      - name: Build and Validate Docs
-        run: ./scripts/build_docs.sh
+      - name: Generate Dart API Docs
+        run: ./scripts/generate_dart_markdown.sh
+
+      - name: Generate Client API Index
+        run: uv run python scripts/generate_client_api_index.py
+
+      - name: Build MkDocs Site
+        run: uv run mkdocs build
+
+      - name: Validate Federation
+        run: uv run python scripts/validate_llms_strategy.py
 
       - name: Run Script Tests
         run: uv run pytest tests/unit/scripts/ -v --no-cov

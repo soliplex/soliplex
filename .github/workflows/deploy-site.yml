@@ -45,9 +45,17 @@ jobs:
         run: dart pub global activate dart_doc_markdown
 
       # --- Build Documentation ---
-      - name: Build and Validate Docs
-        run: ./scripts/build_docs.sh
-        # Generates Dart docs, builds MkDocs, federates llms.txt, validates
+      - name: Generate Dart API Docs
+        run: ./scripts/generate_dart_markdown.sh
+
+      - name: Generate Client API Index
+        run: uv run python scripts/generate_client_api_index.py
+
+      - name: Build MkDocs Site
+        run: uv run mkdocs build
+
+      - name: Validate Federation
+        run: uv run python scripts/validate_llms_strategy.py
 
       # --- Build Flutter Web App ---
       - name: Build Flutter Web
