@@ -4,15 +4,18 @@ API documentation generated from source code.
 
 ## Overview
 
-The Soliplex server provides a REST API at `/api/v1/` with the following modules:
+The Soliplex server provides a REST API at `/api/` with the following modules:
 
 | Module | Base Path | Description |
 |--------|-----------|-------------|
 | Auth | `/login`, `/auth`, `/user_info` | OIDC authentication |
 | Rooms | `/v1/rooms` | Room management |
 | AG-UI | `/v1/rooms/{id}/agui` | Thread and run management |
+| Quizzes | `/v1/rooms/{id}/quiz` | Quiz management |
 | Completions | `/v1/chat/completions` | OpenAI-compatible API |
 | Installation | `/v1/installation` | Installation info |
+
+**Note:** Auth endpoints use `/api/` directly, while other endpoints use `/api/v1/`.
 
 ## Authentication
 
@@ -76,6 +79,13 @@ Tokens are obtained via the OIDC flow:
 | GET | `/v1/chat/completions/{id}` | Get completion |
 | POST | `/v1/chat/completions/{id}` | Execute (SSE) |
 
+### Quizzes
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/rooms/{id}/quiz/{quiz_id}` | Get quiz details |
+| POST | `/v1/rooms/{id}/quiz/{quiz_id}/{question_uuid}` | Submit quiz answer |
+
 ### Installation
 
 | Method | Endpoint | Description |
@@ -130,6 +140,7 @@ CORS is configured to allow the Flutter frontend. Customize for other clients.
 | Auth | `src/soliplex/views/auth.py` |
 | Rooms | `src/soliplex/views/rooms.py` |
 | AG-UI | `src/soliplex/views/agui.py` |
+| Quizzes | `src/soliplex/views/quizzes.py` |
 | Completions | `src/soliplex/views/completions.py` |
 | Installation | `src/soliplex/views/installation.py` |
 
