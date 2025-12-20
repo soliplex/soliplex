@@ -128,6 +128,15 @@ class HTTP_MCP_ClientToolsetConfig:
     allowed_tools: list[str] = None
 ```
 
+The HTTP client wraps Pydantic AI's `MCPServerStreamableHTTP`:
+
+```python
+class HTTP_MCP_Client_Toolset(ai_mcp.MCPServerStreamableHTTP):
+    async def list_tools(self) -> list[Tool]:
+        offered_tools = await super().list_tools()
+        return _filter_tools(offered_tools, self.allowed_tools)
+```
+
 ## Tool Filtering
 
 Use `allowed_tools` to limit which tools from an MCP server are available:
@@ -150,20 +159,26 @@ If `allowed_tools` is not specified, all tools are available.
 MCP client toolsets are passed to factory agents:
 
 ```python
+from soliplex.agents import make_mcp_client_toolset
+
 def my_factory(
     agent_config: FactoryAgentConfig,
     tool_configs: ToolConfigMap,
     mcp_client_toolset_configs: MCP_ClientToolsetConfigMap,
 ) -> Agent:
-    agent = Agent(model=get_model(agent_config))
+    # Create MCP toolsets from configs
+    toolsets = [
+        make_mcp_client_toolset(mctc)
+        for mctc in mcp_client_toolset_configs.values()
+    ]
 
-    # Add MCP tools from external servers
-    for name, mcp_config in mcp_client_toolset_configs.items():
-        toolset = mcp_config.to_toolset()
-        agent.add_mcp_server(toolset)
-
-    return agent
+    return pydantic_ai.Agent(
+        model=get_model(agent_config),
+        mcp_servers=toolsets,
+    )
 ```
+
+The `make_mcp_client_toolset` function uses `toolset_config.tool_kwargs` to instantiate the appropriate toolset class.
 
 ## Room-Level Configuration
 
