@@ -27,6 +27,10 @@ auth_systems:
     server_url: "https://sso.company.com"
     client_id: "soliplex-prod"
     client_secret: "secret:SSO_CLIENT_SECRET"
+    token_validation_pem: |
+      -----BEGIN PUBLIC KEY-----
+      MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...
+      -----END PUBLIC KEY-----
 ```
 
 ### Secrets Management
@@ -83,7 +87,7 @@ Configure token expiration:
 ```yaml
 environment:
   - name: "MCP_TOKEN_MAX_AGE"
-    value: "3600"  # 1 hour
+    value: 3600  # 1 hour (seconds)
 
 secrets:
   - secret_name: "URL_SAFE_TOKEN_SECRET"
@@ -119,24 +123,26 @@ tar -czf rag_backup.tar.gz ./db/rag/
 
 ### Production Log Level
 
-```yaml
-environment:
-  - name: "LOG_LEVEL"
-    value: "WARNING"  # Reduce noise
+Set via CLI option:
+
+```bash
+soliplex-cli serve installation.yaml --log-level WARNING
 ```
+
+Available levels: CRITICAL, ERROR, WARNING (recommended for production), INFO, DEBUG, TRACE
 
 ### Structured Logging with Logfire
 
-```yaml
-secrets:
-  - "LOGFIRE_TOKEN"
+Set Logfire environment variables (these are OS environment variables, not installation config):
 
-environment:
-  - name: "LOGFIRE_ENVIRONMENT"
-    value: "production"
-  - name: "LOGFIRE_SERVICE_NAME"
-    value: "soliplex"
+```bash
+export LOGFIRE_TOKEN="your-logfire-token"
+export LOGFIRE_ENVIRONMENT="production"
+export LOGFIRE_SERVICE_NAME="soliplex"
+soliplex-cli serve installation.yaml
 ```
+
+Soliplex automatically activates Logfire when `LOGFIRE_TOKEN` is set.
 
 ## Resource Limits
 
