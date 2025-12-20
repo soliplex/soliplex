@@ -84,6 +84,7 @@ class Thread(Base):
     )
 
     created: Mapped[datetime.datetime] = mapped_column(
+        sqla_sqltypes.TIMESTAMP(timezone=True),
         default=agui_util._timestamp,
     )
 
@@ -124,6 +125,7 @@ class ThreadMetadata(Base):
 
     id_: Mapped[int] = mapped_column(primary_key=True)
     created: Mapped[datetime.datetime] = mapped_column(
+        sqla_sqltypes.TIMESTAMP(timezone=True),
         default=agui_util._timestamp,
     )
 
@@ -243,10 +245,12 @@ class Run(Base):
             return self.run_agent_input.to_agui_model()
 
     created: Mapped[datetime.datetime] = mapped_column(
+        sqla_sqltypes.TIMESTAMP(timezone=True),
         default=agui_util._timestamp,
     )
 
     finished: Mapped[datetime.datetime | None] = mapped_column(
+        sqla_sqltypes.TIMESTAMP(timezone=True),
         default=None,
     )
 
@@ -272,6 +276,7 @@ class RunMetadata(Base):
 
     id_: Mapped[int] = mapped_column(primary_key=True)
     created: Mapped[datetime.datetime] = mapped_column(
+        sqla_sqltypes.TIMESTAMP(timezone=True),
         default=agui_util._timestamp,
     )
 
@@ -302,6 +307,7 @@ class RunUsage(Base):
 
     id_: Mapped[int] = mapped_column(primary_key=True)
     created: Mapped[datetime.datetime] = mapped_column(
+        sqla_sqltypes.TIMESTAMP(timezone=True),
         default=agui_util._timestamp,
     )
 
@@ -337,6 +343,7 @@ class RunAgentInput(Base):
 
     id_: Mapped[int] = mapped_column(primary_key=True)
     created: Mapped[datetime.datetime] = mapped_column(
+        sqla_sqltypes.TIMESTAMP(timezone=True),
         default=agui_util._timestamp,
     )
 
@@ -417,6 +424,7 @@ class RunEvent(Base):
 
     id_: Mapped[int] = mapped_column(primary_key=True)
     created: Mapped[datetime.datetime] = mapped_column(
+        sqla_sqltypes.TIMESTAMP(timezone=True),
         default=agui_util._timestamp,
     )
 
