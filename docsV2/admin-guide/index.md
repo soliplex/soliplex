@@ -61,11 +61,15 @@ soliplex-cli list-rooms example/installation.yaml
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `OLLAMA_BASE_URL` | Yes* | Ollama server URL (e.g., `http://127.0.0.1:11434`) |
-| `OPENAI_API_KEY` | No | OpenAI API key for cloud models |
-| `INSTALLATION_PATH` | No | Override installation config path |
 | `RAG_LANCE_DB_PATH` | No | Override RAG database path |
 
 *Required when using Ollama as LLM provider
+
+## Secrets
+
+| Secret | Required | Description |
+|--------|----------|-------------|
+| `OPENAI_API_KEY` | If using OpenAI | OpenAI API key (configured via `provider_key: "secret:OPENAI_API_KEY"`) |
 
 ## Security Considerations
 
