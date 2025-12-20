@@ -147,7 +147,7 @@ Meta-configuration for registering custom types. See [Meta Configuration](#meta-
 
 ```yaml
 meta:
-  tool_config_kinds:
+  tool_configs:
     - kind: "my_custom_tool"
       class: "mypackage.config.MyToolConfig"
 ```
@@ -193,11 +193,11 @@ Register custom configuration types:
 
 ```yaml
 meta:
-  tool_config_kinds:
+  tool_configs:
     - kind: "weather"
       class: "mypackage.config.WeatherToolConfig"
 
-  mcp_client_toolset_kinds:
+  mcp_toolset_configs:
     - kind: "custom_mcp"
       class: "mypackage.config.CustomMCPConfig"
 ```
