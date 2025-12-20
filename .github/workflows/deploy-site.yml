@@ -38,6 +38,9 @@ jobs:
         working-directory: src/flutter
         run: flutter pub get
 
+      - name: Install dart_doc_markdown
+        run: dart pub global activate dart_doc_markdown
+
       # --- Build Documentation ---
       - name: Build and Validate Docs
         run: ./scripts/build_docs.sh
