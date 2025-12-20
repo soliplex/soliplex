@@ -57,7 +57,7 @@ graph TB
 |-----------|------------|---------|
 | **UI Framework** | Flutter 3.x | Cross-platform rendering |
 | **State Management** | Riverpod | Reactive state handling |
-| **HTTP Client** | dio | REST API calls |
+| **HTTP Client** | http | REST API calls |
 | **SSE Client** | Custom | AG-UI streaming |
 
 ### Backend (Python)
@@ -85,7 +85,7 @@ sequenceDiagram
     participant D as Database
 
     U->>F: Type message
-    F->>A: POST /rooms/{id}/agui/{thread}/{run}
+    F->>A: POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}
     A->>D: Load thread history
     A->>P: run_stream(prompt, deps, history)
 
@@ -140,17 +140,18 @@ classDiagram
     class Thread {
         +str thread_id
         +str room_id
-        +str user_id
-        +datetime created_at
-        +dict metadata
+        +str user_name
+        +datetime created
+        +dict thread_metadata
     }
 
     class Run {
         +str run_id
         +str thread_id
-        +str status
-        +datetime created_at
-        +list[Event] events
+        +str parent_run_id
+        +datetime created
+        +datetime finished
+        +list_events() list[Event]
     }
 
     class Event {
@@ -171,16 +172,16 @@ classDiagram
     class Installation {
         +str id
         +list secrets
-        +list environment
+        +dict environment
         +list agent_configs
         +list room_paths
     }
 
     class RoomConfig {
         +str id
-        +AgentConfig agent
-        +list tools
-        +dict mcp_client_toolsets
+        +AgentConfig agent_config
+        +list tool_configs
+        +dict mcp_client_toolset_configs
         +bool allow_mcp
     }
 
