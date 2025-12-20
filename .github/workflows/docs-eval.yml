@@ -16,6 +16,18 @@ on:
           - project
           - server
           - client
+      provider:
+        description: 'LLM provider'
+        required: false
+        type: choice
+        default: 'openai'
+        options:
+          - openai
+          - ollama
+      model:
+        description: 'Model name (leave empty for default)'
+        required: false
+        type: string
 
 jobs:
   evaluate:
@@ -33,9 +45,6 @@ jobs:
 
       - name: Install dependencies
         run: uv sync
-
-      - name: Install anthropic
-        run: uv add anthropic
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -58,14 +67,20 @@ jobs:
 
       - name: Run comprehension evaluation
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          DOMAIN_ARG=""
+          ARGS=""
           if [ -n "${{ github.event.inputs.domain }}" ]; then
-            DOMAIN_ARG="--domain ${{ github.event.inputs.domain }}"
+            ARGS="$ARGS --domain ${{ github.event.inputs.domain }}"
           fi
-          uv run python scripts/eval_comprehension.py $DOMAIN_ARG --json > eval-results.json
-          uv run python scripts/eval_comprehension.py $DOMAIN_ARG --verbose
+          if [ -n "${{ github.event.inputs.provider }}" ]; then
+            ARGS="$ARGS --provider ${{ github.event.inputs.provider }}"
+          fi
+          if [ -n "${{ github.event.inputs.model }}" ]; then
+            ARGS="$ARGS --model ${{ github.event.inputs.model }}"
+          fi
+          uv run python scripts/eval_comprehension.py $ARGS --json > eval-results.json
+          uv run python scripts/eval_comprehension.py $ARGS --verbose
 
       - name: Upload evaluation results
         uses: actions/upload-artifact@v4
