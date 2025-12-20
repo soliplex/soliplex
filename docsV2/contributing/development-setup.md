@@ -92,7 +92,7 @@ pytest
 pytest tests/unit/test_agents.py
 
 # Run with coverage report
-pytest --cov=src/soliplex --cov-report=html
+pytest --cov=soliplex --cov-report=html
 ```
 
 ### Frontend Tests
@@ -190,7 +190,12 @@ For development:
 
 ```bash
 export OLLAMA_BASE_URL=http://127.0.0.1:11434
-export LOG_LEVEL=DEBUG
+```
+
+Set log level via CLI option:
+
+```bash
+soliplex-cli serve example/minimal.yaml --no-auth-mode --log-level DEBUG
 ```
 
 ## Troubleshooting
