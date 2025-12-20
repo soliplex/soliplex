@@ -7,7 +7,7 @@ This document covers the `AgentConfig` class and all its configuration options.
 ```yaml
 agent_configs:
   - id: "my_agent"                    # Required: Unique identifier
-    model_name: "gpt-oss:latest"      # Required: LLM model name
+    model_name: "gpt-oss:latest"      # Required (or set DEFAULT_AGENT_MODEL)
     provider_type: "ollama"           # Optional: ollama or openai
     provider_base_url: null           # Optional: Override provider URL
     provider_key: null                # Optional: API key reference
@@ -28,9 +28,9 @@ Unique identifier for the agent. Used for caching and references.
 id: "research_agent"
 ```
 
-### model_name (required)
+### model_name
 
-The LLM model name. Format depends on provider:
+The LLM model name. Required unless `DEFAULT_AGENT_MODEL` is set in the installation's environment. Format depends on provider:
 
 ```yaml
 # Ollama models
@@ -54,7 +54,7 @@ provider_type: "openai"   # OpenAI API
 
 ### provider_base_url
 
-Override the provider URL. If not set, uses `OLLAMA_BASE_URL` from environment.
+Override the provider URL. If not set, uses `OLLAMA_BASE_URL` from the installation's `environment` configuration.
 
 ```yaml
 provider_base_url: "http://custom-ollama:11434"
@@ -138,7 +138,7 @@ Template inheritance:
 ### Ollama Provider
 
 ```yaml
-# Minimal (uses OLLAMA_BASE_URL from env)
+# Minimal (uses OLLAMA_BASE_URL from installation environment)
 agent_configs:
   - id: "local_agent"
     model_name: "gpt-oss:latest"
@@ -241,4 +241,4 @@ agent_configs:
 
 ## Source Code
 
-Configuration parsing: `src/soliplex/config.py` (lines 781-937)
+Configuration parsing: `src/soliplex/config.py` (lines 780-937)
