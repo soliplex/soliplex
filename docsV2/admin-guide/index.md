@@ -61,9 +61,12 @@ soliplex-cli list-rooms example/installation.yaml
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `OLLAMA_BASE_URL` | Yes* | Ollama server URL (e.g., `http://127.0.0.1:11434`) |
+| `DEFAULT_AGENT_MODEL` | No | Fallback model when agent `model_name` not specified |
 | `RAG_LANCE_DB_PATH` | No | Override RAG database path |
 
 *Required when using Ollama as LLM provider
+
+See [Environment Configuration](configuration/environment.md) for the complete list.
 
 ## Secrets
 
