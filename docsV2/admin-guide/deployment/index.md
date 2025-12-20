@@ -43,7 +43,7 @@ soliplex-cli serve example/minimal.yaml --no-auth-mode
 
 | Option | Description |
 |--------|-------------|
-| `--log-level` | Logging verbosity (DEBUG, INFO, WARNING, ERROR) |
+| `--log-level` | Logging verbosity (CRITICAL, ERROR, WARNING, INFO, DEBUG, TRACE) |
 | `--no-auth-mode` | Disable authentication (development only) |
 
 ### Network Requirements
