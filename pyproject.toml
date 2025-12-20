@@ -32,6 +32,8 @@ dependencies = [
     "trio",
     "uvicorn[standard]",
     "certifi >= 2025.11.12",
+    "anthropic>=0.75.0",
+    "pydantic-evals>=1.27.0",
 ]
 
 [project.scripts]

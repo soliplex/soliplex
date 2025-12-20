@@ -153,6 +153,25 @@ wheels = [
 ]
 
 [[package]]
+name = "anthropic"
+version = "0.75.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "distro" },
+    { name = "docstring-parser" },
+    { name = "httpx" },
+    { name = "jiter" },
+    { name = "pydantic" },
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/04/1f/08e95f4b7e2d35205ae5dcbb4ae97e7d477fc521c275c02609e2931ece2d/anthropic-0.75.0.tar.gz", hash = "sha256:e8607422f4ab616db2ea5baacc215dd5f028da99ce2f022e33c7c535b29f3dfb", size = 439565, upload-time = "2025-11-24T20:41:45.28Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/60/1c/1cd02b7ae64302a6e06724bf80a96401d5313708651d277b1458504a1730/anthropic-0.75.0-py3-none-any.whl", hash = "sha256:ea8317271b6c15d80225a9f3c670152746e88805a7a61e14d4a374577164965b", size = 388164, upload-time = "2025-11-24T20:41:43.587Z" },
+]
+
+[[package]]
 name = "anyio"
 version = "4.12.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2290,6 +2309,23 @@ wheels = [
 ]
 
 [[package]]
+name = "pydantic-evals"
+version = "1.27.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "logfire-api" },
+    { name = "pydantic" },
+    { name = "pydantic-ai-slim" },
+    { name = "pyyaml" },
+    { name = "rich" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b6/75/f668b4d83e3c6d6806b37f97b84397ca1667a559147d8d4133a3665db55d/pydantic_evals-1.27.0.tar.gz", hash = "sha256:d8f08c4a61c7adea8cabd84368d3acde88f196162ab37ca1f99ffbbac6872f8f", size = 47078, upload-time = "2025-12-05T03:23:08.792Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/b0/1fcde1b8263ec681a46e1af1a6a01850ed25ae856db52c477b127d12947e/pydantic_evals-1.27.0-py3-none-any.whl", hash = "sha256:086b3264c6602dceddaeb66ee18df7f9a3d5def2acd27d5251018bc95430c47e", size = 56225, upload-time = "2025-12-05T03:22:59.876Z" },
+]
+
+[[package]]
 name = "pydantic-graph"
 version = "1.27.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2715,6 +2751,7 @@ source = { editable = "." }
 dependencies = [
     { name = "ag-ui-protocol" },
     { name = "aiosqlite" },
+    { name = "anthropic" },
     { name = "authlib" },
     { name = "certifi" },
     { name = "fastapi" },
@@ -2725,6 +2762,7 @@ dependencies = [
     { name = "jsonpatch" },
     { name = "jwcrypto" },
     { name = "logfire", extra = ["fastapi"] },
+    { name = "pydantic-evals" },
     { name = "pyjwt" },
     { name = "python-keycloak" },
     { name = "sqlmodel" },
@@ -2763,6 +2801,7 @@ tui = [
 requires-dist = [
     { name = "ag-ui-protocol", specifier = ">=0.1.10" },
     { name = "aiosqlite" },
+    { name = "anthropic", specifier = ">=0.75.0" },
     { name = "authlib" },
     { name = "certifi", specifier = ">=2025.11.12" },
     { name = "fastapi" },
@@ -2773,6 +2812,7 @@ requires-dist = [
     { name = "jsonpatch" },
     { name = "jwcrypto" },
     { name = "logfire", extras = ["fastapi"] },
+    { name = "pydantic-evals", specifier = ">=1.27.0" },
     { name = "pyjwt" },
     { name = "python-keycloak" },
     { name = "sqlmodel" },
