@@ -27,7 +27,7 @@ cd soliplex
 ### 2. Create a Branch
 
 ```bash
-git checkout -b feature/your-feature-name
+git checkout -b feat/your-feature-name
 # or
 git checkout -b fix/issue-description
 ```
@@ -58,7 +58,7 @@ dart format lib test     # Code formatted
 Write clear, descriptive commit messages:
 
 ```bash
-git commit -m "feat: add support for custom tool timeouts
+git commit -m "feat(tools): add support for custom tool timeouts
 
 - Added timeout parameter to ToolConfig
 - Updated agent runner to respect timeout
