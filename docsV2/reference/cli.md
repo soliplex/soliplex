@@ -10,6 +10,15 @@ pip install soliplex
 pip install -e .  # from source
 ```
 
+## Global Options
+
+```bash
+soliplex-cli [options] <command>
+```
+
+- `-v, --version` - Show version and exit
+- `-h, --help` - Show help
+
 ## Commands
 
 ### serve
@@ -21,14 +30,26 @@ soliplex-cli serve <config_path> [options]
 ```
 
 **Arguments:**
-- `config_path` - Path to installation.yaml
+- `config_path` - Path to installation.yaml (can also be set via `SOLIPLEX_INSTALLATION_PATH` env var)
 
 **Options:**
-- `--host` - Host to bind (default: 127.0.0.1)
-- `--port` - Port to bind (default: 8000)
-- `--workers` - Number of workers (default: 1)
-- `--no-auth-mode` - Disable authentication
-- `--reload` - Enable auto-reload (development)
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --host` | 127.0.0.1 | Host to bind |
+| `-p, --port` | 8000 | Port to bind |
+| `--workers` | None | Number of worker processes (env: `WEB_CONCURRENCY`) |
+| `--no-auth-mode` | False | Disable OIDC authentication |
+| `-r, --reload` | None | Reload mode: `config`, `python`, or `both` |
+| `--reload-dirs` | [] | Additional directories to monitor for reload |
+| `--reload-includes` | [] | Additional glob patterns for reload monitoring |
+| `--log-level` | None | Log level: critical, error, warning, info, debug, trace |
+| `--log-config` | None | Logging configuration file (.ini, .json, .yaml) |
+| `--access-log` | None | Enable/disable access log |
+| `--uds` | None | Bind to Unix domain socket |
+| `--fd` | None | Bind to socket from file descriptor |
+| `--proxy-headers` | None | Enable X-Forwarded-Proto/For headers |
+| `--forwarded-allow-ips` | None | IPs to trust for proxy headers (env: `FORWARDED_ALLOW_IPS`) |
 
 **Examples:**
 ```bash
@@ -38,13 +59,19 @@ soliplex-cli serve installation.yaml
 # Production with workers
 soliplex-cli serve installation.yaml --host 0.0.0.0 --port 8000 --workers 4
 
-# Development mode
-soliplex-cli serve installation.yaml --no-auth-mode --reload
+# Development mode with config reload
+soliplex-cli serve installation.yaml --no-auth-mode --reload config
+
+# Development with Python and config reload
+soliplex-cli serve installation.yaml --no-auth-mode --reload both
+
+# With debug logging
+soliplex-cli serve installation.yaml --log-level debug
 ```
 
 ### check-config
 
-Validate a configuration file.
+Validate a configuration file and check that all secrets/environment variables can be resolved.
 
 ```bash
 soliplex-cli check-config <config_path>
@@ -60,10 +87,30 @@ soliplex-cli check-config installation.yaml
 
 **Output:**
 ```
-✓ Configuration valid
-  - 3 rooms configured
-  - 2 agents configured
-  - 1 OIDC provider
+───────────────────────────── Checking secrets ─────────────────────────────
+
+OK
+
+───────────────────────────── Checking environment ─────────────────────────
+
+OK
+
+───────────────────────────── Validating installation model ────────────────
+
+OK
+
+───────────────────────────── Validating room models ───────────────────────
+
+Room: research
+OK
+
+Room: chat
+OK
+
+───────────────────────────── Validating completion models ─────────────────
+
+Completion: default
+OK
 ```
 
 ### list-secrets
@@ -84,7 +131,7 @@ soliplex-cli list-secrets installation.yaml
 
 **Output:**
 ```
-───────────────────────── Configured secrets ──────────────────────────────
+───────────────────────────── Configured secrets ───────────────────────────
 
 - LOGFIRE_TOKEN             MISSING
 - OPENAI_API_KEY            MISSING
@@ -109,11 +156,11 @@ soliplex-cli list-environment installation.yaml
 
 **Output:**
 ```
-─────────────────────── Configured environment variables ───────────────────────
+───────────────────────────── Configured environment variables ─────────────
 
 - OLLAMA_BASE_URL          : http://localhost:11434
-- LOG_LEVEL                : INFO
-- LOGFIRE_ENVIRONMENT      : development
+- INSTALLATION_PATH        : file:.
+- RAG_LANCE_DB_PATH        : file:../db/rag
 ```
 
 ### list-rooms
@@ -134,31 +181,103 @@ soliplex-cli list-rooms installation.yaml
 
 **Output:**
 ```
-───────────────────────────── Configured rooms ─────────────────────────────
+───────────────────────────── Configured Rooms ─────────────────────────────
 
-- research    : Research Assistant (RAG enabled)
-- chat        : General Chat
-- code        : Code Assistant
+- [ research ] Research Room:
+  Research Assistant with RAG enabled
+
+- [ chat ] General Chat:
+  General purpose chat room
+```
+
+### list-completions
+
+List configured completion endpoints.
+
+```bash
+soliplex-cli list-completions <config_path>
+```
+
+**Arguments:**
+- `config_path` - Path to installation.yaml
+
+**Examples:**
+```bash
+soliplex-cli list-completions installation.yaml
+```
+
+**Output:**
+```
+───────────────────────────── Configured Completions ───────────────────────
+
+- [ default ] Default Completion:
+```
+
+### list-oidc-auth-providers
+
+List configured OIDC authentication providers.
+
+```bash
+soliplex-cli list-oidc-auth-providers <config_path>
+```
+
+**Arguments:**
+- `config_path` - Path to installation.yaml
+
+**Examples:**
+```bash
+soliplex-cli list-oidc-auth-providers installation.yaml
+```
+
+**Output:**
+```
+───────────────────────────── Configured OIDC Auth Providers ───────────────
+
+- [ google ] Google:
+  https://accounts.google.com
+
+- [ okta ] Okta Corporate:
+  https://company.okta.com
+```
+
+### config
+
+Export the merged installation configuration as YAML.
+
+```bash
+soliplex-cli config <config_path>
+```
+
+**Arguments:**
+- `config_path` - Path to installation.yaml
+
+**Examples:**
+```bash
+soliplex-cli config installation.yaml
+```
+
+**Output:**
+```
+#------------------------------------------------------------------------------
+# Source: installation.yaml
+#------------------------------------------------------------------------------
+id: soliplex-conf-default
+secrets:
+  - secret_name: URL_SAFE_TOKEN_SECRET
+    ...
 ```
 
 ## Environment Variables
 
 The CLI respects these environment variables:
 
-| Variable | Description |
-|----------|-------------|
-| `OLLAMA_BASE_URL` | Ollama server URL |
-| `LOG_LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR) |
-| `LOGFIRE_TOKEN` | Logfire observability token |
+| Variable | Used By | Description |
+|----------|---------|-------------|
+| `SOLIPLEX_INSTALLATION_PATH` | `<config_path>` argument | Default installation path |
+| `WEB_CONCURRENCY` | `--workers` | Number of worker processes |
+| `FORWARDED_ALLOW_IPS` | `--forwarded-allow-ips` | Trusted proxy IPs |
 
-## Exit Codes
-
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | General error |
-| 2 | Configuration error |
-| 3 | Missing dependencies |
+**Note:** Environment variables like `OLLAMA_BASE_URL` and `LOGFIRE_TOKEN` are configuration-level settings defined in `installation.yaml`, not CLI options.
 
 ## Common Workflows
 
@@ -168,9 +287,9 @@ The CLI respects these environment variables:
 # Start Ollama
 ollama serve &
 
-# Start backend with auto-reload
+# Start backend with config reload
 export OLLAMA_BASE_URL=http://localhost:11434
-soliplex-cli serve example/minimal.yaml --no-auth-mode --reload
+soliplex-cli serve example/minimal.yaml --no-auth-mode --reload config
 ```
 
 ### Production
@@ -197,5 +316,5 @@ soliplex-cli list-secrets installation.yaml
 soliplex-cli list-environment installation.yaml
 
 # Start with debug logging
-LOG_LEVEL=DEBUG soliplex-cli serve installation.yaml --no-auth-mode
+soliplex-cli serve installation.yaml --no-auth-mode --log-level debug
 ```
