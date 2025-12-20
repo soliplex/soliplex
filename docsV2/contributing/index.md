@@ -70,7 +70,7 @@ Closes #123"
 ### 6. Push and Create PR
 
 ```bash
-git push origin feature/your-feature-name
+git push origin feat/your-feature-name
 ```
 
 Then open a Pull Request on GitHub with:
