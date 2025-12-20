@@ -21,7 +21,7 @@ Soliplex provides an AI chat interface with:
 
 ### 1. Select a Room
 
-Rooms appear in the left sidebar. Each room has different:
+Open the navigation drawer (☰) to see available rooms. Each room has different:
 
 - **AI Model** - Which LLM powers the conversation
 - **Tools** - What actions the AI can perform
@@ -39,7 +39,7 @@ Rooms appear in the left sidebar. Each room has different:
 Your conversation is automatically saved. You can:
 
 - Continue asking follow-up questions
-- Start a new thread with the "New Chat" button
+- Start a new thread with the **+** button in the threads panel
 - Access previous threads from the thread list
 
 ## Tips
