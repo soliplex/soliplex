@@ -32,8 +32,11 @@ Get available OIDC authentication providers.
 {
   "google": {
     "id": "google",
-    "display_name": "Google",
-    "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth"
+    "title": "Google",
+    "server_url": "https://accounts.google.com",
+    "token_validation_pem": "-----BEGIN PUBLIC KEY-----...",
+    "client_id": "your-client-id",
+    "scope": "openid email profile"
   }
 }
 ```
@@ -85,9 +88,16 @@ Get available rooms for the authenticated user.
 {
   "research": {
     "id": "research",
+    "name": "Research Room",
     "description": "Research assistant room",
-    "has_rag": true,
-    "has_quizzes": false
+    "welcome_message": "Welcome! How can I help?",
+    "suggestions": ["Search documents", "Summarize content"],
+    "enable_attachments": false,
+    "tools": {...},
+    "mcp_client_toolsets": {...},
+    "quizzes": {...},
+    "agent": {...},
+    "allow_mcp": true
   }
 }
 ```
@@ -103,9 +113,16 @@ Get a specific room's configuration.
 ```json
 {
   "id": "research",
+  "name": "Research Room",
   "description": "Research assistant room",
-  "has_rag": true,
-  "has_quizzes": false
+  "welcome_message": "Welcome! How can I help?",
+  "suggestions": ["Search documents", "Summarize content"],
+  "enable_attachments": false,
+  "tools": {...},
+  "mcp_client_toolsets": {...},
+  "quizzes": {...},
+  "agent": {...},
+  "allow_mcp": true
 }
 ```
 
@@ -182,7 +199,8 @@ List user's threads in a room.
       "thread_id": "thread-123",
       "created": "2024-01-15T10:30:00Z",
       "metadata": {
-        "title": "Research session"
+        "name": "Research session",
+        "description": null
       }
     }
   ]
@@ -197,7 +215,8 @@ Create a new thread in a room.
 ```json
 {
   "metadata": {
-    "title": "New research session"
+    "name": "New research session",
+    "description": "Optional description"
   }
 }
 ```
@@ -209,11 +228,13 @@ Create a new thread in a room.
   "thread_id": "thread-456",
   "created": "2024-01-15T10:35:00Z",
   "metadata": {
-    "title": "New research session"
+    "name": "New research session",
+    "description": "Optional description"
   },
   "runs": {
     "run-1": {
       "run_id": "run-1",
+      "thread_id": "thread-456",
       "created": "2024-01-15T10:35:00Z"
     }
   }
@@ -230,12 +251,18 @@ Get thread details including all runs.
   "room_id": "research",
   "thread_id": "thread-123",
   "created": "2024-01-15T10:30:00Z",
-  "metadata": {},
+  "metadata": {
+    "name": null,
+    "description": null
+  },
   "runs": {
     "run-1": {
       "run_id": "run-1",
+      "thread_id": "thread-123",
       "created": "2024-01-15T10:30:00Z",
-      "metadata": {}
+      "metadata": {
+        "label": null
+      }
     }
   }
 }
@@ -249,18 +276,23 @@ Create a new run in a thread.
 ```json
 {
   "parent_run_id": "run-1",
-  "metadata": {}
+  "metadata": {
+    "label": null
+  }
 }
 ```
 
 **Response:**
 ```json
 {
-  "room_id": "research",
   "thread_id": "thread-123",
   "run_id": "run-2",
   "parent_run_id": "run-1",
-  "created": "2024-01-15T10:35:00Z"
+  "created": "2024-01-15T10:35:00Z",
+  "finished": null,
+  "metadata": {
+    "label": null
+  }
 }
 ```
 
@@ -271,7 +303,8 @@ Update thread metadata.
 **Request Body:**
 ```json
 {
-  "title": "Updated title"
+  "name": "Updated name",
+  "description": "Updated description"
 }
 ```
 
@@ -284,14 +317,24 @@ Get run details including events.
 **Response:**
 ```json
 {
-  "room_id": "research",
   "thread_id": "thread-123",
   "run_id": "run-1",
+  "parent_run_id": null,
   "created": "2024-01-15T10:30:00Z",
+  "finished": "2024-01-15T10:31:00Z",
   "run_input": {
     "messages": [...]
   },
-  "events": [...]
+  "events": [...],
+  "metadata": {
+    "label": null
+  },
+  "usage": {
+    "input_tokens": 100,
+    "output_tokens": 200,
+    "requests": 1,
+    "tool_calls": 2
+  }
 }
 ```
 
@@ -314,21 +357,18 @@ Execute a run. Returns SSE stream of AG-UI events.
 
 **Response:** SSE stream (text/event-stream)
 ```
-event: RUN_STARTED
-data: {"type": "RUN_STARTED", "run_id": "run-1"}
+data: {"type": "RUN_STARTED", "run_id": "run-1", "thread_id": "thread-123"}
 
-event: TEXT_MESSAGE_START
 data: {"type": "TEXT_MESSAGE_START", "message_id": "msg-1"}
 
-event: TEXT_MESSAGE_CONTENT
 data: {"type": "TEXT_MESSAGE_CONTENT", "delta": "RAG stands for..."}
 
-event: TEXT_MESSAGE_END
 data: {"type": "TEXT_MESSAGE_END"}
 
-event: RUN_FINISHED
 data: {"type": "RUN_FINISHED"}
 ```
+
+Event type is identified via the `type` field in the JSON payload.
 
 ### POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}/meta
 
@@ -337,7 +377,7 @@ Update run metadata.
 **Request Body:**
 ```json
 {
-  "status": "completed"
+  "label": "Completed successfully"
 }
 ```
 
@@ -364,7 +404,9 @@ List available completion configurations.
 {
   "default": {
     "id": "default",
-    "model_name": "gpt-oss:latest"
+    "name": "Default Completion",
+    "tools": {...},
+    "agent": {...}
   }
 }
 ```
@@ -377,7 +419,9 @@ Get a specific completion configuration.
 ```json
 {
   "id": "default",
-  "model_name": "gpt-oss:latest"
+  "name": "Default Completion",
+  "tools": {...},
+  "agent": {...}
 }
 ```
 
@@ -406,13 +450,48 @@ data: [DONE]
 
 ## Quiz Endpoints
 
-### GET /v1/rooms/{room_id}/quizzes
+### GET /v1/rooms/{room_id}/quiz/{quiz_id}
 
-List available quizzes in a room.
+Get a specific quiz for the room.
 
-### GET /v1/rooms/{room_id}/quizzes/{quiz_id}
+**Parameters:**
+- `room_id` - Room identifier
+- `quiz_id` - Quiz identifier
 
-Get a specific quiz.
+**Response:**
+```json
+{
+  "id": "quiz-1",
+  "title": "Knowledge Check",
+  "randomize": true,
+  "max_questions": 10,
+  "questions": [...]
+}
+```
+
+### POST /v1/rooms/{room_id}/quiz/{quiz_id}/{question_uuid}
+
+Submit an answer to a quiz question.
+
+**Parameters:**
+- `room_id` - Room identifier
+- `quiz_id` - Quiz identifier
+- `question_uuid` - Question UUID
+
+**Request Body:**
+```json
+{
+  "text": "User's answer text"
+}
+```
+
+**Response:**
+```json
+{
+  "correct": "true",
+  "expected_output": "Expected answer"
+}
+```
 
 ---
 
@@ -426,7 +505,17 @@ Get installation configuration.
 ```json
 {
   "id": "my-installation",
-  "title": "Soliplex"
+  "secrets": [...],
+  "environment": {...},
+  "haiku_rag_config_file": null,
+  "agents": [...],
+  "oidc_paths": [...],
+  "room_paths": [...],
+  "completion_paths": [...],
+  "quizzes_paths": [...],
+  "oidc_auth_systems": [...],
+  "thread_persistence_dburi_sync": "sqlite:///...",
+  "thread_persistence_dburi_async": "sqlite+aiosqlite:///..."
 }
 ```
 
@@ -454,3 +543,5 @@ Common status codes:
 - Room views: `src/soliplex/views/rooms.py`
 - AGUI views: `src/soliplex/views/agui.py`
 - Completions views: `src/soliplex/views/completions.py`
+- Quiz views: `src/soliplex/views/quizzes.py`
+- Installation views: `src/soliplex/views/installation.py`
