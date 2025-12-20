@@ -8,7 +8,6 @@ Quizzes allow testing user knowledge within chat rooms.
 # rooms/training/room_config.yaml
 quizzes:
   - id: "intro"
-    title: "Introduction Quiz"
     question_file: "./quizzes/intro.json"
 ```
 
@@ -22,14 +21,6 @@ Unique quiz identifier:
 id: "intro_quiz"
 ```
 
-### title (required)
-
-Display name for the quiz:
-
-```yaml
-title: "Introduction to RAG"
-```
-
 ### question_file (required)
 
 Path to JSON file containing questions:
@@ -39,6 +30,14 @@ question_file: "./quizzes/intro.json"
 ```
 
 Path is relative to the room configuration file.
+
+### title
+
+Display name for the quiz. Default: `"Quiz"`
+
+```yaml
+title: "Introduction to RAG"
+```
 
 ### randomize
 
@@ -56,77 +55,97 @@ Limit number of questions. Default: all questions
 max_questions: 10
 ```
 
+### judge_agent
+
+Optional agent configuration for evaluating free-form answers:
+
+```yaml
+judge_agent:
+  model_name: "gpt-oss:latest"
+```
+
 ## Question File Format
+
+Question files use the Pydantic evals dataset format:
 
 ```json
 {
-  "questions": [
+  "cases": [
     {
-      "id": "q1",
-      "text": "What does RAG stand for?",
-      "type": "multiple_choice",
-      "options": [
-        {"id": "a", "text": "Retrieval-Augmented Generation"},
-        {"id": "b", "text": "Random Access Gateway"},
-        {"id": "c", "text": "Resource Allocation Guide"}
-      ],
-      "correct": "a",
-      "explanation": "RAG stands for Retrieval-Augmented Generation."
-    },
-    {
-      "id": "q2",
-      "text": "What is the primary purpose of embeddings?",
-      "type": "multiple_choice",
-      "options": [
-        {"id": "a", "text": "Text compression"},
-        {"id": "b", "text": "Semantic similarity search"},
-        {"id": "c", "text": "Data encryption"}
-      ],
-      "correct": "b"
+      "inputs": "What does RAG stand for?",
+      "expected_output": "Retrieval-Augmented Generation",
+      "metadata": {
+        "uuid": "q1-unique-id",
+        "type": "qa"
+      }
     }
   ]
 }
 ```
 
+### Field Reference
+
+| Field | Description |
+|-------|-------------|
+| `inputs` | The question text shown to the user |
+| `expected_output` | The correct answer |
+| `metadata.uuid` | Unique identifier for the question |
+| `metadata.type` | Question type: `qa`, `fill-blank`, or `multiple-choice` |
+| `metadata.options` | Answer options (for `multiple-choice` only) |
+
 ## Question Types
+
+### QA (Question & Answer)
+
+Free-form question with expected answer:
+
+```json
+{
+  "inputs": "What framework does Soliplex use for agents?",
+  "expected_output": "Pydantic AI",
+  "metadata": {
+    "uuid": "58cd4636-9934-427e-b4b7-1678f2e92751",
+    "type": "qa"
+  }
+}
+```
+
+### Fill-in-the-Blank
+
+Question with blank to fill:
+
+```json
+{
+  "inputs": "The default LLM provider is _____",
+  "expected_output": "Ollama",
+  "metadata": {
+    "uuid": "48ee5a26-8d3e-4032-b910-44912b7f13c2",
+    "type": "fill-blank"
+  }
+}
+```
 
 ### Multiple Choice
 
-```json
-{
-  "id": "q1",
-  "text": "Which database does Soliplex use for vector storage?",
-  "type": "multiple_choice",
-  "options": [
-    {"id": "a", "text": "PostgreSQL"},
-    {"id": "b", "text": "LanceDB"},
-    {"id": "c", "text": "MongoDB"}
-  ],
-  "correct": "b"
-}
-```
-
-### True/False
+Question with predefined options:
 
 ```json
 {
-  "id": "q2",
-  "text": "Soliplex supports multiple LLM providers.",
-  "type": "true_false",
-  "correct": true
+  "inputs": "Which database does Soliplex use for vector storage?",
+  "expected_output": "LanceDB",
+  "metadata": {
+    "uuid": "8ae8d35a-cab7-4537-a915-2f67b3152a3c",
+    "type": "multiple-choice",
+    "options": [
+      "PostgreSQL",
+      "LanceDB",
+      "MongoDB"
+    ]
+  }
 }
 ```
 
-### Free Text
-
-```json
-{
-  "id": "q3",
-  "text": "What command starts the Soliplex server?",
-  "type": "free_text",
-  "correct": ["soliplex-cli serve", "soliplex-cli serve installation.yaml"]
-}
-```
+**Note:** The `expected_output` must exactly match one of the `options`.
 
 ## Room Configuration
 
@@ -135,7 +154,6 @@ max_questions: 10
 ```yaml
 quizzes:
   - id: "intro"
-    title: "Introduction Quiz"
     question_file: "./quizzes/intro.json"
 ```
 
@@ -156,24 +174,7 @@ quizzes:
 
 ## API Endpoints
 
-### GET /v1/rooms/{room_id}/quizzes
-
-List available quizzes:
-
-```json
-[
-  {
-    "id": "intro",
-    "title": "Introduction Quiz"
-  },
-  {
-    "id": "advanced",
-    "title": "Advanced Topics"
-  }
-]
-```
-
-### GET /v1/rooms/{room_id}/quizzes/{quiz_id}
+### GET /v1/rooms/{room_id}/quiz/{quiz_id}
 
 Get quiz details and questions:
 
@@ -181,16 +182,42 @@ Get quiz details and questions:
 {
   "id": "intro",
   "title": "Introduction Quiz",
+  "randomize": false,
+  "max_questions": null,
   "questions": [
     {
-      "id": "q1",
-      "text": "What does RAG stand for?",
-      "type": "multiple_choice",
-      "options": [...]
+      "inputs": "What does RAG stand for?",
+      "expected_output": "Retrieval-Augmented Generation",
+      "metadata": {
+        "uuid": "q1-unique-id",
+        "type": "qa",
+        "options": []
+      }
     }
   ]
 }
 ```
+
+### POST /v1/rooms/{room_id}/quiz/{quiz_id}/{question_uuid}
+
+Submit an answer to a quiz question.
+
+**Request body:**
+```json
+{
+  "text": "Retrieval-Augmented Generation"
+}
+```
+
+**Response:**
+```json
+{
+  "correct": "true",
+  "expected_output": "Retrieval-Augmented Generation"
+}
+```
+
+The `correct` field is a string: `"true"` or `"false"`.
 
 ## Complete Example
 
@@ -207,7 +234,6 @@ agent:
   system_prompt: |
     You are a training assistant.
     Help users learn about Soliplex and RAG.
-    Encourage them to take the quizzes.
 
 quizzes:
   - id: "basics"
@@ -219,10 +245,11 @@ quizzes:
     title: "RAG Deep Dive"
     question_file: "./quizzes/rag.json"
     randomize: true
+    judge_agent:
+      model_name: "gpt-oss:latest"
 
 welcome_message: |
   Welcome to the Training Room!
-
   Take our interactive quizzes to test your knowledge.
 
 suggestions:
@@ -234,36 +261,35 @@ suggestions:
 
 ```json
 {
-  "questions": [
+  "cases": [
     {
-      "id": "q1",
-      "text": "What framework does Soliplex use for agents?",
-      "type": "multiple_choice",
-      "options": [
-        {"id": "a", "text": "LangChain"},
-        {"id": "b", "text": "Pydantic AI"},
-        {"id": "c", "text": "LlamaIndex"}
-      ],
-      "correct": "b",
-      "explanation": "Soliplex uses Pydantic AI for agent orchestration."
+      "inputs": "What framework does Soliplex use for agents?",
+      "expected_output": "Pydantic AI",
+      "metadata": {
+        "uuid": "q1-framework",
+        "type": "qa"
+      }
     },
     {
-      "id": "q2",
-      "text": "What is the default LLM provider?",
-      "type": "multiple_choice",
-      "options": [
-        {"id": "a", "text": "OpenAI"},
-        {"id": "b", "text": "Ollama"},
-        {"id": "c", "text": "Anthropic"}
-      ],
-      "correct": "b",
-      "explanation": "Ollama is the default provider for local LLM inference."
+      "inputs": "What is the default LLM provider?",
+      "expected_output": "Ollama",
+      "metadata": {
+        "uuid": "q2-provider",
+        "type": "multiple-choice",
+        "options": [
+          "OpenAI",
+          "Ollama",
+          "Anthropic"
+        ]
+      }
     },
     {
-      "id": "q3",
-      "text": "MCP stands for Model Context Protocol.",
-      "type": "true_false",
-      "correct": true
+      "inputs": "MCP stands for Model Context _____",
+      "expected_output": "Protocol",
+      "metadata": {
+        "uuid": "q3-mcp",
+        "type": "fill-blank"
+      }
     }
   ]
 }
@@ -283,4 +309,6 @@ rooms/
 ## Source Code
 
 - Quiz configuration: `src/soliplex/config.py`
+- Quiz logic: `src/soliplex/quizzes.py`
 - Quiz endpoints: `src/soliplex/views/quizzes.py`
+- Quiz models: `src/soliplex/models.py`
