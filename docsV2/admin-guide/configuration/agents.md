@@ -106,7 +106,7 @@ system_prompt: |
 system_prompt: "./prompts/research.md"
 ```
 
-File paths are relative to the configuration file.
+File paths must start with `./` to be recognized as file references. Paths are resolved relative to the configuration file's directory.
 
 ### retries
 
