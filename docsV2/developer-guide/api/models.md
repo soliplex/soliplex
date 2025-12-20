@@ -35,9 +35,16 @@ Room configuration response:
 ```python
 class Room(pydantic.BaseModel):
     id: str
-    description: str | None
-    has_rag: bool
-    has_quizzes: bool
+    name: str
+    description: str
+    welcome_message: str
+    suggestions: list[str]
+    enable_attachments: bool
+    tools: ConfiguredTools
+    mcp_client_toolsets: ConfiguredMCPClientToolsets
+    quizzes: ConfiguredQuizzes
+    agent: Agent
+    allow_mcp: bool
 
     @classmethod
     def from_config(cls, room_config: RoomConfig) -> "Room":
@@ -59,11 +66,11 @@ Document in a RAG database:
 ```python
 class RAGDocument(pydantic.BaseModel):
     id: str
-    uri: str
+    uri: str | None
     title: str | None
-    metadata: dict
-    created_at: datetime
-    updated_at: datetime
+    metadata: dict[str, typing.Any]
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
 ```
 
 ### RoomDocuments
@@ -83,7 +90,7 @@ Chunk visualization response:
 ```python
 class ChunkVisualization(pydantic.BaseModel):
     chunk_id: str
-    document_uri: str
+    document_uri: str | None
     images_base_64: list[str]  # Base64-encoded PNG images
 ```
 
@@ -109,9 +116,9 @@ Thread representation:
 class AGUI_Thread(pydantic.BaseModel):
     room_id: str
     thread_id: str
-    created: datetime
-    metadata: AGUI_ThreadMetadata | None
-    runs: dict[str, AGUI_Run] | None
+    runs: dict[str, AGUI_Run] | None = {}
+    created: datetime.datetime | None = None
+    metadata: AGUI_ThreadMetadata | None = None
 
     @classmethod
     def from_thread(cls, a_thread, a_thread_meta, a_thread_runs) -> "AGUI_Thread":
@@ -124,7 +131,8 @@ Thread metadata:
 
 ```python
 class AGUI_ThreadMetadata(pydantic.BaseModel):
-    title: str | None = None
+    name: str | None = None
+    description: str | None = None
 
     @classmethod
     def from_thread_meta(cls, thread_meta) -> "AGUI_ThreadMetadata":
@@ -146,15 +154,15 @@ Run representation:
 
 ```python
 class AGUI_Run(pydantic.BaseModel):
-    room_id: str
     thread_id: str
     run_id: str
-    parent_run_id: str | None
-    created: datetime
-    run_input: RunAgentInput | None
-    events: list[dict] | None
-    metadata: AGUI_RunMetadata | None
-    usage: tuple[int, int, int, int] | None  # input, output, requests, tool_calls
+    parent_run_id: str | None = None
+    run_input: RunAgentInput | None = None
+    created: datetime.datetime | None = None
+    finished: datetime.datetime | None = None
+    events: list[agui_core.Event] | None = []
+    metadata: AGUI_RunMetadata | None = None
+    usage: AGUI_RunUsage | None = None
 
     @classmethod
     def from_run(cls, a_run, a_run_input, a_run_meta, a_run_events, a_run_usage) -> "AGUI_Run":
@@ -167,10 +175,26 @@ Run metadata:
 
 ```python
 class AGUI_RunMetadata(pydantic.BaseModel):
-    status: str | None = None
+    label: str | None = None
 
     @classmethod
     def from_run_meta(cls, a_run_meta) -> "AGUI_RunMetadata":
+        ...
+```
+
+### AGUI_RunUsage
+
+Run usage statistics:
+
+```python
+class AGUI_RunUsage(pydantic.BaseModel):
+    input_tokens: int
+    output_tokens: int
+    requests: int
+    tool_calls: int
+
+    @classmethod
+    def from_tuple(cls, usage_tuple) -> "AGUI_RunUsage":
         ...
 ```
 
@@ -195,10 +219,16 @@ class AGUI_NewRunRequest(pydantic.BaseModel):
 
 ### AGUI_State
 
-Shared state for tools:
+Shared state type alias (flexible dict):
 
 ```python
-class AGUI_State(pydantic.BaseModel):
+AGUI_State = dict[str, typing.Any]
+```
+
+Tools that need typed state can use `AWRC_AGUI_State`:
+
+```python
+class AWRC_AGUI_State(pydantic.BaseModel):
     filter_documents: FilterDocuments | None = None
     ask_history: AskedAndAnswered | None = None
 ```
@@ -237,7 +267,9 @@ Completion configuration:
 ```python
 class Completion(pydantic.BaseModel):
     id: str
-    model_name: str
+    name: str
+    tools: ConfiguredTools
+    agent: Agent
 
     @classmethod
     def from_config(cls, completion_config) -> "Completion":
@@ -258,10 +290,17 @@ OpenAI-compatible chat request:
 
 ```python
 class ChatCompletionRequest(pydantic.BaseModel):
+    model: str
     messages: list[ChatMessage]
-    stream: bool = True
-    temperature: float | None = None
+    temperature: float | None = 1.0
+    top_p: float | None = 1.0
+    n: int | None = 1
+    stream: bool | None = False
+    stop: list[str] | None = None
     max_tokens: int | None = None
+    presence_penalty: float | None = 0.0
+    frequency_penalty: float | None = 0.0
+    user: str | None = None
 
 class ChatMessage(pydantic.BaseModel):
     role: str  # "user", "assistant", "system"
@@ -279,8 +318,11 @@ OIDC provider configuration:
 ```python
 class OIDCAuthSystem(pydantic.BaseModel):
     id: str
-    display_name: str
-    authorize_url: str
+    title: str
+    server_url: str
+    token_validation_pem: str
+    client_id: str
+    scope: str | None = None
 
     @classmethod
     def from_config(cls, auth_config) -> "OIDCAuthSystem":
@@ -307,7 +349,9 @@ Quiz representation:
 class Quiz(pydantic.BaseModel):
     id: str
     title: str
-    description: str | None
+    randomize: bool
+    max_questions: int | None = None
+    questions: list[QuizQuestion]
 ```
 
 ---
@@ -342,11 +386,15 @@ ToolConfigMap = dict[str, ToolConfig]
 MCP_ClientToolsetConfigMap = dict[str, MCP_ClientToolsetConfig]
 
 # Event types
-AGUI_Events = list[dict]
-AGUI_EventStream = AsyncIterator[dict]
+AGUI_Events = list[agui_core.Event]
+AGUI_EventStream = AsyncIterator[agui_core.Event]
+
+# State
+AGUI_State = dict[str, typing.Any]
 ```
 
 ## Source Code
 
 - Models: `src/soliplex/models.py`
-- AG-UI models: `src/soliplex/agui/`
+- AG-UI types: `src/soliplex/agui/__init__.py`
+- Tool state models: `src/soliplex/tools.py`
