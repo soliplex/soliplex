@@ -51,19 +51,21 @@ Soliplex supports two ways to specify database paths:
 
 ### Using rag_lancedb_stem
 
-References a database in the installation's `db/rag/` directory:
+References a database in the `RAG_LANCE_DB_PATH` directory:
 
 ```yaml
 # rooms/research/room_config.yaml
 tools:
   - tool_name: "soliplex.tools.search_documents"
-    rag_lancedb_stem: "knowledge"   # → db/rag/knowledge.lancedb
+    rag_lancedb_stem: "knowledge"   # → {RAG_LANCE_DB_PATH}/knowledge.lancedb
 ```
 
 The path is resolved as:
 ```
-{installation_root}/db/rag/{stem}.lancedb
+{RAG_LANCE_DB_PATH}/{stem}.lancedb
 ```
+
+Where `RAG_LANCE_DB_PATH` is set in your installation's environment configuration (typically `db/rag/`).
 
 ### Using rag_lancedb_override_path
 
@@ -111,19 +113,18 @@ tools:
 
 ## haiku-rag Configuration
 
-Customize haiku-rag behavior with the `haiku_rag_config` property:
+Customize haiku-rag behavior with a `haiku.rag.yaml` file in the room directory:
 
 ```yaml
-tools:
-  - tool_name: "soliplex.tools.search_documents"
-    rag_lancedb_stem: "knowledge"
-    haiku_rag_config:
-      search:
-        context_radius: 2           # Include N chunks before/after match
-        rerank: true                # Enable reranking
-      embedding:
-        model: "text-embedding-3-small"
+# rooms/research/haiku.rag.yaml
+search:
+  context_radius: 2           # Include N chunks before/after match
+  rerank: true                # Enable reranking
+embedding:
+  model: "text-embedding-3-small"
 ```
+
+The room-level config merges with the installation's base `haiku_rag_config`. If no room-level file exists, the installation config is used directly.
 
 ## Document Management
 
@@ -145,12 +146,15 @@ Response:
       "id": "doc-1",
       "uri": "file:///docs/guide.pdf",
       "title": "User Guide",
+      "metadata": {"source": "internal", "department": "engineering"},
       "created_at": "2024-01-15T10:30:00Z",
       "updated_at": "2024-01-15T10:30:00Z"
     }
   }
 }
 ```
+
+Note: `uri` and `title` may be null.
 
 ### Chunk Visualization
 
@@ -170,14 +174,16 @@ Response:
 }
 ```
 
+Note: `document_uri` may be null.
+
 ## Context Expansion
 
-When `context_radius` is set, search results include surrounding chunks:
+When `context_radius` is set in `haiku.rag.yaml`, search results include surrounding chunks:
 
 ```yaml
-haiku_rag_config:
-  search:
-    context_radius: 2   # Include 2 chunks before and after
+# rooms/research/haiku.rag.yaml
+search:
+  context_radius: 2   # Include 2 chunks before and after
 ```
 
 This provides more context for the LLM to generate accurate responses.
@@ -215,6 +221,6 @@ Error: `RAG DB file not found: /path/to/db.lancedb`
 
 ## Source Code
 
-- Database path resolution: `src/soliplex/config.py:417-442`
-- Tool configurations: `src/soliplex/config.py:456-557`
+- Database path resolution: `src/soliplex/config.py:416-442`
+- Tool configurations: `src/soliplex/config.py:455-558`
 - Room documents API: `src/soliplex/views/rooms.py:121-167`
