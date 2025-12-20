@@ -49,15 +49,13 @@ environment:
 
 ## Resolution Priority
 
-Environment variables are resolved in the following order (highest to lowest priority):
+Environment variables are resolved as follows:
 
-1. **`.env` file** - A `.env` file in the same directory as the config file
-2. **OS environment** - `os.environ` (used when YAML value is omitted)
-3. **YAML value** - Explicit value in configuration
+1. **`.env` file** - Always takes precedence if the variable is defined
+2. **YAML value** - Used if `.env` doesn't have the variable
+3. **OS environment** - Fallback when YAML value is omitted (bare string or `name:` without `value:`)
 
-```
-.env file → os.environ → YAML configured value
-```
+**Note:** `os.environ` is only checked when no YAML value is specified. If you set `value:` in YAML, `os.environ` is ignored (unless `.env` overrides it).
 
 ### .env File Support
 
