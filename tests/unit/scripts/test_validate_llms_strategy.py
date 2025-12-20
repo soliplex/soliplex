@@ -1,15 +1,12 @@
 """Tests for validate_llms_strategy.py."""
 
-import pytest
-
-from llms_constants import DOMAINS, PATTERNS
-from validate_llms_strategy import (
-    check_context_efficiency,
-    check_file_existence,
-    check_link_integrity,
-    check_map_content,
-    estimate_tokens,
-)
+from llms_constants import DOMAINS
+from llms_constants import PATTERNS
+from validate_llms_strategy import check_context_efficiency
+from validate_llms_strategy import check_file_existence
+from validate_llms_strategy import check_link_integrity
+from validate_llms_strategy import check_map_content
+from validate_llms_strategy import estimate_tokens
 
 
 class TestEstimateTokens:
@@ -91,7 +88,9 @@ class TestCheckContextEfficiency:
 
         # Create map that's too large relative to content
         (site / "llms-project.txt").write_text("x" * 1000)
-        (site / "llms-project-full.txt").write_text("y" * 1000)  # Same size = 100%
+        (site / "llms-project-full.txt").write_text(
+            "y" * 1000
+        )  # Same size = 100%
 
         original_site_dir = validate_llms_strategy.SITE_DIR
         try:
@@ -246,14 +245,22 @@ class TestDomainConfiguration:
         """All thresholds are between 0 and 1."""
         for domain, config in DOMAINS.items():
             threshold = config["threshold"]
-            assert 0 < threshold < 1, f"{domain} threshold {threshold} out of range"
+            assert 0 < threshold < 1, (
+                f"{domain} threshold {threshold} out of range"
+            )
 
     def test_filenames_follow_convention(self):
         """All filenames follow llms-*.txt convention."""
         for domain, config in DOMAINS.items():
-            assert config["map"].startswith("llms-"), f"{domain} map name invalid"
-            assert config["map"].endswith(".txt"), f"{domain} map extension invalid"
-            assert config["content"].endswith("-full.txt"), f"{domain} content suffix"
+            assert config["map"].startswith("llms-"), (
+                f"{domain} map name invalid"
+            )
+            assert config["map"].endswith(".txt"), (
+                f"{domain} map extension invalid"
+            )
+            assert config["content"].endswith("-full.txt"), (
+                f"{domain} content suffix"
+            )
 
 
 class TestCheckMapContent:
@@ -278,7 +285,9 @@ class TestCheckMapContent:
 
             # Create matching content file
             content_file = site_dir / "llms-server-full.txt"
-            content_file.write_text("# Server API\n\n## `SomeClass`\n\nDocs here.")
+            content_file.write_text(
+                "# Server API\n\n## `SomeClass`\n\nDocs here."
+            )
 
             errors, _ = check_map_content()
 
@@ -309,7 +318,9 @@ class TestCheckMapContent:
 
             # Create matching content file
             content_file = site_dir / "llms-server-full.txt"
-            content_file.write_text("# Server API\n\n## `SomeClass`\n\nDocs here.")
+            content_file.write_text(
+                "# Server API\n\n## `SomeClass`\n\nDocs here."
+            )
 
             errors, _ = check_map_content()
 

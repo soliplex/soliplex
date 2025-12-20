@@ -88,10 +88,12 @@ def sample_site_with_domains(sample_site_dir):
         "# Soliplex - Project Documentation\n\n- [Overview](overview.md)\n"
     )
     (sample_site_dir / "llms-server.txt").write_text(
-        "# Soliplex - Server API Reference\n\n## Configuration\n- `SampleConfig`\n"
+        "# Soliplex - Server API Reference\n\n"
+        "## Configuration\n- `SampleConfig`\n"
     )
     (sample_site_dir / "llms-client.txt").write_text(
-        "# Soliplex - Client API Reference\n\n## UI Components\n- [SampleWidget](widget.md)\n"
+        "# Soliplex - Client API Reference\n\n"
+        "## UI Components\n- [SampleWidget](widget.md)\n"
     )
     # Create domain content files (larger)
     (sample_site_dir / "llms-project-full.txt").write_text(

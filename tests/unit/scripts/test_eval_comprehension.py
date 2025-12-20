@@ -8,14 +8,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "scripts"))
 
-from eval_comprehension import (
-    DOMAIN_FILES,
-    ExpectedTopics,
-    QuestionInput,
-    StructuredAnswer,
-    TopicCoverageEvaluator,
-    slugify_question,
-)
+from eval_comprehension import DOMAIN_FILES
+from eval_comprehension import ExpectedTopics
+from eval_comprehension import QuestionInput
+from eval_comprehension import StructuredAnswer
+from eval_comprehension import TopicCoverageEvaluator
+from eval_comprehension import slugify_question
 from pydantic_evals.evaluators import EvaluatorContext
 
 

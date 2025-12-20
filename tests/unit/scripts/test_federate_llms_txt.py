@@ -1,24 +1,17 @@
 """Tests for federate_llms_txt.py."""
 
-import pytest
-
-from llms_constants import (
-    CLIENT_CATEGORY_ORDER,
-    CLIENT_PATH_KEYWORDS,
-    DEFAULT_CATEGORY,
-    MAP_NOISE_PATTERNS,
-    PATTERNS,
-    SERVER_CATEGORY_ORDER,
-    SERVER_SOURCE_CATEGORIES,
-    TEST_PATTERNS,
-)
-from federate_llms_txt import (
-    categorize_server_item,
-    clean_map_content,
-    localize_urls,
-    restructure_server_map,
-    split_file,
-)
+from federate_llms_txt import categorize_server_item
+from federate_llms_txt import clean_map_content
+from federate_llms_txt import localize_urls
+from federate_llms_txt import restructure_server_map
+from federate_llms_txt import split_file
+from llms_constants import CLIENT_CATEGORY_ORDER
+from llms_constants import DEFAULT_CATEGORY
+from llms_constants import MAP_NOISE_PATTERNS
+from llms_constants import PATTERNS
+from llms_constants import SERVER_CATEGORY_ORDER
+from llms_constants import SERVER_SOURCE_CATEGORIES
+from llms_constants import TEST_PATTERNS
 
 
 class TestCategorizeServerItem:
@@ -26,22 +19,30 @@ class TestCategorizeServerItem:
 
     def test_config_file_categorized(self):
         """Items from config.py go to Configuration."""
-        category = categorize_server_item("SampleConfig", "src/soliplex/config.py")
+        category = categorize_server_item(
+            "SampleConfig", "src/soliplex/config.py"
+        )
         assert category == "Configuration"
 
     def test_models_file_categorized(self):
         """Items from models.py go to Models & Data."""
-        category = categorize_server_item("SampleModel", "src/soliplex/models.py")
+        category = categorize_server_item(
+            "SampleModel", "src/soliplex/models.py"
+        )
         assert category == "Models & Data"
 
     def test_agents_file_categorized(self):
         """Items from agents.py go to Agents."""
-        category = categorize_server_item("get_agent", "src/soliplex/agents.py")
+        category = categorize_server_item(
+            "get_agent", "src/soliplex/agents.py"
+        )
         assert category == "Agents"
 
     def test_tools_file_categorized(self):
         """Items from tools.py go to Tools."""
-        category = categorize_server_item("search_documents", "src/soliplex/tools.py")
+        category = categorize_server_item(
+            "search_documents", "src/soliplex/tools.py"
+        )
         assert category == "Tools"
 
     def test_cli_file_categorized(self):
@@ -51,13 +52,17 @@ class TestCategorizeServerItem:
 
     def test_views_directory_categorized(self):
         """Items from views/ go to API Endpoints."""
-        category = categorize_server_item("RoomView", "src/soliplex/views/rooms.py")
+        category = categorize_server_item(
+            "RoomView", "src/soliplex/views/rooms.py"
+        )
         assert category == "API Endpoints"
 
     def test_agui_file_categorized(self):
         """Items with agui in path (not under views/) go to AG-UI Protocol."""
-        # Note: views/ matches first, so agui under views/ goes to API Endpoints
-        category = categorize_server_item("AGUIEvent", "src/soliplex/agui/events.py")
+        # views/ matches first, so agui under views/ goes to API Endpoints
+        category = categorize_server_item(
+            "AGUIEvent", "src/soliplex/agui/events.py"
+        )
         assert category == "AG-UI Protocol"
 
     def test_unknown_source_defaults(self):
@@ -117,8 +122,12 @@ Source code in `src/soliplex/models.py`
         result = restructure_server_map(content)
         lines = result.split("\n")
 
-        config_idx = next(i for i, l in enumerate(lines) if "Configuration" in l)
-        model_idx = next(i for i, l in enumerate(lines) if "Models & Data" in l)
+        config_idx = next(
+            i for i, line in enumerate(lines) if "Configuration" in line
+        )
+        model_idx = next(
+            i for i, line in enumerate(lines) if "Models & Data" in line
+        )
 
         # Configuration should come before Models in SERVER_CATEGORY_ORDER
         assert config_idx < model_idx
@@ -230,7 +239,9 @@ class TestCategoryOrders:
         # All categories from source mapping should be in order
         # (except default category which is handled separately)
         for cat in source_categories:
-            assert cat in order_set, f"{cat} missing from SERVER_CATEGORY_ORDER"
+            assert cat in order_set, (
+                f"{cat} missing from SERVER_CATEGORY_ORDER"
+            )
 
     def test_client_order_has_default_category(self):
         """Client order includes the default category."""
@@ -277,7 +288,7 @@ class TestSplitFile:
         was only 10KB because split_file matched an example header inside
         a code block instead of the real Client API Reference section.
         """
-        # Create a test file with a header inside a code block AND a real header
+        # Create test file with header in code block AND a real header
         content = """\
 # Project Documentation
 
@@ -359,7 +370,7 @@ Some project docs.
 
         # Create llms-full.txt matching the real structure:
         # 1. Code block with '# Server API' example
-        # 2. Immediately followed by '### Client API' (matches '# Client API' search)
+        # 2. Followed by '### Client API' (matches '# Client API' search)
         # 3. Later: real '# Server API' section with actual content
         full_content = """\
 # Project Documentation
@@ -414,7 +425,9 @@ Client stuff here.
         server_content = server_map.read_text()
 
         # The server map should contain categorized items from REAL content
-        assert "RealClass" in server_content, f"Missing RealClass in: {server_content}"
+        assert "RealClass" in server_content, (
+            f"Missing RealClass in: {server_content}"
+        )
         assert "AnotherClass" in server_content
         assert "Configuration" in server_content or "Models" in server_content
 
