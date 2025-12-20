@@ -83,7 +83,7 @@ auth_systems:
 | `server_url` | Yes | OIDC provider base URL (discovery via `/.well-known/openid-configuration`) |
 | `client_id` | Yes | OAuth client ID |
 | `client_secret` | No | OAuth client secret (use `secret:NAME` for secrets) |
-| `scope` | No | Space-separated OAuth scopes (default: `openid`) |
+| `scope` | No | Space-separated OAuth scopes (no default; behavior depends on provider) |
 | `token_validation_pem` | Yes | Public key (PEM format) for JWT signature validation |
 | `oidc_client_pem_path` | No | Path to CA certificate for self-signed provider certs |
 
@@ -135,11 +135,14 @@ curl http://localhost:8000/login
     "id": "keycloak",
     "title": "Sign in with Keycloak",
     "server_url": "https://sso.example.com/realms/myapp",
+    "token_validation_pem": "-----BEGIN PUBLIC KEY-----\nMIIBI...",
     "client_id": "soliplex-client",
     "scope": "openid email profile"
   }
 }
 ```
+
+Note: The `token_validation_pem` public key is included in the response.
 
 ## Token Handling
 
