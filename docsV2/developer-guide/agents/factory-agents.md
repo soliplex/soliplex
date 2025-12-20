@@ -1,0 +1,222 @@
+# Factory Agents
+
+Factory agents provide complete control over agent creation using custom Python code. Use them when standard configuration isn't sufficient.
+
+## When to Use Factory Agents
+
+| Use Case | Standard Config | Factory Agent |
+|----------|-----------------|---------------|
+| Simple prompt + model | Yes | No |
+| Custom tools at runtime | No | Yes |
+| Multi-agent orchestration | No | Yes |
+| Dynamic system prompts | No | Yes |
+| Custom dependencies | No | Yes |
+
+## Configuration
+
+```yaml
+# rooms/custom/room_config.yaml
+agent:
+  kind: "factory"
+  factory_name: "mypackage.agents.custom_factory"
+  with_agent_config: true
+  extra_config:
+    custom_param: "value"
+```
+
+### Properties
+
+| Property | Required | Description |
+|----------|----------|-------------|
+| `kind` | Yes | Must be `"factory"` |
+| `factory_name` | Yes | Python import path |
+| `with_agent_config` | No | Pass config to factory |
+| `extra_config` | No | Custom parameters |
+
+## Factory Function Signature
+
+```python
+def my_factory(
+    agent_config: config.FactoryAgentConfig = None,  # if with_agent_config=true
+    tool_configs: config.ToolConfigMap = None,
+    mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap = None,
+) -> pydantic_ai.Agent:
+    """Create and return a Pydantic AI agent."""
+    pass
+```
+
+## Example: Joke Generator
+
+The `joker_agent_factory` demonstrates multi-agent orchestration:
+
+```python
+# src/soliplex/examples.py
+
+JOKER_AGENT_PROMPT = """
+You are a world-class comedian and joke curator.
+When users request jokes, use the joke_factory tool.
+"""
+
+def joker_agent_factory(
+    agent_config: config.FactoryAgentConfig,
+    tool_configs: config.ToolConfigMap = None,
+    mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap = None,
+):
+    installation_config = agent_config._installation_config
+
+    # Primary agent - handles user interaction
+    joke_selection_agent = pydantic_ai.Agent(
+        model=openai_models.OpenAIChatModel(
+            model_name=installation_config.agent_configs[0].model_name,
+            provider=get_provider(installation_config),
+        ),
+        system_prompt=JOKER_AGENT_PROMPT,
+    )
+
+    # Helper agent - generates jokes
+    joke_generation_agent = pydantic_ai.Agent(
+        model=openai_models.OpenAIChatModel(
+            model_name=installation_config.agent_configs[0].model_name,
+            provider=get_provider(installation_config),
+        ),
+        output_type=list[str],  # Returns list of jokes
+    )
+
+    # Register tool on primary agent that uses helper
+    @joke_selection_agent.tool
+    async def joke_factory(
+        ctx: pydantic_ai.RunContext,
+        count: int,
+        topic: str = None,
+    ) -> list[str]:
+        """Generate jokes using the helper agent."""
+        prompt = f"Generate {count} jokes"
+        if topic:
+            prompt += f" about {topic}"
+
+        result = await joke_generation_agent.run(
+            prompt,
+            usage=ctx.usage,  # Share usage tracking
+        )
+        return result.output
+
+    return joke_selection_agent
+```
+
+### Room Configuration
+
+```yaml
+# example/rooms/joker/room_config.yaml
+id: "joker"
+description: "A room that tells jokes"
+
+agent:
+  kind: "factory"
+  factory_name: "soliplex.examples.joker_agent_factory"
+  with_agent_config: true
+```
+
+## Accessing Installation Config
+
+Factory agents can access the full installation configuration:
+
+```python
+def my_factory(agent_config, tool_configs, mcp_configs):
+    # Access installation config
+    installation = agent_config._installation_config
+
+    # Get secrets
+    api_key = installation.get_secret("OPENAI_API_KEY")
+
+    # Get environment
+    ollama_url = installation.get_environment("OLLAMA_BASE_URL")
+
+    # Access other agent configs
+    other_agent = installation.agent_configs_map["other_agent"]
+
+    # ...
+```
+
+## Dynamic Tools
+
+Add tools dynamically using decorators:
+
+```python
+def my_factory(agent_config, tool_configs, mcp_configs):
+    agent = pydantic_ai.Agent(
+        model=get_model(agent_config),
+        system_prompt="You are a helpful assistant.",
+    )
+
+    # Add tool based on configuration
+    if agent_config.extra_config.get("enable_search"):
+        @agent.tool
+        async def search(ctx, query: str) -> list[str]:
+            return await perform_search(query)
+
+    return agent
+```
+
+## Dynamic System Prompts
+
+Use `@agent.system_prompt` for runtime prompt generation:
+
+```python
+def my_factory(agent_config, tool_configs, mcp_configs):
+    agent = pydantic_ai.Agent(model=get_model(agent_config))
+
+    @agent.system_prompt
+    async def get_prompt(ctx: pydantic_ai.RunContext) -> str:
+        user = ctx.deps.user
+        return f"""
+        You are assisting {user.given_name}.
+        Today's date is {datetime.now().isoformat()}.
+        Be helpful and accurate.
+        """
+
+    return agent
+```
+
+## Multi-Agent Patterns
+
+### Delegation Pattern
+
+Primary agent delegates to specialized agents:
+
+```python
+def orchestrator_factory(agent_config, tool_configs, mcp_configs):
+    # Specialized agents
+    code_agent = create_code_agent()
+    research_agent = create_research_agent()
+
+    # Orchestrator
+    orchestrator = pydantic_ai.Agent(
+        model=get_model(agent_config),
+        system_prompt="Route requests to appropriate specialists.",
+    )
+
+    @orchestrator.tool
+    async def ask_code_expert(ctx, question: str) -> str:
+        result = await code_agent.run(question, usage=ctx.usage)
+        return result.output
+
+    @orchestrator.tool
+    async def ask_researcher(ctx, question: str) -> str:
+        result = await research_agent.run(question, usage=ctx.usage)
+        return result.output
+
+    return orchestrator
+```
+
+## Best Practices
+
+1. **Share usage tracking** - Pass `ctx.usage` between agents
+2. **Handle errors** - Wrap agent calls in try/except
+3. **Cache agents** - Create helper agents once, not per-request
+4. **Test thoroughly** - Factory agents need extra testing
+5. **Document behavior** - Custom agents need clear documentation
+
+## Source Code
+
+- Factory agent implementation: `src/soliplex/config.py` (lines 944-1003)
+- Example factories: `src/soliplex/examples.py`
