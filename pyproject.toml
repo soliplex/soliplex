@@ -80,7 +80,9 @@ markers = [
 ]
 
 [tool.coverage.run]
-omit = []
+omit = [
+    "tests/unit/scripts/conftest.py",
+]
 
 [tool.coverage.report]
 show_missing = true
