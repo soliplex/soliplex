@@ -50,52 +50,58 @@ final widgetRegistryProvider = Provider<WidgetRegistry>((ref) {
 
 ### InfoCard
 
-Display informational content with icon and actions.
+Display informational content with icon and optional subtitle.
 
 ```json
 {
   "widget_name": "InfoCard",
   "data": {
     "title": "Important Notice",
-    "content": "Please review the following...",
-    "icon": "info",
-    "variant": "primary"
+    "subtitle": "Please review the following...",
+    "icon": 58171,
+    "color": 4280391411
   }
 }
 ```
 
+Note: `icon` is an IconData codePoint integer, `color` is ARGB32.
+
 ### MetricDisplay
 
-Show numeric metrics with labels.
+Show numeric metrics with labels and trend indicators.
 
 ```json
 {
   "widget_name": "MetricDisplay",
   "data": {
     "label": "Response Time",
-    "value": 42,
+    "value": "42",
     "unit": "ms",
-    "trend": "up"
+    "trend": "up",
+    "color": 4280391411
   }
 }
 ```
 
+Note: `trend` can be "up", "down", or "neutral".
+
 ### DataList
 
-Render a list of items.
+Render a list of key-value items.
 
 ```json
 {
   "widget_name": "DataList",
   "data": {
-    "title": "Search Results",
     "items": [
-      {"title": "Item 1", "subtitle": "Description"},
-      {"title": "Item 2", "subtitle": "Description"}
+      {"title": "Name", "value": "John Doe"},
+      {"title": "Email", "value": "john@example.com"}
     ]
   }
 }
 ```
+
+Also supports `subtitle` instead of `value` for user lists.
 
 ### ProgressCard
 
@@ -105,43 +111,53 @@ Show progress indicators.
 {
   "widget_name": "ProgressCard",
   "data": {
-    "title": "Processing",
+    "label": "Upload Progress",
     "progress": 0.75,
-    "status": "Analyzing documents..."
+    "color": 4280391411
   }
 }
 ```
 
+Note: `progress` is 0.0 to 1.0.
+
 ### LocationCard
 
-Display location information with optional map.
+Display GPS location data with coordinates and address.
 
 ```json
 {
   "widget_name": "LocationCard",
   "data": {
-    "name": "Anthropic HQ",
-    "address": "San Francisco, CA",
     "latitude": 37.7749,
-    "longitude": -122.4194
+    "longitude": -122.4194,
+    "accuracy": 10.0,
+    "altitude": 15.0,
+    "address": "123 Main St",
+    "city": "San Francisco",
+    "country": "USA",
+    "timestamp": "2024-01-15T10:30:00Z"
   }
 }
 ```
 
 ### GISCard
 
-Geographic information system visualization.
+OpenStreetMap visualization with one or more coordinates.
 
 ```json
 {
   "widget_name": "GISCard",
   "data": {
-    "layers": [...],
-    "center": [37.7749, -122.4194],
-    "zoom": 12
+    "coordinates": [
+      {"latitude": 37.7749, "longitude": -122.4194, "label": "HQ"}
+    ],
+    "zoom": 15,
+    "title": "Locations"
   }
 }
 ```
+
+Also supports single coordinate format with `latitude`/`longitude` at root.
 
 ### ActionButton
 
@@ -152,11 +168,12 @@ Interactive button that sends events back.
   "widget_name": "ActionButton",
   "data": {
     "label": "Confirm",
-    "action": "confirm_action",
-    "variant": "primary"
+    "color": 4280391411
   }
 }
 ```
+
+Fires `pressed` event with the original data when clicked.
 
 ### ErrorDisplay
 
@@ -166,9 +183,8 @@ Show error messages.
 {
   "widget_name": "ErrorDisplay",
   "data": {
-    "title": "Error",
     "message": "Something went wrong",
-    "code": "ERR_500"
+    "color": 4294198070
   }
 }
 ```
@@ -188,46 +204,65 @@ Show loading state.
 
 ### SearchWidget
 
-Search input with suggestions.
+Interactive search with item selection.
 
 ```json
 {
   "widget_name": "SearchWidget",
   "data": {
-    "placeholder": "Search documents...",
-    "suggestions": ["RAG", "Vector", "Embedding"]
+    "placeholder": "Search...",
+    "multi_select": true,
+    "min_chars": 1,
+    "items": [
+      {"id": "1", "title": "Document 1", "subtitle": "Description"}
+    ]
   }
 }
 ```
 
+Emits `submit` event with `{"selected": [...]}` or `cancel` event.
+
 ### SkillsCard
 
-Display skill/capability chips.
+Display person skills with proficiency levels.
 
 ```json
 {
   "widget_name": "SkillsCard",
   "data": {
-    "title": "Available Skills",
-    "skills": ["Python", "RAG", "LLM"]
+    "person_id": "u1",
+    "name": "John Smith",
+    "title": "Engineering Lead",
+    "skills": [
+      {"name": "Flutter", "level": 5},
+      {"name": "Python", "level": 4}
+    ],
+    "avatar_url": "https://..."
   }
 }
 ```
 
+Skill levels: 1-5 (Beginner to Expert).
+
 ### ProjectCard
 
-Project information display.
+Project information with required skills.
 
 ```json
 {
   "widget_name": "ProjectCard",
   "data": {
-    "name": "Soliplex",
-    "description": "AI chat platform",
-    "status": "active"
+    "id": "p1",
+    "title": "Mobile App Redesign",
+    "description": "Complete overhaul of the mobile application",
+    "required_skills": ["Flutter", "Dart", "Figma"],
+    "status": "open",
+    "matched_skills": ["Flutter", "Dart"]
   }
 }
 ```
+
+Status: "open", "in_progress", or "completed".
 
 ### NoteCard / CodeCard / MarkdownCard
 
@@ -237,10 +272,14 @@ Content display widgets for canvas.
 {
   "widget_name": "NoteCard",
   "data": {
-    "content": "Remember to review the API docs"
+    "content": "Remember to review the API docs",
+    "title": "Optional title",
+    "source_message_id": "uuid-of-source-message"
   }
 }
 ```
+
+CodeCard also accepts `language` for syntax highlighting.
 
 ## Widget Builder Signature
 
@@ -323,45 +362,49 @@ Widgets can send events back to the agent:
 ```dart
 class ActionButtonWidget extends StatelessWidget {
   final String label;
-  final String action;
-  final void Function(String, Map<String, dynamic>)? onEvent;
+  final Color? color;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
     return ElevatedButton(
-      onPressed: () {
-        onEvent?.call(action, {'timestamp': DateTime.now().toIso8601String()});
-      },
+      style: color != null
+          ? ElevatedButton.styleFrom(backgroundColor: color)
+          : null,
+      onPressed: onPressed,
       child: Text(label),
     );
   }
 }
 ```
 
-The event is sent to the agent as part of the next run input.
+The `onPressed` callback is wired to fire an event via `onEvent?.call('pressed', data)`.
 
 ## GenUI Message Rendering
 
 GenUI widgets are rendered in the chat via `GenUiMessageWidget`:
 
 ```dart
-class GenUiMessageWidget extends StatelessWidget {
-  final String widgetName;
-  final Map<String, dynamic> data;
+class GenUiMessageWidget extends ConsumerWidget {
+  final GenUiContent content;
+  final void Function(String, Map<String, dynamic>)? onEvent;
 
   @override
-  Widget build(BuildContext context) {
-    final registry = context.read(widgetRegistryProvider);
-    final widget = registry.build(context, widgetName, data);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final registry = ref.watch(widgetRegistryProvider);
+    final widget = registry.build(
+      context,
+      content.widgetName,
+      content.data,
+      onEvent: onEvent,
+    );
 
     if (widget != null) {
       return widget;
     }
 
-    // Fallback for unknown widgets
-    return Card(
-      child: Text('Unknown widget: $widgetName'),
-    );
+    // Fallback shows available widgets
+    return _buildUnknownWidget(context, registry);
   }
 }
 ```
