@@ -21,9 +21,9 @@ ruff format src/
 
 ### Style Guidelines
 
-- Line length: 88 characters
+- Line length: 79 characters (enforced by ruff)
 - Indentation: 4 spaces
-- Quotes: Double quotes for strings
+- Quotes: Prefer double quotes for strings (convention, not enforced)
 - Type hints: Required for public APIs
 
 ### Naming Conventions
@@ -168,7 +168,7 @@ final roomCanvasProvider = StateNotifierProvider.family<...>();
 
 ### Commit Messages
 
-Format:
+Follow this format (convention, not enforced by hooks):
 ```
 type(scope): short description
 
