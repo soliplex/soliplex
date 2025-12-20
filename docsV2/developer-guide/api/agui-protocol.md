@@ -18,7 +18,7 @@ sequenceDiagram
     participant S as Server
     participant A as Agent
 
-    C->>S: POST /agui/{thread_id}/{run_id}
+    C->>S: POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}
     S->>A: run_stream(prompt, deps)
     S-->>C: RUN_STARTED
     loop Streaming
@@ -112,10 +112,10 @@ sequenceDiagram
 }
 ```
 
-**TOOL_RESULT**
+**TOOL_CALL_RESULT**
 ```json
 {
-  "type": "TOOL_RESULT",
+  "type": "TOOL_CALL_RESULT",
   "tool_call_id": "tc-1",
   "result": "[{\"content\": \"...\"}]"
 }
@@ -127,7 +127,7 @@ sequenceDiagram
 ```json
 {
   "type": "STATE_SNAPSHOT",
-  "state": {
+  "snapshot": {
     "filter_documents": null,
     "ask_history": null
   }
@@ -138,11 +138,9 @@ sequenceDiagram
 ```json
 {
   "type": "STATE_DELTA",
-  "delta": {
-    "ask_history": {
-      "questions": [...]
-    }
-  }
+  "delta": [
+    {"op": "replace", "path": "/ask_history", "value": {"questions": [...]}}
+  ]
 }
 ```
 
@@ -248,6 +246,7 @@ Agent events can be combined with custom emitter events:
 
 ```python
 from soliplex.agui.mpx import multiplex_streams
+from soliplex.agui.parser import agui_events_from_dicts
 
 emitter_stream = agui_events_from_dicts(emitter)
 combined = multiplex_streams(agent_stream, emitter_stream)
@@ -276,7 +275,7 @@ import 'package:http/http.dart' as http;
 Future<void> executeRun(String threadId, String runId, String message) async {
   final request = http.Request(
     'POST',
-    Uri.parse('$baseUrl/rooms/$roomId/agui/$threadId/$runId'),
+    Uri.parse('$baseUrl/v1/rooms/$roomId/agui/$threadId/$runId'),
   );
 
   request.body = jsonEncode({
@@ -313,7 +312,7 @@ void handleEvent(Map<String, dynamic> event) {
     case 'TOOL_CALL_START':
       showToolCall(event['tool_name']);
       break;
-    case 'TOOL_RESULT':
+    case 'TOOL_CALL_RESULT':
       showToolResult(event['result']);
       break;
     case 'RUN_FINISHED':
@@ -338,7 +337,8 @@ A thread represents a conversation session:
   "room_id": "research",
   "created": "2024-01-15T10:30:00Z",
   "metadata": {
-    "title": "Research session"
+    "name": "Research session",
+    "description": null
   }
 }
 ```
@@ -353,6 +353,7 @@ A run represents a single agent execution within a thread:
   "thread_id": "thread-123",
   "parent_run_id": null,
   "created": "2024-01-15T10:30:00Z",
+  "finished": null,
   "run_input": {
     "messages": [...]
   },
@@ -379,4 +380,5 @@ This enables features like document filtering and citation tracking.
 - AG-UI endpoint: `src/soliplex/views/agui.py`
 - AG-UI package: `src/soliplex/agui/`
 - Event compaction: `src/soliplex/agui/__init__.py`
+- Event parsing: `src/soliplex/agui/parser.py`
 - Stream multiplexing: `src/soliplex/agui/mpx.py`
