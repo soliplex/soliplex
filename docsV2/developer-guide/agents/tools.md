@@ -57,8 +57,8 @@ Searches the RAG database for relevant documents.
 async def search_documents(
     query: str,
     tool_config: config.SearchDocumentsToolConfig = None,
-) -> list[SearchResult]:
-    """Search the document knowledge base."""
+) -> list[rag_store_models_chunk.SearchResult]:
+    """Search the document knowledge base for relevant information."""
 ```
 
 **Configuration:**
@@ -121,6 +121,28 @@ tools:
 
 ---
 
+### agui_state
+
+Returns the current AG-UI client state.
+
+```python
+async def agui_state(
+    ctx: pydantic_ai.RunContext[agents.AgentDependencies],
+) -> agui.AGUI_State:
+    """Return the AGUI state."""
+    return ctx.deps.state
+```
+
+**Configuration:**
+```yaml
+tools:
+  - tool_name: "soliplex.tools.agui_state"
+```
+
+**Requirements:** `FASTAPI_CONTEXT` - needs RunContext
+
+---
+
 ## Tool Configuration Classes
 
 ### Base ToolConfig
@@ -136,11 +158,14 @@ class ToolConfig:
 
 ```python
 @dataclasses.dataclass
-class SearchDocumentsToolConfig(ToolConfig):
-    rag_lancedb_stem: str = None
-    rag_lancedb_override_path: str = None
+class SearchDocumentsToolConfig(ToolConfig, _RAGToolBase):
+    kind: str = "search_documents"
+    tool_name: str = "soliplex.tools.search_documents"
     search_documents_limit: int = 5
-    haiku_rag_config: dict = None
+    # Inherited from _RAGToolBase:
+    # rag_lancedb_stem: str = None
+    # rag_lancedb_override_path: str = None
+    # haiku_rag_config is a @property, not a field
 ```
 
 ## Creating Custom Tools
