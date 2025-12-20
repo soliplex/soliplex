@@ -360,6 +360,7 @@ def slugify_question(question: str) -> str:
 
 def build_dataset(
     domains: list[str] | None = None,
+    limit: int | None = None,
 ) -> Dataset[QuestionInput, StructuredAnswer]:
     """Build a pydantic-evals Dataset from questions.yaml."""
     questions = load_questions()
@@ -390,6 +391,10 @@ def build_dataset(
                 },
             )
             cases.append(case)
+            if limit and len(cases) >= limit:
+                break
+        if limit and len(cases) >= limit:
+            break
 
     return Dataset(
         cases=cases,
@@ -478,6 +483,12 @@ def main():
         action="store_true",
         help="Output results as JSON (for CI integration)",
     )
+    parser.add_argument(
+        "--limit",
+        "-l",
+        type=int,
+        help="Limit number of questions to evaluate",
+    )
     args = parser.parse_args()
 
     # Validate docs build
@@ -499,7 +510,7 @@ def main():
         print(f"Logfire enabled: {logfire_url}")
 
     # Build dataset
-    dataset = build_dataset(domains)
+    dataset = build_dataset(domains, limit=args.limit)
     print(f"Built dataset with {len(dataset.cases)} cases")
     print(f"Mode: {_eval_mode}")
 

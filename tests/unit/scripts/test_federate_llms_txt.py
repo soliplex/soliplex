@@ -13,12 +13,11 @@ from llms_constants import (
     TEST_PATTERNS,
 )
 from federate_llms_txt import (
-    categorize_path,
     categorize_server_item,
     clean_map_content,
     localize_urls,
-    restructure_client_map,
     restructure_server_map,
+    split_file,
 )
 
 
@@ -69,56 +68,6 @@ class TestCategorizeServerItem:
     def test_none_source_defaults(self):
         """None source gets default category."""
         category = categorize_server_item("Orphan", None)
-        assert category == DEFAULT_CATEGORY
-
-
-class TestCategorizePath:
-    """Tests for client API path categorization."""
-
-    def test_agui_events_categorized(self):
-        """agui_events path goes to AG-UI Protocol."""
-        category = categorize_path("agui_events")
-        assert category == "AG-UI Protocol"
-
-    def test_widget_registry_categorized(self):
-        """widget_registry path goes to Core Architecture."""
-        category = categorize_path("widget_registry")
-        assert category == "Core Architecture"
-
-    def test_service_keyword_categorized(self):
-        """Paths with 'service' go to Services & State."""
-        category = categorize_path("auth_service")
-        assert category == "Services & State"
-
-    def test_notifier_keyword_categorized(self):
-        """Paths with 'notifier' go to Services & State."""
-        category = categorize_path("theme_notifier")
-        assert category == "Services & State"
-
-    def test_model_keyword_categorized(self):
-        """Paths with 'model' go to Models & Data."""
-        category = categorize_path("user_model")
-        assert category == "Models & Data"
-
-    def test_network_keyword_categorized(self):
-        """Paths with 'network' go to Network & API."""
-        category = categorize_path("network_client")
-        assert category == "Network & API"
-
-    def test_widget_keyword_categorized(self):
-        """Paths with 'widget' go to UI Components."""
-        category = categorize_path("custom_widget")
-        assert category == "UI Components"
-
-    def test_auth_keyword_categorized(self):
-        """Paths with 'auth' (not containing 'manager') go to Authentication."""
-        # Note: 'manager' matches first for 'auth_manager', so use 'auth_provider'
-        category = categorize_path("auth_provider")
-        assert category == "Authentication"
-
-    def test_unknown_path_defaults(self):
-        """Unknown paths get default category."""
-        category = categorize_path("random_stuff")
         assert category == DEFAULT_CATEGORY
 
 
@@ -175,67 +124,8 @@ Source code in `src/soliplex/models.py`
         assert config_idx < model_idx
 
 
-class TestRestructureClientMap:
-    """Tests for client map restructuring."""
-
-    def test_filters_noise_patterns(self):
-        """Removes Method/Property/Constructor lines."""
-        content = """
-- [SampleWidget](https://example.com/reference/client_api/widget/SampleWidget/overview.md)
-- [Method: doSomething](https://example.com/reference/client_api/widget/SampleWidget/method.md)
-- [Property: name](https://example.com/reference/client_api/widget/SampleWidget/property.md)
-"""
-        result = restructure_client_map(content)
-
-        assert "SampleWidget" in result
-        assert "Method:" not in result
-        assert "Property:" not in result
-
-    def test_filters_test_files(self):
-        """Removes test file entries."""
-        content = """
-- [RealWidget](https://example.com/reference/client_api/widget/RealWidget/overview.md)
-- [TestWidget](https://example.com/reference/client_api/widget_test/TestWidget/overview.md)
-- [SomeTest](https://example.com/reference/client_api/test/SomeTest/overview.md)
-"""
-        result = restructure_client_map(content)
-
-        assert "RealWidget" in result
-        assert "TestWidget" not in result
-        assert "SomeTest" not in result
-
-    def test_removes_overview_prefix(self):
-        """Simplifies 'Overview for X' to 'X'."""
-        content = """
-- [Overview for SampleWidget](https://example.com/reference/client_api/widget/SampleWidget/overview.md)
-"""
-        result = restructure_client_map(content)
-
-        # Should have SampleWidget without "Overview for" prefix
-        assert "Overview for" not in result
-
-    def test_categorizes_by_path(self):
-        """Groups items by semantic category based on path."""
-        content = """
-- [AuthService](https://example.com/reference/client_api/auth_service/AuthService/overview.md)
-- [MyWidget](https://example.com/reference/client_api/widget/MyWidget/overview.md)
-"""
-        result = restructure_client_map(content)
-
-        assert "## Authentication" in result or "## Services & State" in result
-        assert "## UI Components" in result
-
-
 class TestCleanMapContent:
     """Tests for map content cleaning."""
-
-    def test_delegates_client_to_restructure(self):
-        """Client API content goes through restructure_client_map."""
-        content = "- [Method: test](url)"
-        result = clean_map_content(content, "Client API Reference")
-
-        # Method lines should be filtered
-        assert "Method:" not in result
 
     def test_filters_noise_for_other_sections(self):
         """Generic sections filter noise patterns."""
@@ -259,13 +149,21 @@ class TestLocalizeUrls:
 
         assert result == content
 
-    def test_local_mode_replaces_urls(self):
-        """Local mode replaces remote URLs with local paths."""
+    def test_absolute_mode_replaces_urls(self):
+        """Absolute mode replaces remote URLs with filesystem paths."""
         content = "Visit https://soliplex.github.io/soliplex/page.html"
         result = localize_urls(content, "/site", "/Users/me/site/")
 
         assert "https://soliplex.github.io/soliplex/" not in result
         assert "/Users/me/site/" in result
+
+    def test_local_mode_unchanged(self):
+        """Local mode (localhost URLs) does not trigger localization."""
+        content = "Visit https://soliplex.github.io/soliplex/page.html"
+        result = localize_urls(content, "/site", "http://localhost:8000/")
+
+        # localhost URLs don't start with "/" so they pass through unchanged
+        assert result == content
 
     def test_preserves_other_urls(self):
         """URLs not matching remote pattern are preserved."""
@@ -367,3 +265,158 @@ class TestNoiseAndTestPatterns:
         assert "_test" in TEST_PATTERNS
         assert "test/" in TEST_PATTERNS
         assert "Test" in TEST_PATTERNS
+
+
+class TestSplitFile:
+    """Tests for split_file function."""
+
+    def test_ignores_headers_inside_code_blocks(self, tmp_path):
+        """Section headers inside markdown code blocks should be ignored.
+
+        This is a regression test for the bug where llms-client-full.txt
+        was only 10KB because split_file matched an example header inside
+        a code block instead of the real Client API Reference section.
+        """
+        # Create a test file with a header inside a code block AND a real header
+        content = """\
+# Project Documentation
+
+Here is an example of what the generated index.md looks like:
+
+```markdown
+# Client API Reference
+
+## Libraries
+
+- [example_widget](example_widget/overview.md)
+```
+
+Some more project documentation here.
+
+# Client API Reference
+
+This is the REAL client API documentation.
+
+- [RealWidget](https://example.com/reference/client_api/widget/RealWidget/overview.md)
+- [AnotherWidget](https://example.com/reference/client_api/widget/AnotherWidget/overview.md)
+
+Lots more content here that should be in the full file.
+This represents the actual 1.5MB of Dart documentation.
+"""
+        source_file = tmp_path / "llms-full.txt"
+        source_file.write_text(content)
+
+        sections = {
+            "Project Documentation": "llms-project.txt",
+            "Client API Reference": "llms-client.txt",
+        }
+
+        split_file(str(source_file), sections, is_map=False)
+
+        # Read the generated client file
+        client_file = tmp_path / "llms-client.txt"
+        assert client_file.exists(), "Client file should be created"
+
+        client_content = client_file.read_text()
+
+        # The client file should contain the REAL content, not the example
+        assert "This is the REAL client API documentation" in client_content
+        assert "RealWidget" in client_content
+        assert "Lots more content here" in client_content
+
+        # It should NOT contain the example content or project docs
+        assert "example_widget" not in client_content
+        assert "Some more project documentation" not in client_content
+
+    def test_server_map_ignores_headers_inside_code_blocks(self, tmp_path):
+        """Server map generation should skip headers inside code blocks.
+
+        This is a regression test for the bug where llms-server.txt was
+        nearly empty because clean_map_content found an example header
+        inside a code block instead of the real Server API section.
+
+        The actual bug: llms-full.txt has '# Server API' inside a code block,
+        followed immediately by '### Client API'. clean_map_content() finds
+        the code block header first, then finds '# Client API' as the end
+        marker, extracting only ~34 bytes of example content.
+        """
+        # Create llms.txt (map source) with minimal server section
+        map_content = """\
+# Project Documentation
+
+Some project docs.
+
+# Server API Reference
+
+- [Server API](reference/server_api.md)
+
+# Client API Reference
+
+- [Client API](reference/client_api/index.md)
+"""
+        map_file = tmp_path / "llms.txt"
+        map_file.write_text(map_content)
+
+        # Create llms-full.txt matching the real structure:
+        # 1. Code block with '# Server API' example
+        # 2. Immediately followed by '### Client API' (matches '# Client API' search)
+        # 3. Later: real '# Server API' section with actual content
+        full_content = """\
+# Project Documentation
+
+Here is the handler file:
+
+```markdown
+# Server API
+
+::: soliplex
+```
+
+### Client API (Dart/Flutter)
+
+More project documentation.
+
+# Server API Reference
+
+# Server API
+
+## `RealClass`
+
+This is real server API documentation.
+
+Source code in `src/soliplex/config.py`
+
+## `AnotherClass`
+
+More real content.
+
+Source code in `src/soliplex/models.py`
+
+# Client API Reference
+
+Client stuff here.
+"""
+        full_file = tmp_path / "llms-full.txt"
+        full_file.write_text(full_content)
+
+        sections = {
+            "Project Documentation": "llms-project.txt",
+            "Server API Reference": "llms-server.txt",
+            "Client API Reference": "llms-client.txt",
+        }
+
+        split_file(str(map_file), sections, is_map=True)
+
+        # Read the generated server map
+        server_map = tmp_path / "llms-server.txt"
+        assert server_map.exists(), "Server map should be created"
+
+        server_content = server_map.read_text()
+
+        # The server map should contain categorized items from REAL content
+        assert "RealClass" in server_content, f"Missing RealClass in: {server_content}"
+        assert "AnotherClass" in server_content
+        assert "Configuration" in server_content or "Models" in server_content
+
+        # It should NOT contain the example mkdocstrings directive
+        assert "::: soliplex" not in server_content

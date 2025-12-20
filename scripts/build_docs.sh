@@ -1,16 +1,22 @@
 #!/bin/bash
 set -e
 
+# Default to absolute mode (filesystem paths) for agent convenience
+export DOCS_MODE="${DOCS_MODE:-absolute}"
+
 # Get the project root directory
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo "Generating Dart Markdown docs..."
 "$PROJECT_ROOT/scripts/generate_dart_markdown.sh"
 
+echo "✅ Dart Markdown docs generated in docs/reference/client_api"
+
+echo "Augmenting Dart docs with API links..."
+python3 "$PROJECT_ROOT/scripts/augment_dart_docs.py"
+
 echo "Generating Client API Index..."
 python3 "$PROJECT_ROOT/scripts/generate_client_api_index.py"
-
-echo "✅ Dart docs generated successfully in docs/reference/client_api"
 
 echo "Building MkDocs site..."
 cd "$PROJECT_ROOT"

@@ -73,6 +73,6 @@ This will start a local web server (usually at `http://127.0.0.1:8000`) that aut
 This project uses a federated documentation strategy for AI agents. See [LLM Strategy](llms-strategy.md) for full details on:
 
 - Federation architecture (maps vs. content files)
-- Build modes (`DOCS_MODE=local|remote|relative`)
+- Build modes (`DOCS_MODE=absolute|local|relative|remote`)
 - Agent workflows and domain selection
 - Validation and maintenance

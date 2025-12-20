@@ -14,4 +14,4 @@ These files are optimized for discovery and ingestion by AI agents.
 - **[Server API Reference](/soliplex/llms-server.txt)**: Backend Python API (Full definitions).
 - **[Client API Reference](/soliplex/llms-client.txt)**: Frontend Flutter API (Structured map).
 
-> **Note for Local Agents**: If you are using an AI agent with access to your local filesystem, run the build with `DOCS_MODE=local` to generate absolute filesystem links, or `DOCS_MODE=relative` for relative links (see [Documentation Workflow](../development/documentation.md)).
+> **Note for Local Agents**: If you are using an AI agent with access to your local filesystem, run the build with `DOCS_MODE=absolute` to generate absolute filesystem links, `DOCS_MODE=local` for localhost URLs, or `DOCS_MODE=relative` for relative links (see [Documentation Workflow](../development/documentation.md)).

@@ -79,21 +79,27 @@ Control URL format in `llms.txt` files via `DOCS_MODE`:
 
 | Mode | Command | URL Format in llms.txt |
 |------|---------|------------------------|
-| Remote (default) | `uv run mkdocs build` | `https://soliplex.github.io/soliplex/...` |
-| Local | `DOCS_MODE=local uv run mkdocs build` | `/Users/you/project/site/...` |
-| Relative | `DOCS_MODE=relative uv run mkdocs build` | `llms-server.txt` |
+| Absolute (default) | `./scripts/build_docs.sh` | `/Users/you/project/site/...` |
+| Local | `DOCS_MODE=local ./scripts/build_docs.sh` | `http://localhost:8000/...` |
+| Relative | `DOCS_MODE=relative ./scripts/build_docs.sh` | `llms-server.txt` |
+| Remote | `DOCS_MODE=remote ./scripts/build_docs.sh` | `https://soliplex.github.io/soliplex/...` |
+
+Use `LOCAL_PORT` to customize the port for local mode (default: 8000).
 
 Examples:
 
 ```bash
-# Remote mode (default) - HTTPS URLs for hosted docs
+# Absolute mode (default) - Filesystem paths for local agents
 ./scripts/build_docs.sh
 
-# Local mode - Absolute filesystem paths for local agents
-DOCS_MODE=local ./scripts/build_docs.sh
+# Local mode - Localhost URLs for dev server
+DOCS_MODE=local LOCAL_PORT=8000 ./scripts/build_docs.sh
 
 # Relative mode - Portable relative paths
 DOCS_MODE=relative ./scripts/build_docs.sh
+
+# Remote mode - HTTPS URLs for hosted docs
+DOCS_MODE=remote ./scripts/build_docs.sh
 ```
 
 ## Testing

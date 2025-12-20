@@ -43,18 +43,26 @@ site/llms.txt (368 B)              ← Entry point
 ### For Local Agents (Recommended)
 
 ```bash
-DOCS_MODE=local ./scripts/build_docs.sh
+DOCS_MODE=absolute ./scripts/build_docs.sh
 ```
 
-This generates absolute filesystem paths in `llms.txt`, enabling agents to directly read files.
+This generates absolute filesystem paths in `llms.txt`, enabling agents to directly read files. This is the default mode.
+
+### For Local Dev Server
+
+```bash
+DOCS_MODE=local LOCAL_PORT=8000 ./scripts/build_docs.sh
+```
+
+Generates `http://localhost:PORT/` URLs for use with `mkdocs serve`.
 
 ### For Remote/Hosted
 
 ```bash
-./scripts/build_docs.sh
+DOCS_MODE=remote ./scripts/build_docs.sh
 ```
 
-Generates full HTTPS URLs for online access.
+Generates full HTTPS URLs for online access (uses `site_url` from mkdocs.yml).
 
 ### For Portable Archives
 

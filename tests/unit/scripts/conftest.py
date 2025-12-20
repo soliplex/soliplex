@@ -106,16 +106,22 @@ def sample_site_with_domains(sample_site_dir):
     return sample_site_dir
 
 
-@pytest.fixture(params=["local", "relative", "remote"])
+@pytest.fixture(params=["absolute", "local", "relative", "remote"])
 def docs_mode(request):
     """Parametrized fixture for all DOCS_MODE values."""
     return request.param
 
 
 @pytest.fixture
-def local_site_url(sample_site_dir):
-    """Local mode site URL (absolute filesystem path)."""
+def absolute_site_url(sample_site_dir):
+    """Absolute mode site URL (filesystem path)."""
     return str(sample_site_dir) + "/"
+
+
+@pytest.fixture
+def local_site_url():
+    """Local mode site URL (localhost)."""
+    return "http://localhost:8000/"
 
 
 @pytest.fixture

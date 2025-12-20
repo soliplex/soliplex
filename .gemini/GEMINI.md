@@ -41,7 +41,7 @@ Federated documentation for context-optimized agent access. See `docs/developmen
 
 ### Building for Local Agents
 ```bash
-DOCS_MODE=local ./scripts/build_docs.sh
+DOCS_MODE=absolute ./scripts/build_docs.sh
 ```
 
 ### Quick Access (in `site/`)
