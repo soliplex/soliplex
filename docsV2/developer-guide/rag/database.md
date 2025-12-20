@@ -32,17 +32,17 @@ Use the haiku-rag CLI to create and populate databases:
 
 ```bash
 # Create a new database
-haiku-rag init ./db/rag/knowledge.lancedb
+haiku-rag init --db ./db/rag/knowledge.lancedb
 
-# Ingest documents
-haiku-rag ingest ./db/rag/knowledge.lancedb ./documents/
+# Add documents from a directory
+haiku-rag add-src ./documents/ --db ./db/rag/knowledge.lancedb
 
-# Ingest specific file types
-haiku-rag ingest ./db/rag/knowledge.lancedb ./documents/ --pattern "*.pdf"
+# Add a single file with title
+haiku-rag add-src ./docs/guide.pdf --db ./db/rag/knowledge.lancedb --title "User Guide"
 
-# Ingest with metadata
-haiku-rag ingest ./db/rag/knowledge.lancedb ./documents/ \
-    --metadata '{"source": "internal", "department": "engineering"}'
+# Add documents with metadata
+haiku-rag add-src ./documents/ --db ./db/rag/knowledge.lancedb \
+    --meta source=internal --meta department=engineering
 ```
 
 ## Path Resolution
@@ -215,7 +215,7 @@ Error: `RAG DB file not found: /path/to/db.lancedb`
 
 ### Empty Search Results
 
-- Verify documents have been ingested with `haiku-rag list`
+- Verify documents have been added with `haiku-rag list --db ./db/rag/knowledge.lancedb`
 - Check that the query matches document content
 - Increase `search_documents_limit` to see more results
 

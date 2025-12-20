@@ -48,15 +48,25 @@ tools:
     allow_mcp: true
 ```
 
-### Global RAG Configuration
+### Installation-Level RAG Configuration
 
 ```yaml
-# haiku.rag.yaml
-rag_lancedb_path: "db/rag"
-embedding_model: "text-embedding-3-small"
-chunk_size: 512
-chunk_overlap: 50
+# haiku.rag.yaml (referenced via haiku_rag_config_file in installation.yaml)
+environment: development
+
+embeddings:
+  model:
+    name: text-embedding-3-small
+    provider: openai
+
+processing:
+  chunk_size: 512
+
+search:
+  context_radius: 2
 ```
+
+Room-level `haiku.rag.yaml` files can override these settings.
 
 ## RAG Tools
 
@@ -70,10 +80,10 @@ chunk_overlap: 50
 
 ### Document Ingestion
 
-Documents are processed via haiku-rag CLI:
+Documents are added via haiku-rag CLI:
 
 ```bash
-haiku-rag ingest --db-path db/rag --files docs/*.md
+haiku-rag add-src ./documents/ --db db/rag/knowledge.lancedb
 ```
 
 ### Chunk Visualization
@@ -86,15 +96,19 @@ GET /api/v1/rooms/{room_id}/chunk/{chunk_id}
 
 Returns page images with bounding boxes around the relevant text.
 
-### AGUI State for Document Filtering
+### AG-UI State for Document Filtering
 
 Clients can filter documents via state:
 
 ```json
 {
-  "filter_documents": ["doc1.pdf", "doc2.pdf"]
+  "filter_documents": {
+    "document_ids": ["doc-1", "doc-2"]
+  }
 }
 ```
+
+When set, only the specified documents will be searched.
 
 ## Source Files
 
@@ -102,4 +116,4 @@ Clients can filter documents via state:
 |------|---------|
 | `src/soliplex/tools.py` | RAG tool implementations |
 | `src/soliplex/config.py` | RAG configuration classes |
-| `haiku.rag.yaml` | Global RAG settings |
+| `example/haiku.rag.yaml` | Example haiku-rag configuration |
