@@ -1,0 +1,183 @@
+# LLM Documentation Comprehension Evaluation
+#
+# This file contains questions to test whether an LLM can effectively
+# use the Soliplex documentation to answer common developer questions.
+#
+# Format:
+#   question: The question an agent might ask
+#   expected_topics: Keywords/concepts a correct answer should mention
+#   source_file: Which llms file contains the answer
+#   difficulty: easy | medium | hard
+
+project:
+  - question: "What is Soliplex and what are its main components?"
+    expected_topics: ["RAG", "FastAPI", "Flutter", "backend", "frontend"]
+    source_file: "llms-project-full.txt"
+    difficulty: easy
+
+  - question: "How do I install and set up the Soliplex server?"
+    expected_topics: ["Python", "pip install", "venv", "clone", "environment"]
+    source_file: "llms-project-full.txt"
+    difficulty: easy
+
+  - question: "What authentication system does Soliplex use?"
+    expected_topics: ["OIDC", "Keycloak", "authentication"]
+    source_file: "llms-project-full.txt"
+    difficulty: medium
+
+  - question: "How do I configure a new room in Soliplex?"
+    expected_topics: ["room", "config", "yaml", "installation"]
+    source_file: "llms-project-full.txt"
+    difficulty: medium
+
+  - question: "What LLM providers does Soliplex support?"
+    expected_topics: ["OpenAI", "Ollama", "model", "provider"]
+    source_file: "llms-project-full.txt"
+    difficulty: easy
+
+  - question: "How do I set up RAG document indexing?"
+    expected_topics: ["RAG", "document", "index", "retrieval"]
+    source_file: "llms-project-full.txt"
+    difficulty: medium
+
+  - question: "What environment variables are required for the server?"
+    expected_topics: ["env", "OPENAI", "API_KEY", "secrets"]
+    source_file: "llms-project-full.txt"
+    difficulty: medium
+
+  - question: "How do I run the Flutter client locally?"
+    expected_topics: ["Flutter", "flutter run", "web", "client"]
+    source_file: "llms-project-full.txt"
+    difficulty: easy
+
+  - question: "What is the architecture of Soliplex?"
+    expected_topics: ["backend", "frontend", "FastAPI", "Flutter", "configuration"]
+    source_file: "llms-project-full.txt"
+    difficulty: easy
+
+  - question: "How do I configure secrets in Soliplex?"
+    expected_topics: ["secrets", "env", "resolve", "config"]
+    source_file: "llms-project-full.txt"
+    difficulty: medium
+
+server:
+  - question: "What is AgentDependencies and how is it used?"
+    expected_topics: ["AgentDependencies", "StateHandler", "pydantic-ai", "state"]
+    source_file: "llms-server-full.txt"
+    difficulty: medium
+
+  - question: "How do I create or get an agent from configurations?"
+    expected_topics: ["get_agent_from_configs", "AgentConfig", "tool_configs"]
+    source_file: "llms-server-full.txt"
+    difficulty: medium
+
+  - question: "What CLI commands are available in Soliplex?"
+    expected_topics: ["cli", "typer", "serve", "check-config", "config"]
+    source_file: "llms-server-full.txt"
+    difficulty: easy
+
+  - question: "How do I validate my Soliplex configuration?"
+    expected_topics: ["check-config", "check_config", "secrets", "environment", "validate"]
+    source_file: "llms-server-full.txt"
+    difficulty: medium
+
+  - question: "What tools are available for agents to use?"
+    expected_topics: ["tool", "search", "RAG", "ToolConfig"]
+    source_file: "llms-server-full.txt"
+    difficulty: medium
+
+  - question: "How does the server handle conversations?"
+    expected_topics: ["conversation", "convo", "thread", "message"]
+    source_file: "llms-server-full.txt"
+    difficulty: medium
+
+  - question: "What models and data structures are used in the server?"
+    expected_topics: ["models", "UserProfile", "Room", "Installation", "pydantic"]
+    source_file: "llms-server-full.txt"
+    difficulty: medium
+
+  - question: "How do I export configuration as YAML?"
+    expected_topics: ["config_as_yaml", "yaml", "export", "dump"]
+    source_file: "llms-server-full.txt"
+    difficulty: easy
+
+  - question: "What is the AG-UI protocol in Soliplex?"
+    expected_topics: ["AG-UI", "agui", "event", "state", "emitter"]
+    source_file: "llms-server-full.txt"
+    difficulty: hard
+
+  - question: "How are API endpoints structured in the server?"
+    expected_topics: ["views", "FastAPI", "endpoint", "router"]
+    source_file: "llms-server-full.txt"
+    difficulty: medium
+
+  - question: "What is the MCP client toolset and how is it configured?"
+    expected_topics: ["MCP", "mcp_client", "toolset", "config"]
+    source_file: "llms-server-full.txt"
+    difficulty: hard
+
+  - question: "How do I list available completions in Soliplex?"
+    expected_topics: ["list_completions", "completion", "config"]
+    source_file: "llms-server-full.txt"
+    difficulty: easy
+
+client:
+  - question: "How does RoomService manage connections to the backend?"
+    expected_topics: ["RoomService", "connection", "network", "session"]
+    source_file: "llms-client-full.txt"
+    difficulty: medium
+
+  - question: "What widgets are available for displaying chat messages?"
+    expected_topics: ["widget", "chat", "message", "bubble", "list"]
+    source_file: "llms-client-full.txt"
+    difficulty: easy
+
+  - question: "How is authentication handled in the Flutter client?"
+    expected_topics: ["auth", "OIDC", "token", "authentication"]
+    source_file: "llms-client-full.txt"
+    difficulty: medium
+
+  - question: "What state management approach does the client use?"
+    expected_topics: ["Riverpod", "notifier", "provider", "state"]
+    source_file: "llms-client-full.txt"
+    difficulty: medium
+
+  - question: "How does the client handle AG-UI events?"
+    expected_topics: ["agui", "event", "SSE", "stream"]
+    source_file: "llms-client-full.txt"
+    difficulty: hard
+
+  - question: "What network transport layer does the client use?"
+    expected_topics: ["network", "transport", "HTTP", "SSE", "connection"]
+    source_file: "llms-client-full.txt"
+    difficulty: medium
+
+  - question: "How are chat models structured in the Flutter client?"
+    expected_topics: ["model", "ChatMessage", "data", "entity"]
+    source_file: "llms-client-full.txt"
+    difficulty: medium
+
+  - question: "What UI components exist for room management?"
+    expected_topics: ["room", "widget", "screen", "drawer", "list"]
+    source_file: "llms-client-full.txt"
+    difficulty: easy
+
+  - question: "How does the widget registry work?"
+    expected_topics: ["widget_registry", "register", "factory"]
+    source_file: "llms-client-full.txt"
+    difficulty: hard
+
+  - question: "What dialog components are available in the client?"
+    expected_topics: ["dialog", "modal", "popup", "widget"]
+    source_file: "llms-client-full.txt"
+    difficulty: easy
+
+  - question: "How are API constants and URLs managed in the client?"
+    expected_topics: ["api", "constant", "url", "endpoint", "config"]
+    source_file: "llms-client-full.txt"
+    difficulty: medium
+
+  - question: "What service classes manage backend communication?"
+    expected_topics: ["service", "API", "client", "network"]
+    source_file: "llms-client-full.txt"
+    difficulty: medium

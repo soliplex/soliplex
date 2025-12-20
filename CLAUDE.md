@@ -46,6 +46,14 @@ DOCS_MODE=local ./scripts/build_docs.sh
 | `llms-server-full.txt` | Python backend API |
 | `llms-client-full.txt` | Flutter widget library |
 
+### Verify Your Understanding
+After reading the llms files, you should be able to answer:
+- **Project**: "What are the main components of Soliplex?"
+- **Server**: "What CLI commands are available and what do they do?"
+- **Client**: "How does RoomService connect to the backend?"
+
+If you cannot answer these from the docs, the documentation may need improvement.
+
 ## Critical Memories & Best Practices
 - **Flutter UI Fixes**: For complex syntax errors in nested widget trees, rewrite the entire widget or a large block rather than small targeted string replacements to ensure correct closing of braces/parentheses.
 - **Test Stability**: The `flutter test` runner may cache kernel binaries and fail to reflect recent changes. If unexpected failures occur after code fixes, run `flutter clean`.

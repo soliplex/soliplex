@@ -1,0 +1,83 @@
+name: Docs Comprehension Eval
+
+on:
+  schedule:
+    # Run weekly on Sunday at midnight UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+    # Allow manual triggers
+    inputs:
+      domain:
+        description: 'Domain to evaluate (leave empty for all)'
+        required: false
+        type: choice
+        options:
+          - ''
+          - project
+          - server
+          - client
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Install anthropic
+        run: uv add anthropic
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'beta'
+          cache: true
+
+      - name: Install Flutter dependencies
+        working-directory: src/flutter
+        run: flutter pub get
+
+      - name: Install dart_doc_markdown
+        run: dart pub global activate dart_doc_markdown
+
+      - name: Build documentation
+        run: |
+          ./scripts/generate_dart_markdown.sh
+          uv run python scripts/generate_client_api_index.py
+          uv run mkdocs build
+
+      - name: Run comprehension evaluation
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          DOMAIN_ARG=""
+          if [ -n "${{ github.event.inputs.domain }}" ]; then
+            DOMAIN_ARG="--domain ${{ github.event.inputs.domain }}"
+          fi
+          uv run python scripts/eval_comprehension.py $DOMAIN_ARG --json > eval-results.json
+          uv run python scripts/eval_comprehension.py $DOMAIN_ARG --verbose
+
+      - name: Upload evaluation results
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: eval-results.json
+          retention-days: 90
+
+      - name: Check pass rate
+        run: |
+          PASS_RATE=$(jq '.summary.pass_rate' eval-results.json)
+          echo "Pass rate: $PASS_RATE"
+          if (( $(echo "$PASS_RATE < 0.8" | bc -l) )); then
+            echo "::warning::Comprehension eval pass rate below 80%"
+          fi
