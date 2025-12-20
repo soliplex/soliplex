@@ -31,9 +31,20 @@ soliplex-cli serve example/minimal.yaml --no-auth-mode
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `OLLAMA_BASE_URL` | If using Ollama | Ollama server URL |
-| `OPENAI_API_KEY` | If using OpenAI | OpenAI API key |
 | `URL_SAFE_TOKEN_SECRET` | Recommended | MCP token signing secret |
-| `LOG_LEVEL` | No | Logging verbosity |
+
+### Secrets
+
+| Secret | Required | Description |
+|--------|----------|-------------|
+| `OPENAI_API_KEY` | If using OpenAI | OpenAI API key (configured via `provider_key: "secret:OPENAI_API_KEY"`) |
+
+### CLI Options
+
+| Option | Description |
+|--------|-------------|
+| `--log-level` | Logging verbosity (DEBUG, INFO, WARNING, ERROR) |
+| `--no-auth-mode` | Disable authentication (development only) |
 
 ### Network Requirements
 
