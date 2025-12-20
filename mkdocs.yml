@@ -80,6 +80,9 @@ plugins:
         - config/rooms.md
         - config/secrets.md
         - usage.md
+        - development/documentation.md
+        - development/llms-strategy.md
+        - development/llm-evaluations.md
       Server API Reference:
         - reference/server_api.md
       Client API Reference:
@@ -113,6 +116,8 @@ nav:
       - Client API: reference/client_api/index.md
   - Development:
       - Documentation Workflow: development/documentation.md
+      - LLM Documentation Strategy: development/llms-strategy.md
+      - LLM Doc Evaluations: development/llm-evaluations.md
 markdown_extensions:
   - admonition
   - attr_list
