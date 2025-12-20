@@ -87,7 +87,11 @@ See [Tools](../../developer-guide/agents/tools.md) for details.
 
 ### mcp_client_toolsets
 
-External MCP servers to connect:
+External MCP servers to connect. Supports two transport types: stdio and HTTP.
+
+#### Stdio Transport
+
+Run MCP server as a subprocess:
 
 ```yaml
 mcp_client_toolsets:
@@ -95,7 +99,45 @@ mcp_client_toolsets:
     kind: "stdio"
     command: "npx"
     args: ["-y", "@anthropic-ai/mcp-server-filesystem", "./workspace"]
+    env:
+      API_KEY: "secret:MCP_API_KEY"
+    allowed_tools:
+      - "read_file"
+      - "list_directory"
 ```
+
+| Field | Description |
+|-------|-------------|
+| `kind` | `"stdio"` for subprocess transport |
+| `command` | Executable to run |
+| `args` | Command arguments |
+| `env` | Environment variables (supports `secret:` interpolation) |
+| `allowed_tools` | Whitelist of tools to expose (optional, all if omitted) |
+
+#### HTTP Transport
+
+Connect to remote MCP server over HTTP:
+
+```yaml
+mcp_client_toolsets:
+  remote:
+    kind: "http"
+    url: "https://mcp.example.com/v1"
+    headers:
+      Authorization: "Bearer secret:MCP_TOKEN"
+    query_params:
+      api_key: "secret:MCP_API_KEY"
+    allowed_tools:
+      - "search"
+```
+
+| Field | Description |
+|-------|-------------|
+| `kind` | `"http"` for HTTP transport |
+| `url` | MCP server URL |
+| `headers` | HTTP headers (supports `secret:` interpolation) |
+| `query_params` | URL query parameters (supports `secret:` interpolation) |
+| `allowed_tools` | Whitelist of tools to expose (optional, all if omitted) |
 
 See [MCP Client](../../developer-guide/mcp/client.md) for details.
 
@@ -265,6 +307,8 @@ mcp_client_toolsets:
     kind: "stdio"
     command: "npx"
     args: ["-y", "@anthropic-ai/mcp-server-filesystem", "./workspace"]
+    env:
+      WORKSPACE_PATH: "./workspace"
     allowed_tools:
       - "read_file"
       - "list_directory"
