@@ -66,7 +66,7 @@ flutter run -d chrome --web-port 59001
 
 1. Open http://localhost:59001 in your browser
 2. Enter `http://localhost:8000` as the server URL
-3. Select a room from the sidebar
+3. Open the navigation drawer (☰) and select a room
 4. Type a message and press Enter
 
 ## What's Running
