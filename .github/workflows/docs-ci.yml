@@ -24,7 +24,7 @@ jobs:
         uses: astral-sh/setup-uv@v4
 
       - name: Install Python dependencies
-        run: uv sync
+        run: uv sync --group docs
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
