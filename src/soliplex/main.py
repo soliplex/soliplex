@@ -17,7 +17,6 @@ from soliplex import views
 from soliplex.views import agui as agui_views
 from soliplex.views import auth as auth_views
 from soliplex.views import completions as completions_views
-from soliplex.views import convos as convos_views
 from soliplex.views import installation as installation_views
 from soliplex.views import quizzes as quizzes_views
 from soliplex.views import rooms as rooms_views
@@ -79,7 +78,6 @@ def create_app(
     app.include_router(agui_views.router, prefix="/api")
     app.include_router(auth_views.router, prefix="/api")
     app.include_router(completions_views.router, prefix="/api")
-    app.include_router(convos_views.router, prefix="/api")
     app.include_router(installation_views.router, prefix="/api")
     app.include_router(quizzes_views.router, prefix="/api")
     app.include_router(rooms_views.router, prefix="/api")

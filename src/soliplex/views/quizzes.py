@@ -47,7 +47,7 @@ async def post_quiz_question(
     room_id: str,
     quiz_id: str,
     question_uuid: str,
-    answer: models.UserPromptClientMessage,
+    answer: models.QuizAnswer,
     the_installation: installation.Installation = depend_the_installation,
     token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
 ) -> models.QuizQuestionResponse:
