@@ -190,6 +190,9 @@ ActiveToolCalls = dict[str, ActiveToolCall]
 CompletedToolCalls = set[str]
 Events = list[agui_core.Event]
 
+#
+#   Events which the parser ignores entirely
+#
 IgnorableEventTypes = frozenset[agui_core.EventType]
 
 DEFAULT_IGNORE_EVENTS: IgnorableEventTypes = frozenset(
@@ -201,6 +204,13 @@ DEFAULT_IGNORE_EVENTS: IgnorableEventTypes = frozenset(
         agui_core.EventType.CUSTOM,
     ]
 )
+
+#
+#   Messages which the parser strips when creating a new `RunAgentInput`
+#
+StrippedMessageTypes = type | None
+
+DEFAULT_STRIPPED_MESSAGE_TYPES: StrippedMessageTypes = None
 
 
 @dataclasses.dataclass
@@ -232,6 +242,9 @@ class EventStreamParser:
 
     event_log: Events | None = None
     ignore_event_types: IgnorableEventTypes = DEFAULT_IGNORE_EVENTS
+    stripped_message_types: StrippedMessageTypes = (
+        DEFAULT_STRIPPED_MESSAGE_TYPES
+    )
 
     def __post_init__(self, run_agent_input=None, run=None):
         if run_agent_input is not None:
@@ -540,9 +553,18 @@ class EventStreamParser:
         if self.run_input is None:
             raise NoRunInput()
 
+        if self.stripped_message_types is not None:
+            messages = [
+                msg
+                for msg in self.messages
+                if not isinstance(msg, self.stripped_message_types)
+            ]
+        else:
+            messages = self.messages
+
         return self.run_input.model_copy(
             update={
-                "messages": self.messages,
+                "messages": messages,
                 "state": self.state,
             },
         )

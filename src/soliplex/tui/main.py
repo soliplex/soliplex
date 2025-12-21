@@ -153,6 +153,9 @@ class SoliplexTUI(t_app.App):
         esp = agui_parser.EventStreamParser(
             self.run_agent_input,
             event_log=event_log,
+            # Working around Pydantic-AI issue:
+            # https://github.com/pydantic/pydantic-ai/issues/3802
+            stripped_message_types=agui_core.ActivityMessage,
         )
         request_json = self.run_agent_input.model_dump()
 
