@@ -85,10 +85,9 @@ soliplex-tui --url http://127.0.0.1:8000 --room haiku
 
 ### Backend Structure
 
-- `views/` - FastAPI route handlers (auth, completions, conversations, rooms, quizzes, agui)
+- `views/` - FastAPI route handlers (auth, completions, rooms, quizzes, agui)
 - `agents.py` - Pydantic AI agent configuration and management with agent caching
 - `config.py` - YAML configuration parsing with secret/environment variable resolution
-- `convos.py` - Conversation persistence with message schema translation
 - `tools.py` - AI agent tool definitions
 - `mcp_server.py` / `mcp_client.py` - Model Context Protocol integration
 - `agui/` - AG-UI protocol implementation for streaming responses (thread/run management, SSE events)

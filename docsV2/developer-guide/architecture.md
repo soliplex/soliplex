@@ -314,7 +314,6 @@ src/soliplex/
 ├── __init__.py
 ├── agents.py          # Agent creation, caching
 ├── config.py          # Configuration parsing
-├── convos.py          # Thread persistence
 ├── installation.py    # Installation management
 ├── mcp_server.py      # MCP server
 ├── mcp_client.py      # MCP client
