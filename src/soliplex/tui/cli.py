@@ -31,15 +31,13 @@ BASE_URL = typer.Option(
     "--url",
     help="Base URL for Soliplex back-end",
 )
-ROOM = typer.Option("haiku", "-r", "--room", help="Room name for the agent")
 
 
 @the_cli.command()
 def tui(
     version: bool = typer.Option(None, "--version", "-v"),
     soliplex_url: str = BASE_URL,
-    room_id: str = ROOM,
 ):
-    tui_app = main.SoliplexTUI(soliplex_url, room_id)
+    tui_app = main.SoliplexTUI(soliplex_url)
 
     tui_app.run()
