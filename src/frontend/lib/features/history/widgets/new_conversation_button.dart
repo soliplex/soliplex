@@ -41,10 +41,12 @@ class NewConversationButton extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
             child: Row(
               children: [
-                Icon(
-                  Icons.edit_outlined,
-                  color: colorScheme.onPrimaryContainer,
-                  size: 24,
+                ExcludeSemantics(
+                  child: Icon(
+                    Icons.edit_outlined,
+                    color: colorScheme.onPrimaryContainer,
+                    size: 24,
+                  ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -56,10 +58,13 @@ class NewConversationButton extends StatelessWidget {
                     ),
                   ),
                 ),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  color: colorScheme.onPrimaryContainer.withValues(alpha: 0.5),
-                  size: 16,
+                ExcludeSemantics(
+                  child: Icon(
+                    Icons.arrow_forward_ios,
+                    color:
+                        colorScheme.onPrimaryContainer.withValues(alpha: 0.5),
+                    size: 16,
+                  ),
                 ),
               ],
             ),

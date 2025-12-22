@@ -22,10 +22,12 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.chat_bubble_outline,
-              size: 100,
-              color: Theme.of(context).colorScheme.primary,
+            ExcludeSemantics(
+              child: Icon(
+                Icons.chat_bubble_outline,
+                size: 100,
+                color: Theme.of(context).colorScheme.primary,
+              ),
             ),
             const SizedBox(height: 24),
             Text(
