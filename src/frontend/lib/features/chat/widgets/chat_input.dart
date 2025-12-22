@@ -87,25 +87,28 @@ class _ChatInputState extends ConsumerState<ChatInput> {
                   LogicalKeyboardKey.escape,
                 ): () => _focusNode.unfocus(),
               },
-              child: TextField(
-                controller: _controller,
-                focusNode: _focusNode,
-                maxLines: null,
-                textInputAction: TextInputAction.newline,
-                decoration: InputDecoration(
-                  hintText: canSend
-                      ? 'Type a message...'
-                      : 'Select a room to start chatting',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
+              child: Semantics(
+                label: 'Chat message input',
+                child: TextField(
+                  controller: _controller,
+                  focusNode: _focusNode,
+                  maxLines: null,
+                  textInputAction: TextInputAction.newline,
+                  decoration: InputDecoration(
+                    hintText: canSend
+                        ? 'Type a message...'
+                        : 'Select a room to start chatting',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
+                  enabled: canSend,
+                  onChanged: (_) => setState(() {}),
                 ),
-                enabled: canSend,
-                onChanged: (_) => setState(() {}),
               ),
             ),
           ),
