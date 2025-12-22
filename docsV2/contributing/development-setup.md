@@ -184,6 +184,56 @@ Recommended extensions:
 - Configure Python interpreter to use venv
 - Enable ruff for linting
 
+## Claude Code Integration
+
+If you use [Claude Code](https://claude.ai/code) for AI-assisted development, the project includes MCP (Model Context Protocol) server configurations.
+
+### GitHub MCP Server
+
+The GitHub MCP server enables Claude Code to interact with GitHub issues, pull requests, and repository operations.
+
+**Prerequisites:**
+
+- Docker installed and running
+- GitHub Personal Access Token (PAT)
+
+**Setup:**
+
+1. Create a GitHub PAT at https://github.com/settings/tokens
+   - Classic token: select `repo` scope
+   - Or fine-grained token: grant repository read/write access
+
+2. Create your `.env` file from the example:
+   ```bash
+   cp .env.example .env
+   ```
+
+3. Add your token to `.env`:
+   ```
+   GITHUB_PERSONAL_ACCESS_TOKEN=ghp_your_token_here
+   ```
+
+4. Restart Claude Code - the GitHub MCP server will connect automatically
+
+**Verify:**
+
+Ask Claude to list issues: "List open issues in this repo"
+
+**Available Operations:**
+
+- List/create/comment on issues
+- List/create/review pull requests
+- Create branches
+- Search code and repositories
+
+### Other MCP Servers
+
+The project also includes:
+
+- **context7** - Library documentation lookup (no setup required)
+
+See `.mcp.json` for the full MCP configuration.
+
 ## Environment Variables
 
 For development:
