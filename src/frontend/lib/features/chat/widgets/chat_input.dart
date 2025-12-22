@@ -111,6 +111,7 @@ class _ChatInputState extends ConsumerState<ChatInput> {
           ),
           const SizedBox(width: 8),
           IconButton(
+            tooltip: 'Send message',
             onPressed: canSend && _controller.text.trim().isNotEmpty
                 ? _handleSend
                 : null,

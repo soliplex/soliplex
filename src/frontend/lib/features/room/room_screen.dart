@@ -66,6 +66,7 @@ class RoomScreen extends ConsumerWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton(
+        tooltip: 'Create new thread',
         onPressed: () {
           // Set new thread intent and navigate to thread screen
           // The ChatPanel will create the thread when first message is sent
