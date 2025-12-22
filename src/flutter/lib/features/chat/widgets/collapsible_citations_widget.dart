@@ -1,10 +1,9 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 import 'package:soliplex/core/models/chat_models.dart';
+import 'package:soliplex/core/network/connection_manager.dart';
 import 'package:soliplex/core/utils/url_builder.dart';
 
 /// Collapsible citations section that appears below message content.
@@ -51,6 +50,8 @@ class _CollapsibleCitationsWidgetState
     final urlBuilder = ref.read(urlBuilderProvider);
     if (urlBuilder == null) return;
 
+    final connectionManager = ref.read(connectionManagerProvider);
+
     final uri = urlBuilder.roomChunk(widget.roomId, citation.chunkId);
 
     // Show dialog with loading state that transitions to images
@@ -59,6 +60,7 @@ class _CollapsibleCitationsWidgetState
       builder: (dialogContext) => _ChunkVisualizationDialog(
         uri: uri,
         citation: citation,
+        connectionManager: connectionManager,
         onShowFullImage: (imageBase64, pageNumber, totalPages) {
           _showFullImage(
             dialogContext,
@@ -473,11 +475,13 @@ class _ChunkVisualizationDialog extends StatefulWidget {
   const _ChunkVisualizationDialog({
     required this.uri,
     required this.citation,
+    required this.connectionManager,
     required this.onShowFullImage,
   });
 
   final Uri uri;
   final Citation citation;
+  final ConnectionManager connectionManager;
   final void Function(String imageBase64, int pageNumber, int totalPages)
       onShowFullImage;
 
@@ -499,7 +503,7 @@ class _ChunkVisualizationDialogState extends State<_ChunkVisualizationDialog> {
 
   Future<void> _loadChunkImages() async {
     try {
-      final response = await http.get(widget.uri);
+      final response = await widget.connectionManager.get(widget.uri);
       if (!mounted) return;
 
       if (response.statusCode == 200) {

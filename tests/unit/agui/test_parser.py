@@ -10,13 +10,13 @@ from soliplex.agui import parser as agui_parser
 
 TEST_THREAD_ID = "thread-123"
 TEST_RUN_ID = "run-345"
+TEST_ACTIVITY_MESSAGE_ID = "activity-678"
 
-TEST_RUN_STARTED = agui_core.RunStartedEvent(
+TEST_RUN_STARTED_EVENT = agui_core.RunStartedEvent(
     thread_id=TEST_THREAD_ID,
     run_id=TEST_RUN_ID,
 )
-
-TEST_RUN_FINISHED = agui_core.RunFinishedEvent(
+TEST_RUN_FINISHED_EVENT = agui_core.RunFinishedEvent(
     thread_id=TEST_THREAD_ID,
     run_id=TEST_RUN_ID,
 )
@@ -1129,8 +1129,8 @@ def test_esp_call_w_ignored_event_types(
     [
         (),
         [
-            TEST_RUN_STARTED,
-            TEST_RUN_FINISHED,
+            TEST_RUN_STARTED_EVENT,
+            TEST_RUN_FINISHED_EVENT,
         ],
     ],
 )
@@ -1153,8 +1153,8 @@ async def test_esp__store_run_events(run, w_run, events):
     [
         (),
         [
-            TEST_RUN_STARTED,
-            TEST_RUN_FINISHED,
+            TEST_RUN_STARTED_EVENT,
+            TEST_RUN_FINISHED_EVENT,
         ],
     ],
 )
@@ -1180,12 +1180,12 @@ async def test_esp_parse_stream(run_input, events):
         ([], []),
         (
             [
-                TEST_RUN_STARTED.model_dump(),
-                TEST_RUN_FINISHED.model_dump(),
+                TEST_RUN_STARTED_EVENT.model_dump(),
+                TEST_RUN_FINISHED_EVENT.model_dump(),
             ],
             [
-                TEST_RUN_STARTED,
-                TEST_RUN_FINISHED,
+                TEST_RUN_STARTED_EVENT,
+                TEST_RUN_FINISHED_EVENT,
             ],
         ),
     ],
@@ -1212,6 +1212,7 @@ def test_esp_as_run_agent_input_wo_run_input():
         _ = esp.as_run_agent_input
 
 
+@pytest.mark.parametrize("w_stripped", [None, agui_core.ActivityMessage])
 @pytest.mark.parametrize(
     "state",
     [
@@ -1223,15 +1224,27 @@ def test_esp_as_run_agent_input_wo_run_input():
     "messages",
     [
         None,
-        [TEST_RUN_STARTED, TEST_RUN_FINISHED],
+        [ACTIVITY_MESSAGE],
     ],
 )
-def test_esp_as_run_agent_input_w_run_input(run_input, messages, state):
-    esp = agui_parser.EventStreamParser(run_input)
+def test_esp_as_run_agent_input_w_run_input(
+    run_input,
+    messages,
+    state,
+    w_stripped,
+):
+    kw = {}
+
+    if w_stripped:
+        kw["stripped_message_types"] = w_stripped
+
+    esp = agui_parser.EventStreamParser(run_input, **kw)
 
     if messages is not None:
         exp_messages = esp.messages = [
-            msg.model_copy(deep=True) for msg in messages
+            msg.model_copy(deep=True)
+            for msg in messages
+            if w_stripped is None or not isinstance(msg, w_stripped)
         ]
     else:
         exp_messages = run_input.messages[:]
@@ -1280,12 +1293,12 @@ def test_agui_event_from_json(json_dict, expectaton):
         ([], []),
         (
             [
-                TEST_RUN_STARTED.model_dump(),
-                TEST_RUN_FINISHED.model_dump(),
+                TEST_RUN_STARTED_EVENT.model_dump(),
+                TEST_RUN_FINISHED_EVENT.model_dump(),
             ],
             [
-                TEST_RUN_STARTED,
-                TEST_RUN_FINISHED,
+                TEST_RUN_STARTED_EVENT,
+                TEST_RUN_FINISHED_EVENT,
             ],
         ),
     ],
