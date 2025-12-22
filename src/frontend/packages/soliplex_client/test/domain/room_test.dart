@@ -8,8 +8,9 @@ void main() {
 
       expect(room.id, equals('room-1'));
       expect(room.name, equals('Test Room'));
-      expect(room.description, isNull);
-      expect(room.metadata, isNull);
+      expect(room.description, equals(''));
+      expect(room.metadata, equals(const <String, dynamic>{}));
+      expect(room.hasDescription, isFalse);
     });
 
     test('creates with all fields', () {
@@ -24,6 +25,7 @@ void main() {
       expect(room.name, equals('Test Room'));
       expect(room.description, equals('A test room'));
       expect(room.metadata, equals({'key': 'value'}));
+      expect(room.hasDescription, isTrue);
     });
 
     group('fromJson', () {
@@ -53,8 +55,8 @@ void main() {
 
         expect(room.id, equals('room-1'));
         expect(room.name, equals('Test Room'));
-        expect(room.description, isNull);
-        expect(room.metadata, isNull);
+        expect(room.description, equals(''));
+        expect(room.metadata, equals(const <String, dynamic>{}));
       });
     });
 
@@ -75,7 +77,7 @@ void main() {
         expect(json['metadata'], equals({'key': 'value'}));
       });
 
-      test('excludes null fields', () {
+      test('excludes empty fields', () {
         const room = Room(id: 'room-1', name: 'Test Room');
 
         final json = room.toJson();

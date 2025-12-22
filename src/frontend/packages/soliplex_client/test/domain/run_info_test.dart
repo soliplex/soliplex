@@ -4,15 +4,22 @@ import 'package:test/test.dart';
 void main() {
   group('RunInfo', () {
     test('creates with required fields', () {
-      const run = RunInfo(id: 'run-1', threadId: 'thread-1');
+      final createdAt = DateTime(2025);
+      final run = RunInfo(
+        id: 'run-1',
+        threadId: 'thread-1',
+        createdAt: createdAt,
+      );
 
       expect(run.id, equals('run-1'));
       expect(run.threadId, equals('thread-1'));
-      expect(run.label, isNull);
-      expect(run.createdAt, isNull);
-      expect(run.completedAt, isNull);
+      expect(run.label, equals(''));
+      expect(run.createdAt, equals(createdAt));
+      expect(run.completion, isA<NotCompleted>());
+      expect(run.isCompleted, isFalse);
       expect(run.status, equals(RunStatus.pending));
-      expect(run.metadata, isNull);
+      expect(run.metadata, equals(const <String, dynamic>{}));
+      expect(run.hasLabel, isFalse);
     });
 
     test('creates with all fields', () {
@@ -23,7 +30,7 @@ void main() {
         threadId: 'thread-1',
         label: 'Test Run',
         createdAt: createdAt,
-        completedAt: completedAt,
+        completion: CompletedAt(completedAt),
         status: RunStatus.completed,
         metadata: const {'key': 'value'},
       );
@@ -32,9 +39,12 @@ void main() {
       expect(run.threadId, equals('thread-1'));
       expect(run.label, equals('Test Run'));
       expect(run.createdAt, equals(createdAt));
-      expect(run.completedAt, equals(completedAt));
+      expect(run.completion, isA<CompletedAt>());
+      expect((run.completion as CompletedAt).time, equals(completedAt));
+      expect(run.isCompleted, isTrue);
       expect(run.status, equals(RunStatus.completed));
       expect(run.metadata, equals({'key': 'value'}));
+      expect(run.hasLabel, isTrue);
     });
 
     group('fromJson', () {
@@ -55,7 +65,7 @@ void main() {
         expect(run.threadId, equals('thread-1'));
         expect(run.label, equals('Test Run'));
         expect(run.createdAt, isNotNull);
-        expect(run.completedAt, isNotNull);
+        expect(run.completion, isA<CompletedAt>());
         expect(run.status, equals(RunStatus.completed));
         expect(run.metadata, equals({'key': 'value'}));
       });
@@ -70,11 +80,11 @@ void main() {
 
         expect(run.id, equals('run-1'));
         expect(run.threadId, equals('thread-1'));
-        expect(run.label, isNull);
-        expect(run.createdAt, isNull);
-        expect(run.completedAt, isNull);
+        expect(run.label, equals(''));
+        expect(run.createdAt, isNotNull);
+        expect(run.completion, isA<NotCompleted>());
         expect(run.status, equals(RunStatus.pending));
-        expect(run.metadata, isNull);
+        expect(run.metadata, equals(const <String, dynamic>{}));
       });
 
       test('handles run_id field', () {
@@ -108,7 +118,7 @@ void main() {
           threadId: 'thread-1',
           label: 'Test Run',
           createdAt: createdAt,
-          completedAt: completedAt,
+          completion: CompletedAt(completedAt),
           status: RunStatus.completed,
           metadata: const {'key': 'value'},
         );
@@ -124,16 +134,20 @@ void main() {
         expect(json['metadata'], equals({'key': 'value'}));
       });
 
-      test('excludes null fields except status', () {
-        const run = RunInfo(id: 'run-1', threadId: 'thread-1');
+      test('excludes empty fields', () {
+        final run = RunInfo(
+          id: 'run-1',
+          threadId: 'thread-1',
+          createdAt: DateTime.utc(2025),
+        );
 
         final json = run.toJson();
 
         expect(json.containsKey('id'), isTrue);
         expect(json.containsKey('thread_id'), isTrue);
+        expect(json.containsKey('created_at'), isTrue);
         expect(json.containsKey('status'), isTrue);
         expect(json.containsKey('label'), isFalse);
-        expect(json.containsKey('created_at'), isFalse);
         expect(json.containsKey('completed_at'), isFalse);
         expect(json.containsKey('metadata'), isFalse);
       });
@@ -147,7 +161,7 @@ void main() {
         threadId: 'thread-1',
         label: 'Test Run',
         createdAt: createdAt,
-        completedAt: completedAt,
+        completion: CompletedAt(completedAt),
         status: RunStatus.completed,
         metadata: const {'key': 'value'},
       );
@@ -159,14 +173,18 @@ void main() {
       expect(restored.threadId, equals(original.threadId));
       expect(restored.label, equals(original.label));
       expect(restored.createdAt, equals(original.createdAt));
-      expect(restored.completedAt, equals(original.completedAt));
+      expect(restored.isCompleted, equals(original.isCompleted));
       expect(restored.status, equals(original.status));
       expect(restored.metadata, equals(original.metadata));
     });
 
     group('copyWith', () {
       test('creates modified copy', () {
-        const run = RunInfo(id: 'run-1', threadId: 'thread-1');
+        final run = RunInfo(
+          id: 'run-1',
+          threadId: 'thread-1',
+          createdAt: DateTime(2025),
+        );
         final modified = run.copyWith(status: RunStatus.running);
 
         expect(modified.id, equals('run-1'));
@@ -176,7 +194,11 @@ void main() {
       });
 
       test('creates copy with all fields modified', () {
-        const run = RunInfo(id: 'run-1', threadId: 'thread-1');
+        final run = RunInfo(
+          id: 'run-1',
+          threadId: 'thread-1',
+          createdAt: DateTime(2025),
+        );
         final newCreated = DateTime(2025, 6);
         final newCompleted = DateTime(2025, 6, 2);
         final modified = run.copyWith(
@@ -184,7 +206,7 @@ void main() {
           threadId: 'thread-2',
           label: 'New Label',
           createdAt: newCreated,
-          completedAt: newCompleted,
+          completion: CompletedAt(newCompleted),
           status: RunStatus.completed,
           metadata: {'new': 'data'},
         );
@@ -193,7 +215,8 @@ void main() {
         expect(modified.threadId, equals('thread-2'));
         expect(modified.label, equals('New Label'));
         expect(modified.createdAt, equals(newCreated));
-        expect(modified.completedAt, equals(newCompleted));
+        expect(modified.isCompleted, isTrue);
+        expect((modified.completion as CompletedAt).time, equals(newCompleted));
         expect(modified.status, equals(RunStatus.completed));
         expect(modified.metadata, equals({'new': 'data'}));
       });
@@ -206,7 +229,7 @@ void main() {
           threadId: 'thread-1',
           label: 'Test Run',
           createdAt: createdAt,
-          completedAt: completedAt,
+          completion: CompletedAt(completedAt),
           status: RunStatus.completed,
           metadata: const {'key': 'value'},
         );
@@ -217,7 +240,7 @@ void main() {
         expect(copy.threadId, equals(run.threadId));
         expect(copy.label, equals(run.label));
         expect(copy.createdAt, equals(run.createdAt));
-        expect(copy.completedAt, equals(run.completedAt));
+        expect(copy.isCompleted, equals(run.isCompleted));
         expect(copy.status, equals(run.status));
         expect(copy.metadata, equals(run.metadata));
       });
@@ -225,25 +248,29 @@ void main() {
 
     group('equality', () {
       test('equal based on id and threadId', () {
-        const run1 = RunInfo(
+        final run1 = RunInfo(
           id: 'run-1',
           threadId: 'thread-1',
           label: 'Run 1',
+          createdAt: DateTime(2025),
         );
-        const run2 = RunInfo(
+        final run2 = RunInfo(
           id: 'run-1',
           threadId: 'thread-1',
           label: 'Run 2',
+          createdAt: DateTime(2025),
         );
-        const run3 = RunInfo(
+        final run3 = RunInfo(
           id: 'run-1',
           threadId: 'thread-2',
           label: 'Run 1',
+          createdAt: DateTime(2025),
         );
-        const run4 = RunInfo(
+        final run4 = RunInfo(
           id: 'run-2',
           threadId: 'thread-1',
           label: 'Run 1',
+          createdAt: DateTime(2025),
         );
 
         expect(run1, equals(run2));
@@ -252,31 +279,38 @@ void main() {
       });
 
       test('identical returns true', () {
-        const run = RunInfo(id: 'run-1', threadId: 'thread-1');
+        final run = RunInfo(
+          id: 'run-1',
+          threadId: 'thread-1',
+          createdAt: DateTime(2025),
+        );
         expect(run == run, isTrue);
       });
     });
 
     test('hashCode based on id and threadId', () {
-      const run1 = RunInfo(
+      final run1 = RunInfo(
         id: 'run-1',
         threadId: 'thread-1',
         label: 'Run 1',
+        createdAt: DateTime(2025),
       );
-      const run2 = RunInfo(
+      final run2 = RunInfo(
         id: 'run-1',
         threadId: 'thread-1',
         label: 'Run 2',
+        createdAt: DateTime(2025),
       );
 
       expect(run1.hashCode, equals(run2.hashCode));
     });
 
     test('toString includes id, threadId, and status', () {
-      const run = RunInfo(
+      final run = RunInfo(
         id: 'run-1',
         threadId: 'thread-1',
         status: RunStatus.running,
+        createdAt: DateTime(2025),
       );
 
       final str = run.toString();
@@ -284,6 +318,39 @@ void main() {
       expect(str, contains('run-1'));
       expect(str, contains('thread-1'));
       expect(str, contains('running'));
+    });
+  });
+
+  group('CompletionTime', () {
+    test('NotCompleted is default', () {
+      const completion = NotCompleted();
+      expect(completion, isA<CompletionTime>());
+    });
+
+    test('CompletedAt contains time', () {
+      final time = DateTime(2025);
+      final completion = CompletedAt(time);
+      expect(completion.time, equals(time));
+    });
+
+    test('CompletedAt equality', () {
+      final time1 = DateTime(2025);
+      final time2 = DateTime(2025);
+      final time3 = DateTime(2025, 2);
+
+      final completion1 = CompletedAt(time1);
+      final completion2 = CompletedAt(time2);
+      final completion3 = CompletedAt(time3);
+
+      expect(completion1, equals(completion2));
+      expect(completion1, isNot(equals(completion3)));
+    });
+
+    test('NotCompleted equality', () {
+      const completion1 = NotCompleted();
+      const completion2 = NotCompleted();
+
+      expect(completion1, equals(completion2));
     });
   });
 
