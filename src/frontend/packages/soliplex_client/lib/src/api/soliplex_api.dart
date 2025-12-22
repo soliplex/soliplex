@@ -1,8 +1,8 @@
+import 'package:soliplex_client/src/domain/room.dart';
+import 'package:soliplex_client/src/domain/run_info.dart';
+import 'package:soliplex_client/src/domain/thread_info.dart';
 import 'package:soliplex_client/src/errors/exceptions.dart';
 import 'package:soliplex_client/src/http/http_transport.dart';
-import 'package:soliplex_client/src/models/room.dart';
-import 'package:soliplex_client/src/models/run_info.dart';
-import 'package:soliplex_client/src/models/thread_info.dart';
 import 'package:soliplex_client/src/utils/cancel_token.dart';
 import 'package:soliplex_client/src/utils/url_builder.dart';
 
