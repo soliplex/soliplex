@@ -166,16 +166,23 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
       language = className.replaceFirst('language-', '');
     }
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      child: HighlightView(
-        code,
-        language: language.isEmpty ? 'plaintext' : language,
-        theme: githubTheme,
-        padding: EdgeInsets.zero,
-        textStyle: const TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 14,
+    final semanticLabel = language.isEmpty || language == 'plaintext'
+        ? 'Code block'
+        : 'Code block in $language';
+
+    return Semantics(
+      label: semanticLabel,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        child: HighlightView(
+          code,
+          language: language.isEmpty ? 'plaintext' : language,
+          theme: githubTheme,
+          padding: EdgeInsets.zero,
+          textStyle: const TextStyle(
+            fontFamily: 'monospace',
+            fontSize: 14,
+          ),
         ),
       ),
     );

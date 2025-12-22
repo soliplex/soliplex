@@ -99,10 +99,12 @@ class ThreadListItem extends StatelessWidget {
             )
           : null,
       trailing: isSelected
-          ? Icon(
-              Icons.check_circle,
-              color: colorScheme.primary,
-              size: 20,
+          ? ExcludeSemantics(
+              child: Icon(
+                Icons.check_circle,
+                color: colorScheme.primary,
+                size: 20,
+              ),
             )
           : null,
     );
