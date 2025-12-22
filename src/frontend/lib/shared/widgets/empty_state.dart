@@ -17,10 +17,13 @@ class EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 64,
-            color: Theme.of(context).colorScheme.outline,
+          Semantics(
+            label: message,
+            child: Icon(
+              icon,
+              size: 64,
+              color: Theme.of(context).colorScheme.outline,
+            ),
           ),
           const SizedBox(height: 16),
           Text(

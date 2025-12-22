@@ -64,12 +64,15 @@ class ThreadListItem extends StatelessWidget {
       selectedTileColor: colorScheme.primaryContainer.withValues(alpha: 0.3),
       onTap: onTap,
       leading: hasActiveRun
-          ? SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: colorScheme.primary,
+          ? Semantics(
+              label: 'Conversation in progress',
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: colorScheme.primary,
+                ),
               ),
             )
           : Icon(
