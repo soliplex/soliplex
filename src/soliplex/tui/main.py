@@ -9,7 +9,6 @@ from textual import containers as t_containers
 from textual import reactive as t_reactive
 from textual import screen as t_screen
 from textual import widgets as t_widgets
-from textual.css import query as t_css_query
 
 from soliplex.agui import parser as agui_parser
 
@@ -17,7 +16,7 @@ from soliplex.agui import parser as agui_parser
 class RoomThreadsView(t_screen.Screen):
     BINDINGS = [
         t_binding.Binding(
-            "escape", f"dismiss(None)", "Return to room",
+            "escape", "dismiss(None)", "Return to room",
         ),
     ]
 
