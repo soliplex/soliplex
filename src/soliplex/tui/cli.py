@@ -32,11 +32,6 @@ BASE_URL = typer.Option(
     help="Base URL for Soliplex back-end",
 )
 ROOM = typer.Option("haiku", "-r", "--room", help="Room name for the agent")
-USE_AGUI = typer.Option(
-    True,
-    "--agui/--no-agui",
-    help="Connect using Soliplex AG-UI endpoint",
-)
 
 
 @the_cli.command()
@@ -44,8 +39,7 @@ def tui(
     version: bool = typer.Option(None, "--version", "-v"),
     soliplex_url: str = BASE_URL,
     room_id: str = ROOM,
-    use_agui: bool = USE_AGUI,
 ):
-    tui_app = main.SoliplexTUI(soliplex_url, room_id, use_agui)
+    tui_app = main.SoliplexTUI(soliplex_url, room_id)
 
     tui_app.run()

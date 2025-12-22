@@ -10,7 +10,6 @@ from ag_ui import core as agui_core
 
 from soliplex import agui as agui_package
 from soliplex import config
-from soliplex import convos
 from soliplex import models
 from soliplex import tools
 
@@ -984,45 +983,3 @@ def test_aguithread_from_thread(
         exp_name, exp_desc = exp_name_desc
         assert found.metadata.name == exp_name
         assert found.metadata.description == exp_desc
-
-
-def test_conversationhistorymessage_from_convos_message():
-    convos_message = convos.ConvoHistoryMessage(
-        origin="user",
-        text=USER_TEXT,
-        timestamp=TIMESTAMP,
-    )
-    message = models.ConvoHistoryMessage.from_convos_message(convos_message)
-
-    assert message.origin == "user"
-    assert message.text == USER_TEXT
-    assert message.timestamp == TIMESTAMP
-
-
-def test_conversation_from_convos_info():
-    convos_message = convos.ConvoHistoryMessage(
-        origin="user",
-        text=USER_TEXT,
-        timestamp=TIMESTAMP,
-    )
-    info = convos.ConversationInfo(
-        convo_uuid=CONVO_UUID,
-        name=CONVO_NAME,
-        room_id=CONVO_ROOM_ID,
-        message_history=[convos_message],
-    )
-
-    convo = models.Conversation.from_convos_info(info)
-
-    assert convo.convo_uuid == CONVO_UUID
-    assert convo.name == CONVO_NAME
-    assert convo.room_id == CONVO_ROOM_ID
-
-    for f_msg, e_msg in zip(
-        convo.message_history,
-        info.message_history,
-        strict=True,
-    ):
-        assert f_msg.origin == e_msg.origin
-        assert f_msg.text == e_msg.text
-        assert f_msg.timestamp == e_msg.timestamp

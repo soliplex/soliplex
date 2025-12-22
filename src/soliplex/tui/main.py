@@ -61,11 +61,9 @@ class SoliplexTUI(t_app.App):
         t_binding.Binding("ctrl+q", "quit", "quit", id="quit"),
     ]
 
-    def __init__(self, soliplex_url, room_id, use_agui, *args, **kwargs):
+    def __init__(self, soliplex_url, room_id, *args, **kwargs):
         self.soliplex_url = soliplex_url
         self.room_id = room_id
-        self.convo_uuid = None
-        self.use_agui = use_agui
         self.run_agent_input = None
         self.run_count = 0
         super().__init__(*args, **kwargs)
@@ -88,43 +86,7 @@ class SoliplexTUI(t_app.App):
         await chat_view.mount(Prompt(event.value))
         await chat_view.mount(response := Response())
 
-        if self.use_agui:
-            self.send_agui_prompt(event.value, response)
-        else:
-            self.send_prompt(event.value, response)
-
-    @textual.work(thread=True)
-    def send_prompt(self, prompt: str, response: Response) -> None:
-        """Get the response in a thread."""
-        response_content = ""
-        request_json = {
-            "text": prompt,
-        }
-        if self.convo_uuid is None:
-            request_url = (
-                f"{self.soliplex_url}/api/v1/convos/new/{self.room_id}"
-            )
-            convo_response = requests.post(request_url, json=request_json)
-            convo = convo_response.json()
-            self.convo_uuid = convo["convo_uuid"]
-            response_content = convo["message_history"][-1]["text"]
-            self.call_from_thread(response.update, response_content)
-        else:
-            request_url = (
-                f"{self.soliplex_url}/api/v1/convos/{self.convo_uuid}"
-            )
-            streaming_response = requests.post(
-                request_url,
-                json=request_json,
-                stream=True,
-            )
-            for line in streaming_response.iter_lines():
-                if line:
-                    decoded = line.decode("utf-8")
-                    chunk = json.loads(decoded)
-                    # Soliplex streams the whole thing
-                    # response_content += chunk["content"]
-                    self.call_from_thread(response.update, chunk["content"])
+        self.send_agui_prompt(event.value, response)
 
     @textual.work(thread=True)
     def send_agui_prompt(self, prompt: str, response: Response) -> None:

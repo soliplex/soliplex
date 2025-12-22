@@ -9,7 +9,6 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
 from soliplex import config
-from soliplex import convos
 from soliplex import installation
 from soliplex import models
 from soliplex import secrets
@@ -576,9 +575,6 @@ async def test_lifespan(
     i_config.reload_configurations.assert_called_once_with()
 
     load_installation.assert_called_once_with(INSTALLATION_PATH)
-
-    the_convos = found[0]["the_convos"]
-    assert isinstance(the_convos, convos.Conversations)
 
     threads_engine = found[0]["threads_engine"]
     assert isinstance(threads_engine, sqla_asyncio.AsyncEngine)
