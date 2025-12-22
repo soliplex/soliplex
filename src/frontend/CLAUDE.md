@@ -75,25 +75,13 @@ docs/planning/               # Design specs and work logs (see ROADMAP.md)
 
 ## Code Quality
 
-**Formatting (run first):**
+**Formatting (run first):** `mcp__dart__dart_format`
 
-```bash
-dart format lib test   # Run before commits
-```
-
-**Zero tolerance on analyzer issues:**
-
-```bash
-flutter analyze   # Must report: "No issues found!"
-```
+**Zero tolerance on analyzer issues:** `mcp__dart__analyze_files` (must be 0 issues)
 
 Warnings indicate real bugs. Fix all errors, warnings, AND hints immediately.
 
-**Tests must pass:**
-
-```bash
-flutter test      # All green before any code is complete
-```
+**Tests must pass:** `mcp__dart__run_tests` (all green before any code is complete)
 
 **Coverage target:** 85%+
 
@@ -120,9 +108,9 @@ flutter test      # All green before any code is complete
 ## Critical Rules
 
 1. Always refer to, and abide by `docs/rules/flutter_rules.md`
-2. Run `dart format lib test` before commits
-3. `flutter analyze` MUST report 0 errors AND 0 warnings
-4. All tests must pass before changes are complete
+2. Run `mcp__dart__dart_format` before commits
+3. `mcp__dart__analyze_files` MUST report 0 errors AND 0 warnings
+4. `mcp__dart__run_tests` must pass before changes are complete
 5. Keep `soliplex_client` pure Dart (no Flutter imports)
 6. Platform-specific code goes in `soliplex_client_native`
 7. New Flutter/Dart packages need a `.gitignore` (see <https://github.com/flutter/flutter/blob/master/.gitignore>)
