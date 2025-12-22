@@ -55,6 +55,7 @@ repo_url: https://github.com/soliplex/soliplex
 plugins:
   # Material for MkDocs
   search:
+  llmstxt:
 nav:
   - Home: index.md
   - Overview: overview.md

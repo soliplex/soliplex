@@ -1,0 +1,213 @@
+# Soliplex Flutter SDK
+
+> Cross-platform client for Soliplex AI chat (iOS, Android, Web, Desktop)
+
+Flutter application implementing the AG-UI protocol for real-time AI chat with streaming responses, tool execution visualization, and RAG document context.
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Flutter Application                     │
+├─────────────────────────────────────────────────────────────┤
+│  Features (UI)                                               │
+│  ├── chat/          - Chat screen, message bubbles          │
+│  ├── room/          - Room selection, info drawer           │
+│  ├── endpoints/     - Server management                     │
+│  └── context/       - Context pane (documents, state)       │
+├─────────────────────────────────────────────────────────────┤
+│  Core Services                                               │
+│  ├── network/       - HTTP transport, SSE streaming         │
+│  ├── chat/          - Chat sessions, message models         │
+│  ├── auth/          - OIDC authentication                   │
+│  └── providers/     - Riverpod state management             │
+├─────────────────────────────────────────────────────────────┤
+│  Infrastructure                                              │
+│  ├── quick_agui/    - AG-UI client library                  │
+│  └── ag_ui package  - AG-UI protocol types                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Key Components
+
+### Network Layer
+
+#### RoomSession (`core/network/room_session.dart`)
+Per-room session managing thread lifecycle and message state.
+
+- Creates/loads AG-UI threads
+- Processes SSE event streams
+- Manages active run cancellation
+- Source of truth for chat messages
+
+#### EventProcessor (`core/network/event_processor.dart`)
+Transforms AG-UI events into ChatMessage objects.
+
+Handles event types:
+- `TEXT_MESSAGE_START/CONTENT/END` - Agent responses
+- `TOOL_CALL_START/ARGS/END` - Tool execution
+- `STATE_DELTA` - State synchronization
+- `RUN_STARTED/FINISHED/ERROR` - Run lifecycle
+
+#### HttpTransport (`core/network/http_transport.dart`)
+HTTP client with SSE streaming support.
+
+- POST requests with SSE response handling
+- Bearer token authentication
+- Connection timeout management
+
+### Chat System
+
+#### ChatSession (`core/chat/chat_session.dart`)
+Abstract interface for chat implementations.
+
+```dart
+abstract class ChatSession {
+  Stream<List<ChatMessage>> get messagesStream;
+  Future<void> sendMessage(String text);
+  Future<void> cancelCurrentRun();
+}
+```
+
+#### ChatMessage (`core/models/chat_models.dart`)
+Unified message model for display.
+
+```dart
+class ChatMessage {
+  final String id;
+  final ChatRole role;        // user, assistant, system
+  final String content;
+  final bool isStreaming;
+  final List<ToolCall>? toolCalls;
+  final String? thinkingContent;
+}
+```
+
+### Authentication
+
+#### OidcClient (`core/auth/oidc_client.dart`)
+OIDC authentication flow handler.
+
+- PKCE flow for mobile
+- Backend-mediated flow for web
+- Secure token storage
+- Token refresh handling
+
+#### SecureTokenStorage (`core/auth/secure_token_storage.dart`)
+Platform-specific secure credential storage.
+
+- iOS/Android: flutter_secure_storage
+- Web: localStorage with encryption
+
+### State Management (Riverpod)
+
+#### Server-Scoped Providers (`core/providers/panel_providers.dart`)
+State that resets when server changes.
+
+```dart
+// Pattern: extend ServerScopedNotifier
+class ChatPanelNotifier extends ServerScopedNotifier<ChatPanelState> {
+  @override
+  ChatPanelState get initialState => ChatPanelState.initial();
+}
+```
+
+Key providers:
+- `currentServerProvider` - Active server connection
+- `roomSessionProvider` - Per-room session state
+- `chatPanelProvider` - Chat UI state
+
+### UI Features
+
+#### Chat Screen (`features/chat/chat_screen.dart`)
+Main chat interface with message list and input.
+
+Components:
+- `ChatMessageList` - Scrollable message history
+- `ChatMessageBubble` - Individual message display
+- `ChatInputArea` - Text input with send button
+- `ToolExecutionIndicator` - Active tool visualization
+
+#### Room Selection (`features/room/`)
+Room browsing and configuration.
+
+- `RoomCard` - Room preview with capabilities
+- `RoomInfoDrawer` - Detailed room info
+- `WelcomeCard` - Initial room prompt
+
+#### Message Widgets
+- `CollapsibleThinkingWidget` - Expandable reasoning display
+- `ToolCallSummaryWidget` - Tool execution summary
+- `MarkdownCodeBlock` - Syntax-highlighted code
+
+## Platform Support
+
+| Platform | Auth Flow | Storage | Notes |
+|----------|-----------|---------|-------|
+| iOS | PKCE | Keychain | Full support |
+| Android | PKCE | Keystore | Full support |
+| Web | Backend-mediated | localStorage | Some features hidden |
+| macOS | PKCE | Keychain | Full support |
+
+### Platform-Specific Code Pattern
+
+```dart
+// Conditional imports for dart:io features
+import 'service_io.dart' if (dart.library.html) 'service_web.dart';
+```
+
+## Configuration
+
+### Connection Config (`core/config/connection_config.dart`)
+
+```dart
+class ConnectionConfig {
+  final String serverUrl;
+  final String? authToken;
+  final Duration timeout;
+}
+```
+
+### Feature Flags (`core/config/feature_flags.dart`)
+
+```dart
+class FeatureFlags {
+  final bool enableDebugPanel;
+  final bool enableNetworkInspector;
+}
+```
+
+## Key Patterns
+
+### Message Flow
+
+1. User enters text in ChatInputArea
+2. RoomSession.sendMessage() called
+3. HTTP POST to /agui/{room}/threads/{thread}/runs
+4. SSE stream opened
+5. EventProcessor transforms events → ChatMessage
+6. messagesStream emits updated list
+7. ChatMessageList rebuilds
+
+### Tool Execution Display
+
+1. TOOL_CALL_START event received
+2. ToolCall added to current message
+3. ToolExecutionIndicator shown
+4. TOOL_CALL_END with result
+5. ToolCallSummaryWidget displays result
+
+### State Synchronization (STATE_DELTA)
+
+1. Server sends STATE_DELTA with JSON Patch
+2. EventProcessor applies patch to state
+3. State changes propagate via Riverpod
+4. UI components rebuild as needed
+
+## Dependencies
+
+- riverpod - State management
+- ag_ui - AG-UI protocol types
+- flutter_secure_storage - Credential storage
+- http - HTTP client
+- flutter_markdown - Markdown rendering

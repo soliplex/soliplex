@@ -1,0 +1,164 @@
+# Soliplex Python API
+
+> FastAPI backend for AI-powered document understanding and chat
+
+Soliplex is a configurable AI chat platform with RAG (Retrieval-Augmented Generation) support, multi-provider LLM integration, and the AG-UI streaming protocol.
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      FastAPI Application                     │
+├─────────────────────────────────────────────────────────────┤
+│  Views (API Endpoints)                                       │
+│  ├── /api/v1/rooms      - Room management                   │
+│  ├── /api/agui/*        - AG-UI streaming protocol          │
+│  ├── /api/completions/* - Direct LLM completions            │
+│  ├── /api/auth/*        - OIDC authentication               │
+│  └── /api/quizzes/*     - Quiz evaluation                   │
+├─────────────────────────────────────────────────────────────┤
+│  Core Services                                               │
+│  ├── Installation       - YAML config loader                │
+│  ├── Agents             - Pydantic AI agent factory         │
+│  ├── AGUI               - AG-UI event streaming             │
+│  └── MCP Client/Server  - Model Context Protocol            │
+├─────────────────────────────────────────────────────────────┤
+│  Storage                                                     │
+│  ├── SQLite/PostgreSQL  - Thread persistence                │
+│  └── LanceDB            - RAG vector database               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Key Modules
+
+### soliplex.main
+Application factory and entry point.
+
+- `create_app()` - Creates FastAPI app with middleware (CORS, sessions)
+- Mounts view routers under `/api` prefix
+- Configures lifespan for installation loading
+
+### soliplex.installation
+Configuration and lifecycle management.
+
+- `Installation` - Loads YAML config, manages rooms/agents/tools
+- `lifespan()` - FastAPI lifespan context manager
+- `depend_the_installation` - FastAPI dependency for injection
+
+### soliplex.agents
+Pydantic AI agent construction.
+
+- `AgentDependencies` - Dataclass with installation, user, state
+- `_get_default_agent_from_configs()` - Builds Agent from config
+- Supports OpenAI and Ollama providers
+- MCP toolset integration
+
+### soliplex.config
+YAML configuration parsing.
+
+Key config types:
+- `InstallationConfig` - Top-level config (meta, secrets, rooms)
+- `RoomConfig` - Chat room definition (agent, tools, RAG)
+- `AgentConfig` - LLM provider settings (model, temperature)
+- `ToolConfig` - Tool definitions with parameters
+- `RAGConfig` - Vector database settings
+
+### soliplex.models
+Pydantic models for API responses.
+
+- `Room`, `ConfiguredRooms` - Room metadata
+- `UserProfile` - Authenticated user info
+- `Quiz`, `QuizQuestion` - Quiz evaluation
+- `Tool` - Tool metadata for clients
+
+### soliplex.agui
+AG-UI (Agent UI) protocol implementation.
+
+- `agui.mpx` - Multiplexed thread/run management
+- `agui.parser` - AG-UI event parsing
+- `agui.persistence` - SQLAlchemy thread storage
+- Implements Server-Sent Events streaming
+
+### soliplex.views
+API endpoint routers.
+
+#### views.rooms
+- `GET /v1/rooms` - List available rooms
+- `GET /v1/rooms/{room_id}` - Get room config
+- `GET /v1/rooms/{room_id}/bg_image` - Room background
+- `GET /v1/rooms/{room_id}/chunk/{chunk_id}` - RAG chunk visualization
+
+#### views.agui
+- `GET /agui/{room_id}/threads` - List threads
+- `POST /agui/{room_id}/threads` - Create thread
+- `GET /agui/{room_id}/threads/{thread_id}` - Get thread
+- `DELETE /agui/{room_id}/threads/{thread_id}` - Delete thread
+- `POST /agui/{room_id}/threads/{thread_id}/runs` - Start run (SSE)
+- `POST /agui/{room_id}/threads/{thread_id}/runs/{run_id}/cancel` - Cancel
+
+#### views.completions
+- `POST /completions/v1/chat/completions` - OpenAI-compatible endpoint
+
+#### views.auth
+- `GET /auth/providers` - List OIDC providers
+- `GET /auth/{provider_id}/authorize` - Start OAuth flow
+- `GET /auth/{provider_id}/callback` - OAuth callback
+
+### soliplex.auth
+Authentication utilities.
+
+- `authenticate()` - Validate JWT token
+- `oauth2_predicate` - FastAPI security dependency
+- OIDC provider configuration
+
+### soliplex.mcp_client / soliplex.mcp_server
+Model Context Protocol integration.
+
+- MCP client for connecting to external tool servers
+- MCP server for exposing Soliplex as a tool provider
+
+## Configuration Example
+
+```yaml
+meta:
+  title: "My Soliplex Instance"
+
+secrets:
+  openai_api_key: "sk-..."
+
+agents:
+  default:
+    model_name: "gpt-4o"
+    provider_type: openai
+    llm_provider_kw:
+      api_key: "secret:openai_api_key"
+
+rooms:
+  general:
+    title: "General Chat"
+    agent: default
+
+  docs:
+    title: "Document Q&A"
+    agent: default
+    rag:
+      db_stem: "my_docs"
+```
+
+## Running the Server
+
+```bash
+# Development
+uvicorn soliplex.main:create_app --factory --reload
+
+# With specific installation
+SOLIPLEX_INSTALLATION_PATH=./my_config uvicorn soliplex.main:create_app --factory
+```
+
+## Dependencies
+
+- FastAPI - Web framework
+- Pydantic AI - LLM agent framework
+- SQLAlchemy - Database ORM (async)
+- haiku-rag - RAG/vector search
+- ag-ui - AG-UI protocol types
