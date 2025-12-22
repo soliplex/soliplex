@@ -4,14 +4,14 @@ Cross-platform Flutter frontend for Soliplex AI-powered RAG system.
 
 ## Quick Reference
 
-```bash
-flutter test                      # Run all tests (must pass)
-flutter analyze                   # Check issues (must be 0)
-dart format lib test              # Format code
-flutter pub get                   # Install dependencies
-flutter run -d macos              # Run on macOS
-npx markdownlint-cli "**/*.md"    # Lint markdown
-```
+Use Dart MCP server tools instead of shell commands:
+
+- **Run tests:** `mcp__dart__run_tests` (must pass)
+- **Analyze:** `mcp__dart__analyze_files` (must be 0 issues)
+- **Format:** `mcp__dart__dart_format`
+- **Install deps:** `mcp__dart__pub` with command `get`
+- **Run app:** `mcp__dart__launch_app` with device from `mcp__dart__list_devices`
+- **Lint markdown:** `npx markdownlint-cli "**/*.md"` (shell command)
 
 ## Project Structure
 
