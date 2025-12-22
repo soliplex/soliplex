@@ -13,8 +13,7 @@ void main() {
       expect(conversation.threadId, 'thread-1');
       expect(conversation.messages, isEmpty);
       expect(conversation.toolCalls, isEmpty);
-      expect(conversation.streamingText, isNull);
-      expect(conversation.streamingMessageId, isNull);
+      expect(conversation.streaming, isA<NotStreaming>());
       expect(conversation.status, isA<Idle>());
     });
 
@@ -55,29 +54,51 @@ void main() {
       });
     });
 
-    group('withStreamingText', () {
-      test('sets streaming text and message id', () {
-        final updated = conversation.withStreamingText('Hello', 'msg-1');
+    group('withStreaming', () {
+      test('sets streaming state', () {
+        final updated = conversation.withStreaming(
+          const Streaming(text: 'Hello', messageId: 'msg-1'),
+        );
 
-        expect(updated.streamingText, 'Hello');
-        expect(updated.streamingMessageId, 'msg-1');
+        expect(updated.streaming, isA<Streaming>());
+        final streaming = updated.streaming as Streaming;
+        expect(streaming.text, 'Hello');
+        expect(streaming.messageId, 'msg-1');
       });
 
-      test('clears streaming when text is null', () {
-        final streaming = conversation.withStreamingText('Hello', 'msg-1');
-        final cleared = streaming.withStreamingText(null, null);
+      test('clears streaming state', () {
+        final streaming = conversation.withStreaming(
+          const Streaming(text: 'Hello', messageId: 'msg-1'),
+        );
+        final cleared = streaming.withStreaming(const NotStreaming());
 
-        expect(cleared.streamingText, isNull);
-        expect(cleared.streamingMessageId, isNull);
+        expect(cleared.streaming, isA<NotStreaming>());
       });
 
-      test('appends to existing streaming text', () {
+      test('updates streaming text', () {
         final updated = conversation
-            .withStreamingText('Hello', 'msg-1')
-            .withStreamingText('Hello world', 'msg-1');
+            .withStreaming(const Streaming(text: 'Hello', messageId: 'msg-1'))
+            .withStreaming(
+              const Streaming(text: 'Hello world', messageId: 'msg-1'),
+            );
 
-        expect(updated.streamingText, 'Hello world');
-        expect(updated.streamingMessageId, 'msg-1');
+        expect(updated.streaming, isA<Streaming>());
+        final streaming = updated.streaming as Streaming;
+        expect(streaming.text, 'Hello world');
+        expect(streaming.messageId, 'msg-1');
+      });
+    });
+
+    group('isStreaming', () {
+      test('returns false when not streaming', () {
+        expect(conversation.isStreaming, isFalse);
+      });
+
+      test('returns true when streaming', () {
+        final streaming = conversation.withStreaming(
+          const Streaming(text: 'Hello', messageId: 'msg-1'),
+        );
+        expect(streaming.isStreaming, isTrue);
       });
     });
 
@@ -137,20 +158,23 @@ void main() {
     group('copyWith', () {
       test('creates copy with modified fields', () {
         final updated = conversation.copyWith(
-          streamingText: 'test',
-          streamingMessageId: 'msg-1',
+          streaming: const Streaming(text: 'test', messageId: 'msg-1'),
         );
 
         expect(updated.threadId, conversation.threadId);
-        expect(updated.streamingText, 'test');
-        expect(updated.streamingMessageId, 'msg-1');
+        expect(updated.streaming, isA<Streaming>());
+        final streaming = updated.streaming as Streaming;
+        expect(streaming.text, 'test');
+        expect(streaming.messageId, 'msg-1');
       });
 
       test('preserves unmodified fields', () {
         final withMessage = conversation.withAppendedMessage(
           TextMessage.create(id: 'msg-1', user: ChatUser.user, text: 'Hi'),
         );
-        final updated = withMessage.copyWith(streamingText: 'test');
+        final updated = withMessage.copyWith(
+          streaming: const Streaming(text: 'test', messageId: 'msg-2'),
+        );
 
         expect(updated.messages, hasLength(1));
       });
@@ -166,6 +190,35 @@ void main() {
         final other = Conversation.empty(threadId: 'thread-2');
         expect(conversation, isNot(equals(other)));
       });
+    });
+  });
+
+  group('StreamingState', () {
+    test('NotStreaming is default', () {
+      const state = NotStreaming();
+      expect(state, isA<StreamingState>());
+    });
+
+    test('Streaming contains text and messageId', () {
+      const state = Streaming(text: 'Hello', messageId: 'msg-1');
+      expect(state.text, 'Hello');
+      expect(state.messageId, 'msg-1');
+    });
+
+    test('Streaming equality', () {
+      const state1 = Streaming(text: 'Hello', messageId: 'msg-1');
+      const state2 = Streaming(text: 'Hello', messageId: 'msg-1');
+      const state3 = Streaming(text: 'World', messageId: 'msg-1');
+
+      expect(state1, equals(state2));
+      expect(state1, isNot(equals(state3)));
+    });
+
+    test('NotStreaming equality', () {
+      const state1 = NotStreaming();
+      const state2 = NotStreaming();
+
+      expect(state1, equals(state2));
     });
   });
 

@@ -2,6 +2,68 @@ import 'package:meta/meta.dart';
 
 import 'package:soliplex_client/src/domain/chat_message.dart';
 
+/// State of message streaming.
+///
+/// Use pattern matching for exhaustive handling:
+/// ```dart
+/// switch (streaming) {
+///   case NotStreaming():
+///     // No message being streamed
+///   case Streaming(:final text, :final messageId):
+///     // Message is streaming
+/// }
+/// ```
+@immutable
+sealed class StreamingState {
+  const StreamingState();
+}
+
+/// No message is currently streaming.
+@immutable
+class NotStreaming extends StreamingState {
+  /// Creates a not-streaming state.
+  const NotStreaming();
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is NotStreaming && runtimeType == other.runtimeType;
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() => 'NotStreaming()';
+}
+
+/// A message is currently streaming.
+@immutable
+class Streaming extends StreamingState {
+  /// Creates a streaming state with the given [text] and [messageId].
+  const Streaming({required this.text, required this.messageId});
+
+  /// The text accumulated so far.
+  final String text;
+
+  /// The ID of the message being streamed.
+  final String messageId;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Streaming &&
+          runtimeType == other.runtimeType &&
+          text == other.text &&
+          messageId == other.messageId;
+
+  @override
+  int get hashCode => Object.hash(runtimeType, text, messageId);
+
+  @override
+  String toString() =>
+      'Streaming(messageId: $messageId, text: ${text.length} chars)';
+}
+
 /// Status of a conversation.
 ///
 /// Use pattern matching for exhaustive handling:
@@ -145,8 +207,7 @@ class Conversation {
     required this.threadId,
     this.messages = const [],
     this.toolCalls = const [],
-    this.streamingText,
-    this.streamingMessageId,
+    this.streaming = const NotStreaming(),
     this.status = const Idle(),
   });
 
@@ -164,11 +225,8 @@ class Conversation {
   /// Tool calls history (not displayed to user).
   final List<ToolCallInfo> toolCalls;
 
-  /// Text currently being streamed (null if not streaming).
-  final String? streamingText;
-
-  /// ID of the message being streamed (null if not streaming).
-  final String? streamingMessageId;
+  /// Current streaming state.
+  final StreamingState streaming;
 
   /// Current status of the conversation.
   final ConversationStatus status;
@@ -177,7 +235,7 @@ class Conversation {
   bool get isRunning => status is Running;
 
   /// Whether text is currently streaming.
-  bool get isStreaming => streamingText != null;
+  bool get isStreaming => streaming is Streaming;
 
   /// Returns a new conversation with the message appended.
   Conversation withAppendedMessage(ChatMessage message) {
@@ -185,19 +243,8 @@ class Conversation {
   }
 
   /// Returns a new conversation with updated streaming state.
-  ///
-  /// Pass null for both parameters to clear streaming state.
-  Conversation withStreamingText(String? text, String? messageId) {
-    if (text == null && messageId == null) {
-      return copyWith(
-        clearStreamingText: true,
-        clearStreamingMessageId: true,
-      );
-    }
-    return copyWith(
-      streamingText: text,
-      streamingMessageId: messageId,
-    );
+  Conversation withStreaming(StreamingState newStreaming) {
+    return copyWith(streaming: newStreaming);
   }
 
   /// Returns a new conversation with the tool call added.
@@ -211,28 +258,18 @@ class Conversation {
   }
 
   /// Creates a copy with the given fields replaced.
-  ///
-  /// For nullable fields (streamingText, streamingMessageId), use the
-  /// corresponding clear parameters to explicitly set them to null.
   Conversation copyWith({
     String? threadId,
     List<ChatMessage>? messages,
     List<ToolCallInfo>? toolCalls,
-    String? streamingText,
-    bool clearStreamingText = false,
-    String? streamingMessageId,
-    bool clearStreamingMessageId = false,
+    StreamingState? streaming,
     ConversationStatus? status,
   }) {
     return Conversation(
       threadId: threadId ?? this.threadId,
       messages: messages ?? this.messages,
       toolCalls: toolCalls ?? this.toolCalls,
-      streamingText:
-          clearStreamingText ? null : (streamingText ?? this.streamingText),
-      streamingMessageId: clearStreamingMessageId
-          ? null
-          : (streamingMessageId ?? this.streamingMessageId),
+      streaming: streaming ?? this.streaming,
       status: status ?? this.status,
     );
   }
@@ -251,5 +288,6 @@ class Conversation {
   String toString() => 'Conversation(threadId: $threadId, '
       'messages: ${messages.length}, '
       'toolCalls: ${toolCalls.length}, '
+      'streaming: $streaming, '
       'status: $status)';
 }
