@@ -202,9 +202,10 @@ void main() {
           cancelToken: any(named: 'cancelToken'),
         ),
       ).thenAnswer(
-        (_) async => const RunInfo(
+        (_) async => RunInfo(
           id: 'backend-run-id-123',
           threadId: 'thread-1',
+          createdAt: DateTime.now(),
         ),
       );
 

@@ -107,8 +107,8 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
     final room = ref.watch(currentRoomProvider);
     final thread = ref.watch(currentThreadProvider);
 
-    if (room != null && thread?.name != null) {
-      return thread!.name!;
+    if (room != null && thread != null && thread.hasName) {
+      return thread.name;
     } else if (room != null) {
       return room.name;
     } else {

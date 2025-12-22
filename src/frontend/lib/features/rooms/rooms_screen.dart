@@ -42,7 +42,7 @@ class RoomsScreen extends ConsumerWidget {
                 leading: const Icon(Icons.meeting_room),
                 title: Text(room.name),
                 subtitle:
-                    room.description != null ? Text(room.description!) : null,
+                    room.hasDescription ? Text(room.description) : null,
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   ref.read(currentRoomIdProvider.notifier).set(room.id);

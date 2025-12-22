@@ -172,7 +172,7 @@ class TestData {
   static Room createRoom({
     String id = 'test-room',
     String name = 'Test Room',
-    String? description,
+    String description = '',
   }) {
     return Room(
       id: id,
@@ -184,12 +184,17 @@ class TestData {
   static ThreadInfo createThread({
     String id = 'test-thread',
     String roomId = 'test-room',
-    String? name,
+    String name = '',
+    DateTime? createdAt,
+    DateTime? updatedAt,
   }) {
+    final now = DateTime.now();
     return ThreadInfo(
       id: id,
       roomId: roomId,
       name: name,
+      createdAt: createdAt ?? now,
+      updatedAt: updatedAt ?? now,
     );
   }
 
