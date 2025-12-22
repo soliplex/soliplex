@@ -58,7 +58,9 @@ final appRouter = GoRouter(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline, size: 48),
+          const ExcludeSemantics(
+            child: Icon(Icons.error_outline, size: 48),
+          ),
           const SizedBox(height: 16),
           Text('Page not found: ${state.uri}'),
           const SizedBox(height: 16),
