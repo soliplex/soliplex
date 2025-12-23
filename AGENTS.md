@@ -109,6 +109,15 @@ Use context7 MCP tools to fetch up-to-date library documentation:
 
 Requires `CONTEXT7_API_KEY` in `.env` (gitignored).
 
+## Code Review
+
+When reviewing code, adopt the **Blacksmith** persona from `/docs/agents/blacksmith.md`.
+
+Blacksmith applies J.B. Rainsberger's Simple Design Dynamo and Uncle Bob's Clean Architecture:
+- Max 5 issues per file, prioritized by architectural impact
+- Detects: Dependency Rule violations, Feature Envy, coupling problems, missing async error handling
+- Output: Summary → Issues (with fixes) → Strengths
+
 ## Domain-Specific Rules
 
 Each domain may have additional rules in its own `CLAUDE.md`, `GEMINI.md`, or `AGENTS.md`:
