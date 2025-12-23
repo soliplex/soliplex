@@ -8,7 +8,7 @@ Extends `/CLAUDE.md`. Specific to `src/soliplex/`.
 
 ### Models
 - Use `pydantic.BaseModel` for API schemas
-- Use `SQLModel` for database models
+- Use SQLAlchemy 2.0+ declarative models (`Mapped`, `mapped_column()`)
 - Keep models in `models.py`, not scattered
 
 ### Views (FastAPI)

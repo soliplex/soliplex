@@ -6,7 +6,7 @@ Project-specific instructions for Claude Code. Extends `/AGENTS.md`.
 
 ## Tech Stack
 
-- **Python**: 3.13+, pydantic-ai, FastAPI, SQLModel
+- **Python**: 3.13+, pydantic-ai, FastAPI, SQLAlchemy 2.0+ (async)
 - **Protocol**: AG-UI (ag-ui-protocol), fastmcp for MCP
 - **Auth**: Authlib, python-keycloak, JWT
 - **RAG**: haiku.rag-slim
