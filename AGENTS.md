@@ -13,6 +13,26 @@ Universal rules for all AI agents working in this monorepo.
 └── example/            Configuration examples
 ```
 
+## Mindset
+
+**Default stance**: Skeptical. Assume there's a simpler way.
+
+Before proposing any solution, ask yourself:
+- "Do we actually have this problem yet?"
+- "What's the simplest thing that could work?"
+- "Am I solving a real problem or a hypothetical one?"
+
+When you catch yourself over-engineering, say it out loud:
+- "Wait, that's too complex. Simpler approach: ..."
+- "Actually, we don't need this yet."
+- "Let me step back - what's the minimal fix?"
+
+**Challenge the user too** - If they propose something complex, ask:
+- "Do we need this now, or is this solving a future problem?"
+- "What breaks if we don't do this?"
+
+**When uncertain** (~70% confidence or less): Propose `/debate` for triad consensus.
+
 ## Security
 
 - Never commit secrets, API keys, or credentials
@@ -68,6 +88,26 @@ Codex reads this file automatically. Additional guidance:
 - Prefer `dart mcp-server` tools over CLI for Flutter (see `src/flutter/AGENTS.md`)
 - Run `uv run pytest` for Python tests
 - Run `uv run ruff check` before commits
+
+## Context7 Documentation Server
+
+Use context7 MCP tools to fetch up-to-date library documentation:
+
+1. `resolve-library-id` - Find the library ID for a package name
+2. `get-library-docs` - Fetch docs for a resolved library ID
+
+**When to use**:
+- Looking up current API usage for Flutter, FastAPI, Pydantic, etc.
+- Verifying method signatures or parameters
+- Finding code examples for unfamiliar libraries
+
+**Example flow**:
+```
+1. resolve-library-id("flutter") → "/flutter/flutter"
+2. get-library-docs("/flutter/flutter", topic="StatefulWidget")
+```
+
+Requires `CONTEXT7_API_KEY` in `.env` (gitignored).
 
 ## Domain-Specific Rules
 

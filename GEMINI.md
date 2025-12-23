@@ -2,6 +2,8 @@
 
 Project-specific instructions for Gemini. Extends `/AGENTS.md`.
 
+**Remember**: Default skeptical. "Do we need this yet?" "What's the simplest fix?"
+
 ## Your Role
 
 Gemini excels at:
@@ -54,6 +56,7 @@ Hand off to Claude when the task requires:
 - `/docs/config/agents.md` - Agent configuration
 - `/example/*.yaml` - Configuration examples
 - `/agents-monorepo.md` - Multi-agent strategy
+- Use `context7` MCP tools for up-to-date library docs (see `/AGENTS.md`)
 
 ## Domain Subconfigs
 

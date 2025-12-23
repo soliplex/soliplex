@@ -6,6 +6,9 @@ description: Run a 3-agent debate (Claude, Gemini, Codex) on a topic
 
 Run an isolated vote across all three agents on a decision or question.
 
+**Requires materials review** - User must approve context before agents vote.
+**Agent commands pre-approved** - codex/gemini execution doesn't need tool confirmation.
+
 ## Usage
 
 ```
@@ -14,14 +17,29 @@ Run an isolated vote across all three agents on a decision or question.
 
 ## Instructions
 
-1. **Format the debate prompt** for each agent:
+1. **Present materials for review** before running the debate:
+   ```
+   ## Debate Materials
+
+   **Question**: <the question being debated>
+
+   **Context provided to agents**:
+   - <bullet list of relevant context, files, or findings>
+   - <that will be shared with all agents>
+
+   **Proceed with debate?** [Yes/No]
+   ```
+
+   Wait for user confirmation before continuing.
+
+2. **Format the debate prompt** for each agent:
    ```
    DEBATE: <user's question>
    Context: <any relevant context from conversation>
    Vote YES or NO with one sentence reason.
    ```
 
-2. **Run agents in isolation** (they should not see each other's responses):
+3. **Run agents in isolation** (they should not see each other's responses):
 
    **Codex:**
    ```bash
@@ -35,7 +53,7 @@ Run an isolated vote across all three agents on a decision or question.
 
    **Claude:** Vote directly (you are Claude)
 
-3. **Tally results** in a table:
+4. **Tally results** in a table:
    ```
    | Agent  | Vote | Reason |
    |--------|------|--------|
@@ -46,7 +64,7 @@ Run an isolated vote across all three agents on a decision or question.
    **Result: X-Y <outcome>**
    ```
 
-4. **Announce winner** and any recommended action.
+5. **Announce winner** and any recommended action.
 
 ## Example
 

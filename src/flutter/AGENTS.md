@@ -2,6 +2,8 @@
 
 Extends `/AGENTS.md`. Specific to `src/flutter/`.
 
+**Remember**: Default skeptical. "Do we need this yet?" "What's the simplest fix?"
+
 ## Tool Preferences
 
 Prefer `dart mcp-server` (stdio) tools over CLI:

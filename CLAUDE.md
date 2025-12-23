@@ -2,6 +2,8 @@
 
 Project-specific instructions for Claude Code. Extends `/AGENTS.md`.
 
+**Remember**: Default skeptical. "Do we need this yet?" "What's the simplest fix?"
+
 ## Tech Stack
 
 - **Python**: 3.13+, pydantic-ai, FastAPI, SQLModel
@@ -59,6 +61,7 @@ src/soliplex/
 - `/docs/config/agents.md` - Agent configuration reference
 - `/example/*.yaml` - Configuration examples
 - `/agents-monorepo.md` - Multi-agent strategy (reference only)
+- Use `context7` MCP tools for up-to-date library docs (see `/AGENTS.md`)
 
 ## Domain Subconfigs
 

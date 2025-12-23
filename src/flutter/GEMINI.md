@@ -2,7 +2,7 @@
 
 Extends `/GEMINI.md` and `/AGENTS.md`. Specific to the Flutter frontend.
 
-Project-specific instructions for Gemini when working on this codebase.
+**Remember**: Default skeptical. "Do we need this yet?" "What's the simplest fix?"
 
 ## Your Role in Flutter Work
 

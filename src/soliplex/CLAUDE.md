@@ -2,6 +2,8 @@
 
 Extends `/CLAUDE.md`. Specific to `src/soliplex/`.
 
+**Remember**: Default skeptical. "Do we need this yet?" "What's the simplest fix?"
+
 ## Code Patterns
 
 ### Models
