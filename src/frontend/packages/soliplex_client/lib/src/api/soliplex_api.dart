@@ -1,8 +1,9 @@
+import 'package:soliplex_client/src/api/mappers.dart';
+import 'package:soliplex_client/src/domain/room.dart';
+import 'package:soliplex_client/src/domain/run_info.dart';
+import 'package:soliplex_client/src/domain/thread_info.dart';
 import 'package:soliplex_client/src/errors/exceptions.dart';
 import 'package:soliplex_client/src/http/http_transport.dart';
-import 'package:soliplex_client/src/models/room.dart';
-import 'package:soliplex_client/src/models/run_info.dart';
-import 'package:soliplex_client/src/models/thread_info.dart';
 import 'package:soliplex_client/src/utils/cancel_token.dart';
 import 'package:soliplex_client/src/utils/url_builder.dart';
 
@@ -67,7 +68,7 @@ class SoliplexApi {
     // Backend returns a map of room_id -> room object
     // Convert to list of Room objects
     return response.values
-        .map((e) => Room.fromJson(e as Map<String, dynamic>))
+        .map((e) => roomFromJson(e as Map<String, dynamic>))
         .toList();
   }
 
@@ -92,7 +93,7 @@ class SoliplexApi {
       'GET',
       _urlBuilder.build(pathSegments: ['rooms', roomId]),
       cancelToken: cancelToken,
-      fromJson: Room.fromJson,
+      fromJson: roomFromJson,
     );
   }
 
@@ -131,7 +132,7 @@ class SoliplexApi {
     // Backend returns {"threads": [...]} - extract the threads array
     final threads = response['threads'] as List<dynamic>;
     return threads
-        .map((e) => ThreadInfo.fromJson(e as Map<String, dynamic>))
+        .map((e) => threadInfoFromJson(e as Map<String, dynamic>))
         .toList();
   }
 
@@ -162,7 +163,7 @@ class SoliplexApi {
       'GET',
       _urlBuilder.build(pathSegments: ['rooms', roomId, 'agui', threadId]),
       cancelToken: cancelToken,
-      fromJson: ThreadInfo.fromJson,
+      fromJson: threadInfoFromJson,
     );
   }
 
@@ -206,10 +207,13 @@ class SoliplexApi {
     }
 
     // Normalize response: backend returns thread_id, we use id
+    final now = DateTime.now();
     return ThreadInfo(
       id: response['thread_id'] as String,
       roomId: roomId,
-      initialRunId: initialRunId,
+      initialRunId: initialRunId ?? '',
+      createdAt: now,
+      updatedAt: now,
     );
   }
 
@@ -279,6 +283,7 @@ class SoliplexApi {
     return RunInfo(
       id: response['run_id'] as String,
       threadId: threadId,
+      createdAt: DateTime.now(),
     );
   }
 
@@ -314,7 +319,7 @@ class SoliplexApi {
         pathSegments: ['rooms', roomId, 'agui', threadId, runId],
       ),
       cancelToken: cancelToken,
-      fromJson: RunInfo.fromJson,
+      fromJson: runInfoFromJson,
     );
   }
 

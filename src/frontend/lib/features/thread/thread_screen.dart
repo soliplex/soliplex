@@ -54,7 +54,8 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
       if (widget.threadId == 'new') {
         ref.read(threadSelectionProvider.notifier).set(const NewThreadIntent());
       } else {
-        ref.read(threadSelectionProvider.notifier)
+        ref
+            .read(threadSelectionProvider.notifier)
             .set(ThreadSelected(widget.threadId));
       }
     });
@@ -107,8 +108,8 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
     final room = ref.watch(currentRoomProvider);
     final thread = ref.watch(currentThreadProvider);
 
-    if (room != null && thread?.name != null) {
-      return thread!.name!;
+    if (room != null && thread != null && thread.hasName) {
+      return thread.name;
     } else if (room != null) {
       return room.name;
     } else {

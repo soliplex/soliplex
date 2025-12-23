@@ -207,8 +207,7 @@ void main() {
         expect(find.byType(MarkdownBody), findsOneWidget);
       });
 
-      testWidgets('does not render markdown for user messages',
-          (tester) async {
+      testWidgets('does not render markdown for user messages', (tester) async {
         // Arrange
         final message = TestData.createMessage(
           text: '**bold** and *italic* text',
@@ -257,6 +256,7 @@ void main() {
       testWidgets('displays system message centered', (tester) async {
         // Arrange
         final message = ErrorMessage.create(
+          id: 'error-1',
           message: 'Operation cancelled',
         );
 
@@ -278,6 +278,7 @@ void main() {
           (tester) async {
         // Arrange
         final message = ErrorMessage.create(
+          id: 'error-2',
           message: 'System notification',
         );
 
@@ -308,6 +309,7 @@ void main() {
       testWidgets('displays error message', (tester) async {
         // Arrange
         final message = ErrorMessage.create(
+          id: 'error-3',
           message: 'Something went wrong',
         );
 

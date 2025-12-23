@@ -8,8 +8,9 @@ void main() {
 
       expect(room.id, equals('room-1'));
       expect(room.name, equals('Test Room'));
-      expect(room.description, isNull);
-      expect(room.metadata, isNull);
+      expect(room.description, equals(''));
+      expect(room.metadata, equals(const <String, dynamic>{}));
+      expect(room.hasDescription, isFalse);
     });
 
     test('creates with all fields', () {
@@ -24,84 +25,7 @@ void main() {
       expect(room.name, equals('Test Room'));
       expect(room.description, equals('A test room'));
       expect(room.metadata, equals({'key': 'value'}));
-    });
-
-    group('fromJson', () {
-      test('parses correctly with all fields', () {
-        final json = <String, dynamic>{
-          'id': 'room-1',
-          'name': 'Test Room',
-          'description': 'A test room',
-          'metadata': {'key': 'value'},
-        };
-
-        final room = Room.fromJson(json);
-
-        expect(room.id, equals('room-1'));
-        expect(room.name, equals('Test Room'));
-        expect(room.description, equals('A test room'));
-        expect(room.metadata, equals({'key': 'value'}));
-      });
-
-      test('parses correctly with only required fields', () {
-        final json = <String, dynamic>{
-          'id': 'room-1',
-          'name': 'Test Room',
-        };
-
-        final room = Room.fromJson(json);
-
-        expect(room.id, equals('room-1'));
-        expect(room.name, equals('Test Room'));
-        expect(room.description, isNull);
-        expect(room.metadata, isNull);
-      });
-    });
-
-    group('toJson', () {
-      test('serializes correctly with all fields', () {
-        const room = Room(
-          id: 'room-1',
-          name: 'Test Room',
-          description: 'A test room',
-          metadata: {'key': 'value'},
-        );
-
-        final json = room.toJson();
-
-        expect(json['id'], equals('room-1'));
-        expect(json['name'], equals('Test Room'));
-        expect(json['description'], equals('A test room'));
-        expect(json['metadata'], equals({'key': 'value'}));
-      });
-
-      test('excludes null fields', () {
-        const room = Room(id: 'room-1', name: 'Test Room');
-
-        final json = room.toJson();
-
-        expect(json.containsKey('id'), isTrue);
-        expect(json.containsKey('name'), isTrue);
-        expect(json.containsKey('description'), isFalse);
-        expect(json.containsKey('metadata'), isFalse);
-      });
-    });
-
-    test('roundtrip serialization', () {
-      const original = Room(
-        id: 'room-1',
-        name: 'Test Room',
-        description: 'A test room',
-        metadata: {'key': 'value'},
-      );
-
-      final json = original.toJson();
-      final restored = Room.fromJson(json);
-
-      expect(restored.id, equals(original.id));
-      expect(restored.name, equals(original.name));
-      expect(restored.description, equals(original.description));
-      expect(restored.metadata, equals(original.metadata));
+      expect(room.hasDescription, isTrue);
     });
 
     group('copyWith', () {

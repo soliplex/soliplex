@@ -42,16 +42,14 @@ class ThreadListItem extends StatelessWidget {
   final VoidCallback onTap;
 
   String _getTitle() {
-    if (thread.name != null && thread.name!.isNotEmpty) {
-      return thread.name!;
+    if (thread.hasName) {
+      return thread.name;
     }
     return 'Thread ${getShortId(thread.id)}';
   }
 
-  String? _getSubtitle() {
-    final timestamp = thread.updatedAt ?? thread.createdAt;
-    if (timestamp == null) return null;
-    return formatRelativeTime(timestamp);
+  String _getSubtitle() {
+    return formatRelativeTime(thread.updatedAt);
   }
 
   @override
@@ -88,16 +86,14 @@ class ThreadListItem extends StatelessWidget {
           color: isSelected ? colorScheme.primary : null,
         ),
       ),
-      subtitle: _getSubtitle() != null
-          ? Text(
-              _getSubtitle()!,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: isSelected
-                    ? colorScheme.primary.withValues(alpha: 0.7)
-                    : colorScheme.onSurfaceVariant,
-              ),
-            )
-          : null,
+      subtitle: Text(
+        _getSubtitle(),
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: isSelected
+              ? colorScheme.primary.withValues(alpha: 0.7)
+              : colorScheme.onSurfaceVariant,
+        ),
+      ),
       trailing: isSelected
           ? ExcludeSemantics(
               child: Icon(

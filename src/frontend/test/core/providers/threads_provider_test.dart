@@ -20,10 +20,26 @@ void main() {
     test('returns list of threads from API', () async {
       // Arrange
       const roomId = 'general';
+      final now = DateTime.now();
       final mockThreads = [
-        const ThreadInfo(id: 'thread1', roomId: roomId),
-        const ThreadInfo(id: 'thread2', roomId: roomId),
-        const ThreadInfo(id: 'thread3', roomId: roomId),
+        ThreadInfo(
+          id: 'thread1',
+          roomId: roomId,
+          createdAt: now,
+          updatedAt: now,
+        ),
+        ThreadInfo(
+          id: 'thread2',
+          roomId: roomId,
+          createdAt: now,
+          updatedAt: now,
+        ),
+        ThreadInfo(
+          id: 'thread3',
+          roomId: roomId,
+          createdAt: now,
+          updatedAt: now,
+        ),
       ];
       when(() => mockApi.getThreads(roomId))
           .thenAnswer((_) async => mockThreads);

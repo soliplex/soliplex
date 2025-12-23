@@ -391,7 +391,12 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => const ThreadInfo(id: 'thread-123', roomId: 'room-123'),
+          (_) async => ThreadInfo(
+            id: 'thread-123',
+            roomId: 'room-123',
+            createdAt: DateTime(2025),
+            updatedAt: DateTime(2025),
+          ),
         );
 
         final thread = await api.getThread('room-123', 'thread-123');
@@ -447,7 +452,12 @@ void main() {
           ),
         ).thenAnswer((invocation) async {
           capturedUri = invocation.positionalArguments[1] as Uri;
-          return const ThreadInfo(id: 'thread-123', roomId: 'room-123');
+          return ThreadInfo(
+            id: 'thread-123',
+            roomId: 'room-123',
+            createdAt: DateTime(2025),
+            updatedAt: DateTime(2025),
+          );
         });
 
         await api.getThread('room-123', 'thread-456');
@@ -757,7 +767,11 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => const RunInfo(id: 'run-789', threadId: 'thread-456'),
+          (_) async => RunInfo(
+            id: 'run-789',
+            threadId: 'thread-456',
+            createdAt: DateTime(2025),
+          ),
         );
 
         final run = await api.getRun('room-123', 'thread-456', 'run-789');
@@ -820,7 +834,11 @@ void main() {
           ),
         ).thenAnswer((invocation) async {
           capturedUri = invocation.positionalArguments[1] as Uri;
-          return const RunInfo(id: 'run-789', threadId: 'thread-456');
+          return RunInfo(
+            id: 'run-789',
+            threadId: 'thread-456',
+            createdAt: DateTime(2025),
+          );
         });
 
         await api.getRun('room-123', 'thread-456', 'run-789');

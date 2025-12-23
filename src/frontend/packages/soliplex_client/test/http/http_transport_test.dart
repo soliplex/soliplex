@@ -6,6 +6,7 @@ import 'package:mocktail/mocktail.dart';
 // HttpTransport uses our local CancelToken, not ag_ui's.
 // Hide ag_ui's CancelToken to avoid ambiguity.
 import 'package:soliplex_client/soliplex_client.dart' hide CancelToken;
+import 'package:soliplex_client/src/api/mappers.dart';
 import 'package:soliplex_client/src/utils/cancel_token.dart';
 import 'package:test/test.dart';
 
@@ -121,7 +122,7 @@ void main() {
         final result = await transport.request<Room>(
           'GET',
           Uri.parse('https://api.example.com/rooms/1'),
-          fromJson: Room.fromJson,
+          fromJson: roomFromJson,
         );
 
         expect(result.name, equals('Test Room'));
