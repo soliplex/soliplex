@@ -15,25 +15,6 @@ class ThreadInfo {
     this.metadata = const {},
   });
 
-  /// Creates thread info from JSON.
-  factory ThreadInfo.fromJson(Map<String, dynamic> json) {
-    final createdAt = json['created_at'] != null
-        ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now()
-        : DateTime.now();
-    return ThreadInfo(
-      id: json['id'] as String? ?? json['thread_id'] as String,
-      roomId: json['room_id'] as String? ?? '',
-      initialRunId: (json['initial_run_id'] as String?) ?? '',
-      name: (json['name'] as String?) ?? '',
-      description: (json['description'] as String?) ?? '',
-      createdAt: createdAt,
-      updatedAt: json['updated_at'] != null
-          ? DateTime.tryParse(json['updated_at'] as String) ?? createdAt
-          : createdAt,
-      metadata: (json['metadata'] as Map<String, dynamic>?) ?? const {},
-    );
-  }
-
   /// Unique identifier for the thread.
   final String id;
 
@@ -66,20 +47,6 @@ class ThreadInfo {
 
   /// Whether the thread has a description.
   bool get hasDescription => description.isNotEmpty;
-
-  /// Converts the thread info to JSON.
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'room_id': roomId,
-      if (initialRunId.isNotEmpty) 'initial_run_id': initialRunId,
-      if (name.isNotEmpty) 'name': name,
-      if (description.isNotEmpty) 'description': description,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
-      if (metadata.isNotEmpty) 'metadata': metadata,
-    };
-  }
 
   /// Creates a copy of this thread info with the given fields replaced.
   ThreadInfo copyWith({

@@ -71,26 +71,6 @@ class RunInfo {
     this.metadata = const {},
   });
 
-  /// Creates run info from JSON.
-  factory RunInfo.fromJson(Map<String, dynamic> json) {
-    return RunInfo(
-      id: json['id'] as String? ?? json['run_id'] as String,
-      threadId: json['thread_id'] as String? ?? '',
-      label: (json['label'] as String?) ?? '',
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now()
-          : DateTime.now(),
-      completion: json['completed_at'] != null
-          ? CompletedAt(
-              DateTime.tryParse(json['completed_at'] as String) ??
-                  DateTime.now(),
-            )
-          : const NotCompleted(),
-      status: RunStatus.fromString(json['status'] as String?),
-      metadata: (json['metadata'] as Map<String, dynamic>?) ?? const {},
-    );
-  }
-
   /// Unique identifier for the run.
   final String id;
 
@@ -117,20 +97,6 @@ class RunInfo {
 
   /// Whether the run has completed.
   bool get isCompleted => completion is CompletedAt;
-
-  /// Converts the run info to JSON.
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'thread_id': threadId,
-      if (label.isNotEmpty) 'label': label,
-      'created_at': createdAt.toIso8601String(),
-      if (completion case CompletedAt(:final time))
-        'completed_at': time.toIso8601String(),
-      'status': status.name,
-      if (metadata.isNotEmpty) 'metadata': metadata,
-    };
-  }
 
   /// Creates a copy of this run info with the given fields replaced.
   RunInfo copyWith({
@@ -181,14 +147,5 @@ enum RunStatus {
   failed,
 
   /// Run was cancelled.
-  cancelled;
-
-  /// Creates a RunStatus from a string value.
-  static RunStatus fromString(String? value) {
-    if (value == null) return RunStatus.pending;
-    return RunStatus.values.firstWhere(
-      (e) => e.name == value.toLowerCase(),
-      orElse: () => RunStatus.pending,
-    );
-  }
+  cancelled,
 }

@@ -11,16 +11,6 @@ class Room {
     this.metadata = const {},
   });
 
-  /// Creates a room from JSON.
-  factory Room.fromJson(Map<String, dynamic> json) {
-    return Room(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      description: (json['description'] as String?) ?? '',
-      metadata: (json['metadata'] as Map<String, dynamic>?) ?? const {},
-    );
-  }
-
   /// Unique identifier for the room.
   final String id;
 
@@ -35,16 +25,6 @@ class Room {
 
   /// Whether the room has a description.
   bool get hasDescription => description.isNotEmpty;
-
-  /// Converts the room to JSON.
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      if (description.isNotEmpty) 'description': description,
-      if (metadata.isNotEmpty) 'metadata': metadata,
-    };
-  }
 
   /// Creates a copy of this room with the given fields replaced.
   Room copyWith({
