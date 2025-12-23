@@ -127,7 +127,7 @@ void main() {
     });
 
     group('equality', () {
-      test('equal based on id and roomId', () {
+      test('equal based on id only', () {
         final thread1 = ThreadInfo(
           id: 'thread-1',
           roomId: 'room-1',
@@ -158,7 +158,7 @@ void main() {
         );
 
         expect(thread1, equals(thread2));
-        expect(thread1, isNot(equals(thread3)));
+        expect(thread1, equals(thread3));
         expect(thread1, isNot(equals(thread4)));
       });
 
@@ -173,7 +173,7 @@ void main() {
       });
     });
 
-    test('hashCode based on id and roomId', () {
+    test('hashCode based on id only', () {
       final thread1 = ThreadInfo(
         id: 'thread-1',
         roomId: 'room-1',
@@ -183,7 +183,7 @@ void main() {
       );
       final thread2 = ThreadInfo(
         id: 'thread-1',
-        roomId: 'room-1',
+        roomId: 'room-2',
         name: 'Thread 2',
         createdAt: DateTime(2025),
         updatedAt: DateTime(2025),

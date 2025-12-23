@@ -122,11 +122,11 @@ class RunInfo {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is RunInfo && other.id == id && other.threadId == threadId;
+    return other is RunInfo && other.id == id;
   }
 
   @override
-  int get hashCode => Object.hash(id, threadId);
+  int get hashCode => id.hashCode;
 
   @override
   String toString() => 'RunInfo(id: $id, threadId: $threadId, status: $status)';

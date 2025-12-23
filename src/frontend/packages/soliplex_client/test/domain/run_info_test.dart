@@ -116,7 +116,7 @@ void main() {
     });
 
     group('equality', () {
-      test('equal based on id and threadId', () {
+      test('equal based on id only', () {
         final run1 = RunInfo(
           id: 'run-1',
           threadId: 'thread-1',
@@ -143,7 +143,7 @@ void main() {
         );
 
         expect(run1, equals(run2));
-        expect(run1, isNot(equals(run3)));
+        expect(run1, equals(run3));
         expect(run1, isNot(equals(run4)));
       });
 
@@ -157,7 +157,7 @@ void main() {
       });
     });
 
-    test('hashCode based on id and threadId', () {
+    test('hashCode based on id only', () {
       final run1 = RunInfo(
         id: 'run-1',
         threadId: 'thread-1',
@@ -166,7 +166,7 @@ void main() {
       );
       final run2 = RunInfo(
         id: 'run-1',
-        threadId: 'thread-1',
+        threadId: 'thread-2',
         label: 'Run 2',
         createdAt: DateTime(2025),
       );
