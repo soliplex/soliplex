@@ -24,23 +24,7 @@ Security and process rules from `/AGENTS.md` cannot be overridden.
 
 ## Personal Setup
 
-### 1. Declare Your Available Agents
-
-Create `.agents.local.yaml` in the project root (gitignored):
-
-```yaml
-# Which agents you have access to
-agents:
-  claude:
-    enabled: true
-    primary: true  # Your default agent
-  gemini:
-    enabled: false  # No API key
-  codex:
-    enabled: true
-```
-
-### 2. Set Up Personal Preferences
+### 1. Set Up Personal Preferences
 
 Create `~/.claude/CLAUDE.md` for your personal style preferences:
 
@@ -58,20 +42,22 @@ Create `~/.claude/CLAUDE.md` for your personal style preferences:
 
 These preferences apply across all projects.
 
-### 3. Configure API Keys
+### 2. Verify CLI Access
 
-Each agent needs its API key set as an environment variable:
+Each agent should work from command line:
 
 ```bash
-# Claude (via Anthropic API or Claude Code)
-export ANTHROPIC_API_KEY="..."
+# Claude
+claude --version
 
 # Gemini
-export GEMINI_API_KEY="..."
+gemini --version
 
-# Codex/Copilot (via GitHub)
-# Configured through VS Code/IDE settings
+# Codex
+codex --version
 ```
+
+If a CLI works, you're authenticated. No extra API key setup needed.
 
 ## Fallback Strategies
 
@@ -113,7 +99,6 @@ If you only have one agent, it handles all phases. Adjust prompts accordingly:
 | `AGENTS.md` | Universal rules (all agents, Codex native) | `/AGENTS.md`, `/src/*/AGENTS.md` |
 | `CLAUDE.md` | Claude-specific project knowledge | `/CLAUDE.md`, `/src/*/CLAUDE.md` |
 | `GEMINI.md` | Gemini-specific instructions | `/GEMINI.md`, `/src/*/GEMINI.md` |
-| `.agents.local.yaml` | Your personal agent config | `/` (gitignored) |
 
 ## Simultaneous Multi-Agent Usage
 
