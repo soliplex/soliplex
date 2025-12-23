@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:soliplex_client/soliplex_client.dart' as domain
+    show Conversation, Failed, Running;
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
@@ -80,6 +82,10 @@ void main() {
     group('Streaming State', () {
       testWidgets('shows cancel button when streaming', (tester) async {
         // Arrange
+        const conversation = domain.Conversation(
+          threadId: 'test-thread',
+          status: domain.Running(runId: 'test-run'),
+        );
         await tester.pumpWidget(
           createTestApp(
             home: const Scaffold(
@@ -87,11 +93,7 @@ void main() {
             ),
             overrides: [
               activeRunNotifierOverride(
-                const RunningState(
-                  threadId: 'test-thread',
-                  runId: 'test-run',
-                  context: RunContext.empty,
-                ),
+                const RunningState(conversation: conversation),
               ),
             ],
           ),
@@ -124,6 +126,10 @@ void main() {
     group('Error State', () {
       testWidgets('shows error display when run has error', (tester) async {
         // Arrange
+        const conversation = domain.Conversation(
+          threadId: '',
+          status: domain.Failed(error: 'Something went wrong'),
+        );
         await tester.pumpWidget(
           createTestApp(
             home: const Scaffold(
@@ -132,10 +138,8 @@ void main() {
             overrides: [
               activeRunNotifierOverride(
                 const CompletedState(
-                  threadId: '',
-                  runId: '',
-                  context: RunContext.empty,
-                  result: Failed(errorMessage: 'Something went wrong'),
+                  conversation: conversation,
+                  result: FailedResult(errorMessage: 'Something went wrong'),
                 ),
               ),
             ],

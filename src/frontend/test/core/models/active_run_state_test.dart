@@ -1,172 +1,198 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_client/soliplex_client.dart';
+import 'package:soliplex_client/soliplex_client.dart' as domain
+    show Cancelled, Completed, Conversation, Failed, Running;
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 
 void main() {
-  group('RunContext', () {
-    test('empty creates context with empty collections', () {
-      const context = RunContext.empty;
-
-      expect(context.messages, isEmpty);
-      expect(context.rawEvents, isEmpty);
-      expect(context.state, isEmpty);
-      expect(context.activeToolCalls, isEmpty);
-    });
-
-    test('copyWith creates new instance with updated fields', () {
-      const original = RunContext.empty;
-      final message = TextMessage.create(
-        id: 'msg-1',
-        user: ChatUser.user,
-        text: 'Hello',
-      );
-
-      final updated = original.copyWith(
-        messages: [message],
-      );
-
-      expect(updated.messages, [message]);
-      expect(updated.rawEvents, isEmpty);
-      expect(original.messages, isEmpty);
-    });
-
-    test('equality based on all fields', () {
-      const context1 = RunContext.empty;
-      const context2 = RunContext.empty;
-      final context3 = RunContext(
-        messages: [
-          TextMessage.create(id: 'msg-1', user: ChatUser.user, text: 'Hi'),
-        ],
-      );
-
-      expect(context1, equals(context2));
-      expect(context1, isNot(equals(context3)));
-    });
-  });
-
-  group('TextStreaming', () {
-    test('NotStreaming instances are equal', () {
-      const streaming1 = NotStreaming();
-      const streaming2 = NotStreaming();
-
-      expect(streaming1, equals(streaming2));
-    });
-
-    test('Streaming equality based on messageId and text', () {
-      const streaming1 = Streaming(messageId: 'msg-1', text: 'Hello');
-      const streaming2 = Streaming(messageId: 'msg-1', text: 'Hello');
-      const streaming3 = Streaming(messageId: 'msg-2', text: 'Hello');
-      const streaming4 = Streaming(messageId: 'msg-1', text: 'World');
-
-      expect(streaming1, equals(streaming2));
-      expect(streaming1, isNot(equals(streaming3)));
-      expect(streaming1, isNot(equals(streaming4)));
-    });
-
-    test('NotStreaming is not equal to Streaming', () {
-      const notStreaming = NotStreaming();
-      const streaming = Streaming(messageId: 'msg-1', text: 'Hello');
-
-      expect(notStreaming, isNot(equals(streaming)));
-    });
-  });
-
   group('ActiveRunState', () {
     group('IdleState', () {
-      test('creates with empty context by default', () {
+      test('is a sentinel state with empty conversation', () {
         const state = IdleState();
 
-        expect(state.context, equals(RunContext.empty));
+        expect(state.conversation.threadId, isEmpty);
+        expect(state.conversation.messages, isEmpty);
+        expect(state.streaming, isA<NotStreaming>());
+      });
+
+      test('messages returns empty list', () {
+        const state = IdleState();
+
         expect(state.messages, isEmpty);
+      });
+
+      test('isRunning is false', () {
+        const state = IdleState();
+
         expect(state.isRunning, isFalse);
       });
 
-      test('creates with provided context', () {
-        final message = TextMessage.create(
-          id: 'msg-1',
-          user: ChatUser.user,
-          text: 'Previous message',
-        );
-        final context = RunContext(messages: [message]);
+      test('activeToolCalls returns empty list', () {
+        const state = IdleState();
 
-        final state = IdleState(context: context);
-
-        expect(state.messages, [message]);
+        expect(state.activeToolCalls, isEmpty);
       });
 
-      test('equality based on context', () {
+      test('equality - all IdleState instances are equal', () {
         const state1 = IdleState();
         const state2 = IdleState();
-        final state3 = IdleState(
-          context: RunContext(
-            messages: [
-              TextMessage.create(id: 'msg-1', user: ChatUser.user, text: 'Hi'),
-            ],
-          ),
-        );
 
         expect(state1, equals(state2));
-        expect(state1, isNot(equals(state3)));
       });
     });
 
     group('RunningState', () {
-      test('creates with required fields', () {
-        const state = RunningState(
+      test('creates with conversation and streaming', () {
+        const conversation = domain.Conversation(
           threadId: 'thread-1',
-          runId: 'run-1',
-          context: RunContext.empty,
+          status: domain.Running(runId: 'run-1'),
         );
 
-        expect(state.threadId, 'thread-1');
-        expect(state.runId, 'run-1');
-        expect(state.textStreaming, isA<NotStreaming>());
-        expect(state.isRunning, isTrue);
-        expect(state.isTextStreaming, isFalse);
+        const state = RunningState(
+          conversation: conversation,
+        );
+
+        expect(state.conversation, equals(conversation));
+        expect(state.streaming, isA<NotStreaming>());
       });
 
-      test('isTextStreaming returns true when streaming', () {
-        const state = RunningState(
-          threadId: 'thread-1',
-          runId: 'run-1',
-          context: RunContext.empty,
-          textStreaming: Streaming(messageId: 'msg-1', text: 'Hello'),
+      test('threadId delegates to conversation', () {
+        const conversation = domain.Conversation(
+          threadId: 'thread-123',
+          status: domain.Running(runId: 'run-1'),
         );
 
-        expect(state.isTextStreaming, isTrue);
+        const state = RunningState(conversation: conversation);
+
+        expect(state.threadId, 'thread-123');
+      });
+
+      test('runId extracts from conversation.status', () {
+        const conversation = domain.Conversation(
+          threadId: 'thread-1',
+          status: domain.Running(runId: 'run-456'),
+        );
+
+        const state = RunningState(conversation: conversation);
+
+        expect(state.runId, 'run-456');
+      });
+
+      test('isRunning is true', () {
+        const conversation = domain.Conversation(
+          threadId: 'thread-1',
+          status: domain.Running(runId: 'run-1'),
+        );
+
+        const state = RunningState(conversation: conversation);
+
+        expect(state.isRunning, isTrue);
+      });
+
+      test('isStreaming returns false when NotStreaming', () {
+        const conversation = domain.Conversation(
+          threadId: 'thread-1',
+          status: domain.Running(runId: 'run-1'),
+        );
+
+        const state = RunningState(
+          conversation: conversation,
+        );
+
+        expect(state.isStreaming, isFalse);
+      });
+
+      test('isStreaming returns true when Streaming', () {
+        const conversation = domain.Conversation(
+          threadId: 'thread-1',
+          status: domain.Running(runId: 'run-1'),
+        );
+
+        const state = RunningState(
+          conversation: conversation,
+          streaming: Streaming(messageId: 'msg-1', text: 'Hello'),
+        );
+
+        expect(state.isStreaming, isTrue);
+      });
+
+      test('messages delegates to conversation', () {
+        final message = TextMessage.create(
+          id: 'msg-1',
+          user: ChatUser.user,
+          text: 'Hello',
+        );
+        final conversation = domain.Conversation(
+          threadId: 'thread-1',
+          messages: [message],
+          status: const domain.Running(runId: 'run-1'),
+        );
+
+        final state = RunningState(conversation: conversation);
+
+        expect(state.messages, [message]);
+      });
+
+      test('activeToolCalls delegates to conversation', () {
+        const toolCall = ToolCallInfo(id: 'tc-1', name: 'search');
+        const conversation = domain.Conversation(
+          threadId: 'thread-1',
+          toolCalls: [toolCall],
+          status: domain.Running(runId: 'run-1'),
+        );
+
+        const state = RunningState(conversation: conversation);
+
+        expect(state.activeToolCalls, [toolCall]);
       });
 
       test('copyWith creates new instance with updated fields', () {
-        const original = RunningState(
+        const conversation = domain.Conversation(
           threadId: 'thread-1',
-          runId: 'run-1',
-          context: RunContext.empty,
+          status: domain.Running(runId: 'run-1'),
         );
+        const original = RunningState(conversation: conversation);
 
         final updated = original.copyWith(
-          textStreaming: const Streaming(messageId: 'msg-1', text: 'Hi'),
+          streaming: const Streaming(messageId: 'msg-1', text: 'Hi'),
         );
 
-        expect(updated.textStreaming, isA<Streaming>());
-        expect(original.textStreaming, isA<NotStreaming>());
-        expect(updated.threadId, 'thread-1');
+        expect(updated.streaming, isA<Streaming>());
+        expect(original.streaming, isA<NotStreaming>());
+        expect(updated.conversation, equals(conversation));
       });
 
-      test('equality based on all fields', () {
-        const state1 = RunningState(
+      test('copyWith can update conversation', () {
+        const conversation1 = domain.Conversation(
           threadId: 'thread-1',
-          runId: 'run-1',
-          context: RunContext.empty,
+          status: domain.Running(runId: 'run-1'),
         );
-        const state2 = RunningState(
+        final conversation2 = domain.Conversation(
           threadId: 'thread-1',
-          runId: 'run-1',
-          context: RunContext.empty,
+          messages: [
+            TextMessage.create(id: 'msg-1', user: ChatUser.user, text: 'Hi'),
+          ],
+          status: const domain.Running(runId: 'run-1'),
         );
+        const original = RunningState(conversation: conversation1);
+
+        final updated = original.copyWith(conversation: conversation2);
+
+        expect(updated.conversation.messages.length, 1);
+        expect(original.conversation.messages, isEmpty);
+      });
+
+      test('equality based on conversation and streaming', () {
+        const conversation = domain.Conversation(
+          threadId: 'thread-1',
+          status: domain.Running(runId: 'run-1'),
+        );
+
+        const state1 = RunningState(conversation: conversation);
+        const state2 = RunningState(conversation: conversation);
         const state3 = RunningState(
-          threadId: 'thread-2',
-          runId: 'run-1',
-          context: RunContext.empty,
+          conversation: conversation,
+          streaming: Streaming(messageId: 'msg-1', text: 'Hi'),
         );
 
         expect(state1, equals(state2));
@@ -175,60 +201,100 @@ void main() {
     });
 
     group('CompletedState', () {
-      test('creates with Success result', () {
-        const state = CompletedState(
+      test('creates with conversation and result', () {
+        const conversation = domain.Conversation(
           threadId: 'thread-1',
-          runId: 'run-1',
-          context: RunContext.empty,
+          status: domain.Completed(),
+        );
+
+        const state = CompletedState(
+          conversation: conversation,
           result: Success(),
         );
 
+        expect(state.conversation, equals(conversation));
         expect(state.result, isA<Success>());
+        expect(state.streaming, isA<NotStreaming>());
+      });
+
+      test('threadId delegates to conversation', () {
+        const conversation = domain.Conversation(
+          threadId: 'thread-123',
+          status: domain.Completed(),
+        );
+
+        const state = CompletedState(
+          conversation: conversation,
+          result: Success(),
+        );
+
+        expect(state.threadId, 'thread-123');
+      });
+
+      test('isRunning is false', () {
+        const conversation = domain.Conversation(
+          threadId: 'thread-1',
+          status: domain.Completed(),
+        );
+
+        const state = CompletedState(
+          conversation: conversation,
+          result: Success(),
+        );
+
         expect(state.isRunning, isFalse);
       });
 
       test('creates with Failed result', () {
-        const state = CompletedState(
+        const conversation = domain.Conversation(
           threadId: 'thread-1',
-          runId: 'run-1',
-          context: RunContext.empty,
-          result: Failed(errorMessage: 'Something went wrong'),
+          status: domain.Failed(error: 'Something went wrong'),
         );
 
-        expect(state.result, isA<Failed>());
-        expect((state.result as Failed).errorMessage, 'Something went wrong');
+        const state = CompletedState(
+          conversation: conversation,
+          result: FailedResult(errorMessage: 'Something went wrong'),
+        );
+
+        expect(state.result, isA<FailedResult>());
+        expect(
+          (state.result as FailedResult).errorMessage,
+          'Something went wrong',
+        );
       });
 
       test('creates with Cancelled result', () {
-        const state = CompletedState(
+        const conversation = domain.Conversation(
           threadId: 'thread-1',
-          runId: 'run-1',
-          context: RunContext.empty,
-          result: Cancelled(reason: 'User cancelled'),
+          status: domain.Cancelled(reason: 'User cancelled'),
         );
 
-        expect(state.result, isA<Cancelled>());
-        expect((state.result as Cancelled).reason, 'User cancelled');
+        const state = CompletedState(
+          conversation: conversation,
+          result: CancelledResult(reason: 'User cancelled'),
+        );
+
+        expect(state.result, isA<CancelledResult>());
+        expect((state.result as CancelledResult).reason, 'User cancelled');
       });
 
-      test('equality based on all fields including result', () {
-        const state1 = CompletedState(
+      test('equality based on conversation and result', () {
+        const conversation = domain.Conversation(
           threadId: 'thread-1',
-          runId: 'run-1',
-          context: RunContext.empty,
+          status: domain.Completed(),
+        );
+
+        const state1 = CompletedState(
+          conversation: conversation,
           result: Success(),
         );
         const state2 = CompletedState(
-          threadId: 'thread-1',
-          runId: 'run-1',
-          context: RunContext.empty,
+          conversation: conversation,
           result: Success(),
         );
         const state3 = CompletedState(
-          threadId: 'thread-1',
-          runId: 'run-1',
-          context: RunContext.empty,
-          result: Failed(errorMessage: 'Error'),
+          conversation: conversation,
+          result: FailedResult(errorMessage: 'Error'),
         );
 
         expect(state1, equals(state2));
@@ -238,17 +304,20 @@ void main() {
 
     group('pattern matching', () {
       test('exhaustive switch on ActiveRunState', () {
-        const states = <ActiveRunState>[
-          IdleState(),
-          RunningState(
-            threadId: 't',
-            runId: 'r',
-            context: RunContext.empty,
-          ),
-          CompletedState(
-            threadId: 't',
-            runId: 'r',
-            context: RunContext.empty,
+        const conversation = domain.Conversation(
+          threadId: 't',
+          status: domain.Running(runId: 'r'),
+        );
+        const completedConversation = domain.Conversation(
+          threadId: 't',
+          status: domain.Completed(),
+        );
+
+        final states = <ActiveRunState>[
+          const IdleState(),
+          const RunningState(conversation: conversation),
+          const CompletedState(
+            conversation: completedConversation,
             result: Success(),
           ),
         ];
@@ -266,30 +335,33 @@ void main() {
       test('pattern matching on CompletedState result', () {
         const results = <CompletionResult>[
           Success(),
-          Failed(errorMessage: 'Error'),
-          Cancelled(reason: 'Cancelled'),
+          FailedResult(errorMessage: 'Error'),
+          CancelledResult(reason: 'Cancelled'),
         ];
 
         for (final result in results) {
           final description = switch (result) {
             Success() => 'success',
-            Failed(:final errorMessage) => 'failed: $errorMessage',
-            Cancelled(:final reason) => 'cancelled: $reason',
+            FailedResult(:final errorMessage) => 'failed: $errorMessage',
+            CancelledResult(:final reason) => 'cancelled: $reason',
           };
           expect(description, isNotEmpty);
         }
       });
 
       test('nested pattern matching for error handling', () {
-        const state = CompletedState(
+        const conversation = domain.Conversation(
           threadId: 't',
-          runId: 'r',
-          context: RunContext.empty,
-          result: Failed(errorMessage: 'Network error'),
+          status: domain.Failed(error: 'Network error'),
+        );
+        const state = CompletedState(
+          conversation: conversation,
+          result: FailedResult(errorMessage: 'Network error'),
         );
 
         final errorMessage = switch (state) {
-          CompletedState(result: Failed(:final errorMessage)) => errorMessage,
+          CompletedState(result: FailedResult(:final errorMessage)) =>
+            errorMessage,
           _ => null,
         };
 
@@ -301,9 +373,10 @@ void main() {
       test('IdleState is not equal to RunningState', () {
         const idle = IdleState();
         const running = RunningState(
-          threadId: 't',
-          runId: 'r',
-          context: RunContext.empty,
+          conversation: domain.Conversation(
+            threadId: 't',
+            status: domain.Running(runId: 'r'),
+          ),
         );
 
         expect(idle, isNot(equals(running)));
@@ -311,14 +384,16 @@ void main() {
 
       test('RunningState is not equal to CompletedState', () {
         const running = RunningState(
-          threadId: 't',
-          runId: 'r',
-          context: RunContext.empty,
+          conversation: domain.Conversation(
+            threadId: 't',
+            status: domain.Running(runId: 'r'),
+          ),
         );
         const completed = CompletedState(
-          threadId: 't',
-          runId: 'r',
-          context: RunContext.empty,
+          conversation: domain.Conversation(
+            threadId: 't',
+            status: domain.Completed(),
+          ),
           result: Success(),
         );
 
@@ -336,18 +411,18 @@ void main() {
     });
 
     test('Failed equality based on errorMessage', () {
-      const failed1 = Failed(errorMessage: 'Error A');
-      const failed2 = Failed(errorMessage: 'Error A');
-      const failed3 = Failed(errorMessage: 'Error B');
+      const failed1 = FailedResult(errorMessage: 'Error A');
+      const failed2 = FailedResult(errorMessage: 'Error A');
+      const failed3 = FailedResult(errorMessage: 'Error B');
 
       expect(failed1, equals(failed2));
       expect(failed1, isNot(equals(failed3)));
     });
 
     test('Cancelled equality based on reason', () {
-      const cancelled1 = Cancelled(reason: 'Reason A');
-      const cancelled2 = Cancelled(reason: 'Reason A');
-      const cancelled3 = Cancelled(reason: 'Reason B');
+      const cancelled1 = CancelledResult(reason: 'Reason A');
+      const cancelled2 = CancelledResult(reason: 'Reason A');
+      const cancelled3 = CancelledResult(reason: 'Reason B');
 
       expect(cancelled1, equals(cancelled2));
       expect(cancelled1, isNot(equals(cancelled3)));
@@ -355,8 +430,8 @@ void main() {
 
     test('different result types are not equal', () {
       const success = Success();
-      const failed = Failed(errorMessage: 'Error');
-      const cancelled = Cancelled(reason: 'Reason');
+      const failed = FailedResult(errorMessage: 'Error');
+      const cancelled = CancelledResult(reason: 'Reason');
 
       expect(success, isNot(equals(failed)));
       expect(success, isNot(equals(cancelled)));

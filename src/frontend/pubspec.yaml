@@ -16,7 +16,7 @@ dependencies:
   flutter_markdown: ^0.7.4+1
 
   # State management - Manual providers (NO generator)
-  flutter_riverpod: ^3.0.0
+  flutter_riverpod: ^3.0.3
 
   # Navigation
   go_router: ^17.0.0
@@ -44,8 +44,10 @@ dev_dependencies:
   # Testing
   mocktail: ^1.0.4
 
+  # Riverpod for testing (explicit version from transitive)
+  riverpod: any
+
   # Linting - Zero tolerance
   very_good_analysis: ^10.0.0
-
 flutter:
   uses-material-design: true
