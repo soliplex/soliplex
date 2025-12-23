@@ -1,26 +1,19 @@
-// Hide streaming types from barrel
-// (they conflict with domain's streaming types).
-import 'package:soliplex_client/soliplex_client.dart'
-    hide NotStreaming, Streaming, StreamingState;
-// Use domain prefix to disambiguate streaming types
-// (domain vs application layer).
-import 'package:soliplex_client/src/domain/conversation.dart' as domain;
+import 'package:soliplex_client/soliplex_client.dart';
 import 'package:test/test.dart';
 
 void main() {
   group('Conversation', () {
-    late domain.Conversation conversation;
+    late Conversation conversation;
 
     setUp(() {
-      conversation = domain.Conversation.empty(threadId: 'thread-1');
+      conversation = Conversation.empty(threadId: 'thread-1');
     });
 
     test('empty creates conversation with defaults', () {
       expect(conversation.threadId, 'thread-1');
       expect(conversation.messages, isEmpty);
       expect(conversation.toolCalls, isEmpty);
-      expect(conversation.streaming, isA<domain.NotStreaming>());
-      expect(conversation.status, isA<domain.Idle>());
+      expect(conversation.status, isA<Idle>());
     });
 
     group('withAppendedMessage', () {
@@ -60,56 +53,6 @@ void main() {
       });
     });
 
-    group('withStreaming', () {
-      test('sets streaming state', () {
-        final updated = conversation.withStreaming(
-          const domain.Streaming(text: 'Hello', messageId: 'msg-1'),
-        );
-
-        expect(updated.streaming, isA<domain.Streaming>());
-        final streaming = updated.streaming as domain.Streaming;
-        expect(streaming.text, 'Hello');
-        expect(streaming.messageId, 'msg-1');
-      });
-
-      test('clears streaming state', () {
-        final streaming = conversation.withStreaming(
-          const domain.Streaming(text: 'Hello', messageId: 'msg-1'),
-        );
-        final cleared = streaming.withStreaming(const domain.NotStreaming());
-
-        expect(cleared.streaming, isA<domain.NotStreaming>());
-      });
-
-      test('updates streaming text', () {
-        final updated = conversation
-            .withStreaming(
-              const domain.Streaming(text: 'Hello', messageId: 'msg-1'),
-            )
-            .withStreaming(
-              const domain.Streaming(text: 'Hello world', messageId: 'msg-1'),
-            );
-
-        expect(updated.streaming, isA<domain.Streaming>());
-        final streaming = updated.streaming as domain.Streaming;
-        expect(streaming.text, 'Hello world');
-        expect(streaming.messageId, 'msg-1');
-      });
-    });
-
-    group('isStreaming', () {
-      test('returns false when not streaming', () {
-        expect(conversation.isStreaming, isFalse);
-      });
-
-      test('returns true when streaming', () {
-        final streaming = conversation.withStreaming(
-          const domain.Streaming(text: 'Hello', messageId: 'msg-1'),
-        );
-        expect(streaming.isStreaming, isTrue);
-      });
-    });
-
     group('withToolCall', () {
       test('adds tool call to empty list', () {
         const toolCall = ToolCallInfo(id: 'tool-1', name: 'search');
@@ -134,56 +77,44 @@ void main() {
     group('withStatus', () {
       test('changes status to Running', () {
         final updated =
-            conversation.withStatus(const domain.Running(runId: 'run-1'));
+            conversation.withStatus(const Running(runId: 'run-1'));
 
-        expect(updated.status, isA<domain.Running>());
-        expect((updated.status as domain.Running).runId, 'run-1');
+        expect(updated.status, isA<Running>());
+        expect((updated.status as Running).runId, 'run-1');
       });
 
       test('changes status to Completed', () {
         final running =
-            conversation.withStatus(const domain.Running(runId: 'run-1'));
-        final completed = running.withStatus(const domain.Completed());
+            conversation.withStatus(const Running(runId: 'run-1'));
+        final completed = running.withStatus(const Completed());
 
-        expect(completed.status, isA<domain.Completed>());
+        expect(completed.status, isA<Completed>());
       });
 
       test('changes status to Failed', () {
-        final updated = conversation
-            .withStatus(const domain.Failed(error: 'Network error'));
+        final updated =
+            conversation.withStatus(const Failed(error: 'Network error'));
 
-        expect(updated.status, isA<domain.Failed>());
-        expect((updated.status as domain.Failed).error, 'Network error');
+        expect(updated.status, isA<Failed>());
+        expect((updated.status as Failed).error, 'Network error');
       });
 
       test('changes status to Cancelled', () {
-        final updated = conversation
-            .withStatus(const domain.Cancelled(reason: 'User cancelled'));
+        final updated =
+            conversation.withStatus(const Cancelled(reason: 'User cancelled'));
 
-        expect(updated.status, isA<domain.Cancelled>());
-        expect((updated.status as domain.Cancelled).reason, 'User cancelled');
+        expect(updated.status, isA<Cancelled>());
+        expect((updated.status as Cancelled).reason, 'User cancelled');
       });
     });
 
     group('copyWith', () {
-      test('creates copy with modified fields', () {
-        final updated = conversation.copyWith(
-          streaming: const domain.Streaming(text: 'test', messageId: 'msg-1'),
-        );
-
-        expect(updated.threadId, conversation.threadId);
-        expect(updated.streaming, isA<domain.Streaming>());
-        final streaming = updated.streaming as domain.Streaming;
-        expect(streaming.text, 'test');
-        expect(streaming.messageId, 'msg-1');
-      });
-
       test('preserves unmodified fields', () {
         final withMessage = conversation.withAppendedMessage(
           TextMessage.create(id: 'msg-1', user: ChatUser.user, text: 'Hi'),
         );
         final updated = withMessage.copyWith(
-          streaming: const domain.Streaming(text: 'test', messageId: 'msg-2'),
+          status: const Running(runId: 'run-1'),
         );
 
         expect(updated.messages, hasLength(1));
@@ -223,266 +154,180 @@ void main() {
 
       test('copies with new status', () {
         final updated = conversation.copyWith(
-          status: const domain.Running(runId: 'run-1'),
+          status: const Running(runId: 'run-1'),
         );
 
-        expect(updated.status, isA<domain.Running>());
-        expect((updated.status as domain.Running).runId, 'run-1');
+        expect(updated.status, isA<Running>());
+        expect((updated.status as Running).runId, 'run-1');
       });
     });
 
     group('equality', () {
       test('conversations with same threadId are equal', () {
-        final other = domain.Conversation.empty(threadId: 'thread-1');
+        final other = Conversation.empty(threadId: 'thread-1');
         expect(conversation, equals(other));
       });
 
       test('conversations with different threadId are not equal', () {
-        final other = domain.Conversation.empty(threadId: 'thread-2');
+        final other = Conversation.empty(threadId: 'thread-2');
         expect(conversation, isNot(equals(other)));
       });
     });
   });
 
-  group('StreamingState', () {
-    test('NotStreaming is default', () {
-      const state = domain.NotStreaming();
-      expect(state, isA<domain.StreamingState>());
-    });
-
-    test('Streaming contains text and messageId', () {
-      const state = domain.Streaming(text: 'Hello', messageId: 'msg-1');
-      expect(state.text, 'Hello');
-      expect(state.messageId, 'msg-1');
-    });
-
-    test('Streaming equality', () {
-      const state1 = domain.Streaming(text: 'Hello', messageId: 'msg-1');
-      const state2 = domain.Streaming(text: 'Hello', messageId: 'msg-1');
-      const state3 = domain.Streaming(text: 'World', messageId: 'msg-1');
-
-      expect(state1, equals(state2));
-      expect(state1, isNot(equals(state3)));
-    });
-
-    test('Streaming equality non-identical instances', () {
-      // Runtime list access prevents const evaluation
-      final texts = ['Hello', 'Hello'];
-      final msgIds = ['msg-1', 'msg-1', 'msg-2'];
-
-      final state1 = domain.Streaming(text: texts[0], messageId: msgIds[0]);
-      final state2 = domain.Streaming(text: texts[1], messageId: msgIds[1]);
-      final state3 = domain.Streaming(text: texts[0], messageId: msgIds[2]);
-
-      expect(state1, equals(state2));
-      expect(state1, isNot(equals(state3)));
-    });
-
-    test('NotStreaming equality', () {
-      const state1 = domain.NotStreaming();
-      const state2 = domain.NotStreaming();
-
-      expect(state1, equals(state2));
-    });
-
-    test('NotStreaming equality non-identical instances', () {
-      const state1 = domain.NotStreaming();
-      const state2 = domain.NotStreaming();
-
-      expect(state1, equals(state2));
-    });
-
-    test('NotStreaming hashCode', () {
-      const state1 = domain.NotStreaming();
-      const state2 = domain.NotStreaming();
-
-      expect(state1.hashCode, equals(state2.hashCode));
-    });
-
-    test('NotStreaming toString', () {
-      const state = domain.NotStreaming();
-      expect(state.toString(), equals('NotStreaming()'));
-    });
-
-    test('Streaming hashCode', () {
-      const state1 = domain.Streaming(text: 'Hello', messageId: 'msg-1');
-      const state2 = domain.Streaming(text: 'Hello', messageId: 'msg-1');
-
-      expect(state1.hashCode, equals(state2.hashCode));
-    });
-
-    test('Streaming toString', () {
-      const state = domain.Streaming(text: 'Hello world', messageId: 'msg-1');
-      final str = state.toString();
-
-      expect(str, contains('msg-1'));
-      expect(str, contains('11 chars'));
-    });
-
-    test('Streaming identical returns true', () {
-      const state = domain.Streaming(text: 'Hello', messageId: 'msg-1');
-      expect(state == state, isTrue);
-    });
-
-    test('NotStreaming identical returns true', () {
-      const state = domain.NotStreaming();
-      expect(state == state, isTrue);
-    });
-  });
-
   group('ConversationStatus', () {
     test('Idle is default status', () {
-      const status = domain.Idle();
-      expect(status, isA<domain.ConversationStatus>());
+      const status = Idle();
+      expect(status, isA<ConversationStatus>());
     });
 
     test('Running contains runId', () {
-      const status = domain.Running(runId: 'run-123');
+      const status = Running(runId: 'run-123');
       expect(status.runId, 'run-123');
     });
 
     test('Failed contains error message', () {
-      const status = domain.Failed(error: 'Something went wrong');
+      const status = Failed(error: 'Something went wrong');
       expect(status.error, 'Something went wrong');
     });
 
     test('Cancelled contains reason', () {
-      const status = domain.Cancelled(reason: 'User requested');
+      const status = Cancelled(reason: 'User requested');
       expect(status.reason, 'User requested');
     });
 
     test('Completed has no additional fields', () {
-      const status = domain.Completed();
-      expect(status, isA<domain.ConversationStatus>());
+      const status = Completed();
+      expect(status, isA<ConversationStatus>());
     });
 
     group('Idle', () {
       test('equality', () {
-        const status1 = domain.Idle();
-        const status2 = domain.Idle();
+        const status1 = Idle();
+        const status2 = Idle();
 
         expect(status1, equals(status2));
       });
 
       test('equality non-identical instances', () {
-        const status1 = domain.Idle();
-        const status2 = domain.Idle();
+        const status1 = Idle();
+        const status2 = Idle();
 
         expect(status1, equals(status2));
       });
 
       test('identical returns true', () {
-        const status = domain.Idle();
+        const status = Idle();
         expect(status == status, isTrue);
       });
 
       test('hashCode', () {
-        const status1 = domain.Idle();
-        const status2 = domain.Idle();
+        const status1 = Idle();
+        const status2 = Idle();
 
         expect(status1.hashCode, equals(status2.hashCode));
       });
 
       test('toString', () {
-        const status = domain.Idle();
+        const status = Idle();
         expect(status.toString(), equals('Idle()'));
       });
     });
 
     group('Running', () {
       test('equality', () {
-        const status1 = domain.Running(runId: 'run-1');
-        const status2 = domain.Running(runId: 'run-1');
-        const status3 = domain.Running(runId: 'run-2');
+        const status1 = Running(runId: 'run-1');
+        const status2 = Running(runId: 'run-1');
+        const status3 = Running(runId: 'run-2');
 
         expect(status1, equals(status2));
         expect(status1, isNot(equals(status3)));
       });
 
       test('identical returns true', () {
-        const status = domain.Running(runId: 'run-1');
+        const status = Running(runId: 'run-1');
         expect(status == status, isTrue);
       });
 
       test('hashCode', () {
-        const status1 = domain.Running(runId: 'run-1');
-        const status2 = domain.Running(runId: 'run-1');
+        const status1 = Running(runId: 'run-1');
+        const status2 = Running(runId: 'run-1');
 
         expect(status1.hashCode, equals(status2.hashCode));
       });
 
       test('toString', () {
-        const status = domain.Running(runId: 'run-123');
+        const status = Running(runId: 'run-123');
         expect(status.toString(), contains('run-123'));
       });
     });
 
     group('Completed', () {
       test('equality', () {
-        const status1 = domain.Completed();
-        const status2 = domain.Completed();
+        const status1 = Completed();
+        const status2 = Completed();
 
         expect(status1, equals(status2));
       });
 
       test('equality non-identical instances', () {
-        const status1 = domain.Completed();
-        const status2 = domain.Completed();
+        const status1 = Completed();
+        const status2 = Completed();
 
         expect(status1, equals(status2));
       });
 
       test('identical returns true', () {
-        const status = domain.Completed();
+        const status = Completed();
         expect(status == status, isTrue);
       });
 
       test('hashCode', () {
-        const status1 = domain.Completed();
-        const status2 = domain.Completed();
+        const status1 = Completed();
+        const status2 = Completed();
 
         expect(status1.hashCode, equals(status2.hashCode));
       });
 
       test('toString', () {
-        const status = domain.Completed();
+        const status = Completed();
         expect(status.toString(), equals('Completed()'));
       });
     });
 
     group('Failed', () {
       test('equality', () {
-        const status1 = domain.Failed(error: 'error-1');
-        const status2 = domain.Failed(error: 'error-1');
-        const status3 = domain.Failed(error: 'error-2');
+        const status1 = Failed(error: 'error-1');
+        const status2 = Failed(error: 'error-1');
+        const status3 = Failed(error: 'error-2');
 
         expect(status1, equals(status2));
         expect(status1, isNot(equals(status3)));
       });
 
       test('identical returns true', () {
-        const status = domain.Failed(error: 'error');
+        const status = Failed(error: 'error');
         expect(status == status, isTrue);
       });
 
       test('hashCode', () {
-        const status1 = domain.Failed(error: 'error-1');
-        const status2 = domain.Failed(error: 'error-1');
+        const status1 = Failed(error: 'error-1');
+        const status2 = Failed(error: 'error-1');
 
         expect(status1.hashCode, equals(status2.hashCode));
       });
 
       test('toString', () {
-        const status = domain.Failed(error: 'Network error');
+        const status = Failed(error: 'Network error');
         expect(status.toString(), contains('Network error'));
       });
     });
 
     group('Cancelled', () {
       test('equality', () {
-        const status1 = domain.Cancelled(reason: 'reason-1');
-        const status2 = domain.Cancelled(reason: 'reason-1');
-        const status3 = domain.Cancelled(reason: 'reason-2');
+        const status1 = Cancelled(reason: 'reason-1');
+        const status2 = Cancelled(reason: 'reason-1');
+        const status3 = Cancelled(reason: 'reason-2');
 
         expect(status1, equals(status2));
         expect(status1, isNot(equals(status3)));
@@ -490,8 +335,7 @@ void main() {
 
       test('equality non-identical instances', () {
         // Helper function to create non-const instances
-        domain.Cancelled create(String reason) =>
-            domain.Cancelled(reason: reason);
+        Cancelled create(String reason) => Cancelled(reason: reason);
 
         final status1 = create('reason-1');
         final status2 = create('reason-1');
@@ -500,19 +344,19 @@ void main() {
       });
 
       test('identical returns true', () {
-        const status = domain.Cancelled(reason: 'reason');
+        const status = Cancelled(reason: 'reason');
         expect(status == status, isTrue);
       });
 
       test('hashCode', () {
-        const status1 = domain.Cancelled(reason: 'reason-1');
-        const status2 = domain.Cancelled(reason: 'reason-1');
+        const status1 = Cancelled(reason: 'reason-1');
+        const status2 = Cancelled(reason: 'reason-1');
 
         expect(status1.hashCode, equals(status2.hashCode));
       });
 
       test('toString', () {
-        const status = domain.Cancelled(reason: 'User cancelled');
+        const status = Cancelled(reason: 'User cancelled');
         expect(status.toString(), contains('User cancelled'));
       });
     });
@@ -520,43 +364,41 @@ void main() {
 
   group('Conversation additional', () {
     test('isRunning returns false when Idle', () {
-      final conv = domain.Conversation.empty(threadId: 'thread-1');
+      final conv = Conversation.empty(threadId: 'thread-1');
       expect(conv.isRunning, isFalse);
     });
 
     test('isRunning returns true when Running', () {
-      final conv = domain.Conversation.empty(threadId: 'thread-1')
-          .withStatus(const domain.Running(runId: 'run-1'));
+      final conv = Conversation.empty(threadId: 'thread-1')
+          .withStatus(const Running(runId: 'run-1'));
       expect(conv.isRunning, isTrue);
     });
 
     test('hashCode based on threadId', () {
-      final conv1 = domain.Conversation.empty(threadId: 'thread-1');
-      final conv2 = domain.Conversation.empty(threadId: 'thread-1');
+      final conv1 = Conversation.empty(threadId: 'thread-1');
+      final conv2 = Conversation.empty(threadId: 'thread-1');
 
       expect(conv1.hashCode, equals(conv2.hashCode));
     });
 
     test('toString includes all fields', () {
-      final conv = domain.Conversation.empty(threadId: 'thread-1')
+      final conv = Conversation.empty(threadId: 'thread-1')
           .withAppendedMessage(
             TextMessage.create(id: 'msg-1', user: ChatUser.user, text: 'Hello'),
           )
           .withToolCall(const ToolCallInfo(id: 'tc-1', name: 'search'))
-          .withStreaming(const domain.Streaming(text: 'Hi', messageId: 'msg-1'))
-          .withStatus(const domain.Running(runId: 'run-1'));
+          .withStatus(const Running(runId: 'run-1'));
 
       final str = conv.toString();
 
       expect(str, contains('thread-1'));
       expect(str, contains('messages: 1'));
       expect(str, contains('toolCalls: 1'));
-      expect(str, contains('Streaming'));
       expect(str, contains('Running'));
     });
 
     test('identical conversations return true for equality', () {
-      final conv = domain.Conversation.empty(threadId: 'thread-1');
+      final conv = Conversation.empty(threadId: 'thread-1');
       expect(conv == conv, isTrue);
     });
   });
