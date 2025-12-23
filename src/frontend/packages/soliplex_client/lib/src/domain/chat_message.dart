@@ -283,5 +283,12 @@ class ToolCallInfo {
   }
 
   @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is ToolCallInfo && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+
+  @override
   String toString() => 'ToolCallInfo(id: $id, name: $name, status: $status)';
 }

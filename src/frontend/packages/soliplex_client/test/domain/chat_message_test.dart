@@ -392,6 +392,35 @@ void main() {
       expect(str, contains('search'));
       expect(str, contains('executing'));
     });
+
+    test('equality by id', () {
+      const info1 = ToolCallInfo(id: 'tc1', name: 'search');
+      const info2 = ToolCallInfo(
+        id: 'tc1',
+        name: 'different',
+        status: ToolCallStatus.completed,
+      );
+
+      expect(info1, equals(info2));
+    });
+
+    test('not equal with different id', () {
+      const info1 = ToolCallInfo(id: 'tc1', name: 'search');
+      const info2 = ToolCallInfo(id: 'tc2', name: 'search');
+
+      expect(info1, isNot(equals(info2)));
+    });
+
+    test('hashCode based on id', () {
+      const info1 = ToolCallInfo(id: 'tc1', name: 'search');
+      const info2 = ToolCallInfo(
+        id: 'tc1',
+        name: 'different',
+        status: ToolCallStatus.completed,
+      );
+
+      expect(info1.hashCode, equals(info2.hashCode));
+    });
   });
 
   group('ChatUser', () {
