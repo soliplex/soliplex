@@ -40,6 +40,8 @@ TEST_THREAD_DESC = "Test thread description"
 TEST_PARENT_RUN_ID = "test-run-234"
 TEST_RUN_ID = "test-run-456"
 TEST_RUN_LABEL = "My test run #456"
+TEST_RUN_FEEDBACK = "test-feedback"
+TEST_RUN_FEEDBACK_REASON = "Just because"
 
 EMPTY_RUN_INPUT = agui_core.RunAgentInput(
     thread_id=TEST_THREAD_ID,
@@ -1068,6 +1070,68 @@ async def test_post_room_agui_thread_id_run_id_meta(
         thread_id=TEST_THREAD_ID,
         run_id=TEST_RUN_ID,
         run_metadata=exp_t_meta,
+    )
+    cuir.assert_called_once_with(
+        room_id=TEST_ROOM_ID,
+        the_installation=the_installation,
+        token=token,
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "tssrf_side_effect, expectation",
+    [
+        (None, no_error(205)),
+        (UNKNOWN_THREAD, raises_httpexc(code=404, match="Unknown thread")),
+        (THREAD_ROOM_MISMATCH, raises_httpexc(code=400, match="Thread room")),
+        (UNKNOWN_RUN, raises_httpexc(code=404, match="Unknown run")),
+    ],
+)
+@mock.patch("soliplex.views.agui._check_user_in_room")
+async def test_post_room_agui_thread_id_run_id_feedback(
+    cuir,
+    the_threads,
+    tssrf_side_effect,
+    expectation,
+):
+    cuir.return_value = USER_NAME
+
+    request = fastapi.Request(scope={"type": "http"})
+
+    r_feedback = models.AGUI_RunFeedback(
+        feedback=TEST_RUN_FEEDBACK,
+        reason=TEST_RUN_FEEDBACK_REASON,
+    )
+
+    the_installation = mock.create_autospec(installation.Installation)
+    token = object()
+
+    the_threads.save_run_feedback.side_effect = tssrf_side_effect
+
+    with expectation as expected:
+        found = await agui_views.post_room_agui_thread_id_run_id_feedback(
+            request,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID,
+            run_id=TEST_RUN_ID,
+            new_feedback=r_feedback,
+            the_installation=the_installation,
+            the_threads=the_threads,
+            token=token,
+        )
+
+    if isinstance(expected, int):
+        assert isinstance(found, fastapi.Response)
+        assert found.status_code == expected
+
+    the_threads.save_run_feedback.assert_called_once_with(
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+        feedback=TEST_RUN_FEEDBACK,
+        reason=TEST_RUN_FEEDBACK_REASON,
     )
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,

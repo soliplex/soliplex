@@ -165,12 +165,20 @@ class Run(Base):
 
     'children': list of the run's child runs.
 
-    'run_metadata': optional run metadata, stored in the 'RunMetadata'
-        table via an optional one-to-one relationship.
-
     'run_agent_input': holds optional AG-UI 'RunAgentInput' (runs can
         be created before the client posts an initial protocol-
         level run).
+
+    'events': AG-UI events for the run (one-to-many).
+
+    'run_metadata': optional run metadata, stored in the 'RunMetadata'
+        table via an optional one-to-one relationship.
+
+    'run_usage': optional run usage statistics, stored in the 'RunUsage'
+        table via an optional one-to-one relationship.
+
+    'run_feedback': optional run feedback, stored in the 'RunFeedback'
+        table via an optional one-to-one relationship.
     """
 
     __tablename__ = "run"
@@ -198,6 +206,19 @@ class Run(Base):
         passive_deletes=True,
     )
 
+    run_agent_input: Mapped[RunAgentInput | None] = relationship(
+        back_populates="run",
+        cascade="all, delete",
+        passive_deletes=True,
+    )
+
+    events: Mapped[list[RunEvent]] = relationship(
+        back_populates="run",
+        order_by="RunEvent.created",
+        cascade="all, delete",
+        passive_deletes=True,
+    )
+
     run_metadata: Mapped[RunMetadata | None] = relationship(
         back_populates="run",
         cascade="all, delete",
@@ -210,15 +231,8 @@ class Run(Base):
         passive_deletes=True,
     )
 
-    run_agent_input: Mapped[RunAgentInput | None] = relationship(
+    run_feedback: Mapped[RunFeedback | None] = relationship(
         back_populates="run",
-        cascade="all, delete",
-        passive_deletes=True,
-    )
-
-    events: Mapped[list[RunEvent]] = relationship(
-        back_populates="run",
-        order_by="RunEvent.created",
         cascade="all, delete",
         passive_deletes=True,
     )
@@ -261,73 +275,6 @@ class Run(Base):
             # Work around https://github.com/ag-ui-protocol/ag-ui/issues/752
             if event.type not in SKIP_EVENT_TYPES
         ]
-
-
-class RunMetadata(Base):
-    """Hold optional metadata for an AG-UI run
-
-    'run' is a one-to-one relationship to 'Run' (but optional from
-          the run side).
-
-    'label', required
-    """
-
-    __tablename__ = "run_metadata"
-
-    id_: Mapped[int] = mapped_column(primary_key=True)
-    created: Mapped[datetime.datetime] = mapped_column(
-        sqla_sqltypes.TIMESTAMP(timezone=True),
-        default=agui_util._timestamp,
-    )
-
-    run_id_: Mapped[int] = mapped_column(
-        ForeignKey("run.id_", ondelete="CASCADE"),
-    )
-    run: Mapped[Run] = relationship(back_populates="run_metadata")
-
-    #
-    #   'soliplex.agui.RunMetadata' contract
-    #
-    label: Mapped[str] = mapped_column()
-
-
-class RunUsage(Base):
-    """Hold optional usage info for an AG-UI run
-
-    'run' is a one-to-one relationship to 'Run' (but optional from
-          the run side).
-
-    'input_tokens', int, required
-    'output_tokens', int, required
-    'requests', int, required
-    'tool_calls', int, required
-    """
-
-    __tablename__ = "run_usage"
-
-    id_: Mapped[int] = mapped_column(primary_key=True)
-    created: Mapped[datetime.datetime] = mapped_column(
-        sqla_sqltypes.TIMESTAMP(timezone=True),
-        default=agui_util._timestamp,
-    )
-
-    run_id_: Mapped[int] = mapped_column(
-        ForeignKey("run.id_", ondelete="CASCADE"),
-    )
-    run: Mapped[Run] = relationship(back_populates="run_usage")
-
-    input_tokens: Mapped[int] = mapped_column()
-    output_tokens: Mapped[int] = mapped_column()
-    requests: Mapped[int] = mapped_column()
-    tool_calls: Mapped[int] = mapped_column()
-
-    def as_tuple(self) -> agui_package.RunUsageStats:
-        return agui_package.RunUsageStats(
-            self.input_tokens,
-            self.output_tokens,
-            self.requests,
-            self.tool_calls,
-        )
 
 
 class RunAgentInput(Base):
@@ -452,6 +399,100 @@ class RunEvent(Base):
     @property
     def type(self) -> str:
         return self.data["type"]
+
+
+class RunMetadata(Base):
+    """Hold optional metadata for an AG-UI run
+
+    'run' is a one-to-one relationship to 'Run' (but optional from
+          the run side).
+
+    'label', required
+    """
+
+    __tablename__ = "run_metadata"
+
+    id_: Mapped[int] = mapped_column(primary_key=True)
+    created: Mapped[datetime.datetime] = mapped_column(
+        sqla_sqltypes.TIMESTAMP(timezone=True),
+        default=agui_util._timestamp,
+    )
+
+    run_id_: Mapped[int] = mapped_column(
+        ForeignKey("run.id_", ondelete="CASCADE"),
+    )
+    run: Mapped[Run] = relationship(back_populates="run_metadata")
+
+    #
+    #   'soliplex.agui.RunMetadata' contract
+    #
+    label: Mapped[str] = mapped_column()
+
+
+class RunUsage(Base):
+    """Hold optional usage info for an AG-UI run
+
+    'run' is a one-to-one relationship to 'Run' (but optional from
+          the run side).
+
+    'input_tokens', int, required
+    'output_tokens', int, required
+    'requests', int, required
+    'tool_calls', int, required
+    """
+
+    __tablename__ = "run_usage"
+
+    id_: Mapped[int] = mapped_column(primary_key=True)
+    created: Mapped[datetime.datetime] = mapped_column(
+        sqla_sqltypes.TIMESTAMP(timezone=True),
+        default=agui_util._timestamp,
+    )
+
+    run_id_: Mapped[int] = mapped_column(
+        ForeignKey("run.id_", ondelete="CASCADE"),
+    )
+    run: Mapped[Run] = relationship(back_populates="run_usage")
+
+    input_tokens: Mapped[int] = mapped_column()
+    output_tokens: Mapped[int] = mapped_column()
+    requests: Mapped[int] = mapped_column()
+    tool_calls: Mapped[int] = mapped_column()
+
+    def as_tuple(self) -> agui_package.RunUsageStats:
+        return agui_package.RunUsageStats(
+            self.input_tokens,
+            self.output_tokens,
+            self.requests,
+            self.tool_calls,
+        )
+
+
+class RunFeedback(Base):
+    """Hold optional feedback info for an AG-UI run
+
+    'run' is a one-to-one relationship to 'Run' (but optional from
+          the run side).
+
+    'feedback', str, required
+    'reason', str, optional
+    """
+
+    __tablename__ = "run_feedback"
+
+    id_: Mapped[int] = mapped_column(primary_key=True)
+    created: Mapped[datetime.datetime] = mapped_column(
+        sqla_sqltypes.TIMESTAMP(timezone=True),
+        default=agui_util._timestamp,
+    )
+
+    run_id_: Mapped[int] = mapped_column(
+        ForeignKey("run.id_", ondelete="CASCADE"),
+    )
+    run: Mapped[Run] = relationship(back_populates="run_feedback")
+
+    feedback: Mapped[str] = mapped_column()
+    reason: Mapped[str | None] = mapped_column(default=None)
 
 
 class ThreadStorage(agui_package.ThreadStorage):
@@ -820,6 +861,43 @@ class ThreadStorage(agui_package.ThreadStorage):
                     tool_calls=tool_calls,
                 )
             )
+
+    async def save_run_feedback(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+        feedback: str,
+        reason: str,
+    ):
+        """Save the run feedback"""
+        await self._session.commit()
+
+        async with self.session as session:
+            run = await self._find_thread_run(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+                session=session,
+            )
+
+            existing = await run.awaitable_attrs.run_feedback
+
+            if existing is not None:
+                await session.delete(existing)
+
+            session.add(
+                RunFeedback(
+                    run=run,
+                    feedback=feedback,
+                    reason=reason,
+                )
+            )
+
+        return run
 
 
 def get_session(
