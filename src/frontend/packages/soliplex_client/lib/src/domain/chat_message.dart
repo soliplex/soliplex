@@ -87,6 +87,9 @@ class TextMessage extends ChatMessage {
   /// Whether thinking text is currently streaming.
   final bool isThinkingStreaming;
 
+  /// Whether this message has thinking text.
+  bool get hasThinkingText => thinkingText.isNotEmpty;
+
   /// Creates a copy with modified properties.
   TextMessage copyWith({
     String? id,
@@ -264,6 +267,12 @@ class ToolCallInfo {
 
   /// Result from the tool execution.
   final String result;
+
+  /// Whether this tool call has arguments.
+  bool get hasArguments => arguments.isNotEmpty;
+
+  /// Whether this tool call has a result.
+  bool get hasResult => result.isNotEmpty;
 
   /// Creates a copy with modified properties.
   ToolCallInfo copyWith({

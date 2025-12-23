@@ -129,6 +129,25 @@ void main() {
       expect(str, contains('test-id'));
       expect(str, contains('user'));
     });
+
+    test('hasThinkingText returns true when thinking text is present', () {
+      final message = TextMessage(
+        id: 'test-id',
+        user: ChatUser.assistant,
+        createdAt: DateTime.now(),
+        text: 'Response',
+        thinkingText: 'I am thinking...',
+      );
+
+      expect(message.hasThinkingText, isTrue);
+    });
+
+    test('hasThinkingText returns false when thinking text is empty', () {
+      final message =
+          TextMessage.create(user: ChatUser.assistant, text: 'Response');
+
+      expect(message.hasThinkingText, isFalse);
+    });
   });
 
   group('ErrorMessage', () {
@@ -420,6 +439,38 @@ void main() {
       );
 
       expect(info1.hashCode, equals(info2.hashCode));
+    });
+
+    test('hasArguments returns true when arguments are present', () {
+      const info = ToolCallInfo(
+        id: 'tc1',
+        name: 'search',
+        arguments: '{"query": "test"}',
+      );
+
+      expect(info.hasArguments, isTrue);
+    });
+
+    test('hasArguments returns false when arguments are empty', () {
+      const info = ToolCallInfo(id: 'tc1', name: 'search');
+
+      expect(info.hasArguments, isFalse);
+    });
+
+    test('hasResult returns true when result is present', () {
+      const info = ToolCallInfo(
+        id: 'tc1',
+        name: 'search',
+        result: '{"data": []}',
+      );
+
+      expect(info.hasResult, isTrue);
+    });
+
+    test('hasResult returns false when result is empty', () {
+      const info = ToolCallInfo(id: 'tc1', name: 'search');
+
+      expect(info.hasResult, isFalse);
     });
   });
 
