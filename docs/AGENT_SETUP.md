@@ -140,6 +140,5 @@ When handing off between agents, provide:
 
 ## Getting Help
 
-- Check `/agents-monorepo.md` for detailed multi-agent strategy
 - Review domain-specific docs in `/src/flutter/CLAUDE.md` or `/src/soliplex/CLAUDE.md`
 - Ask Claude: "What agents are configured for this project?"

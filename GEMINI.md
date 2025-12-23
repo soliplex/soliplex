@@ -15,7 +15,7 @@ Gemini excels at:
 ## Tech Stack
 
 Same as `/CLAUDE.md`:
-- **Python**: 3.13+, pydantic-ai, FastAPI, SQLModel
+- **Python**: 3.13+, pydantic-ai, FastAPI, SQLAlchemy 2.0+ (async)
 - **Protocol**: AG-UI (ag-ui-protocol), fastmcp for MCP
 - **Tests**: pytest with 100% coverage requirement
 
@@ -55,7 +55,6 @@ Hand off to Claude when the task requires:
 
 - `/docs/config/agents.md` - Agent configuration
 - `/example/*.yaml` - Configuration examples
-- `/agents-monorepo.md` - Multi-agent strategy
 - Use `context7` MCP tools for up-to-date library docs (see `/AGENTS.md`)
 
 ## Domain Subconfigs

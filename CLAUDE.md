@@ -60,7 +60,6 @@ src/soliplex/
 
 - `/docs/config/agents.md` - Agent configuration reference
 - `/example/*.yaml` - Configuration examples
-- `/agents-monorepo.md` - Multi-agent strategy (reference only)
 - Use `context7` MCP tools for up-to-date library docs (see `/AGENTS.md`)
 
 ## Domain Subconfigs
