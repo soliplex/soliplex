@@ -5,6 +5,9 @@ library soliplex_client;
 export 'package:ag_ui/ag_ui.dart';
 
 export 'src/api/api.dart';
+// Application layer not exported via barrel to avoid naming conflicts with
+// domain layer's StreamingState. Import directly when needed:
+// import 'package:soliplex_client/src/application/application.dart';
 export 'src/domain/domain.dart';
 export 'src/errors/errors.dart';
 export 'src/http/http.dart';
