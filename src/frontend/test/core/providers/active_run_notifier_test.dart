@@ -124,6 +124,7 @@ void main() {
     group('convenience getters', () {
       test('messages returns context.messages', () {
         final message = TextMessage.create(
+          id: 'msg-1',
           user: ChatUser.user,
           text: 'Hello',
         );

@@ -4,12 +4,16 @@ import 'package:test/test.dart';
 void main() {
   group('TextMessage', () {
     test('create with required fields', () {
-      final message = TextMessage.create(user: ChatUser.user, text: 'Hello');
+      final message = TextMessage.create(
+        id: 'msg-1',
+        user: ChatUser.user,
+        text: 'Hello',
+      );
 
       expect(message.user, equals(ChatUser.user));
       expect(message.text, equals('Hello'));
       expect(message.isStreaming, isFalse);
-      expect(message.id, isNotEmpty);
+      expect(message.id, equals('msg-1'));
       expect(message.createdAt, isNotNull);
     });
 
@@ -28,8 +32,11 @@ void main() {
     });
 
     test('copyWith modifies text', () {
-      final original =
-          TextMessage.create(user: ChatUser.user, text: 'Original');
+      final original = TextMessage.create(
+        id: 'msg-1',
+        user: ChatUser.user,
+        text: 'Original',
+      );
       final copy = original.copyWith(text: 'Modified');
 
       expect(copy.text, equals('Modified'));
@@ -39,6 +46,7 @@ void main() {
 
     test('copyWith modifies streaming', () {
       final original = TextMessage.create(
+        id: 'msg-1',
         user: ChatUser.assistant,
         text: 'Test',
         isStreaming: true,
@@ -50,8 +58,11 @@ void main() {
     });
 
     test('copyWith modifies thinking text', () {
-      final original =
-          TextMessage.create(user: ChatUser.assistant, text: 'Response');
+      final original = TextMessage.create(
+        id: 'msg-1',
+        user: ChatUser.assistant,
+        text: 'Response',
+      );
       final copy = original.copyWith(
         thinkingText: 'Thinking...',
         isThinkingStreaming: true,
@@ -72,7 +83,11 @@ void main() {
     });
 
     test('copyWith modifies user', () {
-      final original = TextMessage.create(user: ChatUser.user, text: 'Hello');
+      final original = TextMessage.create(
+        id: 'msg-1',
+        user: ChatUser.user,
+        text: 'Hello',
+      );
       final copy = original.copyWith(user: ChatUser.assistant);
 
       expect(copy.user, equals(ChatUser.assistant));
@@ -80,7 +95,11 @@ void main() {
     });
 
     test('copyWith modifies createdAt', () {
-      final original = TextMessage.create(user: ChatUser.user, text: 'Hello');
+      final original = TextMessage.create(
+        id: 'msg-1',
+        user: ChatUser.user,
+        text: 'Hello',
+      );
       final newTime = DateTime(2025, 6, 15);
       final copy = original.copyWith(createdAt: newTime);
 
@@ -143,8 +162,11 @@ void main() {
     });
 
     test('hasThinkingText returns false when thinking text is empty', () {
-      final message =
-          TextMessage.create(user: ChatUser.assistant, text: 'Response');
+      final message = TextMessage.create(
+        id: 'msg-1',
+        user: ChatUser.assistant,
+        text: 'Response',
+      );
 
       expect(message.hasThinkingText, isFalse);
     });
@@ -152,15 +174,18 @@ void main() {
 
   group('ErrorMessage', () {
     test('create with message', () {
-      final message = ErrorMessage.create(message: 'Something went wrong');
+      final message = ErrorMessage.create(
+        id: 'error-1',
+        message: 'Something went wrong',
+      );
 
       expect(message.user, equals(ChatUser.system));
       expect(message.errorText, equals('Something went wrong'));
-      expect(message.id, isNotEmpty);
+      expect(message.id, equals('error-1'));
     });
 
     test('create with custom id', () {
-      final message = ErrorMessage.create(message: 'Error', id: 'error-id');
+      final message = ErrorMessage.create(id: 'error-id', message: 'Error');
 
       expect(message.id, equals('error-id'));
     });
@@ -187,19 +212,20 @@ void main() {
   group('ToolCallMessage', () {
     test('create with tool calls', () {
       final message = ToolCallMessage.create(
+        id: 'tc-msg-1',
         toolCalls: const [ToolCallInfo(id: 'tc1', name: 'search')],
       );
 
       expect(message.user, equals(ChatUser.assistant));
       expect(message.toolCalls, hasLength(1));
       expect(message.toolCalls.first.name, equals('search'));
-      expect(message.id, isNotEmpty);
+      expect(message.id, equals('tc-msg-1'));
     });
 
     test('create with custom id', () {
       final message = ToolCallMessage.create(
-        toolCalls: const [ToolCallInfo(id: 'tc1', name: 'search')],
         id: 'tc-msg-id',
+        toolCalls: const [ToolCallInfo(id: 'tc1', name: 'search')],
       );
 
       expect(message.id, equals('tc-msg-id'));
@@ -207,11 +233,11 @@ void main() {
 
     test('toString includes id and call count', () {
       final message = ToolCallMessage.create(
+        id: 'tc-msg-id',
         toolCalls: const [
           ToolCallInfo(id: 'tc1', name: 'search'),
           ToolCallInfo(id: 'tc2', name: 'read'),
         ],
-        id: 'tc-msg-id',
       );
       final str = message.toString();
 
@@ -223,6 +249,7 @@ void main() {
   group('GenUiMessage', () {
     test('create with widget and data', () {
       final message = GenUiMessage.create(
+        id: 'genui-1',
         widgetName: 'Chart',
         data: const {'value': 42},
       );
@@ -230,14 +257,14 @@ void main() {
       expect(message.user, equals(ChatUser.assistant));
       expect(message.widgetName, equals('Chart'));
       expect(message.data['value'], equals(42));
-      expect(message.id, isNotEmpty);
+      expect(message.id, equals('genui-1'));
     });
 
     test('create with custom id', () {
       final message = GenUiMessage.create(
+        id: 'genui-id',
         widgetName: 'Chart',
         data: const {'value': 42},
-        id: 'genui-id',
       );
 
       expect(message.id, equals('genui-id'));
@@ -245,9 +272,9 @@ void main() {
 
     test('toString includes id and widget name', () {
       final message = GenUiMessage.create(
+        id: 'genui-id',
         widgetName: 'Chart',
         data: const {'value': 42},
-        id: 'genui-id',
       );
       final str = message.toString();
 
@@ -258,10 +285,10 @@ void main() {
 
   group('LoadingMessage', () {
     test('create', () {
-      final message = LoadingMessage.create();
+      final message = LoadingMessage.create(id: 'loading-1');
 
       expect(message.user, equals(ChatUser.assistant));
-      expect(message.id, isNotEmpty);
+      expect(message.id, equals('loading-1'));
     });
 
     test('create with custom id', () {
@@ -292,13 +319,18 @@ void main() {
 
     test('pattern matching on message types', () {
       final messages = <ChatMessage>[
-        TextMessage.create(user: ChatUser.user, text: 'Hello'),
-        ErrorMessage.create(message: 'Error'),
+        TextMessage.create(id: 'msg-1', user: ChatUser.user, text: 'Hello'),
+        ErrorMessage.create(id: 'err-1', message: 'Error'),
         ToolCallMessage.create(
+          id: 'tc-1',
           toolCalls: const [ToolCallInfo(id: 'tc1', name: 'tool')],
         ),
-        GenUiMessage.create(widgetName: 'Widget', data: const {}),
-        LoadingMessage.create(),
+        GenUiMessage.create(
+          id: 'genui-1',
+          widgetName: 'Widget',
+          data: const {},
+        ),
+        LoadingMessage.create(id: 'loading-1'),
       ];
 
       final types = messages.map((m) {
@@ -315,8 +347,10 @@ void main() {
     });
 
     test('extract text from different message types', () {
-      final textMsg = TextMessage.create(user: ChatUser.user, text: 'Hello');
-      final errorMsg = ErrorMessage.create(message: 'Error occurred');
+      final textMsg =
+          TextMessage.create(id: 'msg-1', user: ChatUser.user, text: 'Hello');
+      final errorMsg =
+          ErrorMessage.create(id: 'err-1', message: 'Error occurred');
 
       String getText(ChatMessage msg) {
         return switch (msg) {

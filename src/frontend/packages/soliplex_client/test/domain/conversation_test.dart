@@ -530,7 +530,7 @@ void main() {
     test('toString includes all fields', () {
       final conv = Conversation.empty(threadId: 'thread-1')
           .withAppendedMessage(
-            TextMessage.create(user: ChatUser.user, text: 'Hello'),
+            TextMessage.create(id: 'msg-1', user: ChatUser.user, text: 'Hello'),
           )
           .withToolCall(const ToolCallInfo(id: 'tc-1', name: 'search'))
           .withStreaming(const Streaming(text: 'Hi', messageId: 'msg-1'))

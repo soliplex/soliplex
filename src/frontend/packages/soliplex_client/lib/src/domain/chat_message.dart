@@ -31,9 +31,6 @@ sealed class ChatMessage {
   /// When this message was created.
   final DateTime createdAt;
 
-  /// Generates a unique message ID.
-  static String generateId() => 'msg_${DateTime.now().millisecondsSinceEpoch}';
-
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -59,15 +56,15 @@ class TextMessage extends ChatMessage {
     this.isThinkingStreaming = false,
   });
 
-  /// Creates a text message with auto-generated ID and timestamp.
+  /// Creates a text message with the given ID and auto-generated timestamp.
   factory TextMessage.create({
+    required String id,
     required ChatUser user,
     required String text,
-    String? id,
     bool isStreaming = false,
   }) {
     return TextMessage(
-      id: id ?? ChatMessage.generateId(),
+      id: id,
       user: user,
       text: text,
       isStreaming: isStreaming,
@@ -125,10 +122,10 @@ class ErrorMessage extends ChatMessage {
     required this.errorText,
   }) : super(user: ChatUser.system);
 
-  /// Creates an error message with auto-generated ID and timestamp.
-  factory ErrorMessage.create({required String message, String? id}) {
+  /// Creates an error message with the given ID and auto-generated timestamp.
+  factory ErrorMessage.create({required String id, required String message}) {
     return ErrorMessage(
-      id: id ?? ChatMessage.generateId(),
+      id: id,
       errorText: message,
       createdAt: DateTime.now(),
     );
@@ -151,13 +148,14 @@ class ToolCallMessage extends ChatMessage {
     required this.toolCalls,
   }) : super(user: ChatUser.assistant);
 
-  /// Creates a tool call message with auto-generated ID and timestamp.
+  /// Creates a tool call message with the given ID and auto-generated
+  /// timestamp.
   factory ToolCallMessage.create({
+    required String id,
     required List<ToolCallInfo> toolCalls,
-    String? id,
   }) {
     return ToolCallMessage(
-      id: id ?? ChatMessage.generateId(),
+      id: id,
       toolCalls: toolCalls,
       createdAt: DateTime.now(),
     );
@@ -181,14 +179,14 @@ class GenUiMessage extends ChatMessage {
     required this.data,
   }) : super(user: ChatUser.assistant);
 
-  /// Creates a genUI message with auto-generated ID and timestamp.
+  /// Creates a genUI message with the given ID and auto-generated timestamp.
   factory GenUiMessage.create({
+    required String id,
     required String widgetName,
     required Map<String, dynamic> data,
-    String? id,
   }) {
     return GenUiMessage(
-      id: id ?? ChatMessage.generateId(),
+      id: id,
       widgetName: widgetName,
       data: data,
       createdAt: DateTime.now(),
@@ -214,10 +212,10 @@ class LoadingMessage extends ChatMessage {
     required super.createdAt,
   }) : super(user: ChatUser.assistant);
 
-  /// Creates a loading message with auto-generated ID and timestamp.
-  factory LoadingMessage.create({String? id}) {
+  /// Creates a loading message with the given ID and auto-generated timestamp.
+  factory LoadingMessage.create({required String id}) {
     return LoadingMessage(
-      id: id ?? ChatMessage.generateId(),
+      id: id,
       createdAt: DateTime.now(),
     );
   }
