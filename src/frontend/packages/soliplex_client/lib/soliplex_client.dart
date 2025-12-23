@@ -5,7 +5,7 @@ library soliplex_client;
 export 'package:ag_ui/ag_ui.dart';
 
 export 'src/api/api.dart';
+export 'src/domain/domain.dart';
 export 'src/errors/errors.dart';
 export 'src/http/http.dart';
-export 'src/models/models.dart';
 export 'src/utils/utils.dart' hide CancelToken;

@@ -41,8 +41,7 @@ class RoomsScreen extends ConsumerWidget {
               return ListTile(
                 leading: const Icon(Icons.meeting_room),
                 title: Text(room.name),
-                subtitle:
-                    room.description != null ? Text(room.description!) : null,
+                subtitle: room.hasDescription ? Text(room.description) : null,
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   ref.read(currentRoomIdProvider.notifier).set(room.id);

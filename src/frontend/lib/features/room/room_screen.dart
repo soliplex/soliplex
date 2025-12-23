@@ -41,17 +41,16 @@ class RoomScreen extends ConsumerWidget {
               final thread = threads[index];
               return ListTile(
                 leading: const Icon(Icons.chat),
-                title: Text(thread.name ?? 'Thread ${thread.id}'),
+                title: Text(
+                  thread.hasName ? thread.name : 'Thread ${thread.id}',
+                ),
                 subtitle: Text(
-                  switch (thread.createdAt) {
-                    final createdAt? =>
-                      'Created ${formatRelativeTime(createdAt)}',
-                    null => 'No date',
-                  },
+                  'Created ${formatRelativeTime(thread.createdAt)}',
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
-                  ref.read(threadSelectionProvider.notifier)
+                  ref
+                      .read(threadSelectionProvider.notifier)
                       .set(ThreadSelected(thread.id));
                   context.push('/rooms/$roomId/thread/${thread.id}');
                 },

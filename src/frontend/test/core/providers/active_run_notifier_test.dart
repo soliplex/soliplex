@@ -124,6 +124,7 @@ void main() {
     group('convenience getters', () {
       test('messages returns context.messages', () {
         final message = TextMessage.create(
+          id: 'msg-1',
           user: ChatUser.user,
           text: 'Hello',
         );
@@ -202,9 +203,10 @@ void main() {
           cancelToken: any(named: 'cancelToken'),
         ),
       ).thenAnswer(
-        (_) async => const RunInfo(
+        (_) async => RunInfo(
           id: 'backend-run-id-123',
           threadId: 'thread-1',
+          createdAt: DateTime.now(),
         ),
       );
 

@@ -16,6 +16,7 @@ void main() {
     test('copyWith creates new instance with updated fields', () {
       const original = RunContext.empty;
       final message = TextMessage.create(
+        id: 'msg-1',
         user: ChatUser.user,
         text: 'Hello',
       );
@@ -34,7 +35,7 @@ void main() {
       const context2 = RunContext.empty;
       final context3 = RunContext(
         messages: [
-          TextMessage.create(user: ChatUser.user, text: 'Hi'),
+          TextMessage.create(id: 'msg-1', user: ChatUser.user, text: 'Hi'),
         ],
       );
 
@@ -82,6 +83,7 @@ void main() {
 
       test('creates with provided context', () {
         final message = TextMessage.create(
+          id: 'msg-1',
           user: ChatUser.user,
           text: 'Previous message',
         );
@@ -98,7 +100,7 @@ void main() {
         final state3 = IdleState(
           context: RunContext(
             messages: [
-              TextMessage.create(user: ChatUser.user, text: 'Hi'),
+              TextMessage.create(id: 'msg-1', user: ChatUser.user, text: 'Hi'),
             ],
           ),
         );
