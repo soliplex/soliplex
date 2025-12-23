@@ -21,6 +21,8 @@
 
 **Phase:** AM3 - COMPLETE (Working Chat shipped)
 
+**Architectural Enhancement v3:** ✅ COMPLETE (Clean architecture layers)
+
 **Next Phase:** AM4 (Enhanced Chat) or AM5 (Inspector)
 
 **Blocked by:** None
@@ -595,4 +597,58 @@ Renamed frontend `Failed`/`Cancelled` to `FailedResult`/`CancelledResult` rather
 
 ---
 
-*Last updated: 2025-12-23 (Application layer export & import cleanup)*
+### Session 7: 2025-12-23 - Domain Layer Cleanup (Arch v3 Complete)
+
+**Duration:** ~20 minutes
+
+**Completed:**
+
+- ✅ Removed streaming from domain layer (Step 1 of arch-v3)
+- ✅ Simplified domain barrel export
+- ✅ Cleaned up obsolete hide clauses in application layer
+- ✅ Removed streaming-related tests from conversation_test.dart
+- ✅ Blacksmith review: approved
+
+**Changes:**
+
+1. **conversation.dart:**
+   - Removed `StreamingState` sealed class and subtypes (`NotStreaming`, `Streaming`)
+   - Removed `streaming` field from `Conversation`
+   - Removed `withStreaming()` method
+   - Removed `isStreaming` getter
+   - Updated `copyWith()` and `toString()` to remove streaming references
+
+2. **domain.dart:**
+   - Simplified from explicit `show`/`hide` export to `export 'conversation.dart';`
+
+3. **agui_event_processor.dart:**
+   - Removed obsolete `hide NotStreaming, Streaming, StreamingState` clause
+
+4. **conversation_test.dart:**
+   - Removed `withStreaming` test group
+   - Removed `isStreaming` test group
+   - Removed `StreamingState` test group
+   - Updated `toString` test
+
+**Metrics:**
+
+- **Analyzer:** 0 errors, 0 warnings, 0 hints ✓
+- **Tests:** 187 passing (0 failures) ✓
+- **Files Modified:** 4 files
+- **Lines Removed:** ~150 (dead code + tests for removed behavior)
+
+**Architectural Enhancement v3: COMPLETE**
+
+All success criteria met:
+- Conversation aggregate is pure domain (no streaming state) ✅
+- StreamingState lives in application layer ✅
+- AG-UI event processing is pure function in application layer ✅
+- ActiveRunNotifier uses processor, no direct event switching ✅
+- All tests pass ✅
+- 0 analyzer issues ✅
+
+**Branch:** `arch-v3/domain-cleanup`
+
+---
+
+*Last updated: 2025-12-23 (Domain layer cleanup - Arch v3 complete)*
