@@ -54,7 +54,8 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
       if (widget.threadId == 'new') {
         ref.read(threadSelectionProvider.notifier).set(const NewThreadIntent());
       } else {
-        ref.read(threadSelectionProvider.notifier)
+        ref
+            .read(threadSelectionProvider.notifier)
             .set(ThreadSelected(widget.threadId));
       }
     });

@@ -49,7 +49,8 @@ class RoomScreen extends ConsumerWidget {
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
-                  ref.read(threadSelectionProvider.notifier)
+                  ref
+                      .read(threadSelectionProvider.notifier)
                       .set(ThreadSelected(thread.id));
                   context.push('/rooms/$roomId/thread/${thread.id}');
                 },

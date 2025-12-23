@@ -81,7 +81,8 @@ class HistoryPanel extends ConsumerWidget {
         if (selection is NoThreadSelected) {
           // Use addPostFrameCallback to avoid setState during build
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            ref.read(threadSelectionProvider.notifier)
+            ref
+                .read(threadSelectionProvider.notifier)
                 .set(ThreadSelected(threads.first.id));
           });
         }

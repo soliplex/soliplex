@@ -110,7 +110,8 @@ class ChatPanel extends ConsumerWidget {
         thread = newThread;
 
         // Update selection to the new thread
-        ref.read(threadSelectionProvider.notifier)
+        ref
+            .read(threadSelectionProvider.notifier)
             .set(ThreadSelected(newThread.id));
 
         // Refresh threads list

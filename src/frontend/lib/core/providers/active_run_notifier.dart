@@ -361,5 +361,4 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
         state = currentState.copyWith(context: updatedContext);
     }
   }
-
 }
