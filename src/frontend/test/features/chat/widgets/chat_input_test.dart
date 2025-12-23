@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:soliplex_client/soliplex_client.dart' as domain
+    show Conversation, Running;
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
@@ -101,6 +103,10 @@ void main() {
         // Arrange
         final mockRoom = TestData.createRoom();
         final mockThread = TestData.createThread();
+        const conversation = domain.Conversation(
+          threadId: 'test-thread',
+          status: domain.Running(runId: 'test-run'),
+        );
 
         // Act
         await tester.pumpWidget(
@@ -114,11 +120,7 @@ void main() {
               currentRoomProvider.overrideWith((ref) => mockRoom),
               currentThreadProvider.overrideWith((ref) => mockThread),
               activeRunNotifierOverride(
-                const RunningState(
-                  threadId: 'test-thread',
-                  runId: 'test-run',
-                  context: RunContext.empty,
-                ),
+                const RunningState(conversation: conversation),
               ),
             ],
           ),

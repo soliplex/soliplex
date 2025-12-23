@@ -1,130 +1,10 @@
 import 'package:meta/meta.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 
-/// Shared context that persists across all run states.
-///
-/// Contains accumulated data that is preserved regardless of run state:
-/// - Messages from the conversation
-/// - Raw AG-UI events for debugging/detail panel
-/// - State snapshots from the backend
-/// - Active tool calls
-@immutable
-class RunContext {
-  /// Creates a run context with the given data.
-  const RunContext({
-    this.messages = const [],
-    this.rawEvents = const [],
-    this.state = const {},
-    this.activeToolCalls = const [],
-  });
-
-  /// Empty context with no data.
-  static const empty = RunContext();
-
-  /// All messages accumulated during runs.
-  final List<ChatMessage> messages;
-
-  /// All AG-UI events received (for AM5 Detail panel).
-  final List<BaseEvent> rawEvents;
-
-  /// Latest state snapshot from backend.
-  final Map<String, dynamic> state;
-
-  /// Tool calls currently being executed.
-  final List<ToolCallInfo> activeToolCalls;
-
-  /// Creates a copy with the given fields replaced.
-  RunContext copyWith({
-    List<ChatMessage>? messages,
-    List<BaseEvent>? rawEvents,
-    Map<String, dynamic>? state,
-    List<ToolCallInfo>? activeToolCalls,
-  }) {
-    return RunContext(
-      messages: messages ?? this.messages,
-      rawEvents: rawEvents ?? this.rawEvents,
-      state: state ?? this.state,
-      activeToolCalls: activeToolCalls ?? this.activeToolCalls,
-    );
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is RunContext &&
-          runtimeType == other.runtimeType &&
-          messages == other.messages &&
-          rawEvents == other.rawEvents &&
-          state == other.state &&
-          activeToolCalls == other.activeToolCalls;
-
-  @override
-  int get hashCode => Object.hash(messages, rawEvents, state, activeToolCalls);
-}
-
-/// Text streaming state - eliminates nullable messageId/streamingText.
-///
-/// Use pattern matching to handle streaming vs not streaming:
-/// ```dart
-/// switch (state.textStreaming) {
-///   case NotStreaming():
-///     // No text being streamed
-///   case Streaming(:final messageId, :final text):
-///     // Text is streaming for messageId
-/// }
-/// ```
-@immutable
-sealed class TextStreaming {
-  const TextStreaming();
-}
-
-/// No text message is currently being streamed.
-@immutable
-class NotStreaming extends TextStreaming {
-  const NotStreaming();
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) || other is NotStreaming;
-
-  @override
-  int get hashCode => runtimeType.hashCode;
-
-  @override
-  String toString() => 'NotStreaming()';
-}
-
-/// A text message is being streamed.
-@immutable
-class Streaming extends TextStreaming {
-  const Streaming({required this.messageId, required this.text});
-
-  /// The ID of the message being streamed.
-  final String messageId;
-
-  /// The accumulated text content so far.
-  final String text;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is Streaming &&
-          runtimeType == other.runtimeType &&
-          messageId == other.messageId &&
-          text == other.text;
-
-  @override
-  int get hashCode => Object.hash(messageId, text);
-
-  @override
-  String toString() => 'Streaming(messageId: $messageId, text: ${text.length} '
-      'chars)';
-}
-
 /// State for an active AG-UI run.
 ///
 /// This is a sealed class hierarchy with 3 states:
-/// - [IdleState]: No active run
+/// - [IdleState]: No active run (sentinel state)
 /// - [RunningState]: Run is executing
 /// - [CompletedState]: Run finished (success, error, or cancelled)
 ///
@@ -133,7 +13,7 @@ class Streaming extends TextStreaming {
 /// switch (state) {
 ///   case IdleState():
 ///     // No active run
-///   case RunningState(:final threadId, :final runId, :final textStreaming):
+///   case RunningState(:final threadId, :final streaming):
 ///     // Run is active
 ///   case CompletedState(:final result):
 ///     switch (result) {
@@ -148,87 +28,90 @@ class Streaming extends TextStreaming {
 /// ```
 @immutable
 sealed class ActiveRunState {
-  const ActiveRunState({required this.context});
+  const ActiveRunState();
 
-  /// Shared context containing messages, events, and state.
-  final RunContext context;
+  /// The conversation (domain state). IdleState returns an empty sentinel.
+  Conversation get conversation;
 
-  // Convenience getters for common context fields
-  /// All messages accumulated during runs.
-  List<ChatMessage> get messages => context.messages;
+  /// The streaming state (application layer). IdleState returns NotStreaming.
+  StreamingState get streaming;
 
-  /// All AG-UI events received.
-  List<BaseEvent> get rawEvents => context.rawEvents;
-
-  /// Latest state snapshot from backend.
-  Map<String, dynamic> get state => context.state;
+  /// All messages from the conversation.
+  List<ChatMessage> get messages => conversation.messages;
 
   /// Tool calls currently being executed.
-  List<ToolCallInfo> get activeToolCalls => context.activeToolCalls;
+  List<ToolCallInfo> get activeToolCalls => conversation.toolCalls;
 
-  /// Whether the run is currently executing.
+  /// Whether a run is currently executing.
   bool get isRunning => this is RunningState;
 }
 
-/// No run is currently active.
+/// No run is currently active. Sentinel state.
 ///
-/// This is the initial state before any run has started.
+/// IdleState intentionally has no threadId - it represents "no conversation".
+/// Widgets needing threadId should only access [RunningState] or
+/// [CompletedState].
 @immutable
 class IdleState extends ActiveRunState {
-  /// Creates an idle state with optional context.
-  const IdleState({super.context = RunContext.empty});
+  /// Creates an idle state.
+  const IdleState();
+
+  @override
+  Conversation get conversation => Conversation.empty(threadId: '');
+
+  @override
+  StreamingState get streaming => const NotStreaming();
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is IdleState &&
-          runtimeType == other.runtimeType &&
-          context == other.context;
+      other is IdleState && runtimeType == other.runtimeType;
 
   @override
-  int get hashCode => Object.hash(runtimeType, context);
+  int get hashCode => runtimeType.hashCode;
 
   @override
-  String toString() => 'IdleState(messages: ${messages.length})';
+  String toString() => 'IdleState()';
 }
 
 /// A run is currently executing.
 ///
-/// Contains thread/run identifiers and text streaming state.
+/// Contains the conversation (domain state) and streaming state (application
+/// layer).
 @immutable
 class RunningState extends ActiveRunState {
   /// Creates a running state.
   const RunningState({
-    required this.threadId,
-    required this.runId,
-    required super.context,
-    this.textStreaming = const NotStreaming(),
+    required this.conversation,
+    this.streaming = const NotStreaming(),
   });
 
+  @override
+  final Conversation conversation;
+
+  @override
+  final StreamingState streaming;
+
   /// The ID of the thread this run belongs to.
-  final String threadId;
+  String get threadId => conversation.threadId;
 
   /// The ID of this run.
-  final String runId;
-
-  /// Current text streaming state.
-  final TextStreaming textStreaming;
+  String get runId => switch (conversation.status) {
+        Running(:final runId) => runId,
+        _ => throw StateError('RunningState must have Running status'),
+      };
 
   /// Whether text is actively streaming.
-  bool get isTextStreaming => textStreaming is Streaming;
+  bool get isStreaming => streaming is Streaming;
 
   /// Creates a copy with the given fields replaced.
   RunningState copyWith({
-    String? threadId,
-    String? runId,
-    RunContext? context,
-    TextStreaming? textStreaming,
+    Conversation? conversation,
+    StreamingState? streaming,
   }) {
     return RunningState(
-      threadId: threadId ?? this.threadId,
-      runId: runId ?? this.runId,
-      context: context ?? this.context,
-      textStreaming: textStreaming ?? this.textStreaming,
+      conversation: conversation ?? this.conversation,
+      streaming: streaming ?? this.streaming,
     );
   }
 
@@ -237,17 +120,15 @@ class RunningState extends ActiveRunState {
       identical(this, other) ||
       other is RunningState &&
           runtimeType == other.runtimeType &&
-          threadId == other.threadId &&
-          runId == other.runId &&
-          context == other.context &&
-          textStreaming == other.textStreaming;
+          conversation == other.conversation &&
+          streaming == other.streaming;
 
   @override
-  int get hashCode => Object.hash(threadId, runId, context, textStreaming);
+  int get hashCode => Object.hash(conversation, streaming);
 
   @override
-  String toString() => 'RunningState(threadId: $threadId, runId: $runId, '
-      'messages: ${messages.length}, textStreaming: $textStreaming)';
+  String toString() => 'RunningState(threadId: $threadId, '
+      'messages: ${messages.length}, streaming: $streaming)';
 }
 
 /// A run has completed (success, error, or cancelled).
@@ -257,9 +138,9 @@ class RunningState extends ActiveRunState {
 /// switch (state.result) {
 ///   case Success():
 ///     // Completed successfully
-///   case Failed(:final errorMessage):
+///   case FailedResult(:final errorMessage):
 ///     // Failed with error
-///   case Cancelled(:final reason):
+///   case CancelledResult(:final reason):
 ///     // Cancelled by user
 /// }
 /// ```
@@ -267,36 +148,37 @@ class RunningState extends ActiveRunState {
 class CompletedState extends ActiveRunState {
   /// Creates a completed state.
   const CompletedState({
-    required this.threadId,
-    required this.runId,
-    required super.context,
+    required this.conversation,
     required this.result,
+    this.streaming = const NotStreaming(),
   });
 
-  /// The ID of the thread this run belonged to.
-  final String threadId;
+  @override
+  final Conversation conversation;
 
-  /// The ID of the completed run.
-  final String runId;
+  @override
+  final StreamingState streaming;
 
   /// The result of the run.
   final CompletionResult result;
+
+  /// The ID of the thread this run belonged to.
+  String get threadId => conversation.threadId;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is CompletedState &&
           runtimeType == other.runtimeType &&
-          threadId == other.threadId &&
-          runId == other.runId &&
-          context == other.context &&
+          conversation == other.conversation &&
+          streaming == other.streaming &&
           result == other.result;
 
   @override
-  int get hashCode => Object.hash(threadId, runId, context, result);
+  int get hashCode => Object.hash(conversation, streaming, result);
 
   @override
-  String toString() => 'CompletedState(threadId: $threadId, runId: $runId, '
+  String toString() => 'CompletedState(threadId: $threadId, '
       'result: $result, messages: ${messages.length})';
 }
 
@@ -307,9 +189,9 @@ class CompletedState extends ActiveRunState {
 /// switch (result) {
 ///   case Success():
 ///     // Completed successfully
-///   case Failed(:final errorMessage):
+///   case FailedResult(:final errorMessage):
 ///     // Failed with error
-///   case Cancelled(:final reason):
+///   case CancelledResult(:final reason):
 ///     // Cancelled by user
 /// }
 /// ```
@@ -335,8 +217,8 @@ class Success extends CompletionResult {
 
 /// The run failed with an error.
 @immutable
-class Failed extends CompletionResult {
-  const Failed({required this.errorMessage});
+class FailedResult extends CompletionResult {
+  const FailedResult({required this.errorMessage});
 
   /// The error message describing what went wrong.
   final String errorMessage;
@@ -344,7 +226,7 @@ class Failed extends CompletionResult {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is Failed &&
+      other is FailedResult &&
           runtimeType == other.runtimeType &&
           errorMessage == other.errorMessage;
 
@@ -352,13 +234,13 @@ class Failed extends CompletionResult {
   int get hashCode => Object.hash(runtimeType, errorMessage);
 
   @override
-  String toString() => 'Failed(errorMessage: $errorMessage)';
+  String toString() => 'FailedResult(errorMessage: $errorMessage)';
 }
 
 /// The run was cancelled by the user.
 @immutable
-class Cancelled extends CompletionResult {
-  const Cancelled({required this.reason});
+class CancelledResult extends CompletionResult {
+  const CancelledResult({required this.reason});
 
   /// The reason for cancellation.
   final String reason;
@@ -366,7 +248,7 @@ class Cancelled extends CompletionResult {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is Cancelled &&
+      other is CancelledResult &&
           runtimeType == other.runtimeType &&
           reason == other.reason;
 
@@ -374,5 +256,5 @@ class Cancelled extends CompletionResult {
   int get hashCode => Object.hash(runtimeType, reason);
 
   @override
-  String toString() => 'Cancelled(reason: $reason)';
+  String toString() => 'CancelledResult(reason: $reason)';
 }

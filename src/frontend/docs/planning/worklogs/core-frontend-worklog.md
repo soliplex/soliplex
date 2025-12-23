@@ -538,4 +538,61 @@ To pick up where you left off:
 
 ---
 
-*Last updated: 2025-12-17 (Native HTTP adapter integrated - macOS performance optimized)*
+### Session 6: 2025-12-23 - Application Layer Export & Import Cleanup
+
+**Duration:** ~30 minutes
+
+**Completed:**
+
+- ✅ Fixed `implementation_imports` hints (importing from lib/src of another package)
+- ✅ Exported application layer from soliplex_client barrel
+- ✅ Renamed CompletionResult types to avoid domain conflicts
+- ✅ Updated all frontend imports to use barrel exports
+
+**Changes:**
+
+1. **Domain barrel (`domain.dart`):**
+   - Export status types explicitly (Cancelled, Completed, Failed, Idle, Running)
+   - Hide streaming types (StreamingState, Streaming, NotStreaming) since they're in application layer
+
+2. **Main barrel (`soliplex_client.dart`):**
+   - Added `export 'src/application/application.dart'`
+
+3. **Frontend type renames:**
+   - `Failed` → `FailedResult` (CompletionResult subtype)
+   - `Cancelled` → `CancelledResult` (CompletionResult subtype)
+   - This avoids conflicts with domain's `Failed`/`Cancelled` (ConversationStatus subtypes)
+
+4. **Test file updates:**
+   - `conversation_test.dart`: Uses `domain.` prefix for domain streaming types
+   - All frontend tests: Updated to use `FailedResult`/`CancelledResult`
+   - Cleaned up unused shown names in imports
+
+**Metrics:**
+
+- **Analyzer:** 0 errors, 0 warnings, 0 hints ✓
+- **Tests:** 187 passing (0 failures) ✓
+- **Files Modified:** 12 files
+
+**Key Decision:**
+
+Renamed frontend `Failed`/`Cancelled` to `FailedResult`/`CancelledResult` rather than using prefixes everywhere. This provides clearer semantics (domain status types vs completion results) and cleaner code at call sites.
+
+**Files Modified:**
+
+- `packages/soliplex_client/lib/src/domain/domain.dart`
+- `packages/soliplex_client/lib/soliplex_client.dart`
+- `packages/soliplex_client/test/domain/conversation_test.dart`
+- `lib/core/models/active_run_state.dart`
+- `lib/core/providers/active_run_notifier.dart`
+- `lib/features/chat/widgets/message_list.dart`
+- `lib/features/chat/chat_panel.dart`
+- `test/core/models/active_run_state_test.dart`
+- `test/core/providers/active_run_notifier_test.dart`
+- `test/features/chat/chat_panel_test.dart`
+- `test/features/chat/widgets/chat_input_test.dart`
+- `test/features/chat/widgets/message_list_test.dart`
+
+---
+
+*Last updated: 2025-12-23 (Application layer export & import cleanup)*

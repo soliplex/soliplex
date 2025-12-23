@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_client/soliplex_client.dart';
+import 'package:soliplex_client/soliplex_client.dart' as domain
+    show Conversation, Running;
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
@@ -163,6 +165,10 @@ void main() {
       testWidgets('shows activity indicator when streaming', (tester) async {
         // Arrange
         final mockThread = TestData.createThread();
+        const conversation = domain.Conversation(
+          threadId: 'test-thread',
+          status: domain.Running(runId: 'test-run'),
+        );
 
         // Act
         await tester.pumpWidget(
@@ -174,11 +180,7 @@ void main() {
               currentThreadProvider.overrideWith((ref) => mockThread),
               threadMessagesProvider(mockThread.id).overrideWith((ref) => []),
               activeRunNotifierOverride(
-                const RunningState(
-                  threadId: 'test-thread',
-                  runId: 'test-run',
-                  context: RunContext.empty,
-                ),
+                const RunningState(conversation: conversation),
               ),
             ],
           ),
@@ -224,6 +226,10 @@ void main() {
         ];
 
         final mockThread = TestData.createThread();
+        const conversation = domain.Conversation(
+          threadId: 'test-thread',
+          status: domain.Running(runId: 'test-run'),
+        );
 
         // Act
         await tester.pumpWidget(
@@ -236,11 +242,7 @@ void main() {
               threadMessagesProvider(mockThread.id)
                   .overrideWith((ref) => messages),
               activeRunNotifierOverride(
-                const RunningState(
-                  threadId: 'test-thread',
-                  runId: 'test-run',
-                  context: RunContext.empty,
-                ),
+                const RunningState(conversation: conversation),
               ),
             ],
           ),
@@ -262,6 +264,11 @@ void main() {
         ];
 
         final mockThread = TestData.createThread();
+        final conversation = domain.Conversation(
+          threadId: 'test-thread',
+          messages: messages,
+          status: const domain.Running(runId: 'test-run'),
+        );
 
         // Act
         await tester.pumpWidget(
@@ -276,10 +283,8 @@ void main() {
               threadMessagesProvider(mockThread.id).overrideWith((ref) => []),
               activeRunNotifierOverride(
                 RunningState(
-                  threadId: 'test-thread',
-                  runId: 'test-run',
-                  context: RunContext(messages: messages),
-                  textStreaming: const Streaming(
+                  conversation: conversation,
+                  streaming: const Streaming(
                     messageId: 'msg-1',
                     text: 'Typing...',
                   ),
@@ -306,6 +311,11 @@ void main() {
         ];
 
         final mockThread = TestData.createThread();
+        final conversation = domain.Conversation(
+          threadId: 'test-thread',
+          messages: messages,
+          status: const domain.Running(runId: 'test-run'),
+        );
 
         // Act
         await tester.pumpWidget(
@@ -320,10 +330,8 @@ void main() {
               threadMessagesProvider(mockThread.id).overrideWith((ref) => []),
               activeRunNotifierOverride(
                 RunningState(
-                  threadId: 'test-thread',
-                  runId: 'test-run',
-                  context: RunContext(messages: messages),
-                  textStreaming: const Streaming(
+                  conversation: conversation,
+                  streaming: const Streaming(
                     messageId: 'msg-2',
                     text: 'Typing...',
                   ),
