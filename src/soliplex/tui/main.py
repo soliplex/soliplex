@@ -16,7 +16,9 @@ from soliplex.agui import parser as agui_parser
 class RoomThreadsView(t_screen.Screen):
     BINDINGS = [
         t_binding.Binding(
-            "escape", "dismiss(None)", "Return to room",
+            "escape",
+            "dismiss(None)",
+            "Return to room",
         ),
     ]
 
@@ -50,7 +52,7 @@ class RoomThreadsView(t_screen.Screen):
 
         with t_containers.VerticalScroll(id="threads-list"):
             for thread_info in self.threads:
-                thread_id = thread_info["thread_id"] 
+                thread_id = thread_info["thread_id"]
                 yield t_widgets.Button(
                     name=thread_id,
                     label=f"{thread_id}",
@@ -77,7 +79,6 @@ class Response(t_widgets.Markdown):
 
 
 class RoomView(t_screen.Screen):
-
     BINDINGS = [
         t_binding.Binding("ctrl+n", "new_thread", "New thread"),
         t_binding.Binding("ctrl+t", "list_threads", "List threads"),
@@ -119,7 +120,7 @@ class RoomView(t_screen.Screen):
         yield t_widgets.Label(id="room-thread")
 
         with t_containers.VerticalScroll(id="chat-view"):
-            yield t_widgets.Static(room_info['welcome_message'])
+            yield t_widgets.Static(room_info["welcome_message"])
             yield t_widgets.Static("Suggestions:")
 
             for suggestion in room_info["suggestions"]:
@@ -143,7 +144,7 @@ class RoomView(t_screen.Screen):
         self.thread_id = self.run_agent_input = None
         scroller = self.query_one("#chat-view")
         scroller.remove_children()
-        scroller.mount(t_widgets.Static(self.room_info['welcome_message']))
+        scroller.mount(t_widgets.Static(self.room_info["welcome_message"]))
         scroller.mount(t_widgets.Static("Suggestions:"))
 
         for suggestion in self.room_info["suggestions"]:
@@ -160,7 +161,7 @@ class RoomView(t_screen.Screen):
 
     def select_thread(self, thread_id: str):
         self.thread_id = thread_id
-        room_url  = f"{self.app.soliplex_url}/api/v1/rooms/{self.room_id}"
+        room_url = f"{self.app.soliplex_url}/api/v1/rooms/{self.room_id}"
         thread_url = f"{room_url}/agui/{thread_id}"
 
         info = requests.get(thread_url).json()
@@ -191,8 +192,7 @@ class RoomView(t_screen.Screen):
                 if message.role == "user":
                     scroller.mount(Prompt(message.content))
                 elif (
-                    message.role == "assistant"
-                    and message.content is not None
+                    message.role == "assistant" and message.content is not None
                 ):
                     scroller.mount(Response(message.content))
 
@@ -211,7 +211,7 @@ class RoomView(t_screen.Screen):
         """Get the AG-UI response in a thread."""
         self.run_count += 1
         response_content = ""
-        room_url  = f"{self.app.soliplex_url}/api/v1/rooms/{self.room_id}"
+        room_url = f"{self.app.soliplex_url}/api/v1/rooms/{self.room_id}"
         room_agui_url_base = f"{room_url}/agui"
 
         if self.run_agent_input is None:
