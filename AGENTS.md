@@ -29,11 +29,45 @@ Universal rules for all AI agents working in this monorepo.
 
 ## Agent Roles
 
-| Agent | Primary Role | Best For |
-|-------|-------------|----------|
-| Claude | Reasoning & Architecture | Complex refactoring, code review, planning |
-| Gemini | Context & Research | Large file analysis, documentation search |
-| Codex | Inline Completion | Autocomplete, boilerplate generation |
+| Agent | CLI | Primary Role | Best For |
+|-------|-----|-------------|----------|
+| Claude | `claude` | Reasoning & Architecture | Complex refactoring, code review, planning |
+| Gemini | `gemini` | Context & Research | Large file analysis, documentation search |
+| Codex | `codex` | Tactical Execution | Quick edits, boilerplate, running commands |
+
+## Triad Workflow
+
+Default sequence for multi-agent tasks:
+
+```
+GEMINI (Research) → CLAUDE (Architect) → CODEX (Execute)
+```
+
+| Phase | Agent | Action |
+|-------|-------|--------|
+| 1. Research | Gemini | Explore codebase, find files, gather context |
+| 2. Plan | Claude | Design approach, make decisions, write complex logic |
+| 3. Execute | Codex | Quick edits, boilerplate, run commands |
+
+Single-agent tasks: any agent handles all phases.
+
+## Handoff Protocol
+
+When switching agents mid-task, append to `docs/work-logs/{feature}.md`:
+
+```markdown
+## Handoff [YYYY-MM-DD]
+- **Done**: What was completed
+- **Files**: Key files modified or identified
+- **Next**: What the next agent should do
+```
+
+## Codex-Specific
+
+Codex reads this file automatically. Additional guidance:
+- Prefer `dart mcp-server` tools over CLI for Flutter (see `src/flutter/AGENTS.md`)
+- Run `uv run pytest` for Python tests
+- Run `uv run ruff check` before commits
 
 ## Domain-Specific Rules
 

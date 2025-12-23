@@ -110,10 +110,48 @@ If you only have one agent, it handles all phases. Adjust prompts accordingly:
 
 | File | Purpose | Location |
 |------|---------|----------|
-| `AGENTS.md` | Universal rules (security, process) | `/AGENTS.md` |
+| `AGENTS.md` | Universal rules (all agents, Codex native) | `/AGENTS.md`, `/src/*/AGENTS.md` |
 | `CLAUDE.md` | Claude-specific project knowledge | `/CLAUDE.md`, `/src/*/CLAUDE.md` |
 | `GEMINI.md` | Gemini-specific instructions | `/GEMINI.md`, `/src/*/GEMINI.md` |
 | `.agents.local.yaml` | Your personal agent config | `/` (gitignored) |
+
+## Simultaneous Multi-Agent Usage
+
+Use all three agents together in a "Relay Race" pattern:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  GEMINI (Research)                                          │
+│  - Explore codebase, find files                             │
+│  - Read large context (docs, history)                       │
+│  - Generate initial scaffold from designs                   │
+├─────────────────────────────────────────────────────────────┤
+│  CLAUDE (Architect)                                         │
+│  - Review Gemini's findings                                 │
+│  - Design implementation approach                           │
+│  - Write complex business logic                             │
+│  - Refactor and integrate                                   │
+├─────────────────────────────────────────────────────────────┤
+│  CODEX (Driver)                                             │
+│  - Inline completion while coding                           │
+│  - Generate boilerplate/tests                               │
+│  - Quick tactical edits                                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Example: Adding a New Feature
+
+1. **Gemini**: "Find all files related to authentication and summarize the current flow"
+2. **Claude**: "Based on Gemini's findings, design an approach to add OAuth2 support"
+3. **Codex**: (in IDE) Autocomplete as you implement Claude's design
+4. **Claude**: "Review the implementation and suggest improvements"
+
+### Handoff Protocol
+
+When handing off between agents, provide:
+- Summary of what was done
+- Files identified/modified
+- What the next agent should do
 
 ## Getting Help
 

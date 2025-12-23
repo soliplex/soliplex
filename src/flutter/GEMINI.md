@@ -12,6 +12,33 @@ Gemini excels at:
 - Analyzing widget trees and state flow
 - Processing screenshots of UI for implementation
 
+## Tool Preferences
+
+Prefer the `dart mcp-server` (stdio MCP server) tools over CLI when available:
+
+| Task | MCP Tool | Instead of CLI |
+|------|----------|----------------|
+| Run tests | `run_tests` | `flutter test` |
+| Analyze | `analyze_files` | `flutter analyze` |
+| Format | `dart_format` | `dart format` |
+| Pub commands | `pub` | `flutter pub` |
+
+MCP tools provide structured output and better error handling.
+
+## Code Quality Sequence
+
+Always run in this order:
+1. Format (`dart_format`)
+2. Lint (`analyze_files`)
+3. Test (`run_tests`)
+
+## Accessibility
+
+Always add accessibility information to widgets:
+- `Tooltip` for icon buttons and non-text actions
+- `Semantics` labels for screen readers
+- `excludeFromSemantics: true` only when parent provides context
+
 ## Reference Documentation
 
 - **SOLIPLEX.md** - Backend API documentation for AG-UI integration (endpoints, request/response schemas, state sync)
