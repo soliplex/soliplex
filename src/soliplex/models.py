@@ -436,6 +436,13 @@ class AGUI_RunMetadata(pydantic.BaseModel):
             )
 
 
+class AGUI_RunFeedback(pydantic.BaseModel):
+    """Feedback for a run"""
+
+    feedback: str = KW_ONLY
+    reason: str | None = KW_ONLY_NONE
+
+
 class AGUI_NewRunRequest(pydantic.BaseModel):
     parent_run_id: str = KW_ONLY_NONE
     metadata: AGUI_RunMetadata = KW_ONLY_NONE

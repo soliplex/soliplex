@@ -548,6 +548,49 @@ async def post_room_agui_thread_id_run_id_meta(
     return fastapi.Response(status_code=205)
 
 
+@util.logfire_span(
+    "POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}/feedback"
+)
+@router.post("/v1/rooms/{room_id}/agui/{thread_id}/{run_id}/feedback")
+async def post_room_agui_thread_id_run_id_feedback(
+    request: fastapi.Request,
+    room_id: str,
+    thread_id: str,
+    run_id: str,
+    new_feedback: models.AGUI_RunFeedback,
+    the_installation: installation.Installation = depend_the_installation,
+    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+) -> fastapi.Response:
+    """Add / update feedback for a run
+
+    Return an HTTP 205 (Reset Content) on success.
+    """
+    user_name = await _check_user_in_room(
+        room_id=room_id,
+        the_installation=the_installation,
+        token=token,
+    )
+
+    try:
+        await the_threads.save_run_feedback(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+            feedback=new_feedback.feedback,
+            reason=new_feedback.reason,
+        )
+
+    except agui_package.AGUI_Exception as exc:
+        raise fastapi.HTTPException(
+            status_code=exc.status_code,
+            detail=exc.args,
+        ) from None
+
+    return fastapi.Response(status_code=205)
+
+
 @util.logfire_span("DELETE /v1/rooms/{room_id}/agui/{thread_id}")
 @router.delete("/v1/rooms/{room_id}/agui/{thread_id}")
 async def delete_room_agui_thread_id(

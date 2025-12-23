@@ -355,6 +355,19 @@ class ThreadStorage(abc.ABC):
     ):
         """Save the run usage statistics"""
 
+    @abc.abstractmethod
+    async def save_run_feedback(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+        feedback: str,
+        reason: str,
+    ):
+        """Save the run feedback"""
+
 
 async def get_the_threads(request: fastapi.Request) -> ThreadStorage:
     from . import persistence
