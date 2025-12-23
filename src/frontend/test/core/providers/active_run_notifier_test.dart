@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:soliplex_client/soliplex_client.dart';
+import 'package:soliplex_client/soliplex_client.dart' as domain
+    show Cancelled, Completed, Conversation, Failed, Running;
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_notifier.dart';
 import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
@@ -52,6 +54,12 @@ void main() {
         final state = container.read(activeRunNotifierProvider);
         expect(state.isRunning, isFalse);
       });
+
+      test('IdleState has empty sentinel conversation', () {
+        final state = container.read(activeRunNotifierProvider);
+        expect(state.messages, isEmpty);
+        expect(state.conversation.threadId, isEmpty);
+      });
     });
 
     group('reset', () {
@@ -62,12 +70,11 @@ void main() {
         expect(state, isA<IdleState>());
       });
 
-      test('clears context', () {
+      test('clears messages', () {
         container.read(activeRunNotifierProvider.notifier).reset();
 
         final state = container.read(activeRunNotifierProvider);
         expect(state.messages, isEmpty);
-        expect(state.rawEvents, isEmpty);
       });
     });
 
@@ -77,44 +84,50 @@ void main() {
         expect(const IdleState().isRunning, isFalse);
 
         // RunningState
+        const runningConversation = domain.Conversation(
+          threadId: 't',
+          status: domain.Running(runId: 'r'),
+        );
         expect(
-          const RunningState(
-            threadId: 't',
-            runId: 'r',
-            context: RunContext.empty,
-          ).isRunning,
+          const RunningState(conversation: runningConversation).isRunning,
           isTrue,
         );
 
         // CompletedState with Success
+        const completedConversation = domain.Conversation(
+          threadId: 't',
+          status: domain.Completed(),
+        );
         expect(
           const CompletedState(
-            threadId: 't',
-            runId: 'r',
-            context: RunContext.empty,
+            conversation: completedConversation,
             result: Success(),
           ).isRunning,
           isFalse,
         );
 
         // CompletedState with Failed
+        const failedConversation = domain.Conversation(
+          threadId: 't',
+          status: domain.Failed(error: 'Error'),
+        );
         expect(
           const CompletedState(
-            threadId: 't',
-            runId: 'r',
-            context: RunContext.empty,
-            result: Failed(errorMessage: 'Error'),
+            conversation: failedConversation,
+            result: FailedResult(errorMessage: 'Error'),
           ).isRunning,
           isFalse,
         );
 
         // CompletedState with Cancelled
+        const cancelledConversation = domain.Conversation(
+          threadId: 't',
+          status: domain.Cancelled(reason: 'User cancelled'),
+        );
         expect(
           const CompletedState(
-            threadId: 't',
-            runId: 'r',
-            context: RunContext.empty,
-            result: Cancelled(reason: 'User cancelled'),
+            conversation: cancelledConversation,
+            result: CancelledResult(reason: 'User cancelled'),
           ).isRunning,
           isFalse,
         );
@@ -122,44 +135,55 @@ void main() {
     });
 
     group('convenience getters', () {
-      test('messages returns context.messages', () {
+      test('messages delegates to conversation.messages', () {
         final message = TextMessage.create(
           id: 'msg-1',
           user: ChatUser.user,
           text: 'Hello',
         );
-        final state = IdleState(
-          context: RunContext(messages: [message]),
+        final conversation = domain.Conversation(
+          threadId: 'thread-1',
+          messages: [message],
+          status: const domain.Running(runId: 'r'),
         );
+        final state = RunningState(conversation: conversation);
 
         expect(state.messages, [message]);
-        expect(state.messages, equals(state.context.messages));
       });
 
-      test('rawEvents returns context.rawEvents', () {
-        const state = IdleState();
-
-        expect(state.rawEvents, isEmpty);
-        expect(state.rawEvents, equals(state.context.rawEvents));
-      });
-
-      test('state getter returns context.state', () {
-        const runState = IdleState(
-          context: RunContext(state: {'key': 'value'}),
-        );
-
-        expect(runState.state, {'key': 'value'});
-        expect(runState.state, equals(runState.context.state));
-      });
-
-      test('activeToolCalls returns context.activeToolCalls', () {
+      test('activeToolCalls delegates to conversation.toolCalls', () {
         const toolCall = ToolCallInfo(id: 'tc-1', name: 'search');
-        const state = IdleState(
-          context: RunContext(activeToolCalls: [toolCall]),
+        const conversation = domain.Conversation(
+          threadId: 'thread-1',
+          toolCalls: [toolCall],
+          status: domain.Running(runId: 'r'),
         );
+        const state = RunningState(conversation: conversation);
 
         expect(state.activeToolCalls, [toolCall]);
-        expect(state.activeToolCalls, equals(state.context.activeToolCalls));
+      });
+
+      test('streaming defaults to NotStreaming', () {
+        const conversation = domain.Conversation(
+          threadId: 'thread-1',
+          status: domain.Running(runId: 'r'),
+        );
+        const state = RunningState(conversation: conversation);
+
+        expect(state.streaming, isA<NotStreaming>());
+      });
+
+      test('isStreaming returns true when Streaming', () {
+        const conversation = domain.Conversation(
+          threadId: 'thread-1',
+          status: domain.Running(runId: 'r'),
+        );
+        const state = RunningState(
+          conversation: conversation,
+          streaming: Streaming(messageId: 'msg-1', text: 'Hello'),
+        );
+
+        expect(state.isStreaming, isTrue);
       });
     });
   });
@@ -279,5 +303,131 @@ void main() {
         expect(runningState.runId, 'backend-run-id-123');
       },
     );
+
+    test('uses existingRunId when provided instead of creating new', () async {
+      const roomId = 'room-1';
+      const threadId = 'thread-1';
+      const existingRunId = 'existing-run-456';
+
+      await container.read(activeRunNotifierProvider.notifier).startRun(
+            roomId: roomId,
+            threadId: threadId,
+            userMessage: 'Test',
+            existingRunId: existingRunId,
+          );
+
+      final state = container.read(activeRunNotifierProvider);
+
+      expect(state, isA<RunningState>());
+      final runningState = state as RunningState;
+      expect(runningState.runId, existingRunId);
+
+      // Verify createRun was NOT called
+      verifyNever(
+        () => mockApi.createRun(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      );
+    });
+
+    test('throws StateError if run already active', () async {
+      const roomId = 'room-1';
+      const threadId = 'thread-1';
+
+      // Start first run
+      await container.read(activeRunNotifierProvider.notifier).startRun(
+            roomId: roomId,
+            threadId: threadId,
+            userMessage: 'First',
+          );
+
+      // Attempt to start second run
+      expect(
+        () => container.read(activeRunNotifierProvider.notifier).startRun(
+              roomId: roomId,
+              threadId: threadId,
+              userMessage: 'Second',
+            ),
+        throwsA(isA<StateError>()),
+      );
+    });
+  });
+
+  group('cancelRun', () {
+    late ProviderContainer container;
+    late StreamController<BaseEvent> eventStreamController;
+
+    setUp(() {
+      eventStreamController = StreamController<BaseEvent>();
+
+      when(
+        () => mockApi.createRun(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).thenAnswer(
+        (_) async => RunInfo(
+          id: 'run-1',
+          threadId: 'thread-1',
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      when(
+        () => mockAgUiClient.runAgent(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).thenAnswer((_) => eventStreamController.stream);
+
+      container = ProviderContainer(
+        overrides: [
+          apiProvider.overrideWithValue(mockApi),
+          agUiClientProvider.overrideWithValue(mockAgUiClient),
+        ],
+      );
+    });
+
+    tearDown(() {
+      eventStreamController.close();
+      container.dispose();
+    });
+
+    test('transitions to CompletedState with Cancelled result', () async {
+      // Start a run
+      await container.read(activeRunNotifierProvider.notifier).startRun(
+            roomId: 'room-1',
+            threadId: 'thread-1',
+            userMessage: 'Hello',
+          );
+
+      // Cancel the run
+      await container.read(activeRunNotifierProvider.notifier).cancelRun();
+
+      final state = container.read(activeRunNotifierProvider);
+      expect(state, isA<CompletedState>());
+      final completedState = state as CompletedState;
+      expect(completedState.result, isA<CancelledResult>());
+    });
+
+    test('preserves messages after cancellation', () async {
+      // Start a run
+      await container.read(activeRunNotifierProvider.notifier).startRun(
+            roomId: 'room-1',
+            threadId: 'thread-1',
+            userMessage: 'Hello',
+          );
+
+      // Cancel the run
+      await container.read(activeRunNotifierProvider.notifier).cancelRun();
+
+      final state = container.read(activeRunNotifierProvider);
+      expect(state.messages.length, 1);
+      expect((state.messages.first as TextMessage).text, 'Hello');
+    });
   });
 }

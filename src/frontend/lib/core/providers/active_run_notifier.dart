@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:meta/meta.dart';
 import 'package:soliplex_client/soliplex_client.dart';
+import 'package:soliplex_client/soliplex_client.dart' as domain
+    show Cancelled, Completed, Conversation, Failed, Idle, Running;
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
 
@@ -125,13 +127,16 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
       text: userMessage,
     );
 
-    // Set running state with user message
-    state = RunningState(
+    // Create conversation with user message and Running status
+    final conversation = domain.Conversation(
       threadId: threadId,
-      runId: runId,
-      context: state.context.copyWith(
-        messages: [...state.context.messages, userMessageObj],
-      ),
+      messages: [userMessageObj],
+      status: domain.Running(runId: runId),
+    );
+
+    // Set running state
+    state = RunningState(
+      conversation: conversation,
     );
 
     try {
@@ -166,10 +171,10 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
           final currentState = state;
           if (currentState is RunningState) {
             state = CompletedState(
-              threadId: currentState.threadId,
-              runId: currentState.runId,
-              context: currentState.context,
-              result: Failed(errorMessage: error.toString()),
+              conversation: currentState.conversation.withStatus(
+                domain.Failed(error: error.toString()),
+              ),
+              result: FailedResult(errorMessage: error.toString()),
             );
           }
         },
@@ -179,9 +184,9 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
           final currentState = state;
           if (currentState is RunningState) {
             state = CompletedState(
-              threadId: currentState.threadId,
-              runId: currentState.runId,
-              context: currentState.context,
+              conversation: currentState.conversation.withStatus(
+                const domain.Completed(),
+              ),
               result: const Success(),
             );
           }
@@ -197,18 +202,18 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
     } on CancellationError {
       // User cancelled - already handled in cancelRun
       state = CompletedState(
-        threadId: threadId,
-        runId: runId,
-        context: state.context,
-        result: const Cancelled(reason: 'Cancelled by user'),
+        conversation: conversation.withStatus(
+          const domain.Cancelled(reason: 'Cancelled by user'),
+        ),
+        result: const CancelledResult(reason: 'Cancelled by user'),
       );
       _internalState = const IdleInternalState();
     } catch (e) {
       state = CompletedState(
-        threadId: threadId,
-        runId: runId,
-        context: state.context,
-        result: Failed(errorMessage: e.toString()),
+        conversation: conversation.withStatus(
+          domain.Failed(error: e.toString()),
+        ),
+        result: FailedResult(errorMessage: e.toString()),
       );
       _internalState = const IdleInternalState();
     }
@@ -227,10 +232,10 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
 
     if (currentState is RunningState) {
       state = CompletedState(
-        threadId: currentState.threadId,
-        runId: currentState.runId,
-        context: currentState.context,
-        result: const Cancelled(reason: 'Cancelled by user'),
+        conversation: currentState.conversation.withStatus(
+          const domain.Cancelled(reason: 'User cancelled'),
+        ),
+        result: const CancelledResult(reason: 'Cancelled by user'),
       );
     }
   }
@@ -250,115 +255,45 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
     final currentState = state;
     if (currentState is! RunningState) return;
 
-    // Store raw event
-    final updatedContext = currentState.context.copyWith(
-      rawEvents: [...currentState.rawEvents, event],
+    // Use application layer processor
+    final result = processEvent(
+      currentState.conversation,
+      currentState.streaming,
+      event,
     );
 
-    switch (event) {
-      case RunStartedEvent():
-        // Run started - just update raw events
-        state = currentState.copyWith(context: updatedContext);
+    // Map result to frontend state
+    state = _mapResultToState(currentState, result);
+  }
 
-      case RunFinishedEvent():
-        // Run finished successfully
-        state = CompletedState(
-          threadId: currentState.threadId,
-          runId: currentState.runId,
-          context: updatedContext,
+  /// Maps an EventProcessingResult to the appropriate ActiveRunState.
+  ActiveRunState _mapResultToState(
+    RunningState previousState,
+    EventProcessingResult result,
+  ) {
+    return switch (result.conversation.status) {
+      domain.Completed() => CompletedState(
+          conversation: result.conversation,
+          streaming: result.streaming,
           result: const Success(),
-        );
-
-      case RunErrorEvent(:final message):
-        // Run encountered an error
-        state = CompletedState(
-          threadId: currentState.threadId,
-          runId: currentState.runId,
-          context: updatedContext,
-          result: Failed(errorMessage: message),
-        );
-
-      case TextMessageStartEvent(:final messageId):
-        // Start streaming a new text message
-        state = currentState.copyWith(
-          context: updatedContext,
-          textStreaming: Streaming(messageId: messageId, text: ''),
-        );
-
-      case TextMessageContentEvent(:final messageId, :final delta):
-        // Append streaming text content
-        final streaming = currentState.textStreaming;
-        if (streaming is Streaming && streaming.messageId == messageId) {
-          state = currentState.copyWith(
-            context: updatedContext,
-            textStreaming: Streaming(
-              messageId: messageId,
-              text: streaming.text + delta,
-            ),
-          );
-        }
-
-      case TextMessageEndEvent(:final messageId):
-        // Complete the streaming message
-        final streaming = currentState.textStreaming;
-        if (streaming is Streaming && streaming.messageId == messageId) {
-          final newMessage = TextMessage.create(
-            id: messageId,
-            user: ChatUser.assistant,
-            text: streaming.text,
-          );
-          state = currentState.copyWith(
-            context: updatedContext.copyWith(
-              messages: [...currentState.messages, newMessage],
-            ),
-            textStreaming: const NotStreaming(),
-          );
-        }
-
-      case ToolCallStartEvent(:final toolCallId, :final toolCallName):
-        final toolCall = ToolCallInfo(id: toolCallId, name: toolCallName);
-        state = currentState.copyWith(
-          context: updatedContext.copyWith(
-            activeToolCalls: [...currentState.activeToolCalls, toolCall],
-          ),
-        );
-
-      case ToolCallEndEvent(:final toolCallId):
-        // Tool call finished
-        final updatedToolCalls = currentState.activeToolCalls
-            .where((tc) => tc.id != toolCallId)
-            .toList();
-        state = currentState.copyWith(
-          context: updatedContext.copyWith(activeToolCalls: updatedToolCalls),
-        );
-
-      case StateSnapshotEvent(:final snapshot):
-        // State snapshot received
-        state = currentState.copyWith(
-          context: updatedContext.copyWith(
-            state: Map<String, dynamic>.from(snapshot as Map),
-          ),
-        );
-
-      case StateDeltaEvent():
-      case StepStartedEvent():
-      case StepFinishedEvent():
-      case ToolCallArgsEvent():
-      case ToolCallResultEvent():
-      case ActivitySnapshotEvent():
-      case MessagesSnapshotEvent():
-      case CustomEvent():
-      case RawEvent():
-      case TextMessageChunkEvent():
-      case ToolCallChunkEvent():
-      case ThinkingStartEvent():
-      case ThinkingContentEvent():
-      case ThinkingEndEvent():
-      case ThinkingTextMessageStartEvent():
-      case ThinkingTextMessageContentEvent():
-      case ThinkingTextMessageEndEvent():
-        // Store event but don't process (AM3 doesn't need these)
-        state = currentState.copyWith(context: updatedContext);
-    }
+        ),
+      domain.Failed(:final error) => CompletedState(
+          conversation: result.conversation,
+          streaming: result.streaming,
+          result: FailedResult(errorMessage: error),
+        ),
+      domain.Cancelled(:final reason) => CompletedState(
+          conversation: result.conversation,
+          streaming: result.streaming,
+          result: CancelledResult(reason: reason),
+        ),
+      domain.Running() => previousState.copyWith(
+          conversation: result.conversation,
+          streaming: result.streaming,
+        ),
+      domain.Idle() => throw StateError(
+          'Unexpected Idle status during event processing',
+        ),
+    };
   }
 }
