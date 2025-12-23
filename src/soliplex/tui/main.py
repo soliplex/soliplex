@@ -14,7 +14,6 @@ from textual import widgets as t_widgets
 from soliplex.agui import parser as agui_parser
 
 
-
 class RunMetadataView(t_screen.Screen):
     BINDINGS = [
         t_binding.Binding("escape", "dismiss(None)", "Return"),
@@ -24,7 +23,6 @@ class RunMetadataView(t_screen.Screen):
         self.run_id = run_id
         self.label_text = label_text
         super().__init__()
-
 
     def compose(self) -> t_app.ComposeResult:
         yield t_widgets.Header()
@@ -77,7 +75,7 @@ class RunMessageWidget(t_widget.Widget):
         if self.message_role == "user":
             if not isinstance(content, str):
                 if content.type == "binary":
-                    conent = "<binary>"
+                    content = "<binary>"
                 else:
                     content = content.text
 
@@ -204,26 +202,24 @@ class RunView(t_screen.Screen):
         usage = self.run_usage
 
         with RunLabeledWidget():
-            yield t_widgets.Label(f"Messages:")
+            yield t_widgets.Label("Messages:")
 
         with t_containers.VerticalScroll(id="run-messages"):
-
             for message in self.run_messages:
                 with RunLabeledWidget():
                     yield RunMessageWidget(message)
 
         with RunLabeledWidget():
-            yield t_widgets.Label(f"Events:")
+            yield t_widgets.Label("Events:")
 
         with t_containers.VerticalScroll(id="run-events"):
-
             for event in self.run_events:
                 with RunLabeledWidget():
                     yield RunEventWidget(event)
 
         if usage is not None:
             with RunLabeledWidget():
-                yield t_widgets.Label(f"Usage:")
+                yield t_widgets.Label("Usage:")
 
             for key, value in usage.items():
                 with RunLabeledWidget():
@@ -242,7 +238,7 @@ class RunView(t_screen.Screen):
 
             payload = {"label": found} if found else {}
 
-            response = requests.post(
+            requests.post(
                 f"{self.app.soliplex_url}/api/v1/rooms/{self.room_id}/agui/"
                 f"{self.thread_id}/{self.run_id}/meta",
                 json=payload,
@@ -252,10 +248,24 @@ class RunView(t_screen.Screen):
             self.query_one("#run-label").content = self.label_text
 
 
+class RunButtonWidget(t_widget.Widget):
+    DEFAULT_CSS = """
+    RunButtonWidget {
+        layout: horizontal;
+        height: auto;
+    }
+    """
+
+
 class ThreadRunsView(t_screen.Screen):
     BINDINGS = [
         t_binding.Binding("escape", "dismiss(None)", "Return"),
     ]
+    DEFAULT_CSS = """
+    .run-label {
+        padding: 1;
+    }
+    """
 
     def __init__(self, room_id, thread_id, *args, **kwargs):
         self.room_id = room_id
@@ -281,10 +291,18 @@ class ThreadRunsView(t_screen.Screen):
 
         with t_containers.VerticalScroll(id="runs-list"):
             for run_id, run_info in self.runs.items():
-                yield t_widgets.Button(
-                    name=run_id,
-                    label=f"{run_id}",
-                )
+                with RunButtonWidget():
+                    yield t_widgets.Button(
+                        name=run_id,
+                        label=f"{run_id}",
+                    )
+
+                    if run_info["metadata"] is not None:
+                        yield t_widgets.Label(
+                            run_info["metadata"]["label"],
+                            classes="run-label",
+                        )
+
         yield t_widgets.Footer()
 
     async def on_button_pressed(
@@ -374,7 +392,6 @@ class RoomThreadsView(t_screen.Screen):
         self.dismiss(thread_id)
 
 
-
 class ThreadMetadataView(t_screen.Screen):
     BINDINGS = [
         t_binding.Binding("escape", "dismiss(None)", "Return"),
@@ -392,7 +409,6 @@ class ThreadMetadataView(t_screen.Screen):
         self.thread_name = thread_name
         self.thread_description = thread_description
         super().__init__()
-
 
     def compose(self) -> t_app.ComposeResult:
         yield t_widgets.Header()
@@ -553,8 +569,7 @@ class RoomView(t_screen.Screen):
         found = await self.app.push_screen_wait(thread_meta_view)
 
         if found is not None:
-
-            response = requests.post(
+            requests.post(
                 f"{self.app.soliplex_url}/api/v1/rooms/{self.room_id}/agui/"
                 f"{self.thread_id}/meta",
                 json=found,
