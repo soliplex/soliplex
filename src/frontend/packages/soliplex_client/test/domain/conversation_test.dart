@@ -179,6 +179,47 @@ void main() {
 
         expect(updated.messages, hasLength(1));
       });
+
+      test('copies with new threadId', () {
+        final updated = conversation.copyWith(threadId: 'thread-2');
+
+        expect(updated.threadId, 'thread-2');
+        expect(updated.messages, conversation.messages);
+        expect(updated.toolCalls, conversation.toolCalls);
+      });
+
+      test('copies with new messages list', () {
+        final newMessages = [
+          TextMessage.create(id: 'msg-1', user: ChatUser.user, text: 'Hello'),
+        ];
+        final updated = conversation.copyWith(messages: newMessages);
+
+        expect(updated.messages, hasLength(1));
+        expect(updated.messages.first.id, 'msg-1');
+        expect(updated.threadId, conversation.threadId);
+      });
+
+      test('copies with new toolCalls list', () {
+        const newToolCalls = [
+          ToolCallInfo(id: 'tc-1', name: 'search'),
+          ToolCallInfo(id: 'tc-2', name: 'read'),
+        ];
+        final updated = conversation.copyWith(toolCalls: newToolCalls);
+
+        expect(updated.toolCalls, hasLength(2));
+        expect(updated.toolCalls[0].name, 'search');
+        expect(updated.toolCalls[1].name, 'read');
+        expect(updated.threadId, conversation.threadId);
+      });
+
+      test('copies with new status', () {
+        final updated = conversation.copyWith(
+          status: const Running(runId: 'run-1'),
+        );
+
+        expect(updated.status, isA<Running>());
+        expect((updated.status as Running).runId, 'run-1');
+      });
     });
 
     group('equality', () {
@@ -215,11 +256,68 @@ void main() {
       expect(state1, isNot(equals(state3)));
     });
 
+    test('Streaming equality non-identical instances', () {
+      // Runtime list access prevents const evaluation
+      final texts = ['Hello', 'Hello'];
+      final msgIds = ['msg-1', 'msg-1', 'msg-2'];
+
+      final state1 = Streaming(text: texts[0], messageId: msgIds[0]);
+      final state2 = Streaming(text: texts[1], messageId: msgIds[1]);
+      final state3 = Streaming(text: texts[0], messageId: msgIds[2]);
+
+      expect(state1, equals(state2));
+      expect(state1, isNot(equals(state3)));
+    });
+
     test('NotStreaming equality', () {
       const state1 = NotStreaming();
       const state2 = NotStreaming();
 
       expect(state1, equals(state2));
+    });
+
+    test('NotStreaming equality non-identical instances', () {
+      const state1 = NotStreaming();
+      const state2 = NotStreaming();
+
+      expect(state1, equals(state2));
+    });
+
+    test('NotStreaming hashCode', () {
+      const state1 = NotStreaming();
+      const state2 = NotStreaming();
+
+      expect(state1.hashCode, equals(state2.hashCode));
+    });
+
+    test('NotStreaming toString', () {
+      const state = NotStreaming();
+      expect(state.toString(), equals('NotStreaming()'));
+    });
+
+    test('Streaming hashCode', () {
+      const state1 = Streaming(text: 'Hello', messageId: 'msg-1');
+      const state2 = Streaming(text: 'Hello', messageId: 'msg-1');
+
+      expect(state1.hashCode, equals(state2.hashCode));
+    });
+
+    test('Streaming toString', () {
+      const state = Streaming(text: 'Hello world', messageId: 'msg-1');
+      final str = state.toString();
+
+      expect(str, contains('msg-1'));
+      expect(str, contains('11 chars'));
+    });
+
+    test('Streaming identical returns true', () {
+      const state = Streaming(text: 'Hello', messageId: 'msg-1');
+      expect(state == state, isTrue);
+    });
+
+    test('NotStreaming identical returns true', () {
+      const state = NotStreaming();
+      expect(state == state, isTrue);
     });
   });
 
@@ -247,6 +345,209 @@ void main() {
     test('Completed has no additional fields', () {
       const status = Completed();
       expect(status, isA<ConversationStatus>());
+    });
+
+    group('Idle', () {
+      test('equality', () {
+        const status1 = Idle();
+        const status2 = Idle();
+
+        expect(status1, equals(status2));
+      });
+
+      test('equality non-identical instances', () {
+        const status1 = Idle();
+        const status2 = Idle();
+
+        expect(status1, equals(status2));
+      });
+
+      test('identical returns true', () {
+        const status = Idle();
+        expect(status == status, isTrue);
+      });
+
+      test('hashCode', () {
+        const status1 = Idle();
+        const status2 = Idle();
+
+        expect(status1.hashCode, equals(status2.hashCode));
+      });
+
+      test('toString', () {
+        const status = Idle();
+        expect(status.toString(), equals('Idle()'));
+      });
+    });
+
+    group('Running', () {
+      test('equality', () {
+        const status1 = Running(runId: 'run-1');
+        const status2 = Running(runId: 'run-1');
+        const status3 = Running(runId: 'run-2');
+
+        expect(status1, equals(status2));
+        expect(status1, isNot(equals(status3)));
+      });
+
+      test('identical returns true', () {
+        const status = Running(runId: 'run-1');
+        expect(status == status, isTrue);
+      });
+
+      test('hashCode', () {
+        const status1 = Running(runId: 'run-1');
+        const status2 = Running(runId: 'run-1');
+
+        expect(status1.hashCode, equals(status2.hashCode));
+      });
+
+      test('toString', () {
+        const status = Running(runId: 'run-123');
+        expect(status.toString(), contains('run-123'));
+      });
+    });
+
+    group('Completed', () {
+      test('equality', () {
+        const status1 = Completed();
+        const status2 = Completed();
+
+        expect(status1, equals(status2));
+      });
+
+      test('equality non-identical instances', () {
+        const status1 = Completed();
+        const status2 = Completed();
+
+        expect(status1, equals(status2));
+      });
+
+      test('identical returns true', () {
+        const status = Completed();
+        expect(status == status, isTrue);
+      });
+
+      test('hashCode', () {
+        const status1 = Completed();
+        const status2 = Completed();
+
+        expect(status1.hashCode, equals(status2.hashCode));
+      });
+
+      test('toString', () {
+        const status = Completed();
+        expect(status.toString(), equals('Completed()'));
+      });
+    });
+
+    group('Failed', () {
+      test('equality', () {
+        const status1 = Failed(error: 'error-1');
+        const status2 = Failed(error: 'error-1');
+        const status3 = Failed(error: 'error-2');
+
+        expect(status1, equals(status2));
+        expect(status1, isNot(equals(status3)));
+      });
+
+      test('identical returns true', () {
+        const status = Failed(error: 'error');
+        expect(status == status, isTrue);
+      });
+
+      test('hashCode', () {
+        const status1 = Failed(error: 'error-1');
+        const status2 = Failed(error: 'error-1');
+
+        expect(status1.hashCode, equals(status2.hashCode));
+      });
+
+      test('toString', () {
+        const status = Failed(error: 'Network error');
+        expect(status.toString(), contains('Network error'));
+      });
+    });
+
+    group('Cancelled', () {
+      test('equality', () {
+        const status1 = Cancelled(reason: 'reason-1');
+        const status2 = Cancelled(reason: 'reason-1');
+        const status3 = Cancelled(reason: 'reason-2');
+
+        expect(status1, equals(status2));
+        expect(status1, isNot(equals(status3)));
+      });
+
+      test('equality non-identical instances', () {
+        // Helper function to create non-const instances
+        Cancelled create(String reason) => Cancelled(reason: reason);
+
+        final status1 = create('reason-1');
+        final status2 = create('reason-1');
+
+        expect(status1, equals(status2));
+      });
+
+      test('identical returns true', () {
+        const status = Cancelled(reason: 'reason');
+        expect(status == status, isTrue);
+      });
+
+      test('hashCode', () {
+        const status1 = Cancelled(reason: 'reason-1');
+        const status2 = Cancelled(reason: 'reason-1');
+
+        expect(status1.hashCode, equals(status2.hashCode));
+      });
+
+      test('toString', () {
+        const status = Cancelled(reason: 'User cancelled');
+        expect(status.toString(), contains('User cancelled'));
+      });
+    });
+  });
+
+  group('Conversation additional', () {
+    test('isRunning returns false when Idle', () {
+      final conv = Conversation.empty(threadId: 'thread-1');
+      expect(conv.isRunning, isFalse);
+    });
+
+    test('isRunning returns true when Running', () {
+      final conv = Conversation.empty(threadId: 'thread-1')
+          .withStatus(const Running(runId: 'run-1'));
+      expect(conv.isRunning, isTrue);
+    });
+
+    test('hashCode based on threadId', () {
+      final conv1 = Conversation.empty(threadId: 'thread-1');
+      final conv2 = Conversation.empty(threadId: 'thread-1');
+
+      expect(conv1.hashCode, equals(conv2.hashCode));
+    });
+
+    test('toString includes all fields', () {
+      final conv = Conversation.empty(threadId: 'thread-1')
+          .withAppendedMessage(
+            TextMessage.create(user: ChatUser.user, text: 'Hello'),
+          )
+          .withToolCall(const ToolCallInfo(id: 'tc-1', name: 'search'))
+          .withStreaming(const Streaming(text: 'Hi', messageId: 'msg-1'))
+          .withStatus(const Running(runId: 'run-1'));
+
+      final str = conv.toString();
+
+      expect(str, contains('thread-1'));
+      expect(str, contains('messages: 1'));
+      expect(str, contains('toolCalls: 1'));
+      expect(str, contains('Streaming'));
+      expect(str, contains('Running'));
+    });
+
+    test('identical conversations return true for equality', () {
+      final conv = Conversation.empty(threadId: 'thread-1');
+      expect(conv == conv, isTrue);
     });
   });
 }

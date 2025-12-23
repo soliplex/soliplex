@@ -58,6 +58,30 @@ void main() {
         expect(room.description, equals(''));
         expect(room.metadata, equals(const <String, dynamic>{}));
       });
+
+      test('handles null description', () {
+        final json = <String, dynamic>{
+          'id': 'room-1',
+          'name': 'Test Room',
+          'description': null,
+        };
+
+        final room = Room.fromJson(json);
+
+        expect(room.description, equals(''));
+      });
+
+      test('handles null metadata', () {
+        final json = <String, dynamic>{
+          'id': 'room-1',
+          'name': 'Test Room',
+          'metadata': null,
+        };
+
+        final room = Room.fromJson(json);
+
+        expect(room.metadata, equals(const <String, dynamic>{}));
+      });
     });
 
     group('toJson', () {

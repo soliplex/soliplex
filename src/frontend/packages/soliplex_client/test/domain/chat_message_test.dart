@@ -61,6 +61,33 @@ void main() {
       expect(copy.isThinkingStreaming, isTrue);
     });
 
+    test('copyWith modifies id', () {
+      final original =
+          TextMessage.create(id: 'old-id', user: ChatUser.user, text: 'Hello');
+      final copy = original.copyWith(id: 'new-id');
+
+      expect(copy.id, equals('new-id'));
+      expect(copy.text, equals(original.text));
+      expect(copy.user, equals(original.user));
+    });
+
+    test('copyWith modifies user', () {
+      final original = TextMessage.create(user: ChatUser.user, text: 'Hello');
+      final copy = original.copyWith(user: ChatUser.assistant);
+
+      expect(copy.user, equals(ChatUser.assistant));
+      expect(copy.text, equals(original.text));
+    });
+
+    test('copyWith modifies createdAt', () {
+      final original = TextMessage.create(user: ChatUser.user, text: 'Hello');
+      final newTime = DateTime(2025, 6, 15);
+      final copy = original.copyWith(createdAt: newTime);
+
+      expect(copy.createdAt, equals(newTime));
+      expect(copy.text, equals(original.text));
+    });
+
     test('equality by id', () {
       final msg1 =
           TextMessage.create(id: 'same-id', user: ChatUser.user, text: 'Hello');
@@ -125,6 +152,17 @@ void main() {
 
       expect(msg1, equals(msg2));
     });
+
+    test('toString includes id and error', () {
+      final message = ErrorMessage.create(
+        id: 'error-id',
+        message: 'Test error',
+      );
+      final str = message.toString();
+
+      expect(str, contains('error-id'));
+      expect(str, contains('Test error'));
+    });
   });
 
   group('ToolCallMessage', () {
@@ -146,6 +184,20 @@ void main() {
       );
 
       expect(message.id, equals('tc-msg-id'));
+    });
+
+    test('toString includes id and call count', () {
+      final message = ToolCallMessage.create(
+        toolCalls: const [
+          ToolCallInfo(id: 'tc1', name: 'search'),
+          ToolCallInfo(id: 'tc2', name: 'read'),
+        ],
+        id: 'tc-msg-id',
+      );
+      final str = message.toString();
+
+      expect(str, contains('tc-msg-id'));
+      expect(str, contains('2'));
     });
   });
 
@@ -171,6 +223,18 @@ void main() {
 
       expect(message.id, equals('genui-id'));
     });
+
+    test('toString includes id and widget name', () {
+      final message = GenUiMessage.create(
+        widgetName: 'Chart',
+        data: const {'value': 42},
+        id: 'genui-id',
+      );
+      final str = message.toString();
+
+      expect(str, contains('genui-id'));
+      expect(str, contains('Chart'));
+    });
   });
 
   group('LoadingMessage', () {
@@ -185,6 +249,13 @@ void main() {
       final message = LoadingMessage.create(id: 'loading-id');
 
       expect(message.id, equals('loading-id'));
+    });
+
+    test('toString includes id', () {
+      final message = LoadingMessage.create(id: 'loading-id');
+      final str = message.toString();
+
+      expect(str, contains('loading-id'));
     });
   });
 
@@ -276,6 +347,19 @@ void main() {
       expect(copy.id, equals('tc1'));
       expect(copy.name, equals('search'));
       expect(copy.status, equals(ToolCallStatus.executing));
+      expect(copy.result, equals('done'));
+    });
+
+    test('copyWith preserves status and result when not passed', () {
+      const original = ToolCallInfo(
+        id: 'tc1',
+        name: 'search',
+        status: ToolCallStatus.completed,
+        result: 'done',
+      );
+      final copy = original.copyWith(name: 'new-search');
+
+      expect(copy.status, equals(ToolCallStatus.completed));
       expect(copy.result, equals('done'));
     });
 

@@ -163,8 +163,7 @@ class RunInfo {
   int get hashCode => Object.hash(id, threadId);
 
   @override
-  String toString() =>
-      'RunInfo(id: $id, threadId: $threadId, status: $status)';
+  String toString() => 'RunInfo(id: $id, threadId: $threadId, status: $status)';
 }
 
 /// Status of a run.

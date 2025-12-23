@@ -116,6 +116,50 @@ void main() {
 
         expect(thread.roomId, equals(''));
       });
+
+      test('handles invalid created_at DateTime', () {
+        final json = <String, dynamic>{
+          'id': 'thread-1',
+          'room_id': 'room-1',
+          'created_at': 'invalid-date',
+        };
+
+        final thread = ThreadInfo.fromJson(json);
+
+        expect(thread.createdAt, isNotNull);
+      });
+
+      test('handles invalid updated_at DateTime', () {
+        final json = <String, dynamic>{
+          'id': 'thread-1',
+          'room_id': 'room-1',
+          'created_at': '2025-01-01T00:00:00.000Z',
+          'updated_at': 'invalid-date',
+        };
+
+        final thread = ThreadInfo.fromJson(json);
+
+        expect(thread.updatedAt, isNotNull);
+        expect(thread.updatedAt, equals(thread.createdAt));
+      });
+
+      test('handles null optional fields', () {
+        final json = <String, dynamic>{
+          'id': 'thread-1',
+          'room_id': 'room-1',
+          'initial_run_id': null,
+          'name': null,
+          'description': null,
+          'metadata': null,
+        };
+
+        final thread = ThreadInfo.fromJson(json);
+
+        expect(thread.initialRunId, equals(''));
+        expect(thread.name, equals(''));
+        expect(thread.description, equals(''));
+        expect(thread.metadata, equals(const <String, dynamic>{}));
+      });
     });
 
     group('toJson', () {
