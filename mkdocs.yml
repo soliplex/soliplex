@@ -57,7 +57,6 @@ plugins:
   search:
 nav:
   - Home: index.md
-  - Overview: overview.md
   - Setup:
       - Server: server.md
       - Client: client.md

@@ -6,8 +6,7 @@ and question answering.
 
 ## Quick Start
 
-1. **[Overview](overview.md)** - Learn about the system architecture and features
-2. **[RAG Database Setup](rag.md)** - Set up the RAG search database
+1. **[RAG Database Setup](rag.md)** - Set up the RAG search database
 2. **[Server Setup](server.md)** - Set up the FastAPI backend server
 3. **[Client Setup](client.md)** - Configure the Flutter web client
 4. **[Usage Guide](usage.md)** - Start using the system

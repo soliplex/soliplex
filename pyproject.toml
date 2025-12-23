@@ -27,7 +27,7 @@ dependencies = [
     "logfire[fastapi]",
     "pyjwt",
     "python-keycloak",
-    "sqlmodel",
+    "sqlalchemy[asyncio]",
     "starlette",
     "trio",
     "uvicorn[standard]",

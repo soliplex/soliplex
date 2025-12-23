@@ -1,6 +1,34 @@
 # Soliplex
 
-An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web interface.
+*Production RAG without the framework tax.*
+
+A complete, hackable RAG system you can actually read and modify.
+
+## Why Soliplex?
+
+Most RAG tutorials are toy examples. Most RAG frameworks are black boxes. Soliplex sits in between: a **full-stack, production-style RAG system** built for understanding and customization.
+
+**Philosophy:**
+- **Composition over framework** — Thin configuration layer over best-in-class libraries (pydantic-ai, haiku-rag, FastMCP), not abstractions that hide them
+- **Full-stack reference** — Backend, frontend, CLI, and evaluation pipeline in one repo
+- **Hackable by design** — Fork it, read it, make it yours
+
+**What you get:**
+- FastAPI backend with AG-UI streaming protocol
+- Cross-platform Flutter client (web, desktop, mobile) — *prototype until 1.0*
+- Efficient document ingestion via Haiku RAG
+- Evaluation pipeline using pydantic-evals *(coming soon)*
+
+**Who is this for?**
+- Developers building custom RAG applications
+- Teams wanting a reference implementation to fork
+- Learners studying production RAG architecture
+
+**When NOT to use Soliplex:**
+- You want a turnkey, hosted solution
+- You need a stable, supported framework (we're pre-1.0)
+- You're not comfortable reading and modifying source code
+- You want to swap out core libraries (pydantic-ai, SQLAlchemy, haiku-rag)
 
 ## Features
 
@@ -10,7 +38,7 @@ An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web inte
 - **AI Agent System**: Function calling and tool integration for AI agents
 - **OIDC Authentication**: Enterprise SSO with Keycloak integration
 - **Model Context Protocol (MCP)**: Extended AI capabilities through MCP client or exposing Room as MCP server
-- **Real-time Communication**: WebSocket-based conversation streams
+- **Real-time Communication**: SSE-based conversation streams
 - **Quiz System**: Custom quizzes with LLM-based evaluation
 - **Observability**: Logfire integration for monitoring
 
@@ -20,10 +48,11 @@ An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web inte
 **Python 3.13+ / FastAPI**
 
 - **Core**: FastAPI application with async support
-- **RAG Engine**: Haiku RAG (0.12.1+) with LanceDB vector storage
-- **AI Integration**: Pydantic AI (1.0.11+) for agent management
+- **RAG Engine**: Haiku RAG with LanceDB vector storage
+- **Protocol**: AG-UI for streaming agent responses
 - **Authentication**: Python-Keycloak with OIDC/JWT support
-- **MCP**: FastMCP (2.12.3+) server and client implementations
+- **MCP**: FastMCP server and client implementations
+- **Database**: SQLAlchemy async for thread persistence
 - **Configuration**: YAML-based configuration system
 
 Key modules:
@@ -38,18 +67,17 @@ Key modules:
 **Flutter 3.35+ / Dart 3.10.0+**
 
 - **Framework**: Flutter web with Material Design
-- **State Management**: Riverpod (2.6.1)
-- **Navigation**: Go Router (16.0.0)
-- **Authentication**: Flutter AppAuth (9.0.1) for OIDC
-- **Real-time**: WebSocket communication
+- **State Management**: Riverpod
+- **Navigation**: Go Router
+- **Authentication**: Flutter AppAuth for OIDC
+- **Real-time**: Server-Sent Events (SSE) streaming
 - **Secure Storage**: Flutter Secure Storage for credentials
 
-Key files:
-- `main.dart` - Application entry point
-- `soliplex_client.dart` - Backend API client
-- `oidc_client.dart` - OIDC authentication client
-- `controllers.dart` - Riverpod state management
-- `configure.dart` - Configuration UI
+Key modules:
+- `core/auth/` - OIDC authentication (oidc_client.dart, auth_providers.dart)
+- `core/network/` - Backend communication (room_session.dart, connection_manager.dart)
+- `core/providers/` - Riverpod state management (app_providers.dart, panel_providers.dart)
+- `features/` - UI features (chat, settings, configure)
 
 ### TUI (`src/soliplex/tui`)
 
@@ -149,7 +177,7 @@ soliplex-tui
 ```
 
 By default, the TUI connects to a Soliplex back-end server running
-on port 8000 on your local machine, and uses the "haiku" romm, just
+on port 8000 on your local machine, and uses the "haiku" room, just
 as though you typed:
 
 ```bash
