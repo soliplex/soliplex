@@ -1,5 +1,7 @@
 # Claude Code Notes
 
+Extends `/CLAUDE.md` and `/AGENTS.md`. Specific to the Flutter frontend.
+
 Project-specific instructions for Claude Code when working on this codebase.
 
 ## Reference Documentation

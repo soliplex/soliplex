@@ -1,6 +1,16 @@
 # Gemini Code Notes
 
+Extends `/GEMINI.md` and `/AGENTS.md`. Specific to the Flutter frontend.
+
 Project-specific instructions for Gemini when working on this codebase.
+
+## Your Role in Flutter Work
+
+Gemini excels at:
+- Reading large Dart files for context
+- Searching documentation across the Flutter codebase
+- Analyzing widget trees and state flow
+- Processing screenshots of UI for implementation
 
 ## Reference Documentation
 

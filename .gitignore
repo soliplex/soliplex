@@ -25,3 +25,9 @@ tmp/
 # osx
 .DS_Store
 ._*
+
+# Agent personal configs (keep out of version control)
+.agents.local.yaml
+*.local.yaml
+.claude/settings.local.json
+.gemini/settings.local.json
