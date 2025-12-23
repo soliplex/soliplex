@@ -2,8 +2,7 @@ import 'package:ag_ui/ag_ui.dart';
 import 'package:meta/meta.dart';
 import 'package:soliplex_client/src/application/streaming_state.dart';
 import 'package:soliplex_client/src/domain/chat_message.dart';
-import 'package:soliplex_client/src/domain/conversation.dart'
-    hide NotStreaming, Streaming, StreamingState;
+import 'package:soliplex_client/src/domain/conversation.dart';
 
 /// Result of processing an AG-UI event.
 ///
