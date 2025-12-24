@@ -32,8 +32,7 @@ void main() {
     // resources are actually cleaned up (close() called) requires mocking
     // and is covered by integration tests at the feature level.
     test('container disposal completes without errors', () {
-      final container = ProviderContainer();
-      container.read(httpTransportProvider);
+      final container = ProviderContainer()..read(httpTransportProvider);
 
       expect(container.dispose, returnsNormally);
     });
@@ -135,8 +134,9 @@ void main() {
       final sharedAdapter = container.read(observableAdapterProvider);
 
       // Read both API clients
-      container.read(apiProvider);
-      container.read(agUiClientProvider);
+      container
+        ..read(apiProvider)
+        ..read(agUiClientProvider);
 
       // Verify the shared adapter is still the same instance
       final adapterAfterClients = container.read(observableAdapterProvider);
@@ -147,8 +147,7 @@ void main() {
     // resources are actually cleaned up (close() called) requires mocking
     // and is covered by integration tests at the feature level.
     test('container disposal completes without errors', () {
-      final container = ProviderContainer();
-      container.read(apiProvider);
+      final container = ProviderContainer()..read(apiProvider);
 
       expect(container.dispose, returnsNormally);
     });
