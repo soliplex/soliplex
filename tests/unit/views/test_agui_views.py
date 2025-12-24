@@ -768,7 +768,7 @@ async def test_post_room_agui_thread_id_meta(
         exp_t_meta = w_meta
         r_meta = models.AGUI_ThreadMetadata.model_validate(w_meta)
     else:
-        exp_t_meta = {}
+        exp_t_meta = None
         r_meta = models.AGUI_ThreadMetadata()
 
     the_installation = mock.create_autospec(installation.Installation)
