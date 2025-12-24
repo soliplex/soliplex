@@ -168,13 +168,15 @@ class AGUI_Feature(pydantic.BaseModel):
     name: str
     description: str
     source: config.AGUI_FeatureSource
+    json_schema: dict[str, typing.Any]
 
     @classmethod
-    def from_config(cls, agui_feature: config.AgentConfig):
+    def from_config(cls, agui_feature: config.AGUI_Feature):
         return cls(
             name=agui_feature.name,
             description=agui_feature.description,
             source=agui_feature.source,
+            json_schema=agui_feature.json_schema,
         )
 
 

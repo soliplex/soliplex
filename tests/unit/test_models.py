@@ -475,6 +475,28 @@ class FeatureModel(pydantic.BaseModel):
     foo: str
     bar: str | None = None
 
+    @classmethod
+    def model_json_schema(cls):
+        return {
+            "type": "object",
+            "title": cls.__name__,
+            "description": cls.__doc__,
+            "properties": {
+                "foo": {
+                    "title": "Foo",
+                    "type": "string",
+                },
+                "bar": {
+                    "title": "Bar",
+                    "anyOf:": [
+                        {"type": "string"},
+                        {"type": "null"},
+                    ],
+                    "default": None,
+                },
+            },
+        }
+
 
 @pytest.fixture
 def the_agui_feature():
@@ -491,6 +513,7 @@ def test_aguifeature_from_config(the_agui_feature):
     assert feature_model.name == AGUI_FEATURE_NAME
     assert feature_model.description == the_agui_feature.description
     assert feature_model.source == the_agui_feature.source
+    assert feature_model.json_schema == FeatureModel.model_json_schema()
 
 
 @pytest.fixture(params=[False, True])
