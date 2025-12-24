@@ -4,6 +4,7 @@ import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 import 'package:soliplex_frontend/features/chat/chat_panel.dart';
 import 'package:soliplex_frontend/features/history/history_panel.dart';
+import 'package:soliplex_frontend/features/inspector/http_inspector_panel.dart';
 
 /// Thread screen with chat and history panels.
 ///
@@ -69,7 +70,17 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_getTitle()),
+        actions: [
+          Builder(
+            builder: (context) => IconButton(
+              icon: const Icon(Icons.bug_report),
+              tooltip: 'HTTP Inspector',
+              onPressed: () => Scaffold.of(context).openEndDrawer(),
+            ),
+          ),
+        ],
       ),
+      endDrawer: const HttpInspectorPanel(),
       body: isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
     );
   }

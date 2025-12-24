@@ -195,11 +195,25 @@ Standalone observer that stores HTTP events. Includes event cap (500 max) to pre
 
 ### Commit 4: Integrate drawer into ThreadScreen
 
-**Status:** Pending
+**Status:** Complete
 
 | File | Type | Change |
 |------|------|--------|
 | `lib/features/thread/thread_screen.dart` | Modify | Add endDrawer + toggle button |
+| `test/features/thread/thread_screen_test.dart` | Modify | Add tests for drawer toggle |
+
+**Implementation Details:**
+
+1. Add `HttpInspectorPanel` as `endDrawer` on Scaffold
+2. Add toggle IconButton in AppBar actions (bug icon or similar)
+3. Use `Scaffold.of(context).openEndDrawer()` to toggle
+4. Consider: GlobalKey<ScaffoldState> or Builder pattern for drawer access
+
+**Test Cases:** (3 tests added)
+
+- Toggle button visible in app bar
+- Tapping toggle opens drawer
+- Drawer can be closed by tapping scrim
 
 ## Dependencies
 
