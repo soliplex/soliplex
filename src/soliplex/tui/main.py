@@ -14,7 +14,26 @@ from textual import widgets as t_widgets
 from soliplex.agui import parser as agui_parser
 
 
-class RunMetadataView(t_screen.Screen):
+class LabeledInputWidget(t_widget.Widget):
+    DEFAULT_CSS = """
+    LabeledInputWidget {
+        layout: horizontal;
+        height: auto;
+        padding: 1;
+    }
+    LabeledInputWidget Label {
+        width: 20;
+        text-align: right;
+        padding: 1
+    }
+    LabeledInputWidget Input {
+        width: 1fr;
+        text-align: left;
+    }
+    """
+
+
+class EditRunMetadataDialog(t_screen.Screen):
     BINDINGS = [
         t_binding.Binding("escape", "dismiss(None)", "Return"),
     ]
@@ -27,10 +46,10 @@ class RunMetadataView(t_screen.Screen):
     def compose(self) -> t_app.ComposeResult:
         yield t_widgets.Header()
 
-        yield t_widgets.Label(f"Run: {self.run_id}")
+        yield t_widgets.Label(f"Run UUID: {self.run_id}")
 
-        with t_containers.Grid():
-            yield t_widgets.Label("Run Label")
+        with LabeledInputWidget():
+            yield t_widgets.Label("Label")
             yield t_widgets.Input(self.label_text)
 
         yield t_widgets.Footer()
@@ -38,8 +57,66 @@ class RunMetadataView(t_screen.Screen):
     @textual.on(t_widgets.Input.Submitted)
     async def on_input(self, event: t_widgets.Input.Submitted) -> None:
         """When the user hits return."""
-        event.input.clear()
-        self.dismiss(event.value)
+        payload = {}
+        label = event.value.strip()
+
+        if label:
+            payload["label"] = label
+
+        self.dismiss(payload)
+
+
+class EditThreadMetadataDialog(t_screen.Screen):
+    BINDINGS = [
+        t_binding.Binding("escape", "dismiss(None)", "Return"),
+    ]
+
+    def __init__(
+        self,
+        thread_id: str,
+        thread_name: str,
+        thread_description: str,
+        *args,
+        **kwargs,
+    ):
+        self.thread_id = thread_id
+        self.thread_name = thread_name
+        self.thread_description = thread_description
+        super().__init__()
+
+    def compose(self) -> t_app.ComposeResult:
+        yield t_widgets.Header()
+
+        yield t_widgets.Label(f"Thread UUID: {self.thread_id}")
+
+        with LabeledInputWidget():
+            yield t_widgets.Label("Thread name:")
+            yield t_widgets.Input(self.thread_name, id="thread-name")
+
+        with LabeledInputWidget():
+            yield t_widgets.Label("Description:")
+            yield t_widgets.Input(self.thread_description, id="thread-desc")
+
+        yield t_widgets.Footer()
+
+    @textual.on(t_widgets.Input.Submitted)
+    async def on_input(self, event: t_widgets.Input.Submitted) -> None:
+        """When the user hits return."""
+        payload = {}
+
+        w_name = self.query_one("#thread-name")
+        name = w_name.value.strip()
+
+        w_desc = self.query_one("#thread-desc")
+        desc = w_desc.value.strip()
+
+        if name:
+            payload["name"] = name
+
+            if desc:
+                payload["description"] = desc
+
+        self.dismiss(payload)
 
 
 class RunLabeledWidget(t_widget.Widget):
@@ -132,7 +209,7 @@ class RunEventWidget(t_widget.Widget):
 class RunView(t_screen.Screen):
     BINDINGS = [
         t_binding.Binding("escape", "dismiss(None)", "Return"),
-        t_binding.Binding("ctrl+l", "edit_label", "Label"),
+        t_binding.Binding("ctrl+z", "edit_metadata", "Metadata"),
     ]
     DEFAULT_CSS = """
     RunView Label {
@@ -233,15 +310,11 @@ class RunView(t_screen.Screen):
         yield t_widgets.Footer()
 
     @textual.work
-    async def action_edit_label(self) -> None:
-        rmv = RunMetadataView(self.run_id, self.label_text)
-        found = await self.app.push_screen_wait(rmv)
+    async def action_edit_metadata(self) -> None:
+        ermd = EditRunMetadataDialog(self.run_id, self.label_text)
+        payload = await self.app.push_screen_wait(ermd)
 
-        if found is not None:
-            found = found.strip()
-
-            payload = {"label": found} if found else {}
-
+        if payload is not None:
             requests.post(
                 f"{self.app.soliplex_url}/api/v1/rooms/{self.room_id}/agui/"
                 f"{self.thread_id}/{self.run_id}/meta",
@@ -396,52 +469,6 @@ class RoomThreadsView(t_screen.Screen):
         self.dismiss(thread_id)
 
 
-class ThreadMetadataView(t_screen.Screen):
-    BINDINGS = [
-        t_binding.Binding("escape", "dismiss(None)", "Return"),
-    ]
-
-    def __init__(
-        self,
-        thread_id: str,
-        thread_name: str,
-        thread_description: str,
-        *args,
-        **kwargs,
-    ):
-        self.thread_id = thread_id
-        self.thread_name = thread_name
-        self.thread_description = thread_description
-        super().__init__()
-
-    def compose(self) -> t_app.ComposeResult:
-        yield t_widgets.Header()
-
-        yield t_widgets.Label(f"Thread: {self.thread_id}")
-
-        with t_containers.Grid():
-            yield t_widgets.Label("Thread name:")
-            yield t_widgets.Input(self.thread_name, id="thread-name")
-
-        with t_containers.Grid():
-            yield t_widgets.Label("Description:")
-            yield t_widgets.Input(self.thread_description, id="thread-desc")
-
-        yield t_widgets.Footer()
-
-    @textual.on(t_widgets.Input.Submitted)
-    async def on_input(self, event: t_widgets.Input.Submitted) -> None:
-        """When the user hits return."""
-        w_name = self.query_one("#thread-name")
-        w_desc = self.query_one("#thread-desc")
-        self.dismiss(
-            {
-                "name": w_name.value.strip(),
-                "description": w_desc.value.strip(),
-            }
-        )
-
-
 class Prompt(t_widgets.Markdown):
     """Markdown for the user prompt."""
 
@@ -564,23 +591,23 @@ class RoomView(t_screen.Screen):
 
     @textual.work
     async def action_edit_metadata(self) -> None:
-        thread_meta_view = ThreadMetadataView(
+        thread_meta_view = EditThreadMetadataDialog(
             self.thread_id,
             self.thread_name,
             self.thread_description,
         )
 
-        found = await self.app.push_screen_wait(thread_meta_view)
+        payload = await self.app.push_screen_wait(thread_meta_view)
 
-        if found is not None:
+        if payload is not None:
             requests.post(
                 f"{self.app.soliplex_url}/api/v1/rooms/{self.room_id}/agui/"
                 f"{self.thread_id}/meta",
-                json=found,
+                json=payload,
             )
 
-            self.thread_name = found["name"]
-            self.thread_description = found["description"]
+            self.thread_name = payload.get("name")
+            self.thread_description = payload.get("description")
 
     def check_action(self, action, parameters):
         if action in ("list_runs", "edit_metadata"):
