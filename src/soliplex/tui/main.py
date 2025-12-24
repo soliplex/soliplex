@@ -111,7 +111,11 @@ class RunEventWidget(t_widget.Widget):
     @property
     def event_content(self):
         info = self.event_info
-        if "delta" in info:
+        if self.event_type == "STATE_SNAPSHOT":
+            content = "*state snapshot*"
+        elif self.event_type == "STATE_DELTA":
+            content = "*state delta*"
+        elif "delta" in info:
             content = info["delta"]
         elif "content" in info:
             content = str(info["content"])
@@ -199,8 +203,6 @@ class RunView(t_screen.Screen):
             yield t_widgets.Label("Label:")
             yield t_widgets.Static(self.label_text, id="run-label")
 
-        usage = self.run_usage
-
         with RunLabeledWidget():
             yield t_widgets.Label("Messages:")
 
@@ -216,6 +218,8 @@ class RunView(t_screen.Screen):
             for event in self.run_events:
                 with RunLabeledWidget():
                     yield RunEventWidget(event)
+
+        usage = self.run_usage
 
         if usage is not None:
             with RunLabeledWidget():
