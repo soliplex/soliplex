@@ -169,6 +169,8 @@ class FakeUrlBuilder implements UrlBuilder {
 class TestData {
   const TestData._();
 
+  static DateTime _defaultTimestamp(DateTime? t) => t ?? DateTime.now();
+
   static Room createRoom({
     String id = 'test-room',
     String name = 'Test Room',
@@ -209,6 +211,89 @@ class TestData {
       user: user,
       text: text,
       isStreaming: isStreaming,
+    );
+  }
+
+  static HttpRequestEvent createRequestEvent({
+    String requestId = 'req-1',
+    DateTime? timestamp,
+    String method = 'GET',
+    Uri? uri,
+    Map<String, String> headers = const {},
+  }) {
+    return HttpRequestEvent(
+      requestId: requestId,
+      timestamp: _defaultTimestamp(timestamp),
+      method: method,
+      uri: uri ?? Uri.parse('http://localhost/api/v1/rooms'),
+      headers: headers,
+    );
+  }
+
+  static HttpResponseEvent createResponseEvent({
+    String requestId = 'req-1',
+    DateTime? timestamp,
+    int statusCode = 200,
+    Duration duration = const Duration(milliseconds: 45),
+    int bodySize = 1234,
+    String? reasonPhrase,
+  }) {
+    return HttpResponseEvent(
+      requestId: requestId,
+      timestamp: _defaultTimestamp(timestamp),
+      statusCode: statusCode,
+      duration: duration,
+      bodySize: bodySize,
+      reasonPhrase: reasonPhrase,
+    );
+  }
+
+  static HttpErrorEvent createErrorEvent({
+    String requestId = 'req-1',
+    DateTime? timestamp,
+    String method = 'POST',
+    Uri? uri,
+    SoliplexException? exception,
+    Duration duration = const Duration(seconds: 2),
+  }) {
+    return HttpErrorEvent(
+      requestId: requestId,
+      timestamp: _defaultTimestamp(timestamp),
+      method: method,
+      uri: uri ?? Uri.parse('http://localhost/api/v1/threads'),
+      exception:
+          exception ?? const NetworkException(message: 'Connection failed'),
+      duration: duration,
+    );
+  }
+
+  static HttpStreamStartEvent createStreamStartEvent({
+    String requestId = 'req-1',
+    DateTime? timestamp,
+    String method = 'GET',
+    Uri? uri,
+  }) {
+    return HttpStreamStartEvent(
+      requestId: requestId,
+      timestamp: _defaultTimestamp(timestamp),
+      method: method,
+      uri: uri ?? Uri.parse('http://localhost/api/v1/runs/run-1/stream'),
+    );
+  }
+
+  static HttpStreamEndEvent createStreamEndEvent({
+    String requestId = 'req-1',
+    DateTime? timestamp,
+    int bytesReceived = 5200,
+    Duration duration = const Duration(seconds: 10),
+    SoliplexException? error,
+  }) {
+    return HttpStreamEndEvent(
+      requestId: requestId,
+      timestamp: _defaultTimestamp(timestamp),
+      bytesReceived: bytesReceived,
+      duration: duration,
+      error: error,
     );
   }
 }

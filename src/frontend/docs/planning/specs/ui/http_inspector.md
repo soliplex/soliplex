@@ -183,14 +183,15 @@ Standalone observer that stores HTTP events. Includes event cap (500 max) to pre
 
 ### Commit 3: Add HTTP event UI components
 
-**Status:** Pending
+**Status:** Complete
 
 | File | Type |
 |------|------|
 | `lib/features/inspector/widgets/http_event_tile.dart` | New |
-| `test/features/inspector/widgets/http_event_tile_test.dart` | New |
+| `test/features/inspector/widgets/http_event_tile_test.dart` | New (19 tests) |
 | `lib/features/inspector/http_inspector_panel.dart` | New |
-| `test/features/inspector/http_inspector_panel_test.dart` | New |
+| `test/features/inspector/http_inspector_panel_test.dart` | New (9 tests) |
+| `test/helpers/test_helpers.dart` | Modify (add HTTP event factories) |
 
 ### Commit 4: Integrate drawer into ThreadScreen
 
