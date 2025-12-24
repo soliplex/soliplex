@@ -35,7 +35,7 @@ class LabeledInputWidget(t_widget.Widget):
 
 class EditRunMetadataDialog(t_screen.Screen):
     BINDINGS = [
-        t_binding.Binding("escape", "dismiss(None)", "Return"),
+        t_binding.Binding("escape", "dismiss(None)", "Exit"),
     ]
 
     def __init__(self, run_id: str, label_text: str, *args, **kwargs):
@@ -68,7 +68,7 @@ class EditRunMetadataDialog(t_screen.Screen):
 
 class EditThreadMetadataDialog(t_screen.Screen):
     BINDINGS = [
-        t_binding.Binding("escape", "dismiss(None)", "Return"),
+        t_binding.Binding("escape", "dismiss(None)", "Exit"),
     ]
 
     def __init__(
@@ -208,7 +208,7 @@ class RunEventWidget(t_widget.Widget):
 
 class RunView(t_screen.Screen):
     BINDINGS = [
-        t_binding.Binding("escape", "dismiss(None)", "Return"),
+        t_binding.Binding("escape", "dismiss(None)", "Exit"),
         t_binding.Binding("ctrl+z", "edit_metadata", "Metadata"),
     ]
     DEFAULT_CSS = """
@@ -336,7 +336,7 @@ class RunButtonWidget(t_widget.Widget):
 
 class ThreadRunsView(t_screen.Screen):
     BINDINGS = [
-        t_binding.Binding("escape", "dismiss(None)", "Return"),
+        t_binding.Binding("escape", "dismiss(None)", "Exit"),
     ]
     DEFAULT_CSS = """
     .run-label {
@@ -403,11 +403,7 @@ class ThreadButtonWidget(t_widget.Widget):
 
 class RoomThreadsView(t_screen.Screen):
     BINDINGS = [
-        t_binding.Binding(
-            "escape",
-            "dismiss(None)",
-            "Return to room",
-        ),
+        t_binding.Binding("escape", "dismiss(None)", "Exit"),
     ]
     DEFAULT_CSS = """
     .thread-name {
@@ -497,7 +493,7 @@ class RoomView(t_screen.Screen):
         t_binding.Binding("ctrl+t", "list_threads", "Threads"),
         t_binding.Binding("ctrl+r", "list_runs", "Runs"),
         t_binding.Binding("ctrl+z", "edit_metadata", "Metadata"),
-        t_binding.Binding("escape", "app.pop_screen", "Exit room"),
+        t_binding.Binding("escape", "app.pop_screen", "Exit"),
     ]
 
     AUTO_FOCUS = "Input"
@@ -610,7 +606,7 @@ class RoomView(t_screen.Screen):
             self.thread_description = payload.get("description")
 
     def check_action(self, action, parameters):
-        if action in ("list_runs", "edit_metadata"):
+        if action in ("list_runs", "edit_metadata", "new_thread"):
             return self.thread_id is not None
 
         return True
