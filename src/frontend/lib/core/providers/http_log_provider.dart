@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 
@@ -6,6 +8,11 @@ import 'package:soliplex_client/soliplex_client.dart';
 /// Provides app-wide HTTP traffic logging for debugging and inspection.
 /// Events are stored in chronological order as they occur. Oldest events
 /// are dropped when [maxEvents] is exceeded to prevent unbounded memory growth.
+///
+/// **Timing**: Events are processed asynchronously via [scheduleMicrotask].
+/// State updates may be delayed by one microtask tick after the HTTP event
+/// occurs. This avoids Riverpod build-time mutation errors when HTTP requests
+/// happen during provider initialization.
 ///
 /// Example:
 /// ```dart
@@ -24,10 +31,15 @@ class HttpLogNotifier extends Notifier<List<HttpEvent>>
   List<HttpEvent> build() => [];
 
   void _addEvent(HttpEvent event) {
-    final newState = [...state, event];
-    state = newState.length > maxEvents
-        ? newState.sublist(newState.length - maxEvents)
-        : newState;
+    // Defer state update to avoid Riverpod errors when called during
+    // another provider's initialization (e.g., FutureProvider making HTTP
+    // requests during build).
+    scheduleMicrotask(() {
+      final newState = [...state, event];
+      state = newState.length > maxEvents
+          ? newState.sublist(newState.length - maxEvents)
+          : newState;
+    });
   }
 
   @override

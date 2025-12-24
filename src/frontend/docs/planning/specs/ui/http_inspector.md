@@ -172,11 +172,14 @@ Standalone observer that stores HTTP events. Includes event cap (500 max) to pre
 
 ### Commit 2: Wire observer into HTTP stack
 
-**Status:** Pending
+**Status:** Complete
 
 | File | Type | Change |
 |------|------|--------|
 | `lib/core/providers/api_provider.dart` | Modify | Add `observableAdapterProvider`, update `httpTransportProvider` and `httpAdapterProvider` |
+| `lib/core/providers/http_log_provider.dart` | Modify | Defer state updates via scheduleMicrotask to avoid Riverpod conflicts |
+| `test/core/providers/api_provider_test.dart` | Modify | Add tests for observableAdapterProvider and shared adapter |
+| `test/core/providers/http_log_provider_test.dart` | Modify | Update tests for async state updates |
 
 ### Commit 3: Add HTTP event UI components
 

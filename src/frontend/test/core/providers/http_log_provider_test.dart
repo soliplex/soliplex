@@ -3,6 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/providers/http_log_provider.dart';
 
+/// Pumps the microtask queue multiple times to allow scheduled microtasks
+/// to execute, including any microtasks scheduled by other microtasks.
+Future<void> pumpMicrotasks() async {
+  for (var i = 0; i < 10; i++) {
+    await Future<void>.delayed(Duration.zero);
+  }
+}
+
 void main() {
   group('HttpLogNotifier', () {
     late ProviderContainer container;
@@ -28,7 +36,7 @@ void main() {
     });
 
     group('onRequest', () {
-      test('stores HttpRequestEvent', () {
+      test('stores HttpRequestEvent', () async {
         final notifier = container.read(httpLogProvider.notifier);
         final event = HttpRequestEvent(
           requestId: 'req-1',
@@ -38,6 +46,7 @@ void main() {
         );
 
         notifier.onRequest(event);
+        await pumpMicrotasks();
 
         final events = container.read(httpLogProvider);
         expect(events, hasLength(1));
@@ -46,7 +55,7 @@ void main() {
     });
 
     group('onResponse', () {
-      test('stores HttpResponseEvent', () {
+      test('stores HttpResponseEvent', () async {
         final notifier = container.read(httpLogProvider.notifier);
         final event = HttpResponseEvent(
           requestId: 'req-1',
@@ -57,6 +66,7 @@ void main() {
         );
 
         notifier.onResponse(event);
+        await pumpMicrotasks();
 
         final events = container.read(httpLogProvider);
         expect(events, hasLength(1));
@@ -65,7 +75,7 @@ void main() {
     });
 
     group('onError', () {
-      test('stores HttpErrorEvent', () {
+      test('stores HttpErrorEvent', () async {
         final notifier = container.read(httpLogProvider.notifier);
         final event = HttpErrorEvent(
           requestId: 'req-1',
@@ -77,6 +87,7 @@ void main() {
         );
 
         notifier.onError(event);
+        await pumpMicrotasks();
 
         final events = container.read(httpLogProvider);
         expect(events, hasLength(1));
@@ -85,7 +96,7 @@ void main() {
     });
 
     group('onStreamStart', () {
-      test('stores HttpStreamStartEvent', () {
+      test('stores HttpStreamStartEvent', () async {
         final notifier = container.read(httpLogProvider.notifier);
         final event = HttpStreamStartEvent(
           requestId: 'req-1',
@@ -95,6 +106,7 @@ void main() {
         );
 
         notifier.onStreamStart(event);
+        await pumpMicrotasks();
 
         final events = container.read(httpLogProvider);
         expect(events, hasLength(1));
@@ -103,7 +115,7 @@ void main() {
     });
 
     group('onStreamEnd', () {
-      test('stores HttpStreamEndEvent', () {
+      test('stores HttpStreamEndEvent', () async {
         final notifier = container.read(httpLogProvider.notifier);
         final event = HttpStreamEndEvent(
           requestId: 'req-1',
@@ -113,6 +125,7 @@ void main() {
         );
 
         notifier.onStreamEnd(event);
+        await pumpMicrotasks();
 
         final events = container.read(httpLogProvider);
         expect(events, hasLength(1));
@@ -121,7 +134,7 @@ void main() {
     });
 
     group('event ordering', () {
-      test('stores events in chronological order', () {
+      test('stores events in chronological order', () async {
         final notifier = container.read(httpLogProvider.notifier);
         final now = DateTime.now();
 
@@ -139,8 +152,10 @@ void main() {
           bodySize: 512,
         );
 
-        notifier.onRequest(requestEvent);
-        notifier.onResponse(responseEvent);
+        notifier
+          ..onRequest(requestEvent)
+          ..onResponse(responseEvent);
+        await pumpMicrotasks();
 
         final events = container.read(httpLogProvider);
         expect(events, hasLength(2));
@@ -150,7 +165,7 @@ void main() {
     });
 
     group('clear', () {
-      test('removes all events', () {
+      test('removes all events', () async {
         final notifier = container.read(httpLogProvider.notifier);
         final event = HttpRequestEvent(
           requestId: 'req-1',
@@ -160,6 +175,7 @@ void main() {
         );
 
         notifier.onRequest(event);
+        await pumpMicrotasks();
         expect(container.read(httpLogProvider), hasLength(1));
 
         notifier.clear();
@@ -169,7 +185,7 @@ void main() {
     });
 
     group('event cap', () {
-      test('limits events to maxEvents', () {
+      test('limits events to maxEvents', () async {
         final notifier = container.read(httpLogProvider.notifier);
 
         // Add more events than the cap allows
@@ -183,14 +199,16 @@ void main() {
             ),
           );
         }
+        await pumpMicrotasks();
 
         final events = container.read(httpLogProvider);
         expect(events, hasLength(HttpLogNotifier.maxEvents));
       });
 
-      test('drops oldest events when cap exceeded', () {
+      test('drops oldest events when cap exceeded', () async {
         final notifier = container.read(httpLogProvider.notifier);
-        final totalEvents = HttpLogNotifier.maxEvents + 50;
+        const overflowCount = 50;
+        const totalEvents = HttpLogNotifier.maxEvents + overflowCount;
 
         for (var i = 0; i < totalEvents; i++) {
           notifier.onRequest(
@@ -202,38 +220,41 @@ void main() {
             ),
           );
         }
+        await pumpMicrotasks();
 
         final events = container.read(httpLogProvider);
-        // First event should be req-50 (oldest 50 were dropped)
+        // First event should be req-{overflowCount} (oldest were dropped)
         final firstEvent = events.first as HttpRequestEvent;
-        expect(firstEvent.requestId, 'req-50');
+        expect(firstEvent.requestId, 'req-$overflowCount');
         // Last event should be req-(totalEvents-1)
         final lastEvent = events.last as HttpRequestEvent;
         expect(lastEvent.requestId, 'req-${totalEvents - 1}');
       });
 
-      test('maintains order with rapid events from multiple methods', () {
+      test('maintains order with rapid events from multiple methods', () async {
         final notifier = container.read(httpLogProvider.notifier);
 
         for (var i = 0; i < 100; i++) {
-          notifier.onRequest(
-            HttpRequestEvent(
-              requestId: 'req-$i',
-              timestamp: DateTime.now(),
-              method: 'GET',
-              uri: Uri.parse('http://localhost/api/test'),
-            ),
-          );
-          notifier.onResponse(
-            HttpResponseEvent(
-              requestId: 'req-$i',
-              timestamp: DateTime.now(),
-              statusCode: 200,
-              duration: const Duration(milliseconds: 10),
-              bodySize: 100,
-            ),
-          );
+          notifier
+            ..onRequest(
+              HttpRequestEvent(
+                requestId: 'req-$i',
+                timestamp: DateTime.now(),
+                method: 'GET',
+                uri: Uri.parse('http://localhost/api/test'),
+              ),
+            )
+            ..onResponse(
+              HttpResponseEvent(
+                requestId: 'req-$i',
+                timestamp: DateTime.now(),
+                statusCode: 200,
+                duration: const Duration(milliseconds: 10),
+                bodySize: 100,
+              ),
+            );
         }
+        await pumpMicrotasks();
 
         final events = container.read(httpLogProvider);
         expect(events, hasLength(200));
