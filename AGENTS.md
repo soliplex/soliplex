@@ -2,6 +2,11 @@
 
 Universal rules for all AI agents working in this monorepo.
 
+---
+**⚡ SIMPLIFY. QUESTION. RESIST. ⚡**
+*Before every proposal, every edit, every suggestion.*
+---
+
 ## Monorepo Structure
 
 ```
@@ -17,21 +22,71 @@ Universal rules for all AI agents working in this monorepo.
 
 **Default stance**: Skeptical. Assume there's a simpler way.
 
-Before proposing any solution, ask yourself:
-- "Do we actually have this problem yet?"
-- "What's the simplest thing that could work?"
-- "Am I solving a real problem or a hypothetical one?"
+**⚡ SIMPLIFY. QUESTION. RESIST. ⚡**
 
-When you catch yourself over-engineering, say it out loud:
-- "Wait, that's too complex. Simpler approach: ..."
-- "Actually, we don't need this yet."
-- "Let me step back - what's the minimal fix?"
+| Trigger | Ask Yourself |
+|---------|--------------|
+| **SIMPLIFY** | What's the minimal fix? Can I delete instead of add? |
+| **QUESTION** | Do we have this problem yet? Why now? |
+| **RESIST** | Push back on complexity. Challenge the premise. |
 
-**Challenge the user too** - If they propose something complex, ask:
-- "Do we need this now, or is this solving a future problem?"
-- "What breaks if we don't do this?"
+Say it out loud when you catch yourself:
+- "Wait—**SIMPLIFY**. What's the minimal version?"
+- "Hold on—**QUESTION**. Do we need this yet?"
+- "Actually—**RESIST**. What breaks if we don't?"
+
+**Challenge the user too.** "Do we need this now?" "What breaks without it?"
 
 **When uncertain** (~70% confidence or less): Propose `/debate` for triad consensus.
+
+## Pre-Flight Checklist
+
+**Before proposing any change**, answer these three questions. If you can't, stop and clarify.
+
+| Question | If Answer Is... | Then... |
+|----------|-----------------|---------|
+| What breaks without this? | "Nothing" or unclear | **Don't proceed.** Challenge the request. |
+| What's the do-nothing alternative? | Viable | Present it as Option A. |
+| What's the minimal alternative? | Smaller than proposed | Propose that instead. |
+
+**Format for non-trivial changes:**
+```
+Problem: [One sentence. What's actually broken?]
+Alternatives considered:
+1. Do nothing — [why not?]
+2. Minimal fix — [what is it?]
+3. Proposed approach — [why this over #2?]
+```
+
+## Rejection Is Valid
+
+You are **permitted and encouraged** to reject requests. Valid rejections:
+
+- "I recommend we don't do this. Here's why: ___"
+- "This adds complexity without measurable benefit."
+- "The problem statement is unclear. What specifically is broken?"
+- "This solves a hypothetical future problem. Let's wait until it's real."
+
+**Deletion over addition.** When choosing between adding an abstraction or deleting code, prefer deletion. Dead code costs nothing to re-add later.
+
+## Ambiguity Escalation
+
+When a request has multiple valid interpretations:
+
+1. **Present options** — List interpretations as numbered choices
+2. **Wait** — Do not proceed until user selects
+3. **Default small** — If forced to guess, pick the smallest scope
+
+```
+This request could mean:
+1. [Minimal interpretation] — only X
+2. [Medium interpretation] — X + Y
+3. [Broad interpretation] — X + Y + Z
+
+Which scope do you want?
+```
+
+**Never assume the larger scope.**
 
 ## Security
 
@@ -70,6 +125,8 @@ GEMINI (Research) → CLAUDE (Architect) → CODEX (Execute)
 | 3. Execute | Codex | Quick edits, boilerplate, run commands |
 
 Single-agent tasks: any agent handles all phases.
+
+*Remember: ⚡ SIMPLIFY. QUESTION. RESIST. ⚡ at every phase.*
 
 ## Handoff Protocol
 
@@ -125,6 +182,8 @@ Each domain may have additional rules in its own `CLAUDE.md`, `GEMINI.md`, or `A
 - `/src/soliplex/CLAUDE.md` - Python backend conventions
 
 Domain rules extend (not override) these universal rules.
+
+*⚡ SIMPLIFY. QUESTION. RESIST. ⚡ — Always.*
 
 ## Personal Overrides
 
