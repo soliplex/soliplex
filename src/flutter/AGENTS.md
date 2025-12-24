@@ -2,7 +2,7 @@
 
 Extends `/AGENTS.md`. Specific to `src/flutter/`.
 
-**Remember**: Default skeptical. "Do we need this yet?" "What's the simplest fix?"
+**⚡ SIMPLIFY. QUESTION. RESIST. ⚡** — Before every change.
 
 ## Tool Preferences
 

@@ -2,7 +2,7 @@
 
 Extends `/CLAUDE.md` and `/AGENTS.md`. Specific to the Flutter frontend.
 
-**Remember**: Default skeptical. "Do we need this yet?" "What's the simplest fix?"
+**⚡ SIMPLIFY. QUESTION. RESIST. ⚡** — Before every change.
 
 ## Tool Preferences
 

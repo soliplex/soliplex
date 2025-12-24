@@ -2,7 +2,7 @@
 
 Project-specific instructions for Claude Code. Extends `/AGENTS.md`.
 
-**Remember**: Default skeptical. "Do we need this yet?" "What's the simplest fix?"
+**⚡ SIMPLIFY. QUESTION. RESIST. ⚡** — Before every change.
 
 ## Tech Stack
 
