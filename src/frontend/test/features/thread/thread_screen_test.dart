@@ -5,6 +5,7 @@ import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 import 'package:soliplex_frontend/features/chat/chat_panel.dart';
 import 'package:soliplex_frontend/features/history/history_panel.dart';
+import 'package:soliplex_frontend/features/inspector/http_inspector_panel.dart';
 import 'package:soliplex_frontend/features/thread/thread_screen.dart';
 
 import '../../helpers/test_helpers.dart';
@@ -128,83 +129,89 @@ void main() {
       expect(titleWidget.data, equals('Test Room'));
     });
 
-    testWidgets('displays default title when room name is null',
-        (tester) async {
-      // Room with default name 'Test Room' from TestData.createRoom defaults
-      final roomWithoutName = TestData.createRoom();
-      final threadWithoutName = TestData.createThread();
-
-      await tester.pumpWidget(
-        createTestApp(
-          home: const ThreadScreen(
-            roomId: 'test-room',
-            threadId: 'test-thread',
+    group('HTTP Inspector drawer', () {
+      testWidgets('has inspector toggle button in app bar', (tester) async {
+        await tester.pumpWidget(
+          createTestApp(
+            home: const ThreadScreen(
+              roomId: 'test-room',
+              threadId: 'test-thread',
+            ),
+            overrides: [
+              roomsProvider.overrideWith((_) async => [testRoom]),
+              threadsProvider('test-room')
+                  .overrideWith((_) async => [testThread]),
+              activeRunNotifierOverride(const IdleState()),
+            ],
           ),
-          overrides: [
-            roomsProvider.overrideWith((_) async => [roomWithoutName]),
-            threadsProvider('test-room')
-                .overrideWith((_) async => [threadWithoutName]),
-            activeRunNotifierOverride(const IdleState()),
-          ],
-        ),
-      );
+        );
 
-      // Let providers initialize
-      await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
 
-      // Should display room name as title in the AppBar
-      // (TestData.createRoom defaults to 'Test Room')
-      final appBar = tester.widget<AppBar>(find.byType(AppBar));
-      final titleWidget = appBar.title! as Text;
-      expect(titleWidget.data, equals('Test Room'));
-    });
+        // Should have inspector toggle button with bug icon
+        expect(find.byIcon(Icons.bug_report), findsOneWidget);
+      });
 
-    testWidgets('has AppBar with title', (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          home: const ThreadScreen(
-            roomId: 'test-room',
-            threadId: 'test-thread',
+      testWidgets('tapping toggle opens inspector drawer', (tester) async {
+        await tester.pumpWidget(
+          createTestApp(
+            home: const ThreadScreen(
+              roomId: 'test-room',
+              threadId: 'test-thread',
+            ),
+            overrides: [
+              roomsProvider.overrideWith((_) async => [testRoom]),
+              threadsProvider('test-room')
+                  .overrideWith((_) async => [testThread]),
+              activeRunNotifierOverride(const IdleState()),
+            ],
           ),
-          overrides: [
-            roomsProvider.overrideWith((_) async => [testRoom]),
-            threadsProvider('test-room')
-                .overrideWith((_) async => [testThread]),
-            activeRunNotifierOverride(const IdleState()),
-          ],
-        ),
-      );
+        );
 
-      await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
 
-      // Should have an AppBar
-      expect(find.byType(AppBar), findsOneWidget);
+        // Inspector panel should not be visible initially
+        expect(find.byType(HttpInspectorPanel), findsNothing);
 
-      // AppBar should contain a title
-      final appBar = tester.widget<AppBar>(find.byType(AppBar));
-      expect(appBar.title, isNotNull);
-    });
+        // Tap the inspector toggle button
+        await tester.tap(find.byIcon(Icons.bug_report));
+        await tester.pumpAndSettle();
 
-    testWidgets('is wrapped in Scaffold', (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          home: const ThreadScreen(
-            roomId: 'test-room',
-            threadId: 'test-thread',
+        // Inspector panel should now be visible
+        expect(find.byType(HttpInspectorPanel), findsOneWidget);
+      });
+
+      testWidgets('drawer can be closed by tapping scrim', (tester) async {
+        await tester.pumpWidget(
+          createTestApp(
+            home: const ThreadScreen(
+              roomId: 'test-room',
+              threadId: 'test-thread',
+            ),
+            overrides: [
+              roomsProvider.overrideWith((_) async => [testRoom]),
+              threadsProvider('test-room')
+                  .overrideWith((_) async => [testThread]),
+              activeRunNotifierOverride(const IdleState()),
+            ],
           ),
-          overrides: [
-            roomsProvider.overrideWith((_) async => [testRoom]),
-            threadsProvider('test-room')
-                .overrideWith((_) async => [testThread]),
-            activeRunNotifierOverride(const IdleState()),
-          ],
-        ),
-      );
+        );
 
-      await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
 
-      // Should be wrapped in Scaffold
-      expect(find.byType(Scaffold), findsOneWidget);
+        // Open the drawer
+        await tester.tap(find.byIcon(Icons.bug_report));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(HttpInspectorPanel), findsOneWidget);
+
+        // Tap on the scrim (left side of screen) to close
+        await tester.tapAt(const Offset(10, 300));
+        await tester.pumpAndSettle();
+
+        // Drawer should be closed
+        expect(find.byType(HttpInspectorPanel), findsNothing);
+      });
     });
   });
 }

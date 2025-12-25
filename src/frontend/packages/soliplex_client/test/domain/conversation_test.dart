@@ -76,16 +76,14 @@ void main() {
 
     group('withStatus', () {
       test('changes status to Running', () {
-        final updated =
-            conversation.withStatus(const Running(runId: 'run-1'));
+        final updated = conversation.withStatus(const Running(runId: 'run-1'));
 
         expect(updated.status, isA<Running>());
         expect((updated.status as Running).runId, 'run-1');
       });
 
       test('changes status to Completed', () {
-        final running =
-            conversation.withStatus(const Running(runId: 'run-1'));
+        final running = conversation.withStatus(const Running(runId: 'run-1'));
         final completed = running.withStatus(const Completed());
 
         expect(completed.status, isA<Completed>());
