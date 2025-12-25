@@ -187,41 +187,30 @@ ActiveRunNotifier starts run
 │  Depends on: soliplex_client, soliplex_client_native                │
 └─────────────────────────────────────────────────────────────────────┘
          │
-         │ imports
-         ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    soliplex_client (Pure Dart)                      │
-│                                                                     │
-│  lib/src/http/                                                      │
-│    - soliplex_http_client.dart   (interface)                        │
-│    - http_response.dart          (response data class)              │
-│    - dart_http_client.dart       (default implementation)           │
-│    - observable_http_client.dart (decorator)                        │
-│    - http_client_adapter.dart    (bridges to http.Client)           │
-│    - http_transport.dart         (JSON + exceptions layer)          │
-│    - http_observer.dart          (observer interface + events)      │
-│                                                                     │
-│  lib/src/api/                                                       │
-│    - soliplex_api.dart           (REST API client)                  │
-│                                                                     │
-│  No Flutter dependency - usable in CLI, server, etc.                │
-└─────────────────────────────────────────────────────────────────────┘
+         │ imports both packages
          │
-         │ imports (for platform detection)
-         ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                 soliplex_client_native (Platform)                   │
-│                                                                     │
-│  lib/src/clients/                                                   │
-│    - cupertino_http_client.dart  (iOS/macOS NSURLSession)           │
-│                                                                     │
-│  lib/src/platform/                                                  │
-│    - create_platform_client.dart (factory function)                 │
-│    - create_platform_client_io.dart   (returns Cupertino on Apple)  │
-│    - create_platform_client_stub.dart (returns Dart elsewhere)      │
-│                                                                     │
-│  Depends on: soliplex_client, cupertino_http                        │
-└─────────────────────────────────────────────────────────────────────┘
+    ┌────┴────────────────────────────┐
+    │                                 │
+    ▼                                 ▼
+┌───────────────────────────┐  ┌──────────────────────────────────────┐
+│ soliplex_client           │  │ soliplex_client_native               │
+│ (Pure Dart)               │  │ (Platform-specific)                  │
+│                           │  │                                      │
+│ lib/src/http/             │  │ lib/src/clients/                     │
+│  - soliplex_http_client   │◀─┤  - cupertino_http_client             │
+│    (interface)            │  │    (iOS/macOS NSURLSession)          │
+│  - http_response          │  │                                      │
+│  - dart_http_client       │  │ lib/src/platform/                    │
+│  - observable_http_client │  │  - create_platform_client            │
+│  - http_client_adapter    │  │    (factory function)                │
+│  - http_transport         │  │                                      │
+│  - http_observer          │  │ Depends on:                          │
+│                           │  │  - soliplex_client (for interface)   │
+│ lib/src/api/              │  │  - cupertino_http                    │
+│  - soliplex_api           │  │                                      │
+│                           │  │                                      │
+│ No Flutter dependency     │  │                                      │
+└───────────────────────────┘  └──────────────────────────────────────┘
 ```
 
 ### Why "Adapter" Only for HttpClientAdapter
