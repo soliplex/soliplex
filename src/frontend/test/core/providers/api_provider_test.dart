@@ -225,13 +225,13 @@ void main() {
   });
 
   group('observableAdapterProvider', () {
-    test('creates ObservableHttpAdapter instance', () {
+    test('creates ObservableHttpClient instance', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
       final adapter = container.read(observableAdapterProvider);
 
-      expect(adapter, isA<ObservableHttpAdapter>());
+      expect(adapter, isA<ObservableHttpClient>());
     });
 
     test('is singleton across multiple reads', () {
@@ -289,7 +289,7 @@ void main() {
       expect(identical(sharedAdapter, adapterAfterTransport), isTrue);
 
       // Verify adapter is observable type (has logging capability)
-      expect(sharedAdapter, isA<ObservableHttpAdapter>());
+      expect(sharedAdapter, isA<ObservableHttpClient>());
     });
   });
 }

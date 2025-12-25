@@ -15,7 +15,7 @@ import 'package:soliplex_client/src/http/soliplex_http_client.dart';
 ///
 /// Example:
 /// ```dart
-/// final observable = ObservableHttpAdapter(
+/// final observable = ObservableHttpClient(
 ///   client: createPlatformAdapter(),
 ///   observer: myObserver,
 /// );

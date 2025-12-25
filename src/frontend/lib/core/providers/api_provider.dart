@@ -8,7 +8,7 @@ import 'package:soliplex_frontend/core/providers/http_log_provider.dart';
 
 /// Provider for the shared observable HTTP adapter.
 ///
-/// Creates a single [ObservableHttpAdapter] that wraps the platform adapter
+/// Creates a single [ObservableHttpClient] that wraps the platform adapter
 /// and notifies [HttpLogNotifier] of all HTTP activity. This adapter is shared
 /// by both REST API ([httpTransportProvider]) and SSE streaming
 /// ([httpAdapterProvider]) to provide unified HTTP logging.
@@ -18,7 +18,7 @@ import 'package:soliplex_frontend/core/providers/http_log_provider.dart';
 final observableAdapterProvider = Provider<SoliplexHttpClient>((ref) {
   final baseAdapter = createPlatformAdapter();
   final observer = ref.watch(httpLogProvider.notifier);
-  final observable = ObservableHttpAdapter(
+  final observable = ObservableHttpClient(
     client: baseAdapter,
     observers: [observer],
   );

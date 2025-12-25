@@ -257,14 +257,14 @@ void main() {
       });
     });
 
-    group('integration with ObservableHttpAdapter', () {
-      test('works with ObservableHttpAdapter wrapper', () async {
+    group('integration with ObservableHttpClient', () {
+      test('works with ObservableHttpClient wrapper', () async {
         final baseAdapter = MockSoliplexHttpClient();
         final observer = _RecordingObserver();
 
         when(baseAdapter.close).thenReturn(null);
 
-        final observableAdapter = ObservableHttpAdapter(
+        final observableAdapter = ObservableHttpClient(
           client: baseAdapter,
           observers: [observer],
         );

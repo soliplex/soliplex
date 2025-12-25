@@ -66,6 +66,6 @@ class HttpLogNotifier extends Notifier<List<HttpEvent>>
 /// Provider for HTTP event logging.
 ///
 /// The notifier implements [HttpObserver] and can be passed to
-/// [ObservableHttpAdapter] to capture all HTTP traffic.
+/// [ObservableHttpClient] to capture all HTTP traffic.
 final httpLogProvider =
     NotifierProvider<HttpLogNotifier, List<HttpEvent>>(HttpLogNotifier.new);

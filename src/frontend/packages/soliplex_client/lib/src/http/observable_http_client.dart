@@ -16,7 +16,7 @@ import 'package:soliplex_client/src/http/soliplex_http_client.dart';
 /// Example:
 /// ```dart
 /// final baseClient = DartHttpClient();
-/// final observable = ObservableHttpAdapter(
+/// final observable = ObservableHttpClient(
 ///   client: baseClient,
 ///   observers: [LoggingObserver(), MetricsObserver()],
 /// );
@@ -26,7 +26,7 @@ import 'package:soliplex_client/src/http/soliplex_http_client.dart';
 ///
 /// observable.close();
 /// ```
-class ObservableHttpAdapter implements SoliplexHttpClient {
+class ObservableHttpClient implements SoliplexHttpClient {
   /// Creates an observable client wrapping [client].
   ///
   /// Parameters:
@@ -34,7 +34,7 @@ class ObservableHttpAdapter implements SoliplexHttpClient {
   /// - [observers]: List of observers to notify (defaults to empty)
   /// - [generateRequestId]: Optional ID generator for correlation
   ///   (defaults to timestamp-based IDs)
-  ObservableHttpAdapter({
+  ObservableHttpClient({
     required SoliplexHttpClient client,
     List<HttpObserver> observers = const [],
     String Function()? generateRequestId,

@@ -57,7 +57,7 @@ class ThrowingObserver implements HttpObserver {
 void main() {
   late MockSoliplexHttpClient mockClient;
   late RecordingObserver recorder;
-  late ObservableHttpAdapter observableAdapter;
+  late ObservableHttpClient observableClient;
 
   setUpAll(() {
     registerFallbackValue(Uri.parse('https://example.com'));
@@ -66,7 +66,7 @@ void main() {
   setUp(() {
     mockClient = MockSoliplexHttpClient();
     recorder = RecordingObserver();
-    observableAdapter = ObservableHttpAdapter(
+    observableClient = ObservableHttpClient(
       client: mockClient,
       observers: [recorder],
     );
@@ -80,7 +80,7 @@ void main() {
     reset(mockClient);
   });
 
-  group('ObservableHttpAdapter', () {
+  group('ObservableHttpClient', () {
     group('request lifecycle - success', () {
       test('notifies observer on request start and response', () async {
         final response = HttpResponse(
@@ -100,7 +100,7 @@ void main() {
           ),
         ).thenAnswer((_) async => response);
 
-        final result = await observableAdapter.request(
+        final result = await observableClient.request(
           'GET',
           Uri.parse('https://example.com/api'),
           headers: {'Authorization': 'Bearer token'},
@@ -140,7 +140,7 @@ void main() {
           ),
         ).thenAnswer((_) async => response);
 
-        final result = await observableAdapter.request(
+        final result = await observableClient.request(
           'POST',
           Uri.parse('https://example.com/create'),
           body: {'data': 'test'},
@@ -168,7 +168,7 @@ void main() {
           ),
         );
 
-        await observableAdapter.request(
+        await observableClient.request(
           'GET',
           Uri.parse('https://example.com'),
         );
@@ -195,7 +195,7 @@ void main() {
         ).thenThrow(exception);
 
         await expectLater(
-          observableAdapter.request(
+          observableClient.request(
             'GET',
             Uri.parse('https://example.com/api'),
           ),
@@ -231,7 +231,7 @@ void main() {
         ).thenThrow(exception);
 
         await expectLater(
-          observableAdapter.request(
+          observableClient.request(
             'POST',
             Uri.parse('https://example.com/slow'),
             timeout: const Duration(seconds: 5),
@@ -264,7 +264,7 @@ void main() {
         ).thenThrow(exception);
 
         await expectLater(
-          observableAdapter.request('GET', Uri.parse('https://example.com')),
+          observableClient.request('GET', Uri.parse('https://example.com')),
           throwsA(equals(exception)),
         );
 
@@ -286,7 +286,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = observableAdapter.requestStream(
+        final stream = observableClient.requestStream(
           'GET',
           Uri.parse('https://example.com/stream'),
         );
@@ -349,7 +349,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = observableAdapter.requestStream(
+        final stream = observableClient.requestStream(
           'GET',
           Uri.parse('https://example.com'),
         );
@@ -390,7 +390,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = observableAdapter.requestStream(
+        final stream = observableClient.requestStream(
           'GET',
           Uri.parse('https://example.com/stream'),
         );
@@ -445,7 +445,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = observableAdapter.requestStream(
+        final stream = observableClient.requestStream(
           'GET',
           Uri.parse('https://example.com/stream'),
         );
@@ -489,7 +489,7 @@ void main() {
         final recorder2 = RecordingObserver();
         final recorder3 = RecordingObserver();
 
-        final adapter = ObservableHttpAdapter(
+        final adapter = ObservableHttpClient(
           client: mockClient,
           observers: [recorder1, recorder2, recorder3],
         );
@@ -531,7 +531,7 @@ void main() {
         final throwingObserver = ThrowingObserver();
         final recorder2 = RecordingObserver();
 
-        final adapter = ObservableHttpAdapter(
+        final adapter = ObservableHttpClient(
           client: mockClient,
           observers: [recorder1, throwingObserver, recorder2],
         );
@@ -567,7 +567,7 @@ void main() {
 
     group('observer error isolation', () {
       test('observer throwing on request does not break request', () async {
-        final adapter = ObservableHttpAdapter(
+        final adapter = ObservableHttpClient(
           client: mockClient,
           observers: [ThrowingObserver()],
         );
@@ -599,7 +599,7 @@ void main() {
       });
 
       test('observer throwing on response does not break request', () async {
-        final adapter = ObservableHttpAdapter(
+        final adapter = ObservableHttpClient(
           client: mockClient,
           observers: [ThrowingObserver()],
         );
@@ -630,7 +630,7 @@ void main() {
       });
 
       test('observer throwing on error does not suppress exception', () async {
-        final adapter = ObservableHttpAdapter(
+        final adapter = ObservableHttpClient(
           client: mockClient,
           observers: [ThrowingObserver()],
         );
@@ -657,7 +657,7 @@ void main() {
 
       test('observer throwing on stream events does not break stream',
           () async {
-        final adapter = ObservableHttpAdapter(
+        final adapter = ObservableHttpClient(
           client: mockClient,
           observers: [ThrowingObserver()],
         );
@@ -724,7 +724,7 @@ void main() {
           ),
         );
 
-        await observableAdapter.request(
+        await observableClient.request(
           'GET',
           Uri.parse('https://example.com'),
         );
@@ -748,7 +748,7 @@ void main() {
         ).thenThrow(const NetworkException(message: 'Failed'));
 
         try {
-          await observableAdapter.request(
+          await observableClient.request(
             'GET',
             Uri.parse('https://example.com'),
           );
@@ -774,7 +774,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = observableAdapter.requestStream(
+        final stream = observableClient.requestStream(
           'GET',
           Uri.parse('https://example.com'),
         );
@@ -809,11 +809,11 @@ void main() {
           ),
         );
 
-        await observableAdapter.request(
+        await observableClient.request(
           'GET',
           Uri.parse('https://example.com/1'),
         );
-        await observableAdapter.request(
+        await observableClient.request(
           'GET',
           Uri.parse('https://example.com/2'),
         );
@@ -830,7 +830,7 @@ void main() {
     group('custom request ID generator', () {
       test('uses provided generator', () async {
         var callCount = 0;
-        final customAdapter = ObservableHttpAdapter(
+        final customAdapter = ObservableHttpClient(
           client: mockClient,
           observers: [recorder],
           generateRequestId: () => 'custom-id-${++callCount}',
@@ -862,13 +862,13 @@ void main() {
 
     group('close delegation', () {
       test('delegates close to wrapped adapter', () {
-        observableAdapter.close();
+        observableClient.close();
 
         verify(() => mockClient.close()).called(1);
       });
 
       test('does not notify observers on close', () {
-        observableAdapter.close();
+        observableClient.close();
 
         expect(recorder.events, isEmpty);
       });
@@ -876,7 +876,7 @@ void main() {
 
     group('empty observer list', () {
       test('works correctly with no observers', () async {
-        final emptyAdapter = ObservableHttpAdapter(
+        final emptyAdapter = ObservableHttpClient(
           client: mockClient,
         );
 
@@ -907,7 +907,7 @@ void main() {
       });
 
       test('streaming works with no observers', () async {
-        final emptyAdapter = ObservableHttpAdapter(
+        final emptyAdapter = ObservableHttpClient(
           client: mockClient,
         );
 
@@ -973,7 +973,7 @@ void main() {
           ),
         );
 
-        await observableAdapter.request(
+        await observableClient.request(
           'POST',
           Uri.parse('https://example.com/api'),
           headers: {'X-Custom': 'value'},
@@ -1005,7 +1005,7 @@ void main() {
         ).thenAnswer((_) => controller.stream);
 
         // Start listening to trigger the request
-        final subscription = observableAdapter
+        final subscription = observableClient
             .requestStream(
               'POST',
               Uri.parse('https://example.com/stream'),
