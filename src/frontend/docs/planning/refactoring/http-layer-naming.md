@@ -242,3 +242,54 @@ ActiveRunNotifier starts run
 │    - ObservableHttpClient: decorator pattern, not adapter          │
 └────────────────────────────────────────────────────────────────────┘
 ```
+
+### Unified HTTP Observability
+
+All HTTP traffic flows through `ObservableHttpClient`, regardless of:
+
+- **Request type**: REST API or AG-UI SSE streaming
+- **Platform**: iOS, macOS, Android, Windows, Linux, or Web
+- **Native client**: `CupertinoHttpClient` or `DartHttpClient`
+
+```text
+┌────────────────────────────────────────────────────────────────────┐
+│                  Single Point of Instantiation                     │
+│                                                                    │
+│  observableClientProvider (api_provider.dart:18)                   │
+│      │                                                             │
+│      │  final baseClient = createPlatformClient();                 │
+│      │  final observable = ObservableHttpClient(                   │
+│      │    client: baseClient,      // Dart or Cupertino            │
+│      │    observers: [observer],   // HttpLogNotifier              │
+│      │  );                                                         │
+│      │                                                             │
+│      └──────────────────┬──────────────────────────────┐           │
+│                         │                              │           │
+│                         ▼                              ▼           │
+│              httpTransportProvider          soliplexHttpClientProvider
+│                         │                              │           │
+│                         ▼                              ▼           │
+│                   apiProvider                  httpClientProvider  │
+│                    (REST)                       (bridges to        │
+│                         │                       http.Client)       │
+│                         │                              │           │
+│                         │                              ▼           │
+│                         │                      agUiClientProvider  │
+│                         │                         (SSE)            │
+│                         │                              │           │
+│                         ▼                              ▼           │
+│                    ┌────────────────────────────────────────┐      │
+│                    │     HttpLogNotifier sees ALL traffic   │      │
+│                    └────────────────────────────────────────┘      │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Why this matters:**
+
+- **No bypass paths**: `createPlatformClient()` is called only once, inside
+  `observableClientProvider`. No code directly instantiates `DartHttpClient`
+  or `CupertinoHttpClient`.
+- **Unified logging**: `HttpLogNotifier` receives callbacks for every HTTP
+  request, response, error, and stream event across the entire application.
+- **Platform-agnostic monitoring**: The same observer interface works whether
+  the app runs on iOS (Cupertino) or any other platform (Dart HTTP).
