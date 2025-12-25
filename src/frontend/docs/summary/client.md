@@ -18,12 +18,13 @@ soliplex_client/lib/src/
 ├── errors/            # Exception hierarchy
 │   └── exceptions.dart
 ├── http/              # HTTP transport layer
-│   ├── adapter_response.dart
-│   ├── dart_http_adapter.dart
+│   ├── dart_http_client.dart
 │   ├── http_client_adapter.dart
 │   ├── http_observer.dart
+│   ├── http_response.dart
 │   ├── http_transport.dart
-│   └── observable_http_adapter.dart
+│   ├── observable_http_client.dart
+│   └── soliplex_http_client.dart
 ├── models/            # Data models
 │   ├── chat_message.dart
 │   ├── models.dart
@@ -71,18 +72,18 @@ The package follows a layered architecture with clear separation of concerns:
 ┌─────────────────────────────────────────────────────────┐
 │                   Adapter Layer                          │
 │  ┌─────────────────────────────────────────────────┐    │
-│  │  ObservableHttpAdapter (optional decorator)      │    │
-│  │         Wraps any adapter below ↓                │    │
+│  │  ObservableHttpClient (optional decorator)       │    │
+│  │         Wraps any client below ↓                 │    │
 │  ├─────────────────────────────────────────────────┤    │
-│  │         HttpClientAdapter (interface)            │    │
+│  │         SoliplexHttpClient (interface)           │    │
 │  └─────────────────────────────────────────────────┘    │
 │                       ▲                                  │
 │           ┌───────────┴───────────┐                      │
 │           │                       │                      │
 │    ┌──────┴──────┐      ┌─────────┴────────┐            │
-│    │DartHttpAdapter│    │CupertinoAdapter  │            │
-│    │ (default)    │    │ (iOS/macOS)*     │            │
-│    └──────────────┘    └──────────────────┘            │
+│    │DartHttpClient│     │CupertinoHttpClient│           │
+│    │ (default)    │     │ (iOS/macOS)*     │            │
+│    └──────────────┘     └──────────────────┘            │
 │                                                          │
 │  * In soliplex_client_native package                    │
 └─────────────────────────────────────────────────────────┘
@@ -90,13 +91,13 @@ The package follows a layered architecture with clear separation of concerns:
 
 ### Key Design Decisions
 
-**1. Pluggable HTTP Adapters**
+**1. Pluggable HTTP Clients**
 
-The `HttpClientAdapter` interface allows different HTTP implementations:
+The `SoliplexHttpClient` interface allows different HTTP implementations:
 
-- `DartHttpAdapter` - Default pure-Dart implementation using `package:http`
-- Platform adapters (in `soliplex_client_native`) - Cupertino HTTP for iOS/macOS
-- `ObservableHttpAdapter` - Wraps any adapter to add monitoring
+- `DartHttpClient` - Default pure-Dart implementation using `package:http`
+- Platform clients (in `soliplex_client_native`) - CupertinoHttpClient for iOS/macOS
+- `ObservableHttpClient` - Wraps any client to add monitoring
 
 **2. Sealed Class Hierarchies**
 
@@ -155,7 +156,7 @@ backend responses.
 
 ```dart
 final api = SoliplexApi(
-  transport: HttpTransport(adapter: DartHttpAdapter()),
+  transport: HttpTransport(client: DartHttpClient()),
   urlBuilder: UrlBuilder('https://api.example.com/api/v1'),
 );
 
@@ -217,7 +218,7 @@ JSON serialization and exception mapping layer.
 
 ```dart
 final transport = HttpTransport(
-  adapter: DartHttpAdapter(),
+  client: DartHttpClient(),
   defaultTimeout: Duration(seconds: 30),
 );
 
@@ -415,22 +416,22 @@ RunInfo(
 
 ## HTTP Observability
 
-### ObservableHttpAdapter
+### ObservableHttpClient
 
-The `ObservableHttpAdapter` is a **decorator** that wraps any `HttpClientAdapter` to
-enable monitoring. It does **not** wrap adapters automatically - you must explicitly
+The `ObservableHttpClient` is a **decorator** that wraps any `SoliplexHttpClient` to
+enable monitoring. It does **not** wrap clients automatically - you must explicitly
 compose it:
 
 ```dart
 // Without observation (default)
-final transport = HttpTransport(adapter: DartHttpAdapter());
+final transport = HttpTransport(client: DartHttpClient());
 
 // With observation (explicit wrapping required)
-final observable = ObservableHttpAdapter(
-  adapter: DartHttpAdapter(),
+final observable = ObservableHttpClient(
+  client: DartHttpClient(),
   observers: [LoggingObserver(), MetricsObserver()],
 );
-final transport = HttpTransport(adapter: observable);
+final transport = HttpTransport(client: observable);
 ```
 
 ### Observer Interface
@@ -462,10 +463,10 @@ abstract class HttpObserver {
 | `onStreamStart()` | When stream begins |
 | `onStreamEnd()` | When stream completes or errors (includes byte count) |
 
-### Observability with DartHttpAdapter
+### Observability with DartHttpClient
 
-When `ObservableHttpAdapter` wraps `DartHttpAdapter`, **all real-world network
-transactions are visible** because `DartHttpAdapter` converts network errors to
+When `ObservableHttpClient` wraps `DartHttpClient`, **all real-world network
+transactions are visible** because `DartHttpClient` converts network errors to
 `SoliplexException` subtypes:
 
 | Original Exception | Converted To |
@@ -475,14 +476,14 @@ transactions are visible** because `DartHttpAdapter` converts network errors to
 | `HttpException` | `NetworkException` |
 | `http.ClientException` | `NetworkException` |
 
-Since `ObservableHttpAdapter` catches `SoliplexException`, all these trigger
+Since `ObservableHttpClient` catches `SoliplexException`, all these trigger
 `onError()`.
 
 **Edge cases not observed:**
 
-1. `StateError` from using a closed adapter (programming error)
+1. `StateError` from using a closed client (programming error)
 2. Non-`SocketException` errors during streaming that aren't wrapped
-   (rare edge case in `DartHttpAdapter.requestStream()` line 164)
+   (rare edge case in `DartHttpClient.requestStream()`)
 
 These are programming errors or rare edge cases, not normal network operations.
 
@@ -527,13 +528,13 @@ api.getRoom('room-123')
   ↓
 HttpTransport.request<Room>()
   ↓
-[ObservableHttpAdapter.request() - if wrapped]
+[ObservableHttpClient.request() - if wrapped]
   ↓
-DartHttpAdapter.request()
+DartHttpClient.request()
   ↓
 Network request
   ↓
-AdapterResponse
+HttpResponse
   ↓
 Status code check → throw if error
   ↓
@@ -572,8 +573,8 @@ yield event to consumer
 
 | Pattern | Usage |
 |---------|-------|
-| **Adapter** | `HttpClientAdapter` interface with `DartHttpAdapter` implementation |
-| **Decorator** | `ObservableHttpAdapter` wraps adapters with monitoring (manual) |
+| **Adapter** | `SoliplexHttpClient` interface with `DartHttpClient` implementation |
+| **Decorator** | `ObservableHttpClient` wraps clients with monitoring (manual) |
 | **Factory** | `AgUiEvent.fromJson()` creates appropriate event subclass |
 | **Repository** | `SoliplexApi` abstracts backend communication |
 | **State Machine** | `RunState` sealed class for run lifecycle |

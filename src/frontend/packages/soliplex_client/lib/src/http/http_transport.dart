@@ -2,13 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:soliplex_client/src/errors/exceptions.dart';
-import 'package:soliplex_client/src/http/adapter_response.dart';
-import 'package:soliplex_client/src/http/http_client_adapter.dart';
+import 'package:soliplex_client/src/http/http_response.dart';
+import 'package:soliplex_client/src/http/soliplex_http_client.dart';
 import 'package:soliplex_client/src/utils/cancel_token.dart';
 
 /// HTTP transport layer with JSON serialization and exception mapping.
 ///
-/// Wraps an [HttpClientAdapter] and provides:
+/// Wraps a [SoliplexHttpClient] and provides:
 /// - Automatic JSON encoding/decoding for request and response bodies
 /// - HTTP status code to exception mapping
 /// - Request cancellation via [CancelToken]
@@ -16,7 +16,7 @@ import 'package:soliplex_client/src/utils/cancel_token.dart';
 ///
 /// Example:
 /// ```dart
-/// final transport = HttpTransport(adapter: DartHttpAdapter());
+/// final transport = HttpTransport(client: DartHttpClient());
 ///
 /// // Simple GET request
 /// final data = await transport.request<Map<String, dynamic>>(
@@ -39,17 +39,17 @@ import 'package:soliplex_client/src/utils/cancel_token.dart';
 /// transport.close();
 /// ```
 class HttpTransport {
-  /// Creates an HTTP transport with the given [adapter].
+  /// Creates an HTTP transport with the given [client].
   ///
   /// Parameters:
-  /// - [adapter]: The underlying HTTP adapter to use for requests
+  /// - [client]: The underlying HTTP client to use for requests
   /// - [defaultTimeout]: Default timeout for requests (defaults to 30 seconds)
   HttpTransport({
-    required HttpClientAdapter adapter,
+    required SoliplexHttpClient client,
     this.defaultTimeout = const Duration(seconds: 30),
-  }) : _adapter = adapter;
+  }) : _client = client;
 
-  final HttpClientAdapter _adapter;
+  final SoliplexHttpClient _client;
 
   /// Default timeout applied to requests when no per-request timeout is given.
   final Duration defaultTimeout;
@@ -77,7 +77,7 @@ class HttpTransport {
   /// - [AuthException] for 401 and 403 responses
   /// - [NotFoundException] for 404 responses
   /// - [ApiException] for other 4xx and 5xx responses
-  /// - [NetworkException] for connection failures (from adapter)
+  /// - [NetworkException] for connection failures (from client)
   Future<T> request<T>(
     String method,
     Uri uri, {
@@ -101,7 +101,7 @@ class HttpTransport {
     }
 
     // Make the request
-    final response = await _adapter.request(
+    final response = await _client.request(
       method,
       uri,
       headers: requestHeaders,
@@ -136,7 +136,7 @@ class HttpTransport {
   ///
   /// Throws:
   /// - [CancelledException] if cancelled before the stream starts
-  /// - [NetworkException] for connection failures (from adapter)
+  /// - [NetworkException] for connection failures (from client)
   Stream<List<int>> requestStream(
     String method,
     Uri uri, {
@@ -158,7 +158,7 @@ class HttpTransport {
     }
 
     // Get the source stream
-    final sourceStream = _adapter.requestStream(
+    final sourceStream = _client.requestStream(
       method,
       uri,
       headers: requestHeaders,
@@ -178,7 +178,7 @@ class HttpTransport {
   ///
   /// After calling this method, no further requests should be made.
   void close() {
-    _adapter.close();
+    _client.close();
   }
 
   /// Wraps a stream with cancellation support from a [CancelToken].
@@ -217,7 +217,7 @@ class HttpTransport {
   }
 
   /// Throws appropriate exception for HTTP error status codes.
-  void _throwForStatusCode(AdapterResponse response, Uri uri) {
+  void _throwForStatusCode(HttpResponse response, Uri uri) {
     final statusCode = response.statusCode;
 
     if (statusCode >= 200 && statusCode < 300) {
@@ -269,7 +269,7 @@ class HttpTransport {
 
   /// Decodes the response body, optionally using a [fromJson] converter.
   T _decodeResponse<T>(
-    AdapterResponse response,
+    HttpResponse response,
     T Function(Map<String, dynamic>)? fromJson,
   ) {
     final body = response.body;

@@ -5,7 +5,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:test/test.dart';
 
-class MockHttpClientAdapter extends Mock implements HttpClientAdapter {}
+class MockSoliplexHttpClient extends Mock implements SoliplexHttpClient {}
 
 class MockHttpObserver extends Mock implements HttpObserver {}
 
@@ -55,35 +55,35 @@ class ThrowingObserver implements HttpObserver {
 }
 
 void main() {
-  late MockHttpClientAdapter mockAdapter;
+  late MockSoliplexHttpClient mockClient;
   late RecordingObserver recorder;
-  late ObservableHttpAdapter observableAdapter;
+  late ObservableHttpClient observableClient;
 
   setUpAll(() {
     registerFallbackValue(Uri.parse('https://example.com'));
   });
 
   setUp(() {
-    mockAdapter = MockHttpClientAdapter();
+    mockClient = MockSoliplexHttpClient();
     recorder = RecordingObserver();
-    observableAdapter = ObservableHttpAdapter(
-      adapter: mockAdapter,
+    observableClient = ObservableHttpClient(
+      client: mockClient,
       observers: [recorder],
     );
 
     // Setup default close behavior
-    when(() => mockAdapter.close()).thenReturn(null);
+    when(() => mockClient.close()).thenReturn(null);
   });
 
   tearDown(() {
     // Reset mock state after each test
-    reset(mockAdapter);
+    reset(mockClient);
   });
 
-  group('ObservableHttpAdapter', () {
+  group('ObservableHttpClient', () {
     group('request lifecycle - success', () {
       test('notifies observer on request start and response', () async {
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 200,
           bodyBytes: Uint8List.fromList(const [1, 2, 3, 4]),
           headers: const {'content-type': 'application/json'},
@@ -91,7 +91,7 @@ void main() {
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -100,7 +100,7 @@ void main() {
           ),
         ).thenAnswer((_) async => response);
 
-        final result = await observableAdapter.request(
+        final result = await observableClient.request(
           'GET',
           Uri.parse('https://example.com/api'),
           headers: {'Authorization': 'Bearer token'},
@@ -123,7 +123,7 @@ void main() {
       });
 
       test('passes through response unchanged', () async {
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 201,
           bodyBytes: Uint8List.fromList(const [65, 66, 67]),
           headers: const {'x-custom': 'value'},
@@ -131,7 +131,7 @@ void main() {
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -140,7 +140,7 @@ void main() {
           ),
         ).thenAnswer((_) async => response);
 
-        final result = await observableAdapter.request(
+        final result = await observableClient.request(
           'POST',
           Uri.parse('https://example.com/create'),
           body: {'data': 'test'},
@@ -154,7 +154,7 @@ void main() {
 
       test('records empty headers when none provided', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -162,13 +162,13 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           ),
         );
 
-        await observableAdapter.request(
+        await observableClient.request(
           'GET',
           Uri.parse('https://example.com'),
         );
@@ -185,7 +185,7 @@ void main() {
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -195,7 +195,7 @@ void main() {
         ).thenThrow(exception);
 
         await expectLater(
-          observableAdapter.request(
+          observableClient.request(
             'GET',
             Uri.parse('https://example.com/api'),
           ),
@@ -221,7 +221,7 @@ void main() {
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -231,7 +231,7 @@ void main() {
         ).thenThrow(exception);
 
         await expectLater(
-          observableAdapter.request(
+          observableClient.request(
             'POST',
             Uri.parse('https://example.com/slow'),
             timeout: const Duration(seconds: 5),
@@ -254,7 +254,7 @@ void main() {
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -264,7 +264,7 @@ void main() {
         ).thenThrow(exception);
 
         await expectLater(
-          observableAdapter.request('GET', Uri.parse('https://example.com')),
+          observableClient.request('GET', Uri.parse('https://example.com')),
           throwsA(equals(exception)),
         );
 
@@ -278,7 +278,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -286,7 +286,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = observableAdapter.requestStream(
+        final stream = observableClient.requestStream(
           'GET',
           Uri.parse('https://example.com/stream'),
         );
@@ -341,7 +341,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -349,7 +349,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = observableAdapter.requestStream(
+        final stream = observableClient.requestStream(
           'GET',
           Uri.parse('https://example.com'),
         );
@@ -382,7 +382,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -390,7 +390,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = observableAdapter.requestStream(
+        final stream = observableClient.requestStream(
           'GET',
           Uri.parse('https://example.com/stream'),
         );
@@ -437,7 +437,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -445,7 +445,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = observableAdapter.requestStream(
+        final stream = observableClient.requestStream(
           'GET',
           Uri.parse('https://example.com/stream'),
         );
@@ -489,13 +489,13 @@ void main() {
         final recorder2 = RecordingObserver();
         final recorder3 = RecordingObserver();
 
-        final adapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+        final observableClient = ObservableHttpClient(
+          client: mockClient,
           observers: [recorder1, recorder2, recorder3],
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -503,13 +503,13 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           ),
         );
 
-        await adapter.request('GET', Uri.parse('https://example.com'));
+        await observableClient.request('GET', Uri.parse('https://example.com'));
 
         // All observers should have same events
         expect(recorder1.events, hasLength(2));
@@ -523,7 +523,7 @@ void main() {
         expect(id1, equals(id2));
         expect(id2, equals(id3));
 
-        adapter.close();
+        observableClient.close();
       });
 
       test('one observer exception does not affect others', () async {
@@ -531,13 +531,13 @@ void main() {
         final throwingObserver = ThrowingObserver();
         final recorder2 = RecordingObserver();
 
-        final adapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+        final observableClient = ObservableHttpClient(
+          client: mockClient,
           observers: [recorder1, throwingObserver, recorder2],
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -545,7 +545,7 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           ),
@@ -553,7 +553,7 @@ void main() {
 
         // Should not throw despite throwing observer
         await expectLater(
-          adapter.request('GET', Uri.parse('https://example.com')),
+          observableClient.request('GET', Uri.parse('https://example.com')),
           completes,
         );
 
@@ -561,19 +561,19 @@ void main() {
         expect(recorder1.events, hasLength(2));
         expect(recorder2.events, hasLength(2));
 
-        adapter.close();
+        observableClient.close();
       });
     });
 
     group('observer error isolation', () {
       test('observer throwing on request does not break request', () async {
-        final adapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+        final observableClient = ObservableHttpClient(
+          client: mockClient,
           observers: [ThrowingObserver()],
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -581,13 +581,13 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List.fromList([1, 2, 3]),
           ),
         );
 
-        final result = await adapter.request(
+        final result = await observableClient.request(
           'GET',
           Uri.parse('https://example.com'),
         );
@@ -595,17 +595,17 @@ void main() {
         expect(result.statusCode, equals(200));
         expect(result.bodyBytes, hasLength(3));
 
-        adapter.close();
+        observableClient.close();
       });
 
       test('observer throwing on response does not break request', () async {
-        final adapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+        final observableClient = ObservableHttpClient(
+          client: mockClient,
           observers: [ThrowingObserver()],
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -613,32 +613,32 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 201,
             bodyBytes: Uint8List(0),
           ),
         );
 
-        final result = await adapter.request(
+        final result = await observableClient.request(
           'POST',
           Uri.parse('https://example.com'),
         );
 
         expect(result.statusCode, equals(201));
 
-        adapter.close();
+        observableClient.close();
       });
 
       test('observer throwing on error does not suppress exception', () async {
-        final adapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+        final observableClient = ObservableHttpClient(
+          client: mockClient,
           observers: [ThrowingObserver()],
         );
 
         const originalException = NetworkException(message: 'Network failed');
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -648,24 +648,24 @@ void main() {
         ).thenThrow(originalException);
 
         await expectLater(
-          adapter.request('GET', Uri.parse('https://example.com')),
+          observableClient.request('GET', Uri.parse('https://example.com')),
           throwsA(equals(originalException)),
         );
 
-        adapter.close();
+        observableClient.close();
       });
 
       test('observer throwing on stream events does not break stream',
           () async {
-        final adapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+        final observableClient = ObservableHttpClient(
+          client: mockClient,
           observers: [ThrowingObserver()],
         );
 
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -673,7 +673,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = adapter.requestStream(
+        final stream = observableClient.requestStream(
           'GET',
           Uri.parse('https://example.com'),
         );
@@ -703,14 +703,14 @@ void main() {
           ]),
         );
 
-        adapter.close();
+        observableClient.close();
       });
     });
 
     group('request ID correlation', () {
       test('same requestId across request/response events', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -718,13 +718,13 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           ),
         );
 
-        await observableAdapter.request(
+        await observableClient.request(
           'GET',
           Uri.parse('https://example.com'),
         );
@@ -738,7 +738,7 @@ void main() {
 
       test('same requestId across request/error events', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -748,7 +748,7 @@ void main() {
         ).thenThrow(const NetworkException(message: 'Failed'));
 
         try {
-          await observableAdapter.request(
+          await observableClient.request(
             'GET',
             Uri.parse('https://example.com'),
           );
@@ -766,7 +766,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -774,7 +774,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = observableAdapter.requestStream(
+        final stream = observableClient.requestStream(
           'GET',
           Uri.parse('https://example.com'),
         );
@@ -795,7 +795,7 @@ void main() {
 
       test('different requests have different IDs', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -803,17 +803,17 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           ),
         );
 
-        await observableAdapter.request(
+        await observableClient.request(
           'GET',
           Uri.parse('https://example.com/1'),
         );
-        await observableAdapter.request(
+        await observableClient.request(
           'GET',
           Uri.parse('https://example.com/2'),
         );
@@ -830,14 +830,14 @@ void main() {
     group('custom request ID generator', () {
       test('uses provided generator', () async {
         var callCount = 0;
-        final customAdapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+        final customClient = ObservableHttpClient(
+          client: mockClient,
           observers: [recorder],
           generateRequestId: () => 'custom-id-${++callCount}',
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -845,30 +845,30 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           ),
         );
 
-        await customAdapter.request('GET', Uri.parse('https://example.com'));
+        await customClient.request('GET', Uri.parse('https://example.com'));
 
         final requestEvent = recorder.eventsOfType<HttpRequestEvent>().first;
         expect(requestEvent.requestId, equals('custom-id-1'));
 
-        customAdapter.close();
+        customClient.close();
       });
     });
 
     group('close delegation', () {
-      test('delegates close to wrapped adapter', () {
-        observableAdapter.close();
+      test('delegates close to wrapped client', () {
+        observableClient.close();
 
-        verify(() => mockAdapter.close()).called(1);
+        verify(() => mockClient.close()).called(1);
       });
 
       test('does not notify observers on close', () {
-        observableAdapter.close();
+        observableClient.close();
 
         expect(recorder.events, isEmpty);
       });
@@ -876,12 +876,12 @@ void main() {
 
     group('empty observer list', () {
       test('works correctly with no observers', () async {
-        final emptyAdapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+        final clientNoObservers = ObservableHttpClient(
+          client: mockClient,
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -889,13 +889,13 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List.fromList([1, 2, 3]),
           ),
         );
 
-        final result = await emptyAdapter.request(
+        final result = await clientNoObservers.request(
           'GET',
           Uri.parse('https://example.com'),
         );
@@ -903,18 +903,18 @@ void main() {
         expect(result.statusCode, equals(200));
         expect(result.bodyBytes, hasLength(3));
 
-        emptyAdapter.close();
+        clientNoObservers.close();
       });
 
       test('streaming works with no observers', () async {
-        final emptyAdapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+        final clientNoObservers = ObservableHttpClient(
+          client: mockClient,
         );
 
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -922,7 +922,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = emptyAdapter.requestStream(
+        final stream = clientNoObservers.requestStream(
           'GET',
           Uri.parse('https://example.com'),
         );
@@ -952,14 +952,14 @@ void main() {
           ]),
         );
 
-        emptyAdapter.close();
+        clientNoObservers.close();
       });
     });
 
     group('parameters forwarding', () {
-      test('forwards all request parameters to wrapped adapter', () async {
+      test('forwards all request parameters to wrapped client', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -967,13 +967,13 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           ),
         );
 
-        await observableAdapter.request(
+        await observableClient.request(
           'POST',
           Uri.parse('https://example.com/api'),
           headers: {'X-Custom': 'value'},
@@ -982,7 +982,7 @@ void main() {
         );
 
         verify(
-          () => mockAdapter.request(
+          () => mockClient.request(
             'POST',
             Uri.parse('https://example.com/api'),
             headers: {'X-Custom': 'value'},
@@ -992,11 +992,11 @@ void main() {
         ).called(1);
       });
 
-      test('forwards all stream parameters to wrapped adapter', () async {
+      test('forwards all stream parameters to wrapped client', () async {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -1005,7 +1005,7 @@ void main() {
         ).thenAnswer((_) => controller.stream);
 
         // Start listening to trigger the request
-        final subscription = observableAdapter
+        final subscription = observableClient
             .requestStream(
               'POST',
               Uri.parse('https://example.com/stream'),
@@ -1018,7 +1018,7 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 10));
 
         verify(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             'POST',
             Uri.parse('https://example.com/stream'),
             headers: const {'Accept': 'text/event-stream'},

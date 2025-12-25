@@ -4,10 +4,10 @@ import 'package:soliplex_client/soliplex_client.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('AdapterResponse', () {
+  group('HttpResponse', () {
     group('construction', () {
       test('creates with required fields only', () {
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 200,
           bodyBytes: Uint8List.fromList([72, 105]), // "Hi"
         );
@@ -19,7 +19,7 @@ void main() {
       });
 
       test('creates with all fields', () {
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 201,
           bodyBytes: Uint8List.fromList(const []),
           headers: const {'content-type': 'application/json'},
@@ -33,7 +33,7 @@ void main() {
       });
 
       test('headers defaults to empty map', () {
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 200,
           bodyBytes: Uint8List(0),
         );
@@ -44,7 +44,7 @@ void main() {
 
     group('body getter', () {
       test('decodes bodyBytes as UTF-8 string', () {
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 200,
           bodyBytes: Uint8List.fromList([72, 101, 108, 108, 111]), // "Hello"
         );
@@ -53,7 +53,7 @@ void main() {
       });
 
       test('handles empty body', () {
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 204,
           bodyBytes: Uint8List(0),
         );
@@ -64,7 +64,7 @@ void main() {
       test('handles UTF-8 multibyte characters', () {
         // "Cafe" with UTF-8 encoded accent: "Cafe\u0301" (combining acute)
         // Using simple ASCII for reliable test
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 200,
           bodyBytes: Uint8List.fromList([67, 97, 102, 101]), // "Cafe"
         );
@@ -76,7 +76,7 @@ void main() {
         final jsonBytes = Uint8List.fromList(
           '{"key": "value"}'.codeUnits,
         );
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 200,
           bodyBytes: jsonBytes,
         );
@@ -88,7 +88,7 @@ void main() {
     group('status helpers', () {
       group('isSuccess', () {
         test('returns true for 200', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           );
@@ -97,7 +97,7 @@ void main() {
         });
 
         test('returns true for 201', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 201,
             bodyBytes: Uint8List(0),
           );
@@ -106,7 +106,7 @@ void main() {
         });
 
         test('returns true for 299', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 299,
             bodyBytes: Uint8List(0),
           );
@@ -115,7 +115,7 @@ void main() {
         });
 
         test('returns false for 199', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 199,
             bodyBytes: Uint8List(0),
           );
@@ -124,7 +124,7 @@ void main() {
         });
 
         test('returns false for 300', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 300,
             bodyBytes: Uint8List(0),
           );
@@ -135,7 +135,7 @@ void main() {
 
       group('isRedirect', () {
         test('returns true for 301', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 301,
             bodyBytes: Uint8List(0),
           );
@@ -144,7 +144,7 @@ void main() {
         });
 
         test('returns true for 302', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 302,
             bodyBytes: Uint8List(0),
           );
@@ -153,7 +153,7 @@ void main() {
         });
 
         test('returns true for 399', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 399,
             bodyBytes: Uint8List(0),
           );
@@ -162,7 +162,7 @@ void main() {
         });
 
         test('returns false for 200', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           );
@@ -171,7 +171,7 @@ void main() {
         });
 
         test('returns false for 400', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 400,
             bodyBytes: Uint8List(0),
           );
@@ -182,7 +182,7 @@ void main() {
 
       group('isClientError', () {
         test('returns true for 400', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 400,
             bodyBytes: Uint8List(0),
           );
@@ -191,7 +191,7 @@ void main() {
         });
 
         test('returns true for 404', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 404,
             bodyBytes: Uint8List(0),
           );
@@ -200,7 +200,7 @@ void main() {
         });
 
         test('returns true for 499', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 499,
             bodyBytes: Uint8List(0),
           );
@@ -209,7 +209,7 @@ void main() {
         });
 
         test('returns false for 399', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 399,
             bodyBytes: Uint8List(0),
           );
@@ -218,7 +218,7 @@ void main() {
         });
 
         test('returns false for 500', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 500,
             bodyBytes: Uint8List(0),
           );
@@ -229,7 +229,7 @@ void main() {
 
       group('isServerError', () {
         test('returns true for 500', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 500,
             bodyBytes: Uint8List(0),
           );
@@ -238,7 +238,7 @@ void main() {
         });
 
         test('returns true for 503', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 503,
             bodyBytes: Uint8List(0),
           );
@@ -247,7 +247,7 @@ void main() {
         });
 
         test('returns true for 599', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 599,
             bodyBytes: Uint8List(0),
           );
@@ -256,7 +256,7 @@ void main() {
         });
 
         test('returns false for 499', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 499,
             bodyBytes: Uint8List(0),
           );
@@ -265,7 +265,7 @@ void main() {
         });
 
         test('returns false for 200', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           );
@@ -278,7 +278,7 @@ void main() {
     group('header helpers', () {
       group('contentType', () {
         test('returns content-type header value', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
             headers: const {'content-type': 'application/json'},
@@ -288,7 +288,7 @@ void main() {
         });
 
         test('returns null when content-type header is missing', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           );
@@ -297,7 +297,7 @@ void main() {
         });
 
         test('returns value with charset', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
             headers: const {'content-type': 'text/html; charset=utf-8'},
@@ -309,7 +309,7 @@ void main() {
 
       group('contentLength', () {
         test('parses content-length header as integer', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
             headers: const {'content-length': '1234'},
@@ -319,7 +319,7 @@ void main() {
         });
 
         test('returns null for invalid content-length', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
             headers: const {'content-length': 'invalid'},
@@ -329,7 +329,7 @@ void main() {
         });
 
         test('returns null when content-length header is missing', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           );
@@ -338,7 +338,7 @@ void main() {
         });
 
         test('handles zero content-length', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 204,
             bodyBytes: Uint8List(0),
             headers: const {'content-length': '0'},
@@ -348,7 +348,7 @@ void main() {
         });
 
         test('handles large content-length', () {
-          final response = AdapterResponse(
+          final response = HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
             headers: const {'content-length': '9999999999'},
@@ -361,7 +361,7 @@ void main() {
 
     group('toString', () {
       test('includes status code and body length', () {
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 200,
           bodyBytes: Uint8List.fromList(const [1, 2, 3, 4, 5]),
         );
@@ -371,7 +371,7 @@ void main() {
       });
 
       test('formats correctly for empty body', () {
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 404,
           bodyBytes: Uint8List(0),
         );
@@ -383,14 +383,14 @@ void main() {
       });
 
       test('follows expected format', () {
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 201,
           bodyBytes: Uint8List.fromList(const [1, 2, 3]),
         );
 
         expect(
           response.toString(),
-          equals('AdapterResponse(statusCode: 201, bodyLength: 3)'),
+          equals('HttpResponse(statusCode: 201, bodyLength: 3)'),
         );
       });
     });

@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:soliplex_client/src/errors/exceptions.dart';
-import 'package:soliplex_client/src/http/adapter_response.dart';
-import 'package:soliplex_client/src/http/http_client_adapter.dart';
 import 'package:soliplex_client/src/http/http_observer.dart';
+import 'package:soliplex_client/src/http/http_response.dart';
+import 'package:soliplex_client/src/http/soliplex_http_client.dart';
 
-/// HTTP adapter decorator that notifies observers of all HTTP activity.
+/// HTTP client decorator that notifies observers of all HTTP activity.
 ///
-/// Wraps any [HttpClientAdapter] implementation and notifies registered
+/// Wraps any [SoliplexHttpClient] implementation and notifies registered
 /// [HttpObserver]s on requests, responses, errors, and streaming events.
 ///
 /// Observers that throw exceptions are caught and ignored to prevent
@@ -15,9 +15,9 @@ import 'package:soliplex_client/src/http/http_observer.dart';
 ///
 /// Example:
 /// ```dart
-/// final baseAdapter = DartHttpAdapter();
-/// final observable = ObservableHttpAdapter(
-///   adapter: baseAdapter,
+/// final baseClient = DartHttpClient();
+/// final observable = ObservableHttpClient(
+///   client: baseClient,
 ///   observers: [LoggingObserver(), MetricsObserver()],
 /// );
 ///
@@ -26,23 +26,23 @@ import 'package:soliplex_client/src/http/http_observer.dart';
 ///
 /// observable.close();
 /// ```
-class ObservableHttpAdapter implements HttpClientAdapter {
-  /// Creates an observable adapter wrapping [adapter].
+class ObservableHttpClient implements SoliplexHttpClient {
+  /// Creates an observable client wrapping [client].
   ///
   /// Parameters:
-  /// - [adapter]: The underlying adapter to wrap
+  /// - [client]: The underlying client to wrap
   /// - [observers]: List of observers to notify (defaults to empty)
   /// - [generateRequestId]: Optional ID generator for correlation
   ///   (defaults to timestamp-based IDs)
-  ObservableHttpAdapter({
-    required HttpClientAdapter adapter,
+  ObservableHttpClient({
+    required SoliplexHttpClient client,
     List<HttpObserver> observers = const [],
     String Function()? generateRequestId,
-  })  : _adapter = adapter,
+  })  : _client = client,
         _observers = List.unmodifiable(observers),
         _generateRequestId = generateRequestId ?? _defaultRequestIdGenerator;
 
-  final HttpClientAdapter _adapter;
+  final SoliplexHttpClient _client;
   final List<HttpObserver> _observers;
   final String Function() _generateRequestId;
 
@@ -55,7 +55,7 @@ class ObservableHttpAdapter implements HttpClientAdapter {
   }
 
   @override
-  Future<AdapterResponse> request(
+  Future<HttpResponse> request(
     String method,
     Uri uri, {
     Map<String, String>? headers,
@@ -79,7 +79,7 @@ class ObservableHttpAdapter implements HttpClientAdapter {
     });
 
     try {
-      final response = await _adapter.request(
+      final response = await _client.request(
         method,
         uri,
         headers: headers,
@@ -151,7 +151,7 @@ class ObservableHttpAdapter implements HttpClientAdapter {
     });
 
     // Get the source stream
-    final sourceStream = _adapter.requestStream(
+    final sourceStream = _client.requestStream(
       method,
       uri,
       headers: headers,
@@ -215,7 +215,7 @@ class ObservableHttpAdapter implements HttpClientAdapter {
 
   @override
   void close() {
-    _adapter.close();
+    _client.close();
   }
 
   /// Safely notifies all observers, catching and ignoring any exceptions.

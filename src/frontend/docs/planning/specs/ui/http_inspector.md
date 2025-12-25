@@ -23,34 +23,34 @@ Collapsible drawer showing all HTTP interactions in the app.
 Current problem: Two separate adapter instances exist (one for REST, one for SSE).
 
 ```text
-createPlatformAdapter() ──────┬──────────────────────────────┐
+createPlatformClient() ───────┬──────────────────────────────┐
                               │                              │
                               v                              v
-                   httpTransportProvider        httpAdapterProvider
+                   httpTransportProvider        soliplexHttpClientProvider
                               │                              │
                               v                              v
-                        SoliplexApi                  AdapterHttpClient
+                        SoliplexApi                  HttpClientAdapter
                         (REST API)                         │
                                                            v
                                                      AgUiClient
                                                      (SSE streaming)
 ```
 
-Solution: Single shared observable adapter at the base:
+Solution: Single shared observable client at the base:
 
 ```text
-createPlatformAdapter()
+createPlatformClient()
          │
          v
-observableAdapterProvider  <── wraps with ObservableHttpAdapter + observer
+observableClientProvider  <── wraps with ObservableHttpClient + observer
          │
     ┌────┴────┐
     │         │
     v         v
-httpTransportProvider    httpAdapterProvider
+httpTransportProvider    soliplexHttpClientProvider
     │                          │
     v                          v
-SoliplexApi              AdapterHttpClient -> AgUiClient
+SoliplexApi              HttpClientAdapter -> AgUiClient
 (REST)                   (SSE)
 ```
 
@@ -61,31 +61,31 @@ SoliplexApi              AdapterHttpClient -> AgUiClient
 final httpLogProvider =
     NotifierProvider<HttpLogNotifier, List<HttpEvent>>(HttpLogNotifier.new);
 
-// 2. Single shared observable adapter (NEW)
-final observableAdapterProvider = Provider<HttpClientAdapter>((ref) {
-  final baseAdapter = createPlatformAdapter();
+// 2. Single shared observable client (NEW)
+final observableClientProvider = Provider<SoliplexHttpClient>((ref) {
+  final baseClient = createPlatformClient();
   final observer = ref.watch(httpLogProvider.notifier);
-  final observable = ObservableHttpAdapter(
-    adapter: baseAdapter,
+  final observable = ObservableHttpClient(
+    client: baseClient,
     observers: [observer],
   );
   ref.onDispose(observable.close);
   return observable;
 });
 
-// 3. Modify existing providers to use shared adapter
+// 3. Modify existing providers to use shared client
 final httpTransportProvider = Provider<HttpTransport>((ref) {
-  final adapter = ref.watch(observableAdapterProvider);  // Changed
-  return HttpTransport(adapter: adapter);
-  // Note: Don't dispose transport here - adapter disposed by observableAdapterProvider
+  final client = ref.watch(observableClientProvider);  // Changed
+  return HttpTransport(client: client);
+  // Note: Don't dispose transport here - client disposed by observableClientProvider
 });
 
-final httpAdapterProvider = Provider<HttpClientAdapter>((ref) {
-  return ref.watch(observableAdapterProvider);  // Changed: just forward
+final soliplexHttpClientProvider = Provider<SoliplexHttpClient>((ref) {
+  return ref.watch(observableClientProvider);  // Changed: just forward
 });
 ```
 
-**Requires**: `HttpObserver`, `ObservableHttpAdapter` from soliplex_client.
+**Requires**: `HttpObserver`, `ObservableHttpClient` from soliplex_client.
 
 ## UI States
 
@@ -114,7 +114,7 @@ final httpAdapterProvider = Provider<HttpClientAdapter>((ref) {
 
 | File | Change |
 |------|--------|
-| `lib/core/providers/api_provider.dart` | Add `observableAdapterProvider`, modify `httpTransportProvider` and `httpAdapterProvider` to use it |
+| `lib/core/providers/api_provider.dart` | Add `observableClientProvider`, modify `httpTransportProvider` and `soliplexHttpClientProvider` to use it |
 | `lib/features/thread/thread_screen.dart` | Add endDrawer + toggle button |
 
 ### Test Files
@@ -176,9 +176,9 @@ Standalone observer that stores HTTP events. Includes event cap (500 max) to pre
 
 | File | Type | Change |
 |------|------|--------|
-| `lib/core/providers/api_provider.dart` | Modify | Add `observableAdapterProvider`, update `httpTransportProvider` and `httpAdapterProvider` |
+| `lib/core/providers/api_provider.dart` | Modify | Add `observableClientProvider`, update `httpTransportProvider` and `soliplexHttpClientProvider` |
 | `lib/core/providers/http_log_provider.dart` | Modify | Defer state updates via scheduleMicrotask to avoid Riverpod conflicts |
-| `test/core/providers/api_provider_test.dart` | Modify | Add tests for observableAdapterProvider and shared adapter |
+| `test/core/providers/api_provider_test.dart` | Modify | Add tests for observableClientProvider and shared adapter |
 | `test/core/providers/http_log_provider_test.dart` | Modify | Update tests for async state updates |
 
 ### Commit 3: Add HTTP event UI components

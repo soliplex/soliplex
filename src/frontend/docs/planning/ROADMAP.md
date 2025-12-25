@@ -133,9 +133,9 @@ Depends on: AM3 (Core Frontend phase 2)
 **Core**: Token refresh, desktop polish
 **Network** (`soliplex_client_native` package):
 
-- Native HTTP adapters (Cupertino, Android, Windows, Linux, Web)
+- Native HTTP clients (Cupertino, Android, Windows, Linux, Web)
 - Certificate pinning
-- Platform auto-detection via `createPlatformAdapter()`
+- Platform auto-detection via `createPlatformClient()`
 
 ---
 

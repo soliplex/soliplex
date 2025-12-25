@@ -1,8 +1,8 @@
-/// Native HTTP adapters for soliplex_client.
+/// Native HTTP clients for soliplex_client.
 ///
-/// Provides platform-optimized HTTP adapters:
-/// - `CupertinoHttpAdapter` for iOS and macOS using NSURLSession
-/// - `createPlatformAdapter` for automatic platform detection
+/// Provides platform-optimized HTTP clients:
+/// - `CupertinoHttpClient` for iOS and macOS using NSURLSession
+/// - `createPlatformClient` for automatic platform detection
 ///
 /// Example:
 /// ```dart
@@ -10,12 +10,12 @@
 /// import 'package:soliplex_client_native/soliplex_client_native.dart';
 ///
 /// // Auto-detect platform
-/// final adapter = createPlatformAdapter();
+/// final client = createPlatformClient();
 ///
-/// // Or use specific adapter
-/// final cupertinoAdapter = CupertinoHttpAdapter();
+/// // Or use specific client
+/// final cupertinoClient = CupertinoHttpClient();
 /// ```
 library soliplex_client_native;
 
-export 'src/adapters/adapters.dart';
+export 'src/clients/clients.dart';
 export 'src/platform/platform.dart';

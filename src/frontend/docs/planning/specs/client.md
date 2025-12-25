@@ -6,8 +6,8 @@ Pure Dart package (`soliplex_client`) for backend communication via HTTP and AG-
 
 | Package | Type | Contents |
 |---------|------|----------|
-| `soliplex_client` | Pure Dart | Core client, DartHttpAdapter, all business logic |
-| `soliplex_client_native` | Flutter | Native HTTP adapters (v1.1) |
+| `soliplex_client` | Pure Dart | Core client, DartHttpClient, all business logic |
+| `soliplex_client_native` | Flutter | Native HTTP clients (v1.1) |
 
 ```text
 packages/
@@ -38,44 +38,44 @@ packages/
 │   │ Utils: UrlBuilder, CancelToken│     │
 │   └───────────────────────────────┘     │
 └───────────────────┬─────────────────────┘
-                    │ uses HttpClientAdapter
+                    │ uses SoliplexHttpClient
                     ▼
 ┌─────────────────────────────────────────┐
-│ ObservableHttpAdapter (optional)        │  DM3 ✓
-│ - Decorator implementing HttpClientAdapter
+│ ObservableHttpClient (optional)         │  DM3 ✓
+│ - Decorator implementing SoliplexHttpClient
 │ - Notifies HttpObserver on all traffic  │
 └───────────────────┬─────────────────────┘
                     │ wraps
                     ▼
 ┌─────────────────────────────────────────┐
-│ HttpClientAdapter (interface)           │  DM2 ✓
+│ SoliplexHttpClient (interface)          │  DM2 ✓
 │ - Abstract HTTP operations (DI)         │
-│ - Returns AdapterResponse               │
+│ - Returns HttpResponse                  │
 └─────────────────────────────────────────┘
                     ▲
                     │ implements
         ┌───────────┴───────────┐
         │                       │
 ┌───────┴───────┐  ┌────────────┴────────────────┐
-│DartHttpAdapter│  │ soliplex_client_native:     │
-│ (default)     │  │ ✓ CupertinoHttpAdapter      │
-│               │  │ - AndroidHttpAdapter planned│
-│ package:http  │  │ - WindowsHttpAdapter planned│
-│ All platforms │  │ - LinuxHttpAdapter planned  │
-└───────────────┘  │ - WebHttpAdapter planned    │
+│DartHttpClient │  │ soliplex_client_native:     │
+│ (default)     │  │ ✓ CupertinoHttpClient       │
+│               │  │ - AndroidHttpClient planned │
+│ package:http  │  │ - WindowsHttpClient planned │
+│ All platforms │  │ - LinuxHttpClient planned   │
+└───────────────┘  │ - WebHttpClient planned     │
                    └─────────────────────────────┘
 ```
 
 **Usage patterns:**
 
 ```dart
-// Option 1: Direct adapter
-HttpTransport(adapter: DartHttpAdapter())
+// Option 1: Direct client
+HttpTransport(client: DartHttpClient())
 
 // Option 2: With monitoring
 HttpTransport(
-  adapter: ObservableHttpAdapter(
-    adapter: DartHttpAdapter(),  // Wraps DartHttpAdapter
+  client: ObservableHttpClient(
+    client: DartHttpClient(),  // Wraps DartHttpClient
     observers: [LoggingObserver()],
   ),
 )
@@ -119,11 +119,11 @@ Server-Sent Events (SSE) streaming with real-time event processing:
 - Retry: 3x exponential backoff (500ms base) on 5xx/network errors
 - Cancel in-flight requests via CancelToken
 
-## HttpClientAdapter (Interface)
+## SoliplexHttpClient (Interface)
 
 ```dart
-abstract class HttpClientAdapter {
-  Future<AdapterResponse> request(String method, Uri uri, {Map<String, String>? headers, Object? body, Duration? timeout});
+abstract class SoliplexHttpClient {
+  Future<HttpResponse> request(String method, Uri uri, {Map<String, String>? headers, Object? body, Duration? timeout});
   Stream<List<int>> requestStream(String method, Uri uri, {Map<String, String>? headers, Object? body});
   void close();
 }
@@ -131,26 +131,26 @@ abstract class HttpClientAdapter {
 
 ### Platform Implementations
 
-| Adapter | Package | Platform | Native Client | Status |
-|---------|---------|----------|---------------|--------|
-| `DartHttpAdapter` | `soliplex_client` | All | package:http | Done |
-| `CupertinoHttpAdapter` | `soliplex_client_native` | iOS/macOS | NSURLSession | Done |
-| `AndroidHttpAdapter` | `soliplex_client_native` | Android | OkHttp | Planned |
-| `WindowsHttpAdapter` | `soliplex_client_native` | Windows | WinHTTP | Planned |
-| `LinuxHttpAdapter` | `soliplex_client_native` | Linux | libcurl | Planned |
-| `WebHttpAdapter` | `soliplex_client_native` | Web | fetch API | Planned |
+| Client | Package | Platform | Native Client | Status |
+|--------|---------|----------|---------------|--------|
+| `DartHttpClient` | `soliplex_client` | All | package:http | Done |
+| `CupertinoHttpClient` | `soliplex_client_native` | iOS/macOS | NSURLSession | Done |
+| `AndroidHttpClient` | `soliplex_client_native` | Android | OkHttp | Planned |
+| `WindowsHttpClient` | `soliplex_client_native` | Windows | WinHTTP | Planned |
+| `LinuxHttpClient` | `soliplex_client_native` | Linux | libcurl | Planned |
+| `WebHttpClient` | `soliplex_client_native` | Web | fetch API | Planned |
 
-### Adapter Injection
+### Client Injection
 
 ```dart
 // Default (pure Dart)
 final client = SoliplexClient(baseUrl: 'https://api.example.com');
 
-// With native adapter (v1.1)
+// With native client (v1.1)
 import 'package:soliplex_client_native/soliplex_client_native.dart';
 final client = SoliplexClient(
   baseUrl: 'https://api.example.com',
-  httpAdapter: createPlatformAdapter(),  // Auto-detects platform
+  httpClient: createPlatformClient(),  // Auto-detects platform
 );
 ```
 
@@ -168,12 +168,12 @@ final client = SoliplexClient(
 
 | Component | Responsibility | Status |
 |-----------|----------------|--------|
-| `AdapterResponse` | HTTP response model with status helpers | Done |
-| `HttpClientAdapter` | Abstract HTTP operations interface (DI) | Done |
-| `DartHttpAdapter` | Default HTTP adapter using package:http | Done |
+| `HttpResponse` | HTTP response model with status helpers | Done |
+| `SoliplexHttpClient` | Abstract HTTP operations interface (DI) | Done |
+| `DartHttpClient` | Default HTTP client using package:http | Done |
 | `HttpObserver` | Interface for observing HTTP activity | Done |
-| `ObservableHttpAdapter` | Decorator that notifies observers on all HTTP traffic | Done |
-| `HttpTransport` | JSON wrapper using HttpClientAdapter | Done |
+| `ObservableHttpClient` | Decorator that notifies observers on all HTTP traffic | Done |
+| `HttpTransport` | JSON wrapper using SoliplexHttpClient | Done |
 | `UrlBuilder` | URL construction with normalization | Done |
 | `CancelToken` | Request cancellation | Done |
 | `SoliplexApi` | Room/Thread/Run CRUD operations | Done |
@@ -214,8 +214,8 @@ Each phase maps to a Developer Milestone (DM). See `ROADMAP.md` for full milesto
 | Phase | Goal | Components | Milestone | Status |
 |-------|------|------------|-----------|--------|
 | 1 | Models & errors | ChatMessage, Room, ThreadInfo, RunInfo, all exceptions | DM1 | Done |
-| 2a | HTTP adapter | HttpClientAdapter (interface), DartHttpAdapter, AdapterResponse | DM2 | Done |
-| 2b | Network observer | HttpObserver (interface), ObservableHttpAdapter (decorator) | DM3 | Done |
+| 2a | HTTP client | SoliplexHttpClient (interface), DartHttpClient, HttpResponse | DM2 | Done |
+| 2b | Network observer | HttpObserver (interface), ObservableHttpClient (decorator) | DM3 | Done |
 | 2c | HTTP transport | HttpTransport, UrlBuilder, CancelToken | DM4 | Done |
 | 3 | API layer | SoliplexApi | DM5 | Done |
 | 4 | AG-UI protocol | Thread, TextMessageBuffer, ToolCallBuffer, ToolRegistry | DM6 | Done |
@@ -245,13 +245,14 @@ packages/soliplex_client/
 │       │   ├── errors.dart             # Barrel export
 │       │   └── exceptions.dart
 │       ├── http/                       # DM2, DM3, DM4 ✓
-│       │   ├── adapter_response.dart
-│       │   ├── dart_http_adapter.dart
+│       │   ├── dart_http_client.dart
 │       │   ├── http.dart               # Barrel export
 │       │   ├── http_client_adapter.dart
 │       │   ├── http_observer.dart
+│       │   ├── http_response.dart
 │       │   ├── http_transport.dart
-│       │   └── observable_http_adapter.dart
+│       │   ├── observable_http_client.dart
+│       │   └── soliplex_http_client.dart
 │       ├── models/                     # DM1 ✓
 │       │   ├── chat_message.dart
 │       │   ├── models.dart             # Barrel export
@@ -274,11 +275,12 @@ packages/soliplex_client/
 │   ├── errors/
 │   │   └── exceptions_test.dart
 │   ├── http/
-│   │   ├── adapter_response_test.dart
-│   │   ├── dart_http_adapter_test.dart
+│   │   ├── dart_http_client_test.dart
+│   │   ├── http_client_adapter_test.dart
 │   │   ├── http_observer_test.dart
+│   │   ├── http_response_test.dart
 │   │   ├── http_transport_test.dart
-│   │   └── observable_http_adapter_test.dart
+│   │   └── observable_http_client_test.dart
 │   ├── models/
 │   │   ├── chat_message_test.dart
 │   │   ├── room_test.dart

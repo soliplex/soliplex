@@ -7,31 +7,31 @@ import 'package:mocktail/mocktail.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:test/test.dart';
 
-class MockHttpClientAdapter extends Mock implements HttpClientAdapter {}
+class MockSoliplexHttpClient extends Mock implements SoliplexHttpClient {}
 
 void main() {
-  late MockHttpClientAdapter mockAdapter;
-  late AdapterHttpClient httpClient;
+  late MockSoliplexHttpClient mockClient;
+  late HttpClientAdapter httpClient;
 
   setUpAll(() {
     registerFallbackValue(Uri.parse('https://example.com'));
   });
 
   setUp(() {
-    mockAdapter = MockHttpClientAdapter();
-    httpClient = AdapterHttpClient(adapter: mockAdapter);
-    when(() => mockAdapter.close()).thenReturn(null);
+    mockClient = MockSoliplexHttpClient();
+    httpClient = HttpClientAdapter(client: mockClient);
+    when(() => mockClient.close()).thenReturn(null);
   });
 
   tearDown(() {
     httpClient.close();
-    reset(mockAdapter);
+    reset(mockClient);
   });
 
-  group('AdapterHttpClient', () {
+  group('HttpClientAdapter', () {
     group('regular requests (non-SSE)', () {
-      test('delegates GET request to adapter.request', () async {
-        final response = AdapterResponse(
+      test('delegates GET request to client.request', () async {
+        final response = HttpResponse(
           statusCode: 200,
           bodyBytes: Uint8List.fromList('{"data": "test"}'.codeUnits),
           headers: const {'content-type': 'application/json'},
@@ -39,7 +39,7 @@ void main() {
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -58,7 +58,7 @@ void main() {
         expect(body, '{"data": "test"}');
 
         verify(
-          () => mockAdapter.request(
+          () => mockClient.request(
             'GET',
             Uri.parse('https://api.test/data'),
             headers: any(named: 'headers'),
@@ -67,8 +67,8 @@ void main() {
         ).called(1);
       });
 
-      test('delegates POST request with body to adapter.request', () async {
-        final response = AdapterResponse(
+      test('delegates POST request with body to client.request', () async {
+        final response = HttpResponse(
           statusCode: 201,
           bodyBytes: Uint8List.fromList('{"id": 1}'.codeUnits),
           headers: const {'content-type': 'application/json'},
@@ -76,7 +76,7 @@ void main() {
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -95,7 +95,7 @@ void main() {
         expect(streamedResponse.reasonPhrase, 'Created');
 
         verify(
-          () => mockAdapter.request(
+          () => mockClient.request(
             'POST',
             Uri.parse('https://api.test/data'),
             headers: any(named: 'headers'),
@@ -107,7 +107,7 @@ void main() {
 
       test('returns proper headers and content length', () async {
         final bodyBytes = Uint8List.fromList('response body'.codeUnits);
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 200,
           bodyBytes: bodyBytes,
           headers: const {
@@ -117,7 +117,7 @@ void main() {
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -136,11 +136,11 @@ void main() {
     });
 
     group('SSE requests', () {
-      test('delegates SSE request to adapter.requestStream', () async {
+      test('delegates SSE request to client.requestStream', () async {
         final controller = StreamController<List<int>>.broadcast();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -160,7 +160,7 @@ void main() {
         expect(streamedResponse.headers['content-type'], 'text/event-stream');
 
         verify(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             'POST',
             Uri.parse('https://api.test/sse'),
             headers: any(named: 'headers'),
@@ -170,7 +170,7 @@ void main() {
 
         // Verify request() was NOT called
         verifyNever(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -186,7 +186,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -222,7 +222,7 @@ void main() {
         final controller = StreamController<List<int>>.broadcast();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -237,7 +237,7 @@ void main() {
         await httpClient.send(request);
 
         verify(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -250,34 +250,34 @@ void main() {
     });
 
     group('close', () {
-      test('delegates to adapter.close', () {
+      test('delegates to client.close', () {
         httpClient.close();
 
-        verify(() => mockAdapter.close()).called(1);
+        verify(() => mockClient.close()).called(1);
       });
     });
 
-    group('integration with ObservableHttpAdapter', () {
-      test('works with ObservableHttpAdapter wrapper', () async {
-        final baseAdapter = MockHttpClientAdapter();
+    group('integration with ObservableHttpClient', () {
+      test('works with ObservableHttpClient wrapper', () async {
+        final baseClient = MockSoliplexHttpClient();
         final observer = _RecordingObserver();
 
-        when(baseAdapter.close).thenReturn(null);
+        when(baseClient.close).thenReturn(null);
 
-        final observableAdapter = ObservableHttpAdapter(
-          adapter: baseAdapter,
+        final observableClient = ObservableHttpClient(
+          client: baseClient,
           observers: [observer],
         );
 
-        final client = AdapterHttpClient(adapter: observableAdapter);
+        final client = HttpClientAdapter(client: observableClient);
 
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 200,
           bodyBytes: Uint8List.fromList('ok'.codeUnits),
         );
 
         when(
-          () => baseAdapter.request(
+          () => baseClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),

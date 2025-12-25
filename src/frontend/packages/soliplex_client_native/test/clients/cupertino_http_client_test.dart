@@ -16,17 +16,17 @@ void main() {
     registerFallbackValue(FakeBaseRequest());
   });
 
-  group('CupertinoHttpAdapter', () {
+  group('CupertinoHttpClient', () {
     late MockHttpClient mockClient;
-    late CupertinoHttpAdapter adapter;
+    late CupertinoHttpClient client;
 
     setUp(() {
       mockClient = MockHttpClient();
-      adapter = CupertinoHttpAdapter.forTesting(client: mockClient);
+      client = CupertinoHttpClient.forTesting(client: mockClient);
     });
 
     tearDown(() {
-      adapter.close();
+      client.close();
     });
 
     group('request', () {
@@ -42,7 +42,7 @@ void main() {
           (_) async => streamedResponse,
         );
 
-        final response = await adapter.request(
+        final response = await client.request(
           'GET',
           Uri.parse('https://example.com/api'),
         );
@@ -64,7 +64,7 @@ void main() {
           return streamedResponse;
         });
 
-        await adapter.request(
+        await client.request(
           'POST',
           Uri.parse('https://example.com/api'),
           body: {'key': 'value'},
@@ -90,7 +90,7 @@ void main() {
           return streamedResponse;
         });
 
-        await adapter.request(
+        await client.request(
           'POST',
           Uri.parse('https://example.com/api'),
           body: 'plain text',
@@ -115,7 +115,7 @@ void main() {
           return streamedResponse;
         });
 
-        await adapter.request(
+        await client.request(
           'POST',
           Uri.parse('https://example.com/api'),
           body: [1, 2, 3, 4],
@@ -140,7 +140,7 @@ void main() {
           return streamedResponse;
         });
 
-        await adapter.request(
+        await client.request(
           'GET',
           Uri.parse('https://example.com/api'),
           headers: {'Authorization': 'Bearer token123'},
@@ -164,7 +164,7 @@ void main() {
           return streamedResponse;
         });
 
-        await adapter.request(
+        await client.request(
           'POST',
           Uri.parse('https://example.com/api'),
           headers: {'content-type': 'application/xml'},
@@ -187,13 +187,13 @@ void main() {
           ),
         );
 
-        adapter = CupertinoHttpAdapter.forTesting(
+        client = CupertinoHttpClient.forTesting(
           client: mockClient,
           defaultTimeout: const Duration(milliseconds: 50),
         );
 
         await expectLater(
-          adapter.request('GET', Uri.parse('https://example.com/api')),
+          client.request('GET', Uri.parse('https://example.com/api')),
           throwsA(
             isA<NetworkException>()
                 .having((e) => e.isTimeout, 'isTimeout', isTrue),
@@ -207,14 +207,14 @@ void main() {
         );
 
         await expectLater(
-          adapter.request('GET', Uri.parse('https://example.com/api')),
+          client.request('GET', Uri.parse('https://example.com/api')),
           throwsA(isA<NetworkException>()),
         );
       });
 
       test('throws ArgumentError for unsupported body type', () async {
         expect(
-          () => adapter.request(
+          () => client.request(
             'POST',
             Uri.parse('https://example.com/api'),
             body: DateTime.now(),
@@ -232,7 +232,7 @@ void main() {
         );
 
         await expectLater(
-          adapter.request(
+          client.request(
             'GET',
             Uri.parse('https://example.com/api'),
             timeout: const Duration(milliseconds: 50),
@@ -252,7 +252,7 @@ void main() {
           (_) async => streamedResponse,
         );
 
-        final response = await adapter.request(
+        final response = await client.request(
           'GET',
           Uri.parse('https://example.com/api'),
         );
@@ -273,7 +273,7 @@ void main() {
           return streamedResponse;
         });
 
-        await adapter.request(
+        await client.request(
           'get',
           Uri.parse('https://example.com/api'),
         );
@@ -292,7 +292,7 @@ void main() {
           (_) async => streamedResponse,
         );
 
-        final response = await adapter.request(
+        final response = await client.request(
           'POST',
           Uri.parse('https://example.com/api'),
         );
@@ -305,7 +305,7 @@ void main() {
         when(() => mockClient.send(any())).thenThrow(originalError);
 
         try {
-          await adapter.request('GET', Uri.parse('https://example.com/api'));
+          await client.request('GET', Uri.parse('https://example.com/api'));
           fail('Expected NetworkException');
         } on NetworkException catch (e) {
           expect(e.originalError, equals(originalError));
@@ -326,13 +326,13 @@ void main() {
           (_) async => streamedResponse,
         );
 
-        adapter = CupertinoHttpAdapter.forTesting(
+        client = CupertinoHttpClient.forTesting(
           client: mockClient,
           defaultTimeout: const Duration(milliseconds: 50),
         );
 
         await expectLater(
-          adapter.request('GET', Uri.parse('https://example.com/api')),
+          client.request('GET', Uri.parse('https://example.com/api')),
           throwsA(
             isA<NetworkException>()
                 .having((e) => e.isTimeout, 'isTimeout', isTrue)
@@ -353,7 +353,7 @@ void main() {
         );
 
         await expectLater(
-          adapter.request('GET', Uri.parse('https://example.com/api')),
+          client.request('GET', Uri.parse('https://example.com/api')),
           throwsA(
             isA<NetworkException>()
                 .having((e) => e.isTimeout, 'isTimeout', isTrue)
@@ -378,7 +378,7 @@ void main() {
           return streamedResponse;
         });
 
-        await adapter.request(
+        await client.request(
           'GET',
           Uri.parse('https://example.com/api'),
         );
@@ -399,7 +399,7 @@ void main() {
           return streamedResponse;
         });
 
-        await adapter.request(
+        await client.request(
           'GET',
           Uri.parse('https://example.com/api'),
         );
@@ -422,7 +422,7 @@ void main() {
           (_) async => streamedResponse,
         );
 
-        final stream = adapter.requestStream(
+        final stream = client.requestStream(
           'GET',
           Uri.parse('https://example.com/stream'),
         );
@@ -466,7 +466,7 @@ void main() {
           (_) async => streamedResponse,
         );
 
-        final stream = adapter.requestStream(
+        final stream = client.requestStream(
           'GET',
           Uri.parse('https://example.com/stream'),
         );
@@ -482,7 +482,7 @@ void main() {
           http.ClientException('Client error'),
         );
 
-        final stream = adapter.requestStream(
+        final stream = client.requestStream(
           'GET',
           Uri.parse('https://example.com/stream'),
         );
@@ -505,7 +505,7 @@ void main() {
           (_) async => streamedResponse,
         );
 
-        final stream = adapter.requestStream(
+        final stream = client.requestStream(
           'GET',
           Uri.parse('https://example.com/stream'),
         );
@@ -547,7 +547,7 @@ void main() {
           (_) async => streamedResponse,
         );
 
-        final stream = adapter.requestStream(
+        final stream = client.requestStream(
           'GET',
           Uri.parse('https://example.com/stream'),
         );
@@ -596,7 +596,7 @@ void main() {
           (_) async => streamedResponse,
         );
 
-        final stream = adapter.requestStream(
+        final stream = client.requestStream(
           'GET',
           Uri.parse('https://example.com/stream'),
         );
@@ -644,7 +644,7 @@ void main() {
           return streamedResponse;
         });
 
-        final stream = adapter.requestStream(
+        final stream = client.requestStream(
           'POST',
           Uri.parse('https://example.com/stream'),
           body: {'key': 'value'},
@@ -680,13 +680,13 @@ void main() {
 
     group('close', () {
       test('closes underlying client', () {
-        adapter.close();
+        client.close();
 
         verify(() => mockClient.close()).called(1);
       });
 
       test('multiple close calls only close client once', () {
-        adapter
+        client
           ..close()
           ..close()
           ..close();
@@ -695,19 +695,19 @@ void main() {
       });
 
       test('throws StateError when request called after close', () {
-        adapter.close();
+        client.close();
 
         expect(
-          () => adapter.request('GET', Uri.parse('https://example.com')),
+          () => client.request('GET', Uri.parse('https://example.com')),
           throwsStateError,
         );
       });
 
       test('throws StateError when requestStream called after close', () {
-        adapter.close();
+        client.close();
 
         expect(
-          () => adapter.requestStream('GET', Uri.parse('https://example.com')),
+          () => client.requestStream('GET', Uri.parse('https://example.com')),
           throwsStateError,
         );
       });
@@ -715,29 +715,29 @@ void main() {
 
     group('default configuration', () {
       test('creates with default timeout of 30 seconds', () {
-        final defaultAdapter =
-            CupertinoHttpAdapter.forTesting(client: mockClient);
+        final defaultClient =
+            CupertinoHttpClient.forTesting(client: mockClient);
 
         expect(
-          defaultAdapter.defaultTimeout,
+          defaultClient.defaultTimeout,
           equals(const Duration(seconds: 30)),
         );
 
-        defaultAdapter.close();
+        defaultClient.close();
       });
 
       test('accepts custom default timeout', () {
-        final customAdapter = CupertinoHttpAdapter.forTesting(
+        final customClient = CupertinoHttpClient.forTesting(
           client: mockClient,
           defaultTimeout: const Duration(seconds: 60),
         );
 
         expect(
-          customAdapter.defaultTimeout,
+          customClient.defaultTimeout,
           equals(const Duration(seconds: 60)),
         );
 
-        customAdapter.close();
+        customClient.close();
       });
     });
 
@@ -754,7 +754,7 @@ void main() {
           return streamedResponse;
         });
 
-        await adapter.request(
+        await client.request(
           'PUT',
           Uri.parse('https://example.com/api'),
           body: {'update': 'data'},
@@ -775,7 +775,7 @@ void main() {
           return streamedResponse;
         });
 
-        await adapter.request(
+        await client.request(
           'DELETE',
           Uri.parse('https://example.com/api/123'),
         );
@@ -795,7 +795,7 @@ void main() {
           return streamedResponse;
         });
 
-        await adapter.request(
+        await client.request(
           'PATCH',
           Uri.parse('https://example.com/api/123'),
           body: {'partial': 'update'},
@@ -816,7 +816,7 @@ void main() {
           return streamedResponse;
         });
 
-        await adapter.request(
+        await client.request(
           'HEAD',
           Uri.parse('https://example.com/api'),
         );

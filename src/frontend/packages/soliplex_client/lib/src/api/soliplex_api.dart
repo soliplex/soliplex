@@ -15,7 +15,7 @@ import 'package:soliplex_client/src/utils/url_builder.dart';
 /// Example:
 /// ```dart
 /// final api = SoliplexApi(
-///   transport: HttpTransport(adapter: DartHttpAdapter()),
+///   transport: HttpTransport(client: DartHttpClient()),
 ///   urlBuilder: UrlBuilder('https://api.example.com/api/v1'),
 /// );
 ///
