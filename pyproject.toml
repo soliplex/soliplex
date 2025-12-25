@@ -25,6 +25,7 @@ dependencies = [
     "jsonpatch",
     "jwcrypto",
     "logfire[fastapi]",
+    "pydantic-ai-slim >= 1.38.0",
     "pyjwt",
     "python-keycloak",
     "sqlmodel",

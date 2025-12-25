@@ -721,7 +721,6 @@ class RoomView(t_screen.Screen):
         esp = agui_parser.EventStreamParser(
             self.run_agent_input,
             event_log=event_log,
-            stripped_message_types=agui_core.ActivityMessage,
         )
         request_json = self.run_agent_input.model_dump()
 
