@@ -1,5 +1,5 @@
 export 'adapter_http_client.dart';
-export 'dart_http_adapter.dart';
+export 'dart_http_client.dart';
 export 'http_observer.dart';
 export 'http_response.dart';
 export 'http_transport.dart';

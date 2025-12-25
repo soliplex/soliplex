@@ -78,13 +78,13 @@ void main() {
     );
 
     test(
-      'returns DartHttpAdapter on non-Apple platforms',
+      'returns DartHttpClient on non-Apple platforms',
       skip: Platform.isMacOS || Platform.isIOS
           ? 'Running on Apple platform'
           : null,
       () {
         final adapter = createPlatformAdapter();
-        expect(adapter, isA<DartHttpAdapter>());
+        expect(adapter, isA<DartHttpClient>());
         adapter.close();
       },
     );

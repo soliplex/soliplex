@@ -8,17 +8,17 @@ import 'package:soliplex_client/src/errors/exceptions.dart';
 import 'package:soliplex_client/src/http/http_response.dart';
 import 'package:soliplex_client/src/http/soliplex_http_client.dart';
 
-/// Default HTTP adapter using `package:http`.
+/// Default HTTP client using `package:http`.
 ///
-/// Works on all Dart platforms except web (which requires a different adapter).
+/// Works on all Dart platforms except web (which requires a different client).
 /// Provides timeout handling, automatic body encoding, and exception
 /// conversion.
 ///
 /// Example:
 /// ```dart
-/// final adapter = DartHttpAdapter();
+/// final client = DartHttpClient();
 /// try {
-///   final response = await adapter.request(
+///   final response = await client.request(
 ///     'POST',
 ///     Uri.parse('https://api.example.com/data'),
 ///     body: {'key': 'value'},
@@ -28,17 +28,17 @@ import 'package:soliplex_client/src/http/soliplex_http_client.dart';
 /// } on NetworkException catch (e) {
 ///   print('Network error: ${e.message}');
 /// } finally {
-///   adapter.close();
+///   client.close();
 /// }
 /// ```
-class DartHttpAdapter implements SoliplexHttpClient {
-  /// Creates a Dart HTTP adapter.
+class DartHttpClient implements SoliplexHttpClient {
+  /// Creates a Dart HTTP client.
   ///
   /// Parameters:
   /// - [client]: Optional [http.Client] to use. Creates a new one if not
   ///   provided.
   /// - [defaultTimeout]: Default timeout for requests. Defaults to 30 seconds.
-  DartHttpAdapter({
+  DartHttpClient({
     http.Client? client,
     this.defaultTimeout = const Duration(seconds: 30),
   }) : _client = client ?? http.Client();
@@ -244,10 +244,10 @@ class DartHttpAdapter implements SoliplexHttpClient {
     return headers.map((key, value) => MapEntry(key.toLowerCase(), value));
   }
 
-  /// Checks that the adapter has not been closed.
+  /// Checks that the client has not been closed.
   void _checkNotClosed() {
     if (_closed) {
-      throw StateError('Cannot use DartHttpAdapter after close() was called');
+      throw StateError('Cannot use DartHttpClient after close() was called');
     }
   }
 }

@@ -6,7 +6,7 @@ import 'package:soliplex_client_native/src/platform/create_platform_adapter_stub
 ///
 /// Returns:
 /// - `CupertinoHttpAdapter` on iOS and macOS (uses NSURLSession)
-/// - `DartHttpAdapter` on all other platforms (Android, Windows, Linux, Web)
+/// - `DartHttpClient` on all other platforms (Android, Windows, Linux, Web)
 ///
 /// The [defaultTimeout] parameter sets the default request timeout.
 /// Defaults to 30 seconds.

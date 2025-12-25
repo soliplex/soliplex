@@ -16,13 +16,13 @@ void main() {
     registerFallbackValue(FakeBaseRequest());
   });
 
-  group('DartHttpAdapter', () {
+  group('DartHttpClient', () {
     late MockHttpClient mockClient;
-    late DartHttpAdapter adapter;
+    late DartHttpClient adapter;
 
     setUp(() {
       mockClient = MockHttpClient();
-      adapter = DartHttpAdapter(client: mockClient);
+      adapter = DartHttpClient(client: mockClient);
     });
 
     tearDown(() {
@@ -187,7 +187,7 @@ void main() {
           ),
         );
 
-        adapter = DartHttpAdapter(
+        adapter = DartHttpClient(
           client: mockClient,
           defaultTimeout: const Duration(milliseconds: 50),
         );
@@ -360,7 +360,7 @@ void main() {
           (_) async => streamedResponse,
         );
 
-        adapter = DartHttpAdapter(
+        adapter = DartHttpClient(
           client: mockClient,
           defaultTimeout: const Duration(milliseconds: 50),
         );
@@ -765,7 +765,7 @@ void main() {
 
     group('default configuration', () {
       test('creates with default timeout of 30 seconds', () {
-        final defaultAdapter = DartHttpAdapter();
+        final defaultAdapter = DartHttpClient();
 
         expect(
           defaultAdapter.defaultTimeout,
@@ -776,7 +776,7 @@ void main() {
       });
 
       test('creates own http.Client when not provided', () {
-        final defaultAdapter = DartHttpAdapter();
+        final defaultAdapter = DartHttpClient();
 
         expect(defaultAdapter, isA<SoliplexHttpClient>());
 
@@ -784,7 +784,7 @@ void main() {
       });
 
       test('accepts custom default timeout', () {
-        final customAdapter = DartHttpAdapter(
+        final customAdapter = DartHttpClient(
           defaultTimeout: const Duration(seconds: 60),
         );
 
