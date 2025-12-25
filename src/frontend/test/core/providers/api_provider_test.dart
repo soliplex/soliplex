@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/models/app_config.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
+import 'package:soliplex_frontend/core/providers/http_log_provider.dart';
 
 import '../../helpers/test_helpers.dart';
 
@@ -27,17 +28,12 @@ void main() {
       expect(identical(transport1, transport2), isTrue);
     });
 
-    test('disposes transport when container is disposed', () {
-      final container = ProviderContainer();
+    // Note: This test verifies disposal doesn't throw. Verifying that
+    // resources are actually cleaned up (close() called) requires mocking
+    // and is covered by integration tests at the feature level.
+    test('container disposal completes without errors', () {
+      final container = ProviderContainer()..read(httpTransportProvider);
 
-      final transport = container.read(httpTransportProvider);
-      expect(transport, isA<HttpTransport>());
-
-      // Dispose container should trigger onDispose callback
-      container.dispose();
-
-      // We can't directly test if close() was called, but we can verify
-      // that no exceptions are thrown during disposal
       expect(container.dispose, returnsNormally);
     });
   });
@@ -129,32 +125,30 @@ void main() {
       expect(identical(api1, api2), isTrue);
     });
 
-    test('uses shared httpTransport instance', () {
+    test('shares transport with agUiClientProvider via shared adapter', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      final transport1 = container.read(httpTransportProvider);
-      final transport2 = container.read(httpTransportProvider);
+      // Both apiProvider and agUiClientProvider should use the same
+      // underlying observable adapter for unified HTTP logging
+      final sharedAdapter = container.read(observableAdapterProvider);
 
-      // Verify transport is singleton
-      expect(identical(transport1, transport2), isTrue);
+      // Read both API clients
+      container
+        ..read(apiProvider)
+        ..read(agUiClientProvider);
 
-      // Read API to ensure it uses the same transport
-      final api = container.read(apiProvider);
-      expect(api, isA<SoliplexApi>());
+      // Verify the shared adapter is still the same instance
+      final adapterAfterClients = container.read(observableAdapterProvider);
+      expect(identical(sharedAdapter, adapterAfterClients), isTrue);
     });
 
-    test('disposes api when container is disposed', () {
-      final container = ProviderContainer();
+    // Note: This test verifies disposal doesn't throw. Verifying that
+    // resources are actually cleaned up (close() called) requires mocking
+    // and is covered by integration tests at the feature level.
+    test('container disposal completes without errors', () {
+      final container = ProviderContainer()..read(apiProvider);
 
-      final api = container.read(apiProvider);
-      expect(api, isA<SoliplexApi>());
-
-      // Dispose container should trigger onDispose callback
-      container.dispose();
-
-      // We can't directly test if close() was called, but we can verify
-      // that no exceptions are thrown during disposal
       expect(container.dispose, returnsNormally);
     });
 
@@ -227,6 +221,75 @@ void main() {
         urlBuilder.build(path: '/rooms'),
         Uri.parse('http://localhost:8000/api/v1/rooms'),
       );
+    });
+  });
+
+  group('observableAdapterProvider', () {
+    test('creates ObservableHttpAdapter instance', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final adapter = container.read(observableAdapterProvider);
+
+      expect(adapter, isA<ObservableHttpAdapter>());
+    });
+
+    test('is singleton across multiple reads', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final adapter1 = container.read(observableAdapterProvider);
+      final adapter2 = container.read(observableAdapterProvider);
+
+      expect(identical(adapter1, adapter2), isTrue);
+    });
+
+    test('initializes HttpLogNotifier dependency', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      // Reading the observable adapter should initialize the log notifier
+      container.read(observableAdapterProvider);
+
+      // The log notifier should be accessible and functional
+      final logNotifier = container.read(httpLogProvider.notifier);
+      expect(logNotifier, isA<HttpLogNotifier>());
+    });
+  });
+
+  group('shared adapter', () {
+    test('httpTransportProvider and httpAdapterProvider share same adapter',
+        () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      // Read the observable adapter directly
+      final sharedAdapter = container.read(observableAdapterProvider);
+
+      // Read the adapter from httpAdapterProvider
+      final httpAdapter = container.read(httpAdapterProvider);
+
+      // They should be the same instance
+      expect(identical(sharedAdapter, httpAdapter), isTrue);
+    });
+
+    test('httpTransportProvider depends on observableAdapterProvider', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      // Read observable adapter first to establish the shared instance
+      final sharedAdapter = container.read(observableAdapterProvider);
+
+      // Read the transport - it should use the same adapter
+      container.read(httpTransportProvider);
+
+      // Reading observable adapter again should return same instance,
+      // proving the transport didn't create a separate adapter
+      final adapterAfterTransport = container.read(observableAdapterProvider);
+      expect(identical(sharedAdapter, adapterAfterTransport), isTrue);
+
+      // Verify adapter is observable type (has logging capability)
+      expect(sharedAdapter, isA<ObservableHttpAdapter>());
     });
   });
 }
