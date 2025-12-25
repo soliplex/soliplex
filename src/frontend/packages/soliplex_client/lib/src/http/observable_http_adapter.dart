@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:soliplex_client/src/errors/exceptions.dart';
-import 'package:soliplex_client/src/http/adapter_response.dart';
 import 'package:soliplex_client/src/http/http_observer.dart';
+import 'package:soliplex_client/src/http/http_response.dart';
 import 'package:soliplex_client/src/http/soliplex_http_client.dart';
 
 /// HTTP client decorator that notifies observers of all HTTP activity.
@@ -55,7 +55,7 @@ class ObservableHttpAdapter implements SoliplexHttpClient {
   }
 
   @override
-  Future<AdapterResponse> request(
+  Future<HttpResponse> request(
     String method,
     Uri uri, {
     Map<String, String>? headers,

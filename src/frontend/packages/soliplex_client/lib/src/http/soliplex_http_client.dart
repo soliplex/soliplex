@@ -1,4 +1,4 @@
-import 'package:soliplex_client/src/http/adapter_response.dart';
+import 'package:soliplex_client/src/http/http_response.dart';
 
 /// Abstract interface for Soliplex HTTP clients.
 ///
@@ -31,7 +31,7 @@ abstract class SoliplexHttpClient {
   ///
   /// Throws `NetworkException` on connection failures or timeouts.
   /// Throws `CancelledException` if the request was cancelled.
-  Future<AdapterResponse> request(
+  Future<HttpResponse> request(
     String method,
     Uri uri, {
     Map<String, String>? headers,

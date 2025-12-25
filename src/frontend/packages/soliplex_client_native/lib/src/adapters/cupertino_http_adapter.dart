@@ -60,7 +60,7 @@ class CupertinoHttpAdapter implements SoliplexHttpClient {
   bool _closed = false;
 
   @override
-  Future<AdapterResponse> request(
+  Future<HttpResponse> request(
     String method,
     Uri uri, {
     Map<String, String>? headers,
@@ -93,7 +93,7 @@ class CupertinoHttpAdapter implements SoliplexHttpClient {
         },
       );
 
-      return AdapterResponse(
+      return HttpResponse(
         statusCode: streamedResponse.statusCode,
         bodyBytes: Uint8List.fromList(bodyBytes),
         headers: _normalizeHeaders(streamedResponse.headers),

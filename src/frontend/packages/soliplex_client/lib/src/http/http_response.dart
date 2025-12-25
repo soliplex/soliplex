@@ -2,14 +2,14 @@ import 'dart:typed_data';
 
 import 'package:meta/meta.dart';
 
-/// Response from an HTTP adapter.
+/// Response from a Soliplex HTTP client.
 ///
 /// Contains the status code, headers, and body bytes from an HTTP response.
 /// Use [body] getter to decode the response as a UTF-8 string.
 @immutable
-class AdapterResponse {
-  /// Creates an adapter response.
-  const AdapterResponse({
+class HttpResponse {
+  /// Creates an HTTP response.
+  const HttpResponse({
     required this.statusCode,
     required this.bodyBytes,
     this.headers = const {},
@@ -54,7 +54,7 @@ class AdapterResponse {
 
   @override
   String toString() {
-    return 'AdapterResponse(statusCode: $statusCode, '
+    return 'HttpResponse(statusCode: $statusCode, '
         'bodyLength: ${bodyBytes.length})';
   }
 }

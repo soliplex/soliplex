@@ -86,7 +86,7 @@ class AdapterHttpClient extends http.BaseClient {
       body: bodyBytes,
     );
 
-    // Convert AdapterResponse to StreamedResponse
+    // Convert HttpResponse to StreamedResponse
     final bodyStream = Stream.value(response.bodyBytes);
 
     return http.StreamedResponse(

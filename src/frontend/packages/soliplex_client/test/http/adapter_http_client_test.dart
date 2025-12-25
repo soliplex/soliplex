@@ -31,7 +31,7 @@ void main() {
   group('AdapterHttpClient', () {
     group('regular requests (non-SSE)', () {
       test('delegates GET request to adapter.request', () async {
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 200,
           bodyBytes: Uint8List.fromList('{"data": "test"}'.codeUnits),
           headers: const {'content-type': 'application/json'},
@@ -68,7 +68,7 @@ void main() {
       });
 
       test('delegates POST request with body to adapter.request', () async {
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 201,
           bodyBytes: Uint8List.fromList('{"id": 1}'.codeUnits),
           headers: const {'content-type': 'application/json'},
@@ -107,7 +107,7 @@ void main() {
 
       test('returns proper headers and content length', () async {
         final bodyBytes = Uint8List.fromList('response body'.codeUnits);
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 200,
           bodyBytes: bodyBytes,
           headers: const {
@@ -271,7 +271,7 @@ void main() {
 
         final client = AdapterHttpClient(client: observableAdapter);
 
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 200,
           bodyBytes: Uint8List.fromList('ok'.codeUnits),
         );

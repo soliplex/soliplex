@@ -33,13 +33,13 @@ void main() {
     reset(mockClient);
   });
 
-  AdapterResponse jsonResponse(
+  HttpResponse jsonResponse(
     int statusCode, {
     Object? body,
     Map<String, String>? headers,
   }) {
     final json = body != null ? jsonEncode(body) : '';
-    return AdapterResponse(
+    return HttpResponse(
       statusCode: statusCode,
       bodyBytes: Uint8List.fromList(utf8.encode(json)),
       headers: {
@@ -49,16 +49,16 @@ void main() {
     );
   }
 
-  AdapterResponse textResponse(int statusCode, String body) {
-    return AdapterResponse(
+  HttpResponse textResponse(int statusCode, String body) {
+    return HttpResponse(
       statusCode: statusCode,
       bodyBytes: Uint8List.fromList(utf8.encode(body)),
       headers: const {'content-type': 'text/plain'},
     );
   }
 
-  AdapterResponse emptyResponse(int statusCode) {
-    return AdapterResponse(
+  HttpResponse emptyResponse(int statusCode) {
+    return HttpResponse(
       statusCode: statusCode,
       bodyBytes: Uint8List(0),
     );
@@ -197,7 +197,7 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List.fromList(utf8.encode('{"key": "value"}')),
           ),
@@ -221,7 +221,7 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List.fromList(utf8.encode('[1, 2, 3]')),
           ),
@@ -757,7 +757,7 @@ void main() {
       test('throws CancelledException when token cancelled during request',
           () async {
         final token = CancelToken();
-        final completer = Completer<AdapterResponse>();
+        final completer = Completer<HttpResponse>();
 
         when(
           () => mockClient.request(

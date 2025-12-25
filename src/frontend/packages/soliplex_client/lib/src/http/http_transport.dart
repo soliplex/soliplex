@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:soliplex_client/src/errors/exceptions.dart';
-import 'package:soliplex_client/src/http/adapter_response.dart';
+import 'package:soliplex_client/src/http/http_response.dart';
 import 'package:soliplex_client/src/http/soliplex_http_client.dart';
 import 'package:soliplex_client/src/utils/cancel_token.dart';
 
@@ -217,7 +217,7 @@ class HttpTransport {
   }
 
   /// Throws appropriate exception for HTTP error status codes.
-  void _throwForStatusCode(AdapterResponse response, Uri uri) {
+  void _throwForStatusCode(HttpResponse response, Uri uri) {
     final statusCode = response.statusCode;
 
     if (statusCode >= 200 && statusCode < 300) {
@@ -269,7 +269,7 @@ class HttpTransport {
 
   /// Decodes the response body, optionally using a [fromJson] converter.
   T _decodeResponse<T>(
-    AdapterResponse response,
+    HttpResponse response,
     T Function(Map<String, dynamic>)? fromJson,
   ) {
     final body = response.body;

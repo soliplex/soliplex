@@ -83,7 +83,7 @@ void main() {
   group('ObservableHttpAdapter', () {
     group('request lifecycle - success', () {
       test('notifies observer on request start and response', () async {
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 200,
           bodyBytes: Uint8List.fromList(const [1, 2, 3, 4]),
           headers: const {'content-type': 'application/json'},
@@ -123,7 +123,7 @@ void main() {
       });
 
       test('passes through response unchanged', () async {
-        final response = AdapterResponse(
+        final response = HttpResponse(
           statusCode: 201,
           bodyBytes: Uint8List.fromList(const [65, 66, 67]),
           headers: const {'x-custom': 'value'},
@@ -162,7 +162,7 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           ),
@@ -503,7 +503,7 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           ),
@@ -545,7 +545,7 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           ),
@@ -581,7 +581,7 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List.fromList([1, 2, 3]),
           ),
@@ -613,7 +613,7 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 201,
             bodyBytes: Uint8List(0),
           ),
@@ -718,7 +718,7 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           ),
@@ -803,7 +803,7 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           ),
@@ -845,7 +845,7 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           ),
@@ -889,7 +889,7 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List.fromList([1, 2, 3]),
           ),
@@ -967,7 +967,7 @@ void main() {
             timeout: any(named: 'timeout'),
           ),
         ).thenAnswer(
-          (_) async => AdapterResponse(
+          (_) async => HttpResponse(
             statusCode: 200,
             bodyBytes: Uint8List(0),
           ),

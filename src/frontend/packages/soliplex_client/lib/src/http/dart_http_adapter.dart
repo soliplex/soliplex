@@ -5,7 +5,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:soliplex_client/src/errors/exceptions.dart';
-import 'package:soliplex_client/src/http/adapter_response.dart';
+import 'package:soliplex_client/src/http/http_response.dart';
 import 'package:soliplex_client/src/http/soliplex_http_client.dart';
 
 /// Default HTTP adapter using `package:http`.
@@ -51,7 +51,7 @@ class DartHttpAdapter implements SoliplexHttpClient {
   bool _closed = false;
 
   @override
-  Future<AdapterResponse> request(
+  Future<HttpResponse> request(
     String method,
     Uri uri, {
     Map<String, String>? headers,
@@ -84,7 +84,7 @@ class DartHttpAdapter implements SoliplexHttpClient {
         },
       );
 
-      return AdapterResponse(
+      return HttpResponse(
         statusCode: streamedResponse.statusCode,
         bodyBytes: Uint8List.fromList(bodyBytes),
         headers: _normalizeHeaders(streamedResponse.headers),
