@@ -48,7 +48,7 @@ docs/planning/               # Design specs and work logs (see ROADMAP.md)
 **Patterns:**
 
 - Repository: SoliplexApi for backend communication
-- Factory: createPlatformAdapter() for HTTP adapters
+- Factory: createPlatformClient() for HTTP clients
 - Observer: HttpObserver for request/response monitoring
 - Buffer: TextMessageBuffer, ToolCallBuffer for streaming
 

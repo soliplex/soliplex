@@ -10,23 +10,23 @@ Rename HTTP layer classes for clarity:
 
 | Current Name | New Name | File Rename | Status |
 |--------------|----------|-------------|--------|
-| `HttpClientAdapter` | `SoliplexHttpClient` | `http_client_adapter.dart` → `soliplex_http_client.dart` | Pending |
-| `AdapterResponse` | `HttpResponse` | `adapter_response.dart` → `http_response.dart` | Pending |
-| `DartHttpAdapter` | `DartHttpClient` | `dart_http_adapter.dart` → `dart_http_client.dart` | Pending |
-| `ObservableHttpAdapter` | `ObservableHttpClient` | `observable_http_adapter.dart` → `observable_http_client.dart` | Pending |
-| `AdapterHttpClient` | `HttpClientAdapter` | `adapter_http_client.dart` → `http_client_adapter.dart` | Pending |
-| `CupertinoHttpAdapter` | `CupertinoHttpClient` | `cupertino_http_adapter.dart` → `cupertino_http_client.dart` | Pending |
-| `createPlatformAdapter` | `createPlatformClient` | (same file) | Pending |
+| `HttpClientAdapter` | `SoliplexHttpClient` | `http_client_adapter.dart` → `soliplex_http_client.dart` | Done |
+| `AdapterResponse` | `HttpResponse` | `adapter_response.dart` → `http_response.dart` | Done |
+| `DartHttpAdapter` | `DartHttpClient` | `dart_http_adapter.dart` → `dart_http_client.dart` | Done |
+| `ObservableHttpAdapter` | `ObservableHttpClient` | `observable_http_adapter.dart` → `observable_http_client.dart` | Done |
+| `AdapterHttpClient` | `HttpClientAdapter` | `adapter_http_client.dart` → `http_client_adapter.dart` | Done |
+| `CupertinoHttpAdapter` | `CupertinoHttpClient` | `cupertino_http_adapter.dart` → `cupertino_http_client.dart` | Done |
+| `createPlatformAdapter` | `createPlatformClient` | (same file) | Done |
 
 **Parameter/variable renames:**
 
 | Context | Old | New | Status |
 |---------|-----|-----|--------|
-| `HttpTransport({required ... adapter})` | `adapter` | `client` | Pending |
-| `ObservableHttpClient({required ... adapter})` | `adapter` | `client` | Pending |
-| `HttpClientAdapter({required ... adapter})` | `adapter` | `client` | Pending |
-| `observableAdapterProvider` | - | `observableClientProvider` | Pending |
-| `httpAdapterProvider` | - | `soliplexHttpClientProvider` | Pending |
+| `HttpTransport({required ... adapter})` | `adapter` | `client` | Done |
+| `ObservableHttpClient({required ... adapter})` | `adapter` | `client` | Done |
+| `HttpClientAdapter({required ... adapter})` | `adapter` | `client` | Done |
+| `observableAdapterProvider` | - | `observableClientProvider` | Done |
+| `httpAdapterProvider` | - | `soliplexHttpClientProvider` | Done |
 
 ## Architecture After Rename
 
@@ -55,10 +55,10 @@ SoliplexHttpClient (interface)
 | # | Description | Status |
 |---|-------------|--------|
 | 0 | Reset branch to new_frontend | Done |
-| 1 | Rename HttpClientAdapter → SoliplexHttpClient | Pending |
-| 2 | Rename AdapterResponse → HttpResponse | Pending |
-| 3 | Rename DartHttpAdapter → DartHttpClient | Pending |
-| 4 | Rename ObservableHttpAdapter → ObservableHttpClient | Pending |
-| 5 | Rename AdapterHttpClient → HttpClientAdapter | Pending |
-| 6 | Rename CupertinoHttpAdapter → CupertinoHttpClient + createPlatformClient | Pending |
-| 7 | Finalize documentation | Pending |
+| 1 | Rename HttpClientAdapter → SoliplexHttpClient | Done |
+| 2 | Rename AdapterResponse → HttpResponse | Done |
+| 3 | Rename DartHttpAdapter → DartHttpClient | Done |
+| 4 | Rename ObservableHttpAdapter → ObservableHttpClient | Done |
+| 5 | Rename AdapterHttpClient → HttpClientAdapter | Done |
+| 6 | Rename CupertinoHttpAdapter → CupertinoHttpClient + createPlatformClient | Done |
+| 7 | Finalize documentation | Done |

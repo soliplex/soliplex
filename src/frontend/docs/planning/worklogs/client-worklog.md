@@ -223,7 +223,7 @@
   - Auto-handles leading/trailing slashes
   - Query parameter encoding via Dart's Uri
 - Created `HttpTransport` class:
-  - JSON serialization wrapper around `HttpClientAdapter`
+  - JSON serialization wrapper around `SoliplexHttpClient`
   - Automatic JSON encoding/decoding for request and response bodies
   - HTTP status code to exception mapping:
     - 401/403 → AuthException
@@ -292,8 +292,8 @@
   - `HttpErrorEvent` - method, uri, exception, duration
   - `HttpStreamStartEvent` - method, uri
   - `HttpStreamEndEvent` - bytesReceived, duration, error, isSuccess helper
-- Created `ObservableHttpAdapter` decorator:
-  - Wraps any `HttpClientAdapter` implementation
+- Created `ObservableHttpClient` decorator:
+  - Wraps any `SoliplexHttpClient` implementation
   - Notifies registered observers on all HTTP activity
   - Observer errors are caught and ignored (don't break requests)
   - Supports custom request ID generator for correlation
@@ -304,9 +304,9 @@
 **Files Created:**
 
 - `lib/src/http/http_observer.dart` - Observer interface + event models (41 lines)
-- `lib/src/http/observable_http_adapter.dart` - Decorator implementation (59 lines)
+- `lib/src/http/observable_http_client.dart` - Decorator implementation (59 lines)
 - `test/http/http_observer_test.dart` - 30 tests for event models
-- `test/http/observable_http_adapter_test.dart` - 27 tests for decorator
+- `test/http/observable_http_client_test.dart` - 27 tests for decorator
 
 **Files Modified:**
 
@@ -321,7 +321,7 @@
 **Key Design Decisions:**
 
 - Event-based observer pattern (passive observers, no request modification)
-- Decorator pattern for composition (works with any HttpClientAdapter)
+- Decorator pattern for composition (works with any SoliplexHttpClient)
 - Error isolation (observer failures don't break HTTP requests)
 - Privacy-aware (no body logging by default, just body size)
 - Request ID correlation across all events for same request
@@ -339,9 +339,9 @@
 **Accomplished:**
 
 - Implemented HTTP adapter layer (DM2)
-- Created `AdapterResponse` model with status helpers and body decoding
-- Created `HttpClientAdapter` abstract interface
-- Created `DartHttpAdapter` using `package:http` with:
+- Created `HttpResponse` model with status helpers and body decoding
+- Created `SoliplexHttpClient` abstract interface
+- Created `DartHttpClient` using `package:http` with:
   - 30s default timeout (configurable per-request)
   - Body types: String, List<int>, Map<String, dynamic> (JSON)
   - Exception conversion: TimeoutException, SocketException, HttpException → NetworkException
@@ -352,12 +352,12 @@
 
 **Files Created:**
 
-- `lib/src/http/adapter_response.dart` - Response model
-- `lib/src/http/http_client_adapter.dart` - Abstract interface
-- `lib/src/http/dart_http_adapter.dart` - Default implementation
+- `lib/src/http/http_response.dart` - Response model
+- `lib/src/http/soliplex_http_client.dart` - Abstract interface
+- `lib/src/http/dart_http_client.dart` - Default implementation
 - `lib/src/http/http.dart` - Barrel export
-- `test/http/adapter_response_test.dart` - 43 tests
-- `test/http/dart_http_adapter_test.dart` - 32 tests
+- `test/http/http_response_test.dart` - 43 tests
+- `test/http/dart_http_client_test.dart` - 32 tests
 
 **Files Modified:**
 
@@ -372,7 +372,7 @@
 
 **Next Session:**
 
-- Start DM3 (Network Observer): HttpObserver interface + ObservableHttpAdapter decorator
+- Start DM3 (Network Observer): HttpObserver interface + ObservableHttpClient decorator
 
 ---
 
@@ -492,12 +492,12 @@
 
 **Files to Create:**
 
-- [x] `lib/src/http/adapter_response.dart` ✓ DM2
-- [x] `lib/src/http/http_client_adapter.dart` ✓ DM2
-- [x] `lib/src/http/dart_http_adapter.dart` ✓ DM2
+- [x] `lib/src/http/http_response.dart` ✓ DM2
+- [x] `lib/src/http/soliplex_http_client.dart` ✓ DM2
+- [x] `lib/src/http/dart_http_client.dart` ✓ DM2
 - [x] `lib/src/http/http.dart` (barrel) ✓ DM2
 - [x] `lib/src/http/http_observer.dart` ✓ DM3
-- [x] `lib/src/http/observable_http_adapter.dart` ✓ DM3
+- [x] `lib/src/http/observable_http_client.dart` ✓ DM3
 - [x] `lib/src/http/http_transport.dart` ✓ DM4
 - [x] `lib/src/utils/url_builder.dart` ✓ DM4
 - [x] `lib/src/utils/cancel_token.dart` ✓ DM4
@@ -505,10 +505,10 @@
 
 **Tests to Create:**
 
-- [x] `test/http/adapter_response_test.dart` ✓ DM2 (43 tests)
-- [x] `test/http/dart_http_adapter_test.dart` ✓ DM2 (32 tests)
+- [x] `test/http/http_response_test.dart` ✓ DM2 (43 tests)
+- [x] `test/http/dart_http_client_test.dart` ✓ DM2 (32 tests)
 - [x] `test/http/http_observer_test.dart` ✓ DM3 (30 tests)
-- [x] `test/http/observable_http_adapter_test.dart` ✓ DM3 (27 tests)
+- [x] `test/http/observable_http_client_test.dart` ✓ DM3 (27 tests)
 - [x] `test/http/http_transport_test.dart` ✓ DM4 (51 tests)
 - [x] `test/utils/url_builder_test.dart` ✓ DM4 (25 tests)
 - [x] `test/utils/cancel_token_test.dart` ✓ DM4 (20 tests)
