@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:soliplex_client/src/errors/exceptions.dart';
 import 'package:soliplex_client/src/http/adapter_response.dart';
-import 'package:soliplex_client/src/http/http_client_adapter.dart';
+import 'package:soliplex_client/src/http/soliplex_http_client.dart';
 
 /// Default HTTP adapter using `package:http`.
 ///
@@ -31,7 +31,7 @@ import 'package:soliplex_client/src/http/http_client_adapter.dart';
 ///   adapter.close();
 /// }
 /// ```
-class DartHttpAdapter implements HttpClientAdapter {
+class DartHttpAdapter implements SoliplexHttpClient {
   /// Creates a Dart HTTP adapter.
   ///
   /// Parameters:

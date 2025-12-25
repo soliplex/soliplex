@@ -15,11 +15,11 @@ import 'package:soliplex_frontend/core/providers/http_log_provider.dart';
 ///
 /// **Lifecycle**: Lives for the entire app session. Closed when container
 /// is disposed.
-final observableAdapterProvider = Provider<HttpClientAdapter>((ref) {
+final observableAdapterProvider = Provider<SoliplexHttpClient>((ref) {
   final baseAdapter = createPlatformAdapter();
   final observer = ref.watch(httpLogProvider.notifier);
   final observable = ObservableHttpAdapter(
-    adapter: baseAdapter,
+    client: baseAdapter,
     observers: [observer],
   );
   ref.onDispose(() {
@@ -45,7 +45,7 @@ final observableAdapterProvider = Provider<HttpClientAdapter>((ref) {
 /// adapter uses dart:http which is isolate-safe.
 final httpTransportProvider = Provider<HttpTransport>((ref) {
   final adapter = ref.watch(observableAdapterProvider);
-  final transport = HttpTransport(adapter: adapter);
+  final transport = HttpTransport(client: adapter);
 
   // Note: Don't dispose transport here - adapter is managed by
   // observableAdapterProvider
@@ -118,18 +118,18 @@ final apiProvider = Provider<SoliplexApi>((ref) {
 ///
 /// Returns the shared [observableAdapterProvider] to ensure all HTTP activity
 /// (both REST and SSE) is logged through [httpLogProvider].
-final httpAdapterProvider = Provider<HttpClientAdapter>((ref) {
+final httpAdapterProvider = Provider<SoliplexHttpClient>((ref) {
   return ref.watch(observableAdapterProvider);
 });
 
 /// Provider for http.Client that uses our adapter stack.
 ///
-/// This bridges our [HttpClientAdapter] to the standard [http.Client]
+/// This bridges our [SoliplexHttpClient] to the standard [http.Client]
 /// interface,
 /// allowing libraries like AgUiClient to use our HTTP infrastructure.
 final httpClientProvider = Provider<http.Client>((ref) {
   final adapter = ref.watch(httpAdapterProvider);
-  final client = AdapterHttpClient(adapter: adapter);
+  final client = AdapterHttpClient(client: adapter);
   ref.onDispose(client.close);
   return client;
 });

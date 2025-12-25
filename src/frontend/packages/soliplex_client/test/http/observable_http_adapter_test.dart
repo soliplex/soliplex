@@ -5,7 +5,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:test/test.dart';
 
-class MockHttpClientAdapter extends Mock implements HttpClientAdapter {}
+class MockSoliplexHttpClient extends Mock implements SoliplexHttpClient {}
 
 class MockHttpObserver extends Mock implements HttpObserver {}
 
@@ -55,7 +55,7 @@ class ThrowingObserver implements HttpObserver {
 }
 
 void main() {
-  late MockHttpClientAdapter mockAdapter;
+  late MockSoliplexHttpClient mockClient;
   late RecordingObserver recorder;
   late ObservableHttpAdapter observableAdapter;
 
@@ -64,20 +64,20 @@ void main() {
   });
 
   setUp(() {
-    mockAdapter = MockHttpClientAdapter();
+    mockClient = MockSoliplexHttpClient();
     recorder = RecordingObserver();
     observableAdapter = ObservableHttpAdapter(
-      adapter: mockAdapter,
+      client: mockClient,
       observers: [recorder],
     );
 
     // Setup default close behavior
-    when(() => mockAdapter.close()).thenReturn(null);
+    when(() => mockClient.close()).thenReturn(null);
   });
 
   tearDown(() {
     // Reset mock state after each test
-    reset(mockAdapter);
+    reset(mockClient);
   });
 
   group('ObservableHttpAdapter', () {
@@ -91,7 +91,7 @@ void main() {
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -131,7 +131,7 @@ void main() {
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -154,7 +154,7 @@ void main() {
 
       test('records empty headers when none provided', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -185,7 +185,7 @@ void main() {
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -221,7 +221,7 @@ void main() {
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -254,7 +254,7 @@ void main() {
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -278,7 +278,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -341,7 +341,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -382,7 +382,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -437,7 +437,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -490,12 +490,12 @@ void main() {
         final recorder3 = RecordingObserver();
 
         final adapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+          client: mockClient,
           observers: [recorder1, recorder2, recorder3],
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -532,12 +532,12 @@ void main() {
         final recorder2 = RecordingObserver();
 
         final adapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+          client: mockClient,
           observers: [recorder1, throwingObserver, recorder2],
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -568,12 +568,12 @@ void main() {
     group('observer error isolation', () {
       test('observer throwing on request does not break request', () async {
         final adapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+          client: mockClient,
           observers: [ThrowingObserver()],
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -600,12 +600,12 @@ void main() {
 
       test('observer throwing on response does not break request', () async {
         final adapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+          client: mockClient,
           observers: [ThrowingObserver()],
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -631,14 +631,14 @@ void main() {
 
       test('observer throwing on error does not suppress exception', () async {
         final adapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+          client: mockClient,
           observers: [ThrowingObserver()],
         );
 
         const originalException = NetworkException(message: 'Network failed');
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -658,14 +658,14 @@ void main() {
       test('observer throwing on stream events does not break stream',
           () async {
         final adapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+          client: mockClient,
           observers: [ThrowingObserver()],
         );
 
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -710,7 +710,7 @@ void main() {
     group('request ID correlation', () {
       test('same requestId across request/response events', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -738,7 +738,7 @@ void main() {
 
       test('same requestId across request/error events', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -766,7 +766,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -795,7 +795,7 @@ void main() {
 
       test('different requests have different IDs', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -831,13 +831,13 @@ void main() {
       test('uses provided generator', () async {
         var callCount = 0;
         final customAdapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+          client: mockClient,
           observers: [recorder],
           generateRequestId: () => 'custom-id-${++callCount}',
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -864,7 +864,7 @@ void main() {
       test('delegates close to wrapped adapter', () {
         observableAdapter.close();
 
-        verify(() => mockAdapter.close()).called(1);
+        verify(() => mockClient.close()).called(1);
       });
 
       test('does not notify observers on close', () {
@@ -877,11 +877,11 @@ void main() {
     group('empty observer list', () {
       test('works correctly with no observers', () async {
         final emptyAdapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+          client: mockClient,
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -908,13 +908,13 @@ void main() {
 
       test('streaming works with no observers', () async {
         final emptyAdapter = ObservableHttpAdapter(
-          adapter: mockAdapter,
+          client: mockClient,
         );
 
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -959,7 +959,7 @@ void main() {
     group('parameters forwarding', () {
       test('forwards all request parameters to wrapped adapter', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -982,7 +982,7 @@ void main() {
         );
 
         verify(
-          () => mockAdapter.request(
+          () => mockClient.request(
             'POST',
             Uri.parse('https://example.com/api'),
             headers: {'X-Custom': 'value'},
@@ -996,7 +996,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -1018,7 +1018,7 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 10));
 
         verify(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             'POST',
             Uri.parse('https://example.com/stream'),
             headers: const {'Accept': 'text/event-stream'},

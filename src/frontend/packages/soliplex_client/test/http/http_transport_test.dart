@@ -10,10 +10,10 @@ import 'package:soliplex_client/src/api/mappers.dart';
 import 'package:soliplex_client/src/utils/cancel_token.dart';
 import 'package:test/test.dart';
 
-class MockHttpClientAdapter extends Mock implements HttpClientAdapter {}
+class MockSoliplexHttpClient extends Mock implements SoliplexHttpClient {}
 
 void main() {
-  late MockHttpClientAdapter mockAdapter;
+  late MockSoliplexHttpClient mockClient;
   late HttpTransport transport;
 
   setUpAll(() {
@@ -21,16 +21,16 @@ void main() {
   });
 
   setUp(() {
-    mockAdapter = MockHttpClientAdapter();
-    transport = HttpTransport(adapter: mockAdapter);
+    mockClient = MockSoliplexHttpClient();
+    transport = HttpTransport(client: mockClient);
 
     // Setup default close behavior
-    when(() => mockAdapter.close()).thenReturn(null);
+    when(() => mockClient.close()).thenReturn(null);
   });
 
   tearDown(() {
     transport.close();
-    reset(mockAdapter);
+    reset(mockClient);
   });
 
   AdapterResponse jsonResponse(
@@ -72,7 +72,7 @@ void main() {
 
       test('accepts custom default timeout', () {
         final customTransport = HttpTransport(
-          adapter: mockAdapter,
+          client: mockClient,
           defaultTimeout: const Duration(seconds: 60),
         );
         expect(
@@ -85,7 +85,7 @@ void main() {
     group('request - successful responses', () {
       test('returns parsed JSON for 200 response', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -107,7 +107,7 @@ void main() {
 
       test('uses fromJson converter when provided', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -131,7 +131,7 @@ void main() {
 
       test('handles 201 Created response', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -151,7 +151,7 @@ void main() {
 
       test('handles 204 No Content response', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -170,7 +170,7 @@ void main() {
 
       test('returns raw string for non-JSON response', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -189,7 +189,7 @@ void main() {
 
       test('detects JSON by content starting with {', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -213,7 +213,7 @@ void main() {
 
       test('detects JSON by content starting with [', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -239,7 +239,7 @@ void main() {
     group('request - HTTP methods', () {
       test('forwards GET request', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -254,7 +254,7 @@ void main() {
         );
 
         verify(
-          () => mockAdapter.request(
+          () => mockClient.request(
             'GET',
             Uri.parse('https://api.example.com'),
             headers: any(named: 'headers'),
@@ -266,7 +266,7 @@ void main() {
 
       test('forwards POST request with JSON body', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -282,7 +282,7 @@ void main() {
         );
 
         verify(
-          () => mockAdapter.request(
+          () => mockClient.request(
             'POST',
             Uri.parse('https://api.example.com/items'),
             headers: {'content-type': 'application/json'},
@@ -294,7 +294,7 @@ void main() {
 
       test('forwards PUT request', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -310,7 +310,7 @@ void main() {
         );
 
         verify(
-          () => mockAdapter.request(
+          () => mockClient.request(
             'PUT',
             any(),
             headers: any(named: 'headers'),
@@ -322,7 +322,7 @@ void main() {
 
       test('forwards DELETE request', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -337,7 +337,7 @@ void main() {
         );
 
         verify(
-          () => mockAdapter.request(
+          () => mockClient.request(
             'DELETE',
             any(),
             headers: any(named: 'headers'),
@@ -349,7 +349,7 @@ void main() {
 
       test('forwards PATCH request', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -365,7 +365,7 @@ void main() {
         );
 
         verify(
-          () => mockAdapter.request(
+          () => mockClient.request(
             'PATCH',
             any(),
             headers: any(named: 'headers'),
@@ -379,7 +379,7 @@ void main() {
     group('request - headers', () {
       test('passes custom headers to adapter', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -395,7 +395,7 @@ void main() {
         );
 
         verify(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: {'Authorization': 'Bearer token', 'X-Custom': 'value'},
@@ -407,7 +407,7 @@ void main() {
 
       test('adds content-type header for JSON body', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -423,7 +423,7 @@ void main() {
         );
 
         verify(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: {'content-type': 'application/json'},
@@ -435,7 +435,7 @@ void main() {
 
       test('does not override existing content-type header', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -452,7 +452,7 @@ void main() {
         );
 
         verify(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: {'content-type': 'application/x-custom'},
@@ -466,7 +466,7 @@ void main() {
     group('request - timeout', () {
       test('uses default timeout when not specified', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -481,7 +481,7 @@ void main() {
         );
 
         verify(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -493,7 +493,7 @@ void main() {
 
       test('uses per-request timeout when specified', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -509,7 +509,7 @@ void main() {
         );
 
         verify(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -523,7 +523,7 @@ void main() {
     group('request - exception mapping', () {
       test('throws AuthException for 401 response', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -546,7 +546,7 @@ void main() {
 
       test('throws AuthException for 403 response', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -569,7 +569,7 @@ void main() {
 
       test('throws NotFoundException for 404 response', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -596,7 +596,7 @@ void main() {
 
       test('throws ApiException for 400 Bad Request', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -619,7 +619,7 @@ void main() {
 
       test('throws ApiException for 500 Internal Server Error', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -642,7 +642,7 @@ void main() {
 
       test('throws ApiException for 502 Bad Gateway', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -661,7 +661,7 @@ void main() {
 
       test('uses HTTP status as message when no JSON error message', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -684,7 +684,7 @@ void main() {
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -706,7 +706,7 @@ void main() {
         );
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -744,7 +744,7 @@ void main() {
 
         // Adapter should not be called
         verifyNever(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -760,7 +760,7 @@ void main() {
         final completer = Completer<AdapterResponse>();
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -793,7 +793,7 @@ void main() {
         final token = CancelToken();
 
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -817,7 +817,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -858,7 +858,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -879,7 +879,7 @@ void main() {
         await Future<void>.delayed(Duration.zero);
 
         verify(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             'POST',
             Uri.parse('https://api.example.com/stream'),
             headers: {
@@ -912,7 +912,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -964,7 +964,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -1006,7 +1006,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -1039,7 +1039,7 @@ void main() {
         final controller = StreamController<List<int>>();
 
         when(
-          () => mockAdapter.requestStream(
+          () => mockClient.requestStream(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -1086,14 +1086,14 @@ void main() {
       test('delegates to adapter', () {
         transport.close();
 
-        verify(() => mockAdapter.close()).called(1);
+        verify(() => mockClient.close()).called(1);
       });
     });
 
     group('error message extraction', () {
       test('extracts message field from JSON error', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -1116,7 +1116,7 @@ void main() {
 
       test('extracts error field from JSON error', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -1138,7 +1138,7 @@ void main() {
 
       test('extracts detail field from JSON error', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -1161,7 +1161,7 @@ void main() {
 
       test('prefers message over error over detail', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),
@@ -1190,7 +1190,7 @@ void main() {
 
       test('includes body in ApiException', () async {
         when(
-          () => mockAdapter.request(
+          () => mockClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),

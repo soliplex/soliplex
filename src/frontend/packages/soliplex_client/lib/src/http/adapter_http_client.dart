@@ -1,25 +1,25 @@
 import 'dart:async';
 
 import 'package:http/http.dart' as http;
-import 'package:soliplex_client/src/http/http_client_adapter.dart';
+import 'package:soliplex_client/src/http/soliplex_http_client.dart';
 
-/// Bridges [HttpClientAdapter] to Dart's [http.Client] interface.
+/// Bridges [SoliplexHttpClient] to Dart's [http.Client] interface.
 ///
-/// This allows injecting our HTTP stack (with platform-specific adapters and
+/// This allows injecting our HTTP stack (with platform-specific clients and
 /// observability) into libraries that accept `http.Client`, such as ag_ui's
 /// `AgUiClient`.
 ///
 /// The implementation detects SSE requests (Accept: text/event-stream) and
-/// routes them through [HttpClientAdapter.requestStream]. Other requests use
-/// [HttpClientAdapter.request] which provides proper status codes.
+/// routes them through [SoliplexHttpClient.requestStream]. Other requests use
+/// [SoliplexHttpClient.request] which provides proper status codes.
 ///
 /// Example:
 /// ```dart
-/// final adapter = ObservableHttpAdapter(
-///   adapter: createPlatformAdapter(),
+/// final observable = ObservableHttpAdapter(
+///   client: createPlatformAdapter(),
 ///   observer: myObserver,
 /// );
-/// final httpClient = AdapterHttpClient(adapter: adapter);
+/// final httpClient = AdapterHttpClient(client: observable);
 ///
 /// // Use with AgUiClient
 /// final agUiClient = AgUiClient(
@@ -28,11 +28,11 @@ import 'package:soliplex_client/src/http/http_client_adapter.dart';
 /// );
 /// ```
 class AdapterHttpClient extends http.BaseClient {
-  /// Creates an [AdapterHttpClient] that delegates to the given [adapter].
-  AdapterHttpClient({required this.adapter});
+  /// Creates an [AdapterHttpClient] that delegates to the given [client].
+  AdapterHttpClient({required this.client});
 
-  /// The underlying adapter that handles HTTP requests.
-  final HttpClientAdapter adapter;
+  /// The underlying client that handles HTTP requests.
+  final SoliplexHttpClient client;
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
@@ -50,14 +50,14 @@ class AdapterHttpClient extends http.BaseClient {
     }
   }
 
-  /// Handles SSE/streaming requests using [HttpClientAdapter.requestStream].
+  /// Handles SSE/streaming requests using [SoliplexHttpClient.requestStream].
   Future<http.StreamedResponse> _sendStreaming(
     http.BaseRequest request,
     Map<String, String> headers,
     List<int>? bodyBytes,
   ) async {
     // Use requestStream for SSE - it throws NetworkException on HTTP errors
-    final byteStream = adapter.requestStream(
+    final byteStream = client.requestStream(
       request.method,
       request.url,
       headers: headers,
@@ -73,13 +73,13 @@ class AdapterHttpClient extends http.BaseClient {
     );
   }
 
-  /// Handles regular requests using [HttpClientAdapter.request].
+  /// Handles regular requests using [SoliplexHttpClient.request].
   Future<http.StreamedResponse> _sendRegular(
     http.BaseRequest request,
     Map<String, String> headers,
     List<int>? bodyBytes,
   ) async {
-    final response = await adapter.request(
+    final response = await client.request(
       request.method,
       request.url,
       headers: headers,
@@ -116,6 +116,6 @@ class AdapterHttpClient extends http.BaseClient {
 
   @override
   void close() {
-    adapter.close();
+    client.close();
   }
 }

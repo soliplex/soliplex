@@ -778,7 +778,7 @@ void main() {
       test('creates own http.Client when not provided', () {
         final defaultAdapter = DartHttpAdapter();
 
-        expect(defaultAdapter, isA<HttpClientAdapter>());
+        expect(defaultAdapter, isA<SoliplexHttpClient>());
 
         defaultAdapter.close();
       });

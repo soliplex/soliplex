@@ -1,22 +1,22 @@
 import 'package:soliplex_client/src/http/adapter_response.dart';
 
-/// Abstract interface for HTTP client adapters.
+/// Abstract interface for Soliplex HTTP clients.
 ///
 /// Implementations wrap platform-specific HTTP clients to provide a unified
-/// interface for making HTTP requests. Use `DartHttpAdapter` for the default
+/// interface for making HTTP requests. Use `DartHttpClient` for the default
 /// pure-Dart implementation using `package:http`.
 ///
 /// Example:
 /// ```dart
-/// final adapter = DartHttpAdapter();
-/// final response = await adapter.request(
+/// final client = DartHttpClient();
+/// final response = await client.request(
 ///   'GET',
 ///   Uri.parse('https://api.example.com/data'),
 /// );
 /// print(response.body);
-/// adapter.close();
+/// client.close();
 /// ```
-abstract class HttpClientAdapter {
+abstract class SoliplexHttpClient {
   /// Performs an HTTP request and returns the complete response.
   ///
   /// Parameters:
@@ -27,7 +27,7 @@ abstract class HttpClientAdapter {
   ///   - `String`: Sent as-is with UTF-8 encoding
   ///   - `List<int>`: Sent as raw bytes
   ///   - `Map<String, dynamic>`: JSON encoded automatically
-  /// - [timeout]: Request timeout. Uses adapter's default if not specified.
+  /// - [timeout]: Request timeout. Uses client's default if not specified.
   ///
   /// Throws `NetworkException` on connection failures or timeouts.
   /// Throws `CancelledException` if the request was cancelled.
@@ -60,7 +60,7 @@ abstract class HttpClientAdapter {
     Object? body,
   });
 
-  /// Closes the adapter and releases any resources.
+  /// Closes the client and releases any resources.
   ///
   /// After calling this method, no further requests should be made.
   /// Calling [close] multiple times is safe.

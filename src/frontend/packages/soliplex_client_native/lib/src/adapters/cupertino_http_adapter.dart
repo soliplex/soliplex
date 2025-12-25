@@ -28,7 +28,7 @@ import 'package:soliplex_client/soliplex_client.dart';
 ///   adapter.close();
 /// }
 /// ```
-class CupertinoHttpAdapter implements HttpClientAdapter {
+class CupertinoHttpAdapter implements SoliplexHttpClient {
   /// Creates a Cupertino HTTP adapter.
   ///
   /// Parameters:

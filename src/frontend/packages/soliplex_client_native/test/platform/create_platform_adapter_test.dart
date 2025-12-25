@@ -38,7 +38,7 @@ void main() {
       skip: skipNativeTests,
       () {
         final adapter = createPlatformAdapter();
-        expect(adapter, isA<HttpClientAdapter>());
+        expect(adapter, isA<SoliplexHttpClient>());
         adapter.close();
       },
     );
@@ -50,7 +50,7 @@ void main() {
         final adapter = createPlatformAdapter(
           defaultTimeout: const Duration(seconds: 60),
         );
-        expect(adapter, isA<HttpClientAdapter>());
+        expect(adapter, isA<SoliplexHttpClient>());
         adapter.close();
       },
     );

@@ -22,7 +22,7 @@ import 'package:soliplex_client_native/src/platform/create_platform_adapter_stub
 /// );
 /// adapter.close();
 /// ```
-HttpClientAdapter createPlatformAdapter({
+SoliplexHttpClient createPlatformAdapter({
   Duration defaultTimeout = const Duration(seconds: 30),
 }) {
   return createPlatformAdapterImpl(defaultTimeout: defaultTimeout);
