@@ -125,22 +125,22 @@ void main() {
       expect(identical(api1, api2), isTrue);
     });
 
-    test('shares transport with agUiClientProvider via shared adapter', () {
+    test('shares transport with agUiClientProvider via shared client', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
       // Both apiProvider and agUiClientProvider should use the same
-      // underlying observable adapter for unified HTTP logging
-      final sharedAdapter = container.read(observableAdapterProvider);
+      // underlying observable client for unified HTTP logging
+      final sharedClient = container.read(observableClientProvider);
 
       // Read both API clients
       container
         ..read(apiProvider)
         ..read(agUiClientProvider);
 
-      // Verify the shared adapter is still the same instance
-      final adapterAfterClients = container.read(observableAdapterProvider);
-      expect(identical(sharedAdapter, adapterAfterClients), isTrue);
+      // Verify the shared client is still the same instance
+      final clientAfterClients = container.read(observableClientProvider);
+      expect(identical(sharedClient, clientAfterClients), isTrue);
     });
 
     // Note: This test verifies disposal doesn't throw. Verifying that
@@ -224,32 +224,32 @@ void main() {
     });
   });
 
-  group('observableAdapterProvider', () {
-    test('creates ObservableHttpAdapter instance', () {
+  group('observableClientProvider', () {
+    test('creates ObservableHttpClient instance', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      final adapter = container.read(observableAdapterProvider);
+      final client = container.read(observableClientProvider);
 
-      expect(adapter, isA<ObservableHttpAdapter>());
+      expect(client, isA<ObservableHttpClient>());
     });
 
     test('is singleton across multiple reads', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      final adapter1 = container.read(observableAdapterProvider);
-      final adapter2 = container.read(observableAdapterProvider);
+      final client1 = container.read(observableClientProvider);
+      final client2 = container.read(observableClientProvider);
 
-      expect(identical(adapter1, adapter2), isTrue);
+      expect(identical(client1, client2), isTrue);
     });
 
     test('initializes HttpLogNotifier dependency', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      // Reading the observable adapter should initialize the log notifier
-      container.read(observableAdapterProvider);
+      // Reading the observable client should initialize the log notifier
+      container.read(observableClientProvider);
 
       // The log notifier should be accessible and functional
       final logNotifier = container.read(httpLogProvider.notifier);
@@ -257,39 +257,41 @@ void main() {
     });
   });
 
-  group('shared adapter', () {
-    test('httpTransportProvider and httpAdapterProvider share same adapter',
-        () {
+  group('shared client', () {
+    test(
+      'httpTransportProvider and soliplexHttpClientProvider share same client',
+      () {
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+
+        // Read the observable client directly
+        final sharedClient = container.read(observableClientProvider);
+
+        // Read the client from soliplexHttpClientProvider
+        final httpClient = container.read(soliplexHttpClientProvider);
+
+        // They should be the same instance
+        expect(identical(sharedClient, httpClient), isTrue);
+      },
+    );
+
+    test('httpTransportProvider depends on observableClientProvider', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      // Read the observable adapter directly
-      final sharedAdapter = container.read(observableAdapterProvider);
+      // Read observable client first to establish the shared instance
+      final sharedClient = container.read(observableClientProvider);
 
-      // Read the adapter from httpAdapterProvider
-      final httpAdapter = container.read(httpAdapterProvider);
-
-      // They should be the same instance
-      expect(identical(sharedAdapter, httpAdapter), isTrue);
-    });
-
-    test('httpTransportProvider depends on observableAdapterProvider', () {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-
-      // Read observable adapter first to establish the shared instance
-      final sharedAdapter = container.read(observableAdapterProvider);
-
-      // Read the transport - it should use the same adapter
+      // Read the transport - it should use the same client
       container.read(httpTransportProvider);
 
-      // Reading observable adapter again should return same instance,
-      // proving the transport didn't create a separate adapter
-      final adapterAfterTransport = container.read(observableAdapterProvider);
-      expect(identical(sharedAdapter, adapterAfterTransport), isTrue);
+      // Reading observable client again should return same instance,
+      // proving the transport didn't create a separate client
+      final clientAfterTransport = container.read(observableClientProvider);
+      expect(identical(sharedClient, clientAfterTransport), isTrue);
 
-      // Verify adapter is observable type (has logging capability)
-      expect(sharedAdapter, isA<ObservableHttpAdapter>());
+      // Verify client is observable type (has logging capability)
+      expect(sharedClient, isA<ObservableHttpClient>());
     });
   });
 }

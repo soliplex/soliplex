@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:meta/meta.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 
-/// HTTP adapter using Apple's NSURLSession via cupertino_http.
+/// HTTP client using Apple's NSURLSession via cupertino_http.
 ///
 /// Provides native HTTP support on iOS and macOS with benefits including:
 /// - Automatic proxy and VPN support
@@ -17,25 +17,25 @@ import 'package:soliplex_client/soliplex_client.dart';
 ///
 /// Example:
 /// ```dart
-/// final adapter = CupertinoHttpAdapter();
+/// final client = CupertinoHttpClient();
 /// try {
-///   final response = await adapter.request(
+///   final response = await client.request(
 ///     'GET',
 ///     Uri.parse('https://api.example.com/data'),
 ///   );
 ///   print(response.body);
 /// } finally {
-///   adapter.close();
+///   client.close();
 /// }
 /// ```
-class CupertinoHttpAdapter implements HttpClientAdapter {
-  /// Creates a Cupertino HTTP adapter.
+class CupertinoHttpClient implements SoliplexHttpClient {
+  /// Creates a Cupertino HTTP client.
   ///
   /// Parameters:
   /// - [configuration]: Optional URLSessionConfiguration. Uses ephemeral
   ///   session configuration if not provided.
   /// - [defaultTimeout]: Default timeout for requests. Defaults to 30 seconds.
-  CupertinoHttpAdapter({
+  CupertinoHttpClient({
     URLSessionConfiguration? configuration,
     this.defaultTimeout = const Duration(seconds: 30),
   }) : _client = CupertinoClient.fromSessionConfiguration(
@@ -43,11 +43,11 @@ class CupertinoHttpAdapter implements HttpClientAdapter {
               URLSessionConfiguration.ephemeralSessionConfiguration(),
         );
 
-  /// Creates a Cupertino HTTP adapter with a custom client for testing.
+  /// Creates a Cupertino HTTP client with a custom client for testing.
   ///
   /// This constructor allows injecting a mock client for unit testing.
   @visibleForTesting
-  CupertinoHttpAdapter.forTesting({
+  CupertinoHttpClient.forTesting({
     required http.Client client,
     this.defaultTimeout = const Duration(seconds: 30),
   }) : _client = client;
@@ -60,7 +60,7 @@ class CupertinoHttpAdapter implements HttpClientAdapter {
   bool _closed = false;
 
   @override
-  Future<AdapterResponse> request(
+  Future<HttpResponse> request(
     String method,
     Uri uri, {
     Map<String, String>? headers,
@@ -93,7 +93,7 @@ class CupertinoHttpAdapter implements HttpClientAdapter {
         },
       );
 
-      return AdapterResponse(
+      return HttpResponse(
         statusCode: streamedResponse.statusCode,
         bodyBytes: Uint8List.fromList(bodyBytes),
         headers: _normalizeHeaders(streamedResponse.headers),
@@ -232,11 +232,11 @@ class CupertinoHttpAdapter implements HttpClientAdapter {
     return headers.map((key, value) => MapEntry(key.toLowerCase(), value));
   }
 
-  /// Checks that the adapter has not been closed.
+  /// Checks that the client has not been closed.
   void _checkNotClosed() {
     if (_closed) {
       throw StateError(
-        'Cannot use CupertinoHttpAdapter after close() was called',
+        'Cannot use CupertinoHttpClient after close() was called',
       );
     }
   }

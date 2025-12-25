@@ -327,9 +327,9 @@
 **Changes:**
 
 - Added `soliplex_client_native` dependency to pubspec.yaml
-- Updated `api_provider.dart` to use `createPlatformAdapter()`
-- Added try-catch fallback in `create_platform_adapter_io.dart` for test environment
-- Platform detection: CupertinoHttpAdapter on macOS/iOS, DartHttpAdapter elsewhere
+- Updated `api_provider.dart` to use `createPlatformClient()`
+- Added try-catch fallback in `create_platform_client_io.dart` for test environment
+- Platform detection: CupertinoHttpClient on macOS/iOS, DartHttpClient elsewhere
 
 **Benefits on macOS:**
 
@@ -348,11 +348,11 @@
 
 **Key Decision:**
 
-Used `createPlatformAdapter()` for automatic platform detection rather than explicit Platform.isMacOS checks. Added try-catch fallback for test environments where native bindings are unavailable, ensuring tests continue to pass with DartHttpAdapter.
+Used `createPlatformClient()` for automatic platform detection rather than explicit Platform.isMacOS checks. Added try-catch fallback for test environments where native bindings are unavailable, ensuring tests continue to pass with DartHttpClient.
 
 **Technical Challenge Resolved:**
 
-Initial implementation failed 16 tests because `CupertinoHttpAdapter` tried to load native bindings in the Flutter test environment (macOS VM without NSURLSession). Solution: Added try-catch in `createPlatformAdapterImpl()` to gracefully fall back to `DartHttpAdapter` when native bindings are unavailable.
+Initial implementation failed 16 tests because `CupertinoHttpClient` tried to load native bindings in the Flutter test environment (macOS VM without NSURLSession). Solution: Added try-catch in `createPlatformClientImpl()` to gracefully fall back to `DartHttpClient` when native bindings are unavailable.
 
 ---
 
@@ -501,7 +501,7 @@ Initial implementation failed 16 tests because `CupertinoHttpAdapter` tried to l
 | 2025-12-16 | Debug mode stack traces in ErrorDisplay | Aids development without cluttering production UI |
 | 2025-12-16 | AsyncValueHandler widget | DRY principle - reduces boilerplate in UI code |
 | 2025-12-16 | Backend health check provider | Enables proactive connection status monitoring |
-| 2025-12-17 | Use native HTTP adapter via createPlatformAdapter() | Automatic platform detection, better macOS performance (NSURLSession), zero config, fallback for test environment |
+| 2025-12-17 | Use native HTTP client via createPlatformClient() | Automatic platform detection, better macOS performance (NSURLSession), zero config, fallback for test environment |
 
 ---
 

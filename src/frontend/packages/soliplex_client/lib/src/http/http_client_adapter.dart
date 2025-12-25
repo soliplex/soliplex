@@ -1,68 +1,121 @@
-import 'package:soliplex_client/src/http/adapter_response.dart';
+import 'dart:async';
 
-/// Abstract interface for HTTP client adapters.
+import 'package:http/http.dart' as http;
+import 'package:soliplex_client/src/http/soliplex_http_client.dart';
+
+/// Bridges [SoliplexHttpClient] to Dart's [http.Client] interface.
 ///
-/// Implementations wrap platform-specific HTTP clients to provide a unified
-/// interface for making HTTP requests. Use `DartHttpAdapter` for the default
-/// pure-Dart implementation using `package:http`.
+/// This allows injecting our HTTP stack (with platform-specific clients and
+/// observability) into libraries that accept `http.Client`, such as ag_ui's
+/// `AgUiClient`.
+///
+/// The implementation detects SSE requests (Accept: text/event-stream) and
+/// routes them through [SoliplexHttpClient.requestStream]. Other requests use
+/// [SoliplexHttpClient.request] which provides proper status codes.
 ///
 /// Example:
 /// ```dart
-/// final adapter = DartHttpAdapter();
-/// final response = await adapter.request(
-///   'GET',
-///   Uri.parse('https://api.example.com/data'),
+/// final observable = ObservableHttpClient(
+///   client: createPlatformClient(),
+///   observer: myObserver,
 /// );
-/// print(response.body);
-/// adapter.close();
+/// final httpClient = HttpClientAdapter(client: observable);
+///
+/// // Use with AgUiClient
+/// final agUiClient = AgUiClient(
+///   config: config,
+///   httpClient: httpClient,
+/// );
 /// ```
-abstract class HttpClientAdapter {
-  /// Performs an HTTP request and returns the complete response.
-  ///
-  /// Parameters:
-  /// - [method]: HTTP method (GET, POST, PUT, DELETE, PATCH, etc.)
-  /// - [uri]: The request URI
-  /// - [headers]: Optional request headers
-  /// - [body]: Optional request body. Supported types:
-  ///   - `String`: Sent as-is with UTF-8 encoding
-  ///   - `List<int>`: Sent as raw bytes
-  ///   - `Map<String, dynamic>`: JSON encoded automatically
-  /// - [timeout]: Request timeout. Uses adapter's default if not specified.
-  ///
-  /// Throws `NetworkException` on connection failures or timeouts.
-  /// Throws `CancelledException` if the request was cancelled.
-  Future<AdapterResponse> request(
-    String method,
-    Uri uri, {
-    Map<String, String>? headers,
-    Object? body,
-    Duration? timeout,
-  });
+class HttpClientAdapter extends http.BaseClient {
+  /// Creates an [HttpClientAdapter] that delegates to the given [client].
+  HttpClientAdapter({required this.client});
 
-  /// Performs an HTTP request and returns a byte stream for streaming
-  /// responses.
-  ///
-  /// Used for SSE (Server-Sent Events) and other streaming protocols.
-  /// The returned stream emits byte chunks as they arrive from the server.
-  ///
-  /// Parameters:
-  /// - [method]: HTTP method (typically GET or POST)
-  /// - [uri]: The request URI
-  /// - [headers]: Optional request headers
-  /// - [body]: Optional request body (same types as [request])
-  ///
-  /// Throws `NetworkException` on connection failures.
-  /// Throws `CancelledException` if the request was cancelled.
-  Stream<List<int>> requestStream(
-    String method,
-    Uri uri, {
-    Map<String, String>? headers,
-    Object? body,
-  });
+  /// The underlying client that handles HTTP requests.
+  final SoliplexHttpClient client;
 
-  /// Closes the adapter and releases any resources.
-  ///
-  /// After calling this method, no further requests should be made.
-  /// Calling [close] multiple times is safe.
-  void close();
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final bodyBytes = await _extractBody(request);
+    final headers = Map<String, String>.from(request.headers);
+
+    // Detect SSE requests by Accept header
+    final acceptHeader = headers['accept'] ?? headers['Accept'] ?? '';
+    final isStreamingRequest = acceptHeader.contains('text/event-stream');
+
+    if (isStreamingRequest) {
+      return _sendStreaming(request, headers, bodyBytes);
+    } else {
+      return _sendRegular(request, headers, bodyBytes);
+    }
+  }
+
+  /// Handles SSE/streaming requests using [SoliplexHttpClient.requestStream].
+  Future<http.StreamedResponse> _sendStreaming(
+    http.BaseRequest request,
+    Map<String, String> headers,
+    List<int>? bodyBytes,
+  ) async {
+    // Use requestStream for SSE - it throws NetworkException on HTTP errors
+    final byteStream = client.requestStream(
+      request.method,
+      request.url,
+      headers: headers,
+      body: bodyBytes,
+    );
+
+    // requestStream throws on HTTP errors, so successful streams are 200
+    return http.StreamedResponse(
+      byteStream,
+      200,
+      request: request,
+      headers: {'content-type': 'text/event-stream'},
+    );
+  }
+
+  /// Handles regular requests using [SoliplexHttpClient.request].
+  Future<http.StreamedResponse> _sendRegular(
+    http.BaseRequest request,
+    Map<String, String> headers,
+    List<int>? bodyBytes,
+  ) async {
+    final response = await client.request(
+      request.method,
+      request.url,
+      headers: headers,
+      body: bodyBytes,
+    );
+
+    // Convert HttpResponse to StreamedResponse
+    final bodyStream = Stream.value(response.bodyBytes);
+
+    return http.StreamedResponse(
+      bodyStream,
+      response.statusCode,
+      request: request,
+      headers: response.headers,
+      reasonPhrase: response.reasonPhrase,
+      contentLength: response.bodyBytes.length,
+    );
+  }
+
+  /// Extracts body bytes from the request.
+  Future<List<int>?> _extractBody(http.BaseRequest request) async {
+    if (request is http.Request) {
+      final bodyBytes = request.bodyBytes;
+      return bodyBytes.isNotEmpty ? bodyBytes : null;
+    } else if (request is http.StreamedRequest) {
+      final bytes = await request.finalize().toBytes();
+      return bytes.isNotEmpty ? bytes : null;
+    } else if (request is http.MultipartRequest) {
+      final bytes = await request.finalize().toBytes();
+      return bytes.isNotEmpty ? bytes : null;
+    }
+    return null;
+  }
+
+  @override
+  void close() {
+    client.close();
+  }
 }

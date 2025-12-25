@@ -50,7 +50,7 @@ frontend/
 │
 ├── packages/soliplex_client_native/  # Flutter package - Native HTTP
 │   └── lib/src/adapters/
-│       └── cupertino_http_adapter.dart  # NSURLSession for iOS/macOS
+│       └── cupertino_http_client.dart   # NSURLSession for iOS/macOS
 │
 ├── test/                             # Integration and widget tests
 ├── android/, ios/, macos/, web/      # Platform-specific code
@@ -114,9 +114,9 @@ Derived: canSendMessageProvider, allMessagesProvider, isStreamingProvider
 └───────────────┬────────────────────────────────┘
                 │
 ┌───────────────▼────────────────────────────────┐
-│   HttpClientAdapter (Platform abstractions)    │  Layer 1: Adapters
-│  - DartHttpAdapter (dart:http)                 │
-│  - CupertinoHttpAdapter (NSURLSession)         │
+│   SoliplexHttpClient (Platform abstractions)   │  Layer 1: Clients
+│  - DartHttpClient (dart:http)                  │
+│  - CupertinoHttpClient (NSURLSession)          │
 └────────────────────────────────────────────────┘
 ```
 

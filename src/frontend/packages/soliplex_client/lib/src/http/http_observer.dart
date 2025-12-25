@@ -6,7 +6,7 @@ import 'package:soliplex_client/src/errors/exceptions.dart';
 /// Implementations can log requests, track metrics, or display debug info.
 /// Observers should NOT modify requests/responses or throw exceptions that
 /// would break the request flow. Any exceptions thrown by observers are
-/// caught and ignored by `ObservableHttpAdapter`.
+/// caught and ignored by `ObservableHttpClient`.
 ///
 /// Example:
 /// ```dart

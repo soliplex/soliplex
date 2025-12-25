@@ -6,27 +6,27 @@ import 'package:soliplex_client_native/soliplex_client_native.dart';
 import 'package:soliplex_frontend/core/providers/config_provider.dart';
 import 'package:soliplex_frontend/core/providers/http_log_provider.dart';
 
-/// Provider for the shared observable HTTP adapter.
+/// Provider for the shared observable HTTP client.
 ///
-/// Creates a single [ObservableHttpAdapter] that wraps the platform adapter
-/// and notifies [HttpLogNotifier] of all HTTP activity. This adapter is shared
+/// Creates a single [ObservableHttpClient] that wraps the platform client
+/// and notifies [HttpLogNotifier] of all HTTP activity. This client is shared
 /// by both REST API ([httpTransportProvider]) and SSE streaming
-/// ([httpAdapterProvider]) to provide unified HTTP logging.
+/// ([soliplexHttpClientProvider]) to provide unified HTTP logging.
 ///
 /// **Lifecycle**: Lives for the entire app session. Closed when container
 /// is disposed.
-final observableAdapterProvider = Provider<HttpClientAdapter>((ref) {
-  final baseAdapter = createPlatformAdapter();
+final observableClientProvider = Provider<SoliplexHttpClient>((ref) {
+  final baseClient = createPlatformClient();
   final observer = ref.watch(httpLogProvider.notifier);
-  final observable = ObservableHttpAdapter(
-    adapter: baseAdapter,
+  final observable = ObservableHttpClient(
+    client: baseClient,
     observers: [observer],
   );
   ref.onDispose(() {
     try {
       observable.close();
     } catch (e, stack) {
-      debugPrint('Error disposing observable adapter: $e\n$stack');
+      debugPrint('Error disposing observable client: $e\n$stack');
     }
   });
   return observable;
@@ -35,7 +35,7 @@ final observableAdapterProvider = Provider<HttpClientAdapter>((ref) {
 /// Provider for the HTTP transport layer.
 ///
 /// Creates a singleton [HttpTransport] instance using the shared
-/// [observableAdapterProvider]. All HTTP requests through this transport
+/// [observableClientProvider]. All HTTP requests through this transport
 /// are logged to [httpLogProvider].
 ///
 /// **Lifecycle**: This is a non-autoDispose provider because the HTTP
@@ -44,11 +44,11 @@ final observableAdapterProvider = Provider<HttpClientAdapter>((ref) {
 /// **Threading**: Safe to call from any isolate. The underlying
 /// adapter uses dart:http which is isolate-safe.
 final httpTransportProvider = Provider<HttpTransport>((ref) {
-  final adapter = ref.watch(observableAdapterProvider);
-  final transport = HttpTransport(adapter: adapter);
+  final client = ref.watch(observableClientProvider);
+  final transport = HttpTransport(client: client);
 
-  // Note: Don't dispose transport here - adapter is managed by
-  // observableAdapterProvider
+  // Note: Don't dispose transport here - client is managed by
+  // observableClientProvider
   return transport;
 });
 
@@ -114,22 +114,22 @@ final apiProvider = Provider<SoliplexApi>((ref) {
   return api;
 });
 
-/// Provider for the HTTP client adapter.
+/// Provider for the Soliplex HTTP client.
 ///
-/// Returns the shared [observableAdapterProvider] to ensure all HTTP activity
+/// Returns the shared [observableClientProvider] to ensure all HTTP activity
 /// (both REST and SSE) is logged through [httpLogProvider].
-final httpAdapterProvider = Provider<HttpClientAdapter>((ref) {
-  return ref.watch(observableAdapterProvider);
+final soliplexHttpClientProvider = Provider<SoliplexHttpClient>((ref) {
+  return ref.watch(observableClientProvider);
 });
 
-/// Provider for http.Client that uses our adapter stack.
+/// Provider for http.Client that uses our HTTP client stack.
 ///
-/// This bridges our [HttpClientAdapter] to the standard [http.Client]
-/// interface,
-/// allowing libraries like AgUiClient to use our HTTP infrastructure.
+/// This bridges our [SoliplexHttpClient] to the standard [http.Client]
+/// interface, allowing libraries like AgUiClient to use our HTTP
+/// infrastructure.
 final httpClientProvider = Provider<http.Client>((ref) {
-  final adapter = ref.watch(httpAdapterProvider);
-  final client = AdapterHttpClient(adapter: adapter);
+  final soliplexClient = ref.watch(soliplexHttpClientProvider);
+  final client = HttpClientAdapter(client: soliplexClient);
   ref.onDispose(client.close);
   return client;
 });
