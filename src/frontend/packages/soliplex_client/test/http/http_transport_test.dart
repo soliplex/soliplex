@@ -377,7 +377,7 @@ void main() {
     });
 
     group('request - headers', () {
-      test('passes custom headers to adapter', () async {
+      test('passes custom headers to client', () async {
         when(
           () => mockClient.request(
             any(),
@@ -678,7 +678,7 @@ void main() {
         );
       });
 
-      test('passes through NetworkException from adapter', () async {
+      test('passes through NetworkException from client', () async {
         const networkError = NetworkException(
           message: 'Connection refused',
         );
@@ -699,7 +699,7 @@ void main() {
         );
       });
 
-      test('passes through timeout NetworkException from adapter', () async {
+      test('passes through timeout NetworkException from client', () async {
         const timeoutError = NetworkException(
           message: 'Request timed out',
           isTimeout: true,
@@ -742,7 +742,7 @@ void main() {
           ),
         );
 
-        // Adapter should not be called
+        // Client should not be called
         verifyNever(
           () => mockClient.request(
             any(),
@@ -813,7 +813,7 @@ void main() {
     });
 
     group('requestStream', () {
-      test('returns byte stream from adapter', () async {
+      test('returns byte stream from client', () async {
         final controller = StreamController<List<int>>();
 
         when(
@@ -854,7 +854,7 @@ void main() {
         );
       });
 
-      test('forwards headers and JSON body to adapter', () async {
+      test('forwards headers and JSON body to client', () async {
         final controller = StreamController<List<int>>();
 
         when(
@@ -1083,7 +1083,7 @@ void main() {
     });
 
     group('close', () {
-      test('delegates to adapter', () {
+      test('delegates to client', () {
         transport.close();
 
         verify(() => mockClient.close()).called(1);

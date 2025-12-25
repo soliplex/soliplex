@@ -1,5 +1,5 @@
 name: soliplex_client_native
-description: Native HTTP adapters for soliplex_client on iOS and macOS
+description: Native HTTP clients for soliplex_client on iOS and macOS
 version: 1.0.0-dev
 publish_to: none
 

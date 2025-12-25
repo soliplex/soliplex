@@ -17,5 +17,5 @@
 /// ```
 library soliplex_client_native;
 
-export 'src/adapters/adapters.dart';
+export 'src/clients/clients.dart';
 export 'src/platform/platform.dart';

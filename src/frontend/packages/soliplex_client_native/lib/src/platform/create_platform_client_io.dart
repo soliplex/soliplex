@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:soliplex_client/soliplex_client.dart';
-import 'package:soliplex_client_native/src/adapters/cupertino_http_client.dart';
+import 'package:soliplex_client_native/src/clients/cupertino_http_client.dart';
 
 /// Creates platform-specific client for IO platforms.
 ///

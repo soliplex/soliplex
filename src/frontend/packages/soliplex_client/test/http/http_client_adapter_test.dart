@@ -30,7 +30,7 @@ void main() {
 
   group('HttpClientAdapter', () {
     group('regular requests (non-SSE)', () {
-      test('delegates GET request to adapter.request', () async {
+      test('delegates GET request to client.request', () async {
         final response = HttpResponse(
           statusCode: 200,
           bodyBytes: Uint8List.fromList('{"data": "test"}'.codeUnits),
@@ -67,7 +67,7 @@ void main() {
         ).called(1);
       });
 
-      test('delegates POST request with body to adapter.request', () async {
+      test('delegates POST request with body to client.request', () async {
         final response = HttpResponse(
           statusCode: 201,
           bodyBytes: Uint8List.fromList('{"id": 1}'.codeUnits),
@@ -136,7 +136,7 @@ void main() {
     });
 
     group('SSE requests', () {
-      test('delegates SSE request to adapter.requestStream', () async {
+      test('delegates SSE request to client.requestStream', () async {
         final controller = StreamController<List<int>>.broadcast();
 
         when(
@@ -250,7 +250,7 @@ void main() {
     });
 
     group('close', () {
-      test('delegates to adapter.close', () {
+      test('delegates to client.close', () {
         httpClient.close();
 
         verify(() => mockClient.close()).called(1);
@@ -259,17 +259,17 @@ void main() {
 
     group('integration with ObservableHttpClient', () {
       test('works with ObservableHttpClient wrapper', () async {
-        final baseAdapter = MockSoliplexHttpClient();
+        final baseClient = MockSoliplexHttpClient();
         final observer = _RecordingObserver();
 
-        when(baseAdapter.close).thenReturn(null);
+        when(baseClient.close).thenReturn(null);
 
-        final observableAdapter = ObservableHttpClient(
-          client: baseAdapter,
+        final observableClient = ObservableHttpClient(
+          client: baseClient,
           observers: [observer],
         );
 
-        final client = HttpClientAdapter(client: observableAdapter);
+        final client = HttpClientAdapter(client: observableClient);
 
         final response = HttpResponse(
           statusCode: 200,
@@ -277,7 +277,7 @@ void main() {
         );
 
         when(
-          () => baseAdapter.request(
+          () => baseClient.request(
             any(),
             any(),
             headers: any(named: 'headers'),

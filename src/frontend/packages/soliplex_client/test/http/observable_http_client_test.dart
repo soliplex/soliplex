@@ -489,7 +489,7 @@ void main() {
         final recorder2 = RecordingObserver();
         final recorder3 = RecordingObserver();
 
-        final adapter = ObservableHttpClient(
+        final observableClient = ObservableHttpClient(
           client: mockClient,
           observers: [recorder1, recorder2, recorder3],
         );
@@ -509,7 +509,7 @@ void main() {
           ),
         );
 
-        await adapter.request('GET', Uri.parse('https://example.com'));
+        await observableClient.request('GET', Uri.parse('https://example.com'));
 
         // All observers should have same events
         expect(recorder1.events, hasLength(2));
@@ -523,7 +523,7 @@ void main() {
         expect(id1, equals(id2));
         expect(id2, equals(id3));
 
-        adapter.close();
+        observableClient.close();
       });
 
       test('one observer exception does not affect others', () async {
@@ -531,7 +531,7 @@ void main() {
         final throwingObserver = ThrowingObserver();
         final recorder2 = RecordingObserver();
 
-        final adapter = ObservableHttpClient(
+        final observableClient = ObservableHttpClient(
           client: mockClient,
           observers: [recorder1, throwingObserver, recorder2],
         );
@@ -553,7 +553,7 @@ void main() {
 
         // Should not throw despite throwing observer
         await expectLater(
-          adapter.request('GET', Uri.parse('https://example.com')),
+          observableClient.request('GET', Uri.parse('https://example.com')),
           completes,
         );
 
@@ -561,13 +561,13 @@ void main() {
         expect(recorder1.events, hasLength(2));
         expect(recorder2.events, hasLength(2));
 
-        adapter.close();
+        observableClient.close();
       });
     });
 
     group('observer error isolation', () {
       test('observer throwing on request does not break request', () async {
-        final adapter = ObservableHttpClient(
+        final observableClient = ObservableHttpClient(
           client: mockClient,
           observers: [ThrowingObserver()],
         );
@@ -587,7 +587,7 @@ void main() {
           ),
         );
 
-        final result = await adapter.request(
+        final result = await observableClient.request(
           'GET',
           Uri.parse('https://example.com'),
         );
@@ -595,11 +595,11 @@ void main() {
         expect(result.statusCode, equals(200));
         expect(result.bodyBytes, hasLength(3));
 
-        adapter.close();
+        observableClient.close();
       });
 
       test('observer throwing on response does not break request', () async {
-        final adapter = ObservableHttpClient(
+        final observableClient = ObservableHttpClient(
           client: mockClient,
           observers: [ThrowingObserver()],
         );
@@ -619,18 +619,18 @@ void main() {
           ),
         );
 
-        final result = await adapter.request(
+        final result = await observableClient.request(
           'POST',
           Uri.parse('https://example.com'),
         );
 
         expect(result.statusCode, equals(201));
 
-        adapter.close();
+        observableClient.close();
       });
 
       test('observer throwing on error does not suppress exception', () async {
-        final adapter = ObservableHttpClient(
+        final observableClient = ObservableHttpClient(
           client: mockClient,
           observers: [ThrowingObserver()],
         );
@@ -648,16 +648,16 @@ void main() {
         ).thenThrow(originalException);
 
         await expectLater(
-          adapter.request('GET', Uri.parse('https://example.com')),
+          observableClient.request('GET', Uri.parse('https://example.com')),
           throwsA(equals(originalException)),
         );
 
-        adapter.close();
+        observableClient.close();
       });
 
       test('observer throwing on stream events does not break stream',
           () async {
-        final adapter = ObservableHttpClient(
+        final observableClient = ObservableHttpClient(
           client: mockClient,
           observers: [ThrowingObserver()],
         );
@@ -673,7 +673,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = adapter.requestStream(
+        final stream = observableClient.requestStream(
           'GET',
           Uri.parse('https://example.com'),
         );
@@ -703,7 +703,7 @@ void main() {
           ]),
         );
 
-        adapter.close();
+        observableClient.close();
       });
     });
 
@@ -830,7 +830,7 @@ void main() {
     group('custom request ID generator', () {
       test('uses provided generator', () async {
         var callCount = 0;
-        final customAdapter = ObservableHttpClient(
+        final customClient = ObservableHttpClient(
           client: mockClient,
           observers: [recorder],
           generateRequestId: () => 'custom-id-${++callCount}',
@@ -851,17 +851,17 @@ void main() {
           ),
         );
 
-        await customAdapter.request('GET', Uri.parse('https://example.com'));
+        await customClient.request('GET', Uri.parse('https://example.com'));
 
         final requestEvent = recorder.eventsOfType<HttpRequestEvent>().first;
         expect(requestEvent.requestId, equals('custom-id-1'));
 
-        customAdapter.close();
+        customClient.close();
       });
     });
 
     group('close delegation', () {
-      test('delegates close to wrapped adapter', () {
+      test('delegates close to wrapped client', () {
         observableClient.close();
 
         verify(() => mockClient.close()).called(1);
@@ -876,7 +876,7 @@ void main() {
 
     group('empty observer list', () {
       test('works correctly with no observers', () async {
-        final emptyAdapter = ObservableHttpClient(
+        final clientNoObservers = ObservableHttpClient(
           client: mockClient,
         );
 
@@ -895,7 +895,7 @@ void main() {
           ),
         );
 
-        final result = await emptyAdapter.request(
+        final result = await clientNoObservers.request(
           'GET',
           Uri.parse('https://example.com'),
         );
@@ -903,11 +903,11 @@ void main() {
         expect(result.statusCode, equals(200));
         expect(result.bodyBytes, hasLength(3));
 
-        emptyAdapter.close();
+        clientNoObservers.close();
       });
 
       test('streaming works with no observers', () async {
-        final emptyAdapter = ObservableHttpClient(
+        final clientNoObservers = ObservableHttpClient(
           client: mockClient,
         );
 
@@ -922,7 +922,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = emptyAdapter.requestStream(
+        final stream = clientNoObservers.requestStream(
           'GET',
           Uri.parse('https://example.com'),
         );
@@ -952,12 +952,12 @@ void main() {
           ]),
         );
 
-        emptyAdapter.close();
+        clientNoObservers.close();
       });
     });
 
     group('parameters forwarding', () {
-      test('forwards all request parameters to wrapped adapter', () async {
+      test('forwards all request parameters to wrapped client', () async {
         when(
           () => mockClient.request(
             any(),
@@ -992,7 +992,7 @@ void main() {
         ).called(1);
       });
 
-      test('forwards all stream parameters to wrapped adapter', () async {
+      test('forwards all stream parameters to wrapped client', () async {
         final controller = StreamController<List<int>>();
 
         when(
