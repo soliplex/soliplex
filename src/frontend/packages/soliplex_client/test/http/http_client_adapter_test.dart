@@ -11,7 +11,7 @@ class MockSoliplexHttpClient extends Mock implements SoliplexHttpClient {}
 
 void main() {
   late MockSoliplexHttpClient mockClient;
-  late AdapterHttpClient httpClient;
+  late HttpClientAdapter httpClient;
 
   setUpAll(() {
     registerFallbackValue(Uri.parse('https://example.com'));
@@ -19,7 +19,7 @@ void main() {
 
   setUp(() {
     mockClient = MockSoliplexHttpClient();
-    httpClient = AdapterHttpClient(client: mockClient);
+    httpClient = HttpClientAdapter(client: mockClient);
     when(() => mockClient.close()).thenReturn(null);
   });
 
@@ -28,7 +28,7 @@ void main() {
     reset(mockClient);
   });
 
-  group('AdapterHttpClient', () {
+  group('HttpClientAdapter', () {
     group('regular requests (non-SSE)', () {
       test('delegates GET request to adapter.request', () async {
         final response = HttpResponse(
@@ -269,7 +269,7 @@ void main() {
           observers: [observer],
         );
 
-        final client = AdapterHttpClient(client: observableAdapter);
+        final client = HttpClientAdapter(client: observableAdapter);
 
         final response = HttpResponse(
           statusCode: 200,

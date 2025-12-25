@@ -16,10 +16,10 @@ import 'package:soliplex_client/src/http/soliplex_http_client.dart';
 /// Example:
 /// ```dart
 /// final observable = ObservableHttpClient(
-///   client: createPlatformAdapter(),
+///   client: createPlatformClient(),
 ///   observer: myObserver,
 /// );
-/// final httpClient = AdapterHttpClient(client: observable);
+/// final httpClient = HttpClientAdapter(client: observable);
 ///
 /// // Use with AgUiClient
 /// final agUiClient = AgUiClient(
@@ -27,9 +27,9 @@ import 'package:soliplex_client/src/http/soliplex_http_client.dart';
 ///   httpClient: httpClient,
 /// );
 /// ```
-class AdapterHttpClient extends http.BaseClient {
-  /// Creates an [AdapterHttpClient] that delegates to the given [client].
-  AdapterHttpClient({required this.client});
+class HttpClientAdapter extends http.BaseClient {
+  /// Creates an [HttpClientAdapter] that delegates to the given [client].
+  HttpClientAdapter({required this.client});
 
   /// The underlying client that handles HTTP requests.
   final SoliplexHttpClient client;

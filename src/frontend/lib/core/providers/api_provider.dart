@@ -129,7 +129,7 @@ final httpAdapterProvider = Provider<SoliplexHttpClient>((ref) {
 /// allowing libraries like AgUiClient to use our HTTP infrastructure.
 final httpClientProvider = Provider<http.Client>((ref) {
   final adapter = ref.watch(httpAdapterProvider);
-  final client = AdapterHttpClient(client: adapter);
+  final client = HttpClientAdapter(client: adapter);
   ref.onDispose(client.close);
   return client;
 });
