@@ -9,27 +9,27 @@ Rename HTTP layer classes for clarity:
 
 ## Naming Changes
 
-| Current Name | New Name | File Rename | Status |
-|--------------|----------|-------------|--------|
-| `HttpClientAdapter` | `SoliplexHttpClient` | `http_client_adapter.dart` → `soliplex_http_client.dart` | Done |
-| `AdapterResponse` | `HttpResponse` | `adapter_response.dart` → `http_response.dart` | Done |
-| `DartHttpAdapter` | `DartHttpClient` | `dart_http_adapter.dart` → `dart_http_client.dart` | Done |
-| `ObservableHttpAdapter` | `ObservableHttpClient` | `observable_http_adapter.dart` → `observable_http_client.dart` | Done |
-| `AdapterHttpClient` | `HttpClientAdapter` | `adapter_http_client.dart` → `http_client_adapter.dart` | Done |
-| `CupertinoHttpAdapter` | `CupertinoHttpClient` | `cupertino_http_adapter.dart` → `cupertino_http_client.dart` | Done |
-| `createPlatformAdapter` | `createPlatformClient` | (same file) | Done |
+| Old Name | New Name | File Rename |
+|----------|----------|-------------|
+| `HttpClientAdapter` | `SoliplexHttpClient` | `http_client_adapter.dart` → `soliplex_http_client.dart` |
+| `AdapterResponse` | `HttpResponse` | `adapter_response.dart` → `http_response.dart` |
+| `DartHttpAdapter` | `DartHttpClient` | `dart_http_adapter.dart` → `dart_http_client.dart` |
+| `ObservableHttpAdapter` | `ObservableHttpClient` | `observable_http_adapter.dart` → `observable_http_client.dart` |
+| `AdapterHttpClient` | `HttpClientAdapter` | `adapter_http_client.dart` → `http_client_adapter.dart` |
+| `CupertinoHttpAdapter` | `CupertinoHttpClient` | `cupertino_http_adapter.dart` → `cupertino_http_client.dart` |
+| `createPlatformAdapter` | `createPlatformClient` | (same file) |
 
 **Parameter/variable renames:**
 
-| Context | Old | New | Status |
-|---------|-----|-----|--------|
-| `HttpTransport({required ... adapter})` | `adapter` | `client` | Done |
-| `ObservableHttpClient({required ... adapter})` | `adapter` | `client` | Done |
-| `HttpClientAdapter({required ... adapter})` | `adapter` | `client` | Done |
-| `observableAdapterProvider` | - | `observableClientProvider` | Done |
-| `httpAdapterProvider` | - | `soliplexHttpClientProvider` | Done |
+| Context | Old | New |
+|---------|-----|-----|
+| `HttpTransport({required ... adapter})` | `adapter` | `client` |
+| `ObservableHttpClient({required ... adapter})` | `adapter` | `client` |
+| `HttpClientAdapter({required ... adapter})` | `adapter` | `client` |
+| `observableAdapterProvider` | - | `observableClientProvider` |
+| `httpAdapterProvider` | - | `soliplexHttpClientProvider` |
 
-## Architecture After Rename
+## Architecture
 
 ### Class Hierarchy
 
@@ -76,9 +76,9 @@ Rename HTTP layer classes for clarity:
 │       │              ▼                       ▼                      │
 │       │    httpTransportProvider    soliplexHttpClientProvider      │
 │       │              │                       │                      │
-│       │              │ Creates:              │ Returns: same as     │
-│       │              │ HttpTransport         │ observableClient-    │
-│       │              │                       │ Provider             │
+│       │              │ Creates:              │ Alias: exposes       │
+│       │              │ HttpTransport         │ SoliplexHttpClient   │
+│       │              │                       │ interface for SSE    │
 │       │              │                       │                      │
 │       ▼              ▼                       ▼                      │
 │  ┌─────────────────────────┐        httpClientProvider              │
@@ -102,6 +102,11 @@ Rename HTTP layer classes for clarity:
 │                                     └─────────────────┘             │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+**Note:** `soliplexHttpClientProvider` is an alias for `observableClientProvider`.
+Both return the same `ObservableHttpClient` instance. The alias exists to provide
+a semantically clear name when code needs the `SoliplexHttpClient` interface
+(e.g., for SSE streaming) rather than knowing about the observable wrapper.
 
 ### Request Flow: REST API
 
@@ -248,16 +253,3 @@ ActiveRunNotifier starts run
 │    - ObservableHttpClient: decorator pattern, not adapter          │
 └────────────────────────────────────────────────────────────────────┘
 ```
-
-## Commit Plan
-
-| # | Description | Status |
-|---|-------------|--------|
-| 0 | Reset branch to new_frontend | Done |
-| 1 | Rename HttpClientAdapter → SoliplexHttpClient | Done |
-| 2 | Rename AdapterResponse → HttpResponse | Done |
-| 3 | Rename DartHttpAdapter → DartHttpClient | Done |
-| 4 | Rename ObservableHttpAdapter → ObservableHttpClient | Done |
-| 5 | Rename AdapterHttpClient → HttpClientAdapter | Done |
-| 6 | Rename CupertinoHttpAdapter → CupertinoHttpClient + createPlatformClient | Done |
-| 7 | Finalize documentation | Done |
