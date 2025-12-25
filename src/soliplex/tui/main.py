@@ -389,18 +389,19 @@ class ThreadRunsView(t_screen.Screen):
 
         with t_containers.VerticalScroll(id="runs-list"):
             for run_id, run_info in self.runs.items():
+                meta = run_info["metadata"]
+
+                if meta is not None:
+                    button_label = f"{meta['label']}:\n{run_id}"
+                else:
+                    button_label = run_id
+
                 with RunButtonWidget():
                     yield t_widgets.Button(
                         name=run_id,
-                        label=f"{run_id}",
+                        label=button_label,
                         variant="primary",
                     )
-
-                    if run_info["metadata"] is not None:
-                        yield t_widgets.Label(
-                            run_info["metadata"]["label"],
-                            classes="run-label",
-                        )
 
         yield t_widgets.Footer()
 
@@ -466,17 +467,18 @@ class RoomThreadsView(t_screen.Screen):
             for thread_info in self.threads:
                 thread_id = thread_info["thread_id"]
                 meta = thread_info.get("metadata")
+
+                if meta is not None:
+                    button_label = f"{meta['name']}:\n{thread_id}"
+                else:
+                    button_label = thread_id
+
                 with ThreadButtonWidget():
                     yield t_widgets.Button(
                         name=thread_id,
-                        label=f"{thread_id}",
+                        label=button_label,
                         variant="primary",
                     )
-                    if meta is not None:
-                        yield t_widgets.Label(
-                            meta["name"],
-                            classes="thread-name",
-                        )
 
         yield t_widgets.Footer()
 
