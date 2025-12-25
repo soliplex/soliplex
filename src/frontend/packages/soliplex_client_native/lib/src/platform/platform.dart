@@ -1,1 +1,1 @@
-export 'create_platform_adapter.dart';
+export 'create_platform_client.dart';

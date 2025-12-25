@@ -16,7 +16,7 @@ import 'package:soliplex_frontend/core/providers/http_log_provider.dart';
 /// **Lifecycle**: Lives for the entire app session. Closed when container
 /// is disposed.
 final observableAdapterProvider = Provider<SoliplexHttpClient>((ref) {
-  final baseAdapter = createPlatformAdapter();
+  final baseAdapter = createPlatformClient();
   final observer = ref.watch(httpLogProvider.notifier);
   final observable = ObservableHttpClient(
     client: baseAdapter,

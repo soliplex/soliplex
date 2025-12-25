@@ -16,13 +16,13 @@ void main() {
     registerFallbackValue(FakeBaseRequest());
   });
 
-  group('CupertinoHttpAdapter', () {
+  group('CupertinoHttpClient', () {
     late MockHttpClient mockClient;
-    late CupertinoHttpAdapter adapter;
+    late CupertinoHttpClient adapter;
 
     setUp(() {
       mockClient = MockHttpClient();
-      adapter = CupertinoHttpAdapter.forTesting(client: mockClient);
+      adapter = CupertinoHttpClient.forTesting(client: mockClient);
     });
 
     tearDown(() {
@@ -187,7 +187,7 @@ void main() {
           ),
         );
 
-        adapter = CupertinoHttpAdapter.forTesting(
+        adapter = CupertinoHttpClient.forTesting(
           client: mockClient,
           defaultTimeout: const Duration(milliseconds: 50),
         );
@@ -326,7 +326,7 @@ void main() {
           (_) async => streamedResponse,
         );
 
-        adapter = CupertinoHttpAdapter.forTesting(
+        adapter = CupertinoHttpClient.forTesting(
           client: mockClient,
           defaultTimeout: const Duration(milliseconds: 50),
         );
@@ -716,7 +716,7 @@ void main() {
     group('default configuration', () {
       test('creates with default timeout of 30 seconds', () {
         final defaultAdapter =
-            CupertinoHttpAdapter.forTesting(client: mockClient);
+            CupertinoHttpClient.forTesting(client: mockClient);
 
         expect(
           defaultAdapter.defaultTimeout,
@@ -727,7 +727,7 @@ void main() {
       });
 
       test('accepts custom default timeout', () {
-        final customAdapter = CupertinoHttpAdapter.forTesting(
+        final customAdapter = CupertinoHttpClient.forTesting(
           client: mockClient,
           defaultTimeout: const Duration(seconds: 60),
         );

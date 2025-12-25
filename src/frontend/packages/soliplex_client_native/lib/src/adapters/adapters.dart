@@ -1,1 +1,1 @@
-export 'cupertino_http_adapter.dart';
+export 'cupertino_http_client.dart';
