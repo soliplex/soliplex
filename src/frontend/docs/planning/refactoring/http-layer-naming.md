@@ -3,6 +3,7 @@
 ## Summary
 
 Rename HTTP layer classes for clarity:
+
 1. Use `*Client` for the HTTP client hierarchy (interface + implementations)
 2. Reserve `*Adapter` only for true Adapter pattern usage (bridging interfaces)
 
@@ -30,24 +31,222 @@ Rename HTTP layer classes for clarity:
 
 ## Architecture After Rename
 
-```text
-AgUiClient (external, needs http.Client)
-    ↓
-HttpClientAdapter (adapts SoliplexHttpClient TO http.Client)
-    ↓
-ObservableHttpClient (monitoring decorator)
-    ↓
-DartHttpClient / CupertinoHttpClient (platform implementations)
-    ↓ implements
-SoliplexHttpClient (interface)
-```
+### Class Hierarchy
 
 ```text
-SoliplexApi
-    ↓
-HttpTransport (JSON + exceptions + cancellation)
-    ↓
-SoliplexHttpClient (interface)
+┌─────────────────────────────────────────────────────────────────────┐
+│                     SoliplexHttpClient                              │
+│                        (interface)                                  │
+│  Methods: request(), requestStream(), close()                       │
+│  Returns: HttpResponse                                              │
+└─────────────────────────────────────────────────────────────────────┘
+                              ▲
+                              │ implements
+          ┌───────────────────┼───────────────────┐
+          │                   │                   │
+┌─────────┴─────────┐ ┌───────┴───────┐ ┌─────────┴─────────┐
+│   DartHttpClient  │ │ Cupertino-    │ │ ObservableHttp-   │
+│                   │ │ HttpClient    │ │ Client            │
+│ Default impl      │ │ iOS/macOS     │ │ Decorator         │
+│ using package:http│ │ NSURLSession  │ │ wraps any client  │
+│                   │ │               │ │ + observers       │
+│ [soliplex_client] │ │ [soliplex_    │ │ [soliplex_client] │
+│                   │ │ client_native]│ │                   │
+└───────────────────┘ └───────────────┘ └───────────────────┘
+```
+
+### Provider Dependency Graph (Flutter App)
+
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Flutter App                                 │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  configProvider ─────────────────┐                                  │
+│       │                          │                                  │
+│       ▼                          ▼                                  │
+│  urlBuilderProvider         observableClientProvider                │
+│       │                          │                                  │
+│       │                          │ Creates: ObservableHttpClient    │
+│       │                          │   wrapping createPlatformClient()│
+│       │                          │   with HttpLogNotifier observer  │
+│       │                          │                                  │
+│       │              ┌───────────┴───────────┐                      │
+│       │              │                       │                      │
+│       │              ▼                       ▼                      │
+│       │    httpTransportProvider    soliplexHttpClientProvider      │
+│       │              │                       │                      │
+│       │              │ Creates:              │ Returns: same as     │
+│       │              │ HttpTransport         │ observableClient-    │
+│       │              │                       │ Provider             │
+│       │              │                       │                      │
+│       ▼              ▼                       ▼                      │
+│  ┌─────────────────────────┐        httpClientProvider              │
+│  │      apiProvider        │                 │                      │
+│  │                         │                 │ Creates:             │
+│  │  Creates: SoliplexApi   │                 │ HttpClientAdapter    │
+│  │  (REST API client)      │                 │ (bridges to          │
+│  │                         │                 │  http.Client)        │
+│  └─────────────────────────┘                 │                      │
+│                                              ▼                      │
+│                                     agUiClientProvider              │
+│                                              │                      │
+│                                              │ Creates: AgUiClient  │
+│                                              │ (SSE streaming)      │
+│                                              ▼                      │
+│                                     ┌─────────────────┐             │
+│                                     │ ActiveRun-      │             │
+│                                     │ Notifier        │             │
+│                                     │ (orchestrates   │             │
+│                                     │  AG-UI runs)    │             │
+│                                     └─────────────────┘             │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Request Flow: REST API
+
+```text
+Widget calls api.getRooms()
+         │
+         ▼
+┌─────────────────┐
+│   SoliplexApi   │  Constructs URL, calls transport
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  HttpTransport  │  JSON encode, exception mapping, CancelToken
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────────┐
+│ ObservableHttpClient│  Notifies HttpLogNotifier (onRequest/onResponse)
+└────────┬────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│  DartHttpClient or  │  Platform-specific HTTP execution
+│  CupertinoHttpClient│
+└────────┬────────────┘
+         │
+         ▼
+    HttpResponse
+    (statusCode, bodyBytes, headers)
+```
+
+### Request Flow: AG-UI Streaming
+
+```text
+ActiveRunNotifier starts run
+         │
+         ▼
+┌─────────────────┐
+│   AgUiClient    │  External library, needs http.Client
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────────┐
+│  HttpClientAdapter  │  TRUE ADAPTER: bridges SoliplexHttpClient → http.Client
+└────────┬────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│ ObservableHttpClient│  Notifies HttpLogNotifier (onStreamStart/onStreamEnd)
+└────────┬────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│  DartHttpClient or  │  Platform-specific SSE stream
+│  CupertinoHttpClient│
+└────────┬────────────┘
+         │
+         ▼
+    Stream<List<int>>
+    (byte chunks for SSE parsing)
+```
+
+### Package Boundaries
+
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│                    soliplex_frontend (Flutter)                      │
+│                                                                     │
+│  lib/core/providers/api_provider.dart                               │
+│    - observableClientProvider                                       │
+│    - httpTransportProvider                                          │
+│    - apiProvider                                                    │
+│    - soliplexHttpClientProvider                                     │
+│    - httpClientProvider                                             │
+│    - agUiClientProvider                                             │
+│                                                                     │
+│  Depends on: soliplex_client, soliplex_client_native                │
+└─────────────────────────────────────────────────────────────────────┘
+         │
+         │ imports
+         ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    soliplex_client (Pure Dart)                      │
+│                                                                     │
+│  lib/src/http/                                                      │
+│    - soliplex_http_client.dart   (interface)                        │
+│    - http_response.dart          (response data class)              │
+│    - dart_http_client.dart       (default implementation)           │
+│    - observable_http_client.dart (decorator)                        │
+│    - http_client_adapter.dart    (bridges to http.Client)           │
+│    - http_transport.dart         (JSON + exceptions layer)          │
+│    - http_observer.dart          (observer interface + events)      │
+│                                                                     │
+│  lib/src/api/                                                       │
+│    - soliplex_api.dart           (REST API client)                  │
+│                                                                     │
+│  No Flutter dependency - usable in CLI, server, etc.                │
+└─────────────────────────────────────────────────────────────────────┘
+         │
+         │ imports (for platform detection)
+         ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                 soliplex_client_native (Platform)                   │
+│                                                                     │
+│  lib/src/clients/                                                   │
+│    - cupertino_http_client.dart  (iOS/macOS NSURLSession)           │
+│                                                                     │
+│  lib/src/platform/                                                  │
+│    - create_platform_client.dart (factory function)                 │
+│    - create_platform_client_io.dart   (returns Cupertino on Apple)  │
+│    - create_platform_client_stub.dart (returns Dart elsewhere)      │
+│                                                                     │
+│  Depends on: soliplex_client, cupertino_http                        │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Why "Adapter" Only for HttpClientAdapter
+
+```text
+┌────────────────────────────────────────────────────────────────────┐
+│                     Adapter Pattern (GoF)                          │
+│                                                                    │
+│  "Convert the interface of a class into another interface         │
+│   clients expect."                                                 │
+│                                                                    │
+│  HttpClientAdapter is the ONLY true adapter:                       │
+│                                                                    │
+│    AgUiClient ──expects──▶ http.Client                             │
+│                               ▲                                    │
+│                               │ extends                            │
+│                    HttpClientAdapter                               │
+│                               │                                    │
+│                               │ delegates to                       │
+│                               ▼                                    │
+│                    SoliplexHttpClient                              │
+│                                                                    │
+│  It bridges OUR interface (SoliplexHttpClient)                     │
+│  to THEIR interface (http.Client from package:http)                │
+│                                                                    │
+│  Other classes are NOT adapters:                                   │
+│    - DartHttpClient: implementation, not adapter                   │
+│    - CupertinoHttpClient: implementation, not adapter              │
+│    - ObservableHttpClient: decorator pattern, not adapter          │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Commit Plan
