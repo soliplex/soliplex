@@ -684,6 +684,7 @@ class RoomView(t_screen.Screen):
                 json=new_thread_request_json,
             ).json()
             self.thread_id = thread_id = new_thread["thread_id"]
+            self.thread_name = None
             (run_id,) = new_thread["runs"].keys()
 
             self.run_agent_input = agui_core.RunAgentInput(
