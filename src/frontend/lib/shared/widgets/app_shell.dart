@@ -61,10 +61,13 @@ class _InspectorButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      icon: const Icon(Icons.bug_report),
-      tooltip: 'Open HTTP traffic inspector',
-      onPressed: () => Scaffold.of(context).openEndDrawer(),
+    return Semantics(
+      label: 'HTTP traffic inspector',
+      child: IconButton(
+        icon: const Icon(Icons.bug_report),
+        tooltip: 'Open HTTP traffic inspector',
+        onPressed: () => Scaffold.of(context).openEndDrawer(),
+      ),
     );
   }
 }

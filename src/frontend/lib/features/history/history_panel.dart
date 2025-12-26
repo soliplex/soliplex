@@ -159,7 +159,9 @@ class HistoryPanel extends ConsumerWidget {
         roomId: roomId,
         threadId: threadId,
         invalidate: invalidateLastViewed(ref),
-      ),
+      ).catchError((Object e) {
+        debugPrint('Failed to persist last viewed thread: $e');
+      }),
     );
     context.go('/rooms/$roomId?thread=$threadId');
   }

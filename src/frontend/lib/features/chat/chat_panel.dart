@@ -106,68 +106,60 @@ class ChatPanel extends ConsumerWidget {
 
     // Create new thread if needed
     if (thread == null || selection is NewThreadIntent) {
-      try {
-        final api = ref.read(apiProvider);
-        final newThread = await api.createThread(room.id);
-        thread = newThread;
+      final newThread = await _withErrorHandling(
+        context,
+        () => ref.read(apiProvider).createThread(room.id),
+        'create thread',
+      );
+      if (newThread == null) return;
+      thread = newThread;
 
-        // Update selection to the new thread
-        ref
-            .read(threadSelectionProvider.notifier)
-            .set(ThreadSelected(newThread.id));
+      // Update selection to the new thread
+      ref
+          .read(threadSelectionProvider.notifier)
+          .set(ThreadSelected(newThread.id));
 
-        // Persist last viewed and update URL
-        await setLastViewedThread(
-          roomId: room.id,
-          threadId: newThread.id,
-          invalidate: invalidateLastViewed(ref),
-        );
-        if (context.mounted) {
-          context.go('/rooms/${room.id}?thread=${newThread.id}');
-        }
-
-        // Refresh threads list
-        ref.invalidate(threadsProvider(room.id));
-      } on NetworkException catch (e, stackTrace) {
-        debugPrint('Failed to create thread: Network error - ${e.message}');
-        debugPrint(stackTrace.toString());
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Network error: ${e.message}')),
-          );
-        }
-        return;
-      } on AuthException catch (e, stackTrace) {
-        debugPrint('Failed to create thread: Auth error - ${e.message}');
-        debugPrint(stackTrace.toString());
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Authentication error: ${e.message}')),
-          );
-        }
-        return;
-      } catch (e, stackTrace) {
-        debugPrint('Failed to create thread: $e');
-        debugPrint(stackTrace.toString());
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to create thread: $e')),
-          );
-        }
-        return;
+      // Persist last viewed and update URL
+      await setLastViewedThread(
+        roomId: room.id,
+        threadId: newThread.id,
+        invalidate: invalidateLastViewed(ref),
+      );
+      if (context.mounted) {
+        context.go('/rooms/${room.id}?thread=${newThread.id}');
       }
+
+      // Refresh threads list
+      ref.invalidate(threadsProvider(room.id));
     }
 
     // Start the run
-    try {
-      await ref.read(activeRunNotifierProvider.notifier).startRun(
+    if (!context.mounted) return;
+    await _withErrorHandling(
+      context,
+      () => ref.read(activeRunNotifierProvider.notifier).startRun(
             roomId: room.id,
-            threadId: thread.id,
+            threadId: thread!.id,
             userMessage: text,
             existingRunId: thread.initialRunId,
-          );
+          ),
+      'send message',
+    );
+  }
+
+  /// Executes an async action with standardized error handling.
+  ///
+  /// Shows appropriate SnackBar messages for errors.
+  /// Returns null on failure, allowing callers to short-circuit.
+  Future<T?> _withErrorHandling<T>(
+    BuildContext context,
+    Future<T> Function() action,
+    String operation,
+  ) async {
+    try {
+      return await action();
     } on NetworkException catch (e, stackTrace) {
-      debugPrint('Failed to send message: Network error - ${e.message}');
+      debugPrint('Failed to $operation: Network error - ${e.message}');
       debugPrint(stackTrace.toString());
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -175,7 +167,7 @@ class ChatPanel extends ConsumerWidget {
         );
       }
     } on AuthException catch (e, stackTrace) {
-      debugPrint('Failed to send message: Auth error - ${e.message}');
+      debugPrint('Failed to $operation: Auth error - ${e.message}');
       debugPrint(stackTrace.toString());
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -183,14 +175,15 @@ class ChatPanel extends ConsumerWidget {
         );
       }
     } catch (e, stackTrace) {
-      debugPrint('Failed to send message: $e');
+      debugPrint('Failed to $operation: $e');
       debugPrint(stackTrace.toString());
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send message: $e')),
+          SnackBar(content: Text('Failed to $operation: $e')),
         );
       }
     }
+    return null;
   }
 
   /// Handles cancelling the active run.

@@ -51,6 +51,20 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     });
   }
 
+  @override
+  void didUpdateWidget(RoomScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.roomId != widget.roomId) {
+      _initialized = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref
+            .read(threadSelectionProvider.notifier)
+            .set(const InitializingSelection());
+        _initializeThreadSelection();
+      });
+    }
+  }
+
   /// Initializes thread selection with fallback chain.
   ///
   /// Priority: query param → last viewed → first thread.
@@ -93,7 +107,9 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
         roomId: widget.roomId,
         threadId: threadId,
         invalidate: invalidateLastViewed(ref),
-      ),
+      ).catchError((Object e) {
+        debugPrint('Failed to persist last viewed thread: $e');
+      }),
     );
   }
 

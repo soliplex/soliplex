@@ -15,10 +15,13 @@ class _SettingsButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      icon: const Icon(Icons.settings),
-      onPressed: () => context.push('/settings'),
-      tooltip: 'Open settings',
+    return Semantics(
+      label: 'Settings',
+      child: IconButton(
+        icon: const Icon(Icons.settings),
+        onPressed: () => context.push('/settings'),
+        tooltip: 'Open settings',
+      ),
     );
   }
 }
