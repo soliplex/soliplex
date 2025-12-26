@@ -1,4 +1,3 @@
-import importlib.metadata
 import json
 
 import requests
@@ -13,9 +12,6 @@ from textual import widget as t_widget
 from textual import widgets as t_widgets
 
 from soliplex.agui import parser as agui_parser
-
-PYDANTIC_AI_SLIM_VERSION = importlib.metadata.version("pydantic-ai-slim")
-B0RKEN_PYDANTIC_AI_SLIM_VERSIONS = ("1.36.0", "1.37.0")
 
 
 class ListHeaderWidget(t_widget.Widget):
@@ -749,16 +745,9 @@ class RoomView(t_screen.Screen):
 
         event_log = []
 
-        esp_kw = {}
-
-        if PYDANTIC_AI_SLIM_VERSION in B0RKEN_PYDANTIC_AI_SLIM_VERSIONS:
-            print("XXX: stripping 'ActivityMessage'")
-            esp_kw["stripped_message_types"] = agui_core.ActivityMessage
-
         esp = agui_parser.EventStreamParser(
             self.run_agent_input,
             event_log=event_log,
-            **esp_kw,
         )
         request_json = self.run_agent_input.model_dump()
 
