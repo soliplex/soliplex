@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
@@ -114,6 +115,16 @@ class ChatPanel extends ConsumerWidget {
         ref
             .read(threadSelectionProvider.notifier)
             .set(ThreadSelected(newThread.id));
+
+        // Persist last viewed and update URL
+        await setLastViewedThread(
+          roomId: room.id,
+          threadId: newThread.id,
+          invalidate: invalidateLastViewed(ref),
+        );
+        if (context.mounted) {
+          context.go('/rooms/${room.id}?thread=${newThread.id}');
+        }
 
         // Refresh threads list
         ref.invalidate(threadsProvider(room.id));

@@ -282,24 +282,23 @@ Future<void> initializeThreadSelection(String roomId, String? queryThread) async
 ### Completed
 
 - [x] Phase 1: AppShell Foundation
-- [x] Phase 2: Last Viewed Thread Provider (in previous commit)
+- [x] Phase 2: Last Viewed Thread Provider
+- [x] Phase 3: Update Panels (HistoryPanel + ChatPanel persist last viewed)
 
 ### Current Status
 
-Phase 1 implementation complete with known issues to address before Phase 3:
+**Phase 3 complete.** Ready for Phase 4: Consolidate RoomScreen.
 
-1. ~~**ThreadScreen orphaned**~~ — ✅ Deleted `thread_screen.dart` and test.
+Remaining cleanup (will resolve naturally in Phase 4):
 
-2. **`initialThreadId` unused** — Router passes it, tests verify it, but
-   RoomScreen does nothing with it. Wire it up or remove until Phase 3.
+1. **`initialThreadId` unused** — Router passes it, RoomScreen ignores it.
+   Phase 4 will wire this up in the async thread selection flow.
 
-3. ~~**`AppBarConfig` scope creep**~~ — ✅ Renamed to `ShellConfig` (commit 423ce58).
+2. **`_handleNewThread` has no visible effect** — Sets provider state but
+   RoomScreen has no ChatPanel. Phase 4 adds ChatPanel to RoomScreen.
 
-4. **`_handleNewThread` has no visible effect** — Sets provider state but
-   RoomScreen has no ChatPanel. FAB exists before UI supports it.
-
-5. **Inconsistent navigation** — `_handleThreadSelection` uses `go()`,
-   `RoomsScreen.onTap` uses `push()`. Decide on consistent strategy.
+3. **Inconsistent navigation** — `_handleThreadSelection` uses `go()`,
+   `RoomsScreen.onTap` uses `push()`. Decide on consistent strategy in Phase 4.
 
 ## Implementation Phases
 
@@ -355,7 +354,7 @@ Phase 1 implementation complete with known issues to address before Phase 3:
    - Desktop: Row with togglable HistoryPanel + ChatPanel
    - Mobile: ChatPanel + leading Drawer with HistoryPanel
    - Room dropdown with loading/error states
-10. Delete `thread_screen.dart` and its test
+10. ~~Delete `thread_screen.dart` and its test~~ — ✅ Already deleted
 11. Update all related tests
 
 ### Phase 5: Polish

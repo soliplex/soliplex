@@ -189,25 +189,44 @@ final lastViewedThreadProvider = FutureProvider.family<String?, String>(
   },
 );
 
+/// Callback for invalidating the last viewed thread provider.
+typedef InvalidateLastViewed = void Function(String roomId);
+
+/// Creates an [InvalidateLastViewed] callback from a ref.
+///
+/// Use this to pass to [setLastViewedThread] or [clearLastViewedThread]:
+/// ```dart
+/// setLastViewedThread(
+///   roomId: roomId,
+///   threadId: threadId,
+///   invalidate: invalidateLastViewed(ref),
+/// );
+/// ```
+InvalidateLastViewed invalidateLastViewed(WidgetRef ref) {
+  return (roomId) => ref.invalidate(lastViewedThreadProvider(roomId));
+}
+
 /// Saves the last viewed thread for a room.
 ///
-/// After saving, invalidates [lastViewedThreadProvider] for this room
-/// so subsequent reads see the new value.
-Future<void> setLastViewedThread(
-  Ref ref, {
+/// After saving, calls [invalidate] to refresh [lastViewedThreadProvider].
+Future<void> setLastViewedThread({
   required String roomId,
   required String threadId,
+  required InvalidateLastViewed invalidate,
 }) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString('$_lastViewedKeyPrefix$roomId', threadId);
-  ref.invalidate(lastViewedThreadProvider(roomId));
+  invalidate(roomId);
 }
 
 /// Clears the last viewed thread for a room.
 ///
-/// After clearing, invalidates [lastViewedThreadProvider] for this room.
-Future<void> clearLastViewedThread(Ref ref, String roomId) async {
+/// After clearing, calls [invalidate] to refresh [lastViewedThreadProvider].
+Future<void> clearLastViewedThread({
+  required String roomId,
+  required InvalidateLastViewed invalidate,
+}) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.remove('$_lastViewedKeyPrefix$roomId');
-  ref.invalidate(lastViewedThreadProvider(roomId));
+  invalidate(roomId);
 }
