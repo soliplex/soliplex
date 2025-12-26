@@ -4,8 +4,8 @@ import 'package:soliplex_frontend/features/home/home_screen.dart';
 import 'package:soliplex_frontend/features/room/room_screen.dart';
 import 'package:soliplex_frontend/features/rooms/rooms_screen.dart';
 import 'package:soliplex_frontend/features/settings/settings_screen.dart';
-import 'package:soliplex_frontend/shared/widgets/app_bar_config.dart';
 import 'package:soliplex_frontend/shared/widgets/app_shell.dart';
+import 'package:soliplex_frontend/shared/widgets/shell_config.dart';
 
 /// Settings button for AppBar actions.
 ///
@@ -30,7 +30,7 @@ AppShell _staticShell({
   List<Widget> actions = const [],
 }) {
   return AppShell(
-    config: AppBarConfig(title: title, actions: actions),
+    config: ShellConfig(title: title, actions: actions),
     body: body,
   );
 }

@@ -4,11 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 import 'package:soliplex_frontend/shared/utils/date_formatter.dart';
-import 'package:soliplex_frontend/shared/widgets/app_bar_config.dart';
 import 'package:soliplex_frontend/shared/widgets/app_shell.dart';
 import 'package:soliplex_frontend/shared/widgets/empty_state.dart';
 import 'package:soliplex_frontend/shared/widgets/error_display.dart';
 import 'package:soliplex_frontend/shared/widgets/loading_indicator.dart';
+import 'package:soliplex_frontend/shared/widgets/shell_config.dart';
 
 /// Screen displaying threads within a specific room.
 ///
@@ -17,7 +17,7 @@ import 'package:soliplex_frontend/shared/widgets/loading_indicator.dart';
 /// or first thread.
 ///
 /// This is a dynamic screen that builds its own AppShell to provide
-/// dynamic AppBarConfig (room name in title, future: room dropdown,
+/// dynamic ShellConfig (room name in title, future: room dropdown,
 /// sidebar toggle).
 class RoomScreen extends ConsumerWidget {
   const RoomScreen({
@@ -38,7 +38,7 @@ class RoomScreen extends ConsumerWidget {
     final threadsAsync = ref.watch(threadsProvider(roomId));
 
     return AppShell(
-      config: AppBarConfig(
+      config: ShellConfig(
         title: Text(room?.name ?? 'Room'),
         floatingActionButton: FloatingActionButton(
           tooltip: 'Create new thread',

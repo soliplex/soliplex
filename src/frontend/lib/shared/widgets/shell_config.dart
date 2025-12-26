@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
-/// Configuration for AppShell's AppBar and drawers.
+/// Configuration for AppShell's Scaffold.
 ///
-/// Screens provide this to configure the shell's AppBar without
-/// having their own Scaffold. This avoids nested Scaffold issues
-/// where inner Scaffolds can't access the shell's drawers.
+/// Screens provide this to configure the shell without having their own
+/// Scaffold. This avoids nested Scaffold issues where inner Scaffolds
+/// can't access the shell's drawers.
 @immutable
-class AppBarConfig {
-  const AppBarConfig({
+class ShellConfig {
+  const ShellConfig({
     this.title,
     this.leading,
     this.actions = const [],

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:soliplex_frontend/shared/widgets/app_bar_config.dart';
 import 'package:soliplex_frontend/shared/widgets/app_shell.dart';
+import 'package:soliplex_frontend/shared/widgets/shell_config.dart';
 
 void main() {
   group('AppShell', () {
@@ -12,7 +12,7 @@ void main() {
         ProviderScope(
           child: MaterialApp(
             home: AppShell(
-              config: const AppBarConfig(),
+              config: const ShellConfig(),
               body: Container(key: bodyKey, child: const Text('Hello')),
             ),
           ),
@@ -28,7 +28,7 @@ void main() {
         const ProviderScope(
           child: MaterialApp(
             home: AppShell(
-              config: AppBarConfig(title: Text('My Title')),
+              config: ShellConfig(title: Text('My Title')),
               body: SizedBox.shrink(),
             ),
           ),
@@ -44,7 +44,7 @@ void main() {
         ProviderScope(
           child: MaterialApp(
             home: AppShell(
-              config: AppBarConfig(
+              config: ShellConfig(
                 leading: IconButton(
                   key: leadingKey,
                   icon: const Icon(Icons.arrow_back),
@@ -66,7 +66,7 @@ void main() {
         ProviderScope(
           child: MaterialApp(
             home: AppShell(
-              config: AppBarConfig(
+              config: ShellConfig(
                 actions: [
                   IconButton(
                     key: actionKey,
@@ -90,7 +90,7 @@ void main() {
         const ProviderScope(
           child: MaterialApp(
             home: AppShell(
-              config: AppBarConfig(),
+              config: ShellConfig(),
               body: Center(child: Text('Content')),
             ),
           ),
@@ -107,7 +107,7 @@ void main() {
           const ProviderScope(
             child: MaterialApp(
               home: AppShell(
-                config: AppBarConfig(),
+                config: ShellConfig(),
                 body: Center(child: Text('Content')),
               ),
             ),
@@ -122,7 +122,7 @@ void main() {
           const ProviderScope(
             child: MaterialApp(
               home: AppShell(
-                config: AppBarConfig(),
+                config: ShellConfig(),
                 body: Center(child: Text('Content')),
               ),
             ),
@@ -143,7 +143,7 @@ void main() {
           ProviderScope(
             child: MaterialApp(
               home: AppShell(
-                config: AppBarConfig(
+                config: ShellConfig(
                   actions: [
                     IconButton(
                       key: const Key('action'),
@@ -168,7 +168,7 @@ void main() {
           const ProviderScope(
             child: MaterialApp(
               home: AppShell(
-                config: AppBarConfig(),
+                config: ShellConfig(),
                 body: Center(child: Text('Content')),
               ),
             ),
@@ -186,7 +186,7 @@ void main() {
           const ProviderScope(
             child: MaterialApp(
               home: AppShell(
-                config: AppBarConfig(),
+                config: ShellConfig(),
                 body: Center(child: Text('Content')),
               ),
             ),
@@ -212,7 +212,7 @@ void main() {
           const ProviderScope(
             child: MaterialApp(
               home: AppShell(
-                config: AppBarConfig(
+                config: ShellConfig(
                   drawer: Drawer(child: drawerContent),
                 ),
                 body: SizedBox.shrink(),
@@ -232,7 +232,7 @@ void main() {
           const ProviderScope(
             child: MaterialApp(
               home: AppShell(
-                config: AppBarConfig(
+                config: ShellConfig(
                   drawer: Drawer(child: Text('Nav')),
                 ),
                 body: SizedBox.shrink(),
@@ -257,7 +257,7 @@ void main() {
           const ProviderScope(
             child: MaterialApp(
               home: AppShell(
-                config: AppBarConfig(),
+                config: ShellConfig(),
                 body: SizedBox.shrink(),
               ),
             ),
@@ -270,9 +270,9 @@ void main() {
     });
   });
 
-  group('AppBarConfig', () {
+  group('ShellConfig', () {
     test('has sensible defaults', () {
-      const config = AppBarConfig();
+      const config = ShellConfig();
       expect(config.title, isNull);
       expect(config.leading, isNull);
       expect(config.actions, isEmpty);
@@ -290,7 +290,7 @@ void main() {
       ];
       const drawer = Drawer(child: Text('Menu'));
 
-      final config = AppBarConfig(
+      final config = ShellConfig(
         title: title,
         leading: leading,
         actions: actions,

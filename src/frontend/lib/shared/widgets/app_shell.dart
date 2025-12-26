@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:soliplex_frontend/features/inspector/http_inspector_panel.dart';
-import 'package:soliplex_frontend/shared/widgets/app_bar_config.dart';
+import 'package:soliplex_frontend/shared/widgets/shell_config.dart';
 
 /// Shell widget that wraps all screens with a single Scaffold.
 ///
@@ -16,7 +16,7 @@ class AppShell extends StatelessWidget {
   });
 
   /// Configuration for the AppBar and drawers.
-  final AppBarConfig config;
+  final ShellConfig config;
 
   /// The screen's body content.
   final Widget body;
