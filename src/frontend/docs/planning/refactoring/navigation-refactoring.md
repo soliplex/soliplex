@@ -296,13 +296,23 @@ Future<void> initializeThreadSelection(String roomId, String? queryThread) async
 5. Add to `threads_provider.dart`:
 
    ```dart
-   // Simple notifier - no repository class needed
-   class LastViewedThreadNotifier extends AsyncNotifier<Map<String, String>> {
-     // get/set with SharedPreferences
-   }
+   // Read: FutureProvider for observable data
+   final lastViewedThreadProvider = FutureProvider.family<String?, String>(...);
+
+   // Write: Plain functions for imperative commands
+   Future<void> setLastViewedThread(Ref ref, {required String roomId, required String threadId});
+   Future<void> clearLastViewedThread(Ref ref, String roomId);
    ```
 
+   **Design note:** Write operations are functions (not providers) because
+   FutureProvider is for observable data, not imperative commands. Functions
+   that take `Ref` can still invalidate providers for cache coherence.
+
 6. Add tests for provider (including stale thread handling)
+
+   **Testing note:** Functions that accept `Ref` require test helper providers
+   to obtain a Ref in tests. This is a known limitation—the indirection is
+   acceptable when localized to test files.
 
 ### Phase 3: Update Panels
 

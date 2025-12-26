@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:meta/meta.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
@@ -171,3 +172,42 @@ final currentThreadProvider = Provider<ThreadInfo?>((ref) {
     },
   );
 });
+
+// ---------------------------------------------------------------------------
+// Last Viewed Thread Providers
+// ---------------------------------------------------------------------------
+
+const _lastViewedKeyPrefix = 'lastViewedThread_';
+
+/// Provider for getting the last viewed thread ID for a room.
+///
+/// Returns null if no thread was previously viewed in this room.
+final lastViewedThreadProvider = FutureProvider.family<String?, String>(
+  (ref, roomId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('$_lastViewedKeyPrefix$roomId');
+  },
+);
+
+/// Saves the last viewed thread for a room.
+///
+/// After saving, invalidates [lastViewedThreadProvider] for this room
+/// so subsequent reads see the new value.
+Future<void> setLastViewedThread(
+  Ref ref, {
+  required String roomId,
+  required String threadId,
+}) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('$_lastViewedKeyPrefix$roomId', threadId);
+  ref.invalidate(lastViewedThreadProvider(roomId));
+}
+
+/// Clears the last viewed thread for a room.
+///
+/// After clearing, invalidates [lastViewedThreadProvider] for this room.
+Future<void> clearLastViewedThread(Ref ref, String roomId) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.remove('$_lastViewedKeyPrefix$roomId');
+  ref.invalidate(lastViewedThreadProvider(roomId));
+}
