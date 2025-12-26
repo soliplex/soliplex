@@ -198,6 +198,18 @@ class AGUI_RunUsage(pydantic.BaseModel):
         ...
 ```
 
+### AGUI_RunFeedback
+
+Feedback for a run:
+
+```python
+class AGUI_RunFeedback(pydantic.BaseModel):
+    feedback: str              # Required - feedback value (e.g., "positive", "negative")
+    reason: str | None = None  # Optional - reason for the feedback
+```
+
+Used with `POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}/feedback` endpoint.
+
 ### AGUI_NewThreadRequest
 
 Request to create a new thread:

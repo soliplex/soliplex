@@ -11,6 +11,15 @@ Soliplex provides an AI chat interface with:
 - **Rich Responses** - Markdown rendering, code highlighting, and citations
 - **Persistent Threads** - Conversation history saved for later reference
 
+## Interfaces
+
+Soliplex provides two interfaces:
+
+- **Flutter App** - Cross-platform graphical interface (web, mobile, desktop)
+- **TUI Client** - Terminal-based interface for command-line users
+
+See the [CLI Reference](../reference/cli.md#tui-client) for TUI documentation.
+
 ## Sections
 
 - **[Chat Rooms](rooms.md)** - Understanding and using different chat rooms

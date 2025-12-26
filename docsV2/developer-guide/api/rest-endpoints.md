@@ -383,6 +383,33 @@ Update run metadata.
 
 **Response:** 205 Reset Content
 
+### POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}/feedback
+
+Submit or update feedback for a completed run.
+
+**Request Body:**
+```json
+{
+  "feedback": "positive",
+  "reason": "Helpful response"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| feedback | string | Yes | Feedback value (e.g., "positive", "negative") |
+| reason | string | No | Optional reason for the feedback |
+
+**Response:** 205 Reset Content
+
+**Example:**
+```bash
+curl -X POST "http://localhost:8000/api/v1/rooms/haiku/agui/thread123/run456/feedback" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"feedback": "positive", "reason": "Helpful response"}'
+```
+
 ### DELETE /v1/rooms/{room_id}/agui/{thread_id}
 
 Delete a thread and all its runs.

@@ -318,3 +318,70 @@ soliplex-cli list-environment installation.yaml
 # Start with debug logging
 soliplex-cli serve installation.yaml --no-auth-mode --log-level debug
 ```
+
+---
+
+## TUI Client
+
+The TUI (Terminal User Interface) provides a terminal-based chat client for Soliplex.
+
+### soliplex-tui
+
+Start the terminal user interface client.
+
+```bash
+soliplex-tui [options]
+```
+
+**Options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--url` | http://127.0.0.1:8000 | Backend server URL |
+| `--room` | None | Room ID to connect to directly |
+| `-v, --version` | - | Show version and exit |
+| `-h, --help` | - | Show help |
+
+**Examples:**
+```bash
+# Connect to local server
+soliplex-tui --url http://127.0.0.1:8000
+
+# Connect to remote server
+soliplex-tui --url https://soliplex.example.com
+
+# Connect directly to a specific room
+soliplex-tui --url http://127.0.0.1:8000 --room haiku
+```
+
+**Keyboard Shortcuts:**
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Q` | Quit application |
+| `Ctrl+N` | New thread |
+| `Ctrl+T` | List threads |
+| `Ctrl+R` | List runs |
+| `Ctrl+Z` | Edit metadata |
+| `Escape` | Exit/dismiss screen |
+| `Enter` | Submit input |
+
+**Features:**
+
+- Room selection and navigation
+- Thread management (create, select, view history)
+- Run viewing with messages and events
+- Metadata editing for threads and runs
+- Real-time streaming responses
+
+**Requirements:**
+
+The TUI client requires the backend to be running with `--no-auth-mode` for local development:
+
+```bash
+# Terminal 1: Start backend
+soliplex-cli serve example/minimal.yaml --no-auth-mode
+
+# Terminal 2: Start TUI
+soliplex-tui --url http://127.0.0.1:8000
+```
