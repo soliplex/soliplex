@@ -374,7 +374,7 @@ async def post_room_agui_thread_id_meta(
             user_name=user_name,
             room_id=room_id,
             thread_id=thread_id,
-            thread_metadata=new_md_dict,
+            thread_metadata=new_md_dict or None,
         )
 
     except agui_package.AGUI_Exception as exc:
