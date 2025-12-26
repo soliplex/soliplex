@@ -1,6 +1,5 @@
 import json
 
-import requests
 import textual
 from ag_ui import core as agui_core
 from textual import app as t_app
@@ -12,6 +11,7 @@ from textual import widget as t_widget
 from textual import widgets as t_widgets
 
 from soliplex.agui import parser as agui_parser
+from soliplex.tui import rest_api
 
 
 class ListHeaderWidget(t_widget.Widget):
@@ -251,31 +251,36 @@ class RunView(t_screen.Screen):
         super().__init__()
 
     @property
+    def rest_api(self) -> rest_api.TUI_REST_API:
+        return self.app.rest_api
+
+    @property
     def run_info(self) -> dict[str, dict]:
         if self._run_info is None:
-            info = requests.get(
-                f"{self.app.soliplex_url}/api/v1/rooms/{self.room_id}/agui/"
-                f"{self.thread_id}/{self.run_id}",
-            ).json()
-            self._run_info = info
+            self._run_info = self.rest_api.get_run(
+                self.room_id,
+                self.thread_id,
+                self.run_id,
+            )
 
         return self._run_info
 
     @property
     def run_events(self) -> list[dict]:
-        return self.run_info["events"]
+        return self.run_info.get("events", [])
 
     @property
-    def run_messages(self) -> dict[str, dict]:
-        return self.run_info["run_input"]["messages"]
+    def run_messages(self) -> list[dict]:
+        run_input = self.run_info.get("run_input") or {}
+        return run_input.get("messages", [])
 
     @property
     def run_meta(self) -> dict[str, str]:
-        return self.run_info["metadata"]
+        return self.run_info.get("metadata", {})
 
     @property
     def run_usage(self) -> dict[str, int]:
-        return self.run_info["usage"]
+        return self.run_info.get("usage", {})
 
     @property
     def label_text(self) -> dict[str, dict]:
@@ -328,10 +333,11 @@ class RunView(t_screen.Screen):
         payload = await self.app.push_screen_wait(ermd)
 
         if payload is not None:
-            requests.post(
-                f"{self.app.soliplex_url}/api/v1/rooms/{self.room_id}/agui/"
-                f"{self.thread_id}/{self.run_id}/meta",
-                json=payload,
+            self.rest_api.post_run_metadata(
+                self.room_id,
+                self.thread_id,
+                self.run_id,
+                payload,
             )
 
             self._run_info["metadata"] = payload
@@ -365,12 +371,16 @@ class ThreadRunsView(t_screen.Screen):
         super().__init__()
 
     @property
+    def rest_api(self) -> rest_api.TUI_REST_API:
+        return self.app.rest_api
+
+    @property
     def runs(self) -> dict[str, dict]:
         if self._runs is None:
-            info = requests.get(
-                f"{self.app.soliplex_url}/api/v1/rooms/{self.room_id}/agui/"
-                f"{self.thread_id}",
-            ).json()
+            info = self.rest_api.get_thread(
+                self.room_id,
+                self.thread_id,
+            )
             self._runs = info["runs"]
 
         return self._runs
@@ -436,11 +446,13 @@ class RoomThreadsView(t_screen.Screen):
         super().__init__()
 
     @property
+    def rest_api(self) -> rest_api.TUI_REST_API:
+        return self.app.rest_api
+
+    @property
     def threads(self) -> dict[str, dict]:
         if self._threads is None:
-            info = requests.get(
-                f"{self.app.soliplex_url}/api/v1/rooms/{self.room_id}/agui",
-            ).json()
+            info = self.rest_api.get_room_threads(self.room_id)
             self._threads = info["threads"]
             self._threads_by_id = {
                 thread_info["thread_id"]: thread_info
@@ -549,6 +561,10 @@ class RoomView(t_screen.Screen):
         self.room_info = room_info
         super().__init__()
 
+    @property
+    def rest_api(self) -> rest_api.TUI_REST_API:
+        return self.app.rest_api
+
     def compose(self) -> t_app.ComposeResult:
         room_info = self.room_info
         yield t_widgets.Header()
@@ -622,10 +638,10 @@ class RoomView(t_screen.Screen):
         payload = await self.app.push_screen_wait(thread_meta_view)
 
         if payload is not None:
-            requests.post(
-                f"{self.app.soliplex_url}/api/v1/rooms/{self.room_id}/agui/"
-                f"{self.thread_id}/meta",
-                json=payload,
+            self.rest_api.post_thread_metadata(
+                self.room_id,
+                self.thread_id,
+                payload,
             )
 
             self.thread_name = payload.get("name")
@@ -639,10 +655,7 @@ class RoomView(t_screen.Screen):
 
     def select_thread(self, thread_id: str):
         self.thread_id = thread_id
-        room_url = f"{self.app.soliplex_url}/api/v1/rooms/{self.room_id}"
-        thread_url = f"{room_url}/agui/{thread_id}"
-
-        info = requests.get(thread_url).json()
+        info = self.rest_api.get_thread(self.room_id, thread_id)
         meta = info.get("metadata")
 
         if meta is not None:
@@ -665,8 +678,11 @@ class RoomView(t_screen.Screen):
         if run_input is not None:
             rai = agui_core.RunAgentInput.model_validate(run_input)
             esp = agui_parser.EventStreamParser(rai)
-            run_url = f"{thread_url}/{last_run['run_id']}"
-            full_run_info = requests.get(run_url).json()
+            full_run_info = self.rest_api.get_run(
+                self.room_id,
+                thread_id,
+                last_run["run_id"],
+            )
 
             for event_info in full_run_info["events"]:
                 event = agui_parser.agui_event_from_json(event_info)
@@ -697,18 +713,13 @@ class RoomView(t_screen.Screen):
         """Get the AG-UI response in a thread."""
         self.run_count += 1
         response_content = ""
-        room_url = f"{self.app.soliplex_url}/api/v1/rooms/{self.room_id}"
-        room_agui_url_base = f"{room_url}/agui"
 
         if self.run_agent_input is None:
-            new_thread_request_url = room_agui_url_base
-            new_thread_request_json = {
+            request = {
                 "name": f"{self.room_id}: {prompt}",
             }
-            new_thread = requests.post(
-                new_thread_request_url,
-                json=new_thread_request_json,
-            ).json()
+            new_thread = self.rest_api.post_new_thread(self.room_id, request)
+
             self.thread_id = thread_id = new_thread["thread_id"]
             self.thread_name = None
             (run_id,) = new_thread["runs"].keys()
@@ -726,12 +737,11 @@ class RoomView(t_screen.Screen):
             )
         else:
             thread_id = self.run_agent_input.thread_id
-            new_run_request_url = f"{room_agui_url_base}/{thread_id}"
-            new_run_request_json = {}
-            new_run = requests.post(
-                new_run_request_url,
-                json=new_run_request_json,
-            ).json()
+            new_run = self.rest_api.post_new_run(
+                self.room_id,
+                thread_id,
+                request={},
+            )
             run_id = new_run["run_id"]
             self.run_agent_input.parent_run_id = new_run["parent_run_id"]
             self.run_agent_input.run_id = run_id
@@ -749,13 +759,12 @@ class RoomView(t_screen.Screen):
             self.run_agent_input,
             event_log=event_log,
         )
-        request_json = self.run_agent_input.model_dump()
 
-        request_url = f"{room_agui_url_base}/{thread_id}/{run_id}"
-        streaming_response = requests.post(
-            request_url,
-            json=request_json,
-            stream=True,
+        streaming_response = self.rest_api.post_start_run(
+            self.room_id,
+            thread_id,
+            run_id,
+            self.run_agent_input,
         )
 
         for line in streaming_response.iter_lines():
@@ -823,6 +832,7 @@ class SoliplexTUI(t_app.App):
 
     def __init__(self, soliplex_url="http://localhost:8000", *args, **kw):
         self.soliplex_url = soliplex_url
+        self.rest_api = rest_api.TUI_REST_API(soliplex_url)
         self._rooms = None
 
         super().__init__(*args, **kw)
@@ -833,9 +843,7 @@ class SoliplexTUI(t_app.App):
     @property
     def rooms(self) -> dict[str, dict]:
         if self._rooms is None:
-            self._rooms = requests.get(
-                f"{self.soliplex_url}/api/v1/rooms",
-            ).json()
+            self._rooms = self.rest_api.get_rooms()
 
         return self._rooms
 
