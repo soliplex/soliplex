@@ -196,15 +196,73 @@ final currentThreadProvider = Provider<ThreadInfo?>((ref) {
 // Last Viewed Thread Providers
 // ---------------------------------------------------------------------------
 
+/// Sealed class representing the last viewed thread state.
+///
+/// Use pattern matching for exhaustive handling:
+/// ```dart
+/// switch (lastViewed) {
+///   case HasLastViewed(:final threadId):
+///     // Use the previously viewed thread
+///   case NoLastViewed():
+///     // No previous thread for this room
+/// }
+/// ```
+@immutable
+sealed class LastViewed {
+  const LastViewed();
+}
+
+/// A thread was previously viewed in this room.
+@immutable
+class HasLastViewed extends LastViewed {
+  const HasLastViewed(this.threadId);
+
+  final String threadId;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HasLastViewed &&
+          runtimeType == other.runtimeType &&
+          threadId == other.threadId;
+
+  @override
+  int get hashCode => threadId.hashCode;
+
+  @override
+  String toString() => 'HasLastViewed($threadId)';
+}
+
+/// No thread was previously viewed in this room.
+@immutable
+class NoLastViewed extends LastViewed {
+  const NoLastViewed();
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is NoLastViewed;
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() => 'NoLastViewed()';
+}
+
 const _lastViewedKeyPrefix = 'lastViewedThread_';
 
 /// Provider for getting the last viewed thread ID for a room.
 ///
-/// Returns null if no thread was previously viewed in this room.
-final lastViewedThreadProvider = FutureProvider.family<String?, String>(
+/// Returns [HasLastViewed] with the thread ID if previously viewed,
+/// or [NoLastViewed] if no thread was viewed in this room.
+final lastViewedThreadProvider = FutureProvider.family<LastViewed, String>(
   (ref, roomId) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('$_lastViewedKeyPrefix$roomId');
+    final threadId = prefs.getString('$_lastViewedKeyPrefix$roomId');
+    if (threadId != null) {
+      return HasLastViewed(threadId);
+    }
+    return const NoLastViewed();
   },
 );
 

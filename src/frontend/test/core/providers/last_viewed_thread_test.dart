@@ -10,18 +10,18 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    test('returns null when no thread was viewed for room', () async {
+    test('returns NoLastViewed when no thread was viewed for room', () async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      final threadId = await container.read(
+      final lastViewed = await container.read(
         lastViewedThreadProvider('room-1').future,
       );
 
-      expect(threadId, isNull);
+      expect(lastViewed, isA<NoLastViewed>());
     });
 
-    test('returns last viewed thread for room', () async {
+    test('returns HasLastViewed with thread for room', () async {
       SharedPreferences.setMockInitialValues({
         'lastViewedThread_room-1': 'thread-123',
       });
@@ -29,11 +29,12 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      final threadId = await container.read(
+      final lastViewed = await container.read(
         lastViewedThreadProvider('room-1').future,
       );
 
-      expect(threadId, 'thread-123');
+      expect(lastViewed, isA<HasLastViewed>());
+      expect((lastViewed as HasLastViewed).threadId, 'thread-123');
     });
 
     test('returns different threads for different rooms', () async {
@@ -45,15 +46,15 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      final thread1 = await container.read(
+      final lastViewed1 = await container.read(
         lastViewedThreadProvider('room-1').future,
       );
-      final thread2 = await container.read(
+      final lastViewed2 = await container.read(
         lastViewedThreadProvider('room-2').future,
       );
 
-      expect(thread1, 'thread-a');
-      expect(thread2, 'thread-b');
+      expect((lastViewed1 as HasLastViewed).threadId, 'thread-a');
+      expect((lastViewed2 as HasLastViewed).threadId, 'thread-b');
     });
   });
 
@@ -118,11 +119,11 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      // Initially null
-      var threadId = await container.read(
+      // Initially NoLastViewed
+      var lastViewed = await container.read(
         lastViewedThreadProvider('room-1').future,
       );
-      expect(threadId, isNull);
+      expect(lastViewed, isA<NoLastViewed>());
 
       // Set value
       await container.read(
@@ -132,10 +133,10 @@ void main() {
       );
 
       // Re-read - should see new value
-      threadId = await container.read(
+      lastViewed = await container.read(
         lastViewedThreadProvider('room-1').future,
       );
-      expect(threadId, 'thread-789');
+      expect((lastViewed as HasLastViewed).threadId, 'thread-789');
     });
   });
 
@@ -179,9 +180,8 @@ void main() {
     });
 
     testWidgets('creates working callback from WidgetRef', (tester) async {
-      // Track if invalidation was called
-      var invalidateCalled = false;
-      String? invalidatedRoomId;
+      // Track invalidation calls
+      final invalidateCalls = <String>[];
 
       await tester.pumpWidget(
         ProviderScope(
@@ -198,8 +198,7 @@ void main() {
                       roomId: 'room-1',
                       threadId: 'thread-widget-test',
                       invalidate: (roomId) {
-                        invalidateCalled = true;
-                        invalidatedRoomId = roomId;
+                        invalidateCalls.add(roomId);
                         invalidate(roomId);
                       },
                     );
@@ -221,12 +220,11 @@ void main() {
       expect(prefs.getString('lastViewedThread_room-1'), 'thread-widget-test');
 
       // Verify invalidation callback was invoked
-      expect(invalidateCalled, isTrue);
-      expect(invalidatedRoomId, 'room-1');
+      expect(invalidateCalls, ['room-1']);
     });
 
     testWidgets('invalidates provider so new value is visible', (tester) async {
-      String? readValue;
+      LastViewed? readValue;
 
       await tester.pumpWidget(
         ProviderScope(
@@ -271,7 +269,7 @@ void main() {
       await tester.tap(find.byKey(const Key('read')));
       await tester.pumpAndSettle();
 
-      expect(readValue, 'thread-new');
+      expect((readValue! as HasLastViewed).threadId, 'thread-new');
     });
   });
 }

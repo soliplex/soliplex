@@ -88,10 +88,9 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     // 2. Last viewed (if valid)
     final lastViewed =
         await ref.read(lastViewedThreadProvider(widget.roomId).future);
-    if (lastViewed != null && threads.any((t) => t.id == lastViewed)) {
-      ref
-          .read(threadSelectionProvider.notifier)
-          .set(ThreadSelected(lastViewed));
+    if (lastViewed case HasLastViewed(:final threadId)
+        when threads.any((t) => t.id == threadId)) {
+      ref.read(threadSelectionProvider.notifier).set(ThreadSelected(threadId));
       return;
     }
 
@@ -182,13 +181,17 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
       ),
-      error: (_, __) => Semantics(
-        label: 'Error loading rooms',
-        child: const Tooltip(
-          message: 'Failed to load rooms',
-          child: Icon(Icons.error_outline),
-        ),
-      ),
+      error: (error, stackTrace) {
+        debugPrint('Failed to load rooms: $error');
+        debugPrint(stackTrace.toString());
+        return Semantics(
+          label: 'Error loading rooms',
+          child: const Tooltip(
+            message: 'Failed to load rooms',
+            child: Icon(Icons.error_outline),
+          ),
+        );
+      },
     );
   }
 

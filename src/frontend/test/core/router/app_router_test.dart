@@ -25,7 +25,8 @@ Widget createRouterApp({List<dynamic> overrides = const []}) {
 List<dynamic> roomScreenOverrides(String roomId) {
   return [
     threadsProvider(roomId).overrideWith((ref) async => []),
-    lastViewedThreadProvider(roomId).overrideWith((ref) async => null),
+    lastViewedThreadProvider(roomId)
+        .overrideWith((ref) async => const NoLastViewed()),
   ];
 }
 

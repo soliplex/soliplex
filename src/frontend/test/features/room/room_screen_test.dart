@@ -28,7 +28,7 @@ void main() {
           overrides: [
             threadsProvider('general').overrideWith((ref) async => []),
             lastViewedThreadProvider('general')
-                .overrideWith((ref) async => null),
+                .overrideWith((ref) async => const NoLastViewed()),
           ],
         ),
       );
@@ -51,7 +51,7 @@ void main() {
           overrides: [
             threadsProvider('general').overrideWith((ref) async => []),
             lastViewedThreadProvider('general')
-                .overrideWith((ref) async => null),
+                .overrideWith((ref) async => const NoLastViewed()),
           ],
         ),
       );
@@ -69,7 +69,7 @@ void main() {
           overrides: [
             threadsProvider('general').overrideWith((ref) async => []),
             lastViewedThreadProvider('general')
-                .overrideWith((ref) async => null),
+                .overrideWith((ref) async => const NoLastViewed()),
           ],
         ),
       );
@@ -92,7 +92,7 @@ void main() {
           overrides: [
             threadsProvider('general').overrideWith((ref) async => []),
             lastViewedThreadProvider('general')
-                .overrideWith((ref) async => null),
+                .overrideWith((ref) async => const NoLastViewed()),
           ],
         ),
       );
@@ -123,7 +123,7 @@ void main() {
           overrides: [
             threadsProvider('general').overrideWith((ref) async => []),
             lastViewedThreadProvider('general')
-                .overrideWith((ref) async => null),
+                .overrideWith((ref) async => const NoLastViewed()),
           ],
         ),
       );
@@ -160,7 +160,7 @@ void main() {
           overrides: [
             threadsProvider('general').overrideWith((ref) async => mockThreads),
             lastViewedThreadProvider('general')
-                .overrideWith((ref) async => 'thread-1'),
+                .overrideWith((ref) async => const HasLastViewed('thread-1')),
           ],
           onContainerCreated: (c) => container = c,
         ),
@@ -187,7 +187,7 @@ void main() {
           overrides: [
             threadsProvider('general').overrideWith((ref) async => mockThreads),
             lastViewedThreadProvider('general')
-                .overrideWith((ref) async => 'thread-2'),
+                .overrideWith((ref) async => const HasLastViewed('thread-2')),
           ],
           onContainerCreated: (c) => container = c,
         ),
@@ -215,7 +215,7 @@ void main() {
           overrides: [
             threadsProvider('general').overrideWith((ref) async => mockThreads),
             lastViewedThreadProvider('general')
-                .overrideWith((ref) async => null),
+                .overrideWith((ref) async => const NoLastViewed()),
           ],
           onContainerCreated: (c) => container = c,
         ),
@@ -237,7 +237,7 @@ void main() {
           overrides: [
             threadsProvider('empty-room').overrideWith((ref) async => []),
             lastViewedThreadProvider('empty-room')
-                .overrideWith((ref) async => null),
+                .overrideWith((ref) async => const NoLastViewed()),
           ],
           onContainerCreated: (c) => container = c,
         ),
@@ -258,7 +258,7 @@ void main() {
           overrides: [
             threadsProvider('general').overrideWith((ref) async => []),
             lastViewedThreadProvider('general')
-                .overrideWith((ref) async => null),
+                .overrideWith((ref) async => const NoLastViewed()),
             roomsProvider.overrideWith(
               (ref) async => [
                 TestData.createRoom(id: 'general', name: 'General'),

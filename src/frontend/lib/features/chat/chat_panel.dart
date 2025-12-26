@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
+import 'package:soliplex_frontend/core/models/result.dart';
 import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
@@ -101,36 +102,43 @@ class ChatPanel extends ConsumerWidget {
       return;
     }
 
-    var thread = ref.read(currentThreadProvider);
+    final thread = ref.read(currentThreadProvider);
     final selection = ref.read(threadSelectionProvider);
 
     // Create new thread if needed
+    final ThreadInfo effectiveThread;
     if (thread == null || selection is NewThreadIntent) {
-      final newThread = await _withErrorHandling(
+      final result = await _withErrorHandling(
         context,
         () => ref.read(apiProvider).createThread(room.id),
         'create thread',
       );
-      if (newThread == null) return;
-      thread = newThread;
+      switch (result) {
+        case Ok(:final value):
+          effectiveThread = value;
+        case Err():
+          return;
+      }
 
       // Update selection to the new thread
       ref
           .read(threadSelectionProvider.notifier)
-          .set(ThreadSelected(newThread.id));
+          .set(ThreadSelected(effectiveThread.id));
 
       // Persist last viewed and update URL
       await setLastViewedThread(
         roomId: room.id,
-        threadId: newThread.id,
+        threadId: effectiveThread.id,
         invalidate: invalidateLastViewed(ref),
       );
       if (context.mounted) {
-        context.go('/rooms/${room.id}?thread=${newThread.id}');
+        context.go('/rooms/${room.id}?thread=${effectiveThread.id}');
       }
 
       // Refresh threads list
       ref.invalidate(threadsProvider(room.id));
+    } else {
+      effectiveThread = thread;
     }
 
     // Start the run
@@ -139,9 +147,9 @@ class ChatPanel extends ConsumerWidget {
       context,
       () => ref.read(activeRunNotifierProvider.notifier).startRun(
             roomId: room.id,
-            threadId: thread!.id,
+            threadId: effectiveThread.id,
             userMessage: text,
-            existingRunId: thread.initialRunId,
+            existingRunId: effectiveThread.initialRunId,
           ),
       'send message',
     );
@@ -150,14 +158,14 @@ class ChatPanel extends ConsumerWidget {
   /// Executes an async action with standardized error handling.
   ///
   /// Shows appropriate SnackBar messages for errors.
-  /// Returns null on failure, allowing callers to short-circuit.
-  Future<T?> _withErrorHandling<T>(
+  /// Returns [Ok] with value on success, [Err] on error.
+  Future<Result<T>> _withErrorHandling<T>(
     BuildContext context,
     Future<T> Function() action,
     String operation,
   ) async {
     try {
-      return await action();
+      return Ok(await action());
     } on NetworkException catch (e, stackTrace) {
       debugPrint('Failed to $operation: Network error - ${e.message}');
       debugPrint(stackTrace.toString());
@@ -166,6 +174,7 @@ class ChatPanel extends ConsumerWidget {
           SnackBar(content: Text('Network error: ${e.message}')),
         );
       }
+      return Err('Network error: ${e.message}');
     } on AuthException catch (e, stackTrace) {
       debugPrint('Failed to $operation: Auth error - ${e.message}');
       debugPrint(stackTrace.toString());
@@ -174,6 +183,7 @@ class ChatPanel extends ConsumerWidget {
           SnackBar(content: Text('Authentication error: ${e.message}')),
         );
       }
+      return Err('Authentication error: ${e.message}');
     } catch (e, stackTrace) {
       debugPrint('Failed to $operation: $e');
       debugPrint(stackTrace.toString());
@@ -182,8 +192,8 @@ class ChatPanel extends ConsumerWidget {
           SnackBar(content: Text('Failed to $operation: $e')),
         );
       }
+      return Err('$e');
     }
-    return null;
   }
 
   /// Handles cancelling the active run.

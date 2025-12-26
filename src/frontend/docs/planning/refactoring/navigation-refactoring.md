@@ -296,6 +296,32 @@ Future<void> initializeThreadSelection(String roomId, String? queryThread) async
 - Room dropdown with loading/error states
 - Comprehensive test coverage (383 tests passing)
 
+### Null Elimination (Post Phase 4)
+
+Refactored to eliminate null returns/assignments where feasible:
+
+**Fixed:**
+
+| Issue | Solution |
+|-------|----------|
+| `_withErrorHandling` returned `null` on failure | Use `Result<T>` sealed class (`Ok`/`Err`) |
+| `lastViewedThreadProvider` returned `String?` | Use `LastViewed` sealed class (`HasLastViewed`/`NoLastViewed`) |
+| `thread!.id` force unwrap in ChatPanel | Restructured with `final effectiveThread` |
+| `error: (_, __)` discarding error info | Added `debugPrint` logging |
+
+**Unfixable (framework constraints):**
+
+| Issue | Reason |
+|-------|--------|
+| `initialThreadId: String?` | GoRouter query params are inherently nullable |
+| `ShellConfig` nullable fields | Flutter Scaffold API requires nullable drawer/FAB |
+| `currentRoom?.name ?? 'none'` | Room can be null when no room selected |
+
+**New types added:**
+
+- `lib/core/models/result.dart` - `Result<T>` with `Ok`/`Err` variants
+- `LastViewed` sealed class in `threads_provider.dart` with `HasLastViewed`/`NoLastViewed`
+
 ## Implementation Phases
 
 ### Phase 1: AppShell Foundation
