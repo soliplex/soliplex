@@ -3,21 +3,38 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+// ignore: implementation_imports, depend_on_referenced_packages
+import 'package:riverpod/src/framework.dart' show Override;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 import 'package:soliplex_frontend/core/router/app_router.dart';
 import 'package:soliplex_frontend/features/home/home_screen.dart';
 import 'package:soliplex_frontend/features/room/room_screen.dart';
 import 'package:soliplex_frontend/features/rooms/rooms_screen.dart';
 import 'package:soliplex_frontend/features/settings/settings_screen.dart';
 
-Widget createRouterApp() {
+Widget createRouterApp({List<Override> overrides = const []}) {
   return ProviderScope(
+    overrides: overrides,
     child: MaterialApp.router(
       routerConfig: appRouter,
     ),
   );
 }
 
+/// Common overrides for tests that navigate to RoomScreen.
+List<Override> roomScreenOverrides(String roomId) {
+  return [
+    threadsProvider(roomId).overrideWith((ref) async => []),
+    lastViewedThreadProvider(roomId).overrideWith((ref) async => null),
+  ];
+}
+
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   group('AppRouter', () {
     testWidgets('navigates to home screen at /', (tester) async {
       await tester.pumpWidget(createRouterApp());
@@ -39,7 +56,9 @@ void main() {
     });
 
     testWidgets('navigates to room screen with roomId', (tester) async {
-      await tester.pumpWidget(createRouterApp());
+      await tester.pumpWidget(
+        createRouterApp(overrides: roomScreenOverrides('general')),
+      );
 
       await tester.pumpAndSettle();
 
@@ -51,7 +70,9 @@ void main() {
 
     testWidgets('redirects old thread URL to query param format',
         (tester) async {
-      await tester.pumpWidget(createRouterApp());
+      await tester.pumpWidget(
+        createRouterApp(overrides: roomScreenOverrides('general')),
+      );
 
       await tester.pumpAndSettle();
 
@@ -65,7 +86,9 @@ void main() {
     });
 
     testWidgets('passes thread query param to RoomScreen', (tester) async {
-      await tester.pumpWidget(createRouterApp());
+      await tester.pumpWidget(
+        createRouterApp(overrides: roomScreenOverrides('general')),
+      );
 
       await tester.pumpAndSettle();
 
@@ -78,7 +101,9 @@ void main() {
 
     testWidgets('RoomScreen receives null when no thread query param',
         (tester) async {
-      await tester.pumpWidget(createRouterApp());
+      await tester.pumpWidget(
+        createRouterApp(overrides: roomScreenOverrides('general')),
+      );
 
       await tester.pumpAndSettle();
 
@@ -90,7 +115,10 @@ void main() {
     });
 
     testWidgets('navigates to settings screen', (tester) async {
-      await tester.pumpWidget(createRouterApp());
+      // Override providers to prevent async init issues from prior navigation
+      await tester.pumpWidget(
+        createRouterApp(overrides: roomScreenOverrides('general')),
+      );
 
       await tester.pumpAndSettle();
 
@@ -101,7 +129,9 @@ void main() {
     });
 
     testWidgets('shows error page for unknown route', (tester) async {
-      await tester.pumpWidget(createRouterApp());
+      await tester.pumpWidget(
+        createRouterApp(overrides: roomScreenOverrides('general')),
+      );
 
       await tester.pumpAndSettle();
 
@@ -113,7 +143,9 @@ void main() {
     });
 
     testWidgets('error page has go home button', (tester) async {
-      await tester.pumpWidget(createRouterApp());
+      await tester.pumpWidget(
+        createRouterApp(overrides: roomScreenOverrides('general')),
+      );
 
       await tester.pumpAndSettle();
 

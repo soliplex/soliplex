@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,14 +14,14 @@ import 'package:soliplex_frontend/shared/widgets/shell_config.dart';
 
 /// Screen displaying threads within a specific room.
 ///
-/// When [initialThreadId] is provided (from query param), the screen
-/// will select that thread. Otherwise, it falls back to last viewed
-/// or first thread.
+/// Implements async thread selection on mount:
+/// 1. Query param (`initialThreadId`) if valid
+/// 2. Last viewed thread from SharedPreferences if valid
+/// 3. First thread in list
 ///
 /// This is a dynamic screen that builds its own AppShell to provide
-/// dynamic ShellConfig (room name in title, future: room dropdown,
-/// sidebar toggle).
-class RoomScreen extends ConsumerWidget {
+/// dynamic ShellConfig (room name in title, sidebar toggle, room dropdown).
+class RoomScreen extends ConsumerStatefulWidget {
   const RoomScreen({
     required this.roomId,
     this.initialThreadId,
@@ -29,20 +31,80 @@ class RoomScreen extends ConsumerWidget {
   final String roomId;
 
   /// Thread ID from query param (?thread=xyz). Used for deep linking.
-  // TODO(Phase3): Use initialThreadId in async thread selection flow
   final String? initialThreadId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RoomScreen> createState() => _RoomScreenState();
+}
+
+class _RoomScreenState extends ConsumerState<RoomScreen> {
+  bool _initialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeThreadSelection();
+    });
+  }
+
+  /// Initializes thread selection with fallback chain.
+  ///
+  /// Priority: query param → last viewed → first thread.
+  Future<void> _initializeThreadSelection() async {
+    if (_initialized) return;
+    _initialized = true;
+
+    final threads = await ref.read(threadsProvider(widget.roomId).future);
+    if (threads.isEmpty) {
+      ref.read(threadSelectionProvider.notifier).set(const NoThreadSelected());
+      return;
+    }
+
+    // 1. Query param (if valid)
+    if (widget.initialThreadId != null &&
+        threads.any((t) => t.id == widget.initialThreadId)) {
+      _selectThread(widget.initialThreadId!);
+      return;
+    }
+
+    // 2. Last viewed (if valid)
+    final lastViewed =
+        await ref.read(lastViewedThreadProvider(widget.roomId).future);
+    if (lastViewed != null && threads.any((t) => t.id == lastViewed)) {
+      ref
+          .read(threadSelectionProvider.notifier)
+          .set(ThreadSelected(lastViewed));
+      return;
+    }
+
+    // 3. First thread
+    _selectThread(threads.first.id);
+  }
+
+  /// Selects a thread and persists as last viewed.
+  void _selectThread(String threadId) {
+    ref.read(threadSelectionProvider.notifier).set(ThreadSelected(threadId));
+    unawaited(
+      setLastViewedThread(
+        roomId: widget.roomId,
+        threadId: threadId,
+        invalidate: invalidateLastViewed(ref),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final room = ref.watch(currentRoomProvider);
-    final threadsAsync = ref.watch(threadsProvider(roomId));
+    final threadsAsync = ref.watch(threadsProvider(widget.roomId));
 
     return AppShell(
       config: ShellConfig(
         title: Text(room?.name ?? 'Room'),
         floatingActionButton: FloatingActionButton(
           tooltip: 'Create new thread',
-          onPressed: () => _handleNewThread(context, ref),
+          onPressed: _handleNewThread,
           child: const Icon(Icons.add),
         ),
       ),
@@ -68,7 +130,7 @@ class RoomScreen extends ConsumerWidget {
                   'Created ${formatRelativeTime(thread.createdAt)}',
                 ),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => _handleThreadSelection(context, ref, thread.id),
+                onTap: () => _handleThreadSelection(thread.id),
               );
             },
           );
@@ -76,25 +138,19 @@ class RoomScreen extends ConsumerWidget {
         loading: () => const LoadingIndicator(message: 'Loading threads...'),
         error: (error, stack) => ErrorDisplay(
           error: error,
-          onRetry: () => ref.invalidate(threadsProvider(roomId)),
+          onRetry: () => ref.invalidate(threadsProvider(widget.roomId)),
         ),
       ),
     );
   }
 
-  void _handleThreadSelection(
-    BuildContext context,
-    WidgetRef ref,
-    String threadId,
-  ) {
-    ref.read(threadSelectionProvider.notifier).set(ThreadSelected(threadId));
-    // Use query param format directly (not old path that triggers redirect)
-    context.go('/rooms/$roomId?thread=$threadId');
+  void _handleThreadSelection(String threadId) {
+    _selectThread(threadId);
+    context.go('/rooms/${widget.roomId}?thread=$threadId');
   }
 
-  void _handleNewThread(BuildContext context, WidgetRef ref) {
+  void _handleNewThread() {
     ref.read(threadSelectionProvider.notifier).set(const NewThreadIntent());
-    // Stay on room screen - ChatPanel will create thread on first message
-    // No navigation needed since we're already on RoomScreen
+    // ChatPanel will create thread on first message
   }
 }
