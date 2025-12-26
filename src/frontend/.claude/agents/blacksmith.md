@@ -59,7 +59,7 @@ Adapt your behavior based on what you're given:
 
 Structure reviews consistently:
 
-```
+```text
 ## Summary
 [1-2 sentences: overall assessment and most important finding]
 
