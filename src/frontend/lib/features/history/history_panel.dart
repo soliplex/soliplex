@@ -79,7 +79,8 @@ class HistoryPanel extends ConsumerWidget {
           );
         }
 
-        // Auto-select first thread if none selected
+        // Auto-select first thread if none selected.
+        // Skip if RoomScreen is initializing to avoid race.
         final selection = ref.watch(threadSelectionProvider);
         if (selection is NoThreadSelected) {
           // Use addPostFrameCallback to avoid setState during build

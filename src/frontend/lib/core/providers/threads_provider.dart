@@ -68,6 +68,25 @@ class NoThreadSelected extends ThreadSelection {
   String toString() => 'NoThreadSelected()';
 }
 
+/// Thread selection is being initialized by RoomScreen.
+///
+/// This state prevents HistoryPanel from auto-selecting a thread while
+/// RoomScreen's async initialization is in progress.
+@immutable
+class InitializingSelection extends ThreadSelection {
+  const InitializingSelection();
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is InitializingSelection;
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() => 'InitializingSelection()';
+}
+
 /// A specific thread is selected.
 @immutable
 class ThreadSelected extends ThreadSelection {

@@ -43,6 +43,10 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Set initializing state to prevent HistoryPanel race condition
+      ref
+          .read(threadSelectionProvider.notifier)
+          .set(const InitializingSelection());
       _initializeThreadSelection();
     });
   }
@@ -108,10 +112,13 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
         leading: isDesktop ? _buildSidebarToggle() : null,
         title: _buildRoomDropdown(),
         drawer: isDesktop ? null : const HistoryPanel(),
-        floatingActionButton: FloatingActionButton(
-          tooltip: 'Create new thread',
-          onPressed: _handleNewThread,
-          child: const Icon(Icons.add),
+        floatingActionButton: Semantics(
+          label: 'Create new thread',
+          child: FloatingActionButton(
+            tooltip: 'Create new thread',
+            onPressed: _handleNewThread,
+            child: const Icon(Icons.add),
+          ),
         ),
       ),
       body: isDesktop ? _buildDesktopLayout(context) : const ChatPanel(),

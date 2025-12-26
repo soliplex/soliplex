@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-// ignore: implementation_imports, depend_on_referenced_packages
-import 'package:riverpod/src/framework.dart' show Override;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 import 'package:soliplex_frontend/core/router/app_router.dart';
@@ -13,9 +11,10 @@ import 'package:soliplex_frontend/features/room/room_screen.dart';
 import 'package:soliplex_frontend/features/rooms/rooms_screen.dart';
 import 'package:soliplex_frontend/features/settings/settings_screen.dart';
 
-Widget createRouterApp({List<Override> overrides = const []}) {
+// Using dynamic list since Override type is internal in Riverpod 3.0
+Widget createRouterApp({List<dynamic> overrides = const []}) {
   return ProviderScope(
-    overrides: overrides,
+    overrides: overrides.cast(),
     child: MaterialApp.router(
       routerConfig: appRouter,
     ),
@@ -23,7 +22,7 @@ Widget createRouterApp({List<Override> overrides = const []}) {
 }
 
 /// Common overrides for tests that navigate to RoomScreen.
-List<Override> roomScreenOverrides(String roomId) {
+List<dynamic> roomScreenOverrides(String roomId) {
   return [
     threadsProvider(roomId).overrideWith((ref) async => []),
     lastViewedThreadProvider(roomId).overrideWith((ref) async => null),
