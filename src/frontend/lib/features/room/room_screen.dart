@@ -36,6 +36,7 @@ class RoomScreen extends ConsumerStatefulWidget {
 
 class _RoomScreenState extends ConsumerState<RoomScreen> {
   bool _initialized = false;
+  bool _sidebarCollapsed = false;
 
   @override
   void initState() {
@@ -105,6 +106,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
 
     return AppShell(
       config: ShellConfig(
+        leading: isDesktop ? _buildSidebarToggle() : null,
         title: Text(room?.name ?? 'Room'),
         drawer: isDesktop ? null : const HistoryPanel(),
         floatingActionButton: FloatingActionButton(
@@ -117,22 +119,36 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     );
   }
 
+  Widget _buildSidebarToggle() {
+    return Semantics(
+      label: _sidebarCollapsed
+          ? 'Show thread list sidebar'
+          : 'Hide thread list sidebar',
+      child: IconButton(
+        icon: Icon(_sidebarCollapsed ? Icons.menu : Icons.menu_open),
+        tooltip: _sidebarCollapsed ? 'Show threads' : 'Hide threads',
+        onPressed: () => setState(() => _sidebarCollapsed = !_sidebarCollapsed),
+      ),
+    );
+  }
+
   Widget _buildDesktopLayout(BuildContext context) {
     return Row(
       children: [
-        SizedBox(
-          width: _sidebarWidth,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border(
-                right: BorderSide(
-                  color: Theme.of(context).colorScheme.outlineVariant,
+        if (!_sidebarCollapsed)
+          SizedBox(
+            width: _sidebarWidth,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border(
+                  right: BorderSide(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
                 ),
               ),
+              child: const HistoryPanel(),
             ),
-            child: const HistoryPanel(),
           ),
-        ),
         const Expanded(child: ChatPanel()),
       ],
     );
