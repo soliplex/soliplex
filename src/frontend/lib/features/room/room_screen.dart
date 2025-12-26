@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 import 'package:soliplex_frontend/features/chat/chat_panel.dart';
@@ -100,14 +101,13 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final room = ref.watch(currentRoomProvider);
     final isDesktop =
         MediaQuery.of(context).size.width >= _desktopBreakpoint;
 
     return AppShell(
       config: ShellConfig(
         leading: isDesktop ? _buildSidebarToggle() : null,
-        title: Text(room?.name ?? 'Room'),
+        title: _buildRoomDropdown(),
         drawer: isDesktop ? null : const HistoryPanel(),
         floatingActionButton: FloatingActionButton(
           tooltip: 'Create new thread',
@@ -128,6 +128,44 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
         icon: Icon(_sidebarCollapsed ? Icons.menu : Icons.menu_open),
         tooltip: _sidebarCollapsed ? 'Show threads' : 'Hide threads',
         onPressed: () => setState(() => _sidebarCollapsed = !_sidebarCollapsed),
+      ),
+    );
+  }
+
+  Widget _buildRoomDropdown() {
+    final roomsAsync = ref.watch(roomsProvider);
+    final currentRoom = ref.watch(currentRoomProvider);
+
+    return roomsAsync.when(
+      data: (rooms) => Semantics(
+        label: 'Room selector, current: ${currentRoom?.name ?? 'none'}',
+        child: Tooltip(
+          message: 'Switch to another room',
+          child: DropdownMenu<String>(
+            initialSelection: currentRoom?.id,
+            dropdownMenuEntries: rooms
+                .map((r) => DropdownMenuEntry(value: r.id, label: r.name))
+                .toList(),
+            onSelected: (id) {
+              if (id != null) context.go('/rooms/$id');
+            },
+          ),
+        ),
+      ),
+      loading: () => Semantics(
+        label: 'Loading rooms',
+        child: const SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+      error: (_, __) => Semantics(
+        label: 'Error loading rooms',
+        child: const Tooltip(
+          message: 'Failed to load rooms',
+          child: Icon(Icons.error_outline),
+        ),
       ),
     );
   }
