@@ -277,6 +277,32 @@ Future<void> initializeThreadSelection(String roomId, String? queryThread) async
 - Key: `lastViewedThread_{roomId}` -> `threadId`
 - Updated on thread selection and thread creation
 
+## Work In Progress
+
+### Completed
+
+- [x] Phase 1: AppShell Foundation
+- [x] Phase 2: Last Viewed Thread Provider (in previous commit)
+
+### Current Status
+
+Phase 1 implementation complete with known issues to address before Phase 3:
+
+1. **ThreadScreen orphaned** — No routes point to it (redirect handles old URLs),
+   but file still exists with its own Scaffold. Delete it.
+
+2. **`initialThreadId` unused** — Router passes it, tests verify it, but
+   RoomScreen does nothing with it. Wire it up or remove until Phase 3.
+
+3. **`AppBarConfig` scope creep** — `floatingActionButton` doesn't belong in an
+   "AppBar" config. Rename to `ShellConfig` or pass FAB separately.
+
+4. **`_handleNewThread` has no visible effect** — Sets provider state but
+   RoomScreen has no ChatPanel. FAB exists before UI supports it.
+
+5. **Inconsistent navigation** — `_handleThreadSelection` uses `go()`,
+   `RoomsScreen.onTap` uses `push()`. Decide on consistent strategy.
+
 ## Implementation Phases
 
 ### Phase 1: AppShell Foundation

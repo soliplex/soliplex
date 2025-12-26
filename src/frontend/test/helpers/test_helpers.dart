@@ -299,6 +299,9 @@ class TestData {
 }
 
 /// Helper to create a testable app with provider overrides.
+///
+/// Wraps the widget in a Scaffold since screens no longer provide their own.
+/// The AppShell wrapper in the real app provides the Scaffold.
 Widget createTestApp({
   required Widget home,
   // Using dynamic list since Override type is internal in Riverpod 3.0
@@ -306,6 +309,6 @@ Widget createTestApp({
 }) {
   return ProviderScope(
     overrides: overrides.cast(),
-    child: MaterialApp(home: home),
+    child: MaterialApp(home: Scaffold(body: home)),
   );
 }

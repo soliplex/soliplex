@@ -8,7 +8,6 @@ import 'package:soliplex_frontend/features/home/home_screen.dart';
 import 'package:soliplex_frontend/features/room/room_screen.dart';
 import 'package:soliplex_frontend/features/rooms/rooms_screen.dart';
 import 'package:soliplex_frontend/features/settings/settings_screen.dart';
-import 'package:soliplex_frontend/features/thread/thread_screen.dart';
 
 Widget createRouterApp() {
   return ProviderScope(
@@ -50,15 +49,44 @@ void main() {
       expect(find.byType(RoomScreen), findsOneWidget);
     });
 
-    testWidgets('navigates to thread screen with parameters', (tester) async {
+    testWidgets('redirects old thread URL to query param format',
+        (tester) async {
       await tester.pumpWidget(createRouterApp());
 
       await tester.pumpAndSettle();
 
+      // Old format: /rooms/:roomId/thread/:threadId
+      // Should redirect to: /rooms/:roomId?thread=:threadId
       unawaited(appRouter.push('/rooms/general/thread/thread-1'));
       await tester.pumpAndSettle();
 
-      expect(find.byType(ThreadScreen), findsOneWidget);
+      // Should show RoomScreen (redirect target)
+      expect(find.byType(RoomScreen), findsOneWidget);
+    });
+
+    testWidgets('passes thread query param to RoomScreen', (tester) async {
+      await tester.pumpWidget(createRouterApp());
+
+      await tester.pumpAndSettle();
+
+      unawaited(appRouter.push('/rooms/general?thread=thread-123'));
+      await tester.pumpAndSettle();
+
+      final roomScreen = tester.widget<RoomScreen>(find.byType(RoomScreen));
+      expect(roomScreen.initialThreadId, equals('thread-123'));
+    });
+
+    testWidgets('RoomScreen receives null when no thread query param',
+        (tester) async {
+      await tester.pumpWidget(createRouterApp());
+
+      await tester.pumpAndSettle();
+
+      unawaited(appRouter.push('/rooms/general'));
+      await tester.pumpAndSettle();
+
+      final roomScreen = tester.widget<RoomScreen>(find.byType(RoomScreen));
+      expect(roomScreen.initialThreadId, isNull);
     });
 
     testWidgets('navigates to settings screen', (tester) async {

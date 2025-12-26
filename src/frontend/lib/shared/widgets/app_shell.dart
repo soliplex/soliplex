@@ -45,6 +45,7 @@ class AppShell extends StatelessWidget {
           child: Drawer(child: HttpInspectorPanel()),
         ),
       ),
+      floatingActionButton: config.floatingActionButton,
       body: body,
     );
   }
@@ -60,12 +61,10 @@ class _InspectorButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Open HTTP traffic inspector',
-      child: IconButton(
-        icon: const Icon(Icons.bug_report),
-        onPressed: () => Scaffold.of(context).openEndDrawer(),
-      ),
+    return IconButton(
+      icon: const Icon(Icons.bug_report),
+      tooltip: 'Open HTTP traffic inspector',
+      onPressed: () => Scaffold.of(context).openEndDrawer(),
     );
   }
 }
