@@ -284,21 +284,17 @@ Future<void> initializeThreadSelection(String roomId, String? queryThread) async
 - [x] Phase 1: AppShell Foundation
 - [x] Phase 2: Last Viewed Thread Provider
 - [x] Phase 3: Update Panels (HistoryPanel + ChatPanel persist last viewed)
+- [x] Phase 4: Consolidate RoomScreen
 
 ### Current Status
 
-**Phase 3 complete.** Ready for Phase 4: Consolidate RoomScreen.
+**Phase 4 complete.** RoomScreen now consolidates the thread list and chat view:
 
-Remaining cleanup (will resolve naturally in Phase 4):
-
-1. **`initialThreadId` unused** — Router passes it, RoomScreen ignores it.
-   Phase 4 will wire this up in the async thread selection flow.
-
-2. **`_handleNewThread` has no visible effect** — Sets provider state but
-   RoomScreen has no ChatPanel. Phase 4 adds ChatPanel to RoomScreen.
-
-3. **Inconsistent navigation** — `_handleThreadSelection` uses `go()`,
-   `RoomsScreen.onTap` uses `push()`. Decide on consistent strategy in Phase 4.
+- Responsive layout: Desktop sidebar + mobile drawer
+- Async thread selection: query param → last viewed → first thread
+- Sidebar toggle with accessibility (desktop only)
+- Room dropdown with loading/error states
+- Comprehensive test coverage (383 tests passing)
 
 ## Implementation Phases
 
