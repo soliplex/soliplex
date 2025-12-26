@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 import 'package:soliplex_frontend/features/chat/chat_panel.dart';
 import 'package:soliplex_frontend/features/history/history_panel.dart';
@@ -13,10 +15,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  group('RoomScreen', () {
+  group('RoomScreen layout', () {
     testWidgets('shows desktop layout with sidebar on wide screens',
         (tester) async {
-      // Set desktop size (>= 600)
       tester.view.physicalSize = const Size(800, 600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -34,14 +35,12 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Desktop: HistoryPanel visible in sidebar
       expect(find.byType(HistoryPanel), findsOneWidget);
       expect(find.byType(ChatPanel), findsOneWidget);
     });
 
     testWidgets('shows mobile layout without sidebar on narrow screens',
         (tester) async {
-      // Set mobile size (< 600)
       tester.view.physicalSize = const Size(400, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -59,9 +58,7 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Mobile: Only ChatPanel visible (HistoryPanel in drawer, not rendered)
       expect(find.byType(ChatPanel), findsOneWidget);
-      // HistoryPanel is in drawer, not rendered until drawer opens
       expect(find.byType(HistoryPanel), findsNothing);
     });
 
@@ -80,6 +77,201 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(FloatingActionButton), findsOneWidget);
+    });
+  });
+
+  group('RoomScreen sidebar toggle', () {
+    testWidgets('toggle button hides sidebar on desktop', (tester) async {
+      tester.view.physicalSize = const Size(800, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        createTestApp(
+          home: const RoomScreen(roomId: 'general'),
+          overrides: [
+            threadsProvider('general').overrideWith((ref) async => []),
+            lastViewedThreadProvider('general')
+                .overrideWith((ref) async => null),
+          ],
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Initially sidebar visible
+      expect(find.byType(HistoryPanel), findsOneWidget);
+      expect(find.byIcon(Icons.menu_open), findsOneWidget);
+
+      // Tap toggle to hide
+      await tester.tap(find.byIcon(Icons.menu_open));
+      await tester.pumpAndSettle();
+
+      // Sidebar hidden
+      expect(find.byType(HistoryPanel), findsNothing);
+      expect(find.byIcon(Icons.menu), findsOneWidget);
+    });
+
+    testWidgets('toggle button shows sidebar after hiding', (tester) async {
+      tester.view.physicalSize = const Size(800, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        createTestApp(
+          home: const RoomScreen(roomId: 'general'),
+          overrides: [
+            threadsProvider('general').overrideWith((ref) async => []),
+            lastViewedThreadProvider('general')
+                .overrideWith((ref) async => null),
+          ],
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Hide sidebar
+      await tester.tap(find.byIcon(Icons.menu_open));
+      await tester.pumpAndSettle();
+
+      // Show sidebar again
+      await tester.tap(find.byIcon(Icons.menu));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(HistoryPanel), findsOneWidget);
+      expect(find.byIcon(Icons.menu_open), findsOneWidget);
+    });
+  });
+
+  group('RoomScreen thread selection', () {
+    testWidgets('selects thread from query param', (tester) async {
+      final mockThreads = [
+        TestData.createThread(id: 'thread-1', roomId: 'general'),
+        TestData.createThread(id: 'thread-2', roomId: 'general'),
+      ];
+
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        createTestApp(
+          home: const RoomScreen(
+            roomId: 'general',
+            initialThreadId: 'thread-2',
+          ),
+          overrides: [
+            threadsProvider('general').overrideWith((ref) async => mockThreads),
+            lastViewedThreadProvider('general')
+                .overrideWith((ref) async => 'thread-1'),
+          ],
+          onContainerCreated: (c) => container = c,
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Should select thread-2 from query param, not last viewed thread-1
+      final selection = container.read(threadSelectionProvider);
+      expect(selection, isA<ThreadSelected>());
+      expect((selection as ThreadSelected).threadId, equals('thread-2'));
+    });
+
+    testWidgets('falls back to last viewed thread', (tester) async {
+      final mockThreads = [
+        TestData.createThread(id: 'thread-1', roomId: 'general'),
+        TestData.createThread(id: 'thread-2', roomId: 'general'),
+      ];
+
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        createTestApp(
+          home: const RoomScreen(roomId: 'general'),
+          overrides: [
+            threadsProvider('general').overrideWith((ref) async => mockThreads),
+            lastViewedThreadProvider('general')
+                .overrideWith((ref) async => 'thread-2'),
+          ],
+          onContainerCreated: (c) => container = c,
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Should select last viewed thread-2
+      final selection = container.read(threadSelectionProvider);
+      expect(selection, isA<ThreadSelected>());
+      expect((selection as ThreadSelected).threadId, equals('thread-2'));
+    });
+
+    testWidgets('falls back to first thread when no last viewed',
+        (tester) async {
+      final mockThreads = [
+        TestData.createThread(id: 'thread-1', roomId: 'general'),
+        TestData.createThread(id: 'thread-2', roomId: 'general'),
+      ];
+
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        createTestApp(
+          home: const RoomScreen(roomId: 'general'),
+          overrides: [
+            threadsProvider('general').overrideWith((ref) async => mockThreads),
+            lastViewedThreadProvider('general')
+                .overrideWith((ref) async => null),
+          ],
+          onContainerCreated: (c) => container = c,
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Should select first thread
+      final selection = container.read(threadSelectionProvider);
+      expect(selection, isA<ThreadSelected>());
+      expect((selection as ThreadSelected).threadId, equals('thread-1'));
+    });
+
+    testWidgets('sets NoThreadSelected when room is empty', (tester) async {
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        createTestApp(
+          home: const RoomScreen(roomId: 'empty-room'),
+          overrides: [
+            threadsProvider('empty-room').overrideWith((ref) async => []),
+            lastViewedThreadProvider('empty-room')
+                .overrideWith((ref) async => null),
+          ],
+          onContainerCreated: (c) => container = c,
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      final selection = container.read(threadSelectionProvider);
+      expect(selection, isA<NoThreadSelected>());
+    });
+  });
+
+  group('RoomScreen room dropdown', () {
+    testWidgets('shows room dropdown', (tester) async {
+      await tester.pumpWidget(
+        createTestApp(
+          home: const RoomScreen(roomId: 'general'),
+          overrides: [
+            threadsProvider('general').overrideWith((ref) async => []),
+            lastViewedThreadProvider('general')
+                .overrideWith((ref) async => null),
+            roomsProvider.overrideWith(
+              (ref) async => [
+                TestData.createRoom(id: 'general', name: 'General'),
+                TestData.createRoom(id: 'support', name: 'Support'),
+              ],
+            ),
+          ],
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DropdownMenu<String>), findsOneWidget);
     });
   });
 }

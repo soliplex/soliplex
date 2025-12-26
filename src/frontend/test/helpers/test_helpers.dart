@@ -302,13 +302,24 @@ class TestData {
 ///
 /// Wraps the widget in a Scaffold since screens no longer provide their own.
 /// The AppShell wrapper in the real app provides the Scaffold.
+///
+/// [onContainerCreated] is called with the [ProviderContainer] after it's
+/// created, allowing tests to read provider state.
 Widget createTestApp({
   required Widget home,
   // Using dynamic list since Override type is internal in Riverpod 3.0
   List<dynamic> overrides = const [],
+  void Function(ProviderContainer)? onContainerCreated,
 }) {
-  return ProviderScope(
-    overrides: overrides.cast(),
+  return UncontrolledProviderScope(
+    container: ProviderContainer(overrides: overrides.cast())
+      ..also(onContainerCreated),
     child: MaterialApp(home: Scaffold(body: home)),
   );
+}
+
+extension _Also<T> on T {
+  void also(void Function(T)? action) {
+    if (action != null) action(this);
+  }
 }

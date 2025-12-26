@@ -101,8 +101,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop =
-        MediaQuery.of(context).size.width >= _desktopBreakpoint;
+    final isDesktop = MediaQuery.of(context).size.width >= _desktopBreakpoint;
 
     return AppShell(
       config: ShellConfig(

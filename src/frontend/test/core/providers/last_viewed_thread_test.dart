@@ -286,8 +286,7 @@ final _setLastViewedThreadTestProvider =
   ),
 );
 
-final _clearLastViewedThreadTestProvider =
-    FutureProvider.family<void, String>(
+final _clearLastViewedThreadTestProvider = FutureProvider.family<void, String>(
   (ref, roomId) => clearLastViewedThread(
     roomId: roomId,
     invalidate: (id) => ref.invalidate(lastViewedThreadProvider(id)),
