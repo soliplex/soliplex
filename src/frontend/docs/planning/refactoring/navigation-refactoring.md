@@ -143,9 +143,9 @@ Screens provide body content only, not their own Scaffold.
 GoRoute
 └── AppShell(config, body)
     └── Scaffold (single, owns AppBar + endDrawer)
-        ├── appBar: Built from AppBarConfig
+        ├── appBar: Built from ShellConfig
         ├── endDrawer: HttpInspectorPanel
-        ├── drawer: (mobile only) from AppBarConfig
+        ├── drawer: (mobile only) from ShellConfig
         └── body: Screen content
 ```
 
@@ -156,16 +156,16 @@ inner Scaffold (which has no drawer) instead of AppShell's.
 ### Screen Types
 
 **Static screens** (HomeScreen, RoomsScreen, SettingsScreen): Wrapped in
-AppShell at the router level with static AppBarConfig.
+AppShell at the router level with static ShellConfig.
 
 **Dynamic screens** (RoomScreen): Build their own AppShell internally to
-provide dynamic AppBarConfig (e.g., room dropdown, sidebar toggle).
+provide dynamic ShellConfig (e.g., room dropdown, sidebar toggle).
 
 ### Design Decision: Dynamic Screen Wrapping
 
 **Decision:** RoomScreen returns AppShell directly (Option A).
 
-**Rationale:** RoomScreen's AppBarConfig depends on:
+**Rationale:** RoomScreen's ShellConfig depends on:
 
 1. Provider state (room dropdown needs roomsProvider)
 2. Local widget state (sidebar toggle needs `_sidebarCollapsed`)
@@ -190,7 +190,7 @@ If a second dynamic screen emerges and the pattern feels wrong:
 4. Update router to wrap RoomScreen in AppShell
 
 This is a mechanical refactor. AppShell is already a separate widget and
-AppBarConfig is pure data, so no structural changes needed.
+ShellConfig is pure data, so no structural changes needed.
 
 ### RoomScreen Layout
 
@@ -392,7 +392,7 @@ Refactored to eliminate null returns/assignments where feasible:
 | File | Purpose |
 |------|---------|
 | `lib/shared/widgets/app_shell.dart` | Single Scaffold shell with inspector |
-| `lib/shared/widgets/app_bar_config.dart` | AppBar configuration for screens |
+| `lib/shared/widgets/shell_config.dart` | Shell configuration for screens |
 
 ### Modify
 
@@ -416,23 +416,25 @@ Refactored to eliminate null returns/assignments where feasible:
 
 ## Code Snippets
 
-### AppBarConfig
+### ShellConfig
 
 ```dart
-/// Configuration for AppShell's AppBar.
+/// Configuration for AppShell's Scaffold (AppBar, drawer, FAB).
 @immutable
-class AppBarConfig {
-  const AppBarConfig({
+class ShellConfig {
+  const ShellConfig({
     this.title,
     this.leading,
     this.actions = const [],
     this.drawer,
+    this.floatingActionButton,
   });
 
   final Widget? title;
   final Widget? leading;
   final List<Widget> actions;
   final Widget? drawer; // For mobile drawer (e.g., thread list)
+  final Widget? floatingActionButton;
 }
 ```
 
@@ -446,7 +448,7 @@ class AppShell extends StatelessWidget {
     super.key,
   });
 
-  final AppBarConfig config;
+  final ShellConfig config;
   final Widget body;
 
   @override
@@ -511,7 +513,7 @@ GoRouter(
       path: '/',
       pageBuilder: (_, __) => NoTransitionPage(
         child: AppShell(
-          config: const AppBarConfig(title: Text('Home')),
+          config: const ShellConfig(title: Text('Home')),
           body: const HomeScreen(),
         ),
       ),
@@ -520,7 +522,7 @@ GoRouter(
       path: '/rooms',
       pageBuilder: (_, __) => NoTransitionPage(
         child: AppShell(
-          config: const AppBarConfig(title: Text('Rooms')),
+          config: const ShellConfig(title: Text('Rooms')),
           body: const RoomsScreen(),
         ),
       ),
@@ -549,14 +551,14 @@ GoRouter(
       path: '/settings',
       pageBuilder: (_, __) => NoTransitionPage(
         child: AppShell(
-          config: const AppBarConfig(title: Text('Settings')),
+          config: const ShellConfig(title: Text('Settings')),
           body: const SettingsScreen(),
         ),
       ),
     ),
   ],
   errorBuilder: (context, state) => AppShell(
-    config: const AppBarConfig(title: Text('Error')),
+    config: const ShellConfig(title: Text('Error')),
     body: // ... error content
   ),
 )

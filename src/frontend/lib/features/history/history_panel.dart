@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -146,23 +144,13 @@ class HistoryPanel extends ConsumerWidget {
   /// Handles selection of a thread.
   ///
   /// Updates provider state, persists last viewed, and updates URL.
-  /// SharedPreferences write is fire-and-forget for instant UI response.
   void _handleThreadSelection(
     BuildContext context,
     WidgetRef ref,
     String roomId,
     String threadId,
   ) {
-    ref.read(threadSelectionProvider.notifier).set(ThreadSelected(threadId));
-    unawaited(
-      setLastViewedThread(
-        roomId: roomId,
-        threadId: threadId,
-        invalidate: invalidateLastViewed(ref),
-      ).catchError((Object e) {
-        debugPrint('Failed to persist last viewed thread: $e');
-      }),
-    );
+    selectAndPersistThread(ref: ref, roomId: roomId, threadId: threadId);
     context.go('/rooms/$roomId?thread=$threadId');
   }
 

@@ -1,5 +1,7 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:meta/meta.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
@@ -45,6 +47,10 @@ final threadsProvider = FutureProvider.family<List<ThreadInfo>, String>(
 ///     // Ready to create a new thread
 /// }
 /// ```
+///
+/// Note: Variants implement equality/hashCode/toString manually rather than
+/// using codegen (freezed/equatable) to avoid adding dependencies for these
+/// few classes. If more sealed classes emerge, consider adding codegen.
 @immutable
 sealed class ThreadSelection {
   const ThreadSelection();
@@ -250,6 +256,31 @@ class NoLastViewed extends LastViewed {
 }
 
 const _lastViewedKeyPrefix = 'lastViewedThread_';
+
+/// Selects a thread and persists it as the last viewed for the room.
+///
+/// This is a shared helper used by both RoomScreen and HistoryPanel.
+/// It handles:
+/// 1. Setting the thread selection state
+/// 2. Fire-and-forget persistence to SharedPreferences
+///
+/// URL updates (if needed) should be done by the caller separately.
+void selectAndPersistThread({
+  required WidgetRef ref,
+  required String roomId,
+  required String threadId,
+}) {
+  ref.read(threadSelectionProvider.notifier).set(ThreadSelected(threadId));
+  unawaited(
+    setLastViewedThread(
+      roomId: roomId,
+      threadId: threadId,
+      invalidate: invalidateLastViewed(ref),
+    ).catchError((Object e) {
+      debugPrint('Failed to persist last viewed thread: $e');
+    }),
+  );
+}
 
 /// Provider for getting the last viewed thread ID for a room.
 ///

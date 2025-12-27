@@ -30,7 +30,9 @@ class Ok<T> extends Result<T> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is Ok<T> && runtimeType == other.runtimeType;
+      other is Ok<T> &&
+          runtimeType == other.runtimeType &&
+          value == other.value;
 
   @override
   int get hashCode => value.hashCode;

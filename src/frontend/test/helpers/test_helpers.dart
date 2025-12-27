@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mocktail/mocktail.dart';
+// Riverpod 3.0 doesn't export Override from a public location.
+// Using dynamic list + cast in createTestApp() avoids this import,
+// but helper functions need the type for signatures.
 // ignore: implementation_imports, depend_on_referenced_packages
 import 'package:riverpod/src/framework.dart' show Override;
 // Hide ag_ui's CancelToken - HttpTransport uses our local one.

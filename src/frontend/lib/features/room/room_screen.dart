@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -42,8 +40,14 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
   @override
   void initState() {
     super.initState();
+    // Note: InitializingSelection is set in addPostFrameCallback because
+    // ref.read() cannot be called before super.initState() completes.
+    // This creates a sub-frame race window where HistoryPanel could
+    // theoretically auto-select before InitializingSelection is set.
+    // In practice, both callbacks queue in the same frame, so the race
+    // is extremely unlikely. If issues arise, lift sidebar state to a
+    // provider so initialization can be synchronous.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Set initializing state to prevent HistoryPanel race condition
       ref
           .read(threadSelectionProvider.notifier)
           .set(const InitializingSelection());
@@ -100,15 +104,10 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
 
   /// Selects a thread and persists as last viewed.
   void _selectThread(String threadId) {
-    ref.read(threadSelectionProvider.notifier).set(ThreadSelected(threadId));
-    unawaited(
-      setLastViewedThread(
-        roomId: widget.roomId,
-        threadId: threadId,
-        invalidate: invalidateLastViewed(ref),
-      ).catchError((Object e) {
-        debugPrint('Failed to persist last viewed thread: $e');
-      }),
+    selectAndPersistThread(
+      ref: ref,
+      roomId: widget.roomId,
+      threadId: threadId,
     );
   }
 

@@ -248,6 +248,37 @@ void main() {
       final selection = container.read(threadSelectionProvider);
       expect(selection, isA<NoThreadSelected>());
     });
+
+    testWidgets('ignores invalid query param and falls back to first thread',
+        (tester) async {
+      final mockThreads = [
+        TestData.createThread(id: 'thread-1', roomId: 'general'),
+        TestData.createThread(id: 'thread-2', roomId: 'general'),
+      ];
+
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        createTestApp(
+          home: const RoomScreen(
+            roomId: 'general',
+            initialThreadId: 'nonexistent-thread',
+          ),
+          overrides: [
+            threadsProvider('general').overrideWith((ref) async => mockThreads),
+            lastViewedThreadProvider('general')
+                .overrideWith((ref) async => const NoLastViewed()),
+          ],
+          onContainerCreated: (c) => container = c,
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Should ignore invalid query param and fall back to first thread
+      final selection = container.read(threadSelectionProvider);
+      expect(selection, isA<ThreadSelected>());
+      expect((selection as ThreadSelected).threadId, equals('thread-1'));
+    });
   });
 
   group('RoomScreen room dropdown', () {
