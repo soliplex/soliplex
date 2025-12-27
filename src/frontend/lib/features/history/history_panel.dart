@@ -77,18 +77,6 @@ class HistoryPanel extends ConsumerWidget {
           );
         }
 
-        // Auto-select first thread if none selected.
-        // Skip if RoomScreen is initializing to avoid race.
-        final selection = ref.watch(threadSelectionProvider);
-        if (selection is NoThreadSelected) {
-          // Use addPostFrameCallback to avoid setState during build
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            ref
-                .read(threadSelectionProvider.notifier)
-                .set(ThreadSelected(threads.first.id));
-          });
-        }
-
         // Get active run state to show indicators
         final activeRunState = ref.watch(activeRunNotifierProvider);
         // Extract threadId from running state (only RunningState has threadId)
@@ -142,16 +130,18 @@ class HistoryPanel extends ConsumerWidget {
   }
 
   /// Handles selection of a thread.
-  ///
-  /// Updates provider state, persists last viewed, and updates URL.
   void _handleThreadSelection(
     BuildContext context,
     WidgetRef ref,
     String roomId,
     String threadId,
   ) {
-    selectAndPersistThread(ref: ref, roomId: roomId, threadId: threadId);
-    context.go('/rooms/$roomId?thread=$threadId');
+    selectThread(
+      ref: ref,
+      roomId: roomId,
+      threadId: threadId,
+      navigate: context.go,
+    );
   }
 
   /// Handles the "New Conversation" button press.

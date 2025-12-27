@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
-import 'package:soliplex_frontend/core/models/result.dart';
 import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
@@ -206,3 +205,27 @@ class ChatPanel extends ConsumerWidget {
     ref.read(activeRunNotifierProvider.notifier).reset();
   }
 }
+
+// ---------------------------------------------------------------------------
+// Result Type (private to this file)
+// ---------------------------------------------------------------------------
+
+/// Result type for operations that can succeed or fail.
+sealed class _Result<T> {
+  const _Result();
+}
+
+/// Successful result containing a value.
+class Ok<T> extends _Result<T> {
+  const Ok(this.value);
+  final T value;
+}
+
+/// Failed result containing an error message.
+class Err<T> extends _Result<T> {
+  const Err(this.message);
+  final String message;
+}
+
+/// Type alias for external pattern matching.
+typedef Result<T> = _Result<T>;

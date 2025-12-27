@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:soliplex_frontend/core/constants/breakpoints.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 import 'package:soliplex_frontend/features/chat/chat_panel.dart';
@@ -34,23 +35,13 @@ class RoomScreen extends ConsumerStatefulWidget {
 }
 
 class _RoomScreenState extends ConsumerState<RoomScreen> {
-  bool _initialized = false;
+  String? _initializedForRoomId;
   bool _sidebarCollapsed = false;
 
   @override
   void initState() {
     super.initState();
-    // Note: InitializingSelection is set in addPostFrameCallback because
-    // ref.read() cannot be called before super.initState() completes.
-    // This creates a sub-frame race window where HistoryPanel could
-    // theoretically auto-select before InitializingSelection is set.
-    // In practice, both callbacks queue in the same frame, so the race
-    // is extremely unlikely. If issues arise, lift sidebar state to a
-    // provider so initialization can be synchronous.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref
-          .read(threadSelectionProvider.notifier)
-          .set(const InitializingSelection());
       _initializeThreadSelection();
     });
   }
@@ -59,11 +50,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
   void didUpdateWidget(RoomScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.roomId != widget.roomId) {
-      _initialized = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref
-            .read(threadSelectionProvider.notifier)
-            .set(const InitializingSelection());
         _initializeThreadSelection();
       });
     }
@@ -73,10 +60,12 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
   ///
   /// Priority: query param → last viewed → first thread.
   Future<void> _initializeThreadSelection() async {
-    if (_initialized) return;
-    _initialized = true;
+    if (_initializedForRoomId == widget.roomId) return;
+    _initializedForRoomId = widget.roomId;
 
     final threads = await ref.read(threadsProvider(widget.roomId).future);
+    if (!mounted) return;
+
     if (threads.isEmpty) {
       ref.read(threadSelectionProvider.notifier).set(const NoThreadSelected());
       return;
@@ -92,6 +81,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     // 2. Last viewed (if valid)
     final lastViewed =
         await ref.read(lastViewedThreadProvider(widget.roomId).future);
+    if (!mounted) return;
+
     if (lastViewed case HasLastViewed(:final threadId)
         when threads.any((t) => t.id == threadId)) {
       ref.read(threadSelectionProvider.notifier).set(ThreadSelected(threadId));
@@ -111,15 +102,12 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     );
   }
 
-  /// Desktop breakpoint (600px is standard mobile/tablet threshold).
-  static const double _desktopBreakpoint = 600;
-
   /// Sidebar width for desktop layout.
   static const double _sidebarWidth = 300;
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.of(context).size.width >= _desktopBreakpoint;
+    final isDesktop = MediaQuery.of(context).size.width >= kDesktopBreakpoint;
 
     return AppShell(
       config: ShellConfig(
