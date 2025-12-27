@@ -338,7 +338,6 @@ soliplex-tui [options]
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--url` | http://127.0.0.1:8000 | Backend server URL |
-| `--room` | None | Room ID to connect to directly |
 | `-v, --version` | - | Show version and exit |
 | `-h, --help` | - | Show help |
 
@@ -349,9 +348,6 @@ soliplex-tui --url http://127.0.0.1:8000
 
 # Connect to remote server
 soliplex-tui --url https://soliplex.example.com
-
-# Connect directly to a specific room
-soliplex-tui --url http://127.0.0.1:8000 --room haiku
 ```
 
 **Keyboard Shortcuts:**
@@ -365,6 +361,9 @@ soliplex-tui --url http://127.0.0.1:8000 --room haiku
 | `Ctrl+Z` | Edit metadata |
 | `Escape` | Exit/dismiss screen |
 | `Enter` | Submit input |
+
+**Note:** Some shortcuts require an active thread selection:
+- `Ctrl+R`, `Ctrl+N`, `Ctrl+Z` are only available after selecting a thread
 
 **Features:**
 
@@ -385,3 +384,15 @@ soliplex-cli serve example/minimal.yaml --no-auth-mode
 # Terminal 2: Start TUI
 soliplex-tui --url http://127.0.0.1:8000
 ```
+
+### soliplex-tui-serve
+
+Serve the TUI via web browser using textual-serve.
+
+```bash
+soliplex-tui-serve
+```
+
+Starts a web server on port 8002 that serves the TUI application, allowing browser-based access to the terminal interface.
+
+**Use Case:** Access the TUI from a web browser when terminal access is not available or when sharing the interface remotely.

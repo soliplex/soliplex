@@ -84,6 +84,63 @@ sequenceDiagram
 }
 ```
 
+### Thinking Events
+
+Extended thinking (Claude's reasoning) events:
+
+**THINKING_TEXT_MESSAGE_START**
+```json
+{
+  "type": "THINKING_TEXT_MESSAGE_START",
+  "message_id": "think-1"
+}
+```
+
+**THINKING_TEXT_MESSAGE_CONTENT**
+```json
+{
+  "type": "THINKING_TEXT_MESSAGE_CONTENT",
+  "message_id": "think-1",
+  "delta": "Let me analyze this..."
+}
+```
+
+**THINKING_TEXT_MESSAGE_END**
+```json
+{
+  "type": "THINKING_TEXT_MESSAGE_END",
+  "message_id": "think-1"
+}
+```
+
+**THINKING_START** / **THINKING_END**
+
+Lightweight thinking block markers:
+```json
+{"type": "THINKING_START"}
+{"type": "THINKING_END"}
+```
+
+### Step Lifecycle Events
+
+Track individual agent steps within a run:
+
+**STEP_STARTED**
+```json
+{
+  "type": "STEP_STARTED",
+  "step_id": "step-1"
+}
+```
+
+**STEP_FINISHED**
+```json
+{
+  "type": "STEP_FINISHED",
+  "step_id": "step-1"
+}
+```
+
 ### Tool Call Events
 
 **TOOL_CALL_START**
@@ -140,6 +197,48 @@ sequenceDiagram
   "type": "STATE_DELTA",
   "delta": [
     {"op": "replace", "path": "/ask_history", "value": {"questions": [...]}}
+  ]
+}
+```
+
+### Activity Events
+
+Track agent activity and message history:
+
+**MESSAGES_SNAPSHOT**
+
+Full snapshot of conversation messages:
+```json
+{
+  "type": "MESSAGES_SNAPSHOT",
+  "messages": [
+    {"role": "user", "content": "..."},
+    {"role": "assistant", "content": "..."}
+  ]
+}
+```
+
+**ACTIVITY_SNAPSHOT**
+
+Current agent activity state:
+```json
+{
+  "type": "ACTIVITY_SNAPSHOT",
+  "activity": {
+    "status": "processing",
+    "current_tool": "search_documents"
+  }
+}
+```
+
+**ACTIVITY_DELTA**
+
+Incremental activity updates:
+```json
+{
+  "type": "ACTIVITY_DELTA",
+  "delta": [
+    {"op": "replace", "path": "/status", "value": "completed"}
   ]
 }
 ```

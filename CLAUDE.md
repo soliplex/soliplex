@@ -72,7 +72,7 @@ dart format lib test
 
 ```bash
 # Run TUI client (requires backend with --no-auth-mode)
-soliplex-tui --url http://127.0.0.1:8000 --room haiku
+soliplex-tui --url http://127.0.0.1:8000
 ```
 
 ## Architecture Overview
