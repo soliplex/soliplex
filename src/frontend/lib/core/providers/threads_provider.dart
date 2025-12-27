@@ -74,25 +74,6 @@ class NoThreadSelected extends ThreadSelection {
   String toString() => 'NoThreadSelected()';
 }
 
-/// Thread selection is being initialized by RoomScreen.
-///
-/// This state prevents HistoryPanel from auto-selecting a thread while
-/// RoomScreen's async initialization is in progress.
-@immutable
-class InitializingSelection extends ThreadSelection {
-  const InitializingSelection();
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) || other is InitializingSelection;
-
-  @override
-  int get hashCode => runtimeType.hashCode;
-
-  @override
-  String toString() => 'InitializingSelection()';
-}
-
 /// A specific thread is selected.
 @immutable
 class ThreadSelected extends ThreadSelection {
@@ -264,7 +245,7 @@ const _lastViewedKeyPrefix = 'lastViewedThread_';
 /// 1. Setting the thread selection state
 /// 2. Fire-and-forget persistence to SharedPreferences
 ///
-/// URL updates (if needed) should be done by the caller separately.
+/// For selection with navigation, use [selectThread] instead.
 void selectAndPersistThread({
   required WidgetRef ref,
   required String roomId,
@@ -280,6 +261,20 @@ void selectAndPersistThread({
       debugPrint('Failed to persist last viewed thread: $e');
     }),
   );
+}
+
+/// Selects a thread, persists it, and navigates to the thread URL.
+///
+/// Use this for user-initiated thread selection (e.g., tapping a thread).
+/// For programmatic selection without navigation, use [selectAndPersistThread].
+void selectThread({
+  required WidgetRef ref,
+  required String roomId,
+  required String threadId,
+  required void Function(String path) navigate,
+}) {
+  selectAndPersistThread(ref: ref, roomId: roomId, threadId: threadId);
+  navigate('/rooms/$roomId?thread=$threadId');
 }
 
 /// Provider for getting the last viewed thread ID for a room.
