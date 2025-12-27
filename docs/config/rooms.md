@@ -11,8 +11,8 @@ Within that directory should be one or two files:
 - `prompt.txt` (if present) holds the system prompt for conversations
   which are initiated from the room.
 
-
 Example layout without external prompt file:
+
 ```yaml
 simple/
     room_config.yaml
@@ -52,7 +52,7 @@ A minimal room configuration must include the above elements, e.g.:
         You are an..... #
   ```
 
-### Optional room elements (UI-related):
+### Optional room elements (UI-related)
 
 - `welcome_message` (a string), for the UI to display when the user
   enters a room.  E.g.:
@@ -75,13 +75,12 @@ A minimal room configuration must include the above elements, e.g.:
     - "Why is the sky blue?"
   ```
 
-- `enable_attachments` (a boolean, default `False`), which, if true, 
+- `enable_attachments` (a boolean, default `False`), which, if true,
   tells the UI to allow the user to attach files to a prompt. E.g.:
 
   ```yaml
   enable_attachments: true
   ```
-
 
 ### Agent configuration
 
@@ -108,7 +107,8 @@ for configuring an agent.
        - tool_name: "soliplex.tools.get_current_datetime"
        - tool_name: "soliplex.tools.get_current_user"
    ```
-  Each tool mapping can contain additional elements, which are used to 
+
+  Each tool mapping can contain additional elements, which are used to
   configure the tool's behavior.
 
 #### RAG / search-related
@@ -127,7 +127,7 @@ values.  *Exactly one* of the following two elements is required:
 
 - `rag_lancedb_override_path` is a string:  it should be a fully-qualified
   pathname, including the suffix, of the LanceDB directory containing the RAG
-  document data for the tool. 
+  document data for the tool.
 
   ```yaml
   rag_lancedb_override_path: "/<path-to-rag-databases>/<room_id>.<extension>"

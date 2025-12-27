@@ -1,9 +1,7 @@
 # Quiz Datasets
 
-
 Quizzes use the evaluation dataset entries (see the
 [schema]("https://schema.pydantic.dev/evals/dataset.json")).
-
 
 ## Room Configuration
 
@@ -18,17 +16,15 @@ Quizzes use the evaluation dataset entries (see the
 Room config entries in the response include the value of `quizzes` (a
 list of mappings).
 
-
 ### `GET /api/v1/rooms/{room_id}`
 
 Response includes  the value of `quizzes` (a list of mappings).
-
 
 ### `GET /api/v1/rooms/{room_id}/quiz/{quiz_id}`
 
 Fetch the quiz.  Returns a mapping for the quiz with a list of questions:
 
-```
+```json
 {
     "id": "<quiz_id>",
     "questions": [
@@ -84,14 +80,15 @@ Fetch the quiz.  Returns a mapping for the quiz with a list of questions:
 Check an answer.  Client should send the answer entered / selected by the
 user as a `text/plain` body.  For a correct answer, returns:
 
-```
+```json
 {
     "correct": "true"
 }
 ```
 
 For an incorrect answer, returns:
-```
+
+```json
 {
     "correct": "false"
     "expected_output": "<expected_output>"

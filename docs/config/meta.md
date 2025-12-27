@@ -27,6 +27,7 @@ meta:
 ```
 
 ## Registering MCP Client Toolset Configuration Classes
+
 The `meta.mcp_toolset_configs` section enumerates MCP client toolset
 configuration types so that they can be referenced by their 'kind'.
 
@@ -35,13 +36,14 @@ can be used to import the configuration class.
 
 By default, Soliplex registers its own tool config classes, just as though
 we configured explicitly:
- 
+
 ```yaml
 meta:
   mcp_toolset_configs:
   - "soliplex.config.Stdio_MCP_ClientToolsetConfig"
   - "soliplex.config.HTTP_MCP_ClientToolsetConfig"
 ```
+
 ## Registering MCP Server Tool Wrapper Types
 
 The `meta.mcp_server_tool_wrappers` section maps tool configuration classes to

@@ -79,7 +79,6 @@ reader context — Tooltips don't apply since they're not directly tapped.
   wrap all CircularProgressIndicator widgets in Semantics with appropriate labels
   (e.g., "Loading rooms", "Loading threads").
 
-
 ## Route Structure
 
 ```text
@@ -182,9 +181,11 @@ screens (which are router-wrapped) is acceptable.
 If a second dynamic screen emerges and the pattern feels wrong:
 
 1. Extract sidebar state to a provider:
+
    ```dart
    final sidebarCollapsedProvider = StateProvider<bool>((ref) => false);
    ```
+
 2. Change RoomScreen to return body content only (not AppShell)
 3. Move config building to router (reads from providers)
 4. Update router to wrap RoomScreen in AppShell
@@ -338,7 +339,7 @@ Refactored to eliminate null returns/assignments where feasible:
 
 ### Phase 2: Last Viewed Thread Provider
 
-5. Add to `threads_provider.dart`:
+1. Add to `threads_provider.dart`:
 
    ```dart
    // Read: FutureProvider for observable data
@@ -353,7 +354,7 @@ Refactored to eliminate null returns/assignments where feasible:
    FutureProvider is for observable data, not imperative commands. Functions
    that take `Ref` can still invalidate providers for cache coherence.
 
-6. Add tests for provider (including stale thread handling)
+1. Add tests for provider (including stale thread handling)
 
    **Testing note:** Functions that accept `Ref` require test helper providers
    to obtain a Ref in tests. This is a known limitation—the indirection is
@@ -361,29 +362,29 @@ Refactored to eliminate null returns/assignments where feasible:
 
 ### Phase 3: Update Panels
 
-7. `history_panel.dart`:
+1. `history_panel.dart`:
    - Call `setLastViewed` on thread selection
    - Update URL with query param on selection
-8. `chat_panel.dart`:
+1. `chat_panel.dart`:
    - Call `setLastViewed` when thread is created
    - Update URL with query param after creation
 
 ### Phase 4: Consolidate RoomScreen
 
-9. Rewrite `room_screen.dart`:
+1. Rewrite `room_screen.dart`:
    - Read `?thread=` query param on mount
    - Implement async thread selection flow (see above)
    - Desktop: Row with togglable HistoryPanel + ChatPanel
    - Mobile: ChatPanel + leading Drawer with HistoryPanel
    - Room dropdown with loading/error states
-10. ~~Delete `thread_screen.dart` and its test~~ — ✅ Already deleted
-11. Update all related tests
+1. ~~Delete `thread_screen.dart` and its test~~ — ✅ Already deleted
+1. Update all related tests
 
 ### Phase 5: Polish
 
-12. Run `mcp__dart__analyze_files` (0 issues)
-13. Run `mcp__dart__dart_format`
-14. Run `mcp__dart__run_tests` (all pass)
+1. Run `mcp__dart__analyze_files` (0 issues)
+1. Run `mcp__dart__dart_format`
+1. Run `mcp__dart__run_tests` (all pass)
 
 ## Files Summary
 

@@ -16,7 +16,7 @@ configurations for a given type of entity.
 
 Example layout:
 
-```
+```text
 /
   installation.yaml
   completions/
@@ -37,7 +37,7 @@ Example layout:
     ...
 ```
 
-### Room Configuration
+## Room Configuration
 
 Within a "rooms" directory, each room is represented by a subdirectory,
 whose name is the room ID.
@@ -54,7 +54,7 @@ Within that subdirectory should be one or two files:
 See [this page](rooms.md) for documentation on the contents and
 schema of these files.
 
-### Completions Endpoint Configuration
+## Completions Endpoint Configuration
 
 Within a "completions" directory, each endpoint is represented by a
 subdirectory, whose name is the endpoint ID.
@@ -69,8 +69,7 @@ Within that subdirectory should be one or two files:
 See [this page](completions.md) for documentation on the contents and
 schema of these files.
 
-
-### Quiz Configuration
+## Quiz Configuration
 
 This directory contains question sets as individual JSON files, derived
 from the evaluation dataset entries.
@@ -78,11 +77,10 @@ from the evaluation dataset entries.
 See [this page](quizzes.md) for documentation on the contents
 and schema of these files.
 
-### OIDC Provider Configuration
+## OIDC Provider Configuration
 
 This directory contains configuration files defining the OIDC identity
 providers configured for use in this installation.
 
 See [this page](oidc_providers.md) for documentation on the contents and
 schema of these files.
-

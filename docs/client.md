@@ -12,12 +12,14 @@ interface for interacting with the RAG system.
 ## Installation
 
 1. Clone the client repository:
+
    ```bash
    git clone git@github.com:soliplex/soliplex.git
    cd soliplex/src/gen_ai_client
    ```
 
 2. Install Flutter dependencies:
+
    ```bash
    flutter pub get
    ```
@@ -36,6 +38,7 @@ server with hot reload capabilities.
 ## Development
 
 The client uses:
+
 - Flutter 3.35+ with Material Design
 - Riverpod for state management
 - `go_router` for navigation

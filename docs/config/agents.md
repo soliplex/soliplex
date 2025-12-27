@@ -3,7 +3,6 @@
 The agent configuration mapping is used to configure the Pydantic AI
 agent used to make the calls to the LLM.
 
-
 ```yaml
 agent:
     model_name: "gpt-oss:20b"
@@ -34,10 +33,12 @@ A minimal configuration, without an external prompt file:
 agent:
     model_name: "gpt-oss:latest"
     system_prompt: |
-        You are a knowledgeable assistant that helps users find information from a document knowledge base.
+        You are a knowledgeable assistant that helps users find
+        information from a document knowledge base.
 
         Your process:
-        1. When a user asks a question, use the search_documents tool to find relevant information
+        1. When a user asks a question, use the search_documents tool
+        to find relevant information
         ...
 ```
 
@@ -73,7 +74,6 @@ agent:
 
   `provider_model_settings`: a mapping, whose keys are determined by
   the `provider_type` above (see below).
-
 
 ## Example Ollama Configuration
 
