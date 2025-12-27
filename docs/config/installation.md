@@ -8,6 +8,7 @@ configurations.
 ```yaml
 id: "soliplex-example"
 ```
+
 ## Installation Metaconfiguration
 
 The `meta` section allows you to register custom "kinds" of entities (tool
@@ -80,8 +81,8 @@ agent_configs:
     system_prompt: |
       You are an expert AI assistant specializing in information retrieval.
       ...
-
 ```
+
 Please see [this page](agents.md) for details on configuring agents.
 In addition to the values described there, note that the `id` element is
 required here.
@@ -111,10 +112,12 @@ oidc_paths:
 ```
 
 To disable authentication, list a single, "null" path, e.g.:
+
 ```yaml
 oidc_paths:
   -
 ```
+
 Or else run 'soliplex-cli serve --no-auth-mode'
 
 ## Room Configuration Paths
@@ -146,6 +149,7 @@ just as though we had configured:
 room_paths:
   - "./rooms"
 ```
+
 To disable all rooms, list a single, "null" path, e.g.:
 
 ```yaml
@@ -184,6 +188,7 @@ completion_paths:
 ```
 
 To disable all completions, list a single, "null" path, e.g.:
+
 ```yaml
 completion_paths:
   -

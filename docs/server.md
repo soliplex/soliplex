@@ -9,8 +9,8 @@ to OpenAI and provides RAG functionality.
 
 - Access to LLM:
 
-   - OpenAI - an API key is required to use OpenAI
-   - Ollama  ([https://ollama.com/] https://ollama.com/)
+  - OpenAI - an API key is required to use OpenAI
+  - Ollama (<https://ollama.com/>)
 
 - Logfire (optional):
 
@@ -22,12 +22,14 @@ to OpenAI and provides RAG functionality.
 ## Installation
 
 1. Clone the repository:
+
    ```bash
    git clone git@github.com:soliplex/soliplex.git
    cd soliplex/
    ```
 
 2. Set up a Python3 virtual environment:
+
    ```bash
    python -m venv venv
    source venv/bin/activate
@@ -35,6 +37,7 @@ to OpenAI and provides RAG functionality.
    ```
 
 3. Install `soliplex` and its dependencies:
+
    ```bash
    pip install -e .
    ```
@@ -43,9 +46,11 @@ to OpenAI and provides RAG functionality.
 
    An environment file can be used to configure secrets.
    For logfire, create a `.env` file with:
-   ```
+
+   ```text
    LOGFIRE_TOKEN=<your_token_here>
    ```
+
 ## Running the example
 
 The example configuration provides an overview of how a soliplex
@@ -59,14 +64,14 @@ configurations:
   it requires secrets for the exernal Model-Control Protocol (MCP) client
   toosets for the room `mcptest`.
 
-- `example/minimal-openai.yaml` is a minimal example using OpenAI: 
+- `example/minimal-openai.yaml` is a minimal example using OpenAI:
   it requires no secrets beyond the `OPENAI_API_KEY`.
 
 - `example/installation.yaml` is a more fleshed-out example using OpenAI:
   in addition tothe `OPENAI_API_KEY` secret, it requires secrets for the
   exernal Model-Control Protocol (MCP) client toosets for the room `mcptest`.
 
-Each installation configuration includes a number of rooms that 
+Each installation configuration includes a number of rooms that:
 
 1. Configure resources:
 
@@ -91,6 +96,7 @@ Each installation configuration includes a number of rooms that
 
    - The example configuration uses the `qwen3` model.  If using either
      Ollama variant, install that model via:
+
      ```bash
      ollama pull qwen3:latest
      ```
@@ -99,13 +105,15 @@ Each installation configuration includes a number of rooms that
 
    This command will check the server for any missing variables or
    invalid configuration files.
+
    ```bash
    soliplex-cli check-config example/<installation config>.yaml
    ```
 
    The secrets used in the your chosen configuration should be exported as
    environment variables, e.g.:
-   ```
+
+   ```text
    SMITHERY_AI_API_KEY=<your key>
    SMITHERY_AI_PROFILE=<your profile>
    ```
@@ -115,6 +123,7 @@ Each installation configuration includes a number of rooms that
    The `example/minimal.yaml` configuration still expects
    the `OLLAMA_BASE_URL` environment variable to be set (or present in
    an `.env` file):
+
    ```bash
    soliplex-cli check-config example/minimal.yaml
    ```
@@ -125,6 +134,7 @@ Each installation configuration includes a number of rooms that
 5. Configure any missing environment variables, e.g. by editing
    the installation YAML file, adding them to a `.env` file in the
    installation path, or exporting them directly.
+
    ```bash
    export OLLAMA_BASE_URL=http://<your-ollama-host>:11434
    soliplex-cli check-config example/
@@ -142,11 +152,13 @@ The server will be available at `http://localhost:8000` by default.
 
 For testing purposes, the server can be run with authentication disabled.
 To run without authentication:
+
 ```bash
 soliplex-cli serve example/no_auth.yaml -r both
 ```
 
 To confirm your room configuration:
+
 ```bash
 curl -X 'GET' \
   'http://127.0.0.1:8000/api/v1/rooms' \

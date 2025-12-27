@@ -12,6 +12,7 @@ Soliplex system.
 ## Features
 
 The Soliplex system provides:
+
 - **Chat Interface**: Interactive chat with AI models
 - **Document Retrieval**: RAG-powered document search and question answering
 - **Multiple Models**: Support for various AI models through OpenAI API
