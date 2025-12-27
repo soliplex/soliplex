@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
@@ -76,7 +77,8 @@ class HistoryPanel extends ConsumerWidget {
           );
         }
 
-        // Auto-select first thread if none selected
+        // Auto-select first thread if none selected.
+        // Skip if RoomScreen is initializing to avoid race.
         final selection = ref.watch(threadSelectionProvider);
         if (selection is NoThreadSelected) {
           // Use addPostFrameCallback to avoid setState during build
@@ -121,7 +123,12 @@ class HistoryPanel extends ConsumerWidget {
                       thread: thread,
                       isSelected: isSelected,
                       hasActiveRun: hasActiveRun,
-                      onTap: () => _handleThreadSelection(ref, thread.id),
+                      onTap: () => _handleThreadSelection(
+                        context,
+                        ref,
+                        roomId,
+                        thread.id,
+                      ),
                     );
                   },
                 ),
@@ -136,9 +143,15 @@ class HistoryPanel extends ConsumerWidget {
 
   /// Handles selection of a thread.
   ///
-  /// Updates the current thread selection to the selected thread.
-  void _handleThreadSelection(WidgetRef ref, String threadId) {
-    ref.read(threadSelectionProvider.notifier).set(ThreadSelected(threadId));
+  /// Updates provider state, persists last viewed, and updates URL.
+  void _handleThreadSelection(
+    BuildContext context,
+    WidgetRef ref,
+    String roomId,
+    String threadId,
+  ) {
+    selectAndPersistThread(ref: ref, roomId: roomId, threadId: threadId);
+    context.go('/rooms/$roomId?thread=$threadId');
   }
 
   /// Handles the "New Conversation" button press.

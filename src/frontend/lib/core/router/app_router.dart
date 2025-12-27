@@ -4,16 +4,63 @@ import 'package:soliplex_frontend/features/home/home_screen.dart';
 import 'package:soliplex_frontend/features/room/room_screen.dart';
 import 'package:soliplex_frontend/features/rooms/rooms_screen.dart';
 import 'package:soliplex_frontend/features/settings/settings_screen.dart';
-import 'package:soliplex_frontend/features/thread/thread_screen.dart';
+import 'package:soliplex_frontend/shared/widgets/app_shell.dart';
+import 'package:soliplex_frontend/shared/widgets/shell_config.dart';
+
+/// Settings button for AppBar actions.
+///
+/// Navigates to the settings screen when pressed.
+class _SettingsButton extends StatelessWidget {
+  const _SettingsButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Settings',
+      child: IconButton(
+        icon: const Icon(Icons.settings),
+        onPressed: () => context.push('/settings'),
+        tooltip: 'Open settings',
+      ),
+    );
+  }
+}
+
+/// Creates an AppShell with the given configuration.
+AppShell _staticShell({
+  required Widget title,
+  required Widget body,
+  List<Widget> actions = const [],
+}) {
+  return AppShell(
+    config: ShellConfig(title: title, actions: actions),
+    body: body,
+  );
+}
+
+/// Creates a NoTransitionPage with AppShell for static screens.
+NoTransitionPage<void> _staticPage({
+  required Widget title,
+  required Widget body,
+  List<Widget> actions = const [],
+}) {
+  return NoTransitionPage(
+    child: _staticShell(title: title, body: body, actions: actions),
+  );
+}
 
 /// Application router configuration.
 ///
 /// Routes:
-/// - `/` - Home screen with navigation button
+/// - `/` - Home screen
 /// - `/rooms` - List of rooms
-/// - `/rooms/:roomId` - Room detail with threads
-/// - `/rooms/:roomId/thread/:threadId` - Thread view (placeholder)
+/// - `/rooms/:roomId` - Room with thread selection (query param: ?thread=xyz)
+/// - `/rooms/:roomId/thread/:threadId` - Redirects to query param format
 /// - `/settings` - Settings screen
+///
+/// All routes use NoTransitionPage for instant navigation.
+/// Static screens are wrapped in AppShell via [_staticPage].
+/// RoomScreen builds its own AppShell for dynamic configuration.
 ///
 /// AM7: Add auth redirect logic.
 final appRouter = GoRouter(
@@ -22,38 +69,53 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/',
       name: 'home',
-      builder: (context, state) => const HomeScreen(),
+      pageBuilder: (context, state) => _staticPage(
+        title: const Text('Soliplex'),
+        body: const HomeScreen(),
+        actions: const [_SettingsButton()],
+      ),
     ),
     GoRoute(
       path: '/rooms',
       name: 'rooms',
-      builder: (context, state) => const RoomsScreen(),
+      pageBuilder: (context, state) => _staticPage(
+        title: const Text('Rooms'),
+        body: const RoomsScreen(),
+        actions: const [_SettingsButton()],
+      ),
     ),
     GoRoute(
       path: '/rooms/:roomId',
       name: 'room',
-      builder: (context, state) {
+      pageBuilder: (context, state) {
         final roomId = state.pathParameters['roomId']!;
-        return RoomScreen(roomId: roomId);
+        final threadId = state.uri.queryParameters['thread'];
+        return NoTransitionPage(
+          child: RoomScreen(roomId: roomId, initialThreadId: threadId),
+        );
       },
     ),
+    // Migration redirect: old thread URLs -> new query param format
     GoRoute(
       path: '/rooms/:roomId/thread/:threadId',
-      name: 'thread',
-      builder: (context, state) {
+      name: 'thread-redirect',
+      redirect: (context, state) {
         final roomId = state.pathParameters['roomId']!;
         final threadId = state.pathParameters['threadId']!;
-        return ThreadScreen(roomId: roomId, threadId: threadId);
+        return '/rooms/$roomId?thread=$threadId';
       },
     ),
     GoRoute(
       path: '/settings',
       name: 'settings',
-      builder: (context, state) => const SettingsScreen(),
+      pageBuilder: (context, state) => _staticPage(
+        title: const Text('Settings'),
+        body: const SettingsScreen(),
+      ),
     ),
   ],
-  errorBuilder: (context, state) => Scaffold(
-    appBar: AppBar(title: const Text('Error')),
+  errorBuilder: (context, state) => _staticShell(
+    title: const Text('Error'),
     body: Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,

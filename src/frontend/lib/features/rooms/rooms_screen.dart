@@ -7,6 +7,8 @@ import 'package:soliplex_frontend/shared/widgets/error_display.dart';
 import 'package:soliplex_frontend/shared/widgets/loading_indicator.dart';
 
 /// Screen displaying list of available rooms.
+///
+/// Returns body content only; AppShell wrapper is provided by the router.
 class RoomsScreen extends ConsumerWidget {
   const RoomsScreen({super.key});
 
@@ -14,48 +16,36 @@ class RoomsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final roomsAsync = ref.watch(roomsProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Rooms'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => context.push('/settings'),
-            tooltip: 'Settings',
-          ),
-        ],
-      ),
-      body: roomsAsync.when(
-        data: (rooms) {
-          if (rooms.isEmpty) {
-            return const EmptyState(
-              message: 'No rooms available',
-              icon: Icons.meeting_room_outlined,
-            );
-          }
-
-          return ListView.builder(
-            itemCount: rooms.length,
-            itemBuilder: (context, index) {
-              final room = rooms[index];
-              return ListTile(
-                leading: const Icon(Icons.meeting_room),
-                title: Text(room.name),
-                subtitle: room.hasDescription ? Text(room.description) : null,
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  ref.read(currentRoomIdProvider.notifier).set(room.id);
-                  context.push('/rooms/${room.id}');
-                },
-              );
-            },
+    return roomsAsync.when(
+      data: (rooms) {
+        if (rooms.isEmpty) {
+          return const EmptyState(
+            message: 'No rooms available',
+            icon: Icons.meeting_room_outlined,
           );
-        },
-        loading: () => const LoadingIndicator(message: 'Loading rooms...'),
-        error: (error, stack) => ErrorDisplay(
-          error: error,
-          onRetry: () => ref.invalidate(roomsProvider),
-        ),
+        }
+
+        return ListView.builder(
+          itemCount: rooms.length,
+          itemBuilder: (context, index) {
+            final room = rooms[index];
+            return ListTile(
+              leading: const Icon(Icons.meeting_room),
+              title: Text(room.name),
+              subtitle: room.hasDescription ? Text(room.description) : null,
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                ref.read(currentRoomIdProvider.notifier).set(room.id);
+                context.push('/rooms/${room.id}');
+              },
+            );
+          },
+        );
+      },
+      loading: () => const LoadingIndicator(message: 'Loading rooms...'),
+      error: (error, stack) => ErrorDisplay(
+        error: error,
+        onRetry: () => ref.invalidate(roomsProvider),
       ),
     );
   }
