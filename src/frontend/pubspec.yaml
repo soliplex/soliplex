@@ -30,6 +30,7 @@ dependencies:
   meta: ^1.15.0
 
   # Local package - soliplex_client
+  shared_preferences: ^2.5.4
   soliplex_client:
     path: packages/soliplex_client
 

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mocktail/mocktail.dart';
+// Riverpod 3.0 doesn't export Override from a public location.
+// Using dynamic list + cast in createTestApp() avoids this import,
+// but helper functions need the type for signatures.
 // ignore: implementation_imports, depend_on_referenced_packages
 import 'package:riverpod/src/framework.dart' show Override;
 // Hide ag_ui's CancelToken - HttpTransport uses our local one.
@@ -299,13 +302,27 @@ class TestData {
 }
 
 /// Helper to create a testable app with provider overrides.
+///
+/// Wraps the widget in a Scaffold since screens no longer provide their own.
+/// The AppShell wrapper in the real app provides the Scaffold.
+///
+/// [onContainerCreated] is called with the [ProviderContainer] after it's
+/// created, allowing tests to read provider state.
 Widget createTestApp({
   required Widget home,
   // Using dynamic list since Override type is internal in Riverpod 3.0
   List<dynamic> overrides = const [],
+  void Function(ProviderContainer)? onContainerCreated,
 }) {
-  return ProviderScope(
-    overrides: overrides.cast(),
-    child: MaterialApp(home: home),
+  return UncontrolledProviderScope(
+    container: ProviderContainer(overrides: overrides.cast())
+      ..also(onContainerCreated),
+    child: MaterialApp(home: Scaffold(body: home)),
   );
+}
+
+extension _Also<T> on T {
+  void also(void Function(T)? action) {
+    if (action != null) action(this);
+  }
 }
