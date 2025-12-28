@@ -64,8 +64,7 @@ class IdleState extends ActiveRunState {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is IdleState && runtimeType == other.runtimeType;
+      identical(this, other) || other is IdleState;
 
   @override
   int get hashCode => runtimeType.hashCode;
@@ -119,7 +118,6 @@ class RunningState extends ActiveRunState {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is RunningState &&
-          runtimeType == other.runtimeType &&
           conversation == other.conversation &&
           streaming == other.streaming;
 
@@ -169,7 +167,6 @@ class CompletedState extends ActiveRunState {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is CompletedState &&
-          runtimeType == other.runtimeType &&
           conversation == other.conversation &&
           streaming == other.streaming &&
           result == other.result;
@@ -226,9 +223,7 @@ class FailedResult extends CompletionResult {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is FailedResult &&
-          runtimeType == other.runtimeType &&
-          errorMessage == other.errorMessage;
+      other is FailedResult && errorMessage == other.errorMessage;
 
   @override
   int get hashCode => Object.hash(runtimeType, errorMessage);
@@ -248,9 +243,7 @@ class CancelledResult extends CompletionResult {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is CancelledResult &&
-          runtimeType == other.runtimeType &&
-          reason == other.reason;
+      other is CancelledResult && reason == other.reason;
 
   @override
   int get hashCode => Object.hash(runtimeType, reason);
