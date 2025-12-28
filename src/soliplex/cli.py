@@ -1,4 +1,5 @@
 import enum
+import json
 import os
 import pathlib
 import typing
@@ -464,6 +465,27 @@ def config_as_yaml(
     the_console.print(f"# Source: {installation_path}")
     the_console.print(f"#{'-' * 78}")
     the_console.print(exported_yaml)
+
+
+@the_cli.command(
+    "agui-feature-schemas",
+)
+def agui_feature_schemas(
+    ctx: typer.Context,
+    installation_path: installation_path_type,
+):
+    """Export the installatin config as YAML"""
+    the_installation = get_installation(installation_path)
+
+    feature_schemas = {
+        feature.name: {
+            "source": str(feature.source),
+            "json_schema": feature.json_schema,
+        }
+        for feature in the_installation._config.agui_features
+    }
+
+    print(json.dumps(feature_schemas))
 
 
 if __name__ == "__main__":
