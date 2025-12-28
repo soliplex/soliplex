@@ -55,7 +55,6 @@ class AppShell extends StatelessWidget {
 ///
 /// Separate widget class ensures build() provides the correct context
 /// for Scaffold.of() to find the Scaffold we just built.
-@immutable
 class _InspectorButton extends StatelessWidget {
   const _InspectorButton();
 

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 /// Screens provide this to configure the shell without having their own
 /// Scaffold. This avoids nested Scaffold issues where inner Scaffolds
 /// can't access the shell's drawers.
-@immutable
 class ShellConfig {
   const ShellConfig({
     this.title,
