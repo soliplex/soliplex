@@ -31,9 +31,7 @@ class Idle extends ConversationStatus {
   const Idle();
 
   @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is Idle && runtimeType == other.runtimeType;
+  bool operator ==(Object other) => identical(this, other) || other is Idle;
 
   @override
   int get hashCode => runtimeType.hashCode;
@@ -53,10 +51,7 @@ class Running extends ConversationStatus {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is Running &&
-          runtimeType == other.runtimeType &&
-          runId == other.runId;
+      identical(this, other) || other is Running && runId == other.runId;
 
   @override
   int get hashCode => Object.hash(runtimeType, runId);
@@ -73,8 +68,7 @@ class Completed extends ConversationStatus {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is Completed && runtimeType == other.runtimeType;
+      identical(this, other) || other is Completed;
 
   @override
   int get hashCode => runtimeType.hashCode;
@@ -94,10 +88,7 @@ class Failed extends ConversationStatus {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is Failed &&
-          runtimeType == other.runtimeType &&
-          error == other.error;
+      identical(this, other) || other is Failed && error == other.error;
 
   @override
   int get hashCode => Object.hash(runtimeType, error);
@@ -117,10 +108,7 @@ class Cancelled extends ConversationStatus {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is Cancelled &&
-          runtimeType == other.runtimeType &&
-          reason == other.reason;
+      identical(this, other) || other is Cancelled && reason == other.reason;
 
   @override
   int get hashCode => Object.hash(runtimeType, reason);
@@ -201,9 +189,7 @@ class Conversation {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is Conversation &&
-          runtimeType == other.runtimeType &&
-          threadId == other.threadId;
+      other is Conversation && threadId == other.threadId;
 
   @override
   int get hashCode => threadId.hashCode;

@@ -39,7 +39,7 @@ sealed class ChatMessage {
           id == other.id;
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(runtimeType, id);
 }
 
 /// A text message.

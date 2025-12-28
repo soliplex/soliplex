@@ -85,9 +85,7 @@ class ThreadSelected extends ThreadSelection {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ThreadSelected &&
-          runtimeType == other.runtimeType &&
-          threadId == other.threadId;
+      other is ThreadSelected && threadId == other.threadId;
 
   @override
   int get hashCode => threadId.hashCode;
@@ -209,9 +207,7 @@ class HasLastViewed extends LastViewed {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is HasLastViewed &&
-          runtimeType == other.runtimeType &&
-          threadId == other.threadId;
+      other is HasLastViewed && threadId == other.threadId;
 
   @override
   int get hashCode => threadId.hashCode;
