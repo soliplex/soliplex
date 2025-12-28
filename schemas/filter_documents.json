@@ -1,0 +1,22 @@
+{
+  "description": "Documents selected by the user to be used to answer a question\n\nThis model describes the 'filter_documents' key in the AG-UI state.\n\nIf 'document_ids' is empty or None, or if the 'filter_documents'\nkey is not present in the AG-UI state, no filter is applied:  the\n'ask_with_rich_citations' tool will return all documents matching\nthe query from the LLM.",
+  "properties": {
+    "document_ids": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Document Ids"
+    }
+  },
+  "title": "FilterDocuments",
+  "type": "object"
+}
