@@ -1,0 +1,41 @@
+[
+    {
+        "url": "https://example.com/file1.pdf",
+        "metadata": {
+            "mds": "cv22",
+            "location": "cannon",
+            "created": "2015-08-07T18:32:08Z",
+            "modified": "Tue, 28 Aug 2023 18:34:49 GMT",
+            "content-type": "application/pdf",
+            "size": "341"
+        },
+        "path": "/file1.pdf",
+        "sha256": "958d253cda107a2b67e9bcf1191dfa73ad5d37a9952cdc4e425fe25c5ac17a6b"
+    },
+    {
+        "url": "https://example.com/file2.pdf",
+        "metadata": {
+            "mds": "cv22",
+            "location": "cannon",
+            "created": "2019-08-07T18:32:08Z",
+            "modified": "Tue, 29 Aug 2023 18:34:49 GMT",
+            "content-type": "application/pdf",
+            "size": "341"
+        },
+        "path": "/file2.pdf",
+        "sha256": "e262fdfc09f9509c100b0d59941ae9ea546e9c94b542cfe5e1416e7fb161b330"
+    },
+    {
+        "url": "https://example.com/invalid.crdownload",
+        "metadata": {
+            "mds": "cv22",
+            "location": "cannon",
+            "created": "2019-08-07T18:32:08Z",
+            "modified": "Tue, 29 Aug 2023 18:34:49 GMT",
+            "content-type": "application/octet-stream",
+            "size": "341"
+        },
+        "path": "/invalid.crdownload",
+        "sha256": "e262fdfc09f9509c100b0d59941ae9ea546e9c94b542cfe5e1416e7fb161b330"
+    }
+]

@@ -1,25 +1,26 @@
-FROM python:3.13.9
+FROM python:3.13-slim
 
 WORKDIR /app
 
-# Install system-level build dependencies
-RUN \
-  --mount=type=cache,target=/root/.cache/pip \
-  apt-get update && \
-  apt-get install -y \
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    gpg \
-    apt-transport-https \
-    git \
-    rsync \
-    vim \
-    jq \
-    && \
-  pip3 install --upgrade pip
+    && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml /app/pyproject.toml
-COPY src/soliplex /app/src/soliplex
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-RUN pip3 install -e .
+# Copy workspace configuration
+COPY pyproject.toml uv.lock* ./
 
-CMD ["/usr/local/bin/soliplex-cli", "serve", "--host=0.0.0.0", "/app/installation"]
+# Copy all apps
+COPY apps/ ./apps/
+
+# Install dependencies
+RUN uv sync --frozen --no-dev
+
+# Expose port
+EXPOSE 8000
+
+# Default command
+CMD ["uv", "run", "soliplex-cli", "serve", "--host", "0.0.0.0"]

@@ -1,122 +1,56 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
-name = "soliplex"
-version = "0.30dev0"
-description = "An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web interface."
+name = "soliplex-monorepo"
+version = "1.0.0"
+description = "Soliplex Monorepo - AI-powered RAG system with document ingestion"
 authors = [{ name = "Enfold", email = "info@enfoldsystems.net" }]
 readme = "README.md"
-requires-python = ">=3.13"
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "Operating System :: OS Independent",
-]
+requires-python = ">=3.12"
 dependencies = [
-    "ag-ui-protocol >= 0.1.10",
-    "aiosqlite",
-    "authlib",
-    "fastapi",
-    "fastmcp >= 2.13.0.2, < 2.14",
-    "greenlet",
-    "haiku.rag-slim >= 0.23.0",
-    "itsdangerous",
-    "jsonpatch",
-    "jwcrypto",
-    "logfire[fastapi]",
-    "pyjwt",
-    "python-keycloak",
-    "sqlmodel",
-    "starlette",
-    "trio",
-    "uvicorn[standard]",
-    "certifi >= 2025.11.12",
+    # Common dependencies shared across apps
+    "haiku-rag-slim >= 0.23.0",
+    "docling-core >= 2.51.1",
+    "pydantic-settings >= 2.12.0",
+    "sqlmodel >= 0.0.27",
+    "aiosqlite <0.22.0",
+    "fastapi[standard] >= 0.125.0",
 ]
 
-[project.scripts]
-soliplex-cli = "soliplex.cli:the_cli"
-soliplex-tui = "soliplex.tui.cli:the_cli"
-soliplex-tui-serve = "soliplex.tui.serve:main"
+[tool.uv.workspace]
+members = [
+    "apps/soliplex",
+    "apps/ingester",
+    "apps/agents",
+]
+
+[tool.uv.sources]
+soliplex = { workspace = true }
+soliplex-ingester = { workspace = true }
+"soliplex.agents" = { workspace = true }
 
 [dependency-groups]
 dev = [
-    "pytest",
-    "pytest-cov",
-    "pytest-asyncio",
-    "coverage",
-    "anyio",
-    "trio",
-    "ruff",
+    "pytest>=9.0.0",
+    "pytest-asyncio>=1.0.0",
+    "pytest-cov>=7.0.0",
+    "pytest-env>=1.0.0",
+    "ruff>=0.14.0",
+    "coverage>=7.0.0",
 ]
 docs = [
-    "mkdocs>=1.6.1",
-    "mkdocs-material>=9.6.19",
-    # See https://github.com/mkdocs/mkdocs/issues/4032
-    "click != 8.2.2, != 8.3.0",
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.6.0",
 ]
-postgres = [
-    "asyncpg",
-]
-tui = [
-    "textual",
-    "textual-serve",
-    "typer",
-]
-
-[tool.pytest.ini_options]
-pythonpath = "."
-python_files = "test_*.py"
-# skip 'tests/functional' by default
-testpaths = ["tests/unit"]
-addopts = "--cov=soliplex --cov=tests/unit --cov-branch --cov-fail-under=100"
-filterwarnings = [
-    # "ignore::DeprecationWarning:<source-package>",
-]
-markers = [
-    "needs_llm: functest requiring an LLM",
-]
-
-[tool.coverage.run]
-omit = [
-    "src/soliplex/cli.py",
-    "src/soliplex/examples.py",
-    "src/soliplex/tui.py",
-]
-
-[tool.coverage.report]
-show_missing = true
 
 [tool.ruff]
-line-length = 79
-exclude = [
-]
-target-version = "py313"
+line-length = 120
+target-version = "py312"
 
 [tool.ruff.lint]
-select = [
-    # flake8
-    "F",
-    # pycodestyle
-    "E",
-    # flake8-bugbear
-    "B",
-    # pyupgrade
-    "U",
-    # isort
-    "I",
-    # pandas vet
-    "PD",
-    # tryceratops
-    "TRY",
-    # flake8-pytest-style
-    "PT",
-]
-ignore = [
-]
+select = ["F", "E", "B", "U", "I", "PD", "TRY", "PT"]
 
 [tool.ruff.lint.isort]
 force-single-line = true
 
-[tool.ruff.lint.flake8-pytest-style]
-parametrize-names-type = "csv"
+# Root workspace is not a package itself - don't build it
+[tool.setuptools]
+packages = []

@@ -1,25 +1,37 @@
-services:
-  soliplex_web:
-    build:
-      context: ./src/flutter
-      dockerfile: Dockerfile
-    #network_mode: "host" # only works on linux
-    ports:
-      - "9000:9000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+version: '3.8'
 
+services:
   soliplex_backend:
     build:
       context: .
       dockerfile: Dockerfile
-    #network_mode: "host" # only works on linux
     ports:
       - "8000:8000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    env_file:
-      - .env
+    environment:
+      - DATABASE_URL=sqlite:///./soliplex.db
     volumes:
-      - ./installation:/app/installation
-      - ./db:/app/db
+      - ./apps/soliplex:/app/apps/soliplex
+      - ./apps/ingester:/app/apps/ingester
+      - ./apps/agents:/app/apps/agents
+      - ./data:/app/data
+    networks:
+      - soliplex_network
+
+  ingester:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["uv", "run", "si-cli", "serve", "--host", "0.0.0.0"]
+    ports:
+      - "8001:8000"
+    environment:
+      - DOC_DB_URL=sqlite:///./ingester.db
+    volumes:
+      - ./apps/ingester:/app/apps/ingester
+      - ./data:/app/data
+    networks:
+      - soliplex_network
+
+networks:
+  soliplex_network:
+    driver: bridge

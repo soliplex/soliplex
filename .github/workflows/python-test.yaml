@@ -1,77 +1,117 @@
-name: Python back-end tests/coverage/linting
+name: Python Tests
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
+      - 'apps/soliplex/**'
+      - 'apps/ingester/**'
+      - 'apps/agents/**'
       - 'pyproject.toml'
-      - 'src/soliplex/**'
-      - 'tests/**'
-      - '.github/workflows/soliplex.yaml'
       - 'uv.lock'
+      - '.github/workflows/python-test.yaml'
   pull_request:
-    branches:
-      - main
+    branches: [main]
     paths:
+      - 'apps/soliplex/**'
+      - 'apps/ingester/**'
+      - 'apps/agents/**'
       - 'pyproject.toml'
-      - 'src/soliplex/**'
-      - 'tests/**'
-      - '.github/workflows/soliplex.yaml'
       - 'uv.lock'
+      - '.github/workflows/python-test.yaml'
   workflow_dispatch:
 
 jobs:
   test-soliplex:
-    runs-on: ${{ matrix.os }}
+    name: Test Soliplex App
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      BRANCH: "${{ github.head_ref }}"
-      RUN_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-      COMMIT_MSG: "${{ github.event.head_commit.message }}"
       SLACK_NOTIFY_URL: "${{ secrets.SLACK_NOTIFY_URL }}"
-      ENFOLD_GH_PAT: "${{ secrets.ENFOLD_GH_PAT }}"
-      ENFOLD_GH_USER: "${{ secrets.ENFOLD_GH_USER }}"
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-        python-version: ["3.13"]
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
-          python-version: ${{ matrix.python-version }}
-          cache: "pip"
-          cache-dependency-path: "**/pyproject.toml"
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.13
+
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip setuptools
-          #
-          # Install 'docling' first using the "CPU-only" index:
-          # avoids installing the huge NVidia / CUDA deps we won't use.
-          #
-          pip install docling \
-            --extra-index-url https://download.pytorch.org/whl/cpu
-          pip install -e . --group dev
+          uv sync --all-packages
+          # Install docling with CPU-only PyTorch
+          uv pip install docling --extra-index-url https://download.pytorch.org/whl/cpu
+
       - name: Run soliplex unit tests
-        run: |
-          pip list
-          # '-s': suppress py.test output capture to ease debugging CI hangs
-          py.test -s
+        working-directory: apps/soliplex
+        run: uv run pytest -s tests/unit
+
       - name: Run soliplex functional tests
-        run: |
-          pip list
-          # '-s': suppress py.test output capture to ease debugging CI hangs
-          py.test -s --no-cov -m "not needs_llm" tests/functional/
+        working-directory: apps/soliplex
+        run: uv run pytest -s --no-cov -m "not needs_llm" tests/functional/
+
       - name: Run ruff linter
-        run: |
-          ruff check
+        working-directory: apps/soliplex
+        run: uv run ruff check
+
       - name: Notify Slack on failure
-        if: failure()
+        if: failure() && github.ref == 'refs/heads/main'
         run: |
-          curl -X POST \
-            --data-urlencode \
-            "payload={\"channel\": \"#soliplex\", \"username\": \"soliplex\", \"text\": \":x: $GITHUB_WORKFLOW failed on $BRANCH:\n$COMMIT_MSG\n$RUN_URL\", \"icon_emoji\": \":ghost:\"}" \
+          curl -X POST --data-urlencode \
+            "payload={\"channel\": \"#soliplex\", \"text\": \":x: Soliplex tests failed\"}" \
             "$SLACK_NOTIFY_URL"
+
+  test-ingester:
+    name: Test Ingester App
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync --all-packages
+
+      - name: Run ingester unit tests
+        working-directory: apps/ingester
+        run: uv run pytest -s tests/unit
+
+      - name: Run ruff linter
+        working-directory: apps/ingester
+        run: uv run ruff check
+
+  test-agents:
+    name: Test Agents App
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync --all-packages
+
+      - name: Run agents unit tests
+        working-directory: apps/agents
+        run: uv run pytest -s tests/unit
+
+      - name: Run ruff linter
+        working-directory: apps/agents
+        run: uv run ruff check

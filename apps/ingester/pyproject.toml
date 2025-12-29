@@ -1,0 +1,121 @@
+[project]
+name = "soliplex-ingester"
+version = "0.1.0"
+description = "ingestion workflow manager for soliplex"
+authors = [{ name = "Enfold", email = "info@enfoldsystems.net" }]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiofiles>=25.1.0",
+    "aiohttp>=3.13.2",
+    "aiosqlite<0.22.0",
+    "alembic>=1.17.2",
+    "async-lru>=2.0.5",
+    "docling-core>=2.51.1",
+    "fastapi[standard]>=0.125.0",
+    "fsspec>=2025.12.0",
+    "haiku-rag-slim>=0.23.0",
+    "opendal>=0.46.0",
+    "pdf-splitter",
+    "psycopg[binary,pool]>=3.3.2",
+    "pydantic-settings>=2.12.0",
+    "pypdf>=6.4.2",
+    "sqlmodel>=0.0.27",
+    "tenacity>=9.1.2",
+    "typer-slim>=0.20.1",
+    "websockets>=15.0.1",
+]
+
+[dependency-groups]
+dev = [
+    "coverage>=7.11.0",
+    "duckdb>=1.4.1",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.0.0",
+    "pytest-env>=1.2.0",
+    "ruff>=0.14.10",
+]
+
+[project.scripts]
+si-cli = "soliplex.ingester.cli:app"
+
+
+[build-system]
+requires = ["setuptools>=75.0.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest_env]
+DOC_DB_URL = "sqlite+aiosqlite:///:memory:"
+FILE_STORE_TARGET="db"
+FILE_STORE_DIR="./file-store"
+LANCEDB_DIR="./lancedb"
+DOCLING_SERVER_URL="http://localhost:5004/v1"
+
+[tool.pytest.ini_options]
+pythonpath = "."
+python_files = "test_*.py"
+# skip 'tests/functional' by default
+testpaths = ["tests/unit"]
+addopts = "--cov=soliplex --cov=tests --cov-branch --cov-fail-under=50"
+filterwarnings = [
+    # "ignore::DeprecationWarning:<source-package>",
+]
+
+[tool.coverage.run]
+omit = [
+    "*/cli.py",
+
+    "*/docling.py",
+    "*/app.py",
+    "tests/*",
+    "*/example/__init__.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.ruff]
+line-length = 126
+exclude = [
+]
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    # flake8
+    "F",
+    # pycodestyle
+    "E",
+    # flake8-bugbear
+    "B",
+    # pyupgrade
+    "U",
+    # isort
+    "I",
+    # pandas vet
+    "PD",
+    # tryceratops
+    "TRY",
+    # flake8-pytest-style
+    "PT",
+]
+ignore = [ "TRY003"
+]
+
+[tool.ruff.lint.isort]
+force-single-line = true
+
+[tool.ruff.lint.flake8-pytest-style]
+parametrize-names-type = "csv"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["soliplex.ingester*"]
+
+[tool.setuptools.package-data]
+"soliplex.ingester.server" = ["static/**/*"]
+
+[tool.uv.sources]
+
+pdf-splitter = { git = "https://github.com/runyaga/pdf-splitter.git" ,branch="main" }
