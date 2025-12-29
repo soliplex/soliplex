@@ -116,7 +116,7 @@ lib/core/router/
 
 ---
 
-### Commit 2: Port interfaces in soliplex_client
+### Commit 2: Port interfaces in soliplex_client ✅
 
 **Files:**
 
@@ -149,70 +149,57 @@ lib/core/router/
 
 ---
 
-### Commit 3: SoliplexApi auth integration
+### Commit 3: SoliplexApi auth integration ✅
 
 **Files:**
 
-- `packages/soliplex_client/lib/src/api/soliplex_api.dart` (modify)
+- `packages/soliplex_client/lib/src/http/http_transport.dart` (modify - add TokenProvider)
+- `lib/core/providers/api_provider.dart` (modify - wire stub TokenProvider)
 - Tests
 
 **Details:**
 
-1. Add `Future<List<OIDCAuthSystem>> getLoginProviders()` method
-2. Constructor accepts optional AuthProvider
-3. Methods call `authProvider.getValidToken()` before authenticated requests
+1. Add `TokenProvider` typedef for auth header injection
+2. HttpTransport accepts required `tokenProvider` callback
+3. Auth header only added when token is non-empty
 
 ---
 
-### Commit 4: Flutter secure storage service
+### Commit 4: SecureTokenStorage implementation ✅
 
 **Files:**
 
-- `lib/core/services/secure_storage_service.dart`
 - `pubspec.yaml` (add flutter_secure_storage)
+- `lib/core/storage/secure_token_storage.dart`
 - Tests
 
 **Details:**
 
-1. Abstract SecureStorageService interface
-2. NativeSecureStorageService (flutter_secure_storage with Keychain/EncryptedSharedPrefs)
-3. WebSecureStorageService (localStorage)
-4. SecureStorageFactory for platform detection
+1. SecureTokenStorage implements TokenStorage using flutter_secure_storage
+2. Per-server key prefixing (`auth_token_{serverId}`)
+3. JSON serialization/deserialization of AuthToken
+
+**Note:** Merged original commits 4+5. Dropped SecureSsoStorage per YAGNI - PKCE state and SsoConfig held in-memory by auth provider.
 
 ---
 
-### Commit 5: Auth storage implementations
+### Commit 5: OIDC discovery service ✅
 
 **Files:**
 
-- `lib/core/auth/secure_storage_gateway.dart`
-- `lib/core/auth/secure_token_storage.dart`
-- `lib/core/auth/secure_sso_storage.dart`
+- `packages/soliplex_client/lib/src/auth/oidc_discovery_service.dart`
 - Tests
 
 **Details:**
 
-1. SecureStorageGateway - thin wrapper with read/write/delete
-2. SecureTokenStorage - implements TokenStorage, per-server keys
-3. SecureSsoStorage - per-server SSO config persistence
+1. OidcDiscoveryService in soliplex_client (pure Dart, no Flutter)
+2. Fetches `{serverUrl}/.well-known/openid-configuration`
+3. Type-safe string extraction with AuthErrorConfiguration on wrong types
+4. Returns SsoConfig combining discovery endpoints with OIDCAuthSystem
 
 ---
 
-### Commit 6: OIDC discovery service
-
-**Files:**
-
-- `lib/core/auth/oidc_discovery.dart`
-- Tests
-
-**Details:**
-
-1. Fetch OIDC `.well-known/openid-configuration`
-2. Build SsoConfig from OIDCAuthSystem + discovery metadata
-
----
-
-### Commit 7: Mobile auth provider (PKCE)
+### Commit 6: Mobile auth provider (PKCE)
 
 **Files:**
 
@@ -223,14 +210,14 @@ lib/core/router/
 
 **Details:**
 
-1. OidcMobileAuthProvider implements AuthProvider
+1. MobileAuthProvider implements AuthProvider
 2. Uses flutter_appauth for PKCE flow
 3. Token refresh via flutter_appauth.token()
 4. Platform configurations for deep links
 
 ---
 
-### Commit 8: Web auth provider (backend-mediated)
+### Commit 7: Web auth provider (backend-mediated)
 
 **Files:**
 
@@ -240,14 +227,14 @@ lib/core/router/
 
 **Details:**
 
-1. OidcWebAuthProvider implements AuthProvider
+1. WebAuthProvider implements AuthProvider
 2. Backend-mediated flow via url_launcher
 3. CSRF state generation and validation
 4. Token refresh via HTTP POST
 
 ---
 
-### Commit 9: App state machine
+### Commit 8: App state machine
 
 **Files:**
 
@@ -265,7 +252,7 @@ lib/core/router/
 
 ---
 
-### Commit 10: Auth providers (Riverpod)
+### Commit 9: Auth providers (Riverpod)
 
 **Files:**
 
@@ -277,14 +264,13 @@ lib/core/router/
 
 1. secureStorageProvider
 2. tokenStorageProvider
-3. ssoStorageProvider
-4. authProviderProvider (platform-aware factory)
-5. appStateProvider (AsyncNotifier)
-6. Inject AuthProvider into SoliplexApi
+3. authProviderProvider (platform-aware factory)
+4. appStateProvider (AsyncNotifier)
+5. Wire TokenProvider to AuthProvider.getValidToken()
 
 ---
 
-### Commit 11: Router auth guards
+### Commit 10: Router auth guards
 
 **Files:**
 
@@ -299,7 +285,7 @@ lib/core/router/
 
 ---
 
-### Commit 12: Login screen
+### Commit 11: Login screen
 
 **Files:**
 
@@ -315,7 +301,7 @@ lib/core/router/
 
 ---
 
-### Commit 13: Auth callback screen (web)
+### Commit 12: Auth callback screen (web)
 
 **Files:**
 
@@ -331,7 +317,7 @@ lib/core/router/
 
 ---
 
-### Commit 14: Logout and settings integration
+### Commit 13: Logout and settings integration
 
 **Files:**
 

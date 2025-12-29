@@ -61,7 +61,8 @@ void main() {
 
         await tokenStorage.read('https://api.example.com');
 
-        verify(() => mockStorage.read(key: 'auth_token_https://api.example.com'))
+        verify(() =>
+                mockStorage.read(key: 'auth_token_https://api.example.com'),)
             .called(1);
       });
     });
@@ -70,8 +71,9 @@ void main() {
       test('stores token as JSON', () async {
         final token = createToken();
 
-        when(() => mockStorage.write(key: any(named: 'key'), value: any(named: 'value')))
-            .thenAnswer((_) async {});
+        when(() => mockStorage.write(
+            key: any(named: 'key'),
+            value: any(named: 'value'),),).thenAnswer((_) async {});
 
         await tokenStorage.write('server1', token);
 
@@ -94,8 +96,9 @@ void main() {
         final token1 = createToken(accessToken: 'old-token');
         final token2 = createToken(accessToken: 'new-token');
 
-        when(() => mockStorage.write(key: any(named: 'key'), value: any(named: 'value')))
-            .thenAnswer((_) async {});
+        when(() => mockStorage.write(
+            key: any(named: 'key'),
+            value: any(named: 'value'),),).thenAnswer((_) async {});
 
         await tokenStorage.write('server1', token1);
         await tokenStorage.write('server1', token2);
@@ -120,7 +123,8 @@ void main() {
       });
 
       test('uses serverId in key', () async {
-        when(() => mockStorage.delete(key: 'auth_token_https://api.example.com'))
+        when(() =>
+                mockStorage.delete(key: 'auth_token_https://api.example.com'),)
             .thenAnswer((_) async {});
 
         await tokenStorage.delete('https://api.example.com');
@@ -157,8 +161,9 @@ void main() {
         );
 
         String? storedValue;
-        when(() => mockStorage.write(key: any(named: 'key'), value: any(named: 'value')))
-            .thenAnswer((invocation) async {
+        when(() => mockStorage.write(
+            key: any(named: 'key'),
+            value: any(named: 'value'),),).thenAnswer((invocation) async {
           storedValue = invocation.namedArguments[#value] as String;
         });
         when(() => mockStorage.read(key: 'auth_token_server1'))
@@ -179,8 +184,9 @@ void main() {
         );
 
         String? storedValue;
-        when(() => mockStorage.write(key: any(named: 'key'), value: any(named: 'value')))
-            .thenAnswer((invocation) async {
+        when(() => mockStorage.write(
+            key: any(named: 'key'),
+            value: any(named: 'value'),),).thenAnswer((invocation) async {
           storedValue = invocation.namedArguments[#value] as String;
         });
         when(() => mockStorage.read(key: 'auth_token_server1'))
