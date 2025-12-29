@@ -1,0 +1,45 @@
+id: test_wf_fail
+meta: {}
+name: Test workflow that fails
+lifecycle_events:
+  group_start:
+    - name: start span
+      method: soliplex.ingester.example.start_span
+      retries: 1
+      parameters: {"span_id":"my-span-id"}
+  group_end:
+    - name: end span
+      method: soliplex.ingester.example.end_span
+      retries: 1
+      parameters: {"span_id":"my-span-id"}
+    - name: notify slack
+      method: soliplex.ingester.example.notify_slack
+      retries: 1
+      parameters: {"channel":"my-channel", "message":"Workflow completed"}
+
+item_steps:
+  validate:
+    name: docling validate
+    retries: 3
+    method: soliplex.ingester.example.validate_document
+    parameters: {"fail": true }
+  parse:
+    name: docling parse
+    retries: 3
+    method: soliplex.ingester.example.parse_document
+    parameters: {}
+  chunk:
+    name: docling chunk
+    retries: 3
+    method: soliplex.ingester.example.chunk_document
+    parameters: {}
+  embed:
+    name: embeddings
+    retries: 3
+    method: soliplex.ingester.example.embed_document
+    parameters: {}
+  store:
+    name: save to rag
+    retries: 3
+    method: soliplex.ingester.example.save_document
+    parameters: {}

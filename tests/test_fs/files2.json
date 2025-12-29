@@ -1,0 +1,38 @@
+[
+  {
+    "url": "http://localhost/placeholder.foo",
+    "path": "file1.pdf",
+    "sha256": "958d253cda107a2b67e9bcf1191dfa73ad5d37a9952cdc4e425fe25c5ac17a6b",
+    "metadata": {
+      "size": 341,
+      "content-type": "application/pdf"
+    }
+  },
+  {
+    "url": "http://localhost/placeholder.foo",
+    "path": "file2.pdf",
+    "sha256": "e262fdfc09f9509c100b0d59941ae9ea546e9c94b542cfe5e1416e7fb161b330",
+    "metadata": {
+      "size": 341,
+      "content-type": "application/pdf"
+    }
+  },
+  {
+    "url": "http://localhost/placeholder.foo",
+    "path": "invalid.crdownload",
+    "sha256": "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb",
+    "metadata": {
+      "size": 1,
+      "content-type": "application/octet-stream"
+    }
+  },
+  {
+    "url": "http://localhost/placeholder.foo",
+    "path": "subdir\\file1.pdf",
+    "sha256": "958d253cda107a2b67e9bcf1191dfa73ad5d37a9952cdc4e425fe25c5ac17a6b",
+    "metadata": {
+      "size": 341,
+      "content-type": "application/pdf"
+    }
+  }
+]

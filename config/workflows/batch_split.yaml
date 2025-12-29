@@ -1,0 +1,30 @@
+id: batch_split
+meta: {}
+name: Batch workflow with splitting
+lifecycle_events:    
+item_steps:
+  validate:
+    name: validate document
+    retries: 3
+    method: soliplex.ingester.lib.workflow.validate_document
+    parameters: {}
+  parse:
+    name: docling parse
+    retries: 3
+    method: soliplex.ingester.lib.workflow.split_parse_document
+    parameters: {}
+  chunk:
+    name: docling chunk
+    retries: 3
+    method: soliplex.ingester.lib.workflow.chunk_document
+    parameters: {}
+  embed:
+    name: embeddings
+    retries: 3
+    method: soliplex.ingester.lib.workflow.embed_document
+    parameters: {}
+  store:
+    name: save to rag
+    retries: 3
+    method: soliplex.ingester.lib.workflow.save_to_rag
+    parameters: {}

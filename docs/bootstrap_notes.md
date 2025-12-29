@@ -1,0 +1,10 @@
+- started with blank directory. ollama shut down blank env file
+- copied minimal.yaml
+- check-config complained about OLLAMA_BASE_URL.  added to env
+- check-config complained about missing oidc config even with no oidc configuration in minimal.yaml
+    - should there be a --no-auth-mode option here? (e.g. should oidc be fully optional?)
+- copied oidc directory.  
+    - check-config clean 
+    - list rooms shows no rooms even though room_paths lists 2 rooms that don't exist
+    - serve no-auth-mode starts but logging isn't initialized (e.g. miessage about uvicorn running doesn't appear)
+- copying haiku room from example causes logging to work on restart , not the others

@@ -1,0 +1,9 @@
+id: test1
+config:
+  parse:
+    parse_param: parse_param1
+  chunk:
+    chunk_param: chunk_param1
+  embed:
+    embed_param: embed_param1
+  

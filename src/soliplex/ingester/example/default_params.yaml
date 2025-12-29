@@ -1,0 +1,20 @@
+id: default
+config:
+  parse:
+    do_ocr: False
+    force_ocr: False
+    ocr_engine: easyocr
+    ocr_lang: en
+    pdf_backend: dlparse_v4
+    table_mode: accurate
+  chunk:
+    chunker: docling-serve
+    chunk_size: 256
+    text_context_radius: 0
+    chunker_type: hybrid
+  embed:
+    provider: ollama
+    model: qwen3-embedding:4b
+    vector_dim: 2560
+  store:
+    data_dir: default_db
