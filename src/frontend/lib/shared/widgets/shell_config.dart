@@ -11,7 +11,6 @@ class ShellConfig {
     this.leading,
     this.actions = const [],
     this.drawer,
-    this.floatingActionButton,
   });
 
   /// The primary widget displayed in the AppBar.
@@ -27,7 +26,4 @@ class ShellConfig {
   /// Optional drawer for mobile navigation (e.g., thread list).
   /// Shown as leading drawer, separate from the HTTP inspector endDrawer.
   final Widget? drawer;
-
-  /// Optional floating action button for the screen.
-  final Widget? floatingActionButton;
 }

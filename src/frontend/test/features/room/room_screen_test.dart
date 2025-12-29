@@ -61,23 +61,6 @@ void main() {
       expect(find.byType(ChatPanel), findsOneWidget);
       expect(find.byType(HistoryPanel), findsNothing);
     });
-
-    testWidgets('shows FAB for creating thread', (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          home: const RoomScreen(roomId: 'general'),
-          overrides: [
-            threadsProvider('general').overrideWith((ref) async => []),
-            lastViewedThreadProvider('general')
-                .overrideWith((ref) async => const NoLastViewed()),
-          ],
-        ),
-      );
-
-      await tester.pumpAndSettle();
-
-      expect(find.byType(FloatingActionButton), findsOneWidget);
-    });
   });
 
   group('RoomScreen sidebar toggle', () {
