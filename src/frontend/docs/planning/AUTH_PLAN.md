@@ -94,7 +94,7 @@ lib/core/router/
 
 ---
 
-### Commit 1: Domain models in soliplex_client
+### Commit 1: Domain models in soliplex_client ✅
 
 **Files:**
 
