@@ -54,7 +54,7 @@ jobs:
           #
           pip install docling \
             --extra-index-url https://download.pytorch.org/whl/cpu
-          pip install -e . --group dev
+          pip install -e . --group dev --group ingester --group agents
       - name: Run soliplex unit tests
         run: |
           pip list
