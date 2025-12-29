@@ -127,6 +127,9 @@ class FakeHttpTransport implements HttpTransport {
   Duration get defaultTimeout => const Duration(seconds: 30);
 
   @override
+  TokenProvider get tokenProvider => () async => 'fake-token';
+
+  @override
   Future<T> request<T>(
     String method,
     Uri uri, {
@@ -140,14 +143,14 @@ class FakeHttpTransport implements HttpTransport {
   }
 
   @override
-  Stream<List<int>> requestStream(
+  Future<Stream<List<int>>> requestStream(
     String method,
     Uri uri, {
     Object? body,
     Map<String, String>? headers,
     CancelToken? cancelToken,
-  }) async* {
-    yield [];
+  }) async {
+    return const Stream.empty();
   }
 
   @override

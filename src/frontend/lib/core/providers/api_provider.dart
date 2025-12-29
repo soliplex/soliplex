@@ -45,7 +45,16 @@ final observableClientProvider = Provider<SoliplexHttpClient>((ref) {
 /// adapter uses dart:http which is isolate-safe.
 final httpTransportProvider = Provider<HttpTransport>((ref) {
   final client = ref.watch(observableClientProvider);
-  final transport = HttpTransport(client: client);
+  // TODO(auth): Replace stub with real tokenProvider from authProvider
+  // once Commit 10 (Auth providers) is complete.
+  final transport = HttpTransport(
+    client: client,
+    tokenProvider: () async {
+      // Stub: returns empty token until auth is wired up.
+      // Backend will return 401 if auth is required.
+      return '';
+    },
+  );
 
   // Note: Don't dispose transport here - client is managed by
   // observableClientProvider

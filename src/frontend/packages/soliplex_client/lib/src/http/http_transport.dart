@@ -1,10 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:soliplex_client/src/auth/auth_error.dart';
 import 'package:soliplex_client/src/errors/exceptions.dart';
 import 'package:soliplex_client/src/http/http_response.dart';
 import 'package:soliplex_client/src/http/soliplex_http_client.dart';
 import 'package:soliplex_client/src/utils/cancel_token.dart';
+
+/// Callback that returns an access token for authenticated requests.
+///
+/// Called before each request when set on [HttpTransport].
+/// Should return the access token string, or throw [AuthError] subtypes
+/// if authentication fails (e.g., [AuthErrorNotAuthenticated]).
+typedef TokenProvider = Future<String> Function();
 
 /// HTTP transport layer with JSON serialization and exception mapping.
 ///
@@ -39,13 +47,17 @@ import 'package:soliplex_client/src/utils/cancel_token.dart';
 /// transport.close();
 /// ```
 class HttpTransport {
-  /// Creates an HTTP transport with the given [client].
+  /// Creates an HTTP transport with the given [client] and [tokenProvider].
   ///
   /// Parameters:
   /// - [client]: The underlying HTTP client to use for requests
+  /// - [tokenProvider]: Callback to get access token for requests.
+  ///   Called before each request; the returned token is added as
+  ///   `Authorization: Bearer <token>` header.
   /// - [defaultTimeout]: Default timeout for requests (defaults to 30 seconds)
   HttpTransport({
     required SoliplexHttpClient client,
+    required this.tokenProvider,
     this.defaultTimeout = const Duration(seconds: 30),
   }) : _client = client;
 
@@ -53,6 +65,13 @@ class HttpTransport {
 
   /// Default timeout applied to requests when no per-request timeout is given.
   final Duration defaultTimeout;
+
+  /// Callback to get access token for authenticated requests.
+  ///
+  /// Called before each request. The returned token is added as an
+  /// `Authorization: Bearer <token>` header. If the callback throws,
+  /// the error propagates to the caller.
+  final TokenProvider tokenProvider;
 
   /// Performs an HTTP request and returns the decoded response.
   ///
@@ -93,6 +112,12 @@ class HttpTransport {
     // Prepare headers and body
     final requestHeaders = <String, String>{...?headers};
     var requestBody = body;
+
+    // Add Authorization header if token is available
+    final token = await tokenProvider();
+    if (token.isNotEmpty) {
+      requestHeaders['Authorization'] = 'Bearer $token';
+    }
 
     // JSON encode Map bodies
     if (body is Map<String, dynamic>) {
@@ -136,20 +161,28 @@ class HttpTransport {
   ///
   /// Throws:
   /// - [CancelledException] if cancelled before the stream starts
+  /// - [AuthError] subtypes if [tokenProvider] fails
+  ///   (e.g., [AuthErrorNotAuthenticated])
   /// - [NetworkException] for connection failures (from client)
-  Stream<List<int>> requestStream(
+  Future<Stream<List<int>>> requestStream(
     String method,
     Uri uri, {
     Object? body,
     Map<String, String>? headers,
     CancelToken? cancelToken,
-  }) {
+  }) async {
     // Check cancellation before starting
     cancelToken?.throwIfCancelled();
 
     // Prepare headers and body
     final requestHeaders = <String, String>{...?headers};
     var requestBody = body;
+
+    // Add Authorization header if token is available
+    final token = await tokenProvider();
+    if (token.isNotEmpty) {
+      requestHeaders['Authorization'] = 'Bearer $token';
+    }
 
     // JSON encode Map bodies
     if (body is Map<String, dynamic>) {

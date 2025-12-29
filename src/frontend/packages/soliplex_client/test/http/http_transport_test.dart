@@ -22,7 +22,10 @@ void main() {
 
   setUp(() {
     mockClient = MockSoliplexHttpClient();
-    transport = HttpTransport(client: mockClient);
+    transport = HttpTransport(
+      client: mockClient,
+      tokenProvider: () async => 'test-token',
+    );
 
     // Setup default close behavior
     when(() => mockClient.close()).thenReturn(null);
@@ -73,6 +76,7 @@ void main() {
       test('accepts custom default timeout', () {
         final customTransport = HttpTransport(
           client: mockClient,
+          tokenProvider: () async => 'token',
           defaultTimeout: const Duration(seconds: 60),
         );
         expect(
@@ -285,7 +289,10 @@ void main() {
           () => mockClient.request(
             'POST',
             Uri.parse('https://api.example.com/items'),
-            headers: {'content-type': 'application/json'},
+            headers: {
+              'Authorization': 'Bearer test-token',
+              'content-type': 'application/json',
+            },
             body: '{"name":"Test"}',
             timeout: any(named: 'timeout'),
           ),
@@ -398,7 +405,10 @@ void main() {
           () => mockClient.request(
             any(),
             any(),
-            headers: {'Authorization': 'Bearer token', 'X-Custom': 'value'},
+            headers: {
+              'Authorization': 'Bearer test-token',
+              'X-Custom': 'value',
+            },
             body: any(named: 'body'),
             timeout: any(named: 'timeout'),
           ),
@@ -426,7 +436,10 @@ void main() {
           () => mockClient.request(
             any(),
             any(),
-            headers: {'content-type': 'application/json'},
+            headers: {
+              'Authorization': 'Bearer test-token',
+              'content-type': 'application/json',
+            },
             body: any(named: 'body'),
             timeout: any(named: 'timeout'),
           ),
@@ -455,7 +468,10 @@ void main() {
           () => mockClient.request(
             any(),
             any(),
-            headers: {'content-type': 'application/x-custom'},
+            headers: {
+              'content-type': 'application/x-custom',
+              'Authorization': 'Bearer test-token',
+            },
             body: any(named: 'body'),
             timeout: any(named: 'timeout'),
           ),
@@ -825,7 +841,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = transport.requestStream(
+        final stream = await transport.requestStream(
           'GET',
           Uri.parse('https://api.example.com/stream'),
         );
@@ -866,7 +882,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = transport.requestStream(
+        final stream = await transport.requestStream(
           'POST',
           Uri.parse('https://api.example.com/stream'),
           headers: {'Authorization': 'Bearer token'},
@@ -883,7 +899,7 @@ void main() {
             'POST',
             Uri.parse('https://api.example.com/stream'),
             headers: {
-              'Authorization': 'Bearer token',
+              'Authorization': 'Bearer test-token',
               'content-type': 'application/json',
             },
             body: '{"prompt":"Hello"}',
@@ -894,11 +910,11 @@ void main() {
         await controller.close();
       });
 
-      test('throws CancelledException when token already cancelled', () {
+      test('throws CancelledException when token already cancelled', () async {
         final token = CancelToken()..cancel('Pre-cancelled');
 
-        expect(
-          () => transport.requestStream(
+        await expectLater(
+          transport.requestStream(
             'GET',
             Uri.parse('https://api.example.com/stream'),
             cancelToken: token,
@@ -920,7 +936,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = transport.requestStream(
+        final stream = await transport.requestStream(
           'GET',
           Uri.parse('https://api.example.com/stream'),
           cancelToken: token,
@@ -972,7 +988,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = transport.requestStream(
+        final stream = await transport.requestStream(
           'GET',
           Uri.parse('https://api.example.com/stream'),
           cancelToken: token,
@@ -1014,7 +1030,7 @@ void main() {
           ),
         ).thenAnswer((_) => controller.stream);
 
-        final stream = transport.requestStream(
+        final stream = await transport.requestStream(
           'GET',
           Uri.parse('https://api.example.com/stream'),
         );
@@ -1048,7 +1064,7 @@ void main() {
         ).thenAnswer((_) => controller.stream);
 
         final token = CancelToken();
-        final stream = transport.requestStream(
+        final stream = await transport.requestStream(
           'GET',
           Uri.parse('https://api.example.com/stream'),
           cancelToken: token,
@@ -1087,6 +1103,323 @@ void main() {
         transport.close();
 
         verify(() => mockClient.close()).called(1);
+      });
+    });
+
+    group('tokenProvider', () {
+      test('adds Authorization header when tokenProvider returns token',
+          () async {
+        final authTransport = HttpTransport(
+          client: mockClient,
+          tokenProvider: () async => 'my-access-token',
+        );
+
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => jsonResponse(200, body: {}));
+
+        await authTransport.request<void>(
+          'GET',
+          Uri.parse('https://api.example.com'),
+        );
+
+        verify(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: {'Authorization': 'Bearer my-access-token'},
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).called(1);
+      });
+
+      test('merges Authorization header with existing headers', () async {
+        final authTransport = HttpTransport(
+          client: mockClient,
+          tokenProvider: () async => 'token-123',
+        );
+
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => jsonResponse(200, body: {}));
+
+        await authTransport.request<void>(
+          'POST',
+          Uri.parse('https://api.example.com'),
+          headers: {'X-Custom': 'value'},
+          body: {'data': 'test'},
+        );
+
+        verify(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: {
+              'Authorization': 'Bearer token-123',
+              'X-Custom': 'value',
+              'content-type': 'application/json',
+            },
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).called(1);
+      });
+
+      test('tokenProvider overwrites user-supplied Authorization header',
+          () async {
+        final authTransport = HttpTransport(
+          client: mockClient,
+          tokenProvider: () async => 'provider-token',
+        );
+
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => jsonResponse(200, body: {}));
+
+        await authTransport.request<void>(
+          'GET',
+          Uri.parse('https://api.example.com'),
+          headers: {'Authorization': 'Bearer user-token'},
+        );
+
+        verify(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: {'Authorization': 'Bearer provider-token'},
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).called(1);
+      });
+
+      test('propagates AuthError from tokenProvider', () async {
+        final authTransport = HttpTransport(
+          client: mockClient,
+          tokenProvider: () async {
+            throw const AuthErrorNotAuthenticated(message: 'Not logged in');
+          },
+        );
+
+        await expectLater(
+          authTransport.request<void>(
+            'GET',
+            Uri.parse('https://api.example.com'),
+          ),
+          throwsA(
+            isA<AuthErrorNotAuthenticated>()
+                .having((e) => e.message, 'message', 'Not logged in'),
+          ),
+        );
+
+        // Client should not be called when auth fails
+        verifyNever(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        );
+      });
+
+      test('propagates AuthErrorNetwork from tokenProvider', () async {
+        final authTransport = HttpTransport(
+          client: mockClient,
+          tokenProvider: () async {
+            throw const AuthErrorNetwork(message: 'Token refresh failed');
+          },
+        );
+
+        await expectLater(
+          authTransport.request<void>(
+            'GET',
+            Uri.parse('https://api.example.com'),
+          ),
+          throwsA(
+            isA<AuthErrorNetwork>()
+                .having((e) => e.message, 'message', 'Token refresh failed'),
+          ),
+        );
+      });
+
+      test('calls tokenProvider for each request', () async {
+        var callCount = 0;
+        final authTransport = HttpTransport(
+          client: mockClient,
+          tokenProvider: () async {
+            callCount++;
+            return 'token-$callCount';
+          },
+        );
+
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => jsonResponse(200, body: {}));
+
+        await authTransport.request<void>(
+          'GET',
+          Uri.parse('https://api.example.com/1'),
+        );
+        await authTransport.request<void>(
+          'GET',
+          Uri.parse('https://api.example.com/2'),
+        );
+
+        expect(callCount, equals(2));
+      });
+
+      test('adds Authorization header to streaming requests', () async {
+        final authTransport = HttpTransport(
+          client: mockClient,
+          tokenProvider: () async => 'stream-token',
+        );
+        final controller = StreamController<List<int>>();
+
+        when(
+          () => mockClient.requestStream(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer((_) => controller.stream);
+
+        final stream = await authTransport.requestStream(
+          'GET',
+          Uri.parse('https://api.example.com/stream'),
+        );
+
+        // Start listening to trigger the request
+        final subscription = stream.listen((_) {});
+        await Future<void>.delayed(Duration.zero);
+
+        verify(
+          () => mockClient.requestStream(
+            any(),
+            any(),
+            headers: {'Authorization': 'Bearer stream-token'},
+            body: any(named: 'body'),
+          ),
+        ).called(1);
+
+        await subscription.cancel();
+        await controller.close();
+      });
+
+      test('propagates AuthError from tokenProvider in streaming requests',
+          () async {
+        final authTransport = HttpTransport(
+          client: mockClient,
+          tokenProvider: () async {
+            throw const AuthErrorNotAuthenticated();
+          },
+        );
+
+        await expectLater(
+          authTransport.requestStream(
+            'GET',
+            Uri.parse('https://api.example.com/stream'),
+          ),
+          throwsA(isA<AuthErrorNotAuthenticated>()),
+        );
+      });
+
+      test('does not add Authorization header when token is empty', () async {
+        final authTransport = HttpTransport(
+          client: mockClient,
+          tokenProvider: () async => '',
+        );
+
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => jsonResponse(200, body: {}));
+
+        await authTransport.request<void>(
+          'GET',
+          Uri.parse('https://api.example.com'),
+        );
+
+        verify(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: <String, String>{},
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).called(1);
+      });
+
+      test('does not add Authorization header to stream when token is empty',
+          () async {
+        final authTransport = HttpTransport(
+          client: mockClient,
+          tokenProvider: () async => '',
+        );
+        final controller = StreamController<List<int>>();
+
+        when(
+          () => mockClient.requestStream(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer((_) => controller.stream);
+
+        final stream = await authTransport.requestStream(
+          'GET',
+          Uri.parse('https://api.example.com/stream'),
+        );
+
+        // Start listening to trigger the request
+        final subscription = stream.listen((_) {});
+        await Future<void>.delayed(Duration.zero);
+
+        verify(
+          () => mockClient.requestStream(
+            any(),
+            any(),
+            headers: <String, String>{},
+            body: any(named: 'body'),
+          ),
+        ).called(1);
+
+        await subscription.cancel();
+        await controller.close();
       });
     });
 
