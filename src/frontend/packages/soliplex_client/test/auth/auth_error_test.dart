@@ -5,7 +5,7 @@ void main() {
   group('AuthError', () {
     group('base class', () {
       test('preserves original error and stack trace', () {
-        final originalError = FormatException('bad token');
+        const originalError = FormatException('bad token');
         final trace = StackTrace.current;
 
         final error = AuthErrorNetwork(
@@ -69,26 +69,6 @@ void main() {
 
         expect(error.toString(), contains('Network'));
         expect(error.toString(), contains('No internet'));
-      });
-    });
-
-    group('AuthErrorTokenExpired', () {
-      test('creates with default message', () {
-        const error = AuthErrorTokenExpired();
-
-        expect(error.message, equals('Token has expired'));
-      });
-
-      test('creates with custom message', () {
-        const error = AuthErrorTokenExpired(message: 'Refresh token expired');
-
-        expect(error.message, equals('Refresh token expired'));
-      });
-
-      test('toString includes type and message', () {
-        const error = AuthErrorTokenExpired();
-
-        expect(error.toString(), contains('TokenExpired'));
       });
     });
 
@@ -162,16 +142,39 @@ void main() {
       });
     });
 
+    group('AuthErrorNotAuthenticated', () {
+      test('creates with default message', () {
+        const error = AuthErrorNotAuthenticated();
+
+        expect(error.message, equals('Not authenticated'));
+      });
+
+      test('creates with custom message', () {
+        const error = AuthErrorNotAuthenticated(
+          message: 'Login required for this operation',
+        );
+
+        expect(error.message, equals('Login required for this operation'));
+      });
+
+      test('toString includes type and message', () {
+        const error = AuthErrorNotAuthenticated();
+
+        expect(error.toString(), contains('NotAuthenticated'));
+        expect(error.toString(), contains('Not authenticated'));
+      });
+    });
+
     group('sealed class exhaustiveness', () {
       test('can pattern match on all variants', () {
         // This test verifies the sealed class is properly exhaustive
         final errors = <AuthError>[
           const AuthErrorCancelled(),
           const AuthErrorNetwork(message: 'test'),
-          const AuthErrorTokenExpired(),
           const AuthErrorInvalidState(),
           const AuthErrorServer(message: 'test', statusCode: 500),
           const AuthErrorConfiguration(message: 'test'),
+          const AuthErrorNotAuthenticated(),
         ];
 
         for (final error in errors) {
@@ -179,10 +182,10 @@ void main() {
           final result = switch (error) {
             AuthErrorCancelled() => 'cancelled',
             AuthErrorNetwork() => 'network',
-            AuthErrorTokenExpired() => 'expired',
             AuthErrorInvalidState() => 'invalid_state',
             AuthErrorServer() => 'server',
             AuthErrorConfiguration() => 'config',
+            AuthErrorNotAuthenticated() => 'not_authenticated',
           };
           expect(result, isNotEmpty);
         }

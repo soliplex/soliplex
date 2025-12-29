@@ -1,8 +1,11 @@
+import 'package:meta/meta.dart';
+
 /// Authentication errors for OIDC flow failures.
 ///
-/// These are distinct from [SoliplexException] subtypes which represent
+/// These are distinct from `SoliplexException` subtypes which represent
 /// HTTP-level failures. AuthError represents failures during the OAuth
 /// authentication flow itself (user cancelled, CSRF mismatch, etc).
+@immutable
 sealed class AuthError implements Exception {
   /// Creates an auth error.
   const AuthError({
@@ -22,6 +25,7 @@ sealed class AuthError implements Exception {
 }
 
 /// Authentication was cancelled by the user.
+@immutable
 final class AuthErrorCancelled extends AuthError {
   /// Creates a cancelled error.
   const AuthErrorCancelled({
@@ -35,6 +39,7 @@ final class AuthErrorCancelled extends AuthError {
 }
 
 /// Network error during authentication.
+@immutable
 final class AuthErrorNetwork extends AuthError {
   /// Creates a network error.
   const AuthErrorNetwork({
@@ -51,20 +56,8 @@ final class AuthErrorNetwork extends AuthError {
   String toString() => 'AuthError.Network: $message';
 }
 
-/// Token has expired and cannot be refreshed.
-final class AuthErrorTokenExpired extends AuthError {
-  /// Creates a token expired error.
-  const AuthErrorTokenExpired({
-    super.message = 'Token has expired',
-    super.originalError,
-    super.stackTrace,
-  });
-
-  @override
-  String toString() => 'AuthError.TokenExpired: $message';
-}
-
 /// CSRF state validation failed.
+@immutable
 final class AuthErrorInvalidState extends AuthError {
   /// Creates an invalid state error.
   const AuthErrorInvalidState({
@@ -78,6 +71,7 @@ final class AuthErrorInvalidState extends AuthError {
 }
 
 /// Server returned an error response.
+@immutable
 final class AuthErrorServer extends AuthError {
   /// Creates a server error.
   const AuthErrorServer({
@@ -99,6 +93,7 @@ final class AuthErrorServer extends AuthError {
 }
 
 /// Configuration error (missing client ID, invalid redirect URI, etc).
+@immutable
 final class AuthErrorConfiguration extends AuthError {
   /// Creates a configuration error.
   const AuthErrorConfiguration({
@@ -109,4 +104,18 @@ final class AuthErrorConfiguration extends AuthError {
 
   @override
   String toString() => 'AuthError.Configuration: $message';
+}
+
+/// Operation requires authentication but user is not logged in.
+@immutable
+final class AuthErrorNotAuthenticated extends AuthError {
+  /// Creates a not authenticated error.
+  const AuthErrorNotAuthenticated({
+    super.message = 'Not authenticated',
+    super.originalError,
+    super.stackTrace,
+  });
+
+  @override
+  String toString() => 'AuthError.NotAuthenticated: $message';
 }

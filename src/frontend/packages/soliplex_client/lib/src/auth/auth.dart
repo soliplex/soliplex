@@ -1,5 +1,9 @@
 export 'auth_error.dart';
+export 'auth_provider.dart';
+export 'auth_result.dart';
 export 'auth_token.dart';
 export 'oidc_auth_system.dart';
 export 'sso_config.dart';
+export 'token_result.dart';
+export 'token_storage.dart';
 export 'user_info.dart';
