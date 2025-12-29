@@ -18,6 +18,8 @@ pyvenv.cfg
 
 # database files
 db/
+file-store/
+lancedb/
 
 # misc
 tmp/
@@ -25,3 +27,11 @@ tmp/
 # osx
 .DS_Store
 ._*
+
+
+# UI development files
+ui/node_modules/
+ui/.svelte-kit/
+ui/build/
+ui/.env
+ui/.env.*
