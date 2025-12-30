@@ -1,8 +1,11 @@
 #!/bin/bash
 # Generate Dart model classes from AG-UI feature JSON schemas
 #
-# This script uses quicktype to generate type-safe Dart classes from
-# the JSON schemas in the schemas/ directory.
+# This script extracts individual feature schemas from the combined
+# schema.json file and uses quicktype to generate type-safe Dart classes.
+#
+# Prerequisites:
+#   Run ./scripts/generate_feature_schemas.sh first to create schema.json
 #
 # Usage:
 #   ./scripts/generate_dart_models.sh
@@ -18,7 +21,21 @@ NC='\033[0m' # No Color
 # Directories
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCHEMAS_DIR="$REPO_ROOT/schemas"
+COMBINED_SCHEMA="$SCHEMAS_DIR/schema.json"
 OUTPUT_DIR="$REPO_ROOT/src/flutter/lib/core/models/agui_features"
+
+# Check if schema.json exists
+if [ ! -f "$COMBINED_SCHEMA" ]; then
+    echo -e "${RED}Error: schema.json not found${NC}"
+    echo ""
+    echo "The combined schema file does not exist at:"
+    echo "  $COMBINED_SCHEMA"
+    echo ""
+    echo -e "${YELLOW}Generate the schema first by running:${NC}"
+    echo "  ./scripts/generate_feature_schemas.sh"
+    echo ""
+    exit 1
+fi
 
 # Check if quicktype is installed
 if ! command -v quicktype &> /dev/null; then
@@ -40,14 +57,41 @@ if ! command -v quicktype &> /dev/null; then
     exit 1
 fi
 
-echo -e "${GREEN}Generating Dart model classes...${NC}"
+# Check if jq is installed
+if ! command -v jq &> /dev/null; then
+    echo -e "${RED}Error: jq is not installed${NC}"
+    echo ""
+    echo "jq is required to extract schemas from the combined schema file."
+    echo ""
+    echo -e "${YELLOW}To install jq:${NC}"
+    echo "  macOS: brew install jq"
+    echo "  Ubuntu: sudo apt-get install jq"
+    echo ""
+    exit 1
+fi
+
+echo -e "${GREEN}Extracting individual feature schemas...${NC}"
 echo ""
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 
-# Generate Dart classes for each schema
-for schema_file in "$SCHEMAS_DIR"/*.json; do
+# Create temporary directory for individual schemas
+TEMP_SCHEMAS_DIR="$SCHEMAS_DIR/temp"
+mkdir -p "$TEMP_SCHEMAS_DIR"
+
+# Extract individual feature schemas from the combined schema
+jq -r '.properties | keys[]' "$COMBINED_SCHEMA" | while read feature_name; do
+    echo "Extracting schema for $feature_name..."
+    jq ".properties.\"$feature_name\"" "$COMBINED_SCHEMA" > "$TEMP_SCHEMAS_DIR/${feature_name}.json"
+done
+
+echo ""
+echo -e "${GREEN}Generating Dart model classes...${NC}"
+echo ""
+
+# Generate Dart classes for each extracted schema
+for schema_file in "$TEMP_SCHEMAS_DIR"/*.json; do
     # Skip if no JSON files found
     if [ ! -f "$schema_file" ]; then
         continue
@@ -80,6 +124,9 @@ for schema_file in "$SCHEMAS_DIR"/*.json; do
 
     echo -e "${GREEN}✓${NC} Generated $filename.dart"
 done
+
+# Clean up temporary schemas
+rm -rf "$TEMP_SCHEMAS_DIR"
 
 echo ""
 echo -e "${GREEN}Done!${NC} Dart models generated in:"
