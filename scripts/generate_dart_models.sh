@@ -70,6 +70,18 @@ if ! command -v jq &> /dev/null; then
     exit 1
 fi
 
+# Check if dart is installed
+if ! command -v dart &> /dev/null; then
+    echo -e "${RED}Error: dart is not installed${NC}"
+    echo ""
+    echo "dart is required to format the generated Dart code."
+    echo ""
+    echo -e "${YELLOW}To install Dart/Flutter:${NC}"
+    echo "  Visit https://flutter.dev/docs/get-started/install"
+    echo ""
+    exit 1
+fi
+
 echo -e "${GREEN}Extracting individual feature schemas...${NC}"
 echo ""
 
@@ -125,14 +137,40 @@ for schema_file in "$TEMP_SCHEMAS_DIR"/*.json; do
     echo -e "${GREEN}✓${NC} Generated $filename.dart"
 done
 
+echo ""
+echo -e "${GREEN}Adding linter ignore directives...${NC}"
+echo ""
+
+# Add linter ignore directives to each generated file
+for dart_file in "$OUTPUT_DIR"/*.dart; do
+    if [ -f "$dart_file" ]; then
+        # Add comprehensive ignore directives at the top of the file
+        # Split across multiple lines to respect 80-char limit
+        cat > "${dart_file}.tmp" <<'EOF'
+// Generated code from quicktype - ignoring style issues
+// ignore_for_file: sort_constructors_first
+// ignore_for_file: prefer_single_quotes
+// ignore_for_file: always_put_required_named_parameters_first
+// ignore_for_file: argument_type_not_assignable
+// ignore_for_file: unnecessary_ignore
+
+EOF
+        cat "$dart_file" >> "${dart_file}.tmp"
+        mv "${dart_file}.tmp" "$dart_file"
+        echo "Added linter ignores to $(basename "$dart_file")"
+    fi
+done
+
+echo ""
+echo -e "${GREEN}Formatting generated Dart code...${NC}"
+echo ""
+
+# Format all generated Dart files
+dart format "$OUTPUT_DIR"
+
 # Clean up temporary schemas
 rm -rf "$TEMP_SCHEMAS_DIR"
 
 echo ""
 echo -e "${GREEN}Done!${NC} Dart models generated in:"
 echo "  $OUTPUT_DIR"
-echo ""
-echo "Next steps:"
-echo "  1. Review the generated models"
-echo "  2. Add imports as needed"
-echo "  3. Models include fromJson/toJson serialization methods"
