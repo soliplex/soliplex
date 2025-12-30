@@ -26,6 +26,7 @@ dependencies:
     path: packages/soliplex_client
   soliplex_client_native:
     path: packages/soliplex_client_native
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

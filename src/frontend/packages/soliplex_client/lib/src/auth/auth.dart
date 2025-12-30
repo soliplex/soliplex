@@ -4,6 +4,7 @@ export 'auth_result.dart';
 export 'auth_token.dart';
 export 'oidc_auth_system.dart';
 export 'oidc_discovery_service.dart';
+export 'refresh_result.dart';
 export 'sso_config.dart';
 export 'token_result.dart';
 export 'token_storage.dart';

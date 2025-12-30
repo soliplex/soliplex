@@ -199,7 +199,7 @@ lib/core/router/
 
 ---
 
-### Commit 6: Mobile auth provider (PKCE)
+### Commit 6: Mobile auth provider (PKCE) ✅
 
 **Files:**
 
@@ -211,9 +211,12 @@ lib/core/router/
 **Details:**
 
 1. MobileAuthProvider implements AuthProvider
-2. Uses flutter_appauth for PKCE flow
+2. Uses flutter_appauth for PKCE flow (iOS, Android, macOS only)
 3. Token refresh via flutter_appauth.token()
 4. Platform configurations for deep links
+5. RefreshResult sealed class for type-safe refresh handling
+
+**Note:** flutter_appauth only supports iOS, Android, macOS. Windows and Linux use WebAuthProvider.
 
 ---
 
@@ -222,15 +225,28 @@ lib/core/router/
 **Files:**
 
 - `lib/core/auth/web_auth_provider.dart`
-- `pubspec.yaml` (add url_launcher, crypto)
+- `pubspec.yaml` (add url_launcher)
 - Tests
 
 **Details:**
 
-1. WebAuthProvider implements AuthProvider
-2. Backend-mediated flow via url_launcher
+1. WebAuthProvider implements AuthProvider for web, Windows, Linux
+2. Platform-specific callback handling:
+   - Web: Browser redirect with query params
+   - Desktop (Windows/Linux): Local HTTP server on 127.0.0.1
 3. CSRF state generation and validation
-4. Token refresh via HTTP POST
+4. Token extraction from query params (backend limitation)
+5. Token refresh via HTTP POST to backend
+
+**Platform selection logic:**
+
+```dart
+if (kIsWeb) return WebAuthProvider(...);
+if (Platform.isIOS || Platform.isAndroid || Platform.isMacOS) {
+  return MobileAuthProvider(...);
+}
+return WebAuthProvider(...);  // Windows, Linux
+```
 
 ---
 
@@ -359,7 +375,44 @@ lib/core/router/
 - `GET /api/login` - Returns List<OIDCAuthSystem>
 - `GET /api/login/{provider}?return_to=...` - Initiates backend-mediated OAuth (web)
 - `GET /api/auth/{provider}` - OAuth callback, redirects with tokens
-- `GET /api/user-info` - Returns authenticated user info
+- `GET /api/user_info` - Returns authenticated user info (note: underscore, not hyphen)
+
+## Backend Security Notes
+
+**Current state (as of 2024-12-29):**
+
+The backend (`src/soliplex/src/soliplex/views/auth.py`) returns tokens via **query parameters**:
+
+```python
+return_to += f"?token={access_token}"
+return_to += f"&refresh_token={refresh_token}"
+return_to += f"&expires_in={expires_in}"
+return_to += f"&refresh_expires_in={refresh_expires_in}"
+```
+
+**Security implications:**
+
+| Concern | Query Params (current) | Fragments (recommended) |
+|---------|----------------------|------------------------|
+| Server logs | ✗ Exposed | ✓ Not sent to server |
+| Browser history | ✗ Stored | ✓ Not stored |
+| Referer header | ✗ Leaks to external resources | ✓ Protected |
+
+**Recommendation for future improvement:**
+
+Change backend to use URL fragments instead:
+
+```python
+return_to += f"#access_token={access_token}&refresh_token=..."
+```
+
+**Current decision:** Proceed with query params (current backend behavior). Frontend will clear URL params immediately after extraction to minimize exposure window.
+
+**Additional backend observations:**
+
+- No explicit redirect_uri whitelist (potential open redirect risk)
+- State parameter handled by authlib via `authorize_state`
+- No timeout for abandoned auth flows
 
 ## Open Questions
 

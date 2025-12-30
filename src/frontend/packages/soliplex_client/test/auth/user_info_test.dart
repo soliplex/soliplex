@@ -167,5 +167,108 @@ void main() {
         expect(restored, equals(original));
       });
     });
+
+    group('fromOidcClaims', () {
+      test('parses standard OIDC claims', () {
+        final claims = {
+          'sub': 'user-123',
+          'email': 'user@example.com',
+          'name': 'Test User',
+        };
+
+        final user = UserInfo.fromOidcClaims(claims);
+
+        expect(user.id, equals('user-123'));
+        expect(user.email, equals('user@example.com'));
+        expect(user.name, equals('Test User'));
+      });
+
+      test('uses id as fallback for sub', () {
+        final claims = {
+          'id': 'user-456',
+          'email': 'user@example.com',
+        };
+
+        final user = UserInfo.fromOidcClaims(claims);
+
+        expect(user.id, equals('user-456'));
+      });
+
+      test('prefers sub over id', () {
+        final claims = {
+          'sub': 'sub-value',
+          'id': 'id-value',
+        };
+
+        final user = UserInfo.fromOidcClaims(claims);
+
+        expect(user.id, equals('sub-value'));
+      });
+
+      test('uses empty string when no id fields present', () {
+        final claims = <String, dynamic>{'email': 'user@example.com'};
+
+        final user = UserInfo.fromOidcClaims(claims);
+
+        expect(user.id, equals(''));
+      });
+
+      test('builds name from given_name and family_name', () {
+        final claims = {
+          'sub': 'user-123',
+          'given_name': 'John',
+          'family_name': 'Doe',
+        };
+
+        final user = UserInfo.fromOidcClaims(claims);
+
+        expect(user.name, equals('John Doe'));
+      });
+
+      test('uses only given_name when family_name missing', () {
+        final claims = {
+          'sub': 'user-123',
+          'given_name': 'John',
+        };
+
+        final user = UserInfo.fromOidcClaims(claims);
+
+        expect(user.name, equals('John'));
+      });
+
+      test('uses only family_name when given_name missing', () {
+        final claims = {
+          'sub': 'user-123',
+          'family_name': 'Doe',
+        };
+
+        final user = UserInfo.fromOidcClaims(claims);
+
+        expect(user.name, equals('Doe'));
+      });
+
+      test('prefers name over given_name/family_name', () {
+        final claims = {
+          'sub': 'user-123',
+          'name': 'Full Name',
+          'given_name': 'John',
+          'family_name': 'Doe',
+        };
+
+        final user = UserInfo.fromOidcClaims(claims);
+
+        expect(user.name, equals('Full Name'));
+      });
+
+      test('handles minimal claims', () {
+        final claims = {'sub': 'user-123'};
+
+        final user = UserInfo.fromOidcClaims(claims);
+
+        expect(user.id, equals('user-123'));
+        expect(user.email, isNull);
+        expect(user.name, isNull);
+      });
+    });
   });
 }

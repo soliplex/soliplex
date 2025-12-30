@@ -23,6 +23,29 @@ class UserInfo {
     );
   }
 
+  /// Creates user info from OIDC userinfo endpoint claims.
+  ///
+  /// Normalizes different OIDC provider claim formats:
+  /// - `sub` or `id` → [id]
+  /// - `name` or `given_name`+`family_name` → [name]
+  /// - `email` → [email]
+  factory UserInfo.fromOidcClaims(Map<String, dynamic> claims) {
+    final givenName = claims['given_name'] as String?;
+    final familyName = claims['family_name'] as String?;
+
+    var name = claims['name'] as String?;
+    if (name == null && (givenName != null || familyName != null)) {
+      name = [givenName, familyName].whereType<String>().join(' ').trim();
+      if (name.isEmpty) name = null;
+    }
+
+    return UserInfo(
+      id: claims['sub'] as String? ?? claims['id'] as String? ?? '',
+      email: claims['email'] as String?,
+      name: name,
+    );
+  }
+
   /// Unique identifier for the user.
   final String id;
 

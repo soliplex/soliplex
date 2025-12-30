@@ -5,23 +5,6 @@ import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:http/http.dart' as http;
 import 'package:soliplex_client/soliplex_client.dart';
 
-/// Result of a token refresh attempt.
-sealed class RefreshResult {
-  const RefreshResult();
-}
-
-/// Token refresh succeeded.
-final class RefreshSuccess extends RefreshResult {
-  const RefreshSuccess(this.token);
-  final AuthToken token;
-}
-
-/// Token refresh was rejected by the server.
-final class RefreshRejected extends RefreshResult {
-  const RefreshRejected(this.exception);
-  final Exception exception;
-}
-
 /// AuthProvider implementation for mobile platforms using PKCE flow.
 ///
 /// Uses flutter_appauth for native OAuth handling on iOS, Android, and macOS.
@@ -75,9 +58,9 @@ class MobileAuthProvider implements AuthProvider {
           case RefreshSuccess(:final token):
             await _tokenStorage.write(serverId, token);
             return Authenticated(token: token);
-          case RefreshRejected(:final exception):
+          case RefreshRejected(:final cause):
             await _tokenStorage.delete(serverId);
-            return RefreshFailed(cause: exception.toString());
+            return RefreshFailed(cause: cause);
         }
     }
   }
@@ -127,17 +110,19 @@ class MobileAuthProvider implements AuthProvider {
 
     if (result case TokenFound(:final token)) {
       final config = _sessionCache[serverId];
+      final idToken = token.idToken;
 
-      if (config?.endSessionEndpoint != null && token.idToken != null) {
+      if (config case SsoConfig(:final endSessionEndpoint?)
+          when idToken != null) {
         try {
           await _appAuth.endSession(
             EndSessionRequest(
-              idTokenHint: token.idToken,
+              idTokenHint: idToken,
               postLogoutRedirectUrl: _redirectUri,
               serviceConfiguration: AuthorizationServiceConfiguration(
-                authorizationEndpoint: config!.authorizationEndpoint,
+                authorizationEndpoint: config.authorizationEndpoint,
                 tokenEndpoint: config.tokenEndpoint,
-                endSessionEndpoint: config.endSessionEndpoint,
+                endSessionEndpoint: endSessionEndpoint,
               ),
             ),
           );
@@ -161,7 +146,8 @@ class MobileAuthProvider implements AuthProvider {
       TokenNotFound() => throw const AuthErrorNotAuthenticated(),
     };
 
-    if (config.userInfoEndpoint == null) {
+    final userInfoEndpoint = config.userInfoEndpoint;
+    if (userInfoEndpoint == null) {
       throw const AuthErrorConfiguration(
         message: 'No userinfo endpoint configured',
       );
@@ -170,7 +156,7 @@ class MobileAuthProvider implements AuthProvider {
     final http.Response response;
     try {
       response = await _httpClient.get(
-        Uri.parse(config.userInfoEndpoint!),
+        Uri.parse(userInfoEndpoint),
         headers: {'Authorization': 'Bearer ${token.accessToken}'},
       );
     } on Exception catch (e, st) {
@@ -190,7 +176,7 @@ class MobileAuthProvider implements AuthProvider {
     }
 
     final json = jsonDecode(response.body) as Map<String, dynamic>;
-    return UserInfo.fromJson(_normalizeUserInfoResponse(json));
+    return UserInfo.fromOidcClaims(json);
   }
 
   Future<RefreshResult> _attemptRefresh(
@@ -213,7 +199,7 @@ class MobileAuthProvider implements AuthProvider {
 
       return RefreshSuccess(_tokenFromResponse(response));
     } on Exception catch (e) {
-      return RefreshRejected(e);
+      return RefreshRejected(e.toString());
     }
   }
 
@@ -238,24 +224,5 @@ class MobileAuthProvider implements AuthProvider {
       expiresAt: expiresAt.toUtc(),
       idToken: response.idToken,
     );
-  }
-
-  /// Normalizes OIDC userinfo response to match [UserInfo.fromJson].
-  ///
-  /// Different OIDC providers use different claim names:
-  /// - Standard: `sub`, `email`, `name`
-  /// - Some use: `preferred_username`, `given_name` + `family_name`
-  Map<String, dynamic> _normalizeUserInfoResponse(Map<String, dynamic> json) {
-    return {
-      'id': json['sub'] as String? ?? json['id'] as String? ?? '',
-      if (json['email'] != null) 'email': json['email'],
-      if (json['name'] != null)
-        'name': json['name']
-      else if (json['given_name'] != null || json['family_name'] != null)
-        'name': [
-          json['given_name'] as String?,
-          json['family_name'] as String?,
-        ].whereType<String>().join(' ').trim(),
-    };
   }
 }
