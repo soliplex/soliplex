@@ -17,6 +17,8 @@ class FakeUri extends Fake implements Uri {}
 
 class FakeAuthToken extends Fake implements AuthToken {}
 
+class FakeOIDCAuthSystem extends Fake implements OIDCAuthSystem {}
+
 void main() {
   late MockTokenStorage mockStorage;
   late MockWebAuthPendingStorage mockPendingStorage;
@@ -28,6 +30,7 @@ void main() {
   setUpAll(() {
     registerFallbackValue(FakeUri());
     registerFallbackValue(FakeAuthToken());
+    registerFallbackValue(FakeOIDCAuthSystem());
   });
 
   setUp(() {
@@ -249,25 +252,31 @@ void main() {
     });
 
     group('login', () {
-      test('launches URL and saves pending server ID', () async {
+      test('launches URL and saves pending auth state', () async {
         final config = createConfig();
-        when(() => mockPendingStorage.savePendingServerId('server1'))
-            .thenAnswer((_) async {});
+        when(
+          () => mockPendingStorage.savePendingAuth(any(), any()),
+        ).thenAnswer((_) async {});
 
         final result = await provider.login('server1', config);
 
         expect(result, isA<LoginRedirect>());
         expect((result as LoginRedirect).serverId, equals('server1'));
         expect(urlLauncherCalled, isTrue);
-        // Pending server ID is saved after successful URL launch
-        verify(() => mockPendingStorage.savePendingServerId('server1'))
-            .called(1);
+        // Pending auth state is saved before URL launch
+        verify(
+          () => mockPendingStorage.savePendingAuth(
+            'server1',
+            config.authSystem,
+          ),
+        ).called(1);
       });
 
       test('builds correct login URL with return_to parameter', () async {
         final config = createConfig();
-        when(() => mockPendingStorage.savePendingServerId('server1'))
-            .thenAnswer((_) async {});
+        when(
+          () => mockPendingStorage.savePendingAuth(any(), any()),
+        ).thenAnswer((_) async {});
 
         await provider.login('server1', config);
 
@@ -282,8 +291,10 @@ void main() {
         );
       });
 
-      test('throws AuthErrorNetwork without saving pending state on failure',
-          () async {
+      test('throws AuthErrorNetwork when URL launch fails', () async {
+        when(() => mockPendingStorage.savePendingAuth(any(), any()))
+            .thenAnswer((_) async {});
+
         final failingProvider = WebAuthProvider(
           baseUrl: 'https://api.example.com',
           tokenStorage: mockStorage,
@@ -303,22 +314,24 @@ void main() {
           throwsA(isA<AuthErrorNetwork>()),
         );
 
-        // Pending state should NOT be saved when URL launch fails
-        verifyNever(() => mockPendingStorage.savePendingServerId(any()));
+        // Pending state saved before URL launch (orphaned on failure but
+        // harmless - overwritten on next login)
+        verify(() => mockPendingStorage.savePendingAuth('server1', any()))
+            .called(1);
       });
     });
 
     group('logout', () {
-      test('deletes token and clears pending server ID', () async {
+      test('deletes token and clears pending auth state', () async {
         final config = createConfig();
         when(() => mockStorage.delete('server1')).thenAnswer((_) async {});
-        when(() => mockPendingStorage.clearPendingServerId())
+        when(() => mockPendingStorage.clearPendingAuth())
             .thenAnswer((_) async {});
 
         await provider.logout('server1', config);
 
         verify(() => mockStorage.delete('server1')).called(1);
-        verify(() => mockPendingStorage.clearPendingServerId()).called(1);
+        verify(() => mockPendingStorage.clearPendingAuth()).called(1);
       });
     });
 

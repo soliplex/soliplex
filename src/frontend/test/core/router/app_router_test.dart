@@ -141,18 +141,17 @@ void main() {
               ),
             ),
           ],
-          initialLocation: '/auth/callback',
+          initialLocation: '/auth/callback?token=test&expires_in=3600',
         ),
       );
 
-      await tester.pumpAndSettle();
+      // Just pump (not pumpAndSettle) to see callback screen before processing
+      await tester.pump();
+      await tester.pump();
 
       expect(find.byType(AuthCallbackScreen), findsOneWidget);
-      // Callback screen shows not-implemented message
-      expect(
-        find.text('Web authentication callback not implemented'),
-        findsOneWidget,
-      );
+      // Callback screen shows loading indicator while processing
+      expect(find.text('Completing authentication...'), findsOneWidget);
     });
 
     testWidgets('preserves return URL in login redirect', (tester) async {

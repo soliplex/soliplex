@@ -27,39 +27,59 @@ Future<bool> defaultUrlLauncher(
 
 /// Storage for pending web authentication state.
 ///
-/// Persists the server ID between browser redirect and callback.
+/// Persists auth state between browser redirect and callback for web OAuth.
 abstract interface class WebAuthPendingStorage {
-  /// Save the server ID before redirecting to OIDC provider.
-  Future<void> savePendingServerId(String serverId);
+  /// Save pending auth state before redirecting to OIDC provider.
+  Future<void> savePendingAuth(String serverId, OIDCAuthSystem authSystem);
 
-  /// Retrieve the server ID after callback.
-  Future<PendingServerResult> getPendingServerId();
+  /// Retrieve pending auth state after callback.
+  Future<PendingAuthResult> getPendingAuth();
 
-  /// Clear pending server ID after successful auth or error.
-  Future<void> clearPendingServerId();
+  /// Clear pending state after successful auth or error.
+  Future<void> clearPendingAuth();
 }
 
-/// Result of retrieving a pending server ID.
+/// Result of retrieving pending auth state.
 @immutable
-sealed class PendingServerResult {
-  const PendingServerResult();
+sealed class PendingAuthResult {
+  const PendingAuthResult();
 }
 
-/// A pending server ID was found.
+/// Pending auth state was found.
 @immutable
-final class PendingServerFound extends PendingServerResult {
+final class PendingAuthFound extends PendingAuthResult {
   /// Creates a found result.
-  const PendingServerFound(this.serverId);
+  const PendingAuthFound({required this.serverId, required this.authSystem});
 
   /// The server ID.
   final String serverId;
+
+  /// The auth system used for login.
+  final OIDCAuthSystem authSystem;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PendingAuthFound &&
+          serverId == other.serverId &&
+          authSystem == other.authSystem;
+
+  @override
+  int get hashCode => Object.hash(serverId, authSystem);
 }
 
-/// No pending server ID exists.
+/// No pending auth state exists.
 @immutable
-final class NoPendingServer extends PendingServerResult {
+final class NoPendingAuth extends PendingAuthResult {
   /// Creates a not found result.
-  const NoPendingServer();
+  const NoPendingAuth();
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is NoPendingAuth;
+
+  @override
+  int get hashCode => 0;
 }
 
 /// AuthProvider implementation for web and desktop (Windows/Linux).
@@ -119,6 +139,12 @@ class WebAuthProvider implements AuthProvider {
 
   @override
   Future<LoginResult> login(String serverId, SsoConfig config) async {
+    // Store auth state before redirect so callback can retrieve it.
+    // Must happen first: if this fails, we haven't redirected yet (fail fast).
+    // If URL launch fails after this, orphaned data is fine - overwritten on
+    // next login.
+    await _pendingStorage.savePendingAuth(serverId, config.authSystem);
+
     // Build the backend login URL
     final loginUrl = Uri.parse('$_baseUrl/api/login/${config.authSystem.id}')
         .replace(queryParameters: {'return_to': _callbackPath});
@@ -135,9 +161,6 @@ class WebAuthProvider implements AuthProvider {
         message: 'Failed to open authentication URL',
       );
     }
-
-    // Store server ID only after successful URL launch
-    await _pendingStorage.savePendingServerId(serverId);
 
     // Browser is redirecting; caller should wait for callback
     return LoginRedirect(serverId: serverId);
@@ -160,7 +183,7 @@ class WebAuthProvider implements AuthProvider {
   @override
   Future<void> logout(String serverId, SsoConfig config) async {
     await _tokenStorage.delete(serverId);
-    await _pendingStorage.clearPendingServerId();
+    await _pendingStorage.clearPendingAuth();
   }
 
   @override

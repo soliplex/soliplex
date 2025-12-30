@@ -336,19 +336,36 @@ return WebAuthProvider(...);  // Windows, Linux
 
 ---
 
-### Commit 12: Auth callback screen (web)
+### Commit 12: Auth callback screen (web) ✅
 
 **Files:**
 
 - `lib/features/login/auth_callback_screen.dart`
-- Tests
+- `lib/core/auth/web_auth_provider.dart` (fixed save-before-redirect order)
+- `lib/core/storage/secure_pending_storage.dart` (defensive JSON parsing)
+- `test/features/login/auth_callback_screen_test.dart`
+- `test/core/storage/secure_pending_storage_test.dart`
+- `test/core/auth/web_auth_provider_test.dart`
 
 **Details:**
 
-1. Extract tokens from URL
-2. Validate CSRF state
-3. Clear URL params immediately
-4. Store tokens, navigate to app
+1. Extract tokens from URL query params (token, refresh_token, expires_in)
+2. Validate required params with user-friendly error messages
+3. Retrieve pending auth state (serverId + authSystem) from secure storage
+4. Re-discover OIDC configuration after browser redirect
+5. Store tokens, transition to Ready state, navigate to home
+6. Sync errors to AppState for consistent router guard behavior
+
+**Implementation highlights (blacksmith review):**
+
+1. **WebAuthProvider.login() reordered**: Save pending auth BEFORE launching URL (was a bug - user could complete OAuth but fail on callback if save failed after redirect)
+2. **Defensive JSON parsing**: SecurePendingStorage validates JSON structure field-by-field before calling fromJson(), returning NoPendingAuth for any corruption
+3. **Graceful error handling**:
+   - Token storage failure: blocks auth (critical)
+   - User info failure: continues (non-critical)
+   - clearPendingAuth failure: continues (cleanup - orphaned state harmless)
+4. **Sealed class pattern**: PendingAuthResult with PendingAuthFound/NoPendingAuth enables exhaustive switch matching
+5. **Test coverage**: All error paths, happy path with token verification, failure tolerance, UI states
 
 ---
 
