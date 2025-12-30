@@ -120,9 +120,8 @@ class ChatPanel extends ConsumerWidget {
       }
 
       // Update selection to the new thread
-      ref
-          .read(threadSelectionProvider.notifier)
-          .set(ThreadSelected(effectiveThread.id));
+      ref.read(threadSelectionProvider.notifier).current =
+          ThreadSelected(effectiveThread.id);
 
       // Persist last viewed and update URL
       await setLastViewedThread(

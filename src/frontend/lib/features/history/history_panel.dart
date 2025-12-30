@@ -149,6 +149,7 @@ class HistoryPanel extends ConsumerWidget {
   /// Sets the selection to [NewThreadIntent], signaling that the next
   /// message should create a new thread.
   void _handleNewConversation(WidgetRef ref) {
-    ref.read(threadSelectionProvider.notifier).set(const NewThreadIntent());
+    ref.read(threadSelectionProvider.notifier).current =
+        const NewThreadIntent();
   }
 }

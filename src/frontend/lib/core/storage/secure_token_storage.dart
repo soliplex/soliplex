@@ -61,14 +61,38 @@ class SecureTokenStorage implements TokenStorage {
         await _storage.delete(key: key);
         return const TokenNotFound();
       }
-      final token = AuthToken.fromJson(decoded);
+      final token = _parseToken(decoded);
       return TokenFound(token);
-      // ignore: avoid_catches_without_on_clauses
-    } catch (_) {
-      // Corrupted data - delete and treat as not found
+    } on FormatException {
+      // Malformed JSON, invalid date format, or wrong field types
       await _storage.delete(key: key);
       return const TokenNotFound();
     }
+  }
+
+  /// Parses a token from JSON with validation.
+  ///
+  /// Throws [FormatException] if required fields are missing or wrong type.
+  AuthToken _parseToken(Map<String, dynamic> json) {
+    final accessToken = json['access_token'];
+    final expiresAt = json['expires_at'];
+
+    if (accessToken is! String) {
+      throw const FormatException('access_token must be a string');
+    }
+    if (expiresAt is! String) {
+      throw const FormatException('expires_at must be a string');
+    }
+
+    final refreshToken = json['refresh_token'];
+    final idToken = json['id_token'];
+
+    return AuthToken(
+      accessToken: accessToken,
+      refreshToken: refreshToken is String ? refreshToken : null,
+      expiresAt: DateTime.parse(expiresAt),
+      idToken: idToken is String ? idToken : null,
+    );
   }
 
   @override

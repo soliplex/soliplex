@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:soliplex_client/src/errors/exceptions.dart';
 import 'package:soliplex_client/src/http/http_observer.dart';
@@ -227,12 +228,13 @@ class ObservableHttpClient implements SoliplexHttpClient {
         notify(observer);
       } catch (e, stackTrace) {
         // Observer threw exception - log but don't break request flow
-        // ignore: avoid_print
-        print(
-          'Warning: HttpObserver ${observer.runtimeType} threw exception: $e',
+        developer.log(
+          'HttpObserver ${observer.runtimeType} threw exception: $e',
+          name: 'ObservableHttpClient',
+          error: e,
+          stackTrace: stackTrace,
+          level: 900, // Warning level
         );
-        // ignore: avoid_print
-        print(stackTrace);
       }
     }
   }

@@ -6,8 +6,11 @@ class ConfigNotifier extends Notifier<AppConfig> {
   @override
   AppConfig build() => AppConfig.defaults();
 
-  // ignore: use_setters_to_change_properties
-  void set(AppConfig value) => state = value;
+  /// The current configuration.
+  AppConfig get current => state;
+
+  /// Updates the configuration.
+  set current(AppConfig value) => state = value;
 }
 
 /// Provider for application configuration.

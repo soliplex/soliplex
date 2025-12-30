@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// ignore: implementation_imports
+import 'package:flutter_riverpod/src/internals.dart' show Override;
 import 'package:mocktail/mocktail.dart';
-// Riverpod 3.0 doesn't export Override from a public location.
-// Using dynamic list + cast in createTestApp() avoids this import,
-// but helper functions need the type for signatures.
-// ignore: implementation_imports, depend_on_referenced_packages
-import 'package:riverpod/src/framework.dart' show Override;
 // Hide ag_ui's CancelToken - HttpTransport uses our local one.
 import 'package:soliplex_client/soliplex_client.dart' hide CancelToken;
 import 'package:soliplex_client/src/utils/cancel_token.dart';
@@ -65,7 +62,10 @@ class MockConfigNotifier extends Notifier<AppConfig> implements ConfigNotifier {
   AppConfig build() => initialConfig;
 
   @override
-  void set(AppConfig value) => state = value;
+  AppConfig get current => state;
+
+  @override
+  set current(AppConfig value) => state = value;
 }
 
 /// Creates an override for configProvider with a mock config.
@@ -85,7 +85,10 @@ class MockCurrentRoomIdNotifier extends Notifier<String?>
   String? build() => initialRoomId;
 
   @override
-  void set(String? value) => state = value;
+  String? get current => state;
+
+  @override
+  set current(String? value) => state = value;
 }
 
 /// Creates an override for currentRoomIdProvider with a mock room ID.
@@ -105,7 +108,10 @@ class MockThreadSelectionNotifier extends Notifier<ThreadSelection>
   ThreadSelection build() => initialSelection;
 
   @override
-  void set(ThreadSelection value) => state = value;
+  ThreadSelection get current => state;
+
+  @override
+  set current(ThreadSelection value) => state = value;
 }
 
 /// Creates an override for threadSelectionProvider with a mock selection.

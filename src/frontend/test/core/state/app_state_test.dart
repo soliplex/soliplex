@@ -51,7 +51,7 @@ void main() {
           ),
         ];
 
-        final state = AppStateNeedsAuth(
+        const state = AppStateNeedsAuth(
           serverId: 'server1',
           providers: providers,
         );
@@ -70,11 +70,11 @@ void main() {
           ),
         ];
 
-        final state1 = AppStateNeedsAuth(
+        const state1 = AppStateNeedsAuth(
           serverId: 'server1',
           providers: providers,
         );
-        final state2 = AppStateNeedsAuth(
+        const state2 = AppStateNeedsAuth(
           serverId: 'server1',
           providers: providers,
         );
@@ -84,10 +84,10 @@ void main() {
       });
 
       test('equality works with different list instances', () {
-        final state1 = AppStateNeedsAuth(
+        const state1 = AppStateNeedsAuth(
           serverId: 'server1',
           providers: [
-            const OIDCAuthSystem(
+            OIDCAuthSystem(
               id: 'keycloak',
               title: 'Keycloak',
               serverUrl: 'https://auth.example.com',
@@ -95,10 +95,10 @@ void main() {
             ),
           ],
         );
-        final state2 = AppStateNeedsAuth(
+        const state2 = AppStateNeedsAuth(
           serverId: 'server1',
           providers: [
-            const OIDCAuthSystem(
+            OIDCAuthSystem(
               id: 'keycloak',
               title: 'Keycloak',
               serverUrl: 'https://auth.example.com',
@@ -114,11 +114,11 @@ void main() {
       test('not equal with different serverId', () {
         const providers = <OIDCAuthSystem>[];
 
-        final state1 = AppStateNeedsAuth(
+        const state1 = AppStateNeedsAuth(
           serverId: 'server1',
           providers: providers,
         );
-        final state2 = AppStateNeedsAuth(
+        const state2 = AppStateNeedsAuth(
           serverId: 'server2',
           providers: providers,
         );
@@ -127,10 +127,10 @@ void main() {
       });
 
       test('not equal with different providers', () {
-        final state1 = AppStateNeedsAuth(
+        const state1 = AppStateNeedsAuth(
           serverId: 'server1',
           providers: [
-            const OIDCAuthSystem(
+            OIDCAuthSystem(
               id: 'keycloak',
               title: 'Keycloak',
               serverUrl: 'https://auth.example.com',
@@ -138,7 +138,7 @@ void main() {
             ),
           ],
         );
-        final state2 = AppStateNeedsAuth(
+        const state2 = AppStateNeedsAuth(
           serverId: 'server1',
           providers: [],
         );
@@ -147,10 +147,10 @@ void main() {
       });
 
       test('toString returns expected format', () {
-        final state = AppStateNeedsAuth(
+        const state = AppStateNeedsAuth(
           serverId: 'server1',
           providers: [
-            const OIDCAuthSystem(
+            OIDCAuthSystem(
               id: 'keycloak',
               title: 'Keycloak',
               serverUrl: 'https://auth.example.com',
@@ -357,7 +357,7 @@ void main() {
       test('can pattern match on all variants', () {
         final states = <AppState>[
           const AppStateNoServer(),
-          AppStateNeedsAuth(serverId: 'server1', providers: const []),
+          const AppStateNeedsAuth(serverId: 'server1', providers: []),
           const AppStateAuthenticating(serverId: 'server1'),
           const AppStateReady(serverId: 'server1', config: testConfig),
           const AppStateError(message: 'error'),

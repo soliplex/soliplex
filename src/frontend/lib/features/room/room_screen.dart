@@ -67,7 +67,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     if (!mounted) return;
 
     if (threads.isEmpty) {
-      ref.read(threadSelectionProvider.notifier).set(const NoThreadSelected());
+      ref.read(threadSelectionProvider.notifier).current =
+          const NoThreadSelected();
       return;
     }
 
@@ -85,7 +86,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
 
     if (lastViewed case HasLastViewed(:final threadId)
         when threads.any((t) => t.id == threadId)) {
-      ref.read(threadSelectionProvider.notifier).set(ThreadSelected(threadId));
+      ref.read(threadSelectionProvider.notifier).current =
+          ThreadSelected(threadId);
       return;
     }
 

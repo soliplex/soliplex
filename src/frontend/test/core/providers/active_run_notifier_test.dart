@@ -198,10 +198,8 @@ void main() {
       final cancelToken = CancelToken();
       final controller = StreamController<BaseEvent>();
 
-      final state = RunningInternalState(
-        cancelToken: cancelToken,
-        subscription: controller.stream.listen((_) {}),
-      );
+      final state = RunningInternalState(cancelToken: cancelToken)
+        ..subscription = controller.stream.listen((_) {});
 
       expect(state, isA<NotifierInternalState>());
       expect(state.cancelToken, equals(cancelToken));

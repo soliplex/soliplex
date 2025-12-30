@@ -83,8 +83,8 @@ void main() {
         uri: Uri.parse('https://example.com'),
       );
 
-      // ignore: unrelated_type_equality_checks
-      expect(event == 'not an event', isFalse);
+      // Cast to Object to test equality with unrelated type
+      expect(event == ('not an event' as Object), isFalse);
     });
 
     test('toString includes key information', () {
@@ -207,8 +207,8 @@ void main() {
         bodySize: 0,
       );
 
-      // ignore: unrelated_type_equality_checks
-      expect(event == 'not an event', isFalse);
+      // Cast to Object to test equality with unrelated type
+      expect(event == ('not an event' as Object), isFalse);
     });
 
     test('toString includes key information', () {
@@ -299,8 +299,8 @@ void main() {
         duration: Duration.zero,
       );
 
-      // ignore: unrelated_type_equality_checks
-      expect(event == 'not an event', isFalse);
+      // Cast to Object to test equality with unrelated type
+      expect(event == ('not an event' as Object), isFalse);
     });
 
     test('toString includes key information', () {
@@ -378,8 +378,8 @@ void main() {
         uri: Uri.parse('https://example.com'),
       );
 
-      // ignore: unrelated_type_equality_checks
-      expect(event == 'not an event', isFalse);
+      // Cast to Object to test equality with unrelated type
+      expect(event == ('not an event' as Object), isFalse);
     });
 
     test('toString includes key information', () {
@@ -495,8 +495,8 @@ void main() {
         duration: Duration.zero,
       );
 
-      // ignore: unrelated_type_equality_checks
-      expect(event == 'not an event', isFalse);
+      // Cast to Object to test equality with unrelated type
+      expect(event == ('not an event' as Object), isFalse);
     });
 
     test('toString includes key information for success', () {

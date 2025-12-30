@@ -31,8 +31,11 @@ class CurrentRoomIdNotifier extends Notifier<String?> {
   @override
   String? build() => null;
 
-  // ignore: use_setters_to_change_properties
-  void set(String? value) => state = value;
+  /// The current room ID.
+  String? get current => state;
+
+  /// Updates the current room ID.
+  set current(String? value) => state = value;
 }
 
 /// Provider for currently selected room ID.

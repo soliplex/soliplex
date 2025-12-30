@@ -273,9 +273,8 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      container
-          .read(threadSelectionProvider.notifier)
-          .set(const ThreadSelected('thread-123'));
+      container.read(threadSelectionProvider.notifier).current =
+          const ThreadSelected('thread-123');
 
       final selection = container.read(threadSelectionProvider);
       expect(selection, isA<ThreadSelected>());
@@ -286,9 +285,8 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      container
-          .read(threadSelectionProvider.notifier)
-          .set(const NewThreadIntent());
+      container.read(threadSelectionProvider.notifier).current =
+          const NewThreadIntent();
 
       final selection = container.read(threadSelectionProvider);
       expect(selection, isA<NewThreadIntent>());

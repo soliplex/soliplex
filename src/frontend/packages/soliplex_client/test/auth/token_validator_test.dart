@@ -58,7 +58,9 @@ void main() {
 
         expect(result, isA<StorageUnavailable>());
         expect(
-            (result as StorageUnavailable).message, equals('Storage locked'));
+          (result as StorageUnavailable).message,
+          equals('Storage locked'),
+        );
       });
 
       test('returns Authenticated when token is valid', () async {

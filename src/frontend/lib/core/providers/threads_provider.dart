@@ -118,8 +118,11 @@ class ThreadSelectionNotifier extends Notifier<ThreadSelection> {
   @override
   ThreadSelection build() => const NoThreadSelected();
 
-  // ignore: use_setters_to_change_properties
-  void set(ThreadSelection value) => state = value;
+  /// The current thread selection.
+  ThreadSelection get current => state;
+
+  /// Updates the current thread selection.
+  set current(ThreadSelection value) => state = value;
 }
 
 /// Provider for current thread selection state.
@@ -129,13 +132,14 @@ class ThreadSelectionNotifier extends Notifier<ThreadSelection> {
 /// **Usage**:
 /// ```dart
 /// // Select a thread
-/// ref.read(threadSelectionProvider.notifier).set(ThreadSelected('thread-id'));
+/// final notifier = ref.read(threadSelectionProvider.notifier);
+/// notifier.current = ThreadSelected('thread-id');
 ///
 /// // Signal new thread intent
-/// ref.read(threadSelectionProvider.notifier).set(const NewThreadIntent());
+/// notifier.current = const NewThreadIntent();
 ///
 /// // Clear selection
-/// ref.read(threadSelectionProvider.notifier).set(const NoThreadSelected());
+/// notifier.current = const NoThreadSelected();
 /// ```
 final threadSelectionProvider =
     NotifierProvider<ThreadSelectionNotifier, ThreadSelection>(
@@ -247,7 +251,7 @@ void selectAndPersistThread({
   required String roomId,
   required String threadId,
 }) {
-  ref.read(threadSelectionProvider.notifier).set(ThreadSelected(threadId));
+  ref.read(threadSelectionProvider.notifier).current = ThreadSelected(threadId);
   unawaited(
     setLastViewedThread(
       roomId: roomId,

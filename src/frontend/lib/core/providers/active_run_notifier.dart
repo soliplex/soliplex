@@ -26,16 +26,13 @@ class IdleInternalState extends NotifierInternalState {
 ///
 /// Not marked as @immutable because it holds mutable StreamSubscription.
 class RunningInternalState extends NotifierInternalState {
-  RunningInternalState({
-    required this.cancelToken,
-    required this.subscription,
-  });
+  RunningInternalState({required this.cancelToken});
 
   /// Token for cancelling the run.
   final CancelToken cancelToken;
 
-  /// Subscription to the event stream.
-  final StreamSubscription<BaseEvent> subscription;
+  /// Subscription to the event stream. Set after construction.
+  late final StreamSubscription<BaseEvent> subscription;
 
   /// Disposes of all resources.
   Future<void> dispose() async {
@@ -163,9 +160,12 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
         cancelToken: cancelToken,
       );
 
-      // Process events
-      // ignore: cancel_subscriptions - stored in _internalState and cancelled
-      final subscription = eventStream.listen(
+      // Store running state before listening (allows subscription assignment)
+      final runningState = RunningInternalState(cancelToken: cancelToken);
+      _internalState = runningState;
+
+      // Process events - subscription stored in runningState for cancellation
+      runningState.subscription = eventStream.listen(
         _processEvent,
         onError: (Object error, StackTrace stackTrace) {
           final currentState = state;
@@ -192,12 +192,6 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
           }
         },
         cancelOnError: false,
-      );
-
-      // Store running state
-      _internalState = RunningInternalState(
-        cancelToken: cancelToken,
-        subscription: subscription,
       );
     } on CancellationError {
       // User cancelled - already handled in cancelRun
