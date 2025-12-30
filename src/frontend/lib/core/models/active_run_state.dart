@@ -52,7 +52,7 @@ sealed class ActiveRunState {
 /// Widgets needing threadId should only access [RunningState] or
 /// [CompletedState].
 @immutable
-class IdleState extends ActiveRunState {
+final class IdleState extends ActiveRunState {
   /// Creates an idle state.
   const IdleState();
 
@@ -78,7 +78,7 @@ class IdleState extends ActiveRunState {
 /// Contains the conversation (domain state) and streaming state (application
 /// layer).
 @immutable
-class RunningState extends ActiveRunState {
+final class RunningState extends ActiveRunState {
   /// Creates a running state.
   const RunningState({
     required this.conversation,
@@ -143,7 +143,7 @@ class RunningState extends ActiveRunState {
 /// }
 /// ```
 @immutable
-class CompletedState extends ActiveRunState {
+final class CompletedState extends ActiveRunState {
   /// Creates a completed state.
   const CompletedState({
     required this.conversation,
@@ -199,7 +199,7 @@ sealed class CompletionResult {
 
 /// The run completed successfully.
 @immutable
-class Success extends CompletionResult {
+final class Success extends CompletionResult {
   const Success();
 
   @override
@@ -214,7 +214,7 @@ class Success extends CompletionResult {
 
 /// The run failed with an error.
 @immutable
-class FailedResult extends CompletionResult {
+final class FailedResult extends CompletionResult {
   const FailedResult({required this.errorMessage});
 
   /// The error message describing what went wrong.
@@ -234,7 +234,7 @@ class FailedResult extends CompletionResult {
 
 /// The run was cancelled by the user.
 @immutable
-class CancelledResult extends CompletionResult {
+final class CancelledResult extends CompletionResult {
   const CancelledResult({required this.reason});
 
   /// The reason for cancellation.
