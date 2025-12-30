@@ -5,22 +5,11 @@ import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/providers/auth_providers.dart';
 import 'package:soliplex_frontend/core/state/app_state.dart';
 
+import '../../helpers/auth_test_helpers.dart';
+
 class MockAuthProvider extends Mock implements AuthProvider {}
 
 void main() {
-  const testAuthSystem = OIDCAuthSystem(
-    id: 'keycloak',
-    title: 'Keycloak',
-    serverUrl: 'https://auth.example.com',
-    clientId: 'client-123',
-  );
-
-  const testConfig = SsoConfig(
-    authorizationEndpoint: 'https://auth.example.com/authorize',
-    tokenEndpoint: 'https://auth.example.com/token',
-    authSystem: testAuthSystem,
-  );
-
   group('AppStateNotifier', () {
     late ProviderContainer container;
     late AppStateNotifier notifier;
@@ -56,7 +45,7 @@ void main() {
 
     group('beginAuth', () {
       test('transitions to Authenticating state', () {
-        notifier.beginAuth('server1');
+        notifier.beginAuth('server1', providers: const []);
 
         final state = container.read(appStateProvider);
         expect(state, isA<AppStateAuthenticating>());
@@ -66,13 +55,13 @@ void main() {
 
     group('setAuthenticated', () {
       test('transitions to Ready state with config', () {
-        notifier.setAuthenticated(serverId: 'server1', config: testConfig);
+        notifier.setAuthenticated(serverId: 'server1', config: testSsoConfig);
 
         final state = container.read(appStateProvider);
         expect(state, isA<AppStateReady>());
         final ready = state as AppStateReady;
         expect(ready.serverId, 'server1');
-        expect(ready.config, testConfig);
+        expect(ready.config, testSsoConfig);
         expect(ready.user, isNull);
       });
 
@@ -85,7 +74,7 @@ void main() {
 
         notifier.setAuthenticated(
           serverId: 'server1',
-          config: testConfig,
+          config: testSsoConfig,
           user: user,
         );
 
@@ -112,6 +101,42 @@ void main() {
         expect(state, isA<AppStateError>());
         expect((state as AppStateError).serverId, 'server1');
       });
+
+      test('preserves providers from NeedsAuth state', () {
+        notifier
+          ..setNeedsAuth(serverId: 'server1', providers: [testAuthSystem])
+          ..setError(message: 'failed', serverId: 'server1');
+
+        final state = container.read(appStateProvider) as AppStateError;
+        expect(state.providers, equals([testAuthSystem]));
+      });
+
+      test('preserves providers from Authenticating state', () {
+        notifier
+          ..beginAuth('server1', providers: [testAuthSystem])
+          ..setError(message: 'failed', serverId: 'server1');
+
+        final state = container.read(appStateProvider) as AppStateError;
+        expect(state.providers, equals([testAuthSystem]));
+      });
+
+      test('preserves providers from prior Error state', () {
+        notifier
+          ..setNeedsAuth(serverId: 'server1', providers: [testAuthSystem])
+          ..setError(message: 'first error', serverId: 'server1')
+          ..setError(message: 'second error', serverId: 'server1');
+
+        final state = container.read(appStateProvider) as AppStateError;
+        expect(state.message, 'second error');
+        expect(state.providers, equals([testAuthSystem]));
+      });
+
+      test('returns empty providers from NoServer state', () {
+        notifier.setError(message: 'failed');
+
+        final state = container.read(appStateProvider) as AppStateError;
+        expect(state.providers, isEmpty);
+      });
     });
 
     group('loggedOut', () {
@@ -120,8 +145,8 @@ void main() {
 
         // Authenticate then log out
         notifier
-          ..beginAuth('server1')
-          ..setAuthenticated(serverId: 'server1', config: testConfig)
+          ..beginAuth('server1', providers: providers)
+          ..setAuthenticated(serverId: 'server1', config: testSsoConfig)
           ..loggedOut(serverId: 'server1', providers: providers);
 
         final state = container.read(appStateProvider);
@@ -155,10 +180,10 @@ void main() {
 
         notifier
           ..setNeedsAuth(serverId: 'server1', providers: providers)
-          ..beginAuth('server1')
+          ..beginAuth('server1', providers: providers)
           ..setAuthenticated(
             serverId: 'server1',
-            config: testConfig,
+            config: testSsoConfig,
             user: user,
           );
 
@@ -167,6 +192,19 @@ void main() {
         expect(states[1], isA<AppStateNeedsAuth>());
         expect(states[2], isA<AppStateAuthenticating>());
         expect(states[3], isA<AppStateReady>());
+      });
+    });
+
+    group('beginProbe', () {
+      test('transitions to Probing state', () {
+        notifier.beginProbe('https://api.example.com');
+
+        final state = container.read(appStateProvider);
+        expect(state, isA<AppStateProbing>());
+        expect(
+          (state as AppStateProbing).serverId,
+          'https://api.example.com',
+        );
       });
     });
   });
@@ -216,7 +254,9 @@ void main() {
     });
 
     test('returns noAuthToken for Authenticating state', () async {
-      container.read(appStateProvider.notifier).beginAuth('server1');
+      container
+          .read(appStateProvider.notifier)
+          .beginAuth('server1', providers: const []);
 
       final tokenProvider = container.read(tokenProviderProvider);
 
@@ -228,7 +268,7 @@ void main() {
     test('returns access token when in Ready state', () async {
       container.read(appStateProvider.notifier).setAuthenticated(
             serverId: 'server1',
-            config: testConfig,
+            config: testSsoConfig,
           );
 
       final testToken = AuthToken(
@@ -236,7 +276,7 @@ void main() {
         expiresAt: DateTime.now().add(const Duration(hours: 1)),
       );
 
-      when(() => mockAuthProvider.getValidToken('server1', testConfig))
+      when(() => mockAuthProvider.getValidToken('server1', testSsoConfig))
           .thenAnswer((_) async => Authenticated(token: testToken));
 
       final tokenProvider = container.read(tokenProviderProvider);
@@ -249,10 +289,10 @@ void main() {
     test('returns noAuthToken for NoToken result', () async {
       container.read(appStateProvider.notifier).setAuthenticated(
             serverId: 'server1',
-            config: testConfig,
+            config: testSsoConfig,
           );
 
-      when(() => mockAuthProvider.getValidToken('server1', testConfig))
+      when(() => mockAuthProvider.getValidToken('server1', testSsoConfig))
           .thenAnswer((_) async => const NoToken());
 
       final tokenProvider = container.read(tokenProviderProvider);
@@ -265,10 +305,10 @@ void main() {
     test('returns noAuthToken for TokenExpired result', () async {
       container.read(appStateProvider.notifier).setAuthenticated(
             serverId: 'server1',
-            config: testConfig,
+            config: testSsoConfig,
           );
 
-      when(() => mockAuthProvider.getValidToken('server1', testConfig))
+      when(() => mockAuthProvider.getValidToken('server1', testSsoConfig))
           .thenAnswer((_) async => const TokenExpired());
 
       final tokenProvider = container.read(tokenProviderProvider);
@@ -281,10 +321,10 @@ void main() {
     test('returns noAuthToken for RefreshFailed result', () async {
       container.read(appStateProvider.notifier).setAuthenticated(
             serverId: 'server1',
-            config: testConfig,
+            config: testSsoConfig,
           );
 
-      when(() => mockAuthProvider.getValidToken('server1', testConfig))
+      when(() => mockAuthProvider.getValidToken('server1', testSsoConfig))
           .thenAnswer(
         (_) async => const RefreshFailed(cause: 'Token refresh failed'),
       );
@@ -299,10 +339,10 @@ void main() {
     test('returns noAuthToken for StorageUnavailable result', () async {
       container.read(appStateProvider.notifier).setAuthenticated(
             serverId: 'server1',
-            config: testConfig,
+            config: testSsoConfig,
           );
 
-      when(() => mockAuthProvider.getValidToken('server1', testConfig))
+      when(() => mockAuthProvider.getValidToken('server1', testSsoConfig))
           .thenAnswer(
         (_) async => const StorageUnavailable(message: 'Keychain locked'),
       );
@@ -317,10 +357,10 @@ void main() {
     test('returns noAuthToken when AuthError is thrown', () async {
       container.read(appStateProvider.notifier).setAuthenticated(
             serverId: 'server1',
-            config: testConfig,
+            config: testSsoConfig,
           );
 
-      when(() => mockAuthProvider.getValidToken('server1', testConfig))
+      when(() => mockAuthProvider.getValidToken('server1', testSsoConfig))
           .thenThrow(const AuthErrorNetwork(message: 'Network error'));
 
       final tokenProvider = container.read(tokenProviderProvider);

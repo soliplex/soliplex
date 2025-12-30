@@ -290,11 +290,13 @@ return WebAuthProvider(...);  // Windows, Linux
 
 ---
 
-### Commit 10: Router auth guards
+### Commit 10: Router auth guards ✅
 
 **Files:**
 
 - `lib/core/router/app_router.dart` (modify)
+- `lib/core/router/router_notifier.dart`
+- Tests
 
 **Details:**
 
@@ -305,19 +307,32 @@ return WebAuthProvider(...);  // Windows, Linux
 
 ---
 
-### Commit 11: Login screen
+### Commit 11: Login screen and auth orchestrator refactoring ✅
 
 **Files:**
 
 - `lib/features/login/login_screen.dart`
+- `lib/core/auth/auth_orchestrator.dart`
+- `lib/core/providers/auth_providers.dart` (refactored)
+- `lib/core/providers/api_provider.dart` (added serverIdProvider)
+- `test/helpers/auth_test_helpers.dart` (consolidated fixtures)
 - Tests
 
 **Details:**
 
-1. Server URL input
-2. Probe server for providers
-3. Provider selection UI
-4. Initiate auth flow
+1. Server URL input with validation
+2. Probe server for providers via AuthOrchestrator
+3. Provider selection UI with Material Design
+4. Initiate auth flow, handle redirect/success/failure
+
+**Architectural improvements (blacksmith review):**
+
+1. **AppStateNotifier refactored to thin state container** - Removed `probeServer()` and `login()` methods; UI now calls orchestrator directly and updates state via notifier methods
+2. **serverIdProvider added** - Decouples URL building from full AppState, improving caching
+3. **TestAppStateNotifier simplified** - No longer needs `initializeOrchestrator()` call
+4. **MockAuthOrchestrator consolidated** - Single hand-rolled mock with optional params, fail-fast StateError on unconfigured methods
+5. **Test fixtures consolidated** - All auth fixtures in `auth_test_helpers.dart`
+6. **setError preserves providers** - Automatic provider preservation for retry UX, with comprehensive test coverage
 
 ---
 
@@ -349,6 +364,209 @@ return WebAuthProvider(...);  // Windows, Linux
 1. Add logout button
 2. Server info display
 3. Current user display
+
+## Final Architecture
+
+After implementation and architectural review (blacksmith consultation), the auth system uses a **two-transport architecture** to break circular dependencies and properly separate authenticated vs unauthenticated concerns.
+
+### Provider Dependency Graph
+
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│  LAYER 1: Base Infrastructure (unauthenticated)                     │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  observableClientProvider                                           │
+│       │                                                             │
+│       ▼                                                             │
+│  baseHttpTransportProvider (no token injection)                     │
+│       │                                                             │
+│       ├──► oidcDiscoveryServiceProvider                             │
+│       │              │                                              │
+│       │              ▼                                              │
+│       └──► authOrchestratorProvider ◄── authApiProvider             │
+│                      │                                              │
+├──────────────────────┼──────────────────────────────────────────────┤
+│  LAYER 2: Auth State │                                              │
+├──────────────────────┼──────────────────────────────────────────────┤
+│                      ▼                                              │
+│            appStateProvider (watches authOrchestratorProvider)      │
+│                      │                                              │
+├──────────────────────┼──────────────────────────────────────────────┤
+│  LAYER 3: Authenticated Services                                    │
+├──────────────────────┼──────────────────────────────────────────────┤
+│                      ▼                                              │
+│            createTokenProvider (reads appStateProvider)             │
+│                      │                                              │
+│                      ▼                                              │
+│  observableClientProvider ──► httpTransportProvider (with tokens)   │
+│                                        │                            │
+│                                        ▼                            │
+│                                   apiProvider                       │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Design Decisions
+
+**Two HTTP Transports:**
+
+| Provider | Token Injection | Use Case |
+|----------|-----------------|----------|
+| `baseHttpTransportProvider` | None | OIDC discovery, server probing, token refresh |
+| `httpTransportProvider` | Bearer token | All authenticated API calls |
+
+**Why this matters:** OIDC discovery and server probing happen *before* authentication. Routing them through an authenticated transport would create a circular dependency:
+
+```text
+httpTransportProvider → tokenProvider → appStateProvider
+    → authOrchestratorProvider → oidcDiscoveryServiceProvider
+    → httpTransportProvider (CYCLE!)
+```
+
+The `baseHttpTransportProvider` breaks this cycle by providing unauthenticated HTTP without depending on auth state.
+
+**HttpTransport Changes:**
+
+```dart
+// Token provider is now optional with a no-op default
+HttpTransport({
+  required SoliplexHttpClient client,
+  TokenProvider tokenProvider = noTokenProvider,  // Default: no auth
+  this.defaultTimeout = const Duration(seconds: 30),
+});
+
+// No-op token provider for unauthenticated requests
+Future<String> noTokenProvider() async => '';
+```
+
+### State Machine
+
+```dart
+sealed class AppState {
+  const AppState();
+}
+
+final class AppStateNoServer extends AppState { }
+final class AppStateProbing extends AppState { serverId }
+final class AppStateNeedsAuth extends AppState { serverId, providers }
+final class AppStateAuthenticating extends AppState { serverId, providers }
+final class AppStateReady extends AppState { serverId, config, user }
+final class AppStateError extends AppState { message, serverId?, providers }
+```
+
+**State Transitions:**
+
+```text
+NoServer ──probe──► Probing ──success──► NeedsAuth ──login──► Authenticating
+    │                  │                     │                      │
+    │                  │ failure             │ error                │ success
+    │                  ▼                     ▼                      ▼
+    │               Error ◄────────────── Error                   Ready
+    │                  │                                            │
+    │                  │ retry                                      │ logout
+    └──────────────────┴────────────────────────────────────────────┘
+```
+
+### Auth Orchestrator
+
+Pure Dart coordinator (no Flutter imports) that returns result types:
+
+```dart
+class AuthOrchestrator {
+  Future<ProbeResult> probeServer(String serverUrl);
+  Future<LoginAttemptResult> login(OIDCAuthSystem authSystem, String serverId);
+}
+
+sealed class ProbeResult { }
+final class ProbeSuccess extends ProbeResult { providers }
+final class ProbeFailure extends ProbeResult { message }
+
+sealed class LoginAttemptResult { }
+final class LoginAttemptSuccess extends LoginAttemptResult { config, user }
+final class LoginAttemptRedirect extends LoginAttemptResult { }  // Web flow
+final class LoginAttemptFailure extends LoginAttemptResult { message }
+```
+
+### Platform Selection
+
+```dart
+final authProviderProvider = Provider<AuthProvider>((ref) {
+  if (kIsWeb) return WebAuthProvider(...);
+  if (Platform.isIOS || Platform.isAndroid || Platform.isMacOS) {
+    return MobileAuthProvider(...);  // PKCE via flutter_appauth
+  }
+  return WebAuthProvider(...);  // Windows, Linux use backend-mediated
+});
+```
+
+### Test Infrastructure
+
+Shared fixtures in `test/helpers/auth_test_helpers.dart`:
+
+```dart
+// Fixtures
+const testAuthSystem = OIDCAuthSystem(id: 'keycloak', ...);
+const testSsoConfig = SsoConfig(authSystem: testAuthSystem, ...);
+const testUser = UserInfo(id: 'user-123', email: 'user@example.com');
+const testProviders = [testAuthSystem];
+
+// Far-future expiration for test tokens
+final _testTokenExpiration = DateTime.utc(2099);
+final testToken = AuthToken(accessToken: '...', expiresAt: _testTokenExpiration);
+
+// Test notifier - starts in specific state for UI tests
+class TestAppStateNotifier extends AppStateNotifier {
+  TestAppStateNotifier(this._initialState);
+  final AppState _initialState;
+
+  @override
+  AppState build() => _initialState;  // Simplified - no orchestrator needed
+}
+
+// Mock orchestrator - configure only what you need, fail-fast on unconfigured
+class MockAuthOrchestrator implements AuthOrchestrator {
+  MockAuthOrchestrator({this.probeResult, this.loginResult});
+
+  final ProbeResult? probeResult;
+  final LoginAttemptResult? loginResult;
+
+  @override
+  Future<ProbeResult> probeServer(String serverUrl) async {
+    if (probeResult == null) {
+      throw StateError('MockAuthOrchestrator.probeServer() not configured');
+    }
+    return probeResult!;
+  }
+
+  @override
+  Future<LoginAttemptResult> login(...) async {
+    if (loginResult == null) {
+      throw StateError('MockAuthOrchestrator.login() not configured');
+    }
+    return loginResult!;
+  }
+}
+```
+
+### Files Summary
+
+**Core Auth:**
+- `lib/core/auth/auth_orchestrator.dart` - Coordinates auth flows (pure Dart)
+- `lib/core/auth/mobile_auth_provider.dart` - PKCE via flutter_appauth
+- `lib/core/auth/web_auth_provider.dart` - Backend-mediated OAuth
+- `lib/core/state/app_state.dart` - Sealed state hierarchy
+
+**Providers:**
+- `lib/core/providers/auth_providers.dart` - All auth providers + AppStateNotifier
+- `lib/core/providers/api_provider.dart` - Dual transport architecture
+
+**Router:**
+- `lib/core/router/app_router.dart` - Auth guards, login/callback routes
+- `lib/core/router/router_notifier.dart` - Bridges Riverpod to GoRouter
+
+**UI:**
+- `lib/features/login/login_screen.dart` - Server probe + provider selection
+- `lib/features/login/auth_callback_screen.dart` - Web OAuth callback (stub)
 
 ## Security Measures (Minimal Viable)
 

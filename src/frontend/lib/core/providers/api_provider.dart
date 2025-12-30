@@ -6,6 +6,7 @@ import 'package:soliplex_client_native/soliplex_client_native.dart';
 import 'package:soliplex_frontend/core/providers/auth_providers.dart';
 import 'package:soliplex_frontend/core/providers/config_provider.dart';
 import 'package:soliplex_frontend/core/providers/http_log_provider.dart';
+import 'package:soliplex_frontend/core/state/app_state.dart';
 
 /// Provider for the shared observable HTTP client.
 ///
@@ -33,41 +34,69 @@ final observableClientProvider = Provider<SoliplexHttpClient>((ref) {
   return observable;
 });
 
-/// Provider for the HTTP transport layer.
+/// Base HTTP transport for unauthenticated requests.
 ///
-/// Creates a singleton [HttpTransport] instance using the shared
-/// [observableClientProvider]. All HTTP requests through this transport
-/// are logged to [httpLogProvider].
+/// Used by auth infrastructure (OIDC discovery, token refresh, server probing)
+/// that must work before authentication is established. Uses [noTokenProvider]
+/// so no Authorization header is added.
 ///
-/// **Lifecycle**: This is a non-autoDispose provider because the HTTP
-/// transport should live for the entire app session.
+/// **Use cases:**
+/// - [OidcDiscoveryService] for fetching OIDC configuration
+/// - [AuthApi] for server probing
+/// - Token refresh flows
+///
+/// **Lifecycle**: Lives for the entire app session.
+final baseHttpTransportProvider = Provider<HttpTransport>((ref) {
+  final client = ref.watch(observableClientProvider);
+  return HttpTransport(client: client);
+});
+
+/// HTTP transport with authentication for API requests.
+///
+/// Automatically injects bearer token from [createTokenProvider].
+/// Use [baseHttpTransportProvider] for unauthenticated pre-auth requests.
+///
+/// **Lifecycle**: Lives for the entire app session.
 ///
 /// **Threading**: Safe to call from any isolate. The underlying
 /// adapter uses dart:http which is isolate-safe.
 final httpTransportProvider = Provider<HttpTransport>((ref) {
   final client = ref.watch(observableClientProvider);
   final tokenProvider = createTokenProvider(ref);
-  final transport = HttpTransport(
+  return HttpTransport(
     client: client,
     tokenProvider: tokenProvider,
   );
+});
 
-  // Note: Don't dispose transport here - client is managed by
-  // observableClientProvider
-  return transport;
+/// Provider for the active server ID.
+///
+/// Extracts the server ID from [appStateProvider], falling back to config
+/// default when no server is configured. This decouples URL building from
+/// the full AppState, allowing components that only need the server URL
+/// to avoid re-rendering on unrelated state changes.
+final serverIdProvider = Provider<String>((ref) {
+  final appState = ref.watch(appStateProvider);
+  final config = ref.watch(configProvider);
+
+  return switch (appState) {
+    AppStateNoServer() => config.baseUrl,
+    AppStateProbing(:final serverId) => serverId,
+    AppStateNeedsAuth(:final serverId) => serverId,
+    AppStateAuthenticating(:final serverId) => serverId,
+    AppStateReady(:final serverId) => serverId,
+    AppStateError(:final serverId) => serverId ?? config.baseUrl,
+  };
 });
 
 /// Provider for the URL builder.
 ///
-/// Creates a [UrlBuilder] configured with the base URL from [configProvider].
-/// Automatically reconstructs when the config changes (e.g., user changes
-/// backend URL in settings).
-///
-/// The URL builder appends `/api/v1` to the base URL to construct
-/// API endpoint URLs.
+/// Creates a [UrlBuilder] configured with the active server URL from
+/// [serverIdProvider]. The URL builder appends `/api/v1` to the base
+/// URL to construct API endpoint URLs.
 final urlBuilderProvider = Provider<UrlBuilder>((ref) {
-  final config = ref.watch(configProvider);
-  return UrlBuilder('${config.baseUrl}/api/v1');
+  final baseUrl = ref.watch(serverIdProvider);
+  return UrlBuilder('$baseUrl/api/v1');
 });
 
 /// Provider for the SoliplexApi instance.

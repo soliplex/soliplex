@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:http/http.dart' as http;
 import 'package:soliplex_client/soliplex_client.dart';
@@ -96,9 +95,8 @@ class MobileAuthProvider implements AuthProvider {
               ),
             ),
           );
-        } on Exception catch (e) {
+        } on Exception {
           // Remote end-session failed; local cleanup will proceed.
-          debugPrint('End session failed for $serverId: $e');
         }
       }
     }

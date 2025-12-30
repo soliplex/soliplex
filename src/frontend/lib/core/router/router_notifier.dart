@@ -21,8 +21,9 @@ class RouterNotifier extends ChangeNotifier {
   /// Whether the user is authenticated.
   bool get isAuthenticated => state is AppStateReady;
 
-  /// Whether auth is in progress.
-  bool get isAuthenticating => state is AppStateAuthenticating;
+  /// Whether the auth flow is in progress (probing or authenticating).
+  bool get isInAuthFlow =>
+      state is AppStateProbing || state is AppStateAuthenticating;
 }
 
 /// Provider for the router notifier.

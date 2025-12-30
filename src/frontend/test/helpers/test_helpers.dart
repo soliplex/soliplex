@@ -133,9 +133,6 @@ class FakeHttpTransport implements HttpTransport {
   Duration get defaultTimeout => const Duration(seconds: 30);
 
   @override
-  TokenProvider get tokenProvider => () async => 'fake-token';
-
-  @override
   Future<T> request<T>(
     String method,
     Uri uri, {

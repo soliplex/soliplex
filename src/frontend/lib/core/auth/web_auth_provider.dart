@@ -123,8 +123,6 @@ class WebAuthProvider implements AuthProvider {
     final loginUrl = Uri.parse('$_baseUrl/api/login/${config.authSystem.id}')
         .replace(queryParameters: {'return_to': _callbackPath});
 
-    debugPrint('WebAuthProvider: Redirecting to $loginUrl');
-
     // Launch browser - on web this navigates away from the app
     final launched = await _urlLauncher(
       loginUrl,
@@ -163,7 +161,6 @@ class WebAuthProvider implements AuthProvider {
   Future<void> logout(String serverId, SsoConfig config) async {
     await _tokenStorage.delete(serverId);
     await _pendingStorage.clearPendingServerId();
-    debugPrint('WebAuthProvider: Logged out $serverId');
   }
 
   @override

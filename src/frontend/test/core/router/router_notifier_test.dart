@@ -1,53 +1,20 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/providers/auth_providers.dart';
 import 'package:soliplex_frontend/core/router/router_notifier.dart';
 import 'package:soliplex_frontend/core/state/app_state.dart';
 
-// TODO(auth): Extract to test/helpers/auth_test_helpers.dart if duplicated again.
-/// Test notifier that starts in a specific state.
-class _TestAppStateNotifier extends AppStateNotifier {
-  _TestAppStateNotifier(this._initialState);
-  final AppState _initialState;
-
-  @override
-  AppState build() => _initialState;
-}
-
-const _testAuthSystem = OIDCAuthSystem(
-  id: 'test',
-  title: 'Test',
-  serverUrl: 'https://auth.example.com',
-  clientId: 'test-client',
-);
-
-const _testSsoConfig = SsoConfig(
-  authSystem: _testAuthSystem,
-  authorizationEndpoint: 'https://auth.example.com/authorize',
-  tokenEndpoint: 'https://auth.example.com/token',
-);
-
-const _testUser = UserInfo(
-  id: 'test-user-id',
-  email: 'test@example.com',
-);
+import '../../helpers/auth_test_helpers.dart';
 
 void main() {
   group('RouterNotifier', () {
     late ProviderContainer container;
 
-    AppStateReady authenticatedState() => const AppStateReady(
-          serverId: 'http://localhost:8000',
-          config: _testSsoConfig,
-          user: _testUser,
-        );
-
     test('isAuthenticated returns true when AppStateReady', () {
       container = ProviderContainer(
         overrides: [
           appStateProvider.overrideWith(
-            () => _TestAppStateNotifier(authenticatedState()),
+            () => TestAppStateNotifier(testAuthenticatedState()),
           ),
         ],
       );
@@ -56,14 +23,14 @@ void main() {
       final notifier = container.read(routerNotifierProvider);
 
       expect(notifier.isAuthenticated, isTrue);
-      expect(notifier.isAuthenticating, isFalse);
+      expect(notifier.isInAuthFlow, isFalse);
     });
 
     test('isAuthenticated returns false when AppStateNoServer', () {
       container = ProviderContainer(
         overrides: [
           appStateProvider.overrideWith(
-            () => _TestAppStateNotifier(const AppStateNoServer()),
+            () => TestAppStateNotifier(const AppStateNoServer()),
           ),
         ],
       );
@@ -72,35 +39,17 @@ void main() {
       final notifier = container.read(routerNotifierProvider);
 
       expect(notifier.isAuthenticated, isFalse);
-      expect(notifier.isAuthenticating, isFalse);
+      expect(notifier.isInAuthFlow, isFalse);
     });
 
-    test('isAuthenticating returns true when AppStateAuthenticating', () {
+    test('isInAuthFlow returns true when AppStateAuthenticating', () {
       container = ProviderContainer(
         overrides: [
           appStateProvider.overrideWith(
-            () => _TestAppStateNotifier(
-              const AppStateAuthenticating(serverId: 'http://localhost:8000'),
-            ),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      final notifier = container.read(routerNotifierProvider);
-
-      expect(notifier.isAuthenticated, isFalse);
-      expect(notifier.isAuthenticating, isTrue);
-    });
-
-    test('isAuthenticated returns false when AppStateNeedsAuth', () {
-      container = ProviderContainer(
-        overrides: [
-          appStateProvider.overrideWith(
-            () => _TestAppStateNotifier(
-              const AppStateNeedsAuth(
+            () => TestAppStateNotifier(
+              const AppStateAuthenticating(
                 serverId: 'http://localhost:8000',
-                providers: [_testAuthSystem],
+                providers: [],
               ),
             ),
           ),
@@ -111,14 +60,53 @@ void main() {
       final notifier = container.read(routerNotifierProvider);
 
       expect(notifier.isAuthenticated, isFalse);
-      expect(notifier.isAuthenticating, isFalse);
+      expect(notifier.isInAuthFlow, isTrue);
+    });
+
+    test('isInAuthFlow returns true when AppStateProbing', () {
+      container = ProviderContainer(
+        overrides: [
+          appStateProvider.overrideWith(
+            () => TestAppStateNotifier(
+              const AppStateProbing(serverId: 'http://localhost:8000'),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final notifier = container.read(routerNotifierProvider);
+
+      expect(notifier.isAuthenticated, isFalse);
+      expect(notifier.isInAuthFlow, isTrue);
+    });
+
+    test('isAuthenticated returns false when AppStateNeedsAuth', () {
+      container = ProviderContainer(
+        overrides: [
+          appStateProvider.overrideWith(
+            () => TestAppStateNotifier(
+              const AppStateNeedsAuth(
+                serverId: 'http://localhost:8000',
+                providers: [testAuthSystem],
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final notifier = container.read(routerNotifierProvider);
+
+      expect(notifier.isAuthenticated, isFalse);
+      expect(notifier.isInAuthFlow, isFalse);
     });
 
     test('isAuthenticated returns false when AppStateError', () {
       container = ProviderContainer(
         overrides: [
           appStateProvider.overrideWith(
-            () => _TestAppStateNotifier(
+            () => TestAppStateNotifier(
               const AppStateError(
                 message: 'Auth failed',
                 serverId: 'http://localhost:8000',
@@ -132,14 +120,14 @@ void main() {
       final notifier = container.read(routerNotifierProvider);
 
       expect(notifier.isAuthenticated, isFalse);
-      expect(notifier.isAuthenticating, isFalse);
+      expect(notifier.isInAuthFlow, isFalse);
     });
 
     test('state returns current AppState', () {
       container = ProviderContainer(
         overrides: [
           appStateProvider.overrideWith(
-            () => _TestAppStateNotifier(const AppStateNoServer()),
+            () => TestAppStateNotifier(const AppStateNoServer()),
           ),
         ],
       );
@@ -155,11 +143,12 @@ void main() {
       addTearDown(container.dispose);
 
       var notifyCount = 0;
-      final notifier = container.read(routerNotifierProvider);
-      notifier.addListener(() => notifyCount++);
+      container.read(routerNotifierProvider).addListener(() => notifyCount++);
 
       // Trigger state change
-      container.read(appStateProvider.notifier).beginAuth('http://localhost');
+      container
+          .read(appStateProvider.notifier)
+          .beginAuth('http://localhost', providers: const []);
 
       expect(notifyCount, equals(1));
     });

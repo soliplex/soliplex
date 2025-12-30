@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:soliplex_client/soliplex_client.dart';
+import 'package:soliplex_frontend/core/auth/auth_orchestrator.dart';
 import 'package:soliplex_frontend/core/auth/mobile_auth_provider.dart';
 import 'package:soliplex_frontend/core/auth/web_auth_provider.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
@@ -24,6 +25,14 @@ import 'package:soliplex_frontend/core/storage/secure_token_storage.dart';
 /// Consumers should treat this as "unauthenticated" - the backend will
 /// return 401 if authentication is required.
 const noAuthToken = '';
+
+/// Provider for AuthApi instance.
+///
+/// Used for pre-authentication API calls like server probing.
+final authApiProvider = Provider<AuthApi>((ref) {
+  final client = ref.watch(httpClientProvider);
+  return AuthApi(client: client);
+});
 
 /// Provider for FlutterSecureStorage instance.
 ///
@@ -110,14 +119,45 @@ MobileAuthProvider _createMobileAuthProvider(
   );
 }
 
+/// Provider for OIDC discovery service.
+///
+/// Uses [baseHttpTransportProvider] since OIDC discovery happens before
+/// authentication is established. This breaks the circular dependency that
+/// would occur if we used the authenticated transport.
+final oidcDiscoveryServiceProvider = Provider<OidcDiscoveryService>((ref) {
+  final transport = ref.watch(baseHttpTransportProvider);
+  return OidcDiscoveryService(transport: transport);
+});
+
+/// Provider for auth orchestrator.
+///
+/// Coordinates authentication flows between [AuthApi], [OidcDiscoveryService],
+/// and [AuthProvider]. Stateless - just coordinates and returns results.
+final authOrchestratorProvider = Provider<AuthOrchestrator>((ref) {
+  final authApi = ref.watch(authApiProvider);
+  final discoveryService = ref.watch(oidcDiscoveryServiceProvider);
+  final authProvider = ref.watch(authProviderProvider);
+
+  return AuthOrchestrator(
+    authApi: authApi,
+    discoveryService: discoveryService,
+    authProvider: authProvider,
+  );
+});
+
 // ============================================================================
 // App State - Authentication lifecycle state
 // ============================================================================
 
 /// Notifier for application authentication state.
 ///
-/// Manages the auth lifecycle:
+/// Thin state container for the auth lifecycle. UI code calls
+/// [authOrchestratorProvider] for operations, then updates state
+/// via methods here.
+///
+/// States:
 /// - NoServer: Initial state, no server configured
+/// - Probing: Server probe in progress
 /// - NeedsAuth: Server configured, providers available
 /// - Authenticating: Login in progress
 /// - Ready: Authenticated and ready (includes config for token operations)
@@ -142,8 +182,8 @@ class AppStateNotifier extends Notifier<AppState> {
   ///
   /// Transitions to Authenticating state.
   /// Call [setAuthenticated] on success or [setError] on failure.
-  void beginAuth(String serverId) {
-    state = AppStateAuthenticating(serverId: serverId);
+  void beginAuth(String serverId, {required List<OIDCAuthSystem> providers}) {
+    state = AppStateAuthenticating(serverId: serverId, providers: providers);
   }
 
   /// Completes authentication successfully.
@@ -158,8 +198,23 @@ class AppStateNotifier extends Notifier<AppState> {
   }
 
   /// Sets an error state.
+  ///
+  /// Automatically preserves providers from the current state (if any) so
+  /// the user can retry login without re-probing the server. Providers are
+  /// extracted from [AppStateNeedsAuth], [AppStateAuthenticating], or
+  /// [AppStateError]; other states yield an empty list.
   void setError({required String message, String? serverId}) {
-    state = AppStateError(message: message, serverId: serverId);
+    final providers = switch (state) {
+      AppStateNeedsAuth(:final providers) => providers,
+      AppStateAuthenticating(:final providers) => providers,
+      AppStateError(:final providers) => providers,
+      _ => const <OIDCAuthSystem>[],
+    };
+    state = AppStateError(
+      message: message,
+      serverId: serverId,
+      providers: providers,
+    );
   }
 
   /// Logs out and returns to NeedsAuth state.
@@ -173,6 +228,14 @@ class AppStateNotifier extends Notifier<AppState> {
   /// Clears all state and returns to NoServer.
   void reset() {
     state = const AppStateNoServer();
+  }
+
+  /// Begins server probing.
+  ///
+  /// Transitions to Probing state. Call [setNeedsAuth] on success
+  /// or [setError] on failure.
+  void beginProbe(String serverId) {
+    state = AppStateProbing(serverId: serverId);
   }
 }
 
@@ -215,16 +278,16 @@ TokenProviderFn createTokenProvider(Ref ref) {
             case StorageUnavailable():
               return noAuthToken;
           }
-        } on AuthError catch (e) {
+        } on AuthError {
           // Transient auth errors (network, server) - return no token
           // so the request proceeds unauthenticated (backend returns 401).
-          debugPrint('Auth error in token provider: $e');
           return noAuthToken;
         }
       // No generic Exception catch: getValidToken returns AuthResult for
       // expected outcomes and throws AuthError for transient failures.
       // Any other exception indicates a bug that should propagate.
       case AppStateNoServer():
+      case AppStateProbing():
       case AppStateNeedsAuth():
       case AppStateAuthenticating():
       case AppStateError():

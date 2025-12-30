@@ -1,10 +1,11 @@
-import 'package:meta/meta.dart';
+import 'package:flutter/foundation.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 
 /// Application authentication state.
 ///
 /// This is a sealed class hierarchy representing the app's auth status:
 /// - [AppStateNoServer]: No server configured
+/// - [AppStateProbing]: Server probe in progress
 /// - [AppStateNeedsAuth]: Server configured but not authenticated
 /// - [AppStateAuthenticating]: Auth flow in progress
 /// - [AppStateReady]: Authenticated and ready
@@ -15,6 +16,8 @@ import 'package:soliplex_client/soliplex_client.dart';
 /// switch (state) {
 ///   case AppStateNoServer():
 ///     // Show server configuration
+///   case AppStateProbing(:final serverId):
+///     // Show probing indicator
 ///   case AppStateNeedsAuth(:final serverId, :final providers):
 ///     // Show login options
 ///   case AppStateAuthenticating(:final serverId):
@@ -48,6 +51,28 @@ final class AppStateNoServer extends AppState {
   String toString() => 'AppStateNoServer()';
 }
 
+/// Server probe is in progress.
+///
+/// The app is fetching auth providers from the server.
+@immutable
+final class AppStateProbing extends AppState {
+  const AppStateProbing({required this.serverId});
+
+  /// The server URL being probed.
+  final String serverId;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppStateProbing && serverId == other.serverId;
+
+  @override
+  int get hashCode => Object.hash(runtimeType, serverId);
+
+  @override
+  String toString() => 'AppStateProbing(serverId: $serverId)';
+}
+
 /// Server is configured but user is not authenticated.
 ///
 /// Contains the server ID and available authentication providers.
@@ -70,10 +95,11 @@ final class AppStateNeedsAuth extends AppState {
       identical(this, other) ||
       other is AppStateNeedsAuth &&
           serverId == other.serverId &&
-          _listEquals(providers, other.providers);
+          listEquals(providers, other.providers);
 
   @override
-  int get hashCode => Object.hash(serverId, Object.hashAll(providers));
+  int get hashCode =>
+      Object.hash(runtimeType, serverId, Object.hashAll(providers));
 
   @override
   String toString() =>
@@ -83,20 +109,30 @@ final class AppStateNeedsAuth extends AppState {
 /// Authentication flow is in progress.
 ///
 /// The user has initiated login and we're waiting for the flow to complete.
+/// Includes providers so they remain visible (disabled) during auth.
 @immutable
 final class AppStateAuthenticating extends AppState {
-  const AppStateAuthenticating({required this.serverId});
+  const AppStateAuthenticating({
+    required this.serverId,
+    required this.providers,
+  });
 
   /// The server ID being authenticated to.
   final String serverId;
 
+  /// The providers that were available (for UI display).
+  final List<OIDCAuthSystem> providers;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is AppStateAuthenticating && serverId == other.serverId;
+      other is AppStateAuthenticating &&
+          serverId == other.serverId &&
+          listEquals(providers, other.providers);
 
   @override
-  int get hashCode => Object.hash(runtimeType, serverId);
+  int get hashCode =>
+      Object.hash(runtimeType, serverId, Object.hashAll(providers));
 
   @override
   String toString() => 'AppStateAuthenticating(serverId: $serverId)';
@@ -131,7 +167,7 @@ final class AppStateReady extends AppState {
           user == other.user;
 
   @override
-  int get hashCode => Object.hash(serverId, config, user);
+  int get hashCode => Object.hash(runtimeType, serverId, config, user);
 
   @override
   String toString() =>
@@ -141,12 +177,14 @@ final class AppStateReady extends AppState {
 /// An error occurred during authentication.
 ///
 /// The error message describes what went wrong. The optional [serverId]
-/// indicates which server the error relates to.
+/// indicates which server the error relates to. If [providers] were available
+/// before the error, they are preserved for retry UX.
 @immutable
 final class AppStateError extends AppState {
   const AppStateError({
     required this.message,
     this.serverId,
+    this.providers = const [],
   });
 
   /// Description of what went wrong.
@@ -155,29 +193,25 @@ final class AppStateError extends AppState {
   /// The server ID where the error occurred, if applicable.
   final String? serverId;
 
+  /// Providers available before the error, preserved for retry without
+  /// re-probing.
+  final List<OIDCAuthSystem> providers;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is AppStateError &&
           message == other.message &&
-          serverId == other.serverId;
+          serverId == other.serverId &&
+          listEquals(providers, other.providers);
 
   @override
-  int get hashCode => Object.hash(message, serverId);
+  int get hashCode =>
+      Object.hash(runtimeType, message, serverId, Object.hashAll(providers));
 
   @override
   String toString() {
     final serverPart = serverId != null ? ', serverId: $serverId' : '';
     return 'AppStateError(message: $message$serverPart)';
   }
-}
-
-/// Helper for list equality comparison.
-bool _listEquals<T>(List<T> a, List<T> b) {
-  if (identical(a, b)) return true;
-  if (a.length != b.length) return false;
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
 }

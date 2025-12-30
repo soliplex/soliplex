@@ -72,7 +72,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final isPublicRoute = _publicRoutes.contains(state.matchedLocation);
       final isAuthenticated = notifier.isAuthenticated;
-      final isAuthenticating = notifier.isAuthenticating;
+      final isInAuthFlow = notifier.isInAuthFlow;
 
       // Allow callback route during authentication
       if (state.matchedLocation == '/auth/callback') {
@@ -81,7 +81,8 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Redirect to login if not authenticated (unless already going there).
       // This covers AppStateNoServer, AppStateNeedsAuth, and AppStateError.
-      if (!isAuthenticated && !isAuthenticating && !isPublicRoute) {
+      // During auth flow (probing or authenticating), stay on login screen.
+      if (!isAuthenticated && !isInAuthFlow && !isPublicRoute) {
         // Preserve the original location to redirect back after login
         final from = state.matchedLocation;
         if (from != '/') {

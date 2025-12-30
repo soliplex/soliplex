@@ -12,7 +12,15 @@ import 'package:soliplex_client/src/utils/cancel_token.dart';
 /// Called before each request when set on [HttpTransport].
 /// Should return the access token string, or throw [AuthError] subtypes
 /// if authentication fails (e.g., [AuthErrorNotAuthenticated]).
+///
+/// Return empty string to skip authentication header.
 typedef TokenProvider = Future<String> Function();
+
+/// No-op token provider for unauthenticated requests.
+///
+/// Always returns empty string, causing [HttpTransport] to skip the
+/// Authorization header. Use this for pre-auth requests like OIDC discovery.
+Future<String> noTokenProvider() async => '';
 
 /// HTTP transport layer with JSON serialization and exception mapping.
 ///
@@ -47,31 +55,28 @@ typedef TokenProvider = Future<String> Function();
 /// transport.close();
 /// ```
 class HttpTransport {
-  /// Creates an HTTP transport with the given [client] and [tokenProvider].
+  /// Creates an HTTP transport with the given [client].
   ///
   /// Parameters:
   /// - [client]: The underlying HTTP client to use for requests
   /// - [tokenProvider]: Callback to get access token for requests.
-  ///   Called before each request; the returned token is added as
-  ///   `Authorization: Bearer <token>` header.
+  ///   Called before each request; if the returned token is non-empty, it's
+  ///   added as `Authorization: Bearer <token>` header. Defaults to
+  ///   [noTokenProvider] which skips authentication.
   /// - [defaultTimeout]: Default timeout for requests (defaults to 30 seconds)
   HttpTransport({
     required SoliplexHttpClient client,
-    required this.tokenProvider,
+    TokenProvider tokenProvider = noTokenProvider,
     this.defaultTimeout = const Duration(seconds: 30),
-  }) : _client = client;
+  })  : _client = client,
+        _tokenProvider = tokenProvider;
 
   final SoliplexHttpClient _client;
 
   /// Default timeout applied to requests when no per-request timeout is given.
   final Duration defaultTimeout;
 
-  /// Callback to get access token for authenticated requests.
-  ///
-  /// Called before each request. The returned token is added as an
-  /// `Authorization: Bearer <token>` header. If the callback throws,
-  /// the error propagates to the caller.
-  final TokenProvider tokenProvider;
+  final TokenProvider _tokenProvider;
 
   /// Performs an HTTP request and returns the decoded response.
   ///
@@ -114,7 +119,7 @@ class HttpTransport {
     var requestBody = body;
 
     // Add Authorization header if token is available
-    final token = await tokenProvider();
+    final token = await _tokenProvider();
     if (token.isNotEmpty) {
       requestHeaders['Authorization'] = 'Bearer $token';
     }
@@ -161,7 +166,7 @@ class HttpTransport {
   ///
   /// Throws:
   /// - [CancelledException] if cancelled before the stream starts
-  /// - [AuthError] subtypes if [tokenProvider] fails
+  /// - [AuthError] subtypes if token provider fails
   ///   (e.g., [AuthErrorNotAuthenticated])
   /// - [NetworkException] for connection failures (from client)
   Future<Stream<List<int>>> requestStream(
@@ -179,7 +184,7 @@ class HttpTransport {
     var requestBody = body;
 
     // Add Authorization header if token is available
-    final token = await tokenProvider();
+    final token = await _tokenProvider();
     if (token.isNotEmpty) {
       requestHeaders['Authorization'] = 'Bearer $token';
     }

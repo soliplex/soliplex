@@ -26,6 +26,7 @@ void main() {
         createTestApp(
           home: const RoomScreen(roomId: 'general'),
           overrides: [
+            roomsProvider.overrideWith((ref) async => const []),
             threadsProvider('general').overrideWith((ref) async => []),
             lastViewedThreadProvider('general')
                 .overrideWith((ref) async => const NoLastViewed()),
@@ -49,6 +50,7 @@ void main() {
         createTestApp(
           home: const RoomScreen(roomId: 'general'),
           overrides: [
+            roomsProvider.overrideWith((ref) async => const []),
             threadsProvider('general').overrideWith((ref) async => []),
             lastViewedThreadProvider('general')
                 .overrideWith((ref) async => const NoLastViewed()),
@@ -73,6 +75,7 @@ void main() {
         createTestApp(
           home: const RoomScreen(roomId: 'general'),
           overrides: [
+            roomsProvider.overrideWith((ref) async => const []),
             threadsProvider('general').overrideWith((ref) async => []),
             lastViewedThreadProvider('general')
                 .overrideWith((ref) async => const NoLastViewed()),
@@ -104,6 +107,7 @@ void main() {
         createTestApp(
           home: const RoomScreen(roomId: 'general'),
           overrides: [
+            roomsProvider.overrideWith((ref) async => const []),
             threadsProvider('general').overrideWith((ref) async => []),
             lastViewedThreadProvider('general')
                 .overrideWith((ref) async => const NoLastViewed()),
@@ -141,6 +145,7 @@ void main() {
             initialThreadId: 'thread-2',
           ),
           overrides: [
+            roomsProvider.overrideWith((ref) async => const []),
             threadsProvider('general').overrideWith((ref) async => mockThreads),
             lastViewedThreadProvider('general')
                 .overrideWith((ref) async => const HasLastViewed('thread-1')),
@@ -168,6 +173,7 @@ void main() {
         createTestApp(
           home: const RoomScreen(roomId: 'general'),
           overrides: [
+            roomsProvider.overrideWith((ref) async => const []),
             threadsProvider('general').overrideWith((ref) async => mockThreads),
             lastViewedThreadProvider('general')
                 .overrideWith((ref) async => const HasLastViewed('thread-2')),
@@ -196,6 +202,7 @@ void main() {
         createTestApp(
           home: const RoomScreen(roomId: 'general'),
           overrides: [
+            roomsProvider.overrideWith((ref) async => const []),
             threadsProvider('general').overrideWith((ref) async => mockThreads),
             lastViewedThreadProvider('general')
                 .overrideWith((ref) async => const NoLastViewed()),
@@ -218,6 +225,7 @@ void main() {
         createTestApp(
           home: const RoomScreen(roomId: 'empty-room'),
           overrides: [
+            roomsProvider.overrideWith((ref) async => const []),
             threadsProvider('empty-room').overrideWith((ref) async => []),
             lastViewedThreadProvider('empty-room')
                 .overrideWith((ref) async => const NoLastViewed()),
@@ -247,6 +255,7 @@ void main() {
             initialThreadId: 'nonexistent-thread',
           ),
           overrides: [
+            roomsProvider.overrideWith((ref) async => const []),
             threadsProvider('general').overrideWith((ref) async => mockThreads),
             lastViewedThreadProvider('general')
                 .overrideWith((ref) async => const NoLastViewed()),
