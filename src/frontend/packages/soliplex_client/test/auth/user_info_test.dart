@@ -205,12 +205,37 @@ void main() {
         expect(user.id, equals('sub-value'));
       });
 
-      test('uses empty string when no id fields present', () {
+      test('throws AuthErrorConfiguration when no id fields present', () {
         final claims = <String, dynamic>{'email': 'user@example.com'};
 
-        final user = UserInfo.fromOidcClaims(claims);
+        expect(
+          () => UserInfo.fromOidcClaims(claims),
+          throwsA(isA<AuthErrorConfiguration>()),
+        );
+      });
 
-        expect(user.id, equals(''));
+      test('throws AuthErrorConfiguration when sub is empty string', () {
+        final claims = <String, dynamic>{
+          'sub': '',
+          'email': 'user@example.com',
+        };
+
+        expect(
+          () => UserInfo.fromOidcClaims(claims),
+          throwsA(isA<AuthErrorConfiguration>()),
+        );
+      });
+
+      test('throws AuthErrorConfiguration when id is empty string', () {
+        final claims = <String, dynamic>{
+          'id': '',
+          'email': 'user@example.com',
+        };
+
+        expect(
+          () => UserInfo.fromOidcClaims(claims),
+          throwsA(isA<AuthErrorConfiguration>()),
+        );
       });
 
       test('builds name from given_name and family_name', () {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_client_native/soliplex_client_native.dart';
+import 'package:soliplex_frontend/core/providers/auth_providers.dart';
 import 'package:soliplex_frontend/core/providers/config_provider.dart';
 import 'package:soliplex_frontend/core/providers/http_log_provider.dart';
 
@@ -45,15 +46,10 @@ final observableClientProvider = Provider<SoliplexHttpClient>((ref) {
 /// adapter uses dart:http which is isolate-safe.
 final httpTransportProvider = Provider<HttpTransport>((ref) {
   final client = ref.watch(observableClientProvider);
-  // TODO(auth): Replace stub with real tokenProvider from authProvider
-  // once Commit 10 (Auth providers) is complete.
+  final tokenProvider = createTokenProvider(ref);
   final transport = HttpTransport(
     client: client,
-    tokenProvider: () async {
-      // Stub: returns empty token until auth is wired up.
-      // Backend will return 401 if auth is required.
-      return '';
-    },
+    tokenProvider: tokenProvider,
   );
 
   // Note: Don't dispose transport here - client is managed by

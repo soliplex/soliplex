@@ -1,4 +1,5 @@
 import 'package:meta/meta.dart';
+import 'package:soliplex_client/src/auth/auth_error.dart';
 
 /// Represents authenticated user information.
 ///
@@ -29,6 +30,9 @@ class UserInfo {
   /// - `sub` or `id` → [id]
   /// - `name` or `given_name`+`family_name` → [name]
   /// - `email` → [email]
+  ///
+  /// Throws [AuthErrorConfiguration] if neither `sub` nor `id` claim exists
+  /// or if the value is empty.
   factory UserInfo.fromOidcClaims(Map<String, dynamic> claims) {
     final givenName = claims['given_name'] as String?;
     final familyName = claims['family_name'] as String?;
@@ -39,8 +43,15 @@ class UserInfo {
       if (name.isEmpty) name = null;
     }
 
+    final id = claims['sub'] as String? ?? claims['id'] as String?;
+    if (id == null || id.isEmpty) {
+      throw const AuthErrorConfiguration(
+        message: 'Userinfo response missing required "sub" or "id" claim',
+      );
+    }
+
     return UserInfo(
-      id: claims['sub'] as String? ?? claims['id'] as String? ?? '',
+      id: id,
       email: claims['email'] as String?,
       name: name,
     );

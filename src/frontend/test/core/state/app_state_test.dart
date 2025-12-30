@@ -3,6 +3,19 @@ import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/state/app_state.dart';
 
 void main() {
+  const testAuthSystem = OIDCAuthSystem(
+    id: 'keycloak',
+    title: 'Keycloak',
+    serverUrl: 'https://auth.example.com',
+    clientId: 'client-123',
+  );
+
+  const testConfig = SsoConfig(
+    authorizationEndpoint: 'https://auth.example.com/authorize',
+    tokenEndpoint: 'https://auth.example.com/token',
+    authSystem: testAuthSystem,
+  );
+
   group('AppState', () {
     group('AppStateNoServer', () {
       test('creates instance', () {
@@ -38,7 +51,7 @@ void main() {
           ),
         ];
 
-        const state = AppStateNeedsAuth(
+        final state = AppStateNeedsAuth(
           serverId: 'server1',
           providers: providers,
         );
@@ -57,11 +70,11 @@ void main() {
           ),
         ];
 
-        const state1 = AppStateNeedsAuth(
+        final state1 = AppStateNeedsAuth(
           serverId: 'server1',
           providers: providers,
         );
-        const state2 = AppStateNeedsAuth(
+        final state2 = AppStateNeedsAuth(
           serverId: 'server1',
           providers: providers,
         );
@@ -70,8 +83,7 @@ void main() {
         expect(state1.hashCode, equals(state2.hashCode));
       });
 
-      test('equality works with different list instances same content', () {
-        // Use non-const to create different list instances
+      test('equality works with different list instances', () {
         final state1 = AppStateNeedsAuth(
           serverId: 'server1',
           providers: [
@@ -102,11 +114,11 @@ void main() {
       test('not equal with different serverId', () {
         const providers = <OIDCAuthSystem>[];
 
-        const state1 = AppStateNeedsAuth(
+        final state1 = AppStateNeedsAuth(
           serverId: 'server1',
           providers: providers,
         );
-        const state2 = AppStateNeedsAuth(
+        final state2 = AppStateNeedsAuth(
           serverId: 'server2',
           providers: providers,
         );
@@ -115,10 +127,10 @@ void main() {
       });
 
       test('not equal with different providers', () {
-        const state1 = AppStateNeedsAuth(
+        final state1 = AppStateNeedsAuth(
           serverId: 'server1',
           providers: [
-            OIDCAuthSystem(
+            const OIDCAuthSystem(
               id: 'keycloak',
               title: 'Keycloak',
               serverUrl: 'https://auth.example.com',
@@ -126,7 +138,7 @@ void main() {
             ),
           ],
         );
-        const state2 = AppStateNeedsAuth(
+        final state2 = AppStateNeedsAuth(
           serverId: 'server1',
           providers: [],
         );
@@ -135,10 +147,10 @@ void main() {
       });
 
       test('toString returns expected format', () {
-        const state = AppStateNeedsAuth(
+        final state = AppStateNeedsAuth(
           serverId: 'server1',
           providers: [
-            OIDCAuthSystem(
+            const OIDCAuthSystem(
               id: 'keycloak',
               title: 'Keycloak',
               serverUrl: 'https://auth.example.com',
@@ -188,9 +200,10 @@ void main() {
 
     group('AppStateReady', () {
       test('creates with required fields', () {
-        const state = AppStateReady(serverId: 'server1');
+        const state = AppStateReady(serverId: 'server1', config: testConfig);
 
         expect(state.serverId, equals('server1'));
+        expect(state.config, equals(testConfig));
         expect(state.user, isNull);
       });
 
@@ -203,26 +216,43 @@ void main() {
 
         const state = AppStateReady(
           serverId: 'server1',
+          config: testConfig,
           user: user,
         );
 
         expect(state.serverId, equals('server1'));
+        expect(state.config, equals(testConfig));
         expect(state.user, equals(user));
       });
 
       test('equality works correctly', () {
         const user = UserInfo(id: 'user-123');
 
-        const state1 = AppStateReady(serverId: 'server1', user: user);
-        const state2 = AppStateReady(serverId: 'server1', user: user);
+        const state1 =
+            AppStateReady(serverId: 'server1', config: testConfig, user: user);
+        const state2 =
+            AppStateReady(serverId: 'server1', config: testConfig, user: user);
 
         expect(state1, equals(state2));
         expect(state1.hashCode, equals(state2.hashCode));
       });
 
       test('not equal with different serverId', () {
-        const state1 = AppStateReady(serverId: 'server1');
-        const state2 = AppStateReady(serverId: 'server2');
+        const state1 = AppStateReady(serverId: 'server1', config: testConfig);
+        const state2 = AppStateReady(serverId: 'server2', config: testConfig);
+
+        expect(state1, isNot(equals(state2)));
+      });
+
+      test('not equal with different config', () {
+        const otherConfig = SsoConfig(
+          authorizationEndpoint: 'https://other.example.com/authorize',
+          tokenEndpoint: 'https://other.example.com/token',
+          authSystem: testAuthSystem,
+        );
+
+        const state1 = AppStateReady(serverId: 'server1', config: testConfig);
+        const state2 = AppStateReady(serverId: 'server1', config: otherConfig);
 
         expect(state1, isNot(equals(state2)));
       });
@@ -230,10 +260,12 @@ void main() {
       test('not equal with different user', () {
         const state1 = AppStateReady(
           serverId: 'server1',
+          config: testConfig,
           user: UserInfo(id: 'user-1'),
         );
         const state2 = AppStateReady(
           serverId: 'server1',
+          config: testConfig,
           user: UserInfo(id: 'user-2'),
         );
 
@@ -241,17 +273,16 @@ void main() {
       });
 
       test('toString returns expected format without user', () {
-        const state = AppStateReady(serverId: 'server1');
+        const state = AppStateReady(serverId: 'server1', config: testConfig);
 
-        expect(
-          state.toString(),
-          equals('AppStateReady(serverId: server1, user: null)'),
-        );
+        expect(state.toString(), contains('server1'));
+        expect(state.toString(), contains('user: null'));
       });
 
       test('toString returns expected format with user', () {
         const state = AppStateReady(
           serverId: 'server1',
+          config: testConfig,
           user: UserInfo(id: 'user-123'),
         );
 
@@ -326,9 +357,9 @@ void main() {
       test('can pattern match on all variants', () {
         final states = <AppState>[
           const AppStateNoServer(),
-          const AppStateNeedsAuth(serverId: 'server1', providers: []),
+          AppStateNeedsAuth(serverId: 'server1', providers: const []),
           const AppStateAuthenticating(serverId: 'server1'),
-          const AppStateReady(serverId: 'server1'),
+          const AppStateReady(serverId: 'server1', config: testConfig),
           const AppStateError(message: 'error'),
         ];
 

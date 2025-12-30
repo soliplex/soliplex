@@ -177,7 +177,8 @@ void main() {
         expect(auth.token.accessToken, equals('refreshed-access'));
       });
 
-      test('returns RefreshFailed when refresh throws exception', () async {
+      test('returns RefreshFailed when refresh throws platform exception',
+          () async {
         final config = createConfig();
         final expiredToken = createToken(
           expiresAt: DateTime.now().subtract(const Duration(hours: 1)),
@@ -185,8 +186,12 @@ void main() {
 
         when(() => mockStorage.read('server1'))
             .thenAnswer((_) async => TokenFound(expiredToken));
-        when(() => mockAppAuth.token(any()))
-            .thenThrow(Exception('Refresh failed'));
+        when(() => mockAppAuth.token(any())).thenThrow(
+          FlutterAppAuthPlatformException(
+            code: 'TOKEN_ERROR',
+            platformErrorDetails: FlutterAppAuthPlatformErrorDetails(),
+          ),
+        );
         when(() => mockStorage.delete('server1')).thenAnswer((_) async {});
 
         final result = await provider.getValidToken('server1', config);
@@ -219,8 +224,10 @@ void main() {
             .thenAnswer((_) async => createAuthResponse());
         when(() => mockStorage.write(any(), any())).thenAnswer((_) async {});
 
-        final token = await provider.login('server1', config);
+        final result = await provider.login('server1', config);
 
+        expect(result, isA<LoginSuccess>());
+        final token = (result as LoginSuccess).token;
         expect(token.accessToken, equals('new-access'));
         verify(() => mockStorage.write('server1', any())).called(1);
       });
@@ -266,17 +273,6 @@ void main() {
         );
       });
 
-      test('throws AuthErrorNetwork on general exception', () async {
-        final config = createConfig();
-        when(() => mockAppAuth.authorizeAndExchangeCode(any()))
-            .thenThrow(Exception('Network error'));
-
-        expect(
-          () => provider.login('server1', config),
-          throwsA(isA<AuthErrorNetwork>()),
-        );
-      });
-
       test('uses custom redirect scheme', () async {
         final customProvider = MobileAuthProvider(
           tokenStorage: mockStorage,
@@ -304,11 +300,12 @@ void main() {
 
     group('logout', () {
       test('deletes token from storage', () async {
+        final config = createConfig();
         when(() => mockStorage.read('server1'))
             .thenAnswer((_) async => const TokenNotFound());
         when(() => mockStorage.delete('server1')).thenAnswer((_) async {});
 
-        await provider.logout('server1');
+        await provider.logout('server1', config);
 
         verify(() => mockStorage.delete('server1')).called(1);
       });
@@ -319,20 +316,13 @@ void main() {
         );
         final token = createToken(idToken: 'id-token-123');
 
-        // Login to cache config
-        when(() => mockAppAuth.authorizeAndExchangeCode(any()))
-            .thenAnswer((_) async => createAuthResponse(idToken: 'id-token'));
-        when(() => mockStorage.write(any(), any())).thenAnswer((_) async {});
-        await provider.login('server1', config);
-
-        // Logout
         when(() => mockStorage.read('server1'))
             .thenAnswer((_) async => TokenFound(token));
         when(() => mockStorage.delete('server1')).thenAnswer((_) async {});
         when(() => mockAppAuth.endSession(any()))
             .thenAnswer((_) async => EndSessionResponse(''));
 
-        await provider.logout('server1');
+        await provider.logout('server1', config);
 
         verify(() => mockAppAuth.endSession(any())).called(1);
       });
@@ -343,13 +333,6 @@ void main() {
         );
         final token = createToken(idToken: 'id-token-123');
 
-        // Login to cache config
-        when(() => mockAppAuth.authorizeAndExchangeCode(any()))
-            .thenAnswer((_) async => createAuthResponse(idToken: 'id-token'));
-        when(() => mockStorage.write(any(), any())).thenAnswer((_) async {});
-        await provider.login('server1', config);
-
-        // Logout with endSession failure
         when(() => mockStorage.read('server1'))
             .thenAnswer((_) async => TokenFound(token));
         when(() => mockStorage.delete('server1')).thenAnswer((_) async {});
@@ -357,7 +340,7 @@ void main() {
             .thenThrow(Exception('End session failed'));
 
         // Should not throw
-        await provider.logout('server1');
+        await provider.logout('server1', config);
 
         verify(() => mockStorage.delete('server1')).called(1);
       });
@@ -473,7 +456,7 @@ void main() {
         when(() => mockStorage.read('server1'))
             .thenAnswer((_) async => TokenFound(token));
         when(() => mockHttpClient.get(any(), headers: any(named: 'headers')))
-            .thenThrow(Exception('Connection refused'));
+            .thenThrow(http.ClientException('Connection refused'));
 
         expect(
           () => provider.getCurrentUser('server1', config),

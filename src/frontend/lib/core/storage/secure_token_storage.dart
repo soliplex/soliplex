@@ -38,15 +38,37 @@ class SecureTokenStorage implements TokenStorage {
   @override
   Future<TokenResult> read(String serverId) async {
     final key = _keyFor(serverId);
-    final json = await _storage.read(key: key);
+
+    // Platform storage access - failures here are not "no token"
+    final String? json;
+    try {
+      json = await _storage.read(key: key);
+    } on Exception catch (e) {
+      return TokenStorageError(
+        message: 'Failed to access secure storage: $e',
+        originalError: e,
+      );
+    }
 
     if (json == null) {
       return const TokenNotFound();
     }
 
-    final data = jsonDecode(json) as Map<String, dynamic>;
-    final token = AuthToken.fromJson(data);
-    return TokenFound(token);
+    // Parse stored JSON - failures here are corruption, not access errors
+    try {
+      final decoded = jsonDecode(json);
+      if (decoded is! Map<String, dynamic>) {
+        await _storage.delete(key: key);
+        return const TokenNotFound();
+      }
+      final token = AuthToken.fromJson(decoded);
+      return TokenFound(token);
+      // ignore: avoid_catches_without_on_clauses
+    } catch (_) {
+      // Corrupted data - delete and treat as not found
+      await _storage.delete(key: key);
+      return const TokenNotFound();
+    }
   }
 
   @override

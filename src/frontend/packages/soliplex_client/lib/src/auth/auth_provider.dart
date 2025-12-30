@@ -1,6 +1,6 @@
 import 'package:soliplex_client/src/auth/auth_error.dart';
 import 'package:soliplex_client/src/auth/auth_result.dart';
-import 'package:soliplex_client/src/auth/auth_token.dart';
+import 'package:soliplex_client/src/auth/login_result.dart';
 import 'package:soliplex_client/src/auth/sso_config.dart';
 import 'package:soliplex_client/src/auth/user_info.dart';
 
@@ -41,15 +41,15 @@ abstract interface class AuthProvider {
   /// the caller may want to retry or show a different error message.
   Future<AuthResult> getValidToken(String serverId, SsoConfig config);
 
-  /// Authenticates with the OIDC provider and stores tokens.
+  /// Authenticates with the OIDC provider.
   ///
   /// Opens a browser for user authentication via the authorization code flow.
-  /// On success, stores tokens keyed by [serverId] and caches [config] for
-  /// logout operations.
+  /// On success, stores tokens keyed by [serverId].
   ///
-  /// Returns [AuthToken] directly on success because login either succeeds
-  /// or throws — there is no "not authenticated" case like with
-  /// [getValidToken].
+  /// Returns a [LoginResult]:
+  /// - [LoginSuccess] with the token on successful authentication (mobile)
+  /// - [LoginRedirect] when the browser redirects away (web). Callers should
+  ///   wait for callback processing to complete authentication.
   ///
   /// Throws [AuthError] subtypes on failure:
   /// - [AuthErrorCancelled] if user cancelled the login
@@ -57,17 +57,16 @@ abstract interface class AuthProvider {
   /// - [AuthErrorInvalidState] for CSRF validation failures
   /// - [AuthErrorServer] for server errors during token exchange
   /// - [AuthErrorConfiguration] for invalid configuration
-  Future<AuthToken> login(String serverId, SsoConfig config);
+  Future<LoginResult> login(String serverId, SsoConfig config);
 
   /// Ends the session and clears stored tokens.
   ///
-  /// Uses the cached [SsoConfig] from the prior [login] call to locate the
-  /// end-session endpoint. If no config is cached (e.g., app restart),
-  /// clears local tokens without server-side session termination.
+  /// Uses [config] to locate the end-session endpoint for server-side
+  /// session termination. Also clears local tokens.
   ///
   /// Never throws. Remote logout failures are logged but not propagated
   /// since local cleanup is sufficient for security purposes.
-  Future<void> logout(String serverId);
+  Future<void> logout(String serverId, SsoConfig config);
 
   /// Retrieves user information from the OIDC provider.
   ///

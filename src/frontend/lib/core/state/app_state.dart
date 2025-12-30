@@ -53,6 +53,7 @@ final class AppStateNoServer extends AppState {
 /// Contains the server ID and available authentication providers.
 @immutable
 final class AppStateNeedsAuth extends AppState {
+  /// Creates a needs-auth state.
   const AppStateNeedsAuth({
     required this.serverId,
     required this.providers,
@@ -103,16 +104,20 @@ final class AppStateAuthenticating extends AppState {
 
 /// User is authenticated and the app is ready.
 ///
-/// Contains the server ID and optionally the current user info.
+/// Contains the server ID, OIDC config for token operations, and user info.
 @immutable
 final class AppStateReady extends AppState {
   const AppStateReady({
     required this.serverId,
+    required this.config,
     this.user,
   });
 
   /// The server ID the user is authenticated to.
   final String serverId;
+
+  /// The OIDC configuration for token operations.
+  final SsoConfig config;
 
   /// The authenticated user's info, if available.
   final UserInfo? user;
@@ -122,13 +127,15 @@ final class AppStateReady extends AppState {
       identical(this, other) ||
       other is AppStateReady &&
           serverId == other.serverId &&
+          config == other.config &&
           user == other.user;
 
   @override
-  int get hashCode => Object.hash(serverId, user);
+  int get hashCode => Object.hash(serverId, config, user);
 
   @override
-  String toString() => 'AppStateReady(serverId: $serverId, user: $user)';
+  String toString() =>
+      'AppStateReady(serverId: $serverId, config: $config, user: $user)';
 }
 
 /// An error occurred during authentication.
@@ -159,8 +166,10 @@ final class AppStateError extends AppState {
   int get hashCode => Object.hash(message, serverId);
 
   @override
-  String toString() =>
-      'AppStateError(message: $message${serverId != null ? ', serverId: $serverId' : ''})';
+  String toString() {
+    final serverPart = serverId != null ? ', serverId: $serverId' : '';
+    return 'AppStateError(message: $message$serverPart)';
+  }
 }
 
 /// Helper for list equality comparison.

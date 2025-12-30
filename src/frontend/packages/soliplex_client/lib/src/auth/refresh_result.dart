@@ -17,6 +17,16 @@ final class RefreshSuccess extends RefreshResult {
 
   /// The refreshed token.
   final AuthToken token;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is RefreshSuccess && other.token == token;
+
+  @override
+  int get hashCode => token.hashCode;
+
+  @override
+  String toString() => 'RefreshSuccess($token)';
 }
 
 /// Token refresh was rejected by the server.
@@ -27,4 +37,15 @@ final class RefreshRejected extends RefreshResult {
 
   /// Description of why refresh was rejected.
   final String cause;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RefreshRejected && other.cause == cause;
+
+  @override
+  int get hashCode => cause.hashCode;
+
+  @override
+  String toString() => 'RefreshRejected($cause)';
 }

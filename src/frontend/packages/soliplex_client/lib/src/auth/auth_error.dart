@@ -119,24 +119,3 @@ final class AuthErrorNotAuthenticated extends AuthError {
   @override
   String toString() => 'AuthError.NotAuthenticated: $message';
 }
-
-/// Browser redirect initiated (web/desktop backend-mediated flow).
-///
-/// This is a flow control signal, not an error. It indicates the browser is
-/// redirecting to the OIDC provider and the app will receive tokens via
-/// callback URL. Callers should catch this during web authentication and
-/// handle navigation to the callback screen.
-///
-/// Note: This is intentionally NOT part of the [AuthError] sealed hierarchy
-/// because it represents expected control flow, not an error condition.
-@immutable
-final class AuthFlowRedirect implements Exception {
-  /// Creates a redirect signal.
-  const AuthFlowRedirect({required this.serverId});
-
-  /// The server ID we're authenticating to.
-  final String serverId;
-
-  @override
-  String toString() => 'AuthFlowRedirect(server: $serverId)';
-}

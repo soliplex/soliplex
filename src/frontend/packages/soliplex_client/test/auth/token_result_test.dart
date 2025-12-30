@@ -101,6 +101,53 @@ void main() {
       });
     });
 
+    group('TokenStorageError', () {
+      test('creates with message', () {
+        const result = TokenStorageError(message: 'Storage locked');
+
+        expect(result.message, equals('Storage locked'));
+        expect(result.originalError, isNull);
+      });
+
+      test('creates with originalError', () {
+        final error = Exception('Keychain unavailable');
+        final result = TokenStorageError(
+          message: 'Storage locked',
+          originalError: error,
+        );
+
+        expect(result.message, equals('Storage locked'));
+        expect(result.originalError, equals(error));
+      });
+
+      test('equal when messages are equal', () {
+        const result1 = TokenStorageError(message: 'error');
+        const result2 = TokenStorageError(message: 'error');
+
+        expect(result1, equals(result2));
+      });
+
+      test('not equal when messages differ', () {
+        const result1 = TokenStorageError(message: 'error 1');
+        const result2 = TokenStorageError(message: 'error 2');
+
+        expect(result1, isNot(equals(result2)));
+      });
+
+      test('hashCode consistent with equality', () {
+        const result1 = TokenStorageError(message: 'error');
+        const result2 = TokenStorageError(message: 'error');
+
+        expect(result1.hashCode, equals(result2.hashCode));
+      });
+
+      test('toString includes message', () {
+        const result = TokenStorageError(message: 'Storage locked');
+
+        expect(result.toString(), equals('TokenStorageError(Storage locked)'));
+      });
+    });
+
     group('cross-type equality', () {
       test('TokenFound is not equal to TokenNotFound', () {
         final tokenFound = TokenFound(
@@ -125,6 +172,7 @@ void main() {
             ),
           ),
           const TokenNotFound(),
+          const TokenStorageError(message: 'test error'),
         ];
 
         for (final result in results) {
@@ -132,6 +180,7 @@ void main() {
           final description = switch (result) {
             TokenFound(:final token) => 'found: ${token.accessToken}',
             TokenNotFound() => 'not found',
+            TokenStorageError(:final message) => 'error: $message',
           };
           expect(description, isNotEmpty);
         }

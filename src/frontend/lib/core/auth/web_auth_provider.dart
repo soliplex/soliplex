@@ -40,11 +40,13 @@ abstract interface class WebAuthPendingStorage {
 }
 
 /// Result of retrieving a pending server ID.
+@immutable
 sealed class PendingServerResult {
   const PendingServerResult();
 }
 
 /// A pending server ID was found.
+@immutable
 final class PendingServerFound extends PendingServerResult {
   /// Creates a found result.
   const PendingServerFound(this.serverId);
@@ -54,6 +56,7 @@ final class PendingServerFound extends PendingServerResult {
 }
 
 /// No pending server ID exists.
+@immutable
 final class NoPendingServer extends PendingServerResult {
   /// Creates a not found result.
   const NoPendingServer();
@@ -66,7 +69,7 @@ final class NoPendingServer extends PendingServerResult {
 /// 2. Backend performs OAuth exchange with OIDC provider
 /// 3. Backend redirects back with tokens in URL query params
 ///
-/// On web, [login] throws [AuthFlowRedirect] since the browser navigates
+/// On web, [login] returns [LoginRedirect] since the browser navigates
 /// away. The callback URL is handled by a separate screen that extracts
 /// tokens and stores them.
 ///
@@ -88,52 +91,34 @@ class WebAuthProvider implements AuthProvider {
     UrlLauncher urlLauncher = defaultUrlLauncher,
   })  : _baseUrl = baseUrl,
         _tokenStorage = tokenStorage,
+        _tokenValidator = TokenValidator(tokenStorage: tokenStorage),
         _pendingStorage = pendingStorage,
         _httpClient = httpClient,
         _callbackPath = callbackPath,
-        _urlLauncher = urlLauncher;
+        _urlLauncher = urlLauncher,
+        _userInfoFetcher = UserInfoFetcher(
+          tokenStorage: tokenStorage,
+          httpClient: httpClient,
+        );
 
   final String _baseUrl;
   final TokenStorage _tokenStorage;
+  final TokenValidator _tokenValidator;
   final WebAuthPendingStorage _pendingStorage;
   final http.Client _httpClient;
   final String _callbackPath;
   final UrlLauncher _urlLauncher;
+  final UserInfoFetcher _userInfoFetcher;
 
   @override
-  Future<AuthResult> getValidToken(String serverId, SsoConfig config) async {
-    final result = await _tokenStorage.read(serverId);
-
-    switch (result) {
-      case TokenNotFound():
-        return const NoToken();
-      case TokenFound(:final token):
-        if (!token.needsRefresh) {
-          return Authenticated(token: token);
-        }
-
-        if (!token.canRefresh) {
-          await _tokenStorage.delete(serverId);
-          return const TokenExpired();
-        }
-
-        final refreshResult = await _attemptRefresh(token, config);
-        switch (refreshResult) {
-          case RefreshSuccess(:final token):
-            await _tokenStorage.write(serverId, token);
-            return Authenticated(token: token);
-          case RefreshRejected(:final cause):
-            await _tokenStorage.delete(serverId);
-            return RefreshFailed(cause: cause);
-        }
-    }
-  }
+  Future<AuthResult> getValidToken(String serverId, SsoConfig config) =>
+      _tokenValidator.getValidToken(
+        serverId,
+        onRefresh: (token) => _attemptRefresh(token, config),
+      );
 
   @override
-  Future<AuthToken> login(String serverId, SsoConfig config) async {
-    // Store server ID for retrieval after callback
-    await _pendingStorage.savePendingServerId(serverId);
-
+  Future<LoginResult> login(String serverId, SsoConfig config) async {
     // Build the backend login URL
     final loginUrl = Uri.parse('$_baseUrl/api/login/${config.authSystem.id}')
         .replace(queryParameters: {'return_to': _callbackPath});
@@ -153,60 +138,37 @@ class WebAuthProvider implements AuthProvider {
       );
     }
 
-    // Signal that browser redirect is happening
-    // Callers should catch this and wait for callback
-    throw AuthFlowRedirect(serverId: serverId);
+    // Store server ID only after successful URL launch
+    await _pendingStorage.savePendingServerId(serverId);
+
+    // Browser is redirecting; caller should wait for callback
+    return LoginRedirect(serverId: serverId);
   }
 
+  /// Logs out by clearing local tokens only.
+  ///
+  /// **Limitation**: This does NOT perform server-side logout with the OIDC
+  /// provider. The user's session with the identity provider remains active.
+  /// If the user logs in again, they may be automatically authenticated
+  /// without re-entering credentials (SSO behavior).
+  ///
+  /// This limitation exists because the web flow uses backend-mediated
+  /// authentication, and implementing server-side logout would require either:
+  /// - A backend endpoint that performs the OIDC end-session redirect, or
+  /// - Exposing the end-session URL to the client (security tradeoff)
+  ///
+  /// For use cases requiring full logout, consider implementing a backend
+  /// `/api/logout` endpoint that handles the OIDC end-session flow.
   @override
-  Future<void> logout(String serverId) async {
-    // Clear local tokens - no server-side logout for web flow
+  Future<void> logout(String serverId, SsoConfig config) async {
     await _tokenStorage.delete(serverId);
     await _pendingStorage.clearPendingServerId();
     debugPrint('WebAuthProvider: Logged out $serverId');
   }
 
   @override
-  Future<UserInfo> getCurrentUser(String serverId, SsoConfig config) async {
-    final result = await _tokenStorage.read(serverId);
-
-    final token = switch (result) {
-      TokenFound(:final token) => token,
-      TokenNotFound() => throw const AuthErrorNotAuthenticated(),
-    };
-
-    final userInfoEndpoint = config.userInfoEndpoint;
-    if (userInfoEndpoint == null) {
-      throw const AuthErrorConfiguration(
-        message: 'No userinfo endpoint configured',
-      );
-    }
-
-    final http.Response response;
-    try {
-      response = await _httpClient.get(
-        Uri.parse(userInfoEndpoint),
-        headers: {'Authorization': 'Bearer ${token.accessToken}'},
-      );
-    } on Exception catch (e, st) {
-      throw AuthErrorNetwork(
-        message: 'Failed to fetch user info: $e',
-        originalError: e,
-        stackTrace: st,
-      );
-    }
-
-    if (response.statusCode != 200) {
-      throw AuthErrorServer(
-        message: 'User info request failed',
-        statusCode: response.statusCode,
-        body: response.body,
-      );
-    }
-
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-    return UserInfo.fromOidcClaims(json);
-  }
+  Future<UserInfo> getCurrentUser(String serverId, SsoConfig config) =>
+      _userInfoFetcher.fetch(serverId, config);
 
   /// Attempts to refresh the token using the OIDC token endpoint.
   Future<RefreshResult> _attemptRefresh(
@@ -243,12 +205,14 @@ class WebAuthProvider implements AuthProvider {
         AuthToken(
           accessToken: accessToken,
           refreshToken: refreshToken ?? token.refreshToken,
-          expiresAt: DateTime.now().add(Duration(seconds: expiresIn)),
+          expiresAt: DateTime.now().toUtc().add(Duration(seconds: expiresIn)),
           idToken: json['id_token'] as String?,
         ),
       );
-    } on Exception catch (e) {
-      return RefreshRejected(e.toString());
+    } on http.ClientException catch (e) {
+      return RefreshRejected('Network error during refresh: $e');
+    } on FormatException catch (e) {
+      return RefreshRejected('Invalid token response format: $e');
     }
   }
 }

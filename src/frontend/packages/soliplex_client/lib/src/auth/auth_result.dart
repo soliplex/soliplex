@@ -108,3 +108,29 @@ final class RefreshFailed extends NotAuthenticated {
   @override
   String toString() => 'RefreshFailed(cause: $cause)';
 }
+
+/// Token storage is temporarily unavailable.
+///
+/// This is a transient error (e.g., Keychain locked on iOS) that may
+/// succeed on retry. Unlike [RefreshFailed], this does not necessarily
+/// mean the user must re-authenticate.
+@immutable
+final class StorageUnavailable extends NotAuthenticated {
+  /// Creates a storage unavailable result.
+  const StorageUnavailable({required this.message});
+
+  /// Description of the storage error.
+  final String message;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is StorageUnavailable && other.message == message;
+  }
+
+  @override
+  int get hashCode => message.hashCode;
+
+  @override
+  String toString() => 'StorageUnavailable(message: $message)';
+}

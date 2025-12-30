@@ -216,14 +216,57 @@ void main() {
     });
 
     group('error handling', () {
-      test('throws FormatException when stored data is invalid JSON', () async {
+      test('returns TokenStorageError when platform storage throws', () async {
+        final exception = Exception('Keychain locked');
+        when(() => mockStorage.read(key: 'auth_token_server1'))
+            .thenThrow(exception);
+
+        final result = await tokenStorage.read('server1');
+
+        expect(result, isA<TokenStorageError>());
+        final error = result as TokenStorageError;
+        expect(error.message, contains('Failed to access secure storage'));
+        expect(error.originalError, equals(exception));
+      });
+
+      test('returns TokenNotFound and deletes when stored data is invalid JSON',
+          () async {
         when(() => mockStorage.read(key: 'auth_token_server1'))
             .thenAnswer((_) async => 'not valid json');
+        when(() => mockStorage.delete(key: 'auth_token_server1'))
+            .thenAnswer((_) async {});
 
-        expect(
-          () => tokenStorage.read('server1'),
-          throwsA(isA<FormatException>()),
-        );
+        final result = await tokenStorage.read('server1');
+
+        expect(result, isA<TokenNotFound>());
+        verify(() => mockStorage.delete(key: 'auth_token_server1')).called(1);
+      });
+
+      test('returns TokenNotFound and deletes when JSON structure is invalid',
+          () async {
+        // Valid JSON but wrong structure (missing required fields)
+        when(() => mockStorage.read(key: 'auth_token_server1'))
+            .thenAnswer((_) async => '{"wrong_field": "value"}');
+        when(() => mockStorage.delete(key: 'auth_token_server1'))
+            .thenAnswer((_) async {});
+
+        final result = await tokenStorage.read('server1');
+
+        expect(result, isA<TokenNotFound>());
+        verify(() => mockStorage.delete(key: 'auth_token_server1')).called(1);
+      });
+
+      test('returns TokenNotFound and deletes when JSON is array not object',
+          () async {
+        when(() => mockStorage.read(key: 'auth_token_server1'))
+            .thenAnswer((_) async => '[]');
+        when(() => mockStorage.delete(key: 'auth_token_server1'))
+            .thenAnswer((_) async {});
+
+        final result = await tokenStorage.read('server1');
+
+        expect(result, isA<TokenNotFound>());
+        verify(() => mockStorage.delete(key: 'auth_token_server1')).called(1);
       });
     });
   });

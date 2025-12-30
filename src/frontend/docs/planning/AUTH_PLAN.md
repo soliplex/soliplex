@@ -250,7 +250,7 @@ return WebAuthProvider(...);  // Windows, Linux
 
 ---
 
-### Commit 8: App state machine
+### Commit 8: App state machine ✅
 
 **Files:**
 
@@ -268,21 +268,25 @@ return WebAuthProvider(...);  // Windows, Linux
 
 ---
 
-### Commit 9: Auth providers (Riverpod)
+### Commit 9: Auth providers (Riverpod) ✅
 
 **Files:**
 
 - `lib/core/providers/auth_providers.dart`
 - `lib/core/providers/api_provider.dart` (modify)
+- `lib/core/storage/secure_pending_storage.dart`
 - Tests
 
 **Details:**
 
 1. secureStorageProvider
 2. tokenStorageProvider
-3. authProviderProvider (platform-aware factory)
-4. appStateProvider (AsyncNotifier)
-5. Wire TokenProvider to AuthProvider.getValidToken()
+3. pendingStorageProvider (for web auth)
+4. authProviderProvider (platform-aware factory)
+5. appStateProvider (Notifier with internal session state)
+6. Wire TokenProvider to AuthProvider.getValidToken()
+
+**Note:** Added SecurePendingStorage for WebAuthProvider's pending server state.
 
 ---
 

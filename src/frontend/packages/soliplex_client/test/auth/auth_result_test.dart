@@ -172,6 +172,43 @@ void main() {
       });
     });
 
+    group('StorageUnavailable', () {
+      test('creates with message', () {
+        const result = StorageUnavailable(message: 'Keychain locked');
+
+        expect(result, isA<NotAuthenticated>());
+        expect(result.message, equals('Keychain locked'));
+      });
+
+      test('equal when messages are equal', () {
+        const result1 = StorageUnavailable(message: 'Storage error');
+        const result2 = StorageUnavailable(message: 'Storage error');
+
+        expect(result1, equals(result2));
+      });
+
+      test('not equal when messages differ', () {
+        const result1 = StorageUnavailable(message: 'Error 1');
+        const result2 = StorageUnavailable(message: 'Error 2');
+
+        expect(result1, isNot(equals(result2)));
+      });
+
+      test('hashCode consistent with equality', () {
+        const result1 = StorageUnavailable(message: 'Storage error');
+        const result2 = StorageUnavailable(message: 'Storage error');
+
+        expect(result1.hashCode, equals(result2.hashCode));
+      });
+
+      test('toString includes message', () {
+        const result = StorageUnavailable(message: 'Keychain locked');
+
+        expect(result.toString(), contains('StorageUnavailable'));
+        expect(result.toString(), contains('Keychain locked'));
+      });
+    });
+
     group('cross-type equality', () {
       test('Authenticated is not equal to NotAuthenticated subtypes', () {
         final authenticated = Authenticated(
@@ -187,16 +224,24 @@ void main() {
           authenticated,
           isNot(equals(RefreshFailed(cause: Exception('test')))),
         );
+        expect(
+          authenticated,
+          isNot(equals(const StorageUnavailable(message: 'error'))),
+        );
       });
 
       test('NotAuthenticated subtypes are not equal to each other', () {
         const noToken = NoToken();
         const tokenExpired = TokenExpired();
         final refreshFailed = RefreshFailed(cause: Exception('test'));
+        const storageUnavailable = StorageUnavailable(message: 'error');
 
         expect(noToken, isNot(equals(tokenExpired)));
         expect(noToken, isNot(equals(refreshFailed)));
+        expect(noToken, isNot(equals(storageUnavailable)));
         expect(tokenExpired, isNot(equals(refreshFailed)));
+        expect(tokenExpired, isNot(equals(storageUnavailable)));
+        expect(refreshFailed, isNot(equals(storageUnavailable)));
       });
     });
 
@@ -212,6 +257,7 @@ void main() {
           const NoToken(),
           const TokenExpired(),
           RefreshFailed(cause: Exception('test')),
+          const StorageUnavailable(message: 'Keychain locked'),
         ];
 
         for (final result in results) {
@@ -221,6 +267,7 @@ void main() {
             NoToken() => 'no token stored',
             TokenExpired() => 'token expired',
             RefreshFailed(:final cause) => 'refresh failed: $cause',
+            StorageUnavailable(:final message) => 'storage error: $message',
           };
           expect(description, isNotEmpty);
         }

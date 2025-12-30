@@ -3,6 +3,12 @@ import 'package:meta/meta.dart';
 /// Represents an OAuth token with access and optional refresh tokens.
 ///
 /// This is a value object where equality is based on all fields.
+///
+/// **Clock Skew Limitation**: Expiry checks ([isExpired], [needsRefresh])
+/// use the device's local time. If the device clock is significantly skewed
+/// from the server, refresh timing may be inaccurate. The 5-minute
+/// [defaultRefreshBuffer] provides tolerance for minor skew. Servers should
+/// reject truly expired tokens regardless of client-side checks.
 @immutable
 class AuthToken {
   /// Creates an auth token.

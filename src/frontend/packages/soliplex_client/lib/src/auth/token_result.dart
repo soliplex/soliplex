@@ -3,7 +3,7 @@ import 'package:soliplex_client/src/auth/auth_token.dart';
 
 /// Result of reading a token from storage.
 ///
-/// Use exhaustive pattern matching to handle both cases:
+/// Use exhaustive pattern matching to handle all cases:
 /// ```dart
 /// final result = await tokenStorage.read(serverId);
 /// switch (result) {
@@ -11,6 +11,8 @@ import 'package:soliplex_client/src/auth/auth_token.dart';
 ///     // use token
 ///   case TokenNotFound():
 ///     // no token stored
+///   case TokenStorageError(:final message):
+///     // platform storage access failed
 /// }
 /// ```
 @immutable
@@ -54,4 +56,32 @@ final class TokenNotFound extends TokenResult {
 
   @override
   String toString() => 'TokenNotFound()';
+}
+
+/// Storage access failed (e.g., Keychain locked, permission denied).
+///
+/// This indicates a platform-level failure, not a missing token.
+/// The caller should handle this differently from [TokenNotFound].
+@immutable
+final class TokenStorageError extends TokenResult {
+  /// Creates a storage error result.
+  const TokenStorageError({required this.message, this.originalError});
+
+  /// Human-readable description of the error.
+  final String message;
+
+  /// The underlying platform exception, if available.
+  final Object? originalError;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is TokenStorageError && other.message == message;
+  }
+
+  @override
+  int get hashCode => message.hashCode;
+
+  @override
+  String toString() => 'TokenStorageError($message)';
 }

@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:http/http.dart' as http;
@@ -22,53 +20,29 @@ class MobileAuthProvider implements AuthProvider {
     required http.Client httpClient,
     String redirectScheme = 'com.soliplex.app',
   })  : _tokenStorage = tokenStorage,
+        _tokenValidator = TokenValidator(tokenStorage: tokenStorage),
         _appAuth = appAuth,
-        _httpClient = httpClient,
+        _userInfoFetcher = UserInfoFetcher(
+          tokenStorage: tokenStorage,
+          httpClient: httpClient,
+        ),
         _redirectUri = '$redirectScheme:/oauthredirect';
 
   final TokenStorage _tokenStorage;
+  final TokenValidator _tokenValidator;
   final FlutterAppAuth _appAuth;
-  final http.Client _httpClient;
+  final UserInfoFetcher _userInfoFetcher;
   final String _redirectUri;
 
-  /// Cached session data for logout operations.
-  ///
-  /// Populated during [login], cleared during [logout]. Used to locate the
-  /// end-session endpoint when logging out.
-  final Map<String, SsoConfig> _sessionCache = {};
+  @override
+  Future<AuthResult> getValidToken(String serverId, SsoConfig config) =>
+      _tokenValidator.getValidToken(
+        serverId,
+        onRefresh: (token) => _attemptRefresh(token, config),
+      );
 
   @override
-  Future<AuthResult> getValidToken(String serverId, SsoConfig config) async {
-    final result = await _tokenStorage.read(serverId);
-
-    switch (result) {
-      case TokenNotFound():
-        return const NoToken();
-      case TokenFound(:final token):
-        if (!token.needsRefresh) {
-          return Authenticated(token: token);
-        }
-
-        if (!token.canRefresh) {
-          await _tokenStorage.delete(serverId);
-          return const TokenExpired();
-        }
-
-        switch (await _attemptRefresh(token, config)) {
-          case RefreshSuccess(:final token):
-            await _tokenStorage.write(serverId, token);
-            return Authenticated(token: token);
-          case RefreshRejected(:final cause):
-            await _tokenStorage.delete(serverId);
-            return RefreshFailed(cause: cause);
-        }
-    }
-  }
-
-  @override
-  Future<AuthToken> login(String serverId, SsoConfig config) async {
-    _sessionCache[serverId] = config;
-
+  Future<LoginResult> login(String serverId, SsoConfig config) async {
     final AuthorizationTokenResponse response;
     try {
       response = await _appAuth.authorizeAndExchangeCode(
@@ -91,29 +65,25 @@ class MobileAuthProvider implements AuthProvider {
         originalError: e,
         stackTrace: st,
       );
-    } on Exception catch (e, st) {
-      throw AuthErrorNetwork(
-        message: 'Authorization request failed: $e',
-        originalError: e,
-        stackTrace: st,
-      );
     }
+    // No generic Exception catch: flutter_appauth only throws
+    // FlutterAppAuthUserCancelledException and FlutterAppAuthPlatformException.
+    // Any other exception indicates a bug that should propagate.
 
     final token = _tokenFromResponse(response);
     await _tokenStorage.write(serverId, token);
-    return token;
+    return LoginSuccess(token);
   }
 
   @override
-  Future<void> logout(String serverId) async {
+  Future<void> logout(String serverId, SsoConfig config) async {
     final result = await _tokenStorage.read(serverId);
 
     if (result case TokenFound(:final token)) {
-      final config = _sessionCache[serverId];
       final idToken = token.idToken;
+      final endSessionEndpoint = config.endSessionEndpoint;
 
-      if (config case SsoConfig(:final endSessionEndpoint?)
-          when idToken != null) {
+      if (endSessionEndpoint != null && idToken != null) {
         try {
           await _appAuth.endSession(
             EndSessionRequest(
@@ -134,50 +104,11 @@ class MobileAuthProvider implements AuthProvider {
     }
 
     await _tokenStorage.delete(serverId);
-    _sessionCache.remove(serverId);
   }
 
   @override
-  Future<UserInfo> getCurrentUser(String serverId, SsoConfig config) async {
-    final result = await _tokenStorage.read(serverId);
-
-    final token = switch (result) {
-      TokenFound(:final token) => token,
-      TokenNotFound() => throw const AuthErrorNotAuthenticated(),
-    };
-
-    final userInfoEndpoint = config.userInfoEndpoint;
-    if (userInfoEndpoint == null) {
-      throw const AuthErrorConfiguration(
-        message: 'No userinfo endpoint configured',
-      );
-    }
-
-    final http.Response response;
-    try {
-      response = await _httpClient.get(
-        Uri.parse(userInfoEndpoint),
-        headers: {'Authorization': 'Bearer ${token.accessToken}'},
-      );
-    } on Exception catch (e, st) {
-      throw AuthErrorNetwork(
-        message: 'Failed to fetch user info: $e',
-        originalError: e,
-        stackTrace: st,
-      );
-    }
-
-    if (response.statusCode != 200) {
-      throw AuthErrorServer(
-        message: 'User info request failed',
-        statusCode: response.statusCode,
-        body: response.body,
-      );
-    }
-
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-    return UserInfo.fromOidcClaims(json);
-  }
+  Future<UserInfo> getCurrentUser(String serverId, SsoConfig config) =>
+      _userInfoFetcher.fetch(serverId, config);
 
   Future<RefreshResult> _attemptRefresh(
     AuthToken token,
@@ -198,9 +129,11 @@ class MobileAuthProvider implements AuthProvider {
       );
 
       return RefreshSuccess(_tokenFromResponse(response));
-    } on Exception catch (e) {
-      return RefreshRejected(e.toString());
+    } on FlutterAppAuthPlatformException catch (e) {
+      return RefreshRejected('Token refresh failed: ${e.message}');
     }
+    // No generic Exception catch: _appAuth.token() only throws
+    // FlutterAppAuthPlatformException. Any other exception indicates a bug.
   }
 
   AuthToken _tokenFromResponse(TokenResponse response) {
@@ -221,6 +154,8 @@ class MobileAuthProvider implements AuthProvider {
     return AuthToken(
       accessToken: accessToken,
       refreshToken: response.refreshToken,
+      // Normalize to UTC for consistent comparison across timezones.
+      // flutter_appauth returns local time; WebAuthProvider also uses UTC.
       expiresAt: expiresAt.toUtc(),
       idToken: response.idToken,
     );

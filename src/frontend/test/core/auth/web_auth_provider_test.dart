@@ -195,7 +195,8 @@ void main() {
         verify(() => mockStorage.delete('server1')).called(1);
       });
 
-      test('returns RefreshFailed when refresh throws exception', () async {
+      test('returns RefreshFailed when refresh throws ClientException',
+          () async {
         final config = createConfig();
         final expiredToken = createToken(
           expiresAt: DateTime.now().subtract(const Duration(hours: 1)),
@@ -209,7 +210,7 @@ void main() {
             headers: any(named: 'headers'),
             body: any(named: 'body'),
           ),
-        ).thenThrow(Exception('Network error'));
+        ).thenThrow(http.ClientException('Network error'));
         when(() => mockStorage.delete('server1')).thenAnswer((_) async {});
 
         final result = await provider.getValidToken('server1', config);
@@ -248,19 +249,19 @@ void main() {
     });
 
     group('login', () {
-      test('saves pending server ID and throws AuthFlowRedirect', () async {
+      test('launches URL and saves pending server ID', () async {
         final config = createConfig();
         when(() => mockPendingStorage.savePendingServerId('server1'))
             .thenAnswer((_) async {});
 
-        await expectLater(
-          () => provider.login('server1', config),
-          throwsA(isA<AuthFlowRedirect>()),
-        );
+        final result = await provider.login('server1', config);
 
+        expect(result, isA<LoginRedirect>());
+        expect((result as LoginRedirect).serverId, equals('server1'));
+        expect(urlLauncherCalled, isTrue);
+        // Pending server ID is saved after successful URL launch
         verify(() => mockPendingStorage.savePendingServerId('server1'))
             .called(1);
-        expect(urlLauncherCalled, isTrue);
       });
 
       test('builds correct login URL with return_to parameter', () async {
@@ -268,11 +269,7 @@ void main() {
         when(() => mockPendingStorage.savePendingServerId('server1'))
             .thenAnswer((_) async {});
 
-        try {
-          await provider.login('server1', config);
-        } on AuthFlowRedirect {
-          // Expected
-        }
+        await provider.login('server1', config);
 
         expect(launchedUrl, isNotNull);
         expect(
@@ -285,7 +282,8 @@ void main() {
         );
       });
 
-      test('throws AuthErrorNetwork when URL launch fails', () async {
+      test('throws AuthErrorNetwork without saving pending state on failure',
+          () async {
         final failingProvider = WebAuthProvider(
           baseUrl: 'https://api.example.com',
           tokenStorage: mockStorage,
@@ -299,23 +297,25 @@ void main() {
               false,
         );
         final config = createConfig();
-        when(() => mockPendingStorage.savePendingServerId('server1'))
-            .thenAnswer((_) async {});
 
         await expectLater(
           () => failingProvider.login('server1', config),
           throwsA(isA<AuthErrorNetwork>()),
         );
+
+        // Pending state should NOT be saved when URL launch fails
+        verifyNever(() => mockPendingStorage.savePendingServerId(any()));
       });
     });
 
     group('logout', () {
       test('deletes token and clears pending server ID', () async {
+        final config = createConfig();
         when(() => mockStorage.delete('server1')).thenAnswer((_) async {});
         when(() => mockPendingStorage.clearPendingServerId())
             .thenAnswer((_) async {});
 
-        await provider.logout('server1');
+        await provider.logout('server1', config);
 
         verify(() => mockStorage.delete('server1')).called(1);
         verify(() => mockPendingStorage.clearPendingServerId()).called(1);
@@ -432,7 +432,7 @@ void main() {
         when(() => mockStorage.read('server1'))
             .thenAnswer((_) async => TokenFound(token));
         when(() => mockHttpClient.get(any(), headers: any(named: 'headers')))
-            .thenThrow(Exception('Connection refused'));
+            .thenThrow(http.ClientException('Connection refused'));
 
         expect(
           () => provider.getCurrentUser('server1', config),
