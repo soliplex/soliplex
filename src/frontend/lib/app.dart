@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soliplex_frontend/core/router/app_router.dart';
 
 /// Root application widget.
-class SoliplexApp extends StatelessWidget {
+class SoliplexApp extends ConsumerWidget {
   const SoliplexApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final router = ref.watch(routerProvider);
+
     return MaterialApp.router(
       title: 'Soliplex',
       theme: ThemeData(
@@ -22,7 +25,7 @@ class SoliplexApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      routerConfig: appRouter,
+      routerConfig: router,
       debugShowCheckedModeBanner: false,
     );
   }
