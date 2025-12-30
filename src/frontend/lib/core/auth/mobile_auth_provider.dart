@@ -1,8 +1,26 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:http/http.dart' as http;
 import 'package:soliplex_client/soliplex_client.dart';
+
+/// Result of a token refresh attempt.
+sealed class RefreshResult {
+  const RefreshResult();
+}
+
+/// Token refresh succeeded.
+final class RefreshSuccess extends RefreshResult {
+  const RefreshSuccess(this.token);
+  final AuthToken token;
+}
+
+/// Token refresh was rejected by the server.
+final class RefreshRejected extends RefreshResult {
+  const RefreshRejected(this.exception);
+  final Exception exception;
+}
 
 /// AuthProvider implementation for mobile platforms using PKCE flow.
 ///
@@ -30,11 +48,14 @@ class MobileAuthProvider implements AuthProvider {
   final http.Client _httpClient;
   final String _redirectUri;
 
-  /// Cached SSO configs per server for token refresh operations.
-  final Map<String, SsoConfig> _configCache = {};
+  /// Cached session data for logout operations.
+  ///
+  /// Populated during [login], cleared during [logout]. Used to locate the
+  /// end-session endpoint when logging out.
+  final Map<String, SsoConfig> _sessionCache = {};
 
   @override
-  Future<AuthResult> getValidToken(String serverId) async {
+  Future<AuthResult> getValidToken(String serverId, SsoConfig config) async {
     final result = await _tokenStorage.read(serverId);
 
     switch (result) {
@@ -50,20 +71,20 @@ class MobileAuthProvider implements AuthProvider {
           return const TokenExpired();
         }
 
-        final refreshed = await _attemptRefresh(serverId, token);
-        if (refreshed != null) {
-          await _tokenStorage.write(serverId, refreshed);
-          return Authenticated(token: refreshed);
+        switch (await _attemptRefresh(token, config)) {
+          case RefreshSuccess(:final token):
+            await _tokenStorage.write(serverId, token);
+            return Authenticated(token: token);
+          case RefreshRejected(:final exception):
+            await _tokenStorage.delete(serverId);
+            return RefreshFailed(cause: exception.toString());
         }
-
-        await _tokenStorage.delete(serverId);
-        return const RefreshFailed(cause: 'Token refresh was rejected');
     }
   }
 
   @override
   Future<AuthToken> login(String serverId, SsoConfig config) async {
-    _configCache[serverId] = config;
+    _sessionCache[serverId] = config;
 
     final AuthorizationTokenResponse response;
     try {
@@ -105,7 +126,7 @@ class MobileAuthProvider implements AuthProvider {
     final result = await _tokenStorage.read(serverId);
 
     if (result case TokenFound(:final token)) {
-      final config = _configCache[serverId];
+      final config = _sessionCache[serverId];
 
       if (config?.endSessionEndpoint != null && token.idToken != null) {
         try {
@@ -120,28 +141,27 @@ class MobileAuthProvider implements AuthProvider {
               ),
             ),
           );
-        } on Exception {
-          // End session failures are not critical - continue with local logout
+        } on Exception catch (e) {
+          // Remote end-session failed; local cleanup will proceed.
+          debugPrint('End session failed for $serverId: $e');
         }
       }
     }
 
     await _tokenStorage.delete(serverId);
-    _configCache.remove(serverId);
+    _sessionCache.remove(serverId);
   }
 
   @override
-  Future<UserInfo> getCurrentUser(String serverId) async {
+  Future<UserInfo> getCurrentUser(String serverId, SsoConfig config) async {
     final result = await _tokenStorage.read(serverId);
 
-    if (result case TokenNotFound()) {
-      throw const AuthErrorNotAuthenticated();
-    }
+    final token = switch (result) {
+      TokenFound(:final token) => token,
+      TokenNotFound() => throw const AuthErrorNotAuthenticated(),
+    };
 
-    final token = (result as TokenFound).token;
-    final config = _configCache[serverId];
-
-    if (config?.userInfoEndpoint == null) {
+    if (config.userInfoEndpoint == null) {
       throw const AuthErrorConfiguration(
         message: 'No userinfo endpoint configured',
       );
@@ -150,7 +170,7 @@ class MobileAuthProvider implements AuthProvider {
     final http.Response response;
     try {
       response = await _httpClient.get(
-        Uri.parse(config!.userInfoEndpoint!),
+        Uri.parse(config.userInfoEndpoint!),
         headers: {'Authorization': 'Bearer ${token.accessToken}'},
       );
     } on Exception catch (e, st) {
@@ -173,12 +193,10 @@ class MobileAuthProvider implements AuthProvider {
     return UserInfo.fromJson(_normalizeUserInfoResponse(json));
   }
 
-  Future<AuthToken?> _attemptRefresh(String serverId, AuthToken token) async {
-    final config = _configCache[serverId];
-    if (config == null) {
-      return null;
-    }
-
+  Future<RefreshResult> _attemptRefresh(
+    AuthToken token,
+    SsoConfig config,
+  ) async {
     try {
       final response = await _appAuth.token(
         TokenRequest(
@@ -193,9 +211,9 @@ class MobileAuthProvider implements AuthProvider {
         ),
       );
 
-      return _tokenFromResponse(response);
-    } on Exception {
-      return null;
+      return RefreshSuccess(_tokenFromResponse(response));
+    } on Exception catch (e) {
+      return RefreshRejected(e);
     }
   }
 

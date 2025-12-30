@@ -14,12 +14,13 @@ import 'package:soliplex_client/src/auth/user_info.dart';
 /// server URL or a derived stable identifier), supporting multi-server
 /// scenarios where users may connect to different backend instances.
 abstract interface class AuthProvider {
-  /// Returns the current authentication status with automatic token refresh.
+  /// Returns a valid access token for the given server.
   ///
-  /// This method handles token lifecycle internally:
-  /// 1. Checks for a stored token
-  /// 2. If token needs refresh, attempts to refresh it
-  /// 3. Returns the valid (possibly refreshed) token
+  /// If a valid token exists in storage, returns it. If the token is expired
+  /// but a refresh token is available, attempts to refresh using [config].
+  ///
+  /// The [config] must match the configuration used during [login] for this
+  /// [serverId]. Passing a different configuration has undefined behavior.
   ///
   /// Returns [Authenticated] with a valid token if the user is logged in
   /// and the token is still valid or was successfully refreshed.
@@ -38,9 +39,13 @@ abstract interface class AuthProvider {
   /// The distinction: permanent failures return [NotAuthenticated] because
   /// the only remedy is re-authentication. Transient failures throw because
   /// the caller may want to retry or show a different error message.
-  Future<AuthResult> getValidToken(String serverId);
+  Future<AuthResult> getValidToken(String serverId, SsoConfig config);
 
-  /// Initiates the login flow for `serverId` using `config`.
+  /// Authenticates with the OIDC provider and stores tokens.
+  ///
+  /// Opens a browser for user authentication via the authorization code flow.
+  /// On success, stores tokens keyed by [serverId] and caches [config] for
+  /// logout operations.
   ///
   /// Returns [AuthToken] directly on success because login either succeeds
   /// or throws — there is no "not authenticated" case like with
@@ -54,22 +59,24 @@ abstract interface class AuthProvider {
   /// - [AuthErrorConfiguration] for invalid configuration
   Future<AuthToken> login(String serverId, SsoConfig config);
 
-  /// Logs out from `serverId`.
+  /// Ends the session and clears stored tokens.
   ///
-  /// Clears stored tokens and optionally performs OIDC end-session.
+  /// Uses the cached [SsoConfig] from the prior [login] call to locate the
+  /// end-session endpoint. If no config is cached (e.g., app restart),
+  /// clears local tokens without server-side session termination.
   ///
-  /// Throws [AuthError] subtypes on failure:
-  /// - [AuthErrorNetwork] if end-session request fails due to network issues
-  /// - [AuthErrorServer] if the server rejects the logout request
+  /// Never throws. Remote logout failures are logged but not propagated
+  /// since local cleanup is sufficient for security purposes.
   Future<void> logout(String serverId);
 
-  /// Returns information about the current user for `serverId`.
+  /// Retrieves user information from the OIDC provider.
   ///
-  /// Requires the user to be authenticated. Call [getValidToken] first to
-  /// verify authentication status.
+  /// Uses [config] to locate the userinfo endpoint. Requires a valid token
+  /// for [serverId].
   ///
   /// Throws [AuthErrorNotAuthenticated] if not logged in.
+  /// Throws [AuthErrorConfiguration] if [config] has no userinfo endpoint.
   /// Throws [AuthError] subtypes on fetch failures (e.g., network failure
   /// while fetching user info from the OIDC provider).
-  Future<UserInfo> getCurrentUser(String serverId);
+  Future<UserInfo> getCurrentUser(String serverId, SsoConfig config);
 }

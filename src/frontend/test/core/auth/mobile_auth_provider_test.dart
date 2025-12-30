@@ -73,7 +73,6 @@ void main() {
         title: 'Keycloak',
         serverUrl: 'https://auth.example.com',
         clientId: 'soliplex-client',
-        scope: 'openid profile email',
       ),
       authorizationEndpoint: 'https://auth.example.com/auth',
       tokenEndpoint: 'https://auth.example.com/token',
@@ -120,20 +119,22 @@ void main() {
   group('MobileAuthProvider', () {
     group('getValidToken', () {
       test('returns NoToken when no token stored', () async {
+        final config = createConfig();
         when(() => mockStorage.read('server1'))
             .thenAnswer((_) async => const TokenNotFound());
 
-        final result = await provider.getValidToken('server1');
+        final result = await provider.getValidToken('server1', config);
 
         expect(result, isA<NoToken>());
       });
 
       test('returns Authenticated when token is valid', () async {
+        final config = createConfig();
         final token = createToken();
         when(() => mockStorage.read('server1'))
             .thenAnswer((_) async => TokenFound(token));
 
-        final result = await provider.getValidToken('server1');
+        final result = await provider.getValidToken('server1', config);
 
         expect(result, isA<Authenticated>());
         expect((result as Authenticated).token, equals(token));
@@ -141,6 +142,7 @@ void main() {
 
       test('returns TokenExpired when token expired without refresh token',
           () async {
+        final config = createConfig();
         final expiredToken = createToken(
           expiresAt: DateTime.now().subtract(const Duration(hours: 1)),
           refreshToken: null,
@@ -149,47 +151,26 @@ void main() {
             .thenAnswer((_) async => TokenFound(expiredToken));
         when(() => mockStorage.delete('server1')).thenAnswer((_) async {});
 
-        final result = await provider.getValidToken('server1');
+        final result = await provider.getValidToken('server1', config);
 
         expect(result, isA<TokenExpired>());
         verify(() => mockStorage.delete('server1')).called(1);
       });
 
-      test('returns RefreshFailed when no config cached', () async {
-        final expiredToken = createToken(
-          expiresAt: DateTime.now().subtract(const Duration(hours: 1)),
-        );
-        when(() => mockStorage.read('server1'))
-            .thenAnswer((_) async => TokenFound(expiredToken));
-        when(() => mockStorage.delete('server1')).thenAnswer((_) async {});
-
-        final result = await provider.getValidToken('server1');
-
-        expect(result, isA<RefreshFailed>());
-        verify(() => mockStorage.delete('server1')).called(1);
-      });
-
-      test('refreshes token when expired and config is cached', () async {
+      test('refreshes token when expired using provided config', () async {
         final config = createConfig();
         final expiredToken = createToken(
           expiresAt: DateTime.now().subtract(const Duration(hours: 1)),
         );
         final refreshedResponse = createTokenResponse();
 
-        // First, login to cache the config
-        when(() => mockAppAuth.authorizeAndExchangeCode(any()))
-            .thenAnswer((_) async => createAuthResponse());
-        when(() => mockStorage.write(any(), any())).thenAnswer((_) async {});
-
-        await provider.login('server1', config);
-
-        // Now test refresh
         when(() => mockStorage.read('server1'))
             .thenAnswer((_) async => TokenFound(expiredToken));
         when(() => mockAppAuth.token(any()))
             .thenAnswer((_) async => refreshedResponse);
+        when(() => mockStorage.write(any(), any())).thenAnswer((_) async {});
 
-        final result = await provider.getValidToken('server1');
+        final result = await provider.getValidToken('server1', config);
 
         expect(result, isA<Authenticated>());
         final auth = result as Authenticated;
@@ -202,21 +183,13 @@ void main() {
           expiresAt: DateTime.now().subtract(const Duration(hours: 1)),
         );
 
-        // First, login to cache the config
-        when(() => mockAppAuth.authorizeAndExchangeCode(any()))
-            .thenAnswer((_) async => createAuthResponse());
-        when(() => mockStorage.write(any(), any())).thenAnswer((_) async {});
-
-        await provider.login('server1', config);
-
-        // Now test failed refresh
         when(() => mockStorage.read('server1'))
             .thenAnswer((_) async => TokenFound(expiredToken));
         when(() => mockAppAuth.token(any()))
             .thenThrow(Exception('Refresh failed'));
         when(() => mockStorage.delete('server1')).thenAnswer((_) async {});
 
-        final result = await provider.getValidToken('server1');
+        final result = await provider.getValidToken('server1', config);
 
         expect(result, isA<RefreshFailed>());
       });
@@ -392,11 +365,14 @@ void main() {
 
     group('getCurrentUser', () {
       test('throws AuthErrorNotAuthenticated when no token', () async {
+        final config = createConfig(
+          userInfoEndpoint: 'https://auth.example.com/userinfo',
+        );
         when(() => mockStorage.read('server1'))
             .thenAnswer((_) async => const TokenNotFound());
 
         expect(
-          () => provider.getCurrentUser('server1'),
+          () => provider.getCurrentUser('server1', config),
           throwsA(isA<AuthErrorNotAuthenticated>()),
         );
       });
@@ -405,17 +381,11 @@ void main() {
         final config = createConfig();
         final token = createToken();
 
-        // Login to cache config (without userinfo endpoint)
-        when(() => mockAppAuth.authorizeAndExchangeCode(any()))
-            .thenAnswer((_) async => createAuthResponse());
-        when(() => mockStorage.write(any(), any())).thenAnswer((_) async {});
-        await provider.login('server1', config);
-
         when(() => mockStorage.read('server1'))
             .thenAnswer((_) async => TokenFound(token));
 
         expect(
-          () => provider.getCurrentUser('server1'),
+          () => provider.getCurrentUser('server1', config),
           throwsA(isA<AuthErrorConfiguration>()),
         );
       });
@@ -425,12 +395,6 @@ void main() {
           userInfoEndpoint: 'https://auth.example.com/userinfo',
         );
         final token = createToken();
-
-        // Login to cache config
-        when(() => mockAppAuth.authorizeAndExchangeCode(any()))
-            .thenAnswer((_) async => createAuthResponse());
-        when(() => mockStorage.write(any(), any())).thenAnswer((_) async {});
-        await provider.login('server1', config);
 
         when(() => mockStorage.read('server1'))
             .thenAnswer((_) async => TokenFound(token));
@@ -446,7 +410,7 @@ void main() {
           ),
         );
 
-        final user = await provider.getCurrentUser('server1');
+        final user = await provider.getCurrentUser('server1', config);
 
         expect(user.id, equals('user-123'));
         expect(user.email, equals('test@example.com'));
@@ -459,12 +423,6 @@ void main() {
           userInfoEndpoint: 'https://auth.example.com/userinfo',
         );
         final token = createToken();
-
-        // Login to cache config
-        when(() => mockAppAuth.authorizeAndExchangeCode(any()))
-            .thenAnswer((_) async => createAuthResponse());
-        when(() => mockStorage.write(any(), any())).thenAnswer((_) async {});
-        await provider.login('server1', config);
 
         when(() => mockStorage.read('server1'))
             .thenAnswer((_) async => TokenFound(token));
@@ -481,7 +439,7 @@ void main() {
           ),
         );
 
-        final user = await provider.getCurrentUser('server1');
+        final user = await provider.getCurrentUser('server1', config);
 
         expect(user.id, equals('user-456'));
         expect(user.name, equals('John Doe'));
@@ -493,12 +451,6 @@ void main() {
         );
         final token = createToken();
 
-        // Login to cache config
-        when(() => mockAppAuth.authorizeAndExchangeCode(any()))
-            .thenAnswer((_) async => createAuthResponse());
-        when(() => mockStorage.write(any(), any())).thenAnswer((_) async {});
-        await provider.login('server1', config);
-
         when(() => mockStorage.read('server1'))
             .thenAnswer((_) async => TokenFound(token));
         when(() => mockHttpClient.get(any(), headers: any(named: 'headers')))
@@ -507,7 +459,7 @@ void main() {
         );
 
         expect(
-          () => provider.getCurrentUser('server1'),
+          () => provider.getCurrentUser('server1', config),
           throwsA(isA<AuthErrorServer>()),
         );
       });
@@ -518,19 +470,13 @@ void main() {
         );
         final token = createToken();
 
-        // Login to cache config
-        when(() => mockAppAuth.authorizeAndExchangeCode(any()))
-            .thenAnswer((_) async => createAuthResponse());
-        when(() => mockStorage.write(any(), any())).thenAnswer((_) async {});
-        await provider.login('server1', config);
-
         when(() => mockStorage.read('server1'))
             .thenAnswer((_) async => TokenFound(token));
         when(() => mockHttpClient.get(any(), headers: any(named: 'headers')))
             .thenThrow(Exception('Connection refused'));
 
         expect(
-          () => provider.getCurrentUser('server1'),
+          () => provider.getCurrentUser('server1', config),
           throwsA(isA<AuthErrorNetwork>()),
         );
       });
@@ -540,12 +486,6 @@ void main() {
           userInfoEndpoint: 'https://auth.example.com/userinfo',
         );
         final token = createToken(accessToken: 'my-access-token');
-
-        // Login to cache config
-        when(() => mockAppAuth.authorizeAndExchangeCode(any()))
-            .thenAnswer((_) async => createAuthResponse());
-        when(() => mockStorage.write(any(), any())).thenAnswer((_) async {});
-        await provider.login('server1', config);
 
         when(() => mockStorage.read('server1'))
             .thenAnswer((_) async => TokenFound(token));
@@ -557,7 +497,7 @@ void main() {
           ),
         );
 
-        await provider.getCurrentUser('server1');
+        await provider.getCurrentUser('server1', config);
 
         final captured = verify(
           () => mockHttpClient.get(
