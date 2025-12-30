@@ -369,18 +369,29 @@ return WebAuthProvider(...);  // Windows, Linux
 
 ---
 
-### Commit 13: Logout and settings integration
+### Commit 13: Logout and settings integration ✅
 
 **Files:**
 
 - `lib/features/settings/settings_screen.dart` (modify)
-- Tests
+- `test/features/settings/settings_screen_test.dart`
+- `test/helpers/auth_test_helpers.dart` (added testServerId constant)
 
 **Details:**
 
-1. Add logout button
-2. Server info display
-3. Current user display
+1. Settings screen shows auth-state-aware UI for all 6 AppState variants
+2. Server connection info display (serverId, auth provider name)
+3. User info display with fallback chain: name → email → id → "Unknown user"
+4. Logout button with confirmation dialog
+5. Error handling with snackbar feedback
+
+**Implementation highlights (blacksmith review):**
+
+1. **Exhaustive state handling**: Switch on `AppState` covers all 6 variants without default case
+2. **Async safety**: `context.mounted` check after `showDialog` before logout operations
+3. **Empty string handling**: `_formatUserDisplay` checks `isNotEmpty` for both name and email
+4. **Single-provider preservation**: After logout, only the provider used for login is preserved; documented as intentional YAGNI decision (multi-provider servers require re-probing)
+5. **Test infrastructure**: Extracted `testServerId` constant for DRY test assertions
 
 ## Final Architecture
 

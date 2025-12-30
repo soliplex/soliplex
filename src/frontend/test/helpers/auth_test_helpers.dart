@@ -11,6 +11,9 @@ import 'package:soliplex_frontend/core/state/app_state.dart';
 // Test Fixtures - Shared auth-related constants
 // ============================================================================
 
+/// Test server ID used across auth tests.
+const testServerId = 'http://localhost:8000';
+
 /// Test OIDC auth system.
 ///
 /// Uses realistic 'Keycloak' naming for UI tests that assert on displayed text.
@@ -67,7 +70,7 @@ class TestAppStateNotifier extends AppStateNotifier {
 
 /// Creates an authenticated [AppStateReady] for tests.
 AppStateReady testAuthenticatedState({
-  String serverId = 'http://localhost:8000',
+  String serverId = testServerId,
   SsoConfig config = testSsoConfig,
   UserInfo? user = testUser,
 }) {
