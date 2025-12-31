@@ -1,3 +1,4 @@
+export 'authenticated_http_client.dart';
 export 'dart_http_client.dart';
 export 'http_client_adapter.dart';
 export 'http_observer.dart';
