@@ -30,6 +30,22 @@ class HttpLogNotifier extends Notifier<List<HttpEvent>>
   @override
   List<HttpEvent> build() => [];
 
+  /// Headers that should have their values redacted for security.
+  static const _sensitiveHeaders = {'authorization', 'cookie', 'set-cookie'};
+
+  /// Query parameters that should have their values redacted for security.
+  static const _sensitiveParams = {
+    'token',
+    'access_token',
+    'refresh_token',
+    'id_token',
+    'code',
+    'client_secret',
+    'state',
+    'code_verifier',
+    'session_state',
+  };
+
   void _addEvent(HttpEvent event) {
     // Defer state update to avoid Riverpod errors when called during
     // another provider's initialization (e.g., FutureProvider making HTTP
@@ -42,17 +58,72 @@ class HttpLogNotifier extends Notifier<List<HttpEvent>>
     });
   }
 
+  /// Redacts sensitive header values to prevent token leakage in logs.
+  Map<String, String> _redactHeaders(Map<String, String> headers) {
+    return headers.map((key, value) {
+      if (_sensitiveHeaders.contains(key.toLowerCase())) {
+        return MapEntry(key, '[REDACTED]');
+      }
+      return MapEntry(key, value);
+    });
+  }
+
+  /// Redacts sensitive query parameter values to prevent token leakage in logs.
+  Uri _redactUri(Uri uri) {
+    if (uri.queryParameters.isEmpty) return uri;
+
+    final hasSenitiveParams = uri.queryParameters.keys
+        .any((key) => _sensitiveParams.contains(key.toLowerCase()));
+    if (!hasSenitiveParams) return uri;
+
+    final redactedParams = uri.queryParameters.map((key, value) {
+      if (_sensitiveParams.contains(key.toLowerCase())) {
+        return MapEntry(key, '[REDACTED]');
+      }
+      return MapEntry(key, value);
+    });
+
+    return uri.replace(queryParameters: redactedParams);
+  }
+
   @override
-  void onRequest(HttpRequestEvent event) => _addEvent(event);
+  void onRequest(HttpRequestEvent event) {
+    final redacted = HttpRequestEvent(
+      requestId: event.requestId,
+      timestamp: event.timestamp,
+      method: event.method,
+      uri: _redactUri(event.uri),
+      headers: _redactHeaders(event.headers),
+    );
+    _addEvent(redacted);
+  }
 
   @override
   void onResponse(HttpResponseEvent event) => _addEvent(event);
 
   @override
-  void onError(HttpErrorEvent event) => _addEvent(event);
+  void onError(HttpErrorEvent event) {
+    final redacted = HttpErrorEvent(
+      requestId: event.requestId,
+      timestamp: event.timestamp,
+      method: event.method,
+      uri: _redactUri(event.uri),
+      exception: event.exception,
+      duration: event.duration,
+    );
+    _addEvent(redacted);
+  }
 
   @override
-  void onStreamStart(HttpStreamStartEvent event) => _addEvent(event);
+  void onStreamStart(HttpStreamStartEvent event) {
+    final redacted = HttpStreamStartEvent(
+      requestId: event.requestId,
+      timestamp: event.timestamp,
+      method: event.method,
+      uri: _redactUri(event.uri),
+    );
+    _addEvent(redacted);
+  }
 
   @override
   void onStreamEnd(HttpStreamEndEvent event) => _addEvent(event);
