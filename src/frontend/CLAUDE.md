@@ -115,3 +115,4 @@ Warnings indicate real bugs. Fix all errors, warnings, AND hints immediately.
 6. Platform-specific code goes in `soliplex_client_native`
 7. New Flutter/Dart packages need a `.gitignore` (see <https://github.com/flutter/flutter/blob/master/.gitignore>)
 8. Keep all dependencies up to date: check `pubspec.yaml` in the main app AND each package in `packages/` against <https://pub.dev>
+9. After editing any `.md` file, run `npx markdownlint-cli <file>` and fix all errors before considering the edit complete
