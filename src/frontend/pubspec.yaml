@@ -11,30 +11,19 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # UI components
+  flutter_appauth: ^11.0.0
   flutter_highlight: ^0.7.0
   flutter_markdown: ^0.7.4+1
-
-  # State management - Manual providers (NO generator)
   flutter_riverpod: ^3.0.3
-
-  # Navigation
+  flutter_secure_storage: ^10.0.0
   go_router: ^17.0.0
-
-  # HTTP client (for backend health checks)
   http: ^1.2.0
-
-  # Utilities
   intl: ^0.20.1
   markdown: ^7.0.0
   meta: ^1.15.0
-
-  # Local package - soliplex_client
   shared_preferences: ^2.5.4
   soliplex_client:
     path: packages/soliplex_client
-
-  # Local package - soliplex_client_native
   soliplex_client_native:
     path: packages/soliplex_client_native
 
