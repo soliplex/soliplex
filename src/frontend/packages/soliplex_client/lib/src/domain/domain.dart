@@ -1,3 +1,4 @@
+export 'auth_provider_config.dart';
 export 'chat_message.dart';
 export 'conversation.dart';
 export 'room.dart';
