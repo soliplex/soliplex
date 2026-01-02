@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "soliplex"
-version = "0.27dev0"
-description = "<ALAN FILL THIS IN>"
+version = "0.30dev0"
+description = "An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web interface."
 authors = [{ name = "Enfold", email = "info@enfoldsystems.net" }]
 readme = "README.md"
 requires-python = ">=3.13"
@@ -20,7 +20,7 @@ dependencies = [
     "fastapi",
     "fastmcp >= 2.13.0.2, < 2.14",
     "greenlet",
-    "haiku.rag-slim >= 0.20.2",
+    "haiku.rag-slim >= 0.23.0",
     "itsdangerous",
     "jsonpatch",
     "jwcrypto",
@@ -78,7 +78,11 @@ markers = [
 ]
 
 [tool.coverage.run]
-omit = []
+omit = [
+    "src/soliplex/cli.py",
+    "src/soliplex/examples.py",
+    "src/soliplex/tui.py",
+]
 
 [tool.coverage.report]
 show_missing = true

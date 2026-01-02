@@ -1,26 +1,502 @@
-#
-#   Note: debugging output emitted below via 'print' / 'pprint' will only
-#         be visible in another terminal running 'textual console'.
-#
-#         Recommended command line for the TUI:
-#         $ textual run --dev soliplex.tui.cli:the_cli \
-#             -- --use-aguie -r <room_id>
-#
-#         Recommended command line for the console:
-#         $ textual console -x SYSTEM -x EVENT -x DEBUG
-#
 import json
-import pprint
 
-import requests
 import textual
 from ag_ui import core as agui_core
 from textual import app as t_app
 from textual import binding as t_binding
 from textual import containers as t_containers
+from textual import reactive as t_reactive
+from textual import screen as t_screen
+from textual import widget as t_widget
 from textual import widgets as t_widgets
 
 from soliplex.agui import parser as agui_parser
+from soliplex.tui import rest_api
+
+
+class ListHeaderWidget(t_widget.Widget):
+    DEFAULT_CSS = """
+    ListHeaderWidget {
+        layout: horizontal;
+        height: auto;
+        padding: 1;
+    }
+    ListHeaderWidget Label {
+        padding-right: 2;
+    }
+    """
+
+
+class LabeledInputWidget(t_widget.Widget):
+    DEFAULT_CSS = """
+    LabeledInputWidget {
+        layout: horizontal;
+        height: auto;
+        padding: 1;
+    }
+    LabeledInputWidget Label {
+        width: 20;
+        text-align: right;
+        padding: 1
+    }
+    LabeledInputWidget Input {
+        width: 1fr;
+        text-align: left;
+    }
+    """
+
+
+class EditRunMetadataDialog(t_screen.Screen):
+    BINDINGS = [
+        t_binding.Binding("escape", "dismiss(None)", "Exit"),
+    ]
+
+    def __init__(self, run_id: str, label_text: str, *args, **kwargs):
+        self.run_id = run_id
+        self.label_text = label_text
+        super().__init__()
+
+    def compose(self) -> t_app.ComposeResult:
+        yield t_widgets.Header()
+
+        yield t_widgets.Label(f"Run UUID: {self.run_id}")
+
+        with LabeledInputWidget():
+            yield t_widgets.Label("Label")
+            yield t_widgets.Input(self.label_text)
+
+        yield t_widgets.Footer()
+
+    @textual.on(t_widgets.Input.Submitted)
+    async def on_input(self, event: t_widgets.Input.Submitted) -> None:
+        """When the user hits return."""
+        payload = {}
+        label = event.value.strip()
+
+        if label:
+            payload["label"] = label
+
+        self.dismiss(payload)
+
+
+class EditThreadMetadataDialog(t_screen.Screen):
+    BINDINGS = [
+        t_binding.Binding("escape", "dismiss(None)", "Exit"),
+    ]
+
+    def __init__(
+        self,
+        thread_id: str,
+        thread_name: str,
+        thread_description: str,
+        *args,
+        **kwargs,
+    ):
+        self.thread_id = thread_id
+        self.thread_name = thread_name
+        self.thread_description = thread_description
+        super().__init__()
+
+    def compose(self) -> t_app.ComposeResult:
+        yield t_widgets.Header()
+
+        yield t_widgets.Label(f"Thread UUID: {self.thread_id}")
+
+        with LabeledInputWidget():
+            yield t_widgets.Label("Thread name:")
+            yield t_widgets.Input(self.thread_name, id="thread-name")
+
+        with LabeledInputWidget():
+            yield t_widgets.Label("Description:")
+            yield t_widgets.Input(self.thread_description, id="thread-desc")
+
+        yield t_widgets.Footer()
+
+    @textual.on(t_widgets.Input.Submitted)
+    async def on_input(self, event: t_widgets.Input.Submitted) -> None:
+        """When the user hits return."""
+        payload = {}
+
+        w_name = self.query_one("#thread-name")
+        name = w_name.value.strip()
+
+        w_desc = self.query_one("#thread-desc")
+        desc = w_desc.value.strip()
+
+        if name:
+            payload["name"] = name
+
+            if desc:
+                payload["description"] = desc
+
+        self.dismiss(payload)
+
+
+class RunLabeledWidget(t_widget.Widget):
+    DEFAULT_CSS = """
+    RunLabeledWidget {
+        layout: horizontal;
+        height: auto;
+    }
+    """
+
+
+class RunMessageWidget(t_widget.Widget):
+    DEFAULT_CSS = """
+    RunMessageWidget {
+        layout: horizontal;
+        height: auto;
+        padding: 1;
+    }
+    """
+
+    def __init__(self, message_info, *args, **kwargs):
+        self.message_info = message_info
+        super().__init__()
+
+    @property
+    def message_role(self):
+        return self.message_info["role"]
+
+    @property
+    def message_content(self):
+        content = self.message_info.get("content")
+
+        if self.message_role == "user":
+            if not isinstance(content, str):
+                if content.type == "binary":
+                    content = "<binary>"
+                else:
+                    content = content.text
+
+        return str(content) if content is not None else None
+
+    def compose(self) -> t_app.ComposeResult:
+        role = self.message_role
+        content = self.message_content
+
+        yield t_widgets.Label(f"{role.capitalize()}:")
+
+        if content is not None:
+            yield t_widgets.Static(content)
+
+
+class RunEventWidget(t_widget.Widget):
+    DEFAULT_CSS = """
+    RunEventWidget {
+        layout: horizontal;
+        height: auto;
+        padding: 1;
+    }
+    """
+
+    def __init__(self, event_info, *args, **kwargs):
+        self.event_info = event_info
+        super().__init__()
+
+    @property
+    def event_type(self):
+        return self.event_info["type"]
+
+    @property
+    def event_content(self):
+        info = self.event_info
+        if self.event_type == "STATE_SNAPSHOT":
+            content = "*state snapshot*"
+        elif self.event_type == "STATE_DELTA":
+            content = "*state delta*"
+        elif "delta" in info:
+            content = info["delta"]
+        elif "content" in info:
+            content = str(info["content"])
+        else:
+            content = ""
+
+        return content
+
+    def compose(self) -> t_app.ComposeResult:
+        yield t_widgets.Label(self.event_type)
+        yield t_widgets.Static(self.event_content)
+
+
+class RunView(t_screen.Screen):
+    BINDINGS = [
+        t_binding.Binding("escape", "dismiss(None)", "Exit"),
+        t_binding.Binding("ctrl+z", "edit_metadata", "Metadata"),
+    ]
+    DEFAULT_CSS = """
+    RunView Label {
+        width: 12;
+        text-align: right;
+    }
+    RunView Static {
+        width: 1fr;
+        text-align: left;
+    }
+    #run-messages {
+        height: 10;
+    }
+    #run-events {
+    }
+    #run-usage {
+        height: 10;
+    }
+    """
+
+    def __init__(self, room_id, thread_id, run_id, *args, **kwargs):
+        self.room_id = room_id
+        self.thread_id = thread_id
+        self.run_id = run_id
+        self._run_info = None
+        super().__init__()
+
+    @property
+    def rest_api(self) -> rest_api.TUI_REST_API:
+        return self.app.rest_api
+
+    @property
+    def run_info(self) -> dict[str, dict]:
+        if self._run_info is None:
+            self._run_info = self.rest_api.get_run(
+                self.room_id,
+                self.thread_id,
+                self.run_id,
+            )
+
+        return self._run_info
+
+    @property
+    def run_events(self) -> list[dict]:
+        return self.run_info.get("events", [])
+
+    @property
+    def run_messages(self) -> list[dict]:
+        run_input = self.run_info.get("run_input") or {}
+        return run_input.get("messages", [])
+
+    @property
+    def run_meta(self) -> dict[str, str]:
+        return self.run_info.get("metadata", {})
+
+    @property
+    def run_usage(self) -> dict[str, int]:
+        return self.run_info.get("usage", {})
+
+    @property
+    def label_text(self) -> dict[str, dict]:
+        meta = self.run_meta
+        return meta["label"] if meta else "<no label>"
+
+    def compose(self) -> t_app.ComposeResult:
+        yield t_widgets.Header()
+
+        with RunLabeledWidget():
+            yield t_widgets.Label("Run:")
+            yield t_widgets.Static(self.run_id)
+
+        with RunLabeledWidget():
+            yield t_widgets.Label("Label:")
+            yield t_widgets.Static(self.label_text, id="run-label")
+
+        with RunLabeledWidget():
+            yield t_widgets.Label("Messages:")
+
+        with t_containers.VerticalScroll(id="run-messages"):
+            for message in self.run_messages:
+                with RunLabeledWidget():
+                    yield RunMessageWidget(message)
+
+        with RunLabeledWidget():
+            yield t_widgets.Label("Events:")
+
+        with t_containers.VerticalScroll(id="run-events"):
+            for event in self.run_events:
+                with RunLabeledWidget():
+                    yield RunEventWidget(event)
+
+        usage = self.run_usage
+
+        if usage is not None:
+            with RunLabeledWidget():
+                yield t_widgets.Label("Usage:")
+
+            for key, value in usage.items():
+                with RunLabeledWidget():
+                    yield t_widgets.Label(f"- {key}")
+                    yield t_widgets.Static(str(value))
+
+        yield t_widgets.Footer()
+
+    @textual.work
+    async def action_edit_metadata(self) -> None:
+        ermd = EditRunMetadataDialog(self.run_id, self.label_text)
+        payload = await self.app.push_screen_wait(ermd)
+
+        if payload is not None:
+            self.rest_api.post_run_metadata(
+                self.room_id,
+                self.thread_id,
+                self.run_id,
+                payload,
+            )
+
+            self._run_info["metadata"] = payload
+            self.query_one("#run-label").content = self.label_text
+
+
+class RunButtonWidget(t_widget.Widget):
+    DEFAULT_CSS = """
+    RunButtonWidget {
+        layout: horizontal;
+        height: auto;
+    }
+    """
+
+
+class ThreadRunsView(t_screen.Screen):
+    BINDINGS = [
+        t_binding.Binding("escape", "dismiss(None)", "Exit"),
+    ]
+    DEFAULT_CSS = """
+    .run-label {
+        padding: 1;
+    }
+    """
+
+    def __init__(self, room_id, thread_id, thread_name, *args, **kwargs):
+        self.room_id = room_id
+        self.thread_id = thread_id
+        self.thread_name = thread_name
+        self._runs = None
+        super().__init__()
+
+    @property
+    def rest_api(self) -> rest_api.TUI_REST_API:
+        return self.app.rest_api
+
+    @property
+    def runs(self) -> dict[str, dict]:
+        if self._runs is None:
+            info = self.rest_api.get_thread(
+                self.room_id,
+                self.thread_id,
+            )
+            self._runs = info["runs"]
+
+        return self._runs
+
+    def compose(self) -> t_app.ComposeResult:
+        yield t_widgets.Header()
+
+        with ListHeaderWidget():
+            yield t_widgets.Label(
+                f"Runs in thread: {self.thread_name or self.thread_id}",
+            )
+
+        with t_containers.VerticalScroll(id="runs-list"):
+            for run_id, run_info in self.runs.items():
+                meta = run_info["metadata"]
+
+                if meta is not None:
+                    button_label = f"{meta['label']}:\n{run_id}"
+                else:
+                    button_label = run_id
+
+                with RunButtonWidget():
+                    yield t_widgets.Button(
+                        name=run_id,
+                        label=button_label,
+                        variant="primary",
+                    )
+
+        yield t_widgets.Footer()
+
+    async def on_button_pressed(
+        self,
+        event: t_widgets.Button.Pressed,
+    ) -> None:
+        run_id = event.button.name
+        event.stop()
+        run_view = RunView(self.room_id, self.thread_id, run_id)
+        self.app.push_screen(run_view)
+
+
+class ThreadButtonWidget(t_widget.Widget):
+    DEFAULT_CSS = """
+    ThreadButtonWidget {
+        layout: horizontal;
+        height: auto;
+    }
+    """
+
+
+class RoomThreadsView(t_screen.Screen):
+    BINDINGS = [
+        t_binding.Binding("escape", "dismiss(None)", "Exit"),
+    ]
+    DEFAULT_CSS = """
+    .thread-name {
+        padding: 1;
+    }
+    """
+
+    def __init__(self, room_id, *args, **kwargs):
+        self.room_id = room_id
+        self._threads = None
+        super().__init__()
+
+    @property
+    def rest_api(self) -> rest_api.TUI_REST_API:
+        return self.app.rest_api
+
+    @property
+    def threads(self) -> dict[str, dict]:
+        if self._threads is None:
+            info = self.rest_api.get_room_threads(self.room_id)
+            self._threads = info["threads"]
+            self._threads_by_id = {
+                thread_info["thread_id"]: thread_info
+                for thread_info in self._threads
+            }
+
+        return self._threads
+
+    def compose(self) -> t_app.ComposeResult:
+        yield t_widgets.Header()
+        threads = self.threads
+
+        with ListHeaderWidget():
+            if threads:
+                yield t_widgets.Label(f"Threads in room: {self.room_id}")
+            else:
+                yield t_widgets.Label(f"No threads in room: {self.room_id}")
+
+        with t_containers.VerticalScroll(id="threads-list"):
+            for thread_info in self.threads:
+                thread_id = thread_info["thread_id"]
+                meta = thread_info.get("metadata")
+
+                if meta is not None:
+                    button_label = f"{meta['name']}:\n{thread_id}"
+                else:
+                    button_label = thread_id
+
+                with ThreadButtonWidget():
+                    yield t_widgets.Button(
+                        name=thread_id,
+                        label=button_label,
+                        variant="primary",
+                    )
+
+        yield t_widgets.Footer()
+
+    async def on_button_pressed(
+        self,
+        event: t_widgets.Button.Pressed,
+    ) -> None:
+        thread_id = event.button.name
+        event.stop()
+        self.dismiss(thread_id)
 
 
 class Prompt(t_widgets.Markdown):
@@ -33,9 +509,26 @@ class Response(t_widgets.Markdown):
     BORDER_TITLE = "Soliplex"
 
 
-class SoliplexTUI(t_app.App):
-    TITLE = "soliplex-tui"
-    SUB_TITLE = "the Soliplex TUI client."
+class RoomThreadWidget(t_widget.Widget):
+    DEFAULT_CSS = """
+    RoomThreadWidget {
+        layout: horizontal;
+        height: auto;
+    }
+    RoomThreadWidget Label {
+        padding-right: 2;
+    }
+    """
+
+
+class RoomView(t_screen.Screen):
+    BINDINGS = [
+        t_binding.Binding("ctrl+n", "new_thread", "New thread"),
+        t_binding.Binding("ctrl+t", "list_threads", "Threads"),
+        t_binding.Binding("ctrl+r", "list_runs", "Runs"),
+        t_binding.Binding("ctrl+z", "edit_metadata", "Metadata"),
+        t_binding.Binding("escape", "app.pop_screen", "Exit"),
+    ]
 
     AUTO_FOCUS = "Input"
     CSS = """
@@ -57,28 +550,153 @@ class SoliplexTUI(t_app.App):
     }
     """
 
-    BINDINGS = [
-        t_binding.Binding("ctrl+q", "quit", "quit", id="quit"),
-    ]
+    thread_id: str | None = t_reactive.reactive(None, bindings=True)
+    thread_name: str | None = t_reactive.reactive(None, always_update=True)
+    thread_description: str | None = None
+    run_agent_input: agui_core.RunAgentInput | None = None
+    run_count: int = 0
 
-    def __init__(self, soliplex_url, room_id, use_agui, *args, **kwargs):
-        self.soliplex_url = soliplex_url
+    def __init__(self, room_id, room_info, *args, **kwargs):
         self.room_id = room_id
-        self.convo_uuid = None
-        self.use_agui = use_agui
-        self.run_agent_input = None
-        self.run_count = 0
-        super().__init__(*args, **kwargs)
+        self.room_info = room_info
+        super().__init__()
+
+    @property
+    def rest_api(self) -> rest_api.TUI_REST_API:
+        return self.app.rest_api
 
     def compose(self) -> t_app.ComposeResult:
+        room_info = self.room_info
         yield t_widgets.Header()
+        with RoomThreadWidget():
+            yield t_widgets.Label(f"Room: {self.room_id}", id="room")
+            yield t_widgets.Label(id="thread")
+
         with t_containers.VerticalScroll(id="chat-view"):
-            yield Response(f"Room: {self.room_id}")
+            yield t_widgets.Static(room_info["welcome_message"])
+            yield t_widgets.Static("Suggestions:")
+
+            for suggestion in room_info["suggestions"]:
+                yield t_widgets.Static(f"- {suggestion}")
+
         yield t_widgets.Input(placeholder="How can I help you?")
         yield t_widgets.Footer()
 
     def on_mount(self) -> None:
         self.query_one("#chat-view").anchor()
+        self.thread_id = None
+
+    def watch_thread_name(self, new_value: str | None):
+        thread_label = self.query_one("#thread")
+
+        if new_value is None:
+            if self.thread_id is None:
+                new_value = "<new thread>"
+            else:
+                new_value = self.thread_id
+
+        thread_label.update(f"Thread: {new_value}")
+
+    def action_new_thread(self) -> None:
+        self.thread_id = self.run_agent_input = None
+        self.thread_name = self.thread_description = None
+        scroller = self.query_one("#chat-view")
+        scroller.remove_children()
+        scroller.mount(t_widgets.Static(self.room_info["welcome_message"]))
+        scroller.mount(t_widgets.Static("Suggestions:"))
+
+        for suggestion in self.room_info["suggestions"]:
+            scroller.mount(t_widgets.Static(f"- {suggestion}"))
+
+    @textual.work
+    async def action_list_threads(self) -> None:
+        room_threads_view = RoomThreadsView(self.room_id)
+
+        found = await self.app.push_screen_wait(room_threads_view)
+
+        if found is not None:
+            self.select_thread(found)
+
+    @textual.work
+    async def action_list_runs(self) -> None:
+        thread_runs_view = ThreadRunsView(
+            self.room_id,
+            self.thread_id,
+            self.thread_name,
+        )
+
+        await self.app.push_screen_wait(thread_runs_view)
+
+    @textual.work
+    async def action_edit_metadata(self) -> None:
+        thread_meta_view = EditThreadMetadataDialog(
+            self.thread_id,
+            self.thread_name,
+            self.thread_description,
+        )
+
+        payload = await self.app.push_screen_wait(thread_meta_view)
+
+        if payload is not None:
+            self.rest_api.post_thread_metadata(
+                self.room_id,
+                self.thread_id,
+                payload,
+            )
+
+            self.thread_name = payload.get("name")
+            self.thread_description = payload.get("description")
+
+    def check_action(self, action, parameters):
+        if action in ("list_runs", "edit_metadata", "new_thread"):
+            return self.thread_id is not None
+
+        return True
+
+    def select_thread(self, thread_id: str):
+        self.thread_id = thread_id
+        info = self.rest_api.get_thread(self.room_id, thread_id)
+        meta = info.get("metadata")
+
+        if meta is not None:
+            self.thread_name = meta["name"]
+            self.thread_description = meta.get("description")
+        else:
+            self.thread_name = None
+            self.thread_description = None
+
+        runs = list(info["runs"].values())
+        self.run_count = len(info["runs"])
+
+        rai = None
+        scroller = self.query_one("#chat-view")
+        scroller.remove_children()
+
+        last_run = runs[-1]
+        run_input = last_run["run_input"]
+
+        if run_input is not None:
+            rai = agui_core.RunAgentInput.model_validate(run_input)
+            esp = agui_parser.EventStreamParser(rai)
+            full_run_info = self.rest_api.get_run(
+                self.room_id,
+                thread_id,
+                last_run["run_id"],
+            )
+
+            for event_info in full_run_info["events"]:
+                event = agui_parser.agui_event_from_json(event_info)
+                esp(event)
+
+            self.run_agent_input = esp.as_run_agent_input
+
+            for message in esp.messages:
+                if message.role == "user":
+                    scroller.mount(Prompt(message.content))
+                elif (
+                    message.role == "assistant" and message.content is not None
+                ):
+                    scroller.mount(Response(message.content))
 
     @textual.on(t_widgets.Input.Submitted)
     async def on_input(self, event: t_widgets.Input.Submitted) -> None:
@@ -88,70 +706,23 @@ class SoliplexTUI(t_app.App):
         await chat_view.mount(Prompt(event.value))
         await chat_view.mount(response := Response())
 
-        if self.use_agui:
-            self.send_agui_prompt(event.value, response)
-        else:
-            self.send_prompt(event.value, response)
-
-    @textual.work(thread=True)
-    def send_prompt(self, prompt: str, response: Response) -> None:
-        """Get the response in a thread."""
-        response_content = ""
-        request_json = {
-            "text": prompt,
-        }
-        if self.convo_uuid is None:
-            request_url = (
-                f"{self.soliplex_url}/api/v1/convos/new/{self.room_id}"
-            )
-            convo_response = requests.post(request_url, json=request_json)
-            convo = convo_response.json()
-            self.convo_uuid = convo["convo_uuid"]
-            response_content = convo["message_history"][-1]["text"]
-            self.call_from_thread(response.update, response_content)
-        else:
-            request_url = (
-                f"{self.soliplex_url}/api/v1/convos/{self.convo_uuid}"
-            )
-            streaming_response = requests.post(
-                request_url,
-                json=request_json,
-                stream=True,
-            )
-            for line in streaming_response.iter_lines():
-                if line:
-                    decoded = line.decode("utf-8")
-                    chunk = json.loads(decoded)
-                    # Soliplex streams the whole thing
-                    # response_content += chunk["content"]
-                    self.call_from_thread(response.update, chunk["content"])
+        self.send_agui_prompt(event.value, response)
 
     @textual.work(thread=True)
     def send_agui_prompt(self, prompt: str, response: Response) -> None:
         """Get the AG-UI response in a thread."""
         self.run_count += 1
         response_content = ""
-        room_agui_url_base = (
-            f"{self.soliplex_url}/api/v1/rooms/{self.room_id}/agui"
-        )
 
         if self.run_agent_input is None:
-            print("X" * 50)
-            print("New thread")
-            print("X" * 50)
-
-            new_thread_request_url = room_agui_url_base
-            new_thread_request_json = {
+            request = {
                 "name": f"{self.room_id}: {prompt}",
             }
-            new_thread = requests.post(
-                new_thread_request_url,
-                json=new_thread_request_json,
-            ).json()
-            thread_id = new_thread["thread_id"]
+            new_thread = self.rest_api.post_new_thread(self.room_id, request)
+
+            self.thread_id = thread_id = new_thread["thread_id"]
+            self.thread_name = None
             (run_id,) = new_thread["runs"].keys()
-            print(f"New thread ID: {thread_id}")
-            print(f"New run ID: {thread_id}")
 
             self.run_agent_input = agui_core.RunAgentInput(
                 thread_id=thread_id,
@@ -166,17 +737,12 @@ class SoliplexTUI(t_app.App):
             )
         else:
             thread_id = self.run_agent_input.thread_id
-            print("X" * 50)
-            print(f"Existing thread: {thread_id}")
-            print("X" * 50)
-            new_run_request_url = f"{room_agui_url_base}/{thread_id}"
-            new_run_request_json = {}
-            new_run = requests.post(
-                new_run_request_url,
-                json=new_run_request_json,
-            ).json()
+            new_run = self.rest_api.post_new_run(
+                self.room_id,
+                thread_id,
+                request={},
+            )
             run_id = new_run["run_id"]
-            print(f"New run ID: {run_id}")
             self.run_agent_input.parent_run_id = new_run["parent_run_id"]
             self.run_agent_input.run_id = run_id
 
@@ -188,17 +754,17 @@ class SoliplexTUI(t_app.App):
             )
 
         event_log = []
+
         esp = agui_parser.EventStreamParser(
             self.run_agent_input,
             event_log=event_log,
         )
-        request_json = self.run_agent_input.model_dump()
 
-        request_url = f"{room_agui_url_base}/{thread_id}/{run_id}"
-        streaming_response = requests.post(
-            request_url,
-            json=request_json,
-            stream=True,
+        streaming_response = self.rest_api.post_start_run(
+            self.room_id,
+            thread_id,
+            run_id,
+            self.run_agent_input,
         )
 
         for line in streaming_response.iter_lines():
@@ -242,16 +808,70 @@ class SoliplexTUI(t_app.App):
                         f"\n\n** error **\n\n{chunk['message']}"
                     )
 
-                self.call_from_thread(response.update, response_content)
+                self.app.call_from_thread(response.update, response_content)
 
         new_run_agent_input = esp.as_run_agent_input
 
-        self.run_agent_input = new_run_agent_input
+        self.run_agent_input.messages[:] = new_run_agent_input.messages[:]
 
-        print(f"Streamed {len(event_log)} events:")
-        for event in event_log:
-            pprint.pprint(event.model_dump())
 
-        print(f"Retained {len(new_run_agent_input.messages)} messages")
-        for message in new_run_agent_input.messages:
-            pprint.pprint(message.model_dump())
+class SoliplexTUI(t_app.App):
+    TITLE = "Soliplex TUI"
+
+    BINDINGS = [
+        t_binding.Binding("ctrl+q", "quit", "quit", id="quit"),
+    ]
+    DEFAULT_CSS = """
+    VerticalScroll {
+        width: 100%;
+    }
+    VerticalScroll Button {
+        width: 100%;
+    }
+    """
+
+    def __init__(self, soliplex_url="http://localhost:8000", *args, **kw):
+        self.soliplex_url = soliplex_url
+        self.rest_api = rest_api.TUI_REST_API(soliplex_url)
+        self._rooms = None
+
+        super().__init__(*args, **kw)
+
+    def on_mount(self) -> None:
+        self.border_subtitle = self.soliplex_url
+
+    @property
+    def rooms(self) -> dict[str, dict]:
+        if self._rooms is None:
+            self._rooms = self.rest_api.get_rooms()
+
+        return self._rooms
+
+    def compose(self) -> t_app.ComposeResult:
+        yield t_widgets.Header()
+
+        with ListHeaderWidget():
+            yield t_widgets.Label("Available rooms:")
+
+        with t_containers.VerticalScroll(id="rooms-list"):
+            for room_id, room_info in self.rooms.items():
+                yield t_widgets.Button(
+                    name=room_id,
+                    label=f"{room_id}:\n{room_info['description']}",
+                    variant="primary",
+                )
+        yield t_widgets.Footer()
+
+    async def on_button_pressed(
+        self,
+        event: t_widgets.Button.Pressed,
+    ) -> None:
+        room_id = event.button.name
+        room_info = self.rooms[room_id]
+        room_view = RoomView(room_id, room_info)
+        await self.push_screen(room_view)
+
+
+if __name__ == "__main__":
+    app = SoliplexTUI()
+    app.run()

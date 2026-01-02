@@ -4,14 +4,12 @@ import dataclasses
 import datetime
 import pathlib
 import typing
-import uuid
 
 import pydantic
 from ag_ui import core as agui_core
 
 from soliplex import agui as agui_package
 from soliplex import config
-from soliplex import convos
 
 KW_ONLY = pydantic.Field(kw_only=True)
 KW_ONLY_NONE = pydantic.Field(kw_only=True, default=None)
@@ -50,6 +48,10 @@ class QuizQuestion(pydantic.BaseModel):
             expected_output=question.expected_output,
             metadata=QuizQuestionMetadata.from_config(question.metadata),
         )
+
+
+class QuizAnswer(pydantic.BaseModel):
+    text: str
 
 
 class Quiz(pydantic.BaseModel):
@@ -455,6 +457,13 @@ class AGUI_RunMetadata(pydantic.BaseModel):
             )
 
 
+class AGUI_RunFeedback(pydantic.BaseModel):
+    """Feedback for a run"""
+
+    feedback: str = KW_ONLY
+    reason: str | None = KW_ONLY_NONE
+
+
 class AGUI_NewRunRequest(pydantic.BaseModel):
     parent_run_id: str = KW_ONLY_NONE
     metadata: AGUI_RunMetadata = KW_ONLY_NONE
@@ -588,58 +597,6 @@ class ChunkVisualization(pydantic.BaseModel):
     chunk_id: str
     document_uri: str | None
     images_base_64: list[str]
-
-
-# ----------------------------------------------------------------------------
-#   Convos-related models
-# ----------------------------------------------------------------------------
-
-
-class ConvoHistoryMessage(pydantic.BaseModel):
-    """Message fetched from a convo history."""
-
-    origin: typing.Literal["user", "llm"]
-    text: str
-    timestamp: str | None
-
-    @classmethod
-    def from_convos_message(cls, message: convos.ConvoHistoryMessage):
-        return cls(
-            origin=message.origin,
-            text=message.text,
-            timestamp=message.timestamp,
-        )
-
-
-class Conversation(pydantic.BaseModel):
-    convo_uuid: uuid.UUID
-    name: str
-    room_id: str
-    message_history: list[ConvoHistoryMessage]
-
-    @classmethod
-    def from_convos_info(cls, info: convos.ConversationInfo):
-        return cls(
-            convo_uuid=info.convo_uuid,
-            name=info.name,
-            room_id=info.room_id,
-            message_history=[
-                ConvoHistoryMessage.from_convos_message(message)
-                for message in info.message_history
-            ],
-        )
-
-
-ConversationMap = dict[uuid.UUID, Conversation]
-
-
-class UserPromptClientMessage(pydantic.BaseModel):
-    text: str
-
-
-class NewConvoClientMessage(pydantic.BaseModel):
-    text: str
-    room_id: str
 
 
 # ----------------------------------------------------------------------------

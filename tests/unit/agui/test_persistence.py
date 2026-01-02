@@ -909,6 +909,73 @@ async def test_threadstorage_thread_run_cru(the_async_session):
     assert after_usage.requests == 3
     assert after_usage.tool_calls == 4
 
+    await the_async_session.commit()
+
+    pre_feedback = await after.awaitable_attrs.run_feedback
+    assert pre_feedback is None
+
+    await the_async_session.commit()
+
+    await ts.save_run_feedback(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=before_id,
+        feedback="testing",
+        reason="just because",
+    )
+
+    await the_async_session.commit()
+
+    w_feedback = await ts.get_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=before_id,
+    )
+
+    feedback = await w_feedback.awaitable_attrs.run_feedback
+
+    assert feedback.feedback == "testing"
+    assert feedback.reason == "just because"
+
+    await the_async_session.commit()
+
+    w_feedback = await ts.get_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=before_id,
+    )
+
+    feedback = await w_feedback.awaitable_attrs.run_feedback
+
+    assert feedback.feedback == "testing"
+    assert feedback.reason == "just because"
+
+    await ts.save_run_feedback(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=before_id,
+        feedback="moar testing",
+        reason="dithering",
+    )
+
+    await the_async_session.commit()
+
+    w_moar_feedback = await ts.get_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=before_id,
+    )
+
+    moar_feedback = await w_moar_feedback.awaitable_attrs.run_feedback
+
+    assert moar_feedback.feedback == "moar testing"
+    assert moar_feedback.reason == "dithering"
+
 
 @pytest.fixture
 def the_engine():

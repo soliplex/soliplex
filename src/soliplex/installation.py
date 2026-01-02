@@ -11,7 +11,6 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
 from soliplex import config
-from soliplex import convos
 from soliplex import mcp_server
 from soliplex import secrets
 from soliplex.agui import persistence as agui_persistence
@@ -186,7 +185,6 @@ async def lifespan(
     the_installation = Installation(i_config)
     the_installation.resolve_secrets()
     the_installation.resolve_environment()
-    the_convos = convos.Conversations()
 
     engine = sqla_asyncio.create_async_engine(
         the_installation.thread_persistence_dburi_async
@@ -196,7 +194,6 @@ async def lifespan(
 
     context = {
         "the_installation": the_installation,
-        "the_convos": the_convos,
         "threads_engine": engine,
     }
 

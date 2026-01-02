@@ -29,7 +29,7 @@ An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web inte
 Key modules:
 - `views/` - API endpoints (auth, completions, conversations, rooms, quizzes)
 - `agents.py` - AI agent configuration and management
-- `convos.py` - Conversation persistence and retrieval
+- `agui/` - AG-UI thread persistence and retrieval
 - `tools.py` - Tool definitions for AI agents
 - `mcp_server.py` / `mcp_client.py` - Model Context Protocol integration
 - `tui/` - Terminal user interface

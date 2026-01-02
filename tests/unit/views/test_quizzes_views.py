@@ -126,7 +126,7 @@ async def test_get_quiz(auth_fn, test_quiz, w_miss):
 async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.Mock(spec_set=["get_room_config"])
-    answer = models.UserPromptClientMessage(text="Answer")
+    answer = models.QuizAnswer(text="Answer")
     token = object()
 
     if w_miss == "room":
