@@ -45,6 +45,7 @@ class Room(pydantic.BaseModel):
     quizzes: ConfiguredQuizzes
     agent: Agent
     allow_mcp: bool
+    agui_feature_names: list[str]  # AG-UI features used by room's tools
 
     @classmethod
     def from_config(cls, room_config: RoomConfig) -> "Room":
@@ -57,6 +58,29 @@ Map of available rooms:
 
 ```python
 ConfiguredRooms = dict[str, Room]
+```
+
+### Tool
+
+Tool configuration exposed in Room response:
+
+```python
+class Tool(pydantic.BaseModel):
+    kind: str                           # Tool type identifier
+    tool_name: str                      # Unique tool name
+    tool_description: str               # Description shown to agent
+    tool_requires: ToolRequires         # Requirements (e.g., "tool_config")
+    allow_mcp: bool                     # Exposed via MCP server
+    agui_feature_names: list[str]       # AG-UI features this tool uses
+    extra_parameters: dict[str, Any]    # Additional config parameters
+```
+
+### ConfiguredTools
+
+Map of tools available in a room:
+
+```python
+ConfiguredTools = dict[str, Tool]
 ```
 
 ### RAGDocument
@@ -209,6 +233,20 @@ class AGUI_RunFeedback(pydantic.BaseModel):
 ```
 
 Used with `POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}/feedback` endpoint.
+
+### AGUI_Feature
+
+AG-UI feature definition returned in Installation response:
+
+```python
+class AGUI_Feature(pydantic.BaseModel):
+    name: str                           # Feature identifier (e.g., "filter_documents")
+    description: str                    # From model class docstring
+    source: str                         # "client", "server", or "either"
+    json_schema: dict[str, typing.Any]  # JSON Schema for the feature model
+```
+
+Features define contracts between client and server for named fields in AG-UI state.
 
 ### AGUI_NewThreadRequest
 
@@ -364,6 +402,27 @@ class Quiz(pydantic.BaseModel):
     randomize: bool
     max_questions: int | None = None
     questions: list[QuizQuestion]
+```
+
+---
+
+## Installation Models
+
+### Installation
+
+Installation configuration response from `GET /v1/installation`:
+
+```python
+class Installation(pydantic.BaseModel):
+    id: str                             # Installation identifier
+    rooms: ConfiguredRooms              # Available rooms
+    completions: ConfiguredCompletions  # Available completions
+    oidc_auth_systems: ConfiguredOIDCAuthSystems  # Auth providers
+    agui_features: list[AGUI_Feature]   # Registered AG-UI features
+
+    @classmethod
+    def from_config(cls, installation_config) -> "Installation":
+        ...
 ```
 
 ---

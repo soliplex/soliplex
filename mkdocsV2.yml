@@ -87,6 +87,7 @@ nav:
           - Environment: admin-guide/configuration/environment.md
           - OIDC: admin-guide/configuration/oidc.md
           - Quizzes: admin-guide/configuration/quizzes.md
+          - Meta: admin-guide/configuration/meta.md
       - Deployment:
           - admin-guide/deployment/index.md
           - Docker: admin-guide/deployment/docker.md

@@ -58,6 +58,10 @@ oidc_paths: [string]                # OIDC config directories
 
 # Meta-configuration (advanced)
 meta:
+  agui_features:                    # AG-UI feature registrations
+    - name: string                  # Feature name in AG-UI state
+      model_klass: string           # Dotted import path to Pydantic model
+      source: string                # "client", "server", or "either" (default)
   tool_configs:                     # Custom tool config classes
     - string                        # Dotted import path
     - config_klass: string          # Or explicit mapping

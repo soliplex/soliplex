@@ -267,6 +267,38 @@ secrets:
     ...
 ```
 
+### agui-feature-schemas
+
+Export AG-UI feature schemas as JSON.
+
+```bash
+soliplex-cli agui-feature-schemas <config_path>
+```
+
+**Arguments:**
+- `config_path` - Path to installation.yaml
+
+**Examples:**
+```bash
+soliplex-cli agui-feature-schemas installation.yaml
+```
+
+**Output:**
+```json
+{
+  "filter_documents": {
+    "source": "client",
+    "json_schema": {...}
+  },
+  "ask_history": {
+    "source": "server",
+    "json_schema": {...}
+  }
+}
+```
+
+This command exports the JSON schemas for all registered AG-UI features, useful for client applications that need to discover available features and their data contracts.
+
 ## Environment Variables
 
 The CLI respects these environment variables:
