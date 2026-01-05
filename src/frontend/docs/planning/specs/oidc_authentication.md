@@ -1218,10 +1218,85 @@ Platform config:
 9. **Startup UX**: Loading indicator until auth state resolves
 10. **refreshExpiresAt**: Omitted - let `invalid_grant` signal refresh token expiry
 
+## Web Platform Support (Deferred)
+
+Web requires a different authentication approach because:
+
+1. `flutter_appauth` uses `dart:ffi` which is unavailable on web
+2. `cupertino_http` (used by `soliplex_client_native`) also uses `dart:ffi`
+3. CORS restrictions prevent direct OIDC token exchange from browser
+
+### Backend-For-Frontend (BFF) Pattern
+
+The backend already provides BFF endpoints for web authentication:
+
+- `GET /api/login/{provider_id}?return_to={callback_url}` - Initiates OAuth flow
+- Backend handles PKCE, code exchange, and redirects back with tokens
+
+### Implementation Requirements
+
+**HTTP Client for Web:**
+
+`soliplex_client_native` unconditionally exports `cupertino_http_client.dart`, which imports
+`cupertino_http` (dart:ffi). Fix with conditional export:
+
+```dart
+// clients.dart
+export 'cupertino_http_client.dart'
+    if (dart.library.js_interop) 'cupertino_http_client_web.dart';
+```
+
+Create `cupertino_http_client_web.dart` that throws `UnsupportedError` if instantiated
+(web should use `DartHttpClient` via `createPlatformClient()` instead).
+
+**Auth Flow for Web:**
+
+New files needed (reference: `clean_soliplex/src/flutter/lib/core/auth/`):
+
+| File | Purpose |
+|------|---------|
+| `callback_params.dart` | Sealed class for URL callback params |
+| `web_auth_callback_handler.dart` | Conditional import dispatcher |
+| `web_auth_callback_native.dart` | No-op for native platforms |
+| `web_auth_callback_web.dart` | Extracts tokens from URL using `web` package |
+| `web_auth_pending_storage.dart` | Stores pending auth session for callback |
+| `features/auth/auth_callback_screen.dart` | Route `/auth/callback` |
+
+**Auth Flow Changes:**
+
+Modify `auth_flow.dart` to detect web platform and redirect to backend BFF endpoint
+instead of using `flutter_appauth`. Web flow:
+
+1. User clicks login → redirect to `/api/login/{provider_id}?return_to=/auth/callback`
+2. Backend handles OAuth, redirects back with `?token=xxx&refresh_token=xxx&expires_in=xxx`
+3. `AuthCallbackScreen` extracts tokens from URL, stores them, navigates to home
+
+**Router Changes:**
+
+Add `/auth/callback` route that renders `AuthCallbackScreen`.
+
+**Dependencies:**
+
+```yaml
+dependencies:
+  url_launcher: ^6.3.0  # For web redirect
+  web: ^1.0.0           # For URL manipulation on web
+```
+
+**Token Storage:**
+
+Web should use memory-only storage (no `flutter_secure_storage` persistence) due to
+browser security model. Tokens cleared on page refresh.
+
+### Estimated Effort
+
+~6-8 new files, modifications to auth_flow.dart, router, and soliplex_client_native.
+Approximately 400-600 lines of new code.
+
 ## Deferred Items
 
 - Windows/Linux loopback server implementation (includes endSession support)
-- Web redirect flow and memory-only storage (includes RP-Initiated Logout)
+- Web platform authentication (see "Web Platform Support" section above)
 - Multiple simultaneous provider sessions
 - Android support (flutter_appauth supported, endSession will work)
 - JWT pattern regex for catch-all token redaction in logs
