@@ -69,7 +69,6 @@
 		D8999C64B753BCD580645B86 /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
 		E4A5F1B82D4C8A0100SIGNING /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		E4A5F1B92D4C8A0100SIGNING /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
-		E4A5F1BA2D4C8A0100SIGNING /* Local.xcconfig.template */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.xcconfig.template; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -177,7 +176,6 @@
 			children = (
 				E4A5F1B82D4C8A0100SIGNING /* Debug.xcconfig */,
 				E4A5F1B92D4C8A0100SIGNING /* Release.xcconfig */,
-				E4A5F1BA2D4C8A0100SIGNING /* Local.xcconfig.template */,
 			);
 			path = Configs;
 			sourceTree = "<group>";
