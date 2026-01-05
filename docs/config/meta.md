@@ -9,6 +9,41 @@ E.g., registering a new tool configuration class in the `meta.tool_configs`
 section allows use of that class when configuring a custom tool in a given
 room.
 
+## Registering AG-UI Feature Classes
+
+The `meta.agui_features` section registers AG-UI feature types so that
+they can be referenced by their `name`.  Each feature is a contract
+between the client application and the server, defining the schema for
+a named field in the AG-UI state, and which parties are expected to write
+to that field.
+
+The section contains a list of mappings, each of which include:
+
+- `name`, a string identifying the field in the AG-UI state.
+
+- `model_klass`, a Python "dotted name" which can be used to import the
+   model class which defines the field's schema.
+
+- `source` (optional), a  key indicating which party is allowed to set
+  the feature's field in the AG-UI state. Allowed values are "client",
+  "server", and "either";  the default is "either".
+
+By default, Soliplex registers its own AG-UI feature classes, just as though
+we configured explicitly:
+
+```yaml
+meta:
+  agui_features:
+
+  - name: "filter_documents"
+    model_klass: "soliplex.agui.features.FilterDocuments"
+    source: "client"
+
+  - name: "ask_history"
+    model_klass: "soliplex.agui.features.AskedAndAnswered"
+    source: "server"
+```
+
 ## Registering Tool Configuration Classes
 
 The `meta.tool_configs` section enumerates tool configuration types so that

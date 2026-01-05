@@ -23,6 +23,8 @@ from haiku.rag import config as hr_config
 from pydantic_ai import settings as ai_settings
 from pydantic_ai.agent import abstract as ai_ag_abstract
 
+from soliplex.agui import features
+
 FILE_PREFIX = "file:"
 
 SECRET_PREFIX = "secret:"
@@ -280,6 +282,7 @@ class ToolRequires(enum.StrEnum):
 @dataclasses.dataclass
 class ToolConfig:
     tool_name: str
+    agui_feature_names: tuple[str] = ()
 
     allow_mcp: bool = False
 
@@ -481,12 +484,13 @@ class SearchDocumentsToolConfig(ToolConfig, _RAGToolBase):
         return instance
 
     def get_extra_parameters(self) -> dict:
+        local = {
+            "search_documents_limit": self.search_documents_limit,
+        }
         return (
             super().get_extra_parameters()
             | _RAGToolBase.get_extra_parameters(self)
-            | {
-                "search_documents_limit": self.search_documents_limit,
-            }
+            | local
         )
 
 
@@ -523,6 +527,10 @@ class RAGResearchToolConfig(ToolConfig, _RAGToolBase):
 class AskWithRichCitationsToolConfig(ToolConfig, _RAGToolBase):
     kind: str = "ask_with_rich_citations"
     tool_name: str = "soliplex.tools.ask_with_rich_citations"
+    agui_feature_names: typing.ClassVar[tuple[str]] = (
+        "filter_documents",
+        "ask_history",
+    )
 
     @classmethod
     def from_yaml(
@@ -1317,6 +1325,14 @@ class RoomConfig:
         return self.id
 
     @property
+    def agui_feature_names(self) -> tuple[str]:
+        tool_configs = self.tool_configs.values()
+        return sum(
+            (tool_config.agui_feature_names for tool_config in tool_configs),
+            start=(),
+        )
+
+    @property
     def quiz_map(self) -> dict[str, QuizConfig]:
         if self._quiz_map is None:
             self._quiz_map = {quiz.id: quiz for quiz in self.quizzes}
@@ -1566,6 +1582,68 @@ class SecretConfig:
 
 
 # ============================================================================
+#   AGUI feature configuration types
+# ============================================================================
+
+
+class AGUI_FeatureSource(enum.StrEnum):
+    CLIENT = "client"
+    SERVER = "server"
+    EITHER = "either"
+
+
+@dataclasses.dataclass
+class AGUI_Feature:
+    """Registration of schema and semantics defining a Soliplex AGUI feature
+
+    Features define a contract between the Soliplex client and the Soliplex
+    server, describing the schema of a portion of the AG-UI protocol's
+    'state' mapping.
+    """
+
+    name: str
+    """Key within the AG-UI state in which the feature's data is stored"""
+
+    model_klass: type
+    """Pydantic model class defining schema for the feature's data"""
+
+    source: AGUI_FeatureSource = AGUI_FeatureSource.EITHER
+    """Parties allowed to write to the feature's data in the AG-UI 'state'"""
+
+    @property
+    def description(self) -> str:
+        return self.model_klass.model_json_schema()["description"]
+
+    @property
+    def as_yaml(self):
+        return {
+            "name": self.name,
+            "description": self.description,
+            "source": str(self.source),
+        }
+
+    @property
+    def json_schema(self):
+        return self.model_klass.model_json_schema()
+
+
+AGUI_FEATURES_BY_NAME = {
+    agui_feature.name: agui_feature
+    for agui_feature in [
+        AGUI_Feature(
+            name="filter_documents",
+            model_klass=features.FilterDocuments,
+            source=AGUI_FeatureSource.CLIENT,
+        ),
+        AGUI_Feature(
+            name="ask_history",
+            model_klass=features.AskedAndAnswered,
+            source=AGUI_FeatureSource.SERVER,
+        ),
+    ]
+}
+
+# ============================================================================
 #   Installation configuration types
 # ============================================================================
 
@@ -1673,6 +1751,36 @@ def resolve_environment_entry(
     return env_value
 
 
+def _from_dotted_name(dotted_name: str):
+    module_name, target = dotted_name.rsplit(".", 1)
+    module = importlib.import_module(module_name)
+    return getattr(module, target)
+
+
+@dataclasses.dataclass
+class AGUI_FeatureConfigMeta:
+    """Registered config class
+
+    'model_klass'
+        dotted name of a a class or factory returning an 'AGUI_Feature'
+        when passed the feature name and an instance of this class.
+
+    'source':
+        (optional) one of "client", "server", or "either" (defaults to
+        "either).
+    """
+
+    name: str
+    model_klass: typing.Any
+    source: AGUI_FeatureSource = "either"
+
+    @classmethod
+    def from_yaml(cls, yaml_config: str | dict):
+        model_klass = yaml_config["model_klass"]
+        yaml_config["model_klass"] = _from_dotted_name(model_klass)
+        return cls(**yaml_config)
+
+
 @dataclasses.dataclass
 class ConfigMeta:
     """Registered config class
@@ -1695,32 +1803,26 @@ class ConfigMeta:
     wrapper_klass: typing.Any = None
     registered_func: typing.Any = None
 
-    @staticmethod
-    def _from_dotted_name(dotted_name: str):
-        module_name, klass_name = dotted_name.rsplit(".", 1)
-        module = importlib.import_module(module_name)
-        return getattr(module, klass_name)
-
     @classmethod
     def from_yaml(cls, yaml_config: str | dict):
         if isinstance(yaml_config, str):
-            config_klass = cls._from_dotted_name(yaml_config)
+            config_klass = _from_dotted_name(yaml_config)
             return cls(config_klass)
         else:
             config_klass = yaml_config["config_klass"]
 
             if isinstance(config_klass, str):
-                config_klass = cls._from_dotted_name(config_klass)
+                config_klass = _from_dotted_name(config_klass)
 
             wrapper_klass = yaml_config.get("wrapper_klass")
 
             if isinstance(wrapper_klass, str):
-                wrapper_klass = cls._from_dotted_name(wrapper_klass)
+                wrapper_klass = _from_dotted_name(wrapper_klass)
 
             registered_func = yaml_config.get("registered_func")
 
             if isinstance(registered_func, str):
-                registered_func = cls._from_dotted_name(registered_func)
+                registered_func = _from_dotted_name(registered_func)
 
             return cls(
                 config_klass=config_klass,
@@ -1738,24 +1840,46 @@ class ConfigMeta:
 class InstallationConfigMeta:
     """Configuration for pluggable components
 
+    'agui_features'
+        a list consisting of `AGUI_FeatureConfigMeta' mappings, defining the
+        AG-UI features supported by the installation.
+
     'tool_configs'
         a list consisting of strings (importable dotted names of tool
-        config classes) or `ConfigMeta' mappings.
+        config classes) or `ConfigMeta' mappings, defining the types
+        of tools which can be configured.
 
     'mcp_toolset_configs'
+        a list consisting of strings (importable dotted names of MCP client
+        toolset config classes) or `ConfigMeta' mappings, defining the types
+        of MCP client toolsets which can be configured.
+
+    'mcp_server_tool_wrappers"
         a list consisting of strings (importable dotted names of MCP
-        toolset config classes) or `ConfigMeta' mappings.
+        server tool wrapper classes) or `ConfigMeta' mappings, defining
+        the types of MCP server tool wrappers which can be configured.
+
+    'agent_configs'
+        a list consisting of strings (importable dotted names of agent
+        config classes) or `ConfigMeta' mappings, defining the
+        types of agents which can be configured.
+
+    'secret_sources'
+        a list consisting of  strings (importable dotted names of secret
+        source classes) or `ConfigMeta' mappings, defining the
+        tyeps of secret sources which can be configured.
 
     After loading, adds the configured classes to the registry mappings
     'TOOL_CONFIG_CLASSES_BY_TOOL_NAME' and
     'MCP_TOOLSET_CONFIG_CLASSES_BY_TYPE'.
     """
 
+    agui_features: list[str | AGUI_FeatureConfigMeta] = ()
     tool_configs: list[str | ConfigMeta] = ()
     mcp_toolset_configs: list[str | ConfigMeta] = ()
     mcp_server_tool_wrappers: list[ConfigMeta] = ()
-    agent_configs: list[ConfigMeta] = ()
-    secret_sources: list[ConfigMeta] = ()
+    agent_configs: list[str | ConfigMeta] = ()
+    secret_sources: list[str | ConfigMeta] = ()
 
     # Set by `from_yaml` factory
     _config_path: pathlib.Path = None
@@ -1768,6 +1892,11 @@ class InstallationConfigMeta:
         config_dict["_config_path"] = config_path
 
         try:
+            config_dict["agui_features"] = [
+                AGUI_FeatureConfigMeta.from_yaml(af_yaml)
+                for af_yaml in config_dict.get("agui_features", ())
+            ]
+
             config_dict["tool_configs"] = [
                 ConfigMeta.from_yaml(tc_yaml)
                 for tc_yaml in config_dict.get("tool_configs", ())
@@ -1806,6 +1935,11 @@ class InstallationConfigMeta:
             ) from exc
 
     def __post_init__(self):
+        self.agui_features = list(self.agui_features)
+        for af_meta in self.agui_features:
+            klass = af_meta.model_klass
+            AGUI_FEATURES_BY_NAME[af_meta.name] = klass
+
         self.tool_configs = list(self.tool_configs)
         for tc_meta in self.tool_configs:
             klass = tc_meta.config_klass
@@ -1836,6 +1970,14 @@ class InstallationConfigMeta:
 
     @property
     def as_yaml(self) -> dict:
+        agui_feature_entries = [
+            {
+                "name": feature.name,
+                "model_klass": _dotted_name(feature.model_klass),
+                "source": str(feature.source),
+            }
+            for feature in AGUI_FEATURES_BY_NAME.values()
+        ]
         tool_config_entries = [
             _dotted_name(klass)
             for klass in TOOL_CONFIG_CLASSES_BY_TOOL_NAME.values()
@@ -1866,6 +2008,7 @@ class InstallationConfigMeta:
             for kind, r_func in SECRET_GETTERS_BY_KIND.items()
         ]
         return {
+            "agui_features": agui_feature_entries,
             "tool_configs": tool_config_entries,
             "mcp_toolset_configs": mcp_toolset_config_entries,
             "mcp_server_tool_wrappers": mcp_server_tool_wrapper_entries,
@@ -1884,6 +2027,13 @@ class InstallationConfig:
     id: str
 
     meta: InstallationConfigMeta = None
+
+    #
+    # AG-UI features defined via metaconfig / defaults
+    #
+    @property
+    def agui_features(self) -> list[AGUI_Feature]:
+        return [feature for feature in AGUI_FEATURES_BY_NAME.values()]
 
     #
     # Secrets name values looked up from env vars or other sources.

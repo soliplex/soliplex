@@ -5,6 +5,7 @@ import pathlib
 import uuid
 from unittest import mock
 
+import pydantic
 import pytest
 from ag_ui import core as agui_core
 
@@ -27,6 +28,8 @@ QUESTION_TYPE_QA = "qa"
 QUESTION_TYPE_MC = "multiple-choice"
 MC_OPTIONS = ["orange", "blue", "purple"]
 
+FEATURE_NAME = "feature_name"
+
 ROOM_ID = "test_room"
 ROOM_NAME = "Test Room"
 ROOM_DESCRIPTION = "This room is made for testing"
@@ -45,6 +48,10 @@ OLLAMA_BASE_URL = "https://ollama.example.com/base"
 HAIKU_RAG_CONFIG_FILE = "/path/to/haiku.rag.yaml"
 
 FACTORY_NAME = "some.package.function"
+
+AGUI_FEATURE_NAME = "test-agui-feature"
+AGUI_FEATURE_DESCRIPTION = "This is a test AG-UI feature"
+AGUI_FEATURE_MODEL_KLASS = "soliplex.agui.features.testing"
 
 INSTALLATION_ID = "test-installation"
 INSTALLATION_SECRET = "Seeeeeekrit!"
@@ -306,6 +313,7 @@ def test_tool_from_config_w_toolconfig():
     assert tool_model.tool_description == test_tool.__doc__.strip()
     assert tool_model.tool_requires == config.ToolRequires.BARE
     assert tool_model.allow_mcp is False
+    assert tool_model.agui_feature_names == []
     assert tool_model.extra_parameters == {}
 
 
@@ -328,9 +336,36 @@ def test_tool_from_config_w_sdtc(temp_dir):
     )
     assert tool_model.tool_requires == config.ToolRequires.TOOL_CONFIG
     assert tool_model.allow_mcp is True
+    assert tool_model.agui_feature_names == []
     assert tool_model.extra_parameters == dict(
         rag_lancedb_path=sdtc_rag_lance_db_path.resolve(),
         search_documents_limit=7,
+    )
+
+
+def test_tool_from_config_w_awrctc(temp_dir):
+    awrctc_rag_lance_db_path = temp_dir / "rag.lancedb"
+    awrctc_rag_lance_db_path.mkdir()
+
+    tool_config = config.AskWithRichCitationsToolConfig(
+        rag_lancedb_override_path=str(awrctc_rag_lance_db_path),
+    )
+
+    tool_model = models.Tool.from_config(tool_config)
+
+    assert tool_model.kind == "ask_with_rich_citations"
+    assert tool_model.tool_name == "soliplex.tools.ask_with_rich_citations"
+    assert (
+        tool_model.tool_description
+        == tools.ask_with_rich_citations.__doc__.strip()
+    )
+    assert tool_model.tool_requires == config.ToolRequires.FASTAPI_CONTEXT
+    assert tool_model.allow_mcp is False
+    assert tool_model.agui_feature_names == [
+        afn for afn in tool_config.agui_feature_names
+    ]
+    assert tool_model.extra_parameters == dict(
+        rag_lancedb_path=awrctc_rag_lance_db_path.resolve(),
     )
 
 
@@ -433,6 +468,53 @@ def test_defaultagent_from_config(
     assert agent_model.provider_base_url == exp_base
 
 
+class FeatureModel(pydantic.BaseModel):
+    """Feature model for testing"""
+
+    foo: str
+    bar: str | None = None
+
+    @classmethod
+    def model_json_schema(cls):
+        return {
+            "type": "object",
+            "title": cls.__name__,
+            "description": cls.__doc__,
+            "properties": {
+                "foo": {
+                    "title": "Foo",
+                    "type": "string",
+                },
+                "bar": {
+                    "title": "Bar",
+                    "anyOf:": [
+                        {"type": "string"},
+                        {"type": "null"},
+                    ],
+                    "default": None,
+                },
+            },
+        }
+
+
+@pytest.fixture
+def the_agui_feature():
+    return config.AGUI_Feature(
+        name=AGUI_FEATURE_NAME,
+        model_klass=FeatureModel,
+        source=config.AGUI_FeatureSource.CLIENT,
+    )
+
+
+def test_aguifeature_from_config(the_agui_feature):
+    feature_model = models.AGUI_Feature.from_config(the_agui_feature)
+
+    assert feature_model.name == AGUI_FEATURE_NAME
+    assert feature_model.description == the_agui_feature.description
+    assert feature_model.source == the_agui_feature.source
+    assert feature_model.json_schema == FeatureModel.model_json_schema()
+
+
 @pytest.fixture(params=[False, True])
 def with_agent_config(request):
     return _from_param(request, "with_agent_config")
@@ -487,6 +569,7 @@ def room_tools(request):
         kw["tool_configs"] = {
             "get_current_datetime": config.ToolConfig(
                 tool_name="soliplex.tools.get_current_datetime",
+                agui_feature_names=(FEATURE_NAME,),
             ),
         }
     return kw
@@ -580,8 +663,10 @@ def test_room_from_config(
             key: models.Tool.from_config(tool_config)
             for (key, tool_config) in room_tools["tool_configs"].items()
         }
+        assert room_model.agui_feature_names == [FEATURE_NAME]
     else:
         assert room_model.tools == {}
+        assert room_model.agui_feature_names == []
 
     if room_quizzes:
         assert room_model.quizzes == {
@@ -717,6 +802,7 @@ def installation_tp_dburi(request):
 
 
 def test_installation_from_config(
+    the_agui_feature,
     installation_secrets,
     installation_environment,
     installation_haiku_rag_config_file,
@@ -742,7 +828,15 @@ def test_installation_from_config(
         **installation_tp_dburi,
     )
 
-    installation_model = models.Installation.from_config(installation_config)
+    # Ensure that the registry has only a  single, known feature.
+    with mock.patch.dict(
+        "soliplex.config.AGUI_FEATURES_BY_NAME",
+        clear=True,
+        the_agui_feature=the_agui_feature,
+    ):
+        installation_model = models.Installation.from_config(
+            installation_config,
+        )
 
     assert installation_model.id == INSTALLATION_ID
 
@@ -776,6 +870,15 @@ def test_installation_from_config(
     ):
         assert m_agent.id == c_agent.id
         assert m_agent.model_name == c_agent.model_name
+
+    for m_feature, c_feature in zip(
+        installation_model.agui_features,
+        [the_agui_feature],
+        strict=True,
+    ):
+        assert m_feature.name == c_feature.name
+        assert m_feature.description == c_feature.description
+        assert m_feature.source == c_feature.source
 
     if installation_oidc_paths:
         assert (

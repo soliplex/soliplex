@@ -15,6 +15,25 @@ id: "soliplex-conf-default-openai"
 meta:
 
   #------------------------------------------------------------------------
+  # Register AG-UI feature models so that they can be referenced by
+  # their 'name'
+  #
+  # 'soliplex.agui.features.FilterDocuments' and
+  # 'soliplex.agui.features.AskedAndAnswered' are registered by default,
+  # just as if we configured here:
+  #
+  # agui_features:
+  #
+  # - name: "filter_documents"
+  #   model_klass: "soliplex.agui.features.FilterDocuments"
+  #   source: "client"
+  #
+  # - name: "ask_history"
+  #   model_klass: "soliplex.agui.features.AskedAndAnswered"
+  #   source: "server"
+  #------------------------------------------------------------------------
+
+  #------------------------------------------------------------------------
   # Register tool configuration types so that they can be referenced by
   # their 'tool_name'
   #
