@@ -226,13 +226,21 @@ class ObservableHttpClient implements SoliplexHttpClient {
       try {
         notify(observer);
       } catch (e, stackTrace) {
-        // Observer threw exception - log but don't break request flow
-        // ignore: avoid_print
-        print(
-          'Warning: HttpObserver ${observer.runtimeType} threw exception: $e',
+        // Observer threw exception - log but don't break request flow.
+        // Use assert pattern to only log in debug mode (assertions enabled).
+        assert(
+          () {
+            // ignore: avoid_print
+            print(
+              'Warning: HttpObserver ${observer.runtimeType} '
+              'threw exception: $e',
+            );
+            // ignore: avoid_print
+            print(stackTrace);
+            return true;
+          }(),
+          'Observer exception logged',
         );
-        // ignore: avoid_print
-        print(stackTrace);
       }
     }
   }
