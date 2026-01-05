@@ -332,6 +332,33 @@ void main() {
       );
     });
 
+    test('treats empty existingRunId same as null', () async {
+      const roomId = 'room-1';
+      const threadId = 'thread-1';
+
+      await container.read(activeRunNotifierProvider.notifier).startRun(
+            roomId: roomId,
+            threadId: threadId,
+            userMessage: 'Test',
+            existingRunId: '',
+          );
+
+      final state = container.read(activeRunNotifierProvider);
+
+      expect(state, isA<RunningState>());
+      final runningState = state as RunningState;
+      expect(runningState.runId, 'backend-run-id-123');
+
+      // Verify createRun WAS called (empty string treated as null)
+      verify(
+        () => mockApi.createRun(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).called(1);
+    });
+
     test('throws StateError if run already active', () async {
       const roomId = 'room-1';
       const threadId = 'thread-1';

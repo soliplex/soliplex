@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:soliplex_frontend/core/auth/auth_provider.dart';
+import 'package:soliplex_frontend/core/auth/auth_state.dart';
 import 'package:soliplex_frontend/features/home/home_screen.dart';
+import 'package:soliplex_frontend/features/login/login_screen.dart';
 import 'package:soliplex_frontend/features/room/room_screen.dart';
 import 'package:soliplex_frontend/features/rooms/rooms_screen.dart';
 import 'package:soliplex_frontend/features/settings/settings_screen.dart';
@@ -49,89 +53,122 @@ NoTransitionPage<void> _staticPage({
   );
 }
 
-/// Application router configuration.
+/// Routes that don't require authentication.
+const _publicRoutes = {'/login'};
+
+/// Application router provider.
+///
+/// Creates a GoRouter that redirects unauthenticated users to login.
 ///
 /// Routes:
-/// - `/` - Home screen
-/// - `/rooms` - List of rooms
-/// - `/rooms/:roomId` - Room with thread selection (query param: ?thread=xyz)
+/// - `/login` - Login screen (public)
+/// - `/` - Home screen (requires auth)
+/// - `/rooms` - List of rooms (requires auth)
+/// - `/rooms/:roomId` - Room with thread selection (requires auth)
 /// - `/rooms/:roomId/thread/:threadId` - Redirects to query param format
-/// - `/settings` - Settings screen
+/// - `/settings` - Settings screen (requires auth)
 ///
 /// All routes use NoTransitionPage for instant navigation.
 /// Static screens are wrapped in AppShell via [_staticPage].
 /// RoomScreen builds its own AppShell for dynamic configuration.
-///
-/// AM7: Add auth redirect logic.
-final appRouter = GoRouter(
-  initialLocation: '/',
-  routes: [
-    GoRoute(
-      path: '/',
-      name: 'home',
-      pageBuilder: (context, state) => _staticPage(
-        title: const Text('Soliplex'),
-        body: const HomeScreen(),
-        actions: const [_SettingsButton()],
+final routerProvider = Provider<GoRouter>((ref) {
+  final authState = ref.watch(authProvider);
+
+  return GoRouter(
+    initialLocation: '/',
+    redirect: (context, state) {
+      final isAuthenticated = authState is Authenticated;
+      final isPublicRoute = _publicRoutes.contains(state.matchedLocation);
+
+      // Unauthenticated users go to login (except for public routes)
+      if (!isAuthenticated && !isPublicRoute) {
+        return '/login';
+      }
+
+      // Authenticated users on login page go to home
+      if (isAuthenticated && state.matchedLocation == '/login') {
+        return '/';
+      }
+
+      return null;
+    },
+    routes: [
+      // Login uses NoTransitionPage directly (no AppShell) -
+      // auth screens are intentionally chrome-less
+      GoRoute(
+        path: '/login',
+        name: 'login',
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: LoginScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/',
+        name: 'home',
+        pageBuilder: (context, state) => _staticPage(
+          title: const Text('Soliplex'),
+          body: const HomeScreen(),
+          actions: const [_SettingsButton()],
+        ),
+      ),
+      GoRoute(
+        path: '/rooms',
+        name: 'rooms',
+        pageBuilder: (context, state) => _staticPage(
+          title: const Text('Rooms'),
+          body: const RoomsScreen(),
+          actions: const [_SettingsButton()],
+        ),
+      ),
+      GoRoute(
+        path: '/rooms/:roomId',
+        name: 'room',
+        pageBuilder: (context, state) {
+          final roomId = state.pathParameters['roomId']!;
+          final threadId = state.uri.queryParameters['thread'];
+          return NoTransitionPage(
+            child: RoomScreen(roomId: roomId, initialThreadId: threadId),
+          );
+        },
+      ),
+      // Migration redirect: old thread URLs -> new query param format
+      GoRoute(
+        path: '/rooms/:roomId/thread/:threadId',
+        name: 'thread-redirect',
+        redirect: (context, state) {
+          final roomId = state.pathParameters['roomId']!;
+          final threadId = state.pathParameters['threadId']!;
+          return '/rooms/$roomId?thread=$threadId';
+        },
+      ),
+      GoRoute(
+        path: '/settings',
+        name: 'settings',
+        pageBuilder: (context, state) => _staticPage(
+          title: const Text('Settings'),
+          body: const SettingsScreen(),
+        ),
+      ),
+    ],
+    errorBuilder: (context, state) => _staticShell(
+      title: const Text('Error'),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ExcludeSemantics(
+              child: Icon(Icons.error_outline, size: 48),
+            ),
+            const SizedBox(height: 16),
+            Text('Page not found: ${state.uri}'),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => context.go('/'),
+              child: const Text('Go Home'),
+            ),
+          ],
+        ),
       ),
     ),
-    GoRoute(
-      path: '/rooms',
-      name: 'rooms',
-      pageBuilder: (context, state) => _staticPage(
-        title: const Text('Rooms'),
-        body: const RoomsScreen(),
-        actions: const [_SettingsButton()],
-      ),
-    ),
-    GoRoute(
-      path: '/rooms/:roomId',
-      name: 'room',
-      pageBuilder: (context, state) {
-        final roomId = state.pathParameters['roomId']!;
-        final threadId = state.uri.queryParameters['thread'];
-        return NoTransitionPage(
-          child: RoomScreen(roomId: roomId, initialThreadId: threadId),
-        );
-      },
-    ),
-    // Migration redirect: old thread URLs -> new query param format
-    GoRoute(
-      path: '/rooms/:roomId/thread/:threadId',
-      name: 'thread-redirect',
-      redirect: (context, state) {
-        final roomId = state.pathParameters['roomId']!;
-        final threadId = state.pathParameters['threadId']!;
-        return '/rooms/$roomId?thread=$threadId';
-      },
-    ),
-    GoRoute(
-      path: '/settings',
-      name: 'settings',
-      pageBuilder: (context, state) => _staticPage(
-        title: const Text('Settings'),
-        body: const SettingsScreen(),
-      ),
-    ),
-  ],
-  errorBuilder: (context, state) => _staticShell(
-    title: const Text('Error'),
-    body: Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const ExcludeSemantics(
-            child: Icon(Icons.error_outline, size: 48),
-          ),
-          const SizedBox(height: 16),
-          Text('Page not found: ${state.uri}'),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: () => context.go('/'),
-            child: const Text('Go Home'),
-          ),
-        ],
-      ),
-    ),
-  ),
-);
+  );
+});

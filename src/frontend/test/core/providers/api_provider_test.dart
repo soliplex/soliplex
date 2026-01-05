@@ -131,7 +131,7 @@ void main() {
 
       // Both apiProvider and agUiClientProvider should use the same
       // underlying observable client for unified HTTP logging
-      final sharedClient = container.read(observableClientProvider);
+      final sharedClient = container.read(authenticatedClientProvider);
 
       // Read both API clients
       container
@@ -139,7 +139,7 @@ void main() {
         ..read(agUiClientProvider);
 
       // Verify the shared client is still the same instance
-      final clientAfterClients = container.read(observableClientProvider);
+      final clientAfterClients = container.read(authenticatedClientProvider);
       expect(identical(sharedClient, clientAfterClients), isTrue);
     });
 
@@ -224,22 +224,23 @@ void main() {
     });
   });
 
-  group('observableClientProvider', () {
-    test('creates ObservableHttpClient instance', () {
+  group('authenticatedClientProvider', () {
+    test('creates SoliplexHttpClient instance', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      final client = container.read(observableClientProvider);
+      final client = container.read(authenticatedClientProvider);
 
-      expect(client, isA<ObservableHttpClient>());
+      // Returns authenticated wrapper around ObservableHttpClient
+      expect(client, isA<SoliplexHttpClient>());
     });
 
     test('is singleton across multiple reads', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      final client1 = container.read(observableClientProvider);
-      final client2 = container.read(observableClientProvider);
+      final client1 = container.read(authenticatedClientProvider);
+      final client2 = container.read(authenticatedClientProvider);
 
       expect(identical(client1, client2), isTrue);
     });
@@ -249,7 +250,7 @@ void main() {
       addTearDown(container.dispose);
 
       // Reading the observable client should initialize the log notifier
-      container.read(observableClientProvider);
+      container.read(authenticatedClientProvider);
 
       // The log notifier should be accessible and functional
       final logNotifier = container.read(httpLogProvider.notifier);
@@ -265,7 +266,7 @@ void main() {
         addTearDown(container.dispose);
 
         // Read the observable client directly
-        final sharedClient = container.read(observableClientProvider);
+        final sharedClient = container.read(authenticatedClientProvider);
 
         // Read the client from soliplexHttpClientProvider
         final httpClient = container.read(soliplexHttpClientProvider);
@@ -275,23 +276,23 @@ void main() {
       },
     );
 
-    test('httpTransportProvider depends on observableClientProvider', () {
+    test('httpTransportProvider depends on authenticatedClientProvider', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
       // Read observable client first to establish the shared instance
-      final sharedClient = container.read(observableClientProvider);
+      final sharedClient = container.read(authenticatedClientProvider);
 
       // Read the transport - it should use the same client
       container.read(httpTransportProvider);
 
       // Reading observable client again should return same instance,
       // proving the transport didn't create a separate client
-      final clientAfterTransport = container.read(observableClientProvider);
+      final clientAfterTransport = container.read(authenticatedClientProvider);
       expect(identical(sharedClient, clientAfterTransport), isTrue);
 
-      // Verify client is observable type (has logging capability)
-      expect(sharedClient, isA<ObservableHttpClient>());
+      // Verify client implements SoliplexHttpClient interface
+      expect(sharedClient, isA<SoliplexHttpClient>());
     });
   });
 }

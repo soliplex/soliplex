@@ -3,19 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_client_native/soliplex_client_native.dart';
+import 'package:soliplex_frontend/core/auth/auth_provider.dart';
 import 'package:soliplex_frontend/core/providers/config_provider.dart';
 import 'package:soliplex_frontend/core/providers/http_log_provider.dart';
 
-/// Provider for the shared observable HTTP client.
+/// Provider for the base observable HTTP client (without auth).
 ///
 /// Creates a single [ObservableHttpClient] that wraps the platform client
-/// and notifies [HttpLogNotifier] of all HTTP activity. This client is shared
-/// by both REST API ([httpTransportProvider]) and SSE streaming
-/// ([soliplexHttpClientProvider]) to provide unified HTTP logging.
+/// and notifies [HttpLogNotifier] of all HTTP activity.
 ///
-/// **Lifecycle**: Lives for the entire app session. Closed when container
-/// is disposed.
-final observableClientProvider = Provider<SoliplexHttpClient>((ref) {
+/// **Note**: Use [authenticatedClientProvider] for API requests; this provider
+/// is the base client without authentication.
+final _baseClientProvider = Provider<SoliplexHttpClient>((ref) {
   final baseClient = createPlatformClient();
   final observer = ref.watch(httpLogProvider.notifier);
   final observable = ObservableHttpClient(
@@ -32,10 +31,32 @@ final observableClientProvider = Provider<SoliplexHttpClient>((ref) {
   return observable;
 });
 
+/// Provider for the shared HTTP client with auth token injection.
+///
+/// Wraps the observable client to automatically add Authorization header
+/// when a token is available. This client is shared by both REST API
+/// ([httpTransportProvider]) and SSE streaming ([soliplexHttpClientProvider])
+/// to provide unified HTTP logging and authentication.
+///
+/// **Decorator order**: `Authenticated(Observable(Platform))`
+/// - Observer sees requests WITH auth headers (accurate logging)
+/// - Observer sees all responses including 401s
+///
+/// **Lifecycle**: Lives for the entire app session. Closed when container
+/// is disposed.
+final authenticatedClientProvider = Provider<SoliplexHttpClient>((ref) {
+  final observableClient = ref.watch(_baseClientProvider);
+
+  return AuthenticatedHttpClient(
+    observableClient,
+    () => ref.read(accessTokenProvider),
+  );
+});
+
 /// Provider for the HTTP transport layer.
 ///
 /// Creates a singleton [HttpTransport] instance using the shared
-/// [observableClientProvider]. All HTTP requests through this transport
+/// [authenticatedClientProvider]. All HTTP requests through this transport
 /// are logged to [httpLogProvider].
 ///
 /// **Lifecycle**: This is a non-autoDispose provider because the HTTP
@@ -44,11 +65,11 @@ final observableClientProvider = Provider<SoliplexHttpClient>((ref) {
 /// **Threading**: Safe to call from any isolate. The underlying
 /// adapter uses dart:http which is isolate-safe.
 final httpTransportProvider = Provider<HttpTransport>((ref) {
-  final client = ref.watch(observableClientProvider);
+  final client = ref.watch(authenticatedClientProvider);
   final transport = HttpTransport(client: client);
 
   // Note: Don't dispose transport here - client is managed by
-  // observableClientProvider
+  // authenticatedClientProvider
   return transport;
 });
 
@@ -116,10 +137,10 @@ final apiProvider = Provider<SoliplexApi>((ref) {
 
 /// Provider for the Soliplex HTTP client.
 ///
-/// Returns the shared [observableClientProvider] to ensure all HTTP activity
+/// Returns the shared [authenticatedClientProvider] to ensure all HTTP activity
 /// (both REST and SSE) is logged through [httpLogProvider].
 final soliplexHttpClientProvider = Provider<SoliplexHttpClient>((ref) {
-  return ref.watch(observableClientProvider);
+  return ref.watch(authenticatedClientProvider);
 });
 
 /// Provider for http.Client that uses our HTTP client stack.

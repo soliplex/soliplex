@@ -112,7 +112,7 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
 
     // Step 1: Get run_id (use existing or create new)
     final String runId;
-    if (existingRunId != null) {
+    if (existingRunId != null && existingRunId.isNotEmpty) {
       runId = existingRunId;
     } else {
       final api = ref.read(apiProvider);

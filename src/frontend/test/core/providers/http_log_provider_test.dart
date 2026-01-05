@@ -184,6 +184,100 @@ void main() {
       });
     });
 
+    group('sensitive data redaction', () {
+      test('redacts authorization header in request', () async {
+        final notifier = container.read(httpLogProvider.notifier);
+        final event = HttpRequestEvent(
+          requestId: 'req-1',
+          timestamp: DateTime.now(),
+          method: 'GET',
+          uri: Uri.parse('http://localhost/api/rooms'),
+          headers: const {'Authorization': 'Bearer secret-token-123'},
+        );
+
+        notifier.onRequest(event);
+        await pumpMicrotasks();
+
+        final events = container.read(httpLogProvider);
+        final stored = events.first as HttpRequestEvent;
+        expect(stored.headers['Authorization'], '[REDACTED]');
+      });
+
+      test('redacts sensitive query params in request URI', () async {
+        final notifier = container.read(httpLogProvider.notifier);
+        final event = HttpRequestEvent(
+          requestId: 'req-1',
+          timestamp: DateTime.now(),
+          method: 'GET',
+          uri: Uri.parse(
+            'http://localhost/callback?code=auth-code-123&state=state-456',
+          ),
+        );
+
+        notifier.onRequest(event);
+        await pumpMicrotasks();
+
+        final events = container.read(httpLogProvider);
+        final stored = events.first as HttpRequestEvent;
+        expect(stored.uri.queryParameters['code'], '[REDACTED]');
+        expect(stored.uri.queryParameters['state'], '[REDACTED]');
+      });
+
+      test('preserves non-sensitive query params', () async {
+        final notifier = container.read(httpLogProvider.notifier);
+        final event = HttpRequestEvent(
+          requestId: 'req-1',
+          timestamp: DateTime.now(),
+          method: 'GET',
+          uri: Uri.parse('http://localhost/api?page=1&limit=10'),
+        );
+
+        notifier.onRequest(event);
+        await pumpMicrotasks();
+
+        final events = container.read(httpLogProvider);
+        final stored = events.first as HttpRequestEvent;
+        expect(stored.uri.queryParameters['page'], '1');
+        expect(stored.uri.queryParameters['limit'], '10');
+      });
+
+      test('redacts sensitive query params in error event URI', () async {
+        final notifier = container.read(httpLogProvider.notifier);
+        final event = HttpErrorEvent(
+          requestId: 'req-1',
+          timestamp: DateTime.now(),
+          method: 'GET',
+          uri: Uri.parse('http://localhost/token?access_token=secret'),
+          exception: const NetworkException(message: 'Timeout'),
+          duration: const Duration(seconds: 2),
+        );
+
+        notifier.onError(event);
+        await pumpMicrotasks();
+
+        final events = container.read(httpLogProvider);
+        final stored = events.first as HttpErrorEvent;
+        expect(stored.uri.queryParameters['access_token'], '[REDACTED]');
+      });
+
+      test('redacts sensitive query params in stream start event', () async {
+        final notifier = container.read(httpLogProvider.notifier);
+        final event = HttpStreamStartEvent(
+          requestId: 'req-1',
+          timestamp: DateTime.now(),
+          method: 'GET',
+          uri: Uri.parse('http://localhost/stream?refresh_token=secret'),
+        );
+
+        notifier.onStreamStart(event);
+        await pumpMicrotasks();
+
+        final events = container.read(httpLogProvider);
+        final stored = events.first as HttpStreamStartEvent;
+        expect(stored.uri.queryParameters['refresh_token'], '[REDACTED]');
+      });
+    });
+
     group('event cap', () {
       test('limits events to maxEvents', () async {
         final notifier = container.read(httpLogProvider.notifier);
