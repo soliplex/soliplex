@@ -44,8 +44,7 @@ class CompletedAt extends CompletionTime {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is CompletedAt && time == other.time;
+      identical(this, other) || other is CompletedAt && time == other.time;
 
   @override
   int get hashCode => Object.hash(runtimeType, time);
