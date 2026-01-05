@@ -1365,6 +1365,7 @@ Track implementation status here. Update after each phase.
 - [x] `lib/core/auth/auth_state.dart` - Safe `toString()` on all states (no token exposure)
 - [x] `lib/app.dart` - Loading screen during auth restore
 - [x] `lib/main.dart` - `clearOnReinstall()` for iOS keychain persistence
+- [x] `lib/features/settings/settings_screen.dart` - Sign out button (triggers endSession + clears storage)
 - [x] `test/core/auth/auth_storage_test.dart` - Storage unit tests
 
 **Notes:**
@@ -1372,5 +1373,6 @@ Track implementation status here. Update after each phase.
 - Keychain uses `first_unlock_this_device` (not spec's original `whenUnlockedThisDeviceOnly`)
   to enable background token refresh. Spec updated to reflect this.
 - `clearOnReinstall()` handles iOS behavior where Keychain persists across app reinstalls
+- Sign out uses `flutter_appauth.endSession()` to properly terminate IdP session
 
 ### Slice 3 Status: ⏳ Not Started
