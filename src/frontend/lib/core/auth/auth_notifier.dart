@@ -49,11 +49,7 @@ class AuthNotifier extends Notifier<AuthState> {
     if (DateTime.now().isAfter(tokens.expiresAt)) {
       // Tokens expired - clear and require re-login
       // (Token refresh will be implemented in Slice 3)
-      try {
-        await _storage.clearTokens();
-      } on Exception catch (e) {
-        debugPrint('AuthNotifier: Failed to clear expired tokens: $e');
-      }
+      await _storage.clearTokens();
       state = const Unauthenticated();
       return;
     }
@@ -89,20 +85,15 @@ class AuthNotifier extends Notifier<AuthState> {
         expiresAt = DateTime.now().add(_fallbackTokenLifetime);
       }
 
-      // Save tokens to secure storage (may fail on unsigned macOS builds)
-      try {
-        await _storage.saveTokens(
-          accessToken: accessToken,
-          refreshToken: refreshToken,
-          expiresAt: expiresAt,
-          issuerId: issuer.id,
-          issuerDiscoveryUrl: issuer.discoveryUrl,
-          idToken: idToken,
-        );
-      } on Exception catch (e) {
-        debugPrint('AuthNotifier: Failed to persist tokens: $e');
-        // Continue - auth works, just won't persist across restarts
-      }
+      // Save tokens to secure storage
+      await _storage.saveTokens(
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+        expiresAt: expiresAt,
+        issuerId: issuer.id,
+        issuerDiscoveryUrl: issuer.discoveryUrl,
+        idToken: idToken,
+      );
 
       state = Authenticated(
         accessToken: accessToken,
@@ -132,11 +123,7 @@ class AuthNotifier extends Notifier<AuthState> {
         idToken: current.idToken,
       );
     }
-    try {
-      await _storage.clearTokens();
-    } on Exception catch (e) {
-      debugPrint('AuthNotifier: Failed to clear tokens on logout: $e');
-    }
+    await _storage.clearTokens();
     state = const Unauthenticated();
   }
 

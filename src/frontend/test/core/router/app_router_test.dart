@@ -20,8 +20,7 @@ Authenticated createAuthenticatedState() => Authenticated(
       refreshToken: 'test-refresh',
       expiresAt: DateTime.now().add(const Duration(hours: 1)),
       issuerId: 'test-issuer',
-      issuerDiscoveryUrl:
-          'https://sso.example.com/.well-known/openid-configuration',
+      issuerDiscoveryUrl: 'https://sso.example.com/.well-known/openid-configuration',
     );
 
 // Using dynamic list since Override type is internal in Riverpod 3.0
@@ -34,7 +33,9 @@ Widget createRouterApp({
       // Override auth state based on test requirement
       authProvider.overrideWith(
         () => createMockAuthNotifier(
-          authenticated ? createAuthenticatedState() : const Unauthenticated(),
+          authenticated
+              ? createAuthenticatedState()
+              : const Unauthenticated(),
         ),
       ),
       ...overrides,
