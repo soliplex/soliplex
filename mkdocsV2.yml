@@ -77,11 +77,15 @@ nav:
       - Keyboard Shortcuts: user-guide/keyboard-shortcuts.md
   - Admin Guide:
       - admin-guide/index.md
+      - Authentication:
+          - admin-guide/authentication/index.md
       - Configuration:
           - admin-guide/configuration/index.md
+          - Filesystem Layout: admin-guide/configuration/filesystem-layout.md
           - Installation: admin-guide/configuration/installation.md
           - Agents: admin-guide/configuration/agents.md
           - Rooms: admin-guide/configuration/rooms.md
+          - Completions: admin-guide/configuration/completions.md
           - RAG: admin-guide/configuration/rag.md
           - Secrets: admin-guide/configuration/secrets.md
           - Environment: admin-guide/configuration/environment.md

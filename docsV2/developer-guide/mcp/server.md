@@ -84,13 +84,32 @@ curl -H "Authorization: Bearer $OIDC_TOKEN" \
     http://localhost:8000/api/v1/rooms/{room_id}/mcp_token
 ```
 
-Response:
+**Request:**
+- Method: `GET`
+- Path: `/api/v1/rooms/{room_id}/mcp_token`
+- Headers: `Authorization: Bearer <OIDC_TOKEN>` (required unless `--no-auth-mode`)
+
+**Response:** `MCPToken` model
 ```json
 {
   "room_id": "research",
   "mcp_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
 ```
+
+### Token Generation
+
+Tokens are generated using `itsdangerous.URLSafeTimedSerializer`:
+
+```python
+# src/soliplex/mcp_auth.py
+def generate_url_safe_token(secret_key: str, salt: str) -> str:
+    """Generate a URL-safe token with timestamp."""
+    serializer = URLSafeTimedSerializer(secret_key)
+    return serializer.dumps(salt, salt=salt)
+```
+
+The `salt` parameter is the room ID, ensuring tokens are room-specific.
 
 ### Token Validation
 
@@ -168,10 +187,12 @@ Configure Claude Desktop's `claude_desktop_config.json`:
 
 ## Tool Wrappers
 
-Some tools require wrapping for MCP compatibility:
+Some tools require wrapping for MCP compatibility.
 
+### Wrapper Types
+
+**WithQueryMCPWrapper** - For tools that take a query parameter:
 ```python
-# Config wrapper for query-based tools
 @dataclasses.dataclass
 class WithQueryMCPWrapper:
     _func: abc.Callable[..., typing.Any]
@@ -180,6 +201,35 @@ class WithQueryMCPWrapper:
     def __call__(self, query):
         return self._func(query, tool_config=self._tool_config)
 ```
+
+**NoArgsMCPWrapper** - For tools that take no user parameters:
+```python
+@dataclasses.dataclass
+class NoArgsMCPWrapper:
+    _func: abc.Callable[..., typing.Any]
+    _tool_config: ToolConfig
+
+    def __call__(self):
+        return self._func(tool_config=self._tool_config)
+```
+
+### Wrapper Registry
+
+Tool-to-wrapper mappings are defined in `MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME`:
+
+```python
+MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME = {
+    "soliplex.tools.search_documents": WithQueryMCPWrapper,
+}
+```
+
+### Adding Custom Wrappers
+
+To expose a custom tool via MCP:
+
+1. Create a wrapper class if needed
+2. Register the tool in the wrapper registry
+3. Set `allow_mcp: true` in the tool configuration
 
 The wrapper curries in the tool configuration so MCP clients only need to provide the query parameter.
 

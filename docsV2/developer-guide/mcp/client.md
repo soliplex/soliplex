@@ -117,6 +117,18 @@ headers:
 
 The secret reference is resolved during configuration loading.
 
+### Secret Interpolation Details
+
+Different config fields handle secrets differently:
+
+| Field | Transport | Resolution Method |
+|-------|-----------|-------------------|
+| `env` | stdio | `get_secret()` - direct lookup |
+| `headers` | http | `interpolate_secrets()` - inline substitution |
+| `query_params` | http | `get_secret()` - direct lookup |
+
+**Security Note:** Query parameters are appended to the URL, which may expose secrets in server logs, browser history, or referrer headers. Prefer using `headers` for sensitive authentication tokens.
+
 ### Implementation
 
 ```python
@@ -260,6 +272,22 @@ MCP client connections may fail. Common issues:
 3. **Authentication failed** - Verify headers and secrets are correct
 4. **Tool not found** - Ensure the tool name matches exactly
 
+## Working Example
+
+See `example/rooms/mcptest/room_config.yaml` for a working stdio MCP client configuration:
+
+```yaml
+mcp_client_toolsets:
+  mcp_everything:
+    kind: "stdio"
+    command: "npx"
+    args:
+      - "-y"
+      - "@anthropic-ai/mcp-server-everything"
+    env:
+      SOME_VAR: "secret:SOME_SECRET"  # Environment with secret
+```
+
 ## Best Practices
 
 1. **Use allowed_tools** - Limit exposure to only needed tools
@@ -267,6 +295,7 @@ MCP client connections may fail. Common issues:
 3. **Test locally first** - Use stdio transport for local testing
 4. **Monitor connections** - Log MCP client activity
 5. **Handle failures gracefully** - External servers may be unavailable
+6. **Avoid query_params for secrets** - Use headers instead to prevent URL exposure
 
 ## Source Code
 

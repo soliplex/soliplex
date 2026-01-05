@@ -404,6 +404,66 @@ class Quiz(pydantic.BaseModel):
     questions: list[QuizQuestion]
 ```
 
+### QuizAnswer
+
+User's answer to a quiz question:
+
+```python
+class QuizAnswer(pydantic.BaseModel):
+    text: str  # The user's answer text
+```
+
+### QuizLLMJudgeResponse
+
+LLM's judgment on answer equivalence:
+
+```python
+class QuizLLMJudgeResponse(pydantic.BaseModel):
+    equivalent: bool  # Whether the answer is equivalent to expected
+```
+
+### QuizQuestionResponse
+
+Response after submitting a quiz answer:
+
+```python
+class QuizQuestionResponse(pydantic.BaseModel):
+    correct: str              # "correct", "incorrect", or "pending"
+    expected_output: str | None  # Expected answer (shown on incorrect)
+```
+
+---
+
+## Secret Models
+
+### Secret
+
+Secret configuration:
+
+```python
+class Secret(pydantic.BaseModel):
+    secret_name: str           # Identifier for the secret
+    sources: list[SecretSource]  # Ordered list of sources to try
+
+    @classmethod
+    def from_config(cls, secret_config) -> "Secret":
+        ...
+```
+
+### SecretSource
+
+Individual secret source:
+
+```python
+class SecretSource(pydantic.BaseModel):
+    kind: str                           # Source type: "env_var", "file", etc.
+    extra_arguments: dict[str, Any]     # Source-specific configuration
+
+    @classmethod
+    def from_config(cls, source_config) -> "SecretSource":
+        ...
+```
+
 ---
 
 ## Installation Models
@@ -423,6 +483,22 @@ class Installation(pydantic.BaseModel):
     @classmethod
     def from_config(cls, installation_config) -> "Installation":
         ...
+```
+
+**Note:** The API response is a subset of the full internal `InstallationConfig`. Additional internal fields include:
+
+```python
+# Internal InstallationConfig fields (not exposed in API)
+secrets: list[Secret] = []                    # Secret configurations
+environment: dict[str, str] = {}              # Environment variables
+haiku_rag_config_file: pathlib.Path | None    # Path to haiku-rag config
+agents: list[DefaultAgent] = []               # Default agent templates
+oidc_paths: list[pathlib.Path] = []           # OIDC config file paths
+room_paths: list[pathlib.Path] = []           # Room config directory paths
+completion_paths: list[pathlib.Path] = []     # Completion config paths
+quizzes_paths: list[pathlib.Path] = []        # Quiz config paths
+thread_persistence_dburi_sync: str | None     # Sync DB connection string
+thread_persistence_dburi_async: str | None    # Async DB connection string
 ```
 
 ---
@@ -462,7 +538,31 @@ AGUI_EventStream = AsyncIterator[agui_core.Event]
 
 # State
 AGUI_State = dict[str, typing.Any]
+
+# Document collections
+RAGDocumentSet = dict[str, RAGDocument]  # Map of document ID to document
+
+# Run collections
+AGUI_Runs = dict[str, AGUI_Run]  # Map of run ID to run
 ```
+
+## External Types
+
+Some types are imported from external dependencies:
+
+### Citation (from haiku-rag)
+
+```python
+# Imported from haiku.rag.graph.common.models
+class Citation:
+    chunk_id: str
+    document_uri: str | None
+    document_title: str | None
+    text: str
+    relevance_score: float
+```
+
+This type is used in `QuestionResponseCitations` for tracking document citations.
 
 ## Source Code
 

@@ -100,7 +100,7 @@ tools:
 
 ### ask_with_rich_citations
 
-Answers questions with inline citations from documents.
+Answers questions with inline citations from documents. This tool integrates with AG-UI state management to track document filtering and citation history.
 
 ```python
 async def ask_with_rich_citations(
@@ -118,6 +118,27 @@ tools:
 ```
 
 **Requirements:** `FASTAPI_CONTEXT` - needs RunContext with AGUI state
+
+**State Management:**
+
+This tool uses AG-UI state features to:
+
+1. **Read `filter_documents`** - If the client sends document IDs to filter, the tool restricts its search to those documents only
+2. **Update `ask_history`** - After answering, the tool emits a `STATE_DELTA` event with the question, response, and citations
+
+```python
+# Internal state model used by the tool
+class AWRC_AGUI_State(pydantic.BaseModel):
+    filter_documents: FilterDocuments | None = None  # Client-provided filter
+    ask_history: AskedAndAnswered | None = None      # Updated by tool
+```
+
+The state flow:
+1. Client sends `filter_documents` in `RunAgentInput.state`
+2. Tool reads filter from `ctx.deps.state`
+3. Tool performs filtered search and generates response
+4. Tool emits `STATE_DELTA` with updated `ask_history`
+5. Client receives delta and updates local state
 
 ---
 
@@ -153,6 +174,39 @@ class ToolConfig:
     tool_name: str       # Python import path
     allow_mcp: bool = False  # Expose via MCP
 ```
+
+### NoToolConfig Exception
+
+Tools that require configuration raise `NoToolConfig` when called without it:
+
+```python
+class NoToolConfig(ValueError):
+    """Raised when a tool is called without required configuration."""
+    pass
+```
+
+This typically occurs when:
+- A tool requiring `TOOL_CONFIG` is called without configuration
+- The tool config lookup fails in `ctx.deps.tool_configs`
+
+### Tool Config Lookup Pattern
+
+Some tools look up their configuration from `ctx.deps.tool_configs` rather than receiving it as a parameter:
+
+```python
+async def research_report(ctx: RunContext[AgentDependencies], question: str):
+    # Look up config by tool name
+    tool_config = ctx.deps.tool_configs.get("research_report")
+    if tool_config is None:
+        raise NoToolConfig()
+    # Use tool_config...
+```
+
+This pattern is used by:
+- `research_report`
+- `ask_with_rich_citations`
+
+The tool config is registered in the room's `tools` section and made available via agent dependencies.
 
 ### SearchDocumentsToolConfig
 

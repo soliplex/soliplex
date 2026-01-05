@@ -84,6 +84,18 @@ sequenceDiagram
 }
 ```
 
+**TEXT_MESSAGE_CHUNK**
+
+Alternative to START/CONTENT/END triplet for simpler streaming:
+```json
+{
+  "type": "TEXT_MESSAGE_CHUNK",
+  "message_id": "msg-1",
+  "role": "assistant",
+  "content": "Hello, world!"
+}
+```
+
 ### Thinking Events
 
 Extended thinking (Claude's reasoning) events:
@@ -175,6 +187,18 @@ Track individual agent steps within a run:
   "type": "TOOL_CALL_RESULT",
   "tool_call_id": "tc-1",
   "result": "[{\"content\": \"...\"}]"
+}
+```
+
+**TOOL_CALL_CHUNK**
+
+Alternative to START/ARGS/END triplet for simpler streaming:
+```json
+{
+  "type": "TOOL_CALL_CHUNK",
+  "tool_call_id": "tc-1",
+  "tool_name": "search_documents",
+  "args": "{\"query\": \"RAG\"}"
 }
 ```
 
@@ -358,6 +382,13 @@ async def tee_events(event_stream, event_list, on_done):
         yield event
     await on_done(events=event_list)
 ```
+
+**Note:** Thinking-related events are currently skipped during persistence due to an upstream issue (ag-ui #752). The following event types are not persisted:
+- `THINKING_START`
+- `THINKING_TEXT_MESSAGE_START`
+- `THINKING_TEXT_MESSAGE_CONTENT`
+- `THINKING_TEXT_MESSAGE_END`
+- `THINKING_END`
 
 ## Client Implementation
 

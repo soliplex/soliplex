@@ -49,7 +49,7 @@ Soliplex provides a complete platform for building AI-powered applications:
 
 ## Version
 
-This documentation covers Soliplex v0.29+.
+This documentation covers Soliplex v0.30+.
 
 ## Getting Help
 
