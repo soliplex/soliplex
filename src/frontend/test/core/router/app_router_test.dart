@@ -31,10 +31,13 @@ Widget createRouterApp({
   return ProviderScope(
     overrides: [
       // Override auth state based on test requirement
-      if (authenticated)
-        authProvider.overrideWith(
-          () => createMockAuthNotifier(createAuthenticatedState()),
+      authProvider.overrideWith(
+        () => createMockAuthNotifier(
+          authenticated
+              ? createAuthenticatedState()
+              : const Unauthenticated(),
         ),
+      ),
       ...overrides,
     ].cast(),
     child: Consumer(
