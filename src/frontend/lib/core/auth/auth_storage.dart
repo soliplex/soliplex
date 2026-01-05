@@ -10,6 +10,7 @@ abstract final class AuthStorageKeys {
   static const expiresAt = 'auth_expires_at';
   static const issuerId = 'auth_issuer_id';
   static const issuerDiscoveryUrl = 'auth_issuer_discovery_url';
+  static const clientId = 'auth_client_id';
 }
 
 /// Secure storage for authentication tokens.
@@ -59,6 +60,7 @@ class AuthStorage {
           storage.delete(key: AuthStorageKeys.expiresAt),
           storage.delete(key: AuthStorageKeys.issuerId),
           storage.delete(key: AuthStorageKeys.issuerDiscoveryUrl),
+          storage.delete(key: AuthStorageKeys.clientId),
         ]);
       } on Exception catch (e) {
         // Keychain may not be available (e.g., unsigned macOS builds).
@@ -77,7 +79,8 @@ class AuthStorage {
     required DateTime expiresAt,
     required String issuerId,
     required String issuerDiscoveryUrl,
-    String? idToken,
+    required String clientId,
+    required String idToken,
   }) async {
     await Future.wait([
       _storage.write(key: AuthStorageKeys.accessToken, value: accessToken),
@@ -91,8 +94,8 @@ class AuthStorage {
         key: AuthStorageKeys.issuerDiscoveryUrl,
         value: issuerDiscoveryUrl,
       ),
-      if (idToken != null)
-        _storage.write(key: AuthStorageKeys.idToken, value: idToken),
+      _storage.write(key: AuthStorageKeys.clientId, value: clientId),
+      _storage.write(key: AuthStorageKeys.idToken, value: idToken),
     ]);
   }
 
@@ -106,6 +109,7 @@ class AuthStorage {
       expiresAtStr,
       issuerId,
       issuerDiscoveryUrl,
+      clientId,
       idToken
     ) = await (
       _storage.read(key: AuthStorageKeys.accessToken),
@@ -113,6 +117,7 @@ class AuthStorage {
       _storage.read(key: AuthStorageKeys.expiresAt),
       _storage.read(key: AuthStorageKeys.issuerId),
       _storage.read(key: AuthStorageKeys.issuerDiscoveryUrl),
+      _storage.read(key: AuthStorageKeys.clientId),
       _storage.read(key: AuthStorageKeys.idToken),
     ).wait;
 
@@ -120,7 +125,9 @@ class AuthStorage {
         refreshToken == null ||
         expiresAtStr == null ||
         issuerId == null ||
-        issuerDiscoveryUrl == null) {
+        issuerDiscoveryUrl == null ||
+        clientId == null ||
+        idToken == null) {
       return null;
     }
 
@@ -133,6 +140,7 @@ class AuthStorage {
       expiresAt: expiresAt,
       issuerId: issuerId,
       issuerDiscoveryUrl: issuerDiscoveryUrl,
+      clientId: clientId,
       idToken: idToken,
     );
   }
@@ -146,6 +154,7 @@ class AuthStorage {
       _storage.delete(key: AuthStorageKeys.expiresAt),
       _storage.delete(key: AuthStorageKeys.issuerId),
       _storage.delete(key: AuthStorageKeys.issuerDiscoveryUrl),
+      _storage.delete(key: AuthStorageKeys.clientId),
     ]);
   }
 }
@@ -158,7 +167,8 @@ class StoredTokens {
     required this.expiresAt,
     required this.issuerId,
     required this.issuerDiscoveryUrl,
-    this.idToken,
+    required this.clientId,
+    required this.idToken,
   });
 
   final String accessToken;
@@ -166,5 +176,6 @@ class StoredTokens {
   final DateTime expiresAt;
   final String issuerId;
   final String issuerDiscoveryUrl;
-  final String? idToken;
+  final String clientId;
+  final String idToken;
 }

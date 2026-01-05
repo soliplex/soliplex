@@ -68,14 +68,9 @@ Future<AuthResult> authenticate(
 /// The [appAuth] parameter allows injection for testing.
 Future<void> endSession({
   required String discoveryUrl,
-  required String? idToken,
+  required String idToken,
   FlutterAppAuth appAuth = const FlutterAppAuth(),
 }) async {
-  if (idToken == null) {
-    // No idToken available - can't end session at IdP
-    return;
-  }
-
   try {
     await appAuth.endSession(
       EndSessionRequest(

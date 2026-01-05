@@ -64,6 +64,7 @@ class AuthNotifier extends Notifier<AuthState> {
       expiresAt: tokens.expiresAt,
       issuerId: tokens.issuerId,
       issuerDiscoveryUrl: tokens.issuerDiscoveryUrl,
+      clientId: tokens.clientId,
       idToken: tokens.idToken,
     );
   }
@@ -72,6 +73,9 @@ class AuthNotifier extends Notifier<AuthState> {
   ///
   /// Opens system browser for authentication, exchanges code for tokens,
   /// and persists tokens to secure storage.
+  ///
+  /// Throws [AuthException] if authentication fails or if the IdP doesn't
+  /// return an id_token (required for proper OIDC logout).
   Future<void> signIn(OidcIssuer issuer) async {
     try {
       final result = await authenticate(issuer);
@@ -79,6 +83,11 @@ class AuthNotifier extends Notifier<AuthState> {
       final accessToken = result.accessToken;
       final refreshToken = result.refreshToken ?? '';
       final idToken = result.idToken;
+
+      // id_token is required for proper OIDC logout
+      if (idToken == null) {
+        throw const AuthException('IdP did not return id_token');
+      }
 
       var expiresAt = result.expiresAt;
       if (expiresAt == null) {
@@ -97,6 +106,7 @@ class AuthNotifier extends Notifier<AuthState> {
           expiresAt: expiresAt,
           issuerId: issuer.id,
           issuerDiscoveryUrl: issuer.discoveryUrl,
+          clientId: issuer.clientId,
           idToken: idToken,
         );
       } on Exception catch (e) {
@@ -110,6 +120,7 @@ class AuthNotifier extends Notifier<AuthState> {
         expiresAt: expiresAt,
         issuerId: issuer.id,
         issuerDiscoveryUrl: issuer.discoveryUrl,
+        clientId: issuer.clientId,
         idToken: idToken,
       );
     } on AuthException {

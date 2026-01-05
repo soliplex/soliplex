@@ -22,6 +22,8 @@ Authenticated createAuthenticatedState() => Authenticated(
       issuerId: 'test-issuer',
       issuerDiscoveryUrl:
           'https://sso.example.com/.well-known/openid-configuration',
+      clientId: 'test-client',
+      idToken: 'test-id-token',
     );
 
 // Using dynamic list since Override type is internal in Riverpod 3.0

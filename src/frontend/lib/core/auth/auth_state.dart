@@ -32,7 +32,8 @@ class Authenticated extends AuthState {
     required this.expiresAt,
     required this.issuerId,
     required this.issuerDiscoveryUrl,
-    this.idToken,
+    required this.clientId,
+    required this.idToken,
     this.userInfo,
   });
 
@@ -41,7 +42,8 @@ class Authenticated extends AuthState {
   final DateTime expiresAt;
   final String issuerId;
   final String issuerDiscoveryUrl;
-  final String? idToken;
+  final String clientId;
+  final String idToken;
   final Map<String, dynamic>? userInfo;
 
   /// Whether the access token has expired.
@@ -62,6 +64,7 @@ class Authenticated extends AuthState {
       other.expiresAt == expiresAt &&
       other.issuerId == issuerId &&
       other.issuerDiscoveryUrl == issuerDiscoveryUrl &&
+      other.clientId == clientId &&
       other.idToken == idToken;
 
   @override
@@ -71,6 +74,7 @@ class Authenticated extends AuthState {
         expiresAt,
         issuerId,
         issuerDiscoveryUrl,
+        clientId,
         idToken,
       );
 
