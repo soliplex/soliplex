@@ -50,7 +50,7 @@ CODE_SIGN_IDENTITY = Apple Development
 
 1. Go to <https://developer.apple.com/account>
 2. Click "Membership details"
-3. Copy the 10-character Team ID (e.g., `XXXXXXXXXX`)
+3. Copy the 10-character Team ID (e.g., `HYA3HSRUJ8`)
 
 **Verification:**
 
@@ -66,27 +66,19 @@ per-session but tokens don't persist, requiring re-login on each launch.
 
 ### iOS
 
-#### Code Signing (Required for Physical Devices)
+#### Code Signing
 
-iOS uses the same xcconfig pattern as macOS:
+iOS uses the same `DEVELOPMENT_TEAM` from Xcode's automatic signing. Open
+`ios/Runner.xcworkspace` in Xcode and select your team under:
 
-```bash
-# 1. Copy the template
-cp ios/Runner/Configs/Local.xcconfig.template ios/Runner/Configs/Local.xcconfig
+**Runner > Signing & Capabilities > Team**
 
-# 2. Edit Local.xcconfig and add your Team ID
-```
-
-Your `Local.xcconfig` should contain:
-
-```text
-DEVELOPMENT_TEAM = YOUR_TEAM_ID_HERE
-```
+Alternatively, create an iOS-specific Local.xcconfig if needed.
 
 #### Simulator vs Device
 
 - **Simulator:** No signing required for debug builds
-- **Physical device:** Requires `Local.xcconfig` with valid `DEVELOPMENT_TEAM`
+- **Physical device:** Requires valid signing and provisioning profile
 
 ### Web
 
@@ -142,7 +134,5 @@ flutter upgrade
 | File | Purpose |
 |------|---------|
 | `macos/Runner/Configs/Local.xcconfig.template` | Template for macOS signing |
-| `macos/Runner/Configs/Local.xcconfig` | Your macOS signing config (gitignored) |
-| `ios/Runner/Configs/Local.xcconfig.template` | Template for iOS signing |
-| `ios/Runner/Configs/Local.xcconfig` | Your iOS signing config (gitignored) |
+| `macos/Runner/Configs/Local.xcconfig` | Your signing config (gitignored) |
 | `.gitignore` | Excludes `**/Local.xcconfig` |
