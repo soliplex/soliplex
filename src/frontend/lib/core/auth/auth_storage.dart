@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -31,7 +32,6 @@ class AuthStorage {
       ),
       mOptions: MacOsOptions(
         accessibility: KeychainAccessibility.first_unlock_this_device,
-        accountName: 'com.enfold.soliplex.oidc',
       ),
     );
   }
@@ -41,21 +41,31 @@ class AuthStorage {
   /// iOS preserves Keychain data across app uninstall/reinstall. This can
   /// cause issues where a reinstalled app inherits tokens from a previous
   /// installation. Call this early in app initialization (e.g., main.dart).
+  ///
+  /// On macOS without code signing, Keychain access may fail. This is handled
+  /// gracefully since macOS doesn't have the same reinstall persistence issue.
   static Future<void> clearOnReinstall() async {
     const key = 'auth_storage_initialized';
     final prefs = await SharedPreferences.getInstance();
 
     if (!prefs.containsKey(key)) {
       // First launch after install - clear any stale keychain data
-      final storage = _createSecureStorage();
-      await Future.wait([
-        storage.delete(key: AuthStorageKeys.accessToken),
-        storage.delete(key: AuthStorageKeys.refreshToken),
-        storage.delete(key: AuthStorageKeys.idToken),
-        storage.delete(key: AuthStorageKeys.expiresAt),
-        storage.delete(key: AuthStorageKeys.issuerId),
-        storage.delete(key: AuthStorageKeys.issuerDiscoveryUrl),
-      ]);
+      try {
+        final storage = _createSecureStorage();
+        await Future.wait([
+          storage.delete(key: AuthStorageKeys.accessToken),
+          storage.delete(key: AuthStorageKeys.refreshToken),
+          storage.delete(key: AuthStorageKeys.idToken),
+          storage.delete(key: AuthStorageKeys.expiresAt),
+          storage.delete(key: AuthStorageKeys.issuerId),
+          storage.delete(key: AuthStorageKeys.issuerDiscoveryUrl),
+        ]);
+      } on Exception catch (e) {
+        // Keychain may not be available (e.g., unsigned macOS builds).
+        // This is acceptable since macOS doesn't persist Keychain across
+        // uninstall like iOS does.
+        debugPrint('AuthStorage: clearOnReinstall skipped: $e');
+      }
       await prefs.setBool(key, true);
     }
   }
