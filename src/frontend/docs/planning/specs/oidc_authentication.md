@@ -982,18 +982,26 @@ await ref.read(authProvider.notifier).restoreSession();
 ```dart
 const storage = FlutterSecureStorage(
   iOptions: IOSOptions(
-    accessibility: KeychainAccessibility.whenUnlockedThisDeviceOnly,
+    accessibility: KeychainAccessibility.first_unlock_this_device,
   ),
   mOptions: MacOsOptions(
-    accessibility: KeychainAccessibility.whenUnlockedThisDeviceOnly,
+    accessibility: KeychainAccessibility.first_unlock_this_device,
+    accountName: 'com.enfold.soliplex.oidc',
   ),
 );
 ```
 
+**Accessibility choice**: `first_unlock_this_device` (not `whenUnlockedThisDeviceOnly`) because:
+
+- Enables background token refresh without requiring device to be actively unlocked
+- Still prevents backup/restore to different devices (`thisDeviceOnly` suffix)
+- Still requires at least one unlock after boot before tokens are accessible
+- Tradeoff: tokens accessible when device is locked (after first unlock)
+
 This prevents:
 
 - Tokens being restored from backup to another device
-- Access when device is locked
+- Access before first device unlock after boot
 
 **Storage Keys**:
 
@@ -1275,6 +1283,19 @@ Track implementation status here. Update after each phase.
 - HTTP filtering in `http_log_provider.dart` not `http_observer.dart`
 - Error messages sanitized per Sentinel review (generic to user, full in logs)
 
-### Slice 2 Status: ⏳ Not Started
+### Slice 2 Status: ✅ Complete
+
+- [x] `lib/core/auth/auth_storage.dart` - Secure storage wrapper with Keychain config
+- [x] `lib/core/auth/auth_notifier.dart` - Session restore and token persistence
+- [x] `lib/core/auth/auth_state.dart` - Safe `toString()` on all states (no token exposure)
+- [x] `lib/app.dart` - Loading screen during auth restore
+- [x] `lib/main.dart` - `clearOnReinstall()` for iOS keychain persistence
+- [x] `test/core/auth/auth_storage_test.dart` - Storage unit tests
+
+**Notes:**
+
+- Keychain uses `first_unlock_this_device` (not spec's original `whenUnlockedThisDeviceOnly`)
+  to enable background token refresh. Spec updated to reflect this.
+- `clearOnReinstall()` handles iOS behavior where Keychain persists across app reinstalls
 
 ### Slice 3 Status: ⏳ Not Started
