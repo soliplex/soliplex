@@ -16,10 +16,19 @@ class _MockAuthNotifier extends Notifier<AuthState> implements AuthNotifier {
   String? get accessToken => null;
 
   @override
+  bool get needsRefresh => false;
+
+  @override
   Future<void> signIn(OidcIssuer issuer) async {}
 
   @override
   Future<void> signOut() async {}
+
+  @override
+  Future<void> refreshIfExpiringSoon() async {}
+
+  @override
+  Future<bool> tryRefresh() async => false;
 }
 
 void main() {
