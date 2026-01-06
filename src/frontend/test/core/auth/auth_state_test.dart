@@ -38,8 +38,8 @@ void main() {
       DateTime? expiresAt,
       String issuerId = 'issuer-1',
       String issuerDiscoveryUrl = 'https://idp.example.com/.well-known',
-      String? idToken = 'id-token',
-      Map<String, dynamic>? userInfo,
+      String clientId = 'client-app',
+      String idToken = 'id-token',
     }) {
       return Authenticated(
         accessToken: accessToken,
@@ -47,8 +47,8 @@ void main() {
         expiresAt: expiresAt ?? defaultExpiresAt,
         issuerId: issuerId,
         issuerDiscoveryUrl: issuerDiscoveryUrl,
+        clientId: clientId,
         idToken: idToken,
-        userInfo: userInfo,
       );
     }
 
@@ -89,25 +89,18 @@ void main() {
         expect(a, isNot(equals(b)));
       });
 
+      test('not equal when clientId differs', () {
+        final a = createAuth(clientId: 'client-a');
+        final b = createAuth(clientId: 'client-b');
+
+        expect(a, isNot(equals(b)));
+      });
+
       test('not equal when idToken differs', () {
         final a = createAuth(idToken: 'id-a');
         final b = createAuth(idToken: 'id-b');
 
         expect(a, isNot(equals(b)));
-      });
-
-      test('equal when only userInfo differs', () {
-        final a = createAuth(userInfo: {'name': 'Alice'});
-        final b = createAuth(userInfo: {'name': 'Bob'});
-
-        expect(a, equals(b));
-      });
-
-      test('equal when one has userInfo and other does not', () {
-        final a = createAuth(userInfo: {'name': 'Alice'});
-        final b = createAuth();
-
-        expect(a, equals(b));
       });
     });
 

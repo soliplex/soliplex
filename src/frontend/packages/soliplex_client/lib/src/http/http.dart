@@ -5,4 +5,6 @@ export 'http_observer.dart';
 export 'http_response.dart';
 export 'http_transport.dart';
 export 'observable_http_client.dart';
+export 'refreshing_http_client.dart';
 export 'soliplex_http_client.dart';
+export 'token_refresher.dart';

@@ -41,7 +41,7 @@ abstract class HttpObserver {
   /// Called when a request is about to be sent.
   ///
   /// [event] contains request details (method, uri, headers).
-  /// Body is not included to avoid logging sensitive data by default.
+  /// Body is intentionally excluded—tokens and credentials may be in flight.
   void onRequest(HttpRequestEvent event);
 
   /// Called when a response is received (both success and error status codes).

@@ -114,8 +114,6 @@ local.properties
 **/ios/Flutter/Flutter.framework
 **/ios/Flutter/Flutter.podspec
 **/ios/Flutter/Generated.xcconfig
-**/ios/Flutter/Debug.xcconfig
-**/ios/Flutter/Release.xcconfig
 **/ios/Flutter/ephemeral
 **/ios/Flutter/app.flx
 **/ios/Flutter/app.zip
@@ -128,9 +126,6 @@ local.properties
 **/Flutter/ephemeral/
 **/Pods/
 **/macos/Flutter/GeneratedPluginRegistrant.swift
-**/macos/Flutter/Flutter-Debug.xcconfig
-**/macos/Flutter/Flutter-Profile.xcconfig
-**/macos/Flutter/Flutter-Release.xcconfig
 **/macos/Flutter/ephemeral
 **/xcuserdata/
 

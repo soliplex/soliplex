@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:soliplex_frontend/core/auth/auth_state.dart';
 
 /// Storage keys for authentication tokens.
 abstract final class AuthStorageKeys {
@@ -10,6 +11,7 @@ abstract final class AuthStorageKeys {
   static const expiresAt = 'auth_expires_at';
   static const issuerId = 'auth_issuer_id';
   static const issuerDiscoveryUrl = 'auth_issuer_discovery_url';
+  static const clientId = 'auth_client_id';
 }
 
 /// Secure storage for authentication tokens.
@@ -59,53 +61,54 @@ class AuthStorage {
           storage.delete(key: AuthStorageKeys.expiresAt),
           storage.delete(key: AuthStorageKeys.issuerId),
           storage.delete(key: AuthStorageKeys.issuerDiscoveryUrl),
+          storage.delete(key: AuthStorageKeys.clientId),
         ]);
-      } on Exception catch (e) {
+      } on Exception {
         // Keychain may not be available (e.g., unsigned macOS builds).
         // This is acceptable since macOS doesn't persist Keychain across
         // uninstall like iOS does.
-        debugPrint('AuthStorage: clearOnReinstall skipped: $e');
+        debugPrint('AuthStorage: clearOnReinstall skipped');
       }
       await prefs.setBool(key, true);
     }
   }
 
-  /// Saves all authentication tokens to secure storage.
-  Future<void> saveTokens({
-    required String accessToken,
-    required String refreshToken,
-    required DateTime expiresAt,
-    required String issuerId,
-    required String issuerDiscoveryUrl,
-    String? idToken,
-  }) async {
+  /// Saves authentication state to secure storage.
+  Future<void> saveTokens(Authenticated tokens) async {
     await Future.wait([
-      _storage.write(key: AuthStorageKeys.accessToken, value: accessToken),
-      _storage.write(key: AuthStorageKeys.refreshToken, value: refreshToken),
+      _storage.write(
+        key: AuthStorageKeys.accessToken,
+        value: tokens.accessToken,
+      ),
+      _storage.write(
+        key: AuthStorageKeys.refreshToken,
+        value: tokens.refreshToken,
+      ),
       _storage.write(
         key: AuthStorageKeys.expiresAt,
-        value: expiresAt.toIso8601String(),
+        value: tokens.expiresAt.toIso8601String(),
       ),
-      _storage.write(key: AuthStorageKeys.issuerId, value: issuerId),
+      _storage.write(key: AuthStorageKeys.issuerId, value: tokens.issuerId),
       _storage.write(
         key: AuthStorageKeys.issuerDiscoveryUrl,
-        value: issuerDiscoveryUrl,
+        value: tokens.issuerDiscoveryUrl,
       ),
-      if (idToken != null)
-        _storage.write(key: AuthStorageKeys.idToken, value: idToken),
+      _storage.write(key: AuthStorageKeys.clientId, value: tokens.clientId),
+      _storage.write(key: AuthStorageKeys.idToken, value: tokens.idToken),
     ]);
   }
 
-  /// Loads stored authentication tokens.
+  /// Loads stored authentication state.
   ///
   /// Returns null if no tokens are stored or if required fields are missing.
-  Future<StoredTokens?> loadTokens() async {
+  Future<Authenticated?> loadTokens() async {
     final (
       accessToken,
       refreshToken,
       expiresAtStr,
       issuerId,
       issuerDiscoveryUrl,
+      clientId,
       idToken
     ) = await (
       _storage.read(key: AuthStorageKeys.accessToken),
@@ -113,6 +116,7 @@ class AuthStorage {
       _storage.read(key: AuthStorageKeys.expiresAt),
       _storage.read(key: AuthStorageKeys.issuerId),
       _storage.read(key: AuthStorageKeys.issuerDiscoveryUrl),
+      _storage.read(key: AuthStorageKeys.clientId),
       _storage.read(key: AuthStorageKeys.idToken),
     ).wait;
 
@@ -120,19 +124,22 @@ class AuthStorage {
         refreshToken == null ||
         expiresAtStr == null ||
         issuerId == null ||
-        issuerDiscoveryUrl == null) {
+        issuerDiscoveryUrl == null ||
+        clientId == null ||
+        idToken == null) {
       return null;
     }
 
     final expiresAt = DateTime.tryParse(expiresAtStr);
     if (expiresAt == null) return null;
 
-    return StoredTokens(
+    return Authenticated(
       accessToken: accessToken,
       refreshToken: refreshToken,
       expiresAt: expiresAt,
       issuerId: issuerId,
       issuerDiscoveryUrl: issuerDiscoveryUrl,
+      clientId: clientId,
       idToken: idToken,
     );
   }
@@ -146,25 +153,7 @@ class AuthStorage {
       _storage.delete(key: AuthStorageKeys.expiresAt),
       _storage.delete(key: AuthStorageKeys.issuerId),
       _storage.delete(key: AuthStorageKeys.issuerDiscoveryUrl),
+      _storage.delete(key: AuthStorageKeys.clientId),
     ]);
   }
-}
-
-/// Tokens loaded from secure storage.
-class StoredTokens {
-  const StoredTokens({
-    required this.accessToken,
-    required this.refreshToken,
-    required this.expiresAt,
-    required this.issuerId,
-    required this.issuerDiscoveryUrl,
-    this.idToken,
-  });
-
-  final String accessToken;
-  final String refreshToken;
-  final DateTime expiresAt;
-  final String issuerId;
-  final String issuerDiscoveryUrl;
-  final String? idToken;
 }

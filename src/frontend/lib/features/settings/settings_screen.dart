@@ -56,12 +56,12 @@ class _AuthSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return switch (authState) {
-      Authenticated(:final issuerId, :final userInfo) => Column(
+      Authenticated(:final issuerId) => Column(
           children: [
             ListTile(
               leading: const Icon(Icons.person),
               title: const Text('Signed In'),
-              subtitle: Text(_displayName(userInfo, issuerId)),
+              subtitle: Text('via $issuerId'),
             ),
             ListTile(
               leading: const Icon(Icons.logout),
@@ -85,16 +85,6 @@ class _AuthSection extends ConsumerWidget {
           enabled: false,
         ),
     };
-  }
-
-  String _displayName(Map<String, dynamic>? userInfo, String issuerId) {
-    if (userInfo != null) {
-      final name = userInfo['name'] ?? userInfo['preferred_username'];
-      final email = userInfo['email'];
-      if (name != null) return '$name${email != null ? ' ($email)' : ''}';
-      if (email != null) return email.toString();
-    }
-    return 'via $issuerId';
   }
 
   Future<void> _confirmSignOut(BuildContext context, WidgetRef ref) async {

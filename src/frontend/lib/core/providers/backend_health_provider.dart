@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
+import 'package:soliplex_frontend/core/providers/api_provider.dart';
 import 'package:soliplex_frontend/core/providers/config_provider.dart';
 
 /// Provider for backend health status.
@@ -27,15 +27,20 @@ import 'package:soliplex_frontend/core/providers/config_provider.dart';
 ///
 /// **Refresh**: Use `ref.refresh(backendHealthProvider)` to manually
 /// re-check backend health.
+///
+/// **Observability**: Uses [baseHttpClientProvider] so health checks appear
+/// in the HTTP inspector. Does not use authenticated client since `/api/ok`
+/// doesn't require authentication.
 final backendHealthProvider = FutureProvider<bool>((ref) async {
   final config = ref.watch(configProvider);
+  final httpClient = ref.watch(baseHttpClientProvider);
 
   try {
-    final response = await http
-        .get(
-          Uri.parse('${config.baseUrl}/api/ok'),
-        )
-        .timeout(const Duration(seconds: 5));
+    final response = await httpClient.request(
+      'GET',
+      Uri.parse('${config.baseUrl}/api/ok'),
+      timeout: const Duration(seconds: 5),
+    );
 
     return response.statusCode == 200;
   } catch (e) {

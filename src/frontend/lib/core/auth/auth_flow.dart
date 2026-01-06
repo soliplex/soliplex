@@ -56,8 +56,9 @@ Future<AuthResult> authenticate(
       idToken: result.idToken,
       expiresAt: result.accessTokenExpirationDateTime,
     );
-  } on Exception catch (e) {
-    debugPrint('Authentication failed: $e');
+  } on Exception {
+    // Note: Don't log exception details - may contain sensitive data
+    debugPrint('Authentication failed');
     throw const AuthException('Authentication failed. Please try again.');
   }
 }
@@ -68,14 +69,9 @@ Future<AuthResult> authenticate(
 /// The [appAuth] parameter allows injection for testing.
 Future<void> endSession({
   required String discoveryUrl,
-  required String? idToken,
+  required String idToken,
   FlutterAppAuth appAuth = const FlutterAppAuth(),
 }) async {
-  if (idToken == null) {
-    // No idToken available - can't end session at IdP
-    return;
-  }
-
   try {
     await appAuth.endSession(
       EndSessionRequest(
@@ -84,8 +80,9 @@ Future<void> endSession({
         postLogoutRedirectUrl: _redirectUri,
       ),
     );
-  } on Exception catch (e) {
+  } on Exception {
     // endSession failure shouldn't prevent local logout
-    debugPrint('IdP session termination failed (local logout proceeds): $e');
+    // Note: Don't log exception details - may contain sensitive data
+    debugPrint('IdP session termination failed (local logout proceeds)');
   }
 }

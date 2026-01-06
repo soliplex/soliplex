@@ -22,6 +22,8 @@ Authenticated createAuthenticatedState() => Authenticated(
       issuerId: 'test-issuer',
       issuerDiscoveryUrl:
           'https://sso.example.com/.well-known/openid-configuration',
+      clientId: 'test-client',
+      idToken: 'test-id-token',
     );
 
 // Using dynamic list since Override type is internal in Riverpod 3.0
@@ -264,4 +266,116 @@ void main() {
       expect(find.byType(HomeScreen), findsOneWidget);
     });
   });
+
+  group('Auth state changes', () {
+    testWidgets('logout from deep navigation redirects to /login',
+        (tester) async {
+      // Start authenticated at /rooms
+      final container = ProviderContainer(
+        overrides: [
+          authProvider.overrideWith(
+            () => _ControllableAuthNotifier(createAuthenticatedState()),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: Consumer(
+            builder: (context, ref, _) {
+              final router = ref.watch(routerProvider);
+              return MaterialApp.router(routerConfig: router);
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Navigate to /rooms
+      container.read(routerProvider).go('/rooms');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RoomsScreen), findsOneWidget);
+
+      // Simulate logout
+      (container.read(authProvider.notifier) as _ControllableAuthNotifier)
+          .setUnauthenticated();
+      await tester.pumpAndSettle();
+
+      // Should redirect to /login
+      expect(find.byType(LoginScreen), findsOneWidget);
+    });
+
+    testWidgets('token refresh preserves navigation location', (tester) async {
+      // Start authenticated at /rooms
+      final container = ProviderContainer(
+        overrides: [
+          authProvider.overrideWith(
+            () => _ControllableAuthNotifier(createAuthenticatedState()),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: Consumer(
+            builder: (context, ref, _) {
+              final router = ref.watch(routerProvider);
+              return MaterialApp.router(routerConfig: router);
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Navigate to /rooms
+      container.read(routerProvider).go('/rooms');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RoomsScreen), findsOneWidget);
+
+      // Simulate token refresh (new tokens, still authenticated)
+      (container.read(authProvider.notifier) as _ControllableAuthNotifier)
+          .refreshTokens();
+      await tester.pumpAndSettle();
+
+      // Should stay at /rooms (NOT redirect to /)
+      expect(find.byType(RoomsScreen), findsOneWidget);
+      expect(find.byType(HomeScreen), findsNothing);
+    });
+  });
+}
+
+/// Controllable AuthNotifier for testing auth state transitions.
+class _ControllableAuthNotifier extends AuthNotifier {
+  _ControllableAuthNotifier(this._initialState);
+  final AuthState _initialState;
+
+  @override
+  AuthState build() => _initialState;
+
+  /// Simulate logout.
+  void setUnauthenticated() {
+    state = const Unauthenticated();
+  }
+
+  /// Simulate token refresh (new tokens, still authenticated).
+  void refreshTokens() {
+    final current = state;
+    if (current is Authenticated) {
+      state = Authenticated(
+        accessToken: 'refreshed-token-${DateTime.now().millisecondsSinceEpoch}',
+        refreshToken: current.refreshToken,
+        expiresAt: DateTime.now().add(const Duration(hours: 1)),
+        issuerId: current.issuerId,
+        issuerDiscoveryUrl: current.issuerDiscoveryUrl,
+        clientId: current.clientId,
+        idToken: current.idToken,
+      );
+    }
+  }
 }

@@ -1,4 +1,5 @@
 import 'package:meta/meta.dart';
+import 'package:soliplex_client/soliplex_client.dart';
 
 /// Authentication state for the application.
 ///
@@ -32,8 +33,8 @@ class Authenticated extends AuthState {
     required this.expiresAt,
     required this.issuerId,
     required this.issuerDiscoveryUrl,
-    this.idToken,
-    this.userInfo,
+    required this.clientId,
+    required this.idToken,
   });
 
   final String accessToken;
@@ -41,19 +42,17 @@ class Authenticated extends AuthState {
   final DateTime expiresAt;
   final String issuerId;
   final String issuerDiscoveryUrl;
-  final String? idToken;
-  final Map<String, dynamic>? userInfo;
+  final String clientId;
+  final String idToken;
 
   /// Whether the access token has expired.
   bool get isExpired => DateTime.now().isAfter(expiresAt);
 
-  /// Whether the access token needs refresh (within 1 minute of expiry).
+  /// Whether the access token needs refresh (expiring soon).
   bool get needsRefresh => DateTime.now().isAfter(
-        expiresAt.subtract(const Duration(minutes: 1)),
+        expiresAt.subtract(TokenRefreshService.refreshThreshold),
       );
 
-  // userInfo excluded from equality: it's derived/optional data that may be
-  // fetched lazily. Two auth states with same tokens are logically equal.
   @override
   bool operator ==(Object other) =>
       other is Authenticated &&
@@ -62,6 +61,7 @@ class Authenticated extends AuthState {
       other.expiresAt == expiresAt &&
       other.issuerId == issuerId &&
       other.issuerDiscoveryUrl == issuerDiscoveryUrl &&
+      other.clientId == clientId &&
       other.idToken == idToken;
 
   @override
@@ -71,6 +71,7 @@ class Authenticated extends AuthState {
         expiresAt,
         issuerId,
         issuerDiscoveryUrl,
+        clientId,
         idToken,
       );
 

@@ -1,4 +1,3 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/models/app_config.dart';
@@ -8,9 +7,11 @@ import 'package:soliplex_frontend/core/providers/http_log_provider.dart';
 import '../../helpers/test_helpers.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('httpTransportProvider', () {
     test('creates HttpTransport instance', () {
-      final container = ProviderContainer();
+      final container = createContainerWithMockedAuth();
       addTearDown(container.dispose);
 
       final transport = container.read(httpTransportProvider);
@@ -19,7 +20,7 @@ void main() {
     });
 
     test('is singleton across multiple reads', () {
-      final container = ProviderContainer();
+      final container = createContainerWithMockedAuth();
       addTearDown(container.dispose);
 
       final transport1 = container.read(httpTransportProvider);
@@ -31,8 +32,12 @@ void main() {
     // Note: This test verifies disposal doesn't throw. Verifying that
     // resources are actually cleaned up (close() called) requires mocking
     // and is covered by integration tests at the feature level.
-    test('container disposal completes without errors', () {
-      final container = ProviderContainer()..read(httpTransportProvider);
+    test('container disposal completes without errors', () async {
+      final container = createContainerWithMockedAuth()
+        ..read(httpTransportProvider);
+
+      // Wait for AuthNotifier's async _restoreSession to complete
+      await waitForAuthRestore(container);
 
       expect(container.dispose, returnsNormally);
     });
@@ -46,7 +51,7 @@ void main() {
         version: '1.0.0',
       );
 
-      final container = ProviderContainer(
+      final container = createContainerWithMockedAuth(
         overrides: [
           configProviderOverride(testConfig),
         ],
@@ -76,7 +81,7 @@ void main() {
       );
 
       // Test with config1
-      final container1 = ProviderContainer(
+      final container1 = createContainerWithMockedAuth(
         overrides: [
           configProviderOverride(config1),
         ],
@@ -90,7 +95,7 @@ void main() {
       );
 
       // Test with config2 in separate container
-      final container2 = ProviderContainer(
+      final container2 = createContainerWithMockedAuth(
         overrides: [
           configProviderOverride(config2),
         ],
@@ -107,7 +112,7 @@ void main() {
 
   group('apiProvider', () {
     test('creates SoliplexApi instance', () {
-      final container = ProviderContainer();
+      final container = createContainerWithMockedAuth();
       addTearDown(container.dispose);
 
       final api = container.read(apiProvider);
@@ -116,7 +121,7 @@ void main() {
     });
 
     test('is singleton across multiple reads', () {
-      final container = ProviderContainer();
+      final container = createContainerWithMockedAuth();
       addTearDown(container.dispose);
 
       final api1 = container.read(apiProvider);
@@ -126,7 +131,7 @@ void main() {
     });
 
     test('shares transport with agUiClientProvider via shared client', () {
-      final container = ProviderContainer();
+      final container = createContainerWithMockedAuth();
       addTearDown(container.dispose);
 
       // Both apiProvider and agUiClientProvider should use the same
@@ -146,8 +151,12 @@ void main() {
     // Note: This test verifies disposal doesn't throw. Verifying that
     // resources are actually cleaned up (close() called) requires mocking
     // and is covered by integration tests at the feature level.
-    test('container disposal completes without errors', () {
-      final container = ProviderContainer()..read(apiProvider);
+    test('container disposal completes without errors', () async {
+      final container = createContainerWithMockedAuth()
+        ..read(apiProvider);
+
+      // Wait for AuthNotifier's async _restoreSession to complete
+      await waitForAuthRestore(container);
 
       expect(container.dispose, returnsNormally);
     });
@@ -165,7 +174,7 @@ void main() {
       );
 
       // Test with config1
-      final container1 = ProviderContainer(
+      final container1 = createContainerWithMockedAuth(
         overrides: [
           configProviderOverride(config1),
         ],
@@ -176,7 +185,7 @@ void main() {
       expect(api1, isA<SoliplexApi>());
 
       // Test with config2 in separate container
-      final container2 = ProviderContainer(
+      final container2 = createContainerWithMockedAuth(
         overrides: [
           configProviderOverride(config2),
         ],
@@ -199,7 +208,7 @@ void main() {
         version: '1.0.0',
       );
 
-      final container = ProviderContainer(
+      final container = createContainerWithMockedAuth(
         overrides: [
           configProviderOverride(testConfig),
         ],
@@ -226,7 +235,7 @@ void main() {
 
   group('authenticatedClientProvider', () {
     test('creates SoliplexHttpClient instance', () {
-      final container = ProviderContainer();
+      final container = createContainerWithMockedAuth();
       addTearDown(container.dispose);
 
       final client = container.read(authenticatedClientProvider);
@@ -236,7 +245,7 @@ void main() {
     });
 
     test('is singleton across multiple reads', () {
-      final container = ProviderContainer();
+      final container = createContainerWithMockedAuth();
       addTearDown(container.dispose);
 
       final client1 = container.read(authenticatedClientProvider);
@@ -246,7 +255,7 @@ void main() {
     });
 
     test('initializes HttpLogNotifier dependency', () {
-      final container = ProviderContainer();
+      final container = createContainerWithMockedAuth();
       addTearDown(container.dispose);
 
       // Reading the observable client should initialize the log notifier
@@ -262,7 +271,7 @@ void main() {
     test(
       'httpTransportProvider and soliplexHttpClientProvider share same client',
       () {
-        final container = ProviderContainer();
+        final container = createContainerWithMockedAuth();
         addTearDown(container.dispose);
 
         // Read the observable client directly
@@ -277,7 +286,7 @@ void main() {
     );
 
     test('httpTransportProvider depends on authenticatedClientProvider', () {
-      final container = ProviderContainer();
+      final container = createContainerWithMockedAuth();
       addTearDown(container.dispose);
 
       // Read observable client first to establish the shared instance

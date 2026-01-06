@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mocktail/mocktail.dart';
@@ -9,6 +11,9 @@ import 'package:riverpod/src/framework.dart' show Override;
 // Hide ag_ui's CancelToken - HttpTransport uses our local one.
 import 'package:soliplex_client/soliplex_client.dart' hide CancelToken;
 import 'package:soliplex_client/src/utils/cancel_token.dart';
+import 'package:soliplex_frontend/core/auth/auth_provider.dart';
+import 'package:soliplex_frontend/core/auth/auth_state.dart';
+import 'package:soliplex_frontend/core/auth/auth_storage.dart';
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/models/app_config.dart';
 import 'package:soliplex_frontend/core/providers/active_run_notifier.dart';
@@ -16,6 +21,90 @@ import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/core/providers/config_provider.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
+
+/// Mock AuthStorage for testing.
+class MockAuthStorage extends Mock implements AuthStorage {}
+
+/// Mock TokenRefreshService for testing.
+class MockTokenRefreshService extends Mock implements TokenRefreshService {}
+
+/// Creates mocked auth dependencies and their provider overrides.
+///
+/// Returns a record with:
+/// - `overrides`: Provider overrides for [authStorageProvider] and
+///   [tokenRefreshServiceProvider]
+/// - `storage`: The [MockAuthStorage] instance for stubbing
+/// - `refreshService`: The [MockTokenRefreshService] instance for stubbing
+///
+/// The mock storage is configured to return null from `loadTokens()` by
+/// default (unauthenticated state).
+///
+/// Use with [ProviderContainer] or [createContainerWithMockedAuth]:
+/// ```dart
+/// final mocks = createMockedAuthDependencies();
+/// final container = ProviderContainer(overrides: mocks.overrides);
+/// when(() => mocks.storage.loadTokens()).thenAnswer((_) async => tokens);
+/// ```
+({
+  List<Override> overrides,
+  MockAuthStorage storage,
+  MockTokenRefreshService refreshService,
+}) createMockedAuthDependencies() {
+  final storage = MockAuthStorage();
+  final refreshService = MockTokenRefreshService();
+
+  when(storage.loadTokens).thenAnswer((_) async => null);
+
+  return (
+    overrides: [
+      authStorageProvider.overrideWithValue(storage),
+      tokenRefreshServiceProvider.overrideWithValue(refreshService),
+    ],
+    storage: storage,
+    refreshService: refreshService,
+  );
+}
+
+/// Creates a [ProviderContainer] with mocked auth providers.
+///
+/// Convenience wrapper around [createMockedAuthDependencies] for tests that
+/// need auth mocking but don't need direct access to the mocks.
+ProviderContainer createContainerWithMockedAuth({
+  List<Override> overrides = const [],
+}) {
+  final authMocks = createMockedAuthDependencies();
+  return ProviderContainer(
+    overrides: [
+      ...authMocks.overrides,
+      ...overrides,
+    ],
+  );
+}
+
+/// Waits for the auth provider to finish restoring session.
+///
+/// Auth restoration is fire-and-forget from `build()`, so tests need to wait
+/// for it to complete. Uses Riverpod's listener to await state changes
+/// rather than polling.
+Future<void> waitForAuthRestore(ProviderContainer container) async {
+  // Check if already complete
+  final currentState = container.read(authProvider);
+  if (currentState is! AuthLoading) return;
+
+  // Listen for state change
+  final completer = Completer<void>();
+  final subscription = container.listen(authProvider, (previous, next) {
+    if (next is! AuthLoading && !completer.isCompleted) {
+      completer.complete();
+    }
+  });
+
+  try {
+    await completer.future.timeout(const Duration(seconds: 5));
+  } finally {
+    subscription.close();
+  }
+}
 
 /// Mock SoliplexApi for testing.
 class MockSoliplexApi extends Mock implements SoliplexApi {}
@@ -297,6 +386,34 @@ class TestData {
       bytesReceived: bytesReceived,
       duration: duration,
       error: error,
+    );
+  }
+
+  /// Creates an Authenticated state for auth testing.
+  ///
+  /// By default creates valid (non-expired) tokens. Use [expired] parameter
+  /// to create tokens that expired 1 hour ago.
+  static Authenticated createAuthenticated({
+    bool expired = false,
+    String accessToken = 'test-access-token',
+    String refreshToken = 'test-refresh-token',
+    String issuerId = 'issuer-1',
+    String issuerDiscoveryUrl = 'https://idp.example.com/.well-known',
+    String clientId = 'client-app',
+    String idToken = 'test-id-token',
+  }) {
+    final expiresAt = expired
+        ? DateTime.now().subtract(const Duration(hours: 1))
+        : DateTime.now().add(const Duration(hours: 1));
+
+    return Authenticated(
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      expiresAt: expiresAt,
+      issuerId: issuerId,
+      issuerDiscoveryUrl: issuerDiscoveryUrl,
+      clientId: clientId,
+      idToken: idToken,
     );
   }
 }
