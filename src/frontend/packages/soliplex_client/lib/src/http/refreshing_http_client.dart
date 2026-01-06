@@ -93,9 +93,14 @@ class RefreshingHttpClient implements SoliplexHttpClient {
 
   /// Attempt refresh with concurrent call deduplication.
   ///
-  /// Multiple concurrent 401s will share a single refresh attempt.
-  /// The Completer is cleared before completing so new requests after
-  /// refresh finishes will start a fresh refresh if needed.
+  /// Uses a [Completer] as a semaphore: multiple concurrent 401s share a
+  /// single refresh attempt by awaiting the same Completer. After refresh
+  /// completes (success or failure), the Completer reference is cleared so
+  /// subsequent requests trigger fresh refresh attempts.
+  ///
+  /// The null-clearing is critical: a [Completer] can only complete once, and
+  /// afterward `.future` returns the cached result forever. Without clearing,
+  /// new 401s would receive stale results instead of refreshing.
   Future<bool> _tryRefreshOnce() async {
     // If refresh already in progress, wait for it
     if (_refreshInProgress != null) {
@@ -106,16 +111,16 @@ class RefreshingHttpClient implements SoliplexHttpClient {
     _refreshInProgress = completer;
     try {
       final result = await _refresher.tryRefresh();
-      // Clear before completing so new requests after refresh finishes start
-      // fresh. Waiters already hold the Completer reference. Safe because Dart
-      // runs on a single event loop—no await between clear and complete.
-      _refreshInProgress = null;
       completer.complete(result);
+      // REQUIRED: Clear the Completer reference after completion.
+      // A Completer can only complete once—after that, .future returns the
+      // cached result forever. Without clearing, subsequent 401s would get
+      // stale results instead of triggering fresh refresh attempts.
+      _refreshInProgress = null;
       return result;
     } catch (e) {
-      // Same pattern for error path
-      _refreshInProgress = null;
       completer.completeError(e);
+      _refreshInProgress = null; // Same reason: allow fresh attempts
       rethrow;
     }
   }

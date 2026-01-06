@@ -52,6 +52,12 @@ class TokenRefreshFailure extends TokenRefreshResult {
 
 /// Reason for token refresh failure.
 enum TokenRefreshFailureReason {
+  /// No refresh token provided.
+  ///
+  /// Not an error condition - some auth flows don't issue refresh tokens.
+  /// Caller should continue with current token until it expires.
+  noRefreshToken,
+
   /// Refresh token rejected by IdP (expired, revoked, or already used).
   ///
   /// User must re-authenticate.
@@ -98,11 +104,20 @@ class TokenRefreshService {
   ///
   /// Fetches the OIDC discovery document to find the token endpoint,
   /// then POSTs a refresh_token grant.
+  ///
+  /// Returns [TokenRefreshFailure] with
+  /// [TokenRefreshFailureReason.noRefreshToken] if [refreshToken] is empty.
   Future<TokenRefreshResult> refresh({
     required String discoveryUrl,
     required String refreshToken,
     required String clientId,
   }) async {
+    if (refreshToken.isEmpty) {
+      return const TokenRefreshFailure(
+        TokenRefreshFailureReason.noRefreshToken,
+      );
+    }
+
     try {
       final discoveryUri = Uri.parse(discoveryUrl);
       final tokenUri = await _fetchTokenEndpoint(discoveryUri);

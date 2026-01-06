@@ -152,6 +152,32 @@ void main() {
       });
     });
 
+    group('input validation', () {
+      test('returns noRefreshToken when refresh token is empty', () async {
+        // No HTTP calls should be made - validation happens before network
+        final result = await service.refresh(
+          discoveryUrl: discoveryUrl,
+          refreshToken: '',
+          clientId: clientId,
+        );
+
+        expect(result, isA<TokenRefreshFailure>());
+        final failure = result as TokenRefreshFailure;
+        expect(failure.reason, TokenRefreshFailureReason.noRefreshToken);
+
+        // Verify no network calls were made
+        verifyNever(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        );
+      });
+    });
+
     group('invalid_grant error', () {
       test('returns invalidGrant failure', () async {
         setupDiscoverySuccess();

@@ -9,6 +9,75 @@ class MockSoliplexHttpClient extends Mock implements SoliplexHttpClient {}
 
 class MockTokenRefresher extends Mock implements TokenRefresher {}
 
+/// Fake TokenRefresher for integration tests.
+///
+/// Uses real async behavior to test concurrent refresh deduplication.
+class FakeTokenRefresher implements TokenRefresher {
+  int refreshCallCount = 0;
+  Duration refreshDelay = Duration.zero;
+  bool refreshResult = true;
+
+  @override
+  bool needsRefresh = false;
+
+  @override
+  Future<void> refreshIfExpiringSoon() async {
+    // No-op for these tests
+  }
+
+  @override
+  Future<bool> tryRefresh() async {
+    refreshCallCount++;
+    if (refreshDelay > Duration.zero) {
+      await Future<void>.delayed(refreshDelay);
+    }
+    return refreshResult;
+  }
+}
+
+/// Fake HTTP client that returns configurable responses.
+class FakeHttpClient implements SoliplexHttpClient {
+  final List<HttpResponse> _responses = [];
+  int _callIndex = 0;
+  int get callCount => _callIndex;
+
+  void queueResponse(int statusCode) {
+    _responses.add(
+      HttpResponse(statusCode: statusCode, bodyBytes: Uint8List(0)),
+    );
+  }
+
+  @override
+  Future<HttpResponse> request(
+    String method,
+    Uri uri, {
+    Map<String, String>? headers,
+    Object? body,
+    Duration? timeout,
+  }) async {
+    if (_callIndex >= _responses.length) {
+      throw StateError(
+        'FakeHttpClient: no more queued responses '
+        '(called ${_callIndex + 1} times, only ${_responses.length} queued)',
+      );
+    }
+    return _responses[_callIndex++];
+  }
+
+  @override
+  Stream<List<int>> requestStream(
+    String method,
+    Uri uri, {
+    Map<String, String>? headers,
+    Object? body,
+  }) {
+    return const Stream.empty();
+  }
+
+  @override
+  void close() {}
+}
+
 void main() {
   late MockSoliplexHttpClient mockClient;
   late MockTokenRefresher mockRefresher;
@@ -505,6 +574,156 @@ void main() {
           client.request('GET', Uri.parse('https://example.com')),
           throwsA(isA<NetworkException>()),
         );
+
+        client.close();
+      });
+    });
+  });
+
+  // Integration tests using fakes instead of mocks to verify real async
+  // behavior. Mocks complete synchronously, hiding race conditions. These
+  // tests use fakes with configurable delays to verify that concurrent 401s
+  // share a single refresh call rather than triggering redundant refreshes.
+  group('RefreshingHttpClient integration', () {
+    late FakeHttpClient fakeClient;
+    late FakeTokenRefresher fakeRefresher;
+
+    setUp(() {
+      fakeClient = FakeHttpClient();
+      fakeRefresher = FakeTokenRefresher();
+    });
+
+    group('concurrent refresh with real async', () {
+      test('deduplicates concurrent 401 refresh calls', () async {
+        // Queue: 401, 401, 200, 200 (two initial failures, then success after
+        // refresh)
+        fakeClient
+          ..queueResponse(401)
+          ..queueResponse(401)
+          ..queueResponse(200)
+          ..queueResponse(200);
+
+        // Simulate real network delay in refresh
+        fakeRefresher.refreshDelay = const Duration(milliseconds: 10);
+
+        final client = RefreshingHttpClient(
+          inner: fakeClient,
+          refresher: fakeRefresher,
+        );
+
+        // Fire two concurrent requests
+        final results = await Future.wait([
+          client.request('GET', Uri.parse('https://example.com/1')),
+          client.request('GET', Uri.parse('https://example.com/2')),
+        ]);
+
+        // Both should succeed after shared refresh
+        expect(results[0].statusCode, equals(200));
+        expect(results[1].statusCode, equals(200));
+
+        // Only ONE refresh call despite two concurrent 401s
+        expect(fakeRefresher.refreshCallCount, equals(1));
+
+        // 4 HTTP calls: 2 initial 401s + 2 retries
+        expect(fakeClient.callCount, equals(4));
+
+        client.close();
+      });
+
+      test('sequential 401s each trigger separate refresh', () async {
+        // First request: 401 -> refresh -> 200
+        // Second request: 401 -> refresh -> 200
+        fakeClient
+          ..queueResponse(401)
+          ..queueResponse(200)
+          ..queueResponse(401)
+          ..queueResponse(200);
+
+        final client = RefreshingHttpClient(
+          inner: fakeClient,
+          refresher: fakeRefresher,
+        );
+
+        // Sequential requests (not concurrent)
+        final result1 = await client.request(
+          'GET',
+          Uri.parse('https://example.com/1'),
+        );
+        final result2 = await client.request(
+          'GET',
+          Uri.parse('https://example.com/2'),
+        );
+
+        expect(result1.statusCode, equals(200));
+        expect(result2.statusCode, equals(200));
+
+        // Two separate refresh calls (not deduplicated)
+        expect(fakeRefresher.refreshCallCount, equals(2));
+
+        client.close();
+      });
+
+      test('refresh failure affects all waiting requests', () async {
+        fakeClient
+          ..queueResponse(401)
+          ..queueResponse(401);
+
+        fakeRefresher
+          ..refreshDelay = const Duration(milliseconds: 10)
+          ..refreshResult = false;
+
+        final client = RefreshingHttpClient(
+          inner: fakeClient,
+          refresher: fakeRefresher,
+        );
+
+        final results = await Future.wait([
+          client.request('GET', Uri.parse('https://example.com/1')),
+          client.request('GET', Uri.parse('https://example.com/2')),
+        ]);
+
+        // Both return 401 since refresh failed
+        expect(results[0].statusCode, equals(401));
+        expect(results[1].statusCode, equals(401));
+
+        // Still only one refresh attempt
+        expect(fakeRefresher.refreshCallCount, equals(1));
+
+        // Only 2 HTTP calls - no retry after failed refresh
+        expect(fakeClient.callCount, equals(2));
+
+        client.close();
+      });
+
+      test('new request after refresh completes gets fresh refresh', () async {
+        fakeClient
+          ..queueResponse(401)
+          ..queueResponse(200)
+          ..queueResponse(401)
+          ..queueResponse(200);
+
+        fakeRefresher.refreshDelay = const Duration(milliseconds: 5);
+
+        final client = RefreshingHttpClient(
+          inner: fakeClient,
+          refresher: fakeRefresher,
+        );
+
+        // First request triggers refresh
+        final result1 = await client.request(
+          'GET',
+          Uri.parse('https://example.com/1'),
+        );
+        expect(result1.statusCode, equals(200));
+        expect(fakeRefresher.refreshCallCount, equals(1));
+
+        // Second request after first completes - if it 401s, gets fresh refresh
+        final result2 = await client.request(
+          'GET',
+          Uri.parse('https://example.com/2'),
+        );
+        expect(result2.statusCode, equals(200));
+        expect(fakeRefresher.refreshCallCount, equals(2));
 
         client.close();
       });
