@@ -94,7 +94,28 @@ Values from `.env` take precedence over both OS environment and YAML-configured 
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `SOLIPLEX_INSTALLATION_PATH` | Installation config path (CLI fallback) | `/path/to/installation.yaml` |
-| `RAG_LANCE_DB_PATH` | RAG database directory | `file:./db/rag` |
+| `RAG_LANCE_DB_PATH` | Base directory for RAG databases | `file:./db/rag` |
+
+#### RAG_LANCE_DB_PATH and rag_lancedb_stem
+
+When a tool uses `rag_lancedb_stem`, the full database path is computed as:
+
+```
+{RAG_LANCE_DB_PATH}/{stem}.lancedb
+```
+
+For example:
+```yaml
+# environment:
+RAG_LANCE_DB_PATH: "file:./db/rag"
+
+# tool config:
+rag_lancedb_stem: "knowledge"
+
+# Result: ./db/rag/knowledge.lancedb
+```
+
+**Note:** `RAG_LANCE_DB_PATH` is only used when `rag_lancedb_stem` is specified. If you use `rag_lancedb_override_path` instead, the full path is taken as-is and `RAG_LANCE_DB_PATH` is ignored.
 
 ## File References
 

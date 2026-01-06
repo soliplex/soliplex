@@ -100,8 +100,9 @@ tools:
 tools:
   - tool_name: "soliplex.tools.research_report"
     rag_lancedb_stem: "knowledge"
-    allow_mcp: true
 ```
+
+**Note:** This tool cannot be exposed via MCP (`allow_mcp: true`) because it requires FastAPI context for AG-UI event emission during the research workflow.
 
 ### Ask With Rich Citations Tool
 
@@ -215,7 +216,7 @@ Error: `RAG DB file not found: /path/to/db.lancedb`
 
 ### Empty Search Results
 
-- Verify documents have been added with `haiku-rag list --db ./db/rag/knowledge.lancedb`
+- Verify documents have been added: `haiku-rag list --db ./db/rag/knowledge.lancedb`
 - Check that the query matches document content
 - Increase `search_documents_limit` to see more results
 

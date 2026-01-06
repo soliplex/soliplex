@@ -195,7 +195,7 @@ Some tools look up their configuration from `ctx.deps.tool_configs` rather than 
 
 ```python
 async def research_report(ctx: RunContext[AgentDependencies], question: str):
-    # Look up config by tool name
+    # Look up config by tool name (matches the 'kind' field)
     tool_config = ctx.deps.tool_configs.get("research_report")
     if tool_config is None:
         raise NoToolConfig()
@@ -206,7 +206,39 @@ This pattern is used by:
 - `research_report`
 - `ask_with_rich_citations`
 
-The tool config is registered in the room's `tools` section and made available via agent dependencies.
+**How it works:**
+
+1. Tool configs are defined in the room's `tools` YAML section
+2. During agent creation, configs are parsed into typed `ToolConfig` subclasses
+3. The configs are stored in a dict keyed by their `kind` field
+4. This dict is passed to the agent as `AgentDependencies.tool_configs`
+5. Tools access their config via `ctx.deps.tool_configs.get("kind_name")`
+
+### _RAGToolBase
+
+RAG tools inherit from `_RAGToolBase` which provides database path resolution and haiku-rag configuration:
+
+```python
+@dataclasses.dataclass
+class _RAGToolBase:
+    rag_lancedb_stem: str = None           # Database name in RAG_LANCE_DB_PATH
+    rag_lancedb_override_path: str = None  # Explicit database path
+
+    @property
+    def haiku_rag_config(self) -> HaikuRagConfig:
+        """Resolved at runtime from installation + room config."""
+        # Merges installation-level haiku.rag.yaml with room-level overrides
+        return self._installation_config.get_haiku_rag_config(
+            room_config_path=self._config_path
+        )
+```
+
+**Path Resolution:**
+
+- `rag_lancedb_stem: "knowledge"` → `{RAG_LANCE_DB_PATH}/knowledge.lancedb`
+- `rag_lancedb_override_path: "./custom.lancedb"` → Resolved relative to config file
+
+The `haiku_rag_config` property automatically merges the installation's base `haiku.rag.yaml` with any room-level overrides.
 
 ### SearchDocumentsToolConfig
 
@@ -216,10 +248,6 @@ class SearchDocumentsToolConfig(ToolConfig, _RAGToolBase):
     kind: str = "search_documents"
     tool_name: str = "soliplex.tools.search_documents"
     search_documents_limit: int = 5  # Default: 5
-    # Inherited from _RAGToolBase:
-    # rag_lancedb_stem: str = None
-    # rag_lancedb_override_path: str = None
-    # haiku_rag_config is a @property, not a field
 ```
 
 ### AG-UI Feature Registration

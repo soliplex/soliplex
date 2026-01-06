@@ -213,7 +213,6 @@ nav:
       - CLI: reference/cli.md
       - Config Schema: reference/config-schema.md
       - Server API: reference/server-api.md
-      - Client API: reference/client_api/index.md
   - Troubleshooting:
       - troubleshooting/index.md
       - Debugging: troubleshooting/debugging.md

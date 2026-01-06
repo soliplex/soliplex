@@ -260,9 +260,17 @@ def get_agent(agent_config: AgentConfig) -> Agent:
 ```
 
 **Implications:**
+
 - Configuration changes require server restart to take effect
 - Agent state persists across requests (within the same process)
 - Memory usage scales with the number of unique agent IDs
+
+**Scope & Persistence:**
+
+- **In-memory only**: The cache is a Python dict that exists only in the server process
+- **Per-process**: In multi-process deployments (e.g., gunicorn workers), each process has its own cache
+- **Not shared**: Cache is not shared across processes or server instances
+- **Lost on restart**: All cached agents are lost when the server restarts
 
 ## Source Code
 

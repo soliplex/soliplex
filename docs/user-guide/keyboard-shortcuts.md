@@ -11,6 +11,8 @@ Keyboard shortcuts for efficient navigation and chat.
 | `Enter` | Send message |
 | `Shift+Enter` | New line in message |
 
+> **Note:** These shortcuts are handled directly by the chat input field, not by the global keyboard shortcut service. They work regardless of system shortcut settings.
+
 ## General
 
 | Shortcut | Action |

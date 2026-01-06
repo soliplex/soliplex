@@ -127,7 +127,15 @@ Different config fields handle secrets differently:
 | `headers` | http | `interpolate_secrets()` - inline substitution |
 | `query_params` | http | `get_secret()` - direct lookup |
 
-**Security Note:** Query parameters are appended to the URL, which may expose secrets in server logs, browser history, or referrer headers. Prefer using `headers` for sensitive authentication tokens.
+!!! warning "Security: Avoid secrets in query_params"
+    Query parameters are **appended directly to the URL** (e.g., `https://api.example.com/mcp/?api_key=SECRET`). This exposes secrets in:
+
+    - Server access logs
+    - Browser history
+    - HTTP referrer headers
+    - Network monitoring tools
+
+    **Always use `headers` for authentication tokens and API keys.** Only use `query_params` for non-sensitive values like API versions or feature flags.
 
 ### Implementation
 

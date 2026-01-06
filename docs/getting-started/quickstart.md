@@ -115,4 +115,4 @@ Check if Ollama is using GPU:
 ollama ps
 ```
 
-If showing 100% CPU, see [Troubleshooting GPU Issues](../troubleshooting/index.md#slow-llm-inference--gpu-not-detected).
+If showing 100% CPU, see [Troubleshooting GPU Issues](../troubleshooting/index.md#slow-llm-inference-gpu-not-detected).

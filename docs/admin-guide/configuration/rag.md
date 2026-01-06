@@ -18,14 +18,14 @@ tools:
 Use the haiku-rag CLI:
 
 ```bash
-# Initialize database
-haiku-rag init ./db/rag/knowledge.lancedb
+# Add documents from a directory (creates database if needed)
+haiku-rag add-src ./documents/ --db ./db/rag/knowledge.lancedb
 
-# Ingest documents
-haiku-rag ingest ./db/rag/knowledge.lancedb ./documents/
+# Add a single file with title
+haiku-rag add-src ./docs/guide.pdf --db ./db/rag/knowledge.lancedb --title "User Guide"
 
 # List documents
-haiku-rag list ./db/rag/knowledge.lancedb
+haiku-rag list --db ./db/rag/knowledge.lancedb
 ```
 
 ### Database Location
@@ -62,8 +62,9 @@ Deep research with iterative search:
 tools:
   - tool_name: "soliplex.tools.research_report"
     rag_lancedb_stem: "knowledge"
-    allow_mcp: true
 ```
+
+**Note:** This tool cannot be exposed via MCP (`allow_mcp: true`) because it requires FastAPI context for AG-UI event emission during the research workflow.
 
 ### ask_with_rich_citations
 
@@ -171,24 +172,21 @@ haiku-rag supports:
 ### Ingestion Commands
 
 ```bash
-# Ingest all supported files
-haiku-rag ingest ./db/rag/knowledge.lancedb ./documents/
+# Add all supported files from a directory
+haiku-rag add-src ./documents/ --db ./db/rag/knowledge.lancedb
 
-# Ingest specific patterns
-haiku-rag ingest ./db/rag/knowledge.lancedb ./documents/ --pattern "*.pdf"
+# Add a single file with title
+haiku-rag add-src ./docs/guide.pdf --db ./db/rag/knowledge.lancedb --title "User Guide"
 
-# Ingest with metadata
-haiku-rag ingest ./db/rag/knowledge.lancedb ./documents/ \
-    --metadata '{"source": "internal", "department": "engineering"}'
-
-# Update existing documents
-haiku-rag ingest ./db/rag/knowledge.lancedb ./documents/ --update
+# Add with metadata
+haiku-rag add-src ./documents/ --db ./db/rag/knowledge.lancedb \
+    --meta source=internal --meta department=engineering
 ```
 
 ### Listing Documents
 
 ```bash
-$ haiku-rag list ./db/rag/knowledge.lancedb
+$ haiku-rag list --db ./db/rag/knowledge.lancedb
 
 Documents in knowledge.lancedb:
 - doc-1: User Guide (file:///docs/guide.pdf)
@@ -246,7 +244,7 @@ Error: `RAG DB file not found: /path/to/db.lancedb`
 ### Empty Results
 
 **Solutions:**
-1. Verify documents have been ingested: `haiku-rag list ./db/rag/knowledge.lancedb`
+1. Verify documents have been added: `haiku-rag list --db ./db/rag/knowledge.lancedb`
 2. Check query relevance to document content
 3. Increase `search_documents_limit`
 4. Verify embedding model matches ingestion model

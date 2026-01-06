@@ -41,6 +41,17 @@ When the AI uses tools (like searching documents), you'll see:
 
 Click to expand and see each tool's name and status.
 
+### Interactive Widgets (GenUI)
+
+Some rooms may display interactive UI widgets within the chat:
+
+- **Maps** - Geographic data visualization
+- **Charts** - Data visualizations (bar, line, pie charts)
+- **Forms** - Input fields for collecting data
+- **Custom widgets** - Room-specific interactive elements
+
+Interact with these widgets directly in the chat. They can respond to clicks, selections, and form submissions.
+
 ### Citations
 
 For RAG-enabled rooms, responses include:

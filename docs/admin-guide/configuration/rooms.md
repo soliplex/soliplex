@@ -244,8 +244,9 @@ Deep research with graph workflow:
 tools:
   - tool_name: "soliplex.tools.research_report"
     rag_lancedb_stem: "knowledge"
-    allow_mcp: true
 ```
+
+**Note:** This tool cannot be exposed via MCP (`allow_mcp: true`) because it requires FastAPI context for AG-UI event emission during the research workflow.
 
 ### ask_with_rich_citations
 
