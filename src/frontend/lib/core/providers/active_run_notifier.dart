@@ -1,7 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:meta/meta.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_client/soliplex_client.dart' as domain
     show Cancelled, Completed, Conversation, Failed, Idle, Running;
@@ -241,13 +241,22 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
   }
 
   /// Resets to idle state, clearing all messages and state.
-  void reset() {
-    if (_internalState is RunningInternalState) {
-      (_internalState as RunningInternalState).dispose();
-      _internalState = const IdleInternalState();
-    }
-
+  ///
+  /// Clears UI state immediately so the UI updates instantly, then awaits
+  /// disposal of any active resources. Disposal errors are caught and logged
+  /// to ensure fire-and-forget callers (like Riverpod listeners) are safe.
+  Future<void> reset() async {
+    final previousState = _internalState;
+    _internalState = const IdleInternalState();
     state = const IdleState();
+
+    if (previousState is RunningInternalState) {
+      try {
+        await previousState.dispose();
+      } catch (e, st) {
+        debugPrint('Disposal error during reset: $e\n$st');
+      }
+    }
   }
 
   /// Processes a single AG-UI event and updates state accordingly.

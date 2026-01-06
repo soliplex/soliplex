@@ -201,8 +201,8 @@ class ChatPanel extends ConsumerWidget {
   }
 
   /// Handles retrying after an error.
-  void _handleRetry(WidgetRef ref) {
-    ref.read(activeRunNotifierProvider.notifier).reset();
+  Future<void> _handleRetry(WidgetRef ref) async {
+    await ref.read(activeRunNotifierProvider.notifier).reset();
   }
 }
 

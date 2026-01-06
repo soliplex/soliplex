@@ -63,18 +63,167 @@ void main() {
     });
 
     group('reset', () {
-      test('returns to IdleState', () {
-        container.read(activeRunNotifierProvider.notifier).reset();
+      test('returns to IdleState', () async {
+        await container.read(activeRunNotifierProvider.notifier).reset();
 
         final state = container.read(activeRunNotifierProvider);
         expect(state, isA<IdleState>());
       });
 
-      test('clears messages', () {
-        container.read(activeRunNotifierProvider.notifier).reset();
+      test('clears messages', () async {
+        await container.read(activeRunNotifierProvider.notifier).reset();
 
         final state = container.read(activeRunNotifierProvider);
         expect(state.messages, isEmpty);
+      });
+
+      test('clears state immediately and awaits disposal', () async {
+        final eventStreamController = StreamController<BaseEvent>();
+        var disposeCalled = false;
+        final disposeCompleter = Completer<void>();
+
+        when(
+          () => mockApi.createRun(
+            any(),
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+          ),
+        ).thenAnswer(
+          (_) async => RunInfo(
+            id: 'run-1',
+            threadId: 'thread-1',
+            createdAt: DateTime.now(),
+          ),
+        );
+
+        when(
+          () => mockAgUiClient.runAgent(
+            any(),
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+          ),
+        ).thenAnswer((_) => eventStreamController.stream);
+
+        final testContainer = ProviderContainer(
+          overrides: [
+            apiProvider.overrideWithValue(mockApi),
+            agUiClientProvider.overrideWithValue(mockAgUiClient),
+          ],
+        );
+
+        addTearDown(() {
+          eventStreamController.close();
+          testContainer.dispose();
+        });
+
+        // Start a run
+        await testContainer.read(activeRunNotifierProvider.notifier).startRun(
+              roomId: 'room-1',
+              threadId: 'thread-1',
+              userMessage: 'Hello',
+            );
+
+        // Verify running
+        expect(
+          testContainer.read(activeRunNotifierProvider),
+          isA<RunningState>(),
+        );
+
+        // Capture the cancel token to track disposal
+        final capturedToken = verify(
+          () => mockAgUiClient.runAgent(
+            any(),
+            any(),
+            cancelToken: captureAny(named: 'cancelToken'),
+          ),
+        ).captured.single as CancelToken;
+
+        // Override the stream subscription's cancel to track disposal
+        eventStreamController.onCancel = () {
+          disposeCalled = true;
+          disposeCompleter.complete();
+        };
+
+        // Call reset
+        final resetFuture =
+            testContainer.read(activeRunNotifierProvider.notifier).reset();
+
+        // State should be IdleState immediately
+        expect(
+          testContainer.read(activeRunNotifierProvider),
+          isA<IdleState>(),
+        );
+
+        // Token should be cancelled
+        expect(capturedToken.isCancelled, isTrue);
+
+        // Wait for reset to complete
+        await resetFuture;
+
+        // Disposal should have completed
+        expect(disposeCalled, isTrue);
+      });
+
+      test('calling reset multiple times is idempotent', () async {
+        final eventStreamController = StreamController<BaseEvent>.broadcast();
+
+        when(
+          () => mockApi.createRun(
+            any(),
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+          ),
+        ).thenAnswer(
+          (_) async => RunInfo(
+            id: 'run-1',
+            threadId: 'thread-1',
+            createdAt: DateTime.now(),
+          ),
+        );
+
+        when(
+          () => mockAgUiClient.runAgent(
+            any(),
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+          ),
+        ).thenAnswer((_) => eventStreamController.stream);
+
+        final testContainer = ProviderContainer(
+          overrides: [
+            apiProvider.overrideWithValue(mockApi),
+            agUiClientProvider.overrideWithValue(mockAgUiClient),
+          ],
+        );
+
+        addTearDown(() {
+          eventStreamController.close();
+          testContainer.dispose();
+        });
+
+        // Start a run
+        await testContainer.read(activeRunNotifierProvider.notifier).startRun(
+              roomId: 'room-1',
+              threadId: 'thread-1',
+              userMessage: 'Hello',
+            );
+
+        // Call reset multiple times in quick succession
+        final futures = <Future<void>>[];
+        for (var i = 0; i < 5; i++) {
+          futures.add(
+            testContainer.read(activeRunNotifierProvider.notifier).reset(),
+          );
+        }
+
+        // All futures should complete without exception
+        await Future.wait(futures);
+
+        // Final state should be idle
+        expect(
+          testContainer.read(activeRunNotifierProvider),
+          isA<IdleState>(),
+        );
       });
     });
 
