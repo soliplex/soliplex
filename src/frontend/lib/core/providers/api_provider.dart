@@ -13,8 +13,10 @@ import 'package:soliplex_frontend/core/providers/http_log_provider.dart';
 /// and notifies [HttpLogNotifier] of all HTTP activity.
 ///
 /// **Note**: Use [authenticatedClientProvider] for API requests; this provider
-/// is the base client without authentication. Exposed publicly for token
-/// refresh calls which must not use authenticated client (would cause loops).
+/// is the base client without authentication. Use this provider for:
+/// - Token refresh calls (must not use authenticated client to avoid loops)
+/// - Backend health checks (don't require authentication)
+/// - Any other calls that should be observable but not authenticated
 final baseHttpClientProvider = Provider<SoliplexHttpClient>((ref) {
   final baseClient = createPlatformClient();
   final observer = ref.watch(httpLogProvider.notifier);
