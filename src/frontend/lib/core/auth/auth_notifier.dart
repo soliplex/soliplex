@@ -63,7 +63,7 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
   }
 
   Future<void> _restoreSession() async {
-    final StoredTokens? tokens;
+    final Authenticated? tokens;
     try {
       tokens = await _storage.loadTokens();
     } on Exception catch (e) {
@@ -80,7 +80,7 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
     }
 
     // Check if tokens are expired - attempt refresh before clearing
-    if (DateTime.now().isAfter(tokens.expiresAt)) {
+    if (tokens.isExpired) {
       _log('Stored tokens expired, attempting refresh');
       final refreshed = await _tryRefreshStoredTokens(tokens);
       if (refreshed) {
@@ -96,17 +96,8 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
       return;
     }
 
-    // Build Authenticated directly rather than via _applyRefreshResult because
-    // tokens are already persisted—no storage write needed.
-    state = Authenticated(
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      expiresAt: tokens.expiresAt,
-      issuerId: tokens.issuerId,
-      issuerDiscoveryUrl: tokens.issuerDiscoveryUrl,
-      clientId: tokens.clientId,
-      idToken: tokens.idToken,
-    );
+    // Tokens already persisted—assign directly to state.
+    state = tokens;
   }
 
   /// Attempt to refresh expired stored tokens during session restore.
@@ -132,7 +123,7 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
   /// local state and can retry when network returns.
   ///
   /// See OIDC spec section "Token Refresh Failure Handling Policy" for details.
-  Future<bool> _tryRefreshStoredTokens(StoredTokens tokens) async {
+  Future<bool> _tryRefreshStoredTokens(Authenticated tokens) async {
     final TokenRefreshResult result;
     try {
       result = await _refreshService.refresh(
@@ -175,31 +166,23 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
     required String clientId,
     required String fallbackIdToken,
   }) async {
-    final idToken = result.idToken ?? fallbackIdToken;
-
-    try {
-      await _storage.saveTokens(
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
-        expiresAt: result.expiresAt,
-        issuerId: issuerId,
-        issuerDiscoveryUrl: issuerDiscoveryUrl,
-        clientId: clientId,
-        idToken: idToken,
-      );
-    } on Exception catch (e) {
-      _log('Failed to persist refreshed tokens: ${e.runtimeType}');
-    }
-
-    state = Authenticated(
+    final newState = Authenticated(
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
       expiresAt: result.expiresAt,
       issuerId: issuerId,
       issuerDiscoveryUrl: issuerDiscoveryUrl,
       clientId: clientId,
-      idToken: idToken,
+      idToken: result.idToken ?? fallbackIdToken,
     );
+
+    try {
+      await _storage.saveTokens(newState);
+    } on Exception catch (e) {
+      _log('Failed to persist refreshed tokens: ${e.runtimeType}');
+    }
+
+    state = newState;
   }
 
   /// Sign in with the given OIDC issuer.
@@ -232,23 +215,7 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
         expiresAt = DateTime.now().add(fallback);
       }
 
-      // Save tokens to secure storage (may fail on unsigned macOS builds)
-      try {
-        await _storage.saveTokens(
-          accessToken: accessToken,
-          refreshToken: refreshToken,
-          expiresAt: expiresAt,
-          issuerId: issuer.id,
-          issuerDiscoveryUrl: issuer.discoveryUrl,
-          clientId: issuer.clientId,
-          idToken: idToken,
-        );
-      } on Exception catch (e) {
-        _log('Failed to persist tokens: ${e.runtimeType}');
-        // Continue - auth works, just won't persist across restarts
-      }
-
-      state = Authenticated(
+      final newState = Authenticated(
         accessToken: accessToken,
         refreshToken: refreshToken,
         expiresAt: expiresAt,
@@ -257,6 +224,16 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
         clientId: issuer.clientId,
         idToken: idToken,
       );
+
+      // Save tokens to secure storage (may fail on unsigned macOS builds)
+      try {
+        await _storage.saveTokens(newState);
+      } on Exception catch (e) {
+        _log('Failed to persist tokens: ${e.runtimeType}');
+        // Continue - auth works, just won't persist across restarts
+      }
+
+      state = newState;
     } on AuthException {
       // Auth failed or was cancelled - stay unauthenticated
       state = const Unauthenticated();

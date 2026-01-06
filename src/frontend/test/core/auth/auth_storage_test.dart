@@ -1,6 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:soliplex_frontend/core/auth/auth_state.dart';
 import 'package:soliplex_frontend/core/auth/auth_storage.dart';
 
 class MockFlutterSecureStorage extends Mock implements FlutterSecureStorage {}
@@ -26,13 +27,15 @@ void main() {
       final expiresAt = DateTime(2025, 12, 31, 12);
 
       await authStorage.saveTokens(
-        accessToken: 'access-token',
-        refreshToken: 'refresh-token',
-        expiresAt: expiresAt,
-        issuerId: 'issuer-1',
-        issuerDiscoveryUrl: 'https://idp.example.com/.well-known',
-        clientId: 'client-app',
-        idToken: 'id-token',
+        Authenticated(
+          accessToken: 'access-token',
+          refreshToken: 'refresh-token',
+          expiresAt: expiresAt,
+          issuerId: 'issuer-1',
+          issuerDiscoveryUrl: 'https://idp.example.com/.well-known',
+          clientId: 'client-app',
+          idToken: 'id-token',
+        ),
       );
 
       verify(
@@ -82,7 +85,7 @@ void main() {
   });
 
   group('loadTokens', () {
-    test('returns StoredTokens when all required fields exist', () async {
+    test('returns Authenticated when all required fields exist', () async {
       final expiresAt = DateTime(2025, 12, 31, 12);
 
       when(() => mockStorage.read(key: AuthStorageKeys.accessToken))
@@ -302,27 +305,4 @@ void main() {
     });
   });
 
-  group('StoredTokens', () {
-    test('stores all provided values', () {
-      final expiresAt = DateTime(2025, 12, 31, 12);
-      final tokens = StoredTokens(
-        accessToken: 'access',
-        refreshToken: 'refresh',
-        expiresAt: expiresAt,
-        issuerId: 'issuer-1',
-        issuerDiscoveryUrl: 'https://idp.example.com/.well-known',
-        clientId: 'client-app',
-        idToken: 'id-token',
-      );
-
-      expect(tokens.accessToken, 'access');
-      expect(tokens.refreshToken, 'refresh');
-      expect(tokens.expiresAt, expiresAt);
-      expect(tokens.issuerId, 'issuer-1');
-      expect(tokens.issuerDiscoveryUrl, 'https://idp.example.com/.well-known');
-      expect(tokens.clientId, 'client-app');
-      expect(tokens.idToken, 'id-token');
-    });
-
-  });
 }

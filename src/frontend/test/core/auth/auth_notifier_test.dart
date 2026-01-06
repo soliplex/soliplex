@@ -4,13 +4,16 @@ import 'package:mocktail/mocktail.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/auth/auth_provider.dart';
 import 'package:soliplex_frontend/core/auth/auth_state.dart';
-import 'package:soliplex_frontend/core/auth/auth_storage.dart';
 
 import '../../helpers/test_helpers.dart';
 
 void main() {
   late MockAuthStorage mockStorage;
   late MockTokenRefreshService mockRefreshService;
+
+  setUpAll(() {
+    registerFallbackValue(TestData.createAuthenticated());
+  });
 
   setUp(() {
     mockStorage = MockAuthStorage();
@@ -29,7 +32,7 @@ void main() {
   group('AuthNotifier._restoreSession', () {
     group('with expired tokens', () {
       test('attempts refresh before clearing state', () async {
-        final expiredTokens = TestData.createStoredTokens(expired: true);
+        final expiredTokens = TestData.createAuthenticated(expired: true);
 
         when(() => mockStorage.loadTokens())
             .thenAnswer((_) async => expiredTokens);
@@ -66,22 +69,12 @@ void main() {
       });
 
       test('restores session when refresh succeeds', () async {
-        final expiredTokens = TestData.createStoredTokens(expired: true);
+        final expiredTokens = TestData.createAuthenticated(expired: true);
         final newExpiresAt = DateTime.now().add(const Duration(hours: 1));
 
         when(() => mockStorage.loadTokens())
             .thenAnswer((_) async => expiredTokens);
-        when(
-          () => mockStorage.saveTokens(
-            accessToken: 'new-access-token',
-            refreshToken: 'new-refresh-token',
-            expiresAt: newExpiresAt,
-            issuerId: expiredTokens.issuerId,
-            issuerDiscoveryUrl: expiredTokens.issuerDiscoveryUrl,
-            clientId: expiredTokens.clientId,
-            idToken: 'new-id-token',
-          ),
-        ).thenAnswer((_) async {});
+        when(() => mockStorage.saveTokens(any())).thenAnswer((_) async {});
         when(
           () => mockRefreshService.refresh(
             discoveryUrl: expiredTokens.issuerDiscoveryUrl,
@@ -112,7 +105,7 @@ void main() {
       });
 
       test('clears state when refresh fails with invalidGrant', () async {
-        final expiredTokens = TestData.createStoredTokens(expired: true);
+        final expiredTokens = TestData.createAuthenticated(expired: true);
 
         when(() => mockStorage.loadTokens())
             .thenAnswer((_) async => expiredTokens);
@@ -142,7 +135,7 @@ void main() {
       });
 
       test('clears state when refresh fails with networkError', () async {
-        final expiredTokens = TestData.createStoredTokens(expired: true);
+        final expiredTokens = TestData.createAuthenticated(expired: true);
 
         when(() => mockStorage.loadTokens())
             .thenAnswer((_) async => expiredTokens);
@@ -172,7 +165,7 @@ void main() {
       });
 
       test('clears state when refresh throws exception', () async {
-        final expiredTokens = TestData.createStoredTokens(expired: true);
+        final expiredTokens = TestData.createAuthenticated(expired: true);
 
         when(() => mockStorage.loadTokens())
             .thenAnswer((_) async => expiredTokens);
@@ -200,7 +193,7 @@ void main() {
       // Tests AuthNotifier's handling of noRefreshToken from service.
       // Actual empty-token detection tested in TokenRefreshService tests.
       test('clears state when service reports noRefreshToken', () async {
-        final expiredTokensNoRefresh = TestData.createStoredTokens(
+        final expiredTokensNoRefresh = TestData.createAuthenticated(
           expired: true,
           refreshToken: '',
         );
@@ -245,7 +238,7 @@ void main() {
 
     group('with valid tokens', () {
       test('restores session without refresh attempt', () async {
-        final validTokens = TestData.createStoredTokens();
+        final validTokens = TestData.createAuthenticated();
 
         when(() => mockStorage.loadTokens())
             .thenAnswer((_) async => validTokens);
@@ -291,10 +284,10 @@ void main() {
   // Runtime refresh tests - verify lenient failure handling (preserves session
   // on transient errors, unlike startup which clears on all failures)
   group('AuthNotifier.tryRefresh (runtime)', () {
-    late StoredTokens validTokens;
+    late Authenticated validTokens;
 
     setUp(() {
-      validTokens = TestData.createStoredTokens();
+      validTokens = TestData.createAuthenticated();
     });
 
     Future<ProviderContainer> setupAuthenticatedSession() async {
@@ -431,17 +424,7 @@ void main() {
           idToken: 'new-id-token',
         ),
       );
-      when(
-        () => mockStorage.saveTokens(
-          accessToken: 'new-access-token',
-          refreshToken: 'new-refresh-token',
-          expiresAt: newExpiresAt,
-          issuerId: validTokens.issuerId,
-          issuerDiscoveryUrl: validTokens.issuerDiscoveryUrl,
-          clientId: validTokens.clientId,
-          idToken: 'new-id-token',
-        ),
-      ).thenAnswer((_) async {});
+      when(() => mockStorage.saveTokens(any())).thenAnswer((_) async {});
 
       final result =
           await container.read(authProvider.notifier).tryRefresh();
@@ -477,17 +460,8 @@ void main() {
         ),
       );
       // Storage throws - simulates keychain locked, full disk, etc.
-      when(
-        () => mockStorage.saveTokens(
-          accessToken: 'new-access-token',
-          refreshToken: 'new-refresh-token',
-          expiresAt: newExpiresAt,
-          issuerId: validTokens.issuerId,
-          issuerDiscoveryUrl: validTokens.issuerDiscoveryUrl,
-          clientId: validTokens.clientId,
-          idToken: 'new-id-token',
-        ),
-      ).thenThrow(Exception('Keychain locked'));
+      when(() => mockStorage.saveTokens(any()))
+          .thenThrow(Exception('Keychain locked'));
 
       final result =
           await container.read(authProvider.notifier).tryRefresh();

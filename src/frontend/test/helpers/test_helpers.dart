@@ -389,11 +389,11 @@ class TestData {
     );
   }
 
-  /// Creates stored tokens for auth testing.
+  /// Creates an Authenticated state for auth testing.
   ///
   /// By default creates valid (non-expired) tokens. Use [expired] parameter
   /// to create tokens that expired 1 hour ago.
-  static StoredTokens createStoredTokens({
+  static Authenticated createAuthenticated({
     bool expired = false,
     String accessToken = 'test-access-token',
     String refreshToken = 'test-refresh-token',
@@ -406,7 +406,7 @@ class TestData {
         ? DateTime.now().subtract(const Duration(hours: 1))
         : DateTime.now().add(const Duration(hours: 1));
 
-    return StoredTokens(
+    return Authenticated(
       accessToken: accessToken,
       refreshToken: refreshToken,
       expiresAt: expiresAt,

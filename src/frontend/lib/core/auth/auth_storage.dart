@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:soliplex_frontend/core/auth/auth_state.dart';
 
 /// Storage keys for authentication tokens.
 abstract final class AuthStorageKeys {
@@ -72,37 +73,35 @@ class AuthStorage {
     }
   }
 
-  /// Saves all authentication tokens to secure storage.
-  Future<void> saveTokens({
-    required String accessToken,
-    required String refreshToken,
-    required DateTime expiresAt,
-    required String issuerId,
-    required String issuerDiscoveryUrl,
-    required String clientId,
-    required String idToken,
-  }) async {
+  /// Saves authentication state to secure storage.
+  Future<void> saveTokens(Authenticated tokens) async {
     await Future.wait([
-      _storage.write(key: AuthStorageKeys.accessToken, value: accessToken),
-      _storage.write(key: AuthStorageKeys.refreshToken, value: refreshToken),
+      _storage.write(
+        key: AuthStorageKeys.accessToken,
+        value: tokens.accessToken,
+      ),
+      _storage.write(
+        key: AuthStorageKeys.refreshToken,
+        value: tokens.refreshToken,
+      ),
       _storage.write(
         key: AuthStorageKeys.expiresAt,
-        value: expiresAt.toIso8601String(),
+        value: tokens.expiresAt.toIso8601String(),
       ),
-      _storage.write(key: AuthStorageKeys.issuerId, value: issuerId),
+      _storage.write(key: AuthStorageKeys.issuerId, value: tokens.issuerId),
       _storage.write(
         key: AuthStorageKeys.issuerDiscoveryUrl,
-        value: issuerDiscoveryUrl,
+        value: tokens.issuerDiscoveryUrl,
       ),
-      _storage.write(key: AuthStorageKeys.clientId, value: clientId),
-      _storage.write(key: AuthStorageKeys.idToken, value: idToken),
+      _storage.write(key: AuthStorageKeys.clientId, value: tokens.clientId),
+      _storage.write(key: AuthStorageKeys.idToken, value: tokens.idToken),
     ]);
   }
 
-  /// Loads stored authentication tokens.
+  /// Loads stored authentication state.
   ///
   /// Returns null if no tokens are stored or if required fields are missing.
-  Future<StoredTokens?> loadTokens() async {
+  Future<Authenticated?> loadTokens() async {
     final (
       accessToken,
       refreshToken,
@@ -134,7 +133,7 @@ class AuthStorage {
     final expiresAt = DateTime.tryParse(expiresAtStr);
     if (expiresAt == null) return null;
 
-    return StoredTokens(
+    return Authenticated(
       accessToken: accessToken,
       refreshToken: refreshToken,
       expiresAt: expiresAt,
@@ -157,25 +156,4 @@ class AuthStorage {
       _storage.delete(key: AuthStorageKeys.clientId),
     ]);
   }
-}
-
-/// Tokens loaded from secure storage.
-class StoredTokens {
-  const StoredTokens({
-    required this.accessToken,
-    required this.refreshToken,
-    required this.expiresAt,
-    required this.issuerId,
-    required this.issuerDiscoveryUrl,
-    required this.clientId,
-    required this.idToken,
-  });
-
-  final String accessToken;
-  final String refreshToken;
-  final DateTime expiresAt;
-  final String issuerId;
-  final String issuerDiscoveryUrl;
-  final String clientId;
-  final String idToken;
 }
