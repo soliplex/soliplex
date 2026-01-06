@@ -137,7 +137,7 @@ final String? Function() _getToken;
 
 ### HTTP Decorator Order and Observability
 
-**Wrapping hierarchy:** `Authenticated(Observable(Platform))`
+**Wrapping hierarchy:** `Refreshing(Authenticated(Observable(Platform)))`
 
 ```dart
 // 1. Platform client (innermost)
@@ -146,14 +146,19 @@ final platform = createPlatformClient();
 // 2. Observable wraps Platform
 final observable = ObservableHttpClient(client: platform, observers: [...]);
 
-// 3. Authenticated wraps Observable (outermost)
+// 3. Authenticated wraps Observable
 final authenticated = AuthenticatedHttpClient(client: observable, getToken: ...);
+
+// 4. Refreshing wraps Authenticated (outermost)
+final refreshing = RefreshingHttpClient(inner: authenticated, refresher: authNotifier);
 ```
 
 **Call order for requests:**
 
 ```text
 Caller
+  ↓ refreshing.request()
+Refreshing checks needsRefresh, proactively refreshes if needed
   ↓ authenticated.request()
 Authenticated adds token to headers
   ↓ observable.request()
@@ -169,7 +174,9 @@ Platform receives response
   ↓
 Observable logs response (sees 401s, all errors)
   ↓
-Authenticated receives response (throws on 401)
+Authenticated returns response
+  ↓
+Refreshing checks for 401, refreshes and retries ONCE if needed
   ↓
 Caller
 ```
@@ -177,82 +184,127 @@ Caller
 **Why this order:**
 
 - Observer sees requests WITH auth headers (accurate logging)
-- Observer sees all responses including 401s before Authenticated processes them
-- Debugging auth issues shows actual headers sent
+- Observer sees all responses including 401s
+- RefreshingHttpClient handles retry at the outermost layer
+- Single retry limit prevents infinite loops (CWE-834)
 
 ### 401 Retry Architecture
 
 **Key decision:** `AuthenticatedHttpClient` does NOT retry. It only adds tokens.
-
-Retry logic lives in the application layer (AuthNotifier) so ALL HTTP traffic is
-observable:
+`RefreshingHttpClient` handles all refresh and retry logic as a separate decorator.
 
 ```text
-1. Original request → Authenticated → Observable → Platform
+1. Original request → Refreshing → Authenticated → Observable → Platform
 2. 401 response     ← (observer sees this)
-3. AuthNotifier catches 401, triggers refresh
-4. Refresh request  → Authenticated → Observable → Platform
+3. RefreshingHttpClient triggers refresh via TokenRefresher interface
+4. Refresh request  → Observable → Platform (uses base client, not authenticated)
 5. Refresh response ← (observer sees this)
-6. AuthNotifier retries original request
-7. Retry request    → Authenticated → Observable → Platform
+6. RefreshingHttpClient retries original request (retried=true prevents loops)
+7. Retry request    → Refreshing → Authenticated → Observable → Platform
 8. Final response   ← (observer sees this)
 ```
 
-**Observer sees all 4+ HTTP calls.** No visibility is lost.
+**Observer sees all HTTP calls.** No visibility is lost.
 
 ```dart
-// In AuthNotifier - orchestration layer
-Future<T> executeWithAuth<T>(Future<T> Function() request) async {
-  try {
-    return await request();
-  } on AuthException catch (e) {
-    if (e.statusCode == 401) {
-      await refresh();  // Goes through same observable stack
-      return await request();  // Retry goes through same stack
+// RefreshingHttpClient - HTTP decorator layer
+class RefreshingHttpClient implements SoliplexHttpClient {
+  final SoliplexHttpClient _inner;
+  final TokenRefresher _refresher;
+  Completer<bool>? _refreshInProgress;  // Dedupes concurrent refreshes
+
+  Future<HttpResponse> request(...) async {
+    await _refresher.refreshIfExpiringSoon();  // Proactive refresh
+    return _executeWithRetry(..., retried: false);
+  }
+
+  Future<HttpResponse> _executeWithRetry(..., {required bool retried}) async {
+    final response = await _inner.request(...);
+
+    // On 401, attempt refresh and retry ONCE (CWE-834 prevention)
+    if (response.statusCode == 401 && !retried) {
+      if (await _tryRefreshOnce()) {
+        return _executeWithRetry(..., retried: true);
+      }
     }
-    rethrow;
+    return response;
   }
 }
 ```
 
+**Security controls:**
+
+- Single retry limit via `retried` flag prevents infinite 401→refresh→401 loops (CWE-834)
+- Completer pattern deduplicates concurrent refresh attempts
+- Refresh uses base HTTP client (not authenticated) to avoid refresh token loops
+
 ### Flow Diagram
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           soliplex_client (core)                            │
-│                                                                             │
-│  fetchAuthProviders() ──► List<AuthProviderConfig>                          │
-│                                 │                                           │
-│                                 │ Core doesn't interpret this               │
-│                                 ▼                                           │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │ AuthenticatedHttpClient                                              │   │
-│  │   - Wraps ObservableHttpClient (which wraps Platform)                │   │
-│  │   - Calls _getToken() per request                                    │   │
-│  │   - Injects Authorization header if token present                    │   │
-│  │   - Does NOT retry on 401                                            │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                   ▲                                                         │
-│                   │ _getToken: String? Function()                           │
-└───────────────────┼─────────────────────────────────────────────────────────┘
-                    │
-┌───────────────────┼─────────────────────────────────────────────────────────┐
-│                   │               Flutter Frontend                          │
-│                   │                                                         │
-│  ┌────────────────┴────────────────────────────────────────────────────┐   │
-│  │ Token Getter (provided to core)                                      │   │
-│  │   () => ref.read(accessTokenProvider)                                │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                   ▲                                                         │
-│                   │                                                         │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │ AuthNotifier                                                         │   │
-│  │   - Interprets AuthProviderConfig as OidcIssuer                      │   │
-│  │   - Runs flutter_appauth flow                                        │   │
-│  │   - Stores tokens in flutter_secure_storage                          │   │
-│  │   - Orchestrates refresh and 401 retry                               │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                          soliplex_client (core)                          │
+│                                                                          │
+│  Defines abstractions:                                                   │
+│    • TokenRefresher (interface)                                          │
+│    • String? Function() (token getter signature)                         │
+│                                                                          │
+│  fetchAuthProviders() ──► List<AuthProviderConfig>                       │
+│                                                                          │
+│  ┌────────────────────────────────────────────────────────────────────┐  │
+│  │ RefreshingHttpClient                                               │  │
+│  │   - Wraps AuthenticatedHttpClient                                  │  │
+│  │   - Proactive refresh before requests when needsRefresh            │  │
+│  │   - On 401: refresh via TokenRefresher, retry ONCE                 │  │
+│  │   - Concurrent refresh deduplication via Completer                 │  │
+│  │   - CWE-834: Single retry limit prevents infinite loops            │  │
+│  │                                                                    │  │
+│  │   Dependencies:                                                    │  │
+│  │     inner: AuthenticatedHttpClient                                 │  │
+│  │     refresher: TokenRefresher ◄──────────────────────────────┐     │  │
+│  └──────────────────────────────────────────────────────────────│─────┘  │
+│                                                                 │        │
+│  ┌──────────────────────────────────────────────────────────────│─────┐  │
+│  │ AuthenticatedHttpClient                                      │     │  │
+│  │   - Wraps ObservableHttpClient                               │     │  │
+│  │   - Calls _getToken() per request                            │     │  │
+│  │   - Injects Authorization header if token present            │     │  │
+│  │   - Does NOT retry on 401                                    │     │  │
+│  │                                                              │     │  │
+│  │   Dependencies:                                              │     │  │
+│  │     inner: ObservableHttpClient                              │     │  │
+│  │     _getToken: String? Function() ◄──────────────────────────│─┐   │  │
+│  └──────────────────────────────────────────────────────────────│─│───┘  │
+│                                                                 │ │      │
+│  ┌──────────────────────────────────────────────────────────────│─│───┐  │
+│  │ TokenRefreshService (pure Dart)                              │ │   │  │
+│  │   - refresh() → TokenRefreshResult (sealed type)             │ │   │  │
+│  │   - Fetches OIDC discovery, POSTs to token endpoint          │ │   │  │
+│  │   - SSRF protection via origin validation                    │ │   │  │
+│  │                                                              │ │   │  │
+│  │   Dependencies:                                              │ │   │  │
+│  │     httpClient: baseHttpClient (no auth, internal to core)   │ │   │  │
+│  └──────────────────────────────────────────────────────────────│─│───┘  │
+└─────────────────────────────────────────────────────────────────│─│──────┘
+                                                                  │ │
+                                        implements &              │ │
+                                        injects                   │ │
+                                                                  │ │
+┌─────────────────────────────────────────────────────────────────│─│──────┐
+│                           Flutter Frontend                      │ │      │
+│                                                                 │ │      │
+│  ┌──────────────────────────────────────────────────────────────│─│───┐  │
+│  │ AuthNotifier implements TokenRefresher ──────────────────────┘ │   │  │
+│  │   - Interprets AuthProviderConfig as OidcIssuer                │   │  │
+│  │   - Runs flutter_appauth flow (sign in/out)                    │   │  │
+│  │   - Stores tokens in flutter_secure_storage                    │   │  │
+│  │   - Delegates refresh to TokenRefreshService                   │   │  │
+│  │   - Implements needsRefresh, refreshIfExpiringSoon(), tryRefresh() │  │
+│  └────────────────────────────────────────────────────────────────│───┘  │
+│                                                                   │      │
+│  api_provider.dart wiring:                                        │      │
+│    _getToken: () => ref.read(accessTokenProvider) ────────────────┘      │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Migration Plan
@@ -260,18 +312,20 @@ Future<T> executeWithAuth<T>(Future<T> Function() request) async {
 1. **Add to `soliplex_client`:**
    - `AuthProviderConfig` model in `lib/src/auth/`
    - `AuthenticatedHttpClient` decorator in `lib/src/http/`
+   - `TokenRefresher` interface in `lib/src/http/`
+   - `RefreshingHttpClient` decorator in `lib/src/http/`
    - `fetchAuthProviders()` in `SoliplexApi`
 
 2. **Keep in Flutter frontend:**
    - `OidcIssuer` (frontend interpretation of `AuthProviderConfig`)
    - All Riverpod providers/notifiers
    - `auth_flow.dart` (flutter_appauth)
-   - Token storage, refresh orchestration, 401 retry logic
+   - Token storage, `AuthNotifier` implementing `TokenRefresher`
 
 3. **Refactor Flutter wiring:**
    - Use core's `AuthenticatedHttpClient` instead of `_AuthenticatedHttpClient`
-   - Frontend provides token getter closure
-   - Decorator order: `Authenticated(Observable(Platform))`
+   - Frontend provides token getter closure and `TokenRefresher` implementation
+   - Decorator order: `Refreshing(Authenticated(Observable(Platform)))`
 
 ## System Integration
 
@@ -296,9 +350,10 @@ Future<T> executeWithAuth<T>(Future<T> Function() request) async {
 │  │  ┌──────────────────┐      ┌──────────────────┐                    │   │
 │  │  │   authProvider   │◄────►│  configProvider  │                    │   │
 │  │  │  (AuthNotifier)  │      │ (ConfigNotifier) │                    │   │
-│  │  └────────┬─────────┘      └──────────────────┘                    │   │
+│  │  │ impl TokenRefresher     └──────────────────┘                    │   │
+│  │  └────────┬─────────┘                                              │   │
 │  │           │                                                         │   │
-│  │           │ credentials                                             │   │
+│  │           │ credentials + TokenRefresher interface                  │   │
 │  │           ▼                                                         │   │
 │  │  ┌──────────────────┐      ┌──────────────────┐                    │   │
 │  │  │    apiProvider   │─────►│ agUiClientProvider│                   │   │
@@ -308,29 +363,38 @@ Future<T> executeWithAuth<T>(Future<T> Function() request) async {
 │              │                         │                                   │
 │              ▼                         ▼                                   │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                    HTTP Layer (soliplex_client)                     │   │
+│  │                         HTTP Decorator Stack                         │   │
 │  │                                                                     │   │
-│  │  ┌────────────────────────┐      ┌────────────────────────┐        │   │
-│  │  │      SoliplexApi       │      │       IdpClient        │        │   │
-│  │  │   (backend calls)      │      │   (token refresh)      │        │   │
-│  │  │   + auth headers       │      │   to IdP endpoint      │        │   │
-│  │  └───────────┬────────────┘      └───────────┬────────────┘        │   │
-│  │              │                               │                      │   │
-│  │              └───────────────┬───────────────┘                      │   │
-│  │                              │                                      │   │
-│  │                              ▼                                      │   │
 │  │  ┌─────────────────────────────────────────────────────────────┐   │   │
-│  │  │              ObservableHttpClient                            │   │   │
-│  │  │  Wraps single HTTP client, notifies HttpObserver             │   │   │
-│  │  │  ALL traffic (backend + IdP) goes through here               │   │   │
+│  │  │ RefreshingHttpClient (core - soliplex_client)                 │   │   │
+│  │  │   - Proactive refresh via TokenRefresher.refreshIfExpiringSoon│  │   │
+│  │  │   - 401 retry via TokenRefresher.tryRefresh (once only)      │   │   │
+│  │  │   - Uses baseHttpClient for refresh (bypasses auth layer)    │   │   │
 │  │  └──────────────────────────┬──────────────────────────────────┘   │   │
 │  │                             │                                       │   │
 │  │                             ▼                                       │   │
 │  │  ┌─────────────────────────────────────────────────────────────┐   │   │
-│  │  │              Platform HTTP Client (single instance)          │   │   │
-│  │  │  (CupertinoHttpClient / DartHttpClient)                      │   │   │
+│  │  │ AuthenticatedHttpClient (core - soliplex_client)             │   │   │
+│  │  │   - Injects Authorization: Bearer {token}                    │   │   │
+│  │  │   - Does NOT handle refresh or retry                         │   │   │
+│  │  └──────────────────────────┬──────────────────────────────────┘   │   │
+│  │                             │                                       │   │
+│  │                             ▼                                       │   │
+│  │  ┌─────────────────────────────────────────────────────────────┐   │   │
+│  │  │ ObservableHttpClient (core - soliplex_client)                │   │   │
+│  │  │   - Notifies HttpObserver of all requests/responses          │   │   │
+│  │  │   - ALL traffic (backend + IdP refresh) goes through here    │   │   │
+│  │  └──────────────────────────┬──────────────────────────────────┘   │   │
+│  │                             │                                       │   │
+│  │                             ▼                                       │   │
+│  │  ┌─────────────────────────────────────────────────────────────┐   │   │
+│  │  │ Platform HTTP Client (core - soliplex_client_native)         │   │   │
+│  │  │   - CupertinoHttpClient (iOS/macOS) / DartHttpClient         │   │   │
 │  │  └──────────────────────────┬──────────────────────────────────┘   │   │
 │  └─────────────────────────────┼──────────────────────────────────────┘   │
+│                                │                                           │
+│  Token Refresh Path (bypasses AuthenticatedHttpClient):                    │
+│  AuthNotifier.tryRefresh() → auth_flow.refreshTokens() → baseHttpClient   │
 │                                │                                           │
 └────────────────────────────────┼───────────────────────────────────────────┘
                                  │ HTTPS
@@ -354,9 +418,9 @@ Future<T> executeWithAuth<T>(Future<T> Function() request) async {
 │  │  server_url: https://sso.domain.net/realms/soliplex                 │  │
 │  │                                                                     │  │
 │  │  ┌────────────────────────────────────────────────────────────┐    │  │
-│  │  │ /.well-known/openid-configuration                           │    │  │
-│  │  │ /protocol/openid-connect/auth  ◄── flutter_appauth login    │    │  │
-│  │  │ /protocol/openid-connect/token ◄── code exchange & refresh  │    │  │
+│  │  │ /.well-known/openid-configuration ◄── OIDC discovery        │    │  │
+│  │  │ /protocol/openid-connect/auth     ◄── flutter_appauth login │    │  │
+│  │  │ /protocol/openid-connect/token    ◄── code exchange & refresh│   │  │
 │  │  └────────────────────────────────────────────────────────────┘    │  │
 │  └─────────────────────────────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────────────────────────────┘
@@ -368,22 +432,23 @@ Auth Flow (Direct OIDC via flutter_appauth):
 4. IdP redirects to app with auth code
 5. flutter_appauth exchanges code for tokens at IdP token endpoint (PKCE)
 6. App stores tokens, uses for API calls
+7. On refresh: auth_flow.refreshTokens() → baseHttpClient → IdP token endpoint
 ```
 
 ### Auth Components
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         lib/core/auth/ [NEW]                                │
+│                         lib/core/auth/                                      │
 │                                                                             │
 │  ┌───────────────────────────────────────────────────────────────────────┐ │
 │  │  AuthState (sealed class)                                             │ │
 │  │                                                                       │ │
 │  │  ┌─────────────────┐    ┌──────────────────────────────────────────┐ │ │
 │  │  │ Unauthenticated │    │ Authenticated                            │ │ │
-│  │  │                 │    │   accessToken, refreshToken              │ │ │
-│  │  │                 │    │   expiresAt, refreshExpiresAt            │ │ │
-│  │  │                 │    │   userInfo?                              │ │ │
+│  │  │                 │    │   accessToken, refreshToken, idToken     │ │ │
+│  │  │                 │    │   expiresAt, issuerId, clientId          │ │ │
+│  │  │                 │    │   issuerDiscoveryUrl, userInfo?          │ │ │
 │  │  │                 │    │   isExpired, needsRefresh (computed)     │ │ │
 │  │  └─────────────────┘    └──────────────────────────────────────────┘ │ │
 │  └───────────────────────────────────────────────────────────────────────┘ │
@@ -391,36 +456,101 @@ Auth Flow (Direct OIDC via flutter_appauth):
 │                                  │ persisted to                             │
 │                                  ▼                                          │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │                 flutter_secure_storage (direct)                       │  │
+│  │                 flutter_secure_storage (via AuthStorage)              │  │
 │  │                                                                       │  │
 │  │  iOS/macOS: Keychain    Android: EncryptedSharedPreferences          │  │
 │  └──────────────────────────────────────────────────────────────────────┘  │
 │                                                                             │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │                      AuthNotifier                                     │  │
-│  │  signIn(issuerId)    → delegates to platform auth flow                │  │
+│  │  TokenRefresher (interface) — from soliplex_client                    │  │
+│  │    needsRefresh: bool                                                 │  │
+│  │    refreshIfExpiringSoon() → proactive refresh                        │  │
+│  │    tryRefresh() → attempt refresh, return success/failure             │  │
+│  │                                                                       │  │
+│  │  Note: Implementers need access to baseHttpClient (not the            │  │
+│  │  RefreshingHttpClient being configured) for token refresh calls.      │  │
+│  │  This dependency is injected via constructor, not interface.          │  │
+│  └───────────────────────────────┬──────────────────────────────────────┘  │
+│                                  │                                          │
+│                                  │ implemented by                           │
+│                                  ▼                                          │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │  AuthNotifier implements TokenRefresher                               │  │
+│  │                                                                       │  │
+│  │  Dependencies captured in build() via providers (enables testing):    │  │
+│  │    late final AuthStorage _storage                                    │  │
+│  │    late final TokenRefreshService _refreshService                     │  │
+│  │                                                                       │  │
+│  │  signIn(issuer)      → flutter_appauth flow                           │  │
 │  │  signOut()           → endSession + clears tokens from storage        │  │
-│  │  refresh()           → calls IdP token endpoint (via HTTP stack)      │  │
+│  │  tryRefresh()        → delegates to _refreshService.refresh()         │  │
 │  │  restoreSession()    → loads tokens from storage on app start         │  │
 │  └───────────────────────────────┬──────────────────────────────────────┘  │
 │                                  │                                          │
 │                                  │ delegates to                             │
 │                                  ▼                                          │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │                   auth_flow.dart (single file)                        │  │
+│  │  auth_flow.dart                                                       │  │
 │  │                                                                       │  │
-│  │  authenticate(provider, backendUrl) → tokens                          │  │
-│  │                                                                       │  │
-│  │  MVP: flutter_appauth for iOS/macOS                                   │  │
-│  │  Post-MVP: Add desktop loopback, web redirect                         │  │
+│  │  authenticate(issuer) → AuthResult (flutter_appauth)                  │  │
+│  │  endSession(...)      → IdP logout (flutter_appauth)                  │  │
 │  └──────────────────────────────────────────────────────────────────────┘  │
 │                                                                             │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │                      OidcIssuer (slim model)                          │  │
+│  │  TokenRefreshService (pure Dart - from soliplex_client)               │  │
 │  │                                                                       │  │
-│  │  id, title  (from /api/login)                                         │  │
-│  │  serverUrl, clientId, tokenEndpoint  (added when needed for refresh)  │  │
+│  │  Constructor: TokenRefreshService(httpClient: SoliplexHttpClient)     │  │
+│  │    httpClient: base client (not authenticated) for refresh calls      │  │
+│  │                                                                       │  │
+│  │  refresh(...) → TokenRefreshResult (sealed type)                      │  │
+│  │    - TokenRefreshSuccess: new tokens                                  │  │
+│  │    - TokenRefreshFailure: invalidGrant, networkError, unknownError    │  │
+│  │                                                                       │  │
+│  │  Handles: OIDC discovery, token refresh POST, SSRF validation         │  │
 │  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │  RefreshingHttpClient (decorator) — from soliplex_client              │  │
+│  │                                                                       │  │
+│  │  Constructor: RefreshingHttpClient(inner, refresher)                  │  │
+│  │    inner: AuthenticatedHttpClient (for normal requests)               │  │
+│  │    refresher: TokenRefresher (for refresh operations)                 │  │
+│  │                                                                       │  │
+│  │  Note: Does NOT receive baseHttpClient directly. The TokenRefresher   │  │
+│  │  implementation (AuthNotifier) handles the baseClient access.         │  │
+│  │                                                                       │  │
+│  │  Behavior:                                                            │  │
+│  │    - Proactive refresh via refresher.refreshIfExpiringSoon()          │  │
+│  │    - 401 retry via refresher.tryRefresh() (once only, CWE-834)        │  │
+│  │    - Completer pattern for concurrent refresh deduplication           │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │  OidcIssuer (slim model)                                              │  │
+│  │                                                                       │  │
+│  │  id, title, serverUrl, clientId, scope                                │  │
+│  │  discoveryUrl (computed from serverUrl)                               │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+HTTP Client Dependency Clarification:
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Why TokenRefresher needs baseHttpClient (not the decorated stack):         │
+│                                                                             │
+│  RefreshingHttpClient wraps AuthenticatedHttpClient. If refresh calls       │
+│  went through AuthenticatedHttpClient, the refresh_token would be sent      │
+│  with an Authorization header containing the (possibly expired) access      │
+│  token - this is incorrect OAuth behavior and could cause loops.            │
+│                                                                             │
+│  Solution: AuthNotifier receives baseHttpClient via Riverpod ref and        │
+│  passes it to auth_flow.refreshTokens(). The refresh request goes           │
+│  through Observable → Platform (visible in HTTP logs) but NOT through       │
+│  Authenticated (no auth header added).                                      │
+│                                                                             │
+│  Request paths:                                                             │
+│    Normal API call: Refreshing → Authenticated → Observable → Platform     │
+│    Token refresh:   auth_flow.refreshTokens() → Observable → Platform      │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -434,6 +564,22 @@ Auth Flow (Direct OIDC via flutter_appauth):
 │        │                                                                    │
 │        ▼                                                                    │
 │   ┌────────────────────────────────────────────────────────────────────┐   │
+│   │ RefreshingHttpClient                                                │   │
+│   │                                                                     │   │
+│   │  1. Check needsRefresh → proactive refresh if needed               │   │
+│   │  2. Forward request to inner client                                 │   │
+│   │  3. On 401 → tryRefresh() → retry ONCE (CWE-834)                   │   │
+│   └─────────────────────────────┬──────────────────────────────────────┘   │
+│                                 │                                           │
+│                                 ▼                                           │
+│   ┌────────────────────────────────────────────────────────────────────┐   │
+│   │ AuthenticatedHttpClient                                             │   │
+│   │                                                                     │   │
+│   │  Inject: Authorization: Bearer {token}                              │   │
+│   └─────────────────────────────┬──────────────────────────────────────┘   │
+│                                 │                                           │
+│                                 ▼                                           │
+│   ┌────────────────────────────────────────────────────────────────────┐   │
 │   │ ObservableHttpClient                                                │   │
 │   │                                                                     │   │
 │   │  Emits HttpRequestEvent ──────────────────────────────────────┐    │   │
@@ -444,34 +590,17 @@ Auth Flow (Direct OIDC via flutter_appauth):
 │                                 │                                 │         │
 │                                 ▼                                 │         │
 │   ┌────────────────────────────────────────────────────────────┐  │        │
-│   │ AuthenticatedHttpTransport                                  │  │        │
-│   │                                                             │  │        │
-│   │  1. Check if token needs refresh                            │  │        │
-│   │  2. If expired → refresh() via same HTTP stack (observable) │  │        │
-│   │  3. Inject: Authorization: Bearer {token}                   │  │        │
-│   └─────────────────────────────┬───────────────────────────────┘  │        │
+│   │ Platform HTTP Client → Network                              │  │        │
+│   └─────────────────────────────┬──────────────────────────────┘  │        │
 │                                 │                                  │         │
 │                                 ▼                                  │         │
 │   ┌────────────────────────────────────────────────────────────┐   │        │
-│   │ HttpTransport → Platform HTTP Client → Network             │   │        │
-│   └─────────────────────────────┬──────────────────────────────┘   │        │
-│                                 │                                  │         │
-│                                 ▼                                  │         │
-│   ┌────────────────────────────────────────────────────────────┐   │        │
-│   │ Response received                                          │   │        │
-│   │                                                            │   │        │
-│   │  On 401: AuthenticatedHttpTransport triggers refresh       │   │        │
-│   │          (retry request with new token)                    │   │        │
-│   └─────────────────────────────┬──────────────────────────────┘   │        │
-│                                 │                                  │         │
-│                                 ▼                                  │         │
-│   ┌────────────────────────────────────────────────────────────┐   │        │
-│   │ ObservableHttpClient                                        │   │        │
+│   │ Response flows back up through the chain                    │   │        │
 │   │                                                             │   │        │
-│   │  Emits HttpResponseEvent ────────────────────────────────┐ │   │        │
-│   │    • status, headers                                     │ │   │        │
-│   │    • body (tokens [REDACTED])                            │ │   │        │
-│   └──────────────────────────────────────────────────────────┼─┘   │        │
+│   │  ObservableHttpClient emits HttpResponseEvent ──────────┐  │   │        │
+│   │    • status, headers                                    │  │   │        │
+│   │    • body (tokens [REDACTED])                           │  │   │        │
+│   └─────────────────────────────────────────────────────────┼──┘   │        │
 │                                                              │     │         │
 │                                                              ▼     ▼         │
 │   ┌────────────────────────────────────────────────────────────────────┐   │
@@ -493,8 +622,10 @@ Auth Flow (Direct OIDC via flutter_appauth):
 │                        What IS Observable                                   │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ✓ GET /api/login (fetch IdP configuration)                                │
+│  ✓ GET {idp}/.well-known/openid-configuration (OIDC discovery)             │
 │  ✓ POST {idp}/token (refresh calls go through our HTTP stack)              │
 │  ✓ All authenticated API calls (GET /api/v1/rooms, etc.)                   │
+│  ✓ 401 retry requests (after successful refresh)                           │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                        What is NOT Observable                               │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -503,8 +634,8 @@ Auth Flow (Direct OIDC via flutter_appauth):
 │  ✗ Code exchange by flutter_appauth (happens inside the library)           │
 │                                                                             │
 │  Note: With direct OIDC, the initial code exchange is handled internally   │
-│  by flutter_appauth and isn't observable. Only token refresh (which we     │
-│  trigger manually) goes through our HTTP stack.                            │
+│  by flutter_appauth and isn't observable. Token refresh uses our HTTP      │
+│  stack via refreshTokens() in auth_flow.dart, so it IS observable.         │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -689,7 +820,7 @@ class Authenticated extends AuthState {
   final DateTime expiresAt;
   final String issuerId;            // Which IdP issued tokens (for refresh)
   final String issuerDiscoveryUrl;  // OIDC discovery URL (for endSession)
-  final String? idToken;            // Required for OIDC endSession
+  final String idToken;             // Required for OIDC endSession
   final Map<String, dynamic>? userInfo;
 
   const Authenticated({
@@ -708,6 +839,18 @@ class Authenticated extends AuthState {
   );
 }
 ```
+
+**Refresh Buffer Justification (1 minute):**
+
+The 1-minute buffer before token expiry provides:
+
+1. **Network latency margin**: Ensures refresh completes before token expires, even with slow networks
+2. **Clock drift tolerance**: Small differences between client and server clocks won't cause premature 401s
+3. **Reasonable for typical token lifetimes**: Keycloak default access token lifetime is 5 minutes;
+   1 minute buffer means refresh at 80% of lifetime
+
+For shorter token lifetimes (< 2 minutes), this buffer may be too aggressive. Consider making it
+configurable or percentage-based (e.g., 80% of lifetime) if supporting IdPs with very short tokens.
 
 Note: `userInfo` is intentionally excluded from equality checks as it may be
 fetched/updated independently of token state.
@@ -728,6 +871,23 @@ to avoid spreading null checks throughout the codebase.
 | `Authenticated.idToken` | `String?` | Propagated from `AuthResult` | `endSession()` - skips IdP logout if null |
 | `Authenticated.userInfo` | `Map<String, dynamic>?` | Optionally fetched after auth | Consumers check before use |
 | `AuthenticatedHttpClient._getToken()` | `String?` | Returns null when unauthenticated | `_injectAuth()` - skips header if null |
+| `TokenRefreshSuccess.idToken` | `String?` | OIDC spec: refresh may not return id_token | `AuthNotifier` preserves existing idToken |
+
+**TokenRefreshSuccess.idToken Nullability (OIDC Spec Reference):**
+
+Per [OIDC Core 1.0 Section 12.2](https://openid.net/specs/openid-connect-core-1_0.html#RefreshTokenResponse):
+
+> "Upon successful validation of the Refresh Token, the response body is the Token Response
+> of Section 3.1.3.3 except that **it might not contain an id_token**."
+
+Whether an IdP returns a new `id_token` on refresh depends on implementation, requested scopes,
+and provider-specific policies. The `TokenRefreshSuccess.idToken` field is intentionally nullable
+to accurately represent what the IdP returned. Callers must preserve the existing `id_token`:
+
+```dart
+// In AuthNotifier._handleRefreshSuccess()
+final idToken = result.idToken ?? current.idToken;
+```
 
 **Design principle**: Nulls represent legitimate states (e.g., no token yet, IdP didn't
 provide optional field). Each null is handled at one boundary, keeping the rest of the
@@ -762,24 +922,31 @@ Token endpoint for refresh is derived at runtime from OIDC discovery:
 
 | Provider | Type | Purpose |
 |----------|------|---------|
-| `authProvider` | StateNotifierProvider | Auth state + actions |
-| `idpClientProvider` | Provider | IdP token refresh client |
+| `authProvider` | NotifierProvider | Auth state + actions, implements TokenRefresher |
+| `baseHttpClientProvider` | Provider | Observable HTTP client for refresh (no auth header) |
 
-Derived providers (`authCredentialsProvider`, `isAuthenticatedProvider`) added when needed.
+Derived providers (`accessTokenProvider`, `isAuthenticatedProvider`) added when needed.
 
 ### AuthNotifier
 
+Implements `TokenRefresher` to provide refresh capabilities to RefreshingHttpClient.
+
 ```dart
-class AuthNotifier extends StateNotifier<AuthState> {
-  final FlutterSecureStorage _storage;
-  final IdpClient _idpClient;  // For token refresh
+class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
+  final AuthStorage _storage;
 
   Future<void> signIn(OidcIssuer issuer);
-  Future<void> signOut();         // Calls endSession (flutter_appauth) + clears storage
-  Future<void> refresh();         // Uses IdpClient (observable via shared HTTP client)
-  Future<void> restoreSession();  // On app start
+  Future<void> signOut();              // Calls endSession (flutter_appauth) + clears storage
+
+  // TokenRefresher implementation
+  bool get needsRefresh;               // True if token expires within 1 minute
+  Future<void> refreshIfExpiringSoon(); // Proactive refresh before API calls
+  Future<bool> tryRefresh();           // Uses auth_flow.refreshTokens() with baseHttpClient
 }
 ```
+
+Token refresh uses `ref.read(baseHttpClientProvider)` to get an observable HTTP client
+that bypasses the auth layer (avoiding circular dependency).
 
 **signOut behavior:**
 
@@ -787,23 +954,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
   the IdP session, then clears local tokens
 - On platforms without flutter_appauth (future): clears local tokens only; proper
   endSession support deferred until platform-specific auth is implemented
-
-### IdpClient
-
-Slim client for IdP token operations. Uses the shared HTTP client (observable).
-
-```dart
-class IdpClient {
-  final HttpClient _httpClient;  // Same client as SoliplexApi
-
-  /// Refresh tokens using IdP token endpoint
-  Future<TokenResponse> refreshToken({
-    required String tokenEndpoint,
-    required String refreshToken,
-    required String clientId,
-  });
-}
-```
 
 ## Platform Auth Flow
 
@@ -1175,14 +1325,21 @@ Post-MVP:
 ```text
 lib/core/auth/
 ├── auth_state.dart              # Sealed class (AuthState, Authenticated, etc.)
-├── oidc_issuer.dart             # Model from /api/login
-├── auth_flow.dart               # Platform auth: authenticate, endSession
-├── auth_notifier.dart           # State management + storage
-├── idp_client.dart              # Token refresh to IdP
-└── authenticated_transport.dart # Token injection, 401 handling
+├── auth_storage.dart            # Keychain storage wrapper
+├── auth_notifier.dart           # State management + TokenRefresher impl
+├── auth_provider.dart           # Riverpod providers
+├── auth_flow.dart               # authenticate, endSession (flutter_appauth)
+└── oidc_issuer.dart             # Model from /api/login
+
+packages/soliplex_client/lib/src/http/
+├── token_refresher.dart         # Interface for refresh operations
+└── refreshing_http_client.dart  # HTTP decorator for refresh + 401 retry
+
+packages/soliplex_client/lib/src/auth/
+└── token_refresh_service.dart   # Pure Dart service for token refresh
 
 lib/core/providers/
-└── auth_provider.dart           # Riverpod providers
+└── api_provider.dart            # HTTP client wiring with RefreshingHttpClient
 
 lib/features/login/
 └── login_screen.dart            # Provider selection UI
@@ -1197,13 +1354,15 @@ Platform config:
 
 | Component | Purpose | Lines (est) |
 |-----------|---------|-------------|
-| AuthState | Sealed class with token fields | ~25 |
-| OidcIssuer | Model from /api/login | ~20 |
-| AuthNotifier | State management + storage | ~70 |
-| auth_flow.dart | authenticate + endSession | ~50 |
-| IdpClient | Token refresh to IdP | ~30 |
-| authenticated_transport.dart | Token injection, 401 handling | ~50 |
-| **Total** | | **~245** |
+| AuthState | Sealed class with token fields | ~60 |
+| AuthStorage | Keychain storage wrapper | ~80 |
+| AuthNotifier | State management + TokenRefresher impl | ~250 |
+| auth_flow.dart | authenticate + endSession (flutter_appauth) | ~80 |
+| OidcIssuer | Model from /api/login | ~50 |
+| TokenRefresher | Interface for refresh operations | ~20 |
+| TokenRefreshService | Pure Dart refresh logic with result type | ~230 |
+| RefreshingHttpClient | HTTP decorator, 401 retry, CWE-834 | ~120 |
+| **Total** | | **~890** |
 
 ## Resolved Questions
 
@@ -1375,4 +1534,68 @@ Track implementation status here. Update after each phase.
 - `clearOnReinstall()` handles iOS behavior where Keychain persists across app reinstalls
 - Sign out uses `flutter_appauth.endSession()` to properly terminate IdP session
 
-### Slice 3 Status: ⏳ Not Started
+### Slice 3 Status: 🔄 In Progress
+
+- [x] `lib/core/auth/auth_storage.dart` - Add clientId to storage
+- [x] `lib/core/auth/auth_state.dart` - Add clientId to Authenticated, require idToken
+- [x] `lib/core/auth/auth_notifier.dart` - Store clientId, implement TokenRefresher
+- [x] `lib/core/auth/auth_flow.dart` - Simplified to just authenticate/endSession
+- [x] `packages/soliplex_client/.../token_refresher.dart` - Interface for refresh operations
+- [x] `packages/soliplex_client/.../refreshing_http_client.dart` - HTTP decorator with 401 retry
+- [x] `packages/soliplex_client/.../token_refresh_service.dart` - Pure Dart refresh logic
+- [x] `lib/core/auth/auth_provider.dart` - Add tokenRefreshServiceProvider
+- [ ] `lib/core/providers/api_provider.dart` - Wire RefreshingHttpClient
+- [ ] Handle expired tokens on session restore (attempt refresh before clearing)
+- [ ] Integration tests for refresh functionality
+
+**Implementation Notes:**
+
+- Token refresh extracted to `TokenRefreshService` (pure Dart, in soliplex_client)
+- Returns sealed `TokenRefreshResult` type (Success/Failure) instead of exceptions
+- SSRF protection: validates token endpoint origin matches discovery URL
+- `RefreshingHttpClient` decorator pattern per blacksmith/sentinel review
+- Single retry limit prevents infinite 401→refresh→401 loops (CWE-834)
+- Completer pattern deduplicates concurrent refresh attempts with microtask cleanup
+- `TokenRefresher` interface decouples HTTP client from AuthNotifier
+- `idToken` now required (not nullable) - needed for proper OIDC logout
+- `clientId` stored in Keychain alongside other tokens for refresh
+
+**Architectural Decision (2026-01-05):**
+
+Per blacksmith consultation, AuthNotifier implementing TokenRefresher is valid DIP:
+
+- RefreshingHttpClient depends only on TokenRefresher abstraction
+- AuthNotifier provides implementation
+- No actual inversion - the interface is in the right place (HTTP layer defines needs)
+
+Testability improved by:
+
+- Extracting refresh HTTP logic to `TokenRefreshService` (pure Dart, constructor injection)
+- AuthNotifier captures dependencies in `build()` via `late final` fields
+- Test by overriding providers (`authStorageProvider`, `tokenRefreshServiceProvider`)
+
+**Riverpod Notifier Dependency Injection Pattern:**
+
+Riverpod's `Notifier` class doesn't support constructor injection because `NotifierProvider`
+uses `AuthNotifier.new` (the default constructor). The `ref` object is only available
+inside `build()` and instance methods, not in the constructor.
+
+The solution is `late final` fields initialized at the start of `build()`:
+
+```dart
+class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
+  late final AuthStorage _storage;
+  late final TokenRefreshService _refreshService;
+
+  @override
+  AuthState build() {
+    _storage = ref.read(authStorageProvider);
+    _refreshService = ref.read(tokenRefreshServiceProvider);
+    // ...
+  }
+}
+```
+
+**Lifecycle guarantee:** Riverpod calls `build()` before exposing the Notifier to callers.
+No instance method can be invoked until `build()` completes and returns the initial state.
+The `late final` fields are always initialized before any method accesses them.

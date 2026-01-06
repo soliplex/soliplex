@@ -32,14 +32,18 @@ final baseHttpClientProvider = Provider<SoliplexHttpClient>((ref) {
   return observable;
 });
 
-/// Provider for the shared HTTP client with auth token injection.
+/// Provider for the shared HTTP client with auth token injection and refresh.
 ///
 /// Wraps the observable client to automatically add Authorization header
-/// when a token is available. This client is shared by both REST API
-/// ([httpTransportProvider]) and SSE streaming ([soliplexHttpClientProvider])
-/// to provide unified HTTP logging and authentication.
+/// when a token is available, and handles token refresh on expiry or 401.
 ///
-/// **Decorator order**: `Authenticated(Observable(Platform))`
+/// This client is shared by both REST API ([httpTransportProvider]) and
+/// SSE streaming ([soliplexHttpClientProvider]) to provide unified HTTP
+/// logging, authentication, and token refresh.
+///
+/// **Decorator order**: `Refreshing(Authenticated(Observable(Platform)))`
+/// - Refreshing handles proactive refresh and 401 retry (once only)
+/// - Authenticated adds Authorization header
 /// - Observer sees requests WITH auth headers (accurate logging)
 /// - Observer sees all responses including 401s
 ///
@@ -47,10 +51,18 @@ final baseHttpClientProvider = Provider<SoliplexHttpClient>((ref) {
 /// is disposed.
 final authenticatedClientProvider = Provider<SoliplexHttpClient>((ref) {
   final observableClient = ref.watch(baseHttpClientProvider);
+  final authNotifier = ref.watch(authProvider.notifier);
 
-  return AuthenticatedHttpClient(
+  // Inner client: adds Authorization header
+  final authClient = AuthenticatedHttpClient(
     observableClient,
     () => ref.read(accessTokenProvider),
+  );
+
+  // Outer client: handles proactive refresh + 401 retry
+  return RefreshingHttpClient(
+    inner: authClient,
+    refresher: authNotifier,
   );
 });
 
