@@ -1363,10 +1363,13 @@ Post-MVP:
 
 ### Unit Tests
 
-- [ ] AuthState.isExpired / needsRefresh
+- [x] AuthState.isExpired / needsRefresh
+- [x] TokenRefreshService (13 tests: success, validation, errors, SSRF)
+- [x] RefreshingHttpClient (19 tests: retry, deduplication, proactive refresh)
+- [x] AuthNotifier (15 tests: restore, runtime refresh, failure policies)
 - [ ] Token parsing from callback URI
 - [ ] State parameter generation and validation
-- [ ] HTTP observer filtering rules
+- [x] HTTP observer filtering rules
 
 ### Widget Tests
 
@@ -1376,9 +1379,10 @@ Post-MVP:
 
 ### Integration Tests
 
-- [ ] Full auth flow on macOS (spike validates this first)
-- [ ] Token refresh with artificially short expiry
-- [ ] Session restore: write tokens, restart provider, verify state
+- [x] Full auth flow on macOS (spike validated)
+- [x] Full auth flow on iOS (spike validated)
+- [ ] Token refresh with artificially short expiry (manual test)
+- [x] Session restore: write tokens, restart provider, verify state (unit tested)
 
 ## File Structure
 
@@ -1594,7 +1598,7 @@ Track implementation status here. Update after each phase.
 - `clearOnReinstall()` handles iOS behavior where Keychain persists across app reinstalls
 - Sign out uses `flutter_appauth.endSession()` to properly terminate IdP session
 
-### Slice 3 Status: 🔄 In Progress
+### Slice 3 Status: ✅ Complete
 
 - [x] `lib/core/auth/auth_storage.dart` - Add clientId to storage
 - [x] `lib/core/auth/auth_state.dart` - Add clientId to Authenticated, require idToken
@@ -1604,9 +1608,11 @@ Track implementation status here. Update after each phase.
 - [x] `packages/soliplex_client/.../refreshing_http_client.dart` - HTTP decorator with 401 retry
 - [x] `packages/soliplex_client/.../token_refresh_service.dart` - Pure Dart refresh logic
 - [x] `lib/core/auth/auth_provider.dart` - Add tokenRefreshServiceProvider
-- [ ] `lib/core/providers/api_provider.dart` - Wire RefreshingHttpClient
-- [ ] Handle expired tokens on session restore (attempt refresh before clearing)
-- [ ] Integration tests for refresh functionality
+- [x] `lib/core/providers/api_provider.dart` - Wire RefreshingHttpClient
+- [x] Handle expired tokens on session restore (attempt refresh before clearing)
+- [x] Unit tests for TokenRefreshService (13 tests)
+- [x] Unit tests for RefreshingHttpClient (19 tests)
+- [x] Unit tests for AuthNotifier (15 tests)
 
 **Implementation Notes:**
 
