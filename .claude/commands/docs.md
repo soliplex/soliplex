@@ -2,11 +2,11 @@ Perform a comprehensive documentation gap analysis for the docsV2 directory.
 
 ## Instructions
 
-Execute a minimum of 3 passes to identify documentation gaps across ALL 55 documentation files.
+Execute a minimum of 3 passes to identify documentation gaps across all documentation files.
 
 ### Pass 1: Inventory & Recent Changes
 1. Run `git log --oneline -20` to see recent commits
-2. List all files in `docsV2/` directory (currently 55 files)
+2. List all files in `docsV2/` directory
 3. Identify which documentation areas might be affected by recent changes
 
 ### Pass 2: Deep Verification by Section
@@ -14,7 +14,7 @@ Execute a minimum of 3 passes to identify documentation gaps across ALL 55 docum
 Compare each documentation section against its implementation:
 
 **Reference Section**
-- `docsV2/reference/cli.md` → `src/soliplex/cli.py`
+- `docsV2/reference/cli.md` → `src/soliplex/cli.py`, `src/soliplex/tui/`
 - `docsV2/reference/config-schema.md` → `src/soliplex/config.py`
 - `docsV2/reference/server-api.md` → `src/soliplex/views/` (OpenAPI)
 
@@ -52,6 +52,11 @@ Compare each documentation section against its implementation:
 - `docsV2/admin-guide/configuration/oidc.md` → `src/soliplex/auth.py`
 - `docsV2/admin-guide/configuration/quizzes.md` → `src/soliplex/views/quizzes.py`
 - `docsV2/admin-guide/configuration/meta.md` → `src/soliplex/installation.py`
+- `docsV2/admin-guide/configuration/completions.md` → `src/soliplex/views/completions.py`
+- `docsV2/admin-guide/configuration/filesystem-layout.md` → filesystem structure
+
+**Admin Guide - Authentication**
+- `docsV2/admin-guide/authentication/index.md` → `src/soliplex/auth.py`
 
 **Admin Guide - Deployment**
 - `docsV2/admin-guide/deployment/docker.md` → `Dockerfile`, `docker-compose.yaml`
