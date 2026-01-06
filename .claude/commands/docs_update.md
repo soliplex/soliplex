@@ -5,9 +5,13 @@ Perform a comprehensive documentation gap analysis for the docs directory.
 Execute a minimum of 3 passes to identify documentation gaps across all documentation files.
 
 ### Pass 1: Inventory & Recent Changes
-1. Run `git log --oneline -20` to see recent commits
-2. List all files in `docs/` directory
-3. Identify which documentation areas might be affected by recent changes
+
+1. Read the last review date from `docs/.last_review`
+   - Format: `last_review: YYYY-MM-DD`
+   - If file doesn't exist, assume 6 months ago and note this is first run
+2. Run `git log --oneline --since=<date> -- src/ example/` to see implementation changes since last review
+3. List all files in `docs/` directory
+4. Cross-reference commits with documentation areas that might need updates
 
 ### Pass 2: Deep Verification by Section
 
@@ -105,3 +109,13 @@ For each gap, include:
 - Recommended fix
 
 Ask before making any changes. User will review the analysis and decide what to implement.
+
+### After Fixing Gaps
+
+Once documentation gaps have been fixed and committed:
+
+1. Update `docs/.last_review` with today's date:
+   ```yaml
+   last_review: YYYY-MM-DD
+   ```
+2. Commit the timestamp update
