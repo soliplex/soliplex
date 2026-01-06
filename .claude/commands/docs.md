@@ -1,4 +1,4 @@
-Perform a comprehensive documentation gap analysis for the docsV2 directory.
+Perform a comprehensive documentation gap analysis for the docs directory.
 
 ## Instructions
 
@@ -6,7 +6,7 @@ Execute a minimum of 3 passes to identify documentation gaps across all document
 
 ### Pass 1: Inventory & Recent Changes
 1. Run `git log --oneline -20` to see recent commits
-2. List all files in `docsV2/` directory
+2. List all files in `docs/` directory
 3. Identify which documentation areas might be affected by recent changes
 
 ### Pass 2: Deep Verification by Section
@@ -14,71 +14,71 @@ Execute a minimum of 3 passes to identify documentation gaps across all document
 Compare each documentation section against its implementation:
 
 **Reference Section**
-- `docsV2/reference/cli.md` → `src/soliplex/cli.py`, `src/soliplex/tui/`
-- `docsV2/reference/config-schema.md` → `src/soliplex/config.py`
-- `docsV2/reference/server-api.md` → `src/soliplex/views/` (OpenAPI)
+- `docs/reference/cli.md` → `src/soliplex/cli.py`, `src/soliplex/tui/`
+- `docs/reference/config-schema.md` → `src/soliplex/config.py`
+- `docs/reference/server-api.md` → `src/soliplex/views/` (OpenAPI)
 
 **Developer Guide - API**
-- `docsV2/developer-guide/api/models.md` → `src/soliplex/models.py`
-- `docsV2/developer-guide/api/rest-endpoints.md` → `src/soliplex/views/`
-- `docsV2/developer-guide/api/agui-protocol.md` → `src/soliplex/agui/`
+- `docs/developer-guide/api/models.md` → `src/soliplex/models.py`
+- `docs/developer-guide/api/rest-endpoints.md` → `src/soliplex/views/`
+- `docs/developer-guide/api/agui-protocol.md` → `src/soliplex/agui/`
 
 **Developer Guide - Agents**
-- `docsV2/developer-guide/agents/configuration.md` → `src/soliplex/agents.py`
-- `docsV2/developer-guide/agents/factory-agents.md` → `src/soliplex/agents.py`
-- `docsV2/developer-guide/agents/tools.md` → `src/soliplex/tools.py`
-- `docsV2/developer-guide/agents/streaming.md` → `src/soliplex/agui/`
+- `docs/developer-guide/agents/configuration.md` → `src/soliplex/agents.py`
+- `docs/developer-guide/agents/factory-agents.md` → `src/soliplex/agents.py`
+- `docs/developer-guide/agents/tools.md` → `src/soliplex/tools.py`
+- `docs/developer-guide/agents/streaming.md` → `src/soliplex/agui/`
 
 **Developer Guide - RAG**
-- `docsV2/developer-guide/rag/database.md` → haiku-rag integration
-- `docsV2/developer-guide/rag/tools.md` → `src/soliplex/tools.py`
-- `docsV2/developer-guide/rag/citations.md` → `src/soliplex/agui/features.py`
+- `docs/developer-guide/rag/database.md` → haiku-rag integration
+- `docs/developer-guide/rag/tools.md` → `src/soliplex/tools.py`
+- `docs/developer-guide/rag/citations.md` → `src/soliplex/agui/features.py`
 
 **Developer Guide - MCP**
-- `docsV2/developer-guide/mcp/server.md` → `src/soliplex/mcp_server.py`
-- `docsV2/developer-guide/mcp/client.md` → `src/soliplex/mcp_client.py`
+- `docs/developer-guide/mcp/server.md` → `src/soliplex/mcp_server.py`
+- `docs/developer-guide/mcp/client.md` → `src/soliplex/mcp_client.py`
 
 **Developer Guide - Flutter**
-- `docsV2/developer-guide/flutter/architecture.md` → `src/flutter/lib/`
-- `docsV2/developer-guide/flutter/widgets.md` → `src/flutter/lib/widgets/`
+- `docs/developer-guide/flutter/architecture.md` → `src/flutter/lib/`
+- `docs/developer-guide/flutter/widgets.md` → `src/flutter/lib/widgets/`
 
 **Admin Guide - Configuration**
-- `docsV2/admin-guide/configuration/installation.md` → `src/soliplex/config.py`
-- `docsV2/admin-guide/configuration/agents.md` → `src/soliplex/agents.py`
-- `docsV2/admin-guide/configuration/rooms.md` → `src/soliplex/config.py`
-- `docsV2/admin-guide/configuration/rag.md` → haiku-rag config
-- `docsV2/admin-guide/configuration/secrets.md` → `src/soliplex/secrets.py`
-- `docsV2/admin-guide/configuration/environment.md` → `src/soliplex/config.py`
-- `docsV2/admin-guide/configuration/oidc.md` → `src/soliplex/auth.py`
-- `docsV2/admin-guide/configuration/quizzes.md` → `src/soliplex/views/quizzes.py`
-- `docsV2/admin-guide/configuration/meta.md` → `src/soliplex/installation.py`
-- `docsV2/admin-guide/configuration/completions.md` → `src/soliplex/views/completions.py`
-- `docsV2/admin-guide/configuration/filesystem-layout.md` → filesystem structure
+- `docs/admin-guide/configuration/installation.md` → `src/soliplex/config.py`
+- `docs/admin-guide/configuration/agents.md` → `src/soliplex/agents.py`
+- `docs/admin-guide/configuration/rooms.md` → `src/soliplex/config.py`
+- `docs/admin-guide/configuration/rag.md` → haiku-rag config
+- `docs/admin-guide/configuration/secrets.md` → `src/soliplex/secrets.py`
+- `docs/admin-guide/configuration/environment.md` → `src/soliplex/config.py`
+- `docs/admin-guide/configuration/oidc.md` → `src/soliplex/auth.py`
+- `docs/admin-guide/configuration/quizzes.md` → `src/soliplex/views/quizzes.py`
+- `docs/admin-guide/configuration/meta.md` → `src/soliplex/installation.py`
+- `docs/admin-guide/configuration/completions.md` → `src/soliplex/views/completions.py`
+- `docs/admin-guide/configuration/filesystem-layout.md` → filesystem structure
 
 **Admin Guide - Authentication**
-- `docsV2/admin-guide/authentication/index.md` → `src/soliplex/auth.py`
+- `docs/admin-guide/authentication/index.md` → `src/soliplex/auth.py`
 
 **Admin Guide - Deployment**
-- `docsV2/admin-guide/deployment/docker.md` → `Dockerfile`, `docker-compose.yaml`
-- `docsV2/admin-guide/deployment/production.md` → deployment configs
-- `docsV2/admin-guide/deployment/monitoring.md` → logging config
+- `docs/admin-guide/deployment/docker.md` → `Dockerfile`, `docker-compose.yaml`
+- `docs/admin-guide/deployment/production.md` → deployment configs
+- `docs/admin-guide/deployment/monitoring.md` → logging config
 
 **Getting Started**
-- `docsV2/getting-started/quickstart.md` → `example/` configs
-- `docsV2/getting-started/installation.md` → `pyproject.toml`, README
-- `docsV2/getting-started/first-chat.md` → example configs
+- `docs/getting-started/quickstart.md` → `example/` configs
+- `docs/getting-started/installation.md` → `pyproject.toml`, README
+- `docs/getting-started/first-chat.md` → example configs
 
 **User Guide**
-- `docsV2/user-guide/rooms.md` → Flutter app, config
-- `docsV2/user-guide/rag-search.md` → `src/soliplex/tools.py`
-- `docsV2/user-guide/keyboard-shortcuts.md` → `src/flutter/lib/`
+- `docs/user-guide/rooms.md` → Flutter app, config
+- `docs/user-guide/rag-search.md` → `src/soliplex/tools.py`
+- `docs/user-guide/keyboard-shortcuts.md` → `src/flutter/lib/`
 
 **Contributing**
-- `docsV2/contributing/development-setup.md` → `pyproject.toml`, CLAUDE.md
-- `docsV2/contributing/code-style.md` → ruff config, Flutter analysis
+- `docs/contributing/development-setup.md` → `pyproject.toml`, CLAUDE.md
+- `docs/contributing/code-style.md` → ruff config, Flutter analysis
 
 **Troubleshooting**
-- `docsV2/troubleshooting/debugging.md` → logging, error handling
+- `docs/troubleshooting/debugging.md` → logging, error handling
 
 Look for:
 - Undocumented features, endpoints, or models
@@ -88,8 +88,7 @@ Look for:
 - Outdated version numbers
 
 ### Pass 3: Cross-Reference Validation
-- Verify `mkdocsV2.yml` navigation matches actual files in `docsV2/`
-- Check for any legacy docs in `docs/` that should be migrated to `docsV2/`
+- Verify `mkdocs.yml` navigation matches actual files in `docs/`
 - Verify internal documentation links work
 - Check index.md files have accurate section overviews
 

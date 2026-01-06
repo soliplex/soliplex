@@ -84,7 +84,7 @@ haiku-rag --config example/haiku.rag.yaml \
 17 documents added successfully.
 ```
 
-See: `docs/rag.md` for more options.
+See: `docs/admin-guide/configuration/rag.md` for more options.
 
 ### Check the backend server configuration
 

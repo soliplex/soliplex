@@ -155,8 +155,7 @@ soliplex/
 ├── tests/
 │   ├── unit/              # Unit tests
 │   └── functional/        # Integration tests
-├── docs/                  # Existing documentation
-├── docsV2/                # New documentation
+├── docs/                  # Documentation
 └── example/               # Example configurations
 ```
 

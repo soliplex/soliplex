@@ -1,17 +1,59 @@
 # Reference
 
-This section contains the API reference documentation for the Soliplex system.
+Technical reference documentation for Soliplex.
 
-- [Server API](server_api.md): Python backend API documentation.
-- [Client API](client_api/index.md): Flutter client API documentation.
+## Sections
 
-## AI & LLM Entry points
+- **[CLI Reference](cli.md)** - Command-line interface documentation
+- **[Config Schema](config-schema.md)** - Complete YAML configuration schema
+- **[Server API](server-api.md)** - Auto-generated Python API documentation
 
-These files are optimized for discovery and ingestion by AI agents.
+## Quick Reference
 
-- **[Main Discovery Map](/soliplex/llms.txt)**: Start here for a high-level overview.
-- **[Project Documentation](/soliplex/llms-project.txt)**: Global architecture and user guides.
-- **[Server API Reference](/soliplex/llms-server.txt)**: Backend Python API (Full definitions).
-- **[Client API Reference](/soliplex/llms-client.txt)**: Frontend Flutter API (Structured map).
+### CLI Commands
 
-> **Note for Local Agents**: If you are using an AI agent with access to your local filesystem, run the build with `DOCS_MODE=local` to generate absolute filesystem links, or `DOCS_MODE=relative` for relative links (see [Documentation Workflow](../development/documentation.md)).
+| Command | Description |
+|---------|-------------|
+| `soliplex-cli serve <config>` | Start the server |
+| `soliplex-cli check-config <config>` | Validate configuration |
+| `soliplex-cli list-secrets <config>` | List configured secrets |
+| `soliplex-cli list-environment <config>` | List environment variables |
+| `soliplex-cli list-rooms <config>` | List configured rooms |
+| `soliplex-cli list-completions <config>` | List completions |
+| `soliplex-cli list-oidc-auth-providers <config>` | List OIDC providers |
+| `soliplex-cli config <config>` | Export merged config as YAML |
+
+### API Base URL
+
+```
+http://localhost:8000/api/
+```
+
+### Key Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/rooms` | GET | List available rooms |
+| `/api/v1/rooms/{room_id}/agui` | POST | Create new thread |
+| `/api/v1/rooms/{room_id}/agui/{thread_id}/{run_id}` | POST | Execute run (SSE) |
+| `/api/login` | GET | Get OIDC providers |
+| `/api/user_info` | GET | Get current user |
+
+### Configuration Files
+
+| File | Purpose |
+|------|---------|
+| `installation.yaml` | Main configuration |
+| `rooms/*/room_config.yaml` | Room configuration |
+| `completions/*/completion_config.yaml` | Completion configuration |
+| `oidc/config.yaml` | OIDC provider configuration |
+| `haiku.rag.yaml` | Global RAG configuration |
+
+## LLM Entry Points
+
+For AI agents consuming this documentation, key entry points:
+
+- **Backend**: `src/soliplex/` - FastAPI server
+- **Frontend**: `src/flutter/lib/` - Flutter application
+- **Config**: `example/` - Example configurations
+- **Docs**: `docs/`

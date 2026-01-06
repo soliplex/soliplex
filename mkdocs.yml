@@ -1,127 +1,228 @@
-site_name: Soliplex
+site_name: Soliplex Documentation
 site_url: https://soliplex.github.io/soliplex/
+site_description: AI-powered chat platform with RAG, MCP, and multi-LLM support
 dev_addr: 127.0.0.1:8001
+
+repo_name: soliplex/soliplex
+repo_url: https://github.com/soliplex/soliplex
+
+docs_dir: docs
+
 theme:
   name: material
   logo: img/logo.png
   palette:
-    - media: "(prefers-color-scheme)"
+    - scheme: default
+      primary: indigo
+      accent: indigo
       toggle:
-        icon: material/lightbulb-auto
-        name: Switch to light mode
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: deep purple
-      accent: amber
-      toggle:
-        icon: material/lightbulb
+        icon: material/brightness-7
         name: Switch to dark mode
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: deep purple
-      accent: amber
+    - scheme: slate
+      primary: indigo
+      accent: indigo
       toggle:
-        icon: material/lightbulb-outline
-        name: Switch to system preference
+        icon: material/brightness-4
+        name: Switch to light mode
   features:
-    - content.code.annotate
-    - content.code.copy
-    - content.code.select
-    - content.footnote.tooltips
-    - content.tabs.link
-    - content.tooltips
-    - navigation.footer
-    - navigation.indexes
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.top
     - navigation.instant
     - navigation.instant.prefetch
-    - navigation.instant.progress
-    - navigation.path
-    - navigation.tabs
-    - navigation.tabs.sticky
-    - navigation.top
-    - navigation.tracking
-    - search.highlight
-    - search.share
     - search.suggest
-    - toc.follow
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
 
-  icon:
-    repo: fontawesome/brands/github-alt
-  # logo: img/icon-white.svg
-  # favicon: img/favicon.png
-  language: en
-repo_name: soliplex/soliplex
-repo_url: https://github.com/soliplex/soliplex
 plugins:
-  # Material for MkDocs
-  search:
-  mkdocstrings:
-    handlers:
-      python:
-        paths: [src]
-  llmstxt:
-    full_output: llms-full.txt
-    sections:
-      Project Documentation:
-        - index.md
-        - overview.md
-        - server.md
-        - client.md
-        - rag.md
-        - config/agents.md
-        - config/completions.md
-        - config/environment.md
-        - config/filesystem_layout.md
-        - config/installation.md
-        - config/meta.md
-        - config/oidc_providers.md
-        - config/quizzes.md
-        - config/rag.md
-        - config/rooms.md
-        - config/secrets.md
-        - usage.md
-      Server API Reference:
-        - reference/server_api.md
-      Client API Reference:
-        - reference/client_api/index.md
-        - reference/client_api/**/*.md
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: true
+            show_root_heading: true
+  - llmstxt:
+      full_output: llms-full.txt
+      sections:
+        Getting Started:
+          - index.md
+          - getting-started/quickstart.md
+          - getting-started/installation.md
+          - getting-started/first-chat.md
+        User Guide:
+          - user-guide/index.md
+          - user-guide/rooms.md
+          - user-guide/rag-search.md
+          - user-guide/keyboard-shortcuts.md
+        Admin Guide - Configuration:
+          - admin-guide/index.md
+          - admin-guide/configuration/index.md
+          - admin-guide/configuration/filesystem-layout.md
+          - admin-guide/configuration/installation.md
+          - admin-guide/configuration/agents.md
+          - admin-guide/configuration/rooms.md
+          - admin-guide/configuration/completions.md
+          - admin-guide/configuration/rag.md
+          - admin-guide/configuration/secrets.md
+          - admin-guide/configuration/environment.md
+          - admin-guide/configuration/oidc.md
+          - admin-guide/configuration/quizzes.md
+          - admin-guide/configuration/meta.md
+        Admin Guide - Authentication:
+          - admin-guide/authentication/index.md
+        Admin Guide - Deployment:
+          - admin-guide/deployment/index.md
+          - admin-guide/deployment/docker.md
+          - admin-guide/deployment/production.md
+          - admin-guide/deployment/monitoring.md
+        Developer Guide - Architecture:
+          - developer-guide/index.md
+          - developer-guide/architecture.md
+        Developer Guide - Agents:
+          - developer-guide/agents/index.md
+          - developer-guide/agents/configuration.md
+          - developer-guide/agents/factory-agents.md
+          - developer-guide/agents/tools.md
+          - developer-guide/agents/streaming.md
+        Developer Guide - RAG:
+          - developer-guide/rag/index.md
+          - developer-guide/rag/database.md
+          - developer-guide/rag/tools.md
+          - developer-guide/rag/citations.md
+        Developer Guide - MCP:
+          - developer-guide/mcp/index.md
+          - developer-guide/mcp/server.md
+          - developer-guide/mcp/client.md
+        Developer Guide - API:
+          - developer-guide/api/index.md
+          - developer-guide/api/rest-endpoints.md
+          - developer-guide/api/agui-protocol.md
+          - developer-guide/api/models.md
+        Developer Guide - Flutter:
+          - developer-guide/flutter/index.md
+          - developer-guide/flutter/architecture.md
+          - developer-guide/flutter/widgets.md
+        Reference:
+          - reference/index.md
+          - reference/cli.md
+          - reference/config-schema.md
+          - reference/server-api.md
+        Client API Reference:
+          - reference/client_api/index.md
+          - reference/client_api/**/*.md
+        Troubleshooting:
+          - troubleshooting/index.md
+          - troubleshooting/debugging.md
+        Contributing:
+          - contributing/index.md
+          - contributing/development-setup.md
+          - contributing/code-style.md
+
 hooks:
   - scripts/federate_llms_txt.py
-nav:
-  - Home: index.md
-  - Overview: overview.md
-  - Setup:
-      - Server: server.md
-      - Client: client.md
-      - RAG DB: rag.md
-  - Configuration:
-      - Filesystem Layout: config/filesystem_layout.md
-      - Installation: config/installation.md
-      - Meta: config/meta.md
-      - Environment: config/environment.md
-      - Secrets: config/secrets.md
-      - Agents: config/agents.md
-      - Rooms: config/rooms.md
-      - Completions: config/completions.md
-      - RAG: config/rag.md
-      - Quizzes: config/quizzes.md
-      - OIDC Authentication: config/oidc_providers.md
-  - Usage: usage.md
-  - Reference:
-      - Overview: reference/index.md
-      - Server API: reference/server_api.md
-      - Client API: reference/client_api/index.md
-  - Development:
-      - Documentation Workflow: development/documentation.md
+
 markdown_extensions:
-  - admonition
-  - attr_list
-  - pymdownx.details
   - pymdownx.highlight:
       anchor_linenums: true
       line_spans: __span
       pygments_lang_class: true
-      use_pygments: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - getting-started/index.md
+      - Quickstart: getting-started/quickstart.md
+      - Installation: getting-started/installation.md
+      - First Chat: getting-started/first-chat.md
+  - User Guide:
+      - user-guide/index.md
+      - Chat Rooms: user-guide/rooms.md
+      - Document Search: user-guide/rag-search.md
+      - Keyboard Shortcuts: user-guide/keyboard-shortcuts.md
+  - Admin Guide:
+      - admin-guide/index.md
+      - Authentication:
+          - admin-guide/authentication/index.md
+      - Configuration:
+          - admin-guide/configuration/index.md
+          - Filesystem Layout: admin-guide/configuration/filesystem-layout.md
+          - Installation: admin-guide/configuration/installation.md
+          - Agents: admin-guide/configuration/agents.md
+          - Rooms: admin-guide/configuration/rooms.md
+          - Completions: admin-guide/configuration/completions.md
+          - RAG: admin-guide/configuration/rag.md
+          - Secrets: admin-guide/configuration/secrets.md
+          - Environment: admin-guide/configuration/environment.md
+          - OIDC: admin-guide/configuration/oidc.md
+          - Quizzes: admin-guide/configuration/quizzes.md
+          - Meta: admin-guide/configuration/meta.md
+      - Deployment:
+          - admin-guide/deployment/index.md
+          - Docker: admin-guide/deployment/docker.md
+          - Production: admin-guide/deployment/production.md
+          - Monitoring: admin-guide/deployment/monitoring.md
+  - Developer Guide:
+      - developer-guide/index.md
+      - Architecture: developer-guide/architecture.md
+      - Agents:
+          - developer-guide/agents/index.md
+          - Configuration: developer-guide/agents/configuration.md
+          - Factory Agents: developer-guide/agents/factory-agents.md
+          - Tools: developer-guide/agents/tools.md
+          - Streaming: developer-guide/agents/streaming.md
+      - RAG:
+          - developer-guide/rag/index.md
+          - Database: developer-guide/rag/database.md
+          - Tools: developer-guide/rag/tools.md
+          - Citations: developer-guide/rag/citations.md
+      - MCP:
+          - developer-guide/mcp/index.md
+          - Server: developer-guide/mcp/server.md
+          - Client: developer-guide/mcp/client.md
+      - API:
+          - developer-guide/api/index.md
+          - REST Endpoints: developer-guide/api/rest-endpoints.md
+          - AG-UI Protocol: developer-guide/api/agui-protocol.md
+          - Models: developer-guide/api/models.md
+      - Flutter:
+          - developer-guide/flutter/index.md
+          - Architecture: developer-guide/flutter/architecture.md
+          - Widgets: developer-guide/flutter/widgets.md
+  - Reference:
+      - reference/index.md
+      - CLI: reference/cli.md
+      - Config Schema: reference/config-schema.md
+      - Server API: reference/server-api.md
+      - Client API: reference/client_api/index.md
+  - Troubleshooting:
+      - troubleshooting/index.md
+      - Debugging: troubleshooting/debugging.md
+  - Contributing:
+      - contributing/index.md
+      - Development Setup: contributing/development-setup.md
+      - Code Style: contributing/code-style.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/soliplex/soliplex
