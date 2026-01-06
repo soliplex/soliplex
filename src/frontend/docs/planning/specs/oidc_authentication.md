@@ -982,18 +982,26 @@ await ref.read(authProvider.notifier).restoreSession();
 ```dart
 const storage = FlutterSecureStorage(
   iOptions: IOSOptions(
-    accessibility: KeychainAccessibility.whenUnlockedThisDeviceOnly,
+    accessibility: KeychainAccessibility.first_unlock_this_device,
   ),
   mOptions: MacOsOptions(
-    accessibility: KeychainAccessibility.whenUnlockedThisDeviceOnly,
+    accessibility: KeychainAccessibility.first_unlock_this_device,
+    accountName: 'com.enfold.soliplex.oidc',
   ),
 );
 ```
 
+**Accessibility choice**: `first_unlock_this_device` (not `whenUnlockedThisDeviceOnly`) because:
+
+- Enables background token refresh without requiring device to be actively unlocked
+- Still prevents backup/restore to different devices (`thisDeviceOnly` suffix)
+- Still requires at least one unlock after boot before tokens are accessible
+- Tradeoff: tokens accessible when device is locked (after first unlock)
+
 This prevents:
 
 - Tokens being restored from backup to another device
-- Access when device is locked
+- Access before first device unlock after boot
 
 **Storage Keys**:
 
@@ -1210,10 +1218,85 @@ Platform config:
 9. **Startup UX**: Loading indicator until auth state resolves
 10. **refreshExpiresAt**: Omitted - let `invalid_grant` signal refresh token expiry
 
+## Web Platform Support (Deferred)
+
+Web requires a different authentication approach because:
+
+1. `flutter_appauth` uses `dart:ffi` which is unavailable on web
+2. `cupertino_http` (used by `soliplex_client_native`) also uses `dart:ffi`
+3. CORS restrictions prevent direct OIDC token exchange from browser
+
+### Backend-For-Frontend (BFF) Pattern
+
+The backend already provides BFF endpoints for web authentication:
+
+- `GET /api/login/{provider_id}?return_to={callback_url}` - Initiates OAuth flow
+- Backend handles PKCE, code exchange, and redirects back with tokens
+
+### Implementation Requirements
+
+**HTTP Client for Web:**
+
+`soliplex_client_native` unconditionally exports `cupertino_http_client.dart`, which imports
+`cupertino_http` (dart:ffi). Fix with conditional export:
+
+```dart
+// clients.dart
+export 'cupertino_http_client.dart'
+    if (dart.library.js_interop) 'cupertino_http_client_web.dart';
+```
+
+Create `cupertino_http_client_web.dart` that throws `UnsupportedError` if instantiated
+(web should use `DartHttpClient` via `createPlatformClient()` instead).
+
+**Auth Flow for Web:**
+
+New files needed (reference: `clean_soliplex/src/flutter/lib/core/auth/`):
+
+| File | Purpose |
+|------|---------|
+| `callback_params.dart` | Sealed class for URL callback params |
+| `web_auth_callback_handler.dart` | Conditional import dispatcher |
+| `web_auth_callback_native.dart` | No-op for native platforms |
+| `web_auth_callback_web.dart` | Extracts tokens from URL using `web` package |
+| `web_auth_pending_storage.dart` | Stores pending auth session for callback |
+| `features/auth/auth_callback_screen.dart` | Route `/auth/callback` |
+
+**Auth Flow Changes:**
+
+Modify `auth_flow.dart` to detect web platform and redirect to backend BFF endpoint
+instead of using `flutter_appauth`. Web flow:
+
+1. User clicks login → redirect to `/api/login/{provider_id}?return_to=/auth/callback`
+2. Backend handles OAuth, redirects back with `?token=xxx&refresh_token=xxx&expires_in=xxx`
+3. `AuthCallbackScreen` extracts tokens from URL, stores them, navigates to home
+
+**Router Changes:**
+
+Add `/auth/callback` route that renders `AuthCallbackScreen`.
+
+**Dependencies:**
+
+```yaml
+dependencies:
+  url_launcher: ^6.3.0  # For web redirect
+  web: ^1.0.0           # For URL manipulation on web
+```
+
+**Token Storage:**
+
+Web should use memory-only storage (no `flutter_secure_storage` persistence) due to
+browser security model. Tokens cleared on page refresh.
+
+### Estimated Effort
+
+~6-8 new files, modifications to auth_flow.dart, router, and soliplex_client_native.
+Approximately 400-600 lines of new code.
+
 ## Deferred Items
 
 - Windows/Linux loopback server implementation (includes endSession support)
-- Web redirect flow and memory-only storage (includes RP-Initiated Logout)
+- Web platform authentication (see "Web Platform Support" section above)
 - Multiple simultaneous provider sessions
 - Android support (flutter_appauth supported, endSession will work)
 - JWT pattern regex for catch-all token redaction in logs
@@ -1275,6 +1358,21 @@ Track implementation status here. Update after each phase.
 - HTTP filtering in `http_log_provider.dart` not `http_observer.dart`
 - Error messages sanitized per Sentinel review (generic to user, full in logs)
 
-### Slice 2 Status: ⏳ Not Started
+### Slice 2 Status: ✅ Complete
+
+- [x] `lib/core/auth/auth_storage.dart` - Secure storage wrapper with Keychain config
+- [x] `lib/core/auth/auth_notifier.dart` - Session restore and token persistence
+- [x] `lib/core/auth/auth_state.dart` - Safe `toString()` on all states (no token exposure)
+- [x] `lib/app.dart` - Loading screen during auth restore
+- [x] `lib/main.dart` - `clearOnReinstall()` for iOS keychain persistence
+- [x] `lib/features/settings/settings_screen.dart` - Sign out button (triggers endSession + clears storage)
+- [x] `test/core/auth/auth_storage_test.dart` - Storage unit tests
+
+**Notes:**
+
+- Keychain uses `first_unlock_this_device` (not spec's original `whenUnlockedThisDeviceOnly`)
+  to enable background token refresh. Spec updated to reflect this.
+- `clearOnReinstall()` handles iOS behavior where Keychain persists across app reinstalls
+- Sign out uses `flutter_appauth.endSession()` to properly terminate IdP session
 
 ### Slice 3 Status: ⏳ Not Started

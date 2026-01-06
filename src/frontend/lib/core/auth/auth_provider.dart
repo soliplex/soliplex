@@ -50,8 +50,7 @@ final accessTokenProvider = Provider<String?>((ref) {
 ///
 /// Uses core's [fetchAuthProviders] to get configured identity providers,
 /// then wraps them in [OidcIssuer] for OIDC-specific functionality.
-final oidcIssuersProvider =
-    FutureProvider<List<OidcIssuer>>((ref) async {
+final oidcIssuersProvider = FutureProvider<List<OidcIssuer>>((ref) async {
   final config = ref.watch(configProvider);
   final transport = ref.watch(httpTransportProvider);
 

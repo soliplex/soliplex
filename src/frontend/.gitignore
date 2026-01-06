@@ -170,3 +170,6 @@ app.*.symbols
 .gclient_previous_sync_commits
 
 scratchpad/*
+
+# Developer-specific Xcode configuration (contains DEVELOPMENT_TEAM)
+**/Local.xcconfig

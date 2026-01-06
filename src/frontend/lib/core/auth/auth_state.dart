@@ -18,6 +18,9 @@ class Unauthenticated extends AuthState {
 
   @override
   int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() => 'Unauthenticated()';
 }
 
 /// User is authenticated with valid tokens.
@@ -70,6 +73,10 @@ class Authenticated extends AuthState {
         issuerDiscoveryUrl,
         idToken,
       );
+
+  @override
+  String toString() =>
+      'Authenticated(issuerId: $issuerId, expiresAt: $expiresAt)';
 }
 
 /// Authentication is being restored from storage.
@@ -82,4 +89,7 @@ class AuthLoading extends AuthState {
 
   @override
   int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() => 'AuthLoading()';
 }

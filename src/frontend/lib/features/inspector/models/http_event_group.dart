@@ -61,9 +61,9 @@ class HttpEventGroup {
   /// Throws [StateError] if no event contains method information.
   /// Check [hasEvents] before accessing if the group may be incomplete.
   String get method {
-    if (request != null) return request!.method;
-    if (error != null) return error!.method;
-    if (streamStart != null) return streamStart!.method;
+    if (request case HttpRequestEvent(:final method)) return method;
+    if (error case HttpErrorEvent(:final method)) return method;
+    if (streamStart case HttpStreamStartEvent(:final method)) return method;
     throw StateError('HttpEventGroup $requestId has no event with method');
   }
 
@@ -72,9 +72,9 @@ class HttpEventGroup {
   /// Throws [StateError] if no event contains URI information.
   /// Check [hasEvents] before accessing if the group may be incomplete.
   Uri get uri {
-    if (request != null) return request!.uri;
-    if (error != null) return error!.uri;
-    if (streamStart != null) return streamStart!.uri;
+    if (request case HttpRequestEvent(:final uri)) return uri;
+    if (error case HttpErrorEvent(:final uri)) return uri;
+    if (streamStart case HttpStreamStartEvent(:final uri)) return uri;
     throw StateError('HttpEventGroup $requestId has no event with uri');
   }
 
@@ -92,9 +92,11 @@ class HttpEventGroup {
   /// Throws [StateError] if no event contains timestamp information.
   /// Check [hasEvents] before accessing if the group may be incomplete.
   DateTime get timestamp {
-    if (request != null) return request!.timestamp;
-    if (streamStart != null) return streamStart!.timestamp;
-    if (error != null) return error!.timestamp;
+    if (request case HttpRequestEvent(:final timestamp)) return timestamp;
+    if (streamStart case HttpStreamStartEvent(:final timestamp)) {
+      return timestamp;
+    }
+    if (error case HttpErrorEvent(:final timestamp)) return timestamp;
     throw StateError('HttpEventGroup $requestId has no event with timestamp');
   }
 
@@ -117,19 +119,23 @@ class HttpEventGroup {
   /// network errors take precedence over missing responses (pending).
   HttpEventStatus get status {
     if (isStream) {
-      if (streamEnd == null) return HttpEventStatus.streaming;
-      if (streamEnd!.error != null) return HttpEventStatus.streamError;
-      return HttpEventStatus.streamComplete;
+      return switch (streamEnd) {
+        null => HttpEventStatus.streaming,
+        HttpStreamEndEvent(error: _?) => HttpEventStatus.streamError,
+        HttpStreamEndEvent() => HttpEventStatus.streamComplete,
+      };
     }
 
     if (error != null) return HttpEventStatus.networkError;
-    if (response == null) return HttpEventStatus.pending;
 
-    final code = response!.statusCode;
-    if (code >= 200 && code < 300) return HttpEventStatus.success;
-    if (code >= 400 && code < 500) return HttpEventStatus.clientError;
-    if (code >= 500) return HttpEventStatus.serverError;
-    return HttpEventStatus.success;
+    return switch (response) {
+      null => HttpEventStatus.pending,
+      HttpResponseEvent(statusCode: final code) when code >= 500 =>
+        HttpEventStatus.serverError,
+      HttpResponseEvent(statusCode: final code) when code >= 400 =>
+        HttpEventStatus.clientError,
+      HttpResponseEvent() => HttpEventStatus.success,
+    };
   }
 
   /// Whether this status should display a spinner.
@@ -138,18 +144,21 @@ class HttpEventGroup {
 
   /// Human-readable description of the current status for accessibility.
   String get statusDescription {
-    return switch (status) {
-      HttpEventStatus.pending => 'pending',
-      HttpEventStatus.success => 'success, status ${response!.statusCode}',
-      HttpEventStatus.clientError =>
-        'client error, status ${response!.statusCode}',
-      HttpEventStatus.serverError =>
-        'server error, status ${response!.statusCode}',
-      HttpEventStatus.networkError =>
-        'network error, ${error!.exception.runtimeType}',
-      HttpEventStatus.streaming => 'streaming',
-      HttpEventStatus.streamComplete => 'stream complete',
-      HttpEventStatus.streamError => 'stream error',
+    return switch ((status, response, error)) {
+      (HttpEventStatus.pending, _, _) => 'pending',
+      (HttpEventStatus.success, HttpResponseEvent(:final statusCode), _) =>
+        'success, status $statusCode',
+      (HttpEventStatus.clientError, HttpResponseEvent(:final statusCode), _) =>
+        'client error, status $statusCode',
+      (HttpEventStatus.serverError, HttpResponseEvent(:final statusCode), _) =>
+        'server error, status $statusCode',
+      (HttpEventStatus.networkError, _, HttpErrorEvent(:final exception)) =>
+        'network error, ${exception.runtimeType}',
+      (HttpEventStatus.streaming, _, _) => 'streaming',
+      (HttpEventStatus.streamComplete, _, _) => 'stream complete',
+      (HttpEventStatus.streamError, _, _) => 'stream error',
+      // Fallback for impossible states (status implies response/error exists)
+      _ => status.name,
     };
   }
 

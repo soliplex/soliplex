@@ -1,0 +1,9 @@
+// Local development settings - Copy to Local.xcconfig (gitignored)
+//
+// This file contains developer-specific settings that should not be committed.
+// Required for code signing on physical devices.
+
+// Your Apple Developer Team ID (10-character alphanumeric)
+// Find it at: https://developer.apple.com/account -> Membership details
+// Uncomment and fill in:
+// DEVELOPMENT_TEAM = XXXXXXXXXX

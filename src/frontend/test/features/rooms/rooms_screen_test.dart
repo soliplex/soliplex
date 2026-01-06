@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/features/rooms/rooms_screen.dart';
 import 'package:soliplex_frontend/shared/widgets/empty_state.dart';
@@ -9,14 +12,23 @@ import '../../helpers/test_helpers.dart';
 void main() {
   group('RoomsScreen', () {
     testWidgets('displays loading indicator while fetching', (tester) async {
+      // Use a completer to control when the async operation completes
+      final completer = Completer<List<Room>>();
+
       await tester.pumpWidget(
-        createTestApp(home: const RoomsScreen()),
+        createTestApp(
+          home: const RoomsScreen(),
+          overrides: [
+            roomsProvider.overrideWith((ref) => completer.future),
+          ],
+        ),
       );
 
-      // Before any async operations complete
+      // Before async operation completes, should show loading
       expect(find.byType(LoadingIndicator), findsOneWidget);
 
-      // Wait for all pending timers and frames
+      // Complete the future and settle
+      completer.complete([]);
       await tester.pumpAndSettle();
     });
 
