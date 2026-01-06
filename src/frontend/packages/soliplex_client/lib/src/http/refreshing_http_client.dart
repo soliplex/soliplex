@@ -102,7 +102,10 @@ class RefreshingHttpClient implements SoliplexHttpClient {
   /// afterward `.future` returns the cached result forever. Without clearing,
   /// new 401s would receive stale results instead of refreshing.
   Future<bool> _tryRefreshOnce() async {
-    // If refresh already in progress, wait for it
+    // If refresh already in progress, wait for it.
+    // Race condition safety: Dart's single-threaded event loop guarantees no
+    // interleaving between the null check and assignment below. Code only
+    // yields at `await` points, so this check-then-assign is atomic.
     if (_refreshInProgress != null) {
       return _refreshInProgress!.future;
     }
