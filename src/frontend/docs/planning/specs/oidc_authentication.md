@@ -1665,3 +1665,22 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
 **Lifecycle guarantee:** Riverpod calls `build()` before exposing the Notifier to callers.
 No instance method can be invoked until `build()` completes and returns the initial state.
 The `late final` fields are always initialized before any method accesses them.
+
+### Remaining Work
+
+**Tests (incremental coverage, not blocking):**
+
+| Category | Item | Priority |
+|----------|------|----------|
+| Unit | Token parsing from callback URI | Low |
+| Unit | State parameter generation/validation | Low |
+| Widget | LoginScreen fetches/renders providers | Medium |
+| Widget | LoginScreen loading/error states | Medium |
+| Widget | Auth redirect guard behavior | Medium |
+| Manual | Token refresh with artificially short expiry | Medium |
+
+**Current test coverage:** 47 unit tests across TokenRefreshService (13), RefreshingHttpClient (19),
+and AuthNotifier (15). Core token refresh functionality is well-tested.
+
+**Not remaining (deferred to post-MVP):** See "Deferred Items" section above for Windows/Linux,
+Web platform, Android, and other post-MVP work.
