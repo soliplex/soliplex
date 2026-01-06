@@ -1,4 +1,5 @@
 import 'package:meta/meta.dart';
+import 'package:soliplex_client/soliplex_client.dart';
 
 /// Authentication state for the application.
 ///
@@ -49,9 +50,9 @@ class Authenticated extends AuthState {
   /// Whether the access token has expired.
   bool get isExpired => DateTime.now().isAfter(expiresAt);
 
-  /// Whether the access token needs refresh (within 1 minute of expiry).
+  /// Whether the access token needs refresh (expiring soon).
   bool get needsRefresh => DateTime.now().isAfter(
-        expiresAt.subtract(const Duration(minutes: 1)),
+        expiresAt.subtract(TokenRefreshService.refreshThreshold),
       );
 
   // userInfo excluded from equality: it's derived/optional data that may be

@@ -1,10 +1,27 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/auth/auth_notifier.dart';
 import 'package:soliplex_frontend/core/auth/auth_state.dart';
+import 'package:soliplex_frontend/core/auth/auth_storage.dart';
 import 'package:soliplex_frontend/core/auth/oidc_issuer.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
 import 'package:soliplex_frontend/core/providers/config_provider.dart';
+
+/// Provider for secure token storage.
+final authStorageProvider = Provider<AuthStorage>((ref) => AuthStorage());
+
+/// Provider for token refresh service.
+///
+/// Uses the base HTTP client (without auth) to avoid circular dependencies
+/// when refreshing tokens.
+final tokenRefreshServiceProvider = Provider<TokenRefreshService>((ref) {
+  final httpClient = ref.watch(baseHttpClientProvider);
+  return TokenRefreshService(
+    httpClient: httpClient,
+    onDiagnostic: debugPrint,
+  );
+});
 
 /// Provider for auth state and actions.
 ///

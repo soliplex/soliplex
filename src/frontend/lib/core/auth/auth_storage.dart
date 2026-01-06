@@ -62,11 +62,11 @@ class AuthStorage {
           storage.delete(key: AuthStorageKeys.issuerDiscoveryUrl),
           storage.delete(key: AuthStorageKeys.clientId),
         ]);
-      } on Exception catch (e) {
+      } on Exception {
         // Keychain may not be available (e.g., unsigned macOS builds).
         // This is acceptable since macOS doesn't persist Keychain across
         // uninstall like iOS does.
-        debugPrint('AuthStorage: clearOnReinstall skipped: $e');
+        debugPrint('AuthStorage: clearOnReinstall skipped');
       }
       await prefs.setBool(key, true);
     }
