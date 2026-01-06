@@ -1076,21 +1076,42 @@ const _sensitiveBodyFields = {
 
 ### Redirect Guard
 
-```dart
-redirect: (context, state) {
-  final authState = ref.read(authProvider);
-  final isAuthenticated = authState is Authenticated;
-  final isLoginRoute = state.matchedLocation == '/login';
+The router uses `refreshListenable` to trigger redirect re-evaluation on auth status
+changes without recreating the router itself. This preserves navigation state during
+token refresh (which updates auth state but shouldn't cause navigation).
 
-  if (!isAuthenticated && !isLoginRoute) {
-    return '/login';
-  }
-  if (isAuthenticated && isLoginRoute) {
-    return '/';
-  }
-  return null;
-}
+```dart
+final routerProvider = Provider<GoRouter>((ref) {
+  // authStatusListenableProvider only fires on login/logout transitions,
+  // NOT on token refresh. This prevents navigation state loss.
+  final authStatusListenable = ref.watch(authStatusListenableProvider);
+
+  return GoRouter(
+    initialLocation: '/',
+    refreshListenable: authStatusListenable,
+    redirect: (context, state) {
+      // Use ref.read() for fresh auth state, not a captured variable
+      final authState = ref.read(authProvider);
+      final isAuthenticated = authState is Authenticated;
+      final isLoginRoute = state.matchedLocation == '/login';
+
+      if (!isAuthenticated && !isLoginRoute) {
+        return '/login';
+      }
+      if (isAuthenticated && isLoginRoute) {
+        return '/';
+      }
+      return null;
+    },
+    // ...routes
+  );
+});
 ```
+
+**Key implementation detail:** `_AuthStatusListenable` tracks whether user is
+authenticated (boolean), not the full auth state. When tokens refresh, the boolean
+stays `true`, so no notification fires and the router doesn't rebuild. On logout,
+the boolean changes from `true` to `false`, triggering redirect evaluation.
 
 ### Startup UX
 
@@ -1661,6 +1682,29 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
 **Lifecycle guarantee:** Riverpod calls `build()` before exposing the Notifier to callers.
 No instance method can be invoked until `build()` completes and returns the initial state.
 The `late final` fields are always initialized before any method accesses them.
+
+### Router Navigation Preservation Fix (2026-01-06)
+
+Fixed issue where token refresh caused navigation state loss. The router was using
+`ref.watch(authProvider)` which recreated the GoRouter on every auth state change
+(including token refresh), resetting navigation to `initialLocation: '/'`.
+
+**Solution:**
+
+- Added `authStatusListenableProvider` that only fires on login/logout transitions
+- Router uses `refreshListenable` pattern instead of `ref.watch(authProvider)`
+- Redirect callback uses `ref.read(authProvider)` for fresh state reads
+
+**Files modified:**
+
+- `lib/core/auth/auth_provider.dart` - Added `_AuthStatusListenable`
+- `lib/core/router/app_router.dart` - Updated to use `refreshListenable`
+- `test/core/router/app_router_test.dart` - Added tests for auth state changes
+
+**Tests added:**
+
+- `logout from deep navigation redirects to /login`
+- `token refresh preserves navigation location`
 
 ### Remaining Work
 

@@ -60,6 +60,11 @@ const _publicRoutes = {'/login'};
 ///
 /// Creates a GoRouter that redirects unauthenticated users to login.
 ///
+/// Uses [authStatusListenableProvider] to trigger redirect re-evaluation
+/// on login/logout transitions WITHOUT recreating the router. This preserves
+/// navigation state during token refresh (which updates auth state but
+/// shouldn't cause navigation).
+///
 /// Routes:
 /// - `/login` - Login screen (public)
 /// - `/` - Home screen (requires auth)
@@ -72,11 +77,20 @@ const _publicRoutes = {'/login'};
 /// Static screens are wrapped in AppShell via [_staticPage].
 /// RoomScreen builds its own AppShell for dynamic configuration.
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authProvider);
+  // Use refreshListenable instead of ref.watch(authProvider) to avoid
+  // recreating the router on every auth state change (including token refresh).
+  // The listenable only fires on actual login/logout transitions.
+  final authStatusListenable = ref.watch(authStatusListenableProvider);
 
   return GoRouter(
     initialLocation: '/',
+    // Triggers redirect re-evaluation on auth transitions without
+    // recreating the router.
+    refreshListenable: authStatusListenable,
     redirect: (context, state) {
+      // CRITICAL: Use ref.read() for fresh auth state, not a captured variable.
+      // This ensures the redirect always sees current auth status.
+      final authState = ref.read(authProvider);
       final isAuthenticated = authState is Authenticated;
       final isPublicRoute = _publicRoutes.contains(state.matchedLocation);
 
