@@ -110,12 +110,12 @@ agent:
 tools:
   - tool_name: string               # Required: Python import path
     allow_mcp: boolean              # Expose via MCP (default: false)
-    agui_feature_names: [string]    # AG-UI features to register
-    # RAG tool options
-    rag_lancedb_stem: string        # Database in RAG_LANCE_DB_PATH
-    rag_lancedb_override_path: string  # Explicit database path
-    search_documents_limit: integer # Max results (default: 5)
-    haiku_rag_config: object        # haiku-rag overrides
+    agui_feature_names: [string]    # AG-UI features this tool uses (e.g., ["filter_documents"])
+    # RAG tool options (for search_documents, ask_with_rich_citations, research_report)
+    rag_lancedb_stem: string        # Database stem - combined with RAG_LANCE_DB_PATH
+    rag_lancedb_override_path: string  # Full explicit path (ignores RAG_LANCE_DB_PATH)
+    search_documents_limit: integer # Max search results (default: 5, search_documents only)
+    haiku_rag_config: object        # haiku-rag config overrides (embedding model, etc.)
 
 # MCP client toolsets
 mcp_client_toolsets:

@@ -548,6 +548,36 @@ Get installation configuration.
 
 ---
 
+## Debug & Health Endpoints
+
+### GET /ok
+
+Process control health check endpoint.
+
+**Response:** `200 OK` with text body `"ok"`
+
+**Example:**
+```bash
+curl http://localhost:8000/api/ok
+# ok
+```
+
+### GET /check-headers
+
+Debug endpoint that echoes request headers. Useful for debugging authentication and proxy configurations.
+
+**Response:**
+```json
+{
+  "host": "localhost:8000",
+  "user-agent": "curl/8.1.2",
+  "accept": "*/*",
+  "authorization": "Bearer eyJ..."
+}
+```
+
+---
+
 ## Error Responses
 
 All errors follow this format:
@@ -566,6 +596,7 @@ Common status codes:
 
 ## Source Code
 
+- Debug/health views: `src/soliplex/views/__init__.py`
 - Auth views: `src/soliplex/views/auth.py`
 - Room views: `src/soliplex/views/rooms.py`
 - AGUI views: `src/soliplex/views/agui.py`

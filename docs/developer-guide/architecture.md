@@ -329,7 +329,66 @@ src/soliplex/
 │   ├── rooms.py
 │   └── ...
 └── tui/               # Terminal UI client
+    ├── __init__.py
+    ├── cli.py         # CLI entry point
+    ├── main.py        # TUI app, screens, widgets
+    ├── rest_api.py    # REST API client
+    └── serve.py       # Web-serve wrapper
 ```
+
+## TUI Architecture
+
+The Terminal User Interface provides a Textual-based client for Soliplex.
+
+```mermaid
+graph TB
+    subgraph "TUI Application"
+        App[SoliplexTUI App]
+        RS[RoomSelect Screen]
+        RV[RoomView Screen]
+        TV[ThreadRunsView]
+        RunV[RunView Screen]
+        Dialog[Metadata Dialogs]
+    end
+
+    subgraph "REST API Layer"
+        API[TUI_REST_API]
+    end
+
+    subgraph "Backend"
+        Server[Soliplex Server]
+    end
+
+    App --> RS
+    RS -->|room selected| RV
+    RV -->|Ctrl+T| TV
+    RV -->|Ctrl+R| TV
+    TV -->|run selected| RunV
+    RV -->|Ctrl+Z| Dialog
+    RunV -->|Ctrl+Z| Dialog
+
+    RV --> API
+    API -->|HTTP| Server
+```
+
+### Key Components
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `TUI_REST_API` | `rest_api.py` | HTTP client for backend communication |
+| `SoliplexTUI` | `main.py` | Main app with room selection |
+| `RoomView` | `main.py` | Chat interface with thread management |
+| `RunView` | `main.py` | Detailed run event viewer |
+| `EditThreadMetadataDialog` | `main.py` | Thread name/description editing |
+| `EditRunMetadataDialog` | `main.py` | Run label editing |
+
+### Screen Flow
+
+1. **Room Selection** → User picks a room from available rooms
+2. **Room Chat** → Chat interface with current thread
+3. **Thread List** → Browse all threads via `Ctrl+T`
+4. **Run List** → Browse runs in current thread via `Ctrl+R`
+5. **Run Details** → View run events and messages
 
 ## Technology Decisions
 

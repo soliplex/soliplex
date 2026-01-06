@@ -13,7 +13,7 @@ Soliplex exposes a REST API for all client interactions. This section documents 
 
 ## Sections
 
-- **[REST Endpoints](rest-endpoints.md)** - Complete endpoint documentation (25 endpoints)
+- **[REST Endpoints](rest-endpoints.md)** - Complete endpoint documentation (27 endpoints)
 - **[AG-UI Protocol](agui-protocol.md)** - Streaming protocol for agent events
 - **[Models](models.md)** - Request/response Pydantic models
 
@@ -38,6 +38,7 @@ Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
 | **Auth** | 4 | OIDC flow, user info |
 | **Quizzes** | 2 | Quiz access |
 | **Installation** | 1 | Server config |
+| **Debug** | 2 | Health check, header debugging |
 
 ### Core Endpoints
 
@@ -92,4 +93,5 @@ Event type is identified via the `type` field in the JSON payload.
 | `src/soliplex/views/auth.py` | Auth endpoints |
 | `src/soliplex/views/quizzes.py` | Quiz endpoints |
 | `src/soliplex/views/installation.py` | Installation endpoint |
+| `src/soliplex/views/__init__.py` | Debug/health endpoints |
 | `src/soliplex/models.py` | Pydantic models |

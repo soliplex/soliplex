@@ -87,7 +87,7 @@ Values from `.env` take precedence over both OS environment and YAML-configured 
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `MCP_TOKEN_MAX_AGE` | MCP token expiration (seconds) | None (no expiry) |
+| `MCP_TOKEN_MAX_AGE` | MCP token expiration in seconds (e.g., 3600 = 1 hour) | None (no expiry) |
 
 ### Paths
 

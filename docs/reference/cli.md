@@ -405,6 +405,27 @@ soliplex-tui --url https://soliplex.example.com
 - Metadata editing for threads and runs
 - Real-time streaming responses
 
+**Screen Navigation:**
+
+The TUI has a hierarchical screen structure:
+
+1. **Room Selection** - Main screen showing available rooms
+2. **Room Chat** (`Ctrl+Click` or `Enter` on room) - Chat interface for a room
+3. **Thread List** (`Ctrl+T` from chat) - View all threads in the room
+4. **Run List** (`Ctrl+R` from chat) - View runs in the current thread
+5. **Run Details** (`Enter` on run) - Detailed view of a run with events
+
+Use `Escape` to go back one level.
+
+**Metadata Editing:**
+
+Press `Ctrl+Z` to edit metadata in context:
+
+- **From Room Chat view:** Edit thread metadata (name and description)
+- **From Run Details view:** Edit run metadata (label)
+
+A dialog appears with input fields. Press `Enter` to save or `Escape` to cancel.
+
 **Requirements:**
 
 The TUI client requires the backend to be running with `--no-auth-mode` for local development:

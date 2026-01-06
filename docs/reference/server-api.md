@@ -8,6 +8,7 @@ The Soliplex server provides a REST API at `/api/` with the following modules:
 
 | Module | Base Path | Description |
 |--------|-----------|-------------|
+| Debug | `/ok`, `/check-headers` | Health check and debugging |
 | Auth | `/login`, `/auth`, `/user_info` | OIDC authentication |
 | Rooms | `/v1/rooms` | Room management |
 | AG-UI | `/v1/rooms/{id}/agui` | Thread and run management |
@@ -31,6 +32,13 @@ Tokens are obtained via the OIDC flow:
 3. `GET /auth/{system}` - Complete auth (callback)
 
 ## Endpoints Summary
+
+### Debug & Health
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/ok` | Health check (returns "ok") |
+| GET | `/check-headers` | Echo request headers |
 
 ### Authentication
 
@@ -105,14 +113,14 @@ Add or update feedback for a completed run.
 
 ```json
 {
-  "feedback": "thumbs_up",
+  "feedback": "positive",
   "reason": "Helpful and accurate response"
 }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `feedback` | string | Yes | Feedback value (e.g., "thumbs_up", "thumbs_down") |
+| `feedback` | string | Yes | Feedback value (e.g., "positive", "negative") |
 | `reason` | string | No | Optional explanation for the feedback |
 
 **Response:** HTTP 205 (Reset Content) on success.
@@ -162,6 +170,7 @@ CORS is configured to allow the Flutter frontend. Customize for other clients.
 
 | Module | Source File |
 |--------|-------------|
+| Debug | `src/soliplex/views/__init__.py` |
 | Auth | `src/soliplex/views/auth.py` |
 | Rooms | `src/soliplex/views/rooms.py` |
 | AG-UI | `src/soliplex/views/agui.py` |

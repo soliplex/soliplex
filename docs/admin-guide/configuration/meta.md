@@ -44,6 +44,41 @@ meta:
     source: "server"
 ```
 
+### Accessing Registered Features
+
+Registered AG-UI features are available at runtime through the `InstallationConfig.agui_features` property. Each feature is an `AGUI_Feature` object with:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | string | Feature identifier (e.g., "filter_documents") |
+| `source` | string | Who can set the value: "client", "server", or "either" |
+| `model_klass` | string | Python class path for the model |
+| `description` | string | Feature description (from model docstring) |
+| `json_schema` | dict | JSON Schema for the feature's data structure |
+
+Features are also exposed in API responses via `GET /v1/installation`:
+
+```json
+{
+  "agui_features": [
+    {
+      "name": "filter_documents",
+      "source": "client",
+      "description": "Client-side document filtering",
+      "json_schema": {...}
+    }
+  ]
+}
+```
+
+**Note:** Tool configurations that specify `agui_feature_names` automatically register their features. For example, `AskWithRichCitationsToolConfig` registers both `filter_documents` and `ask_history` features.
+
+Use the CLI to inspect available features:
+
+```bash
+soliplex-cli agui-feature-schemas installation.yaml
+```
+
 ## Registering Tool Configuration Classes
 
 The `meta.tool_configs` section enumerates tool configuration types so that
