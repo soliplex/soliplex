@@ -113,9 +113,6 @@ plugins:
           - reference/cli.md
           - reference/config-schema.md
           - reference/server-api.md
-        Client API Reference:
-          - reference/client_api/index.md
-          - reference/client_api/**/*.md
         Troubleshooting:
           - troubleshooting/index.md
           - troubleshooting/debugging.md
