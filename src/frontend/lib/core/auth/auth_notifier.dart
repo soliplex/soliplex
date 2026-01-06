@@ -45,13 +45,20 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
   late final AuthStorage _storage;
   late final TokenRefreshService _refreshService;
 
+  void _log(String message) => debugPrint('AuthNotifier: $message');
+
   @override
   AuthState build() {
     _storage = ref.read(authStorageProvider);
     _refreshService = ref.read(tokenRefreshServiceProvider);
 
-    // Start with loading, then restore session
-    _restoreSession();
+    // Fire-and-forget: _restoreSession runs async while we return AuthLoading.
+    // Any refresh calls during restore fail gracefully (state is not
+    // Authenticated yet) and will succeed after restore completes.
+    // Defense-in-depth: catch any unhandled errors to avoid silent failures.
+    _restoreSession().catchError(
+      (Object e) => _log('Unhandled restore error: ${e.runtimeType}'),
+    );
     return const AuthLoading();
   }
 
@@ -62,7 +69,7 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
     } on Exception catch (e) {
       // Storage unavailable (keychain locked, permissions, corruption)
       // Policy: treat as unauthenticated rather than stuck in loading
-      debugPrint('AuthNotifier: Failed to restore session: $e');
+      _log('Failed to restore session: ${e.runtimeType}');
       state = const Unauthenticated();
       return;
     }
@@ -72,18 +79,25 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
       return;
     }
 
-    // Check if tokens are expired
+    // Check if tokens are expired - attempt refresh before clearing
     if (DateTime.now().isAfter(tokens.expiresAt)) {
-      // Tokens expired - clear and require re-login
+      _log('Stored tokens expired, attempting refresh');
+      final refreshed = await _tryRefreshStoredTokens(tokens);
+      if (refreshed) {
+        return;
+      }
+      // Refresh failed - clear and require re-login
       try {
         await _storage.clearTokens();
       } on Exception catch (e) {
-        debugPrint('AuthNotifier: Failed to clear expired tokens: $e');
+        _log('Failed to clear expired tokens: ${e.runtimeType}');
       }
       state = const Unauthenticated();
       return;
     }
 
+    // Build Authenticated directly rather than via _applyRefreshResult because
+    // tokens are already persisted—no storage write needed.
     state = Authenticated(
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
@@ -92,6 +106,101 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
       issuerDiscoveryUrl: tokens.issuerDiscoveryUrl,
       clientId: tokens.clientId,
       idToken: tokens.idToken,
+    );
+  }
+
+  /// Attempt to refresh expired stored tokens during session restore.
+  ///
+  /// Returns `true` if refresh succeeded and state was updated
+  /// (even if storage persistence failed—session works but won't survive
+  /// restart).
+  /// Returns `false` if refresh failed (caller should clear and logout).
+  ///
+  /// ## Failure Handling Policy (Startup vs Runtime)
+  ///
+  /// This method treats ALL failures the same (return false → logout), unlike
+  /// [tryRefresh] which distinguishes between failure types. This asymmetry
+  /// is intentional:
+  ///
+  /// **At startup:** We're trying to *establish* trust from stored credentials.
+  /// If we can't validate tokens (for any reason—network, revoked, etc.), we
+  /// have nothing useful. Failing fast with "please log in" is clearer than
+  /// pretending auth succeeded when we can't verify it.
+  ///
+  /// **At runtime:** We already established trust. A transient network error
+  /// shouldn't destroy a valid session. The user stays "authenticated" in
+  /// local state and can retry when network returns.
+  ///
+  /// See OIDC spec section "Token Refresh Failure Handling Policy" for details.
+  Future<bool> _tryRefreshStoredTokens(StoredTokens tokens) async {
+    final TokenRefreshResult result;
+    try {
+      result = await _refreshService.refresh(
+        discoveryUrl: tokens.issuerDiscoveryUrl,
+        refreshToken: tokens.refreshToken,
+        clientId: tokens.clientId,
+      );
+    } on Exception catch (e) {
+      _log('Refresh during restore threw: ${e.runtimeType}');
+      return false;
+    }
+
+    if (result is! TokenRefreshSuccess) {
+      final failure = result as TokenRefreshFailure;
+      _log('Refresh during restore failed: ${failure.reason}');
+      return false;
+    }
+
+    await _applyRefreshResult(
+      result,
+      issuerId: tokens.issuerId,
+      issuerDiscoveryUrl: tokens.issuerDiscoveryUrl,
+      clientId: tokens.clientId,
+      fallbackIdToken: tokens.idToken,
+    );
+
+    _log('Session restored via token refresh');
+    return true;
+  }
+
+  /// Apply a successful token refresh result to storage and state.
+  ///
+  /// Preserves idToken if the IdP didn't return a new one (per OIDC Core 1.0
+  /// Section 12.2). Attempts to persist to storage but continues on failure
+  /// (session works for current app run).
+  Future<void> _applyRefreshResult(
+    TokenRefreshSuccess result, {
+    required String issuerId,
+    required String issuerDiscoveryUrl,
+    required String clientId,
+    required String fallbackIdToken,
+    Map<String, dynamic>? userInfo,
+  }) async {
+    final idToken = result.idToken ?? fallbackIdToken;
+
+    try {
+      await _storage.saveTokens(
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        expiresAt: result.expiresAt,
+        issuerId: issuerId,
+        issuerDiscoveryUrl: issuerDiscoveryUrl,
+        clientId: clientId,
+        idToken: idToken,
+      );
+    } on Exception catch (e) {
+      _log('Failed to persist refreshed tokens: ${e.runtimeType}');
+    }
+
+    state = Authenticated(
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+      expiresAt: result.expiresAt,
+      issuerId: issuerId,
+      issuerDiscoveryUrl: issuerDiscoveryUrl,
+      clientId: clientId,
+      idToken: idToken,
+      userInfo: userInfo,
     );
   }
 
@@ -118,8 +227,8 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
       var expiresAt = result.expiresAt;
       if (expiresAt == null) {
         const fallback = TokenRefreshService.fallbackTokenLifetime;
-        debugPrint(
-          'AuthNotifier: Token response missing expires_in; '
+        _log(
+          'Token response missing expires_in; '
           'using ${fallback.inMinutes}min fallback',
         );
         expiresAt = DateTime.now().add(fallback);
@@ -137,7 +246,7 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
           idToken: idToken,
         );
       } on Exception catch (e) {
-        debugPrint('AuthNotifier: Failed to persist tokens: $e');
+        _log('Failed to persist tokens: ${e.runtimeType}');
         // Continue - auth works, just won't persist across restarts
       }
 
@@ -173,7 +282,7 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
     try {
       await _storage.clearTokens();
     } on Exception catch (e) {
-      debugPrint('AuthNotifier: Failed to clear tokens on logout: $e');
+      _log('Failed to clear tokens on logout: ${e.runtimeType}');
     }
     state = const Unauthenticated();
   }
@@ -201,25 +310,28 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
     if (needsRefresh) {
       final success = await tryRefresh();
       if (!success) {
-        debugPrint('AuthNotifier: Proactive refresh failed');
+        _log('Proactive refresh failed');
       }
     }
   }
 
-  /// Attempt to refresh the current tokens.
+  /// Attempt to refresh the current tokens (runtime refresh).
   ///
   /// Returns `true` if refresh succeeded, `false` if it failed.
-  /// On invalid_grant (expired/revoked refresh token), clears auth state.
-  /// On network errors, returns `false` without clearing state.
+  ///
+  /// Failure handling depends on the reason:
+  /// - `invalidGrant`: Refresh token revoked/expired → clears auth state (logout)
+  /// - `networkError`: Transient failure → preserves session, caller can retry
+  /// - `noRefreshToken`: No token available → preserves session
+  ///
+  /// This is more lenient than [_tryRefreshStoredTokens] because at runtime we
+  /// have an established session worth preserving through transient failures.
+  ///
+  /// See OIDC spec section "Token Refresh Failure Handling Policy" for details.
   @override
   Future<bool> tryRefresh() async {
     final current = state;
     if (current is! Authenticated) {
-      return false;
-    }
-
-    if (current.refreshToken.isEmpty) {
-      debugPrint('AuthNotifier: No refresh token available');
       return false;
     }
 
@@ -233,17 +345,23 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
       case TokenRefreshSuccess():
         return _handleRefreshSuccess(result, current);
 
+      case TokenRefreshFailure(
+            reason: TokenRefreshFailureReason.noRefreshToken,
+          ):
+        _log('No refresh token available');
+        return false;
+
       case TokenRefreshFailure(reason: TokenRefreshFailureReason.invalidGrant):
-        debugPrint('AuthNotifier: Refresh token expired, clearing auth state');
+        _log('Refresh token expired, clearing auth state');
         await _clearAuthState();
         return false;
 
       case TokenRefreshFailure(reason: TokenRefreshFailureReason.networkError):
-        debugPrint('AuthNotifier: Refresh failed due to network error');
+        _log('Refresh failed due to network error');
         return false;
 
       case TokenRefreshFailure():
-        debugPrint('AuthNotifier: Refresh failed');
+        _log('Refresh failed');
         return false;
     }
   }
@@ -252,37 +370,16 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
     TokenRefreshSuccess result,
     Authenticated current,
   ) async {
-    // Preserve idToken through refresh (IdPs often don't return new one)
-    final idToken = result.idToken ?? current.idToken;
-
-    // Update storage
-    try {
-      await _storage.saveTokens(
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
-        expiresAt: result.expiresAt,
-        issuerId: current.issuerId,
-        issuerDiscoveryUrl: current.issuerDiscoveryUrl,
-        clientId: current.clientId,
-        idToken: idToken,
-      );
-    } on Exception catch (e) {
-      debugPrint('AuthNotifier: Failed to persist refreshed tokens: $e');
-    }
-
-    // Update state
-    state = Authenticated(
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-      expiresAt: result.expiresAt,
+    await _applyRefreshResult(
+      result,
       issuerId: current.issuerId,
       issuerDiscoveryUrl: current.issuerDiscoveryUrl,
       clientId: current.clientId,
-      idToken: idToken,
+      fallbackIdToken: current.idToken,
       userInfo: current.userInfo,
     );
 
-    debugPrint('AuthNotifier: Token refresh successful');
+    _log('Token refresh successful');
     return true;
   }
 
@@ -290,7 +387,7 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
     try {
       await _storage.clearTokens();
     } on Exception catch (e) {
-      debugPrint('AuthNotifier: Failed to clear tokens: $e');
+      _log('Failed to clear tokens: ${e.runtimeType}');
     }
     state = const Unauthenticated();
   }
