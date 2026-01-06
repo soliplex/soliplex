@@ -14,7 +14,7 @@ source venv/bin/activate && OLLAMA_BASE_URL=http://127.0.0.1:11434 soliplex-cli 
 
 3. Start Flutter web app:
 ```bash
-cd src/flutter && flutter run -d chrome --web-port 59001
+cd src/flutter && flutter run -d chrome --web-port 59001 --dart-define=DEFAULT_SERVER_URL=http://localhost:8000
 ```
 
 Run all three in the background so I can continue working. Wait a few seconds after starting each to check their output and confirm they started successfully. Summarize the status of all services when done.
