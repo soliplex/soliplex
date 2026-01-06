@@ -820,6 +820,7 @@ class Authenticated extends AuthState {
   final DateTime expiresAt;
   final String issuerId;            // Which IdP issued tokens (for refresh)
   final String issuerDiscoveryUrl;  // OIDC discovery URL (for endSession)
+  final String clientId;            // Required for token refresh
   final String idToken;             // Required for OIDC endSession
 
   const Authenticated({
@@ -828,12 +829,13 @@ class Authenticated extends AuthState {
     required this.expiresAt,
     required this.issuerId,
     required this.issuerDiscoveryUrl,
+    required this.clientId,
     required this.idToken,
   });
 
   bool get isExpired => DateTime.now().isAfter(expiresAt);
   bool get needsRefresh => DateTime.now().isAfter(
-    expiresAt.subtract(const Duration(minutes: 1)),
+    expiresAt.subtract(TokenRefreshService.refreshThreshold),
   );
 }
 ```
@@ -863,7 +865,6 @@ to avoid spreading null checks throughout the codebase.
 | `AuthResult.refreshToken` | `String?` | Some IdPs don't issue refresh tokens | `AuthNotifier.signIn()` - defaults to empty string |
 | `AuthResult.idToken` | `String?` | Some IdPs may not return id_token | Stored as-is; checked in `endSession()` |
 | `AuthResult.expiresAt` | `DateTime?` | Some IdP responses omit `expires_in` | `AuthNotifier.signIn()` - defaults to 1 hour from now |
-| `Authenticated.idToken` | `String?` | Propagated from `AuthResult` | `endSession()` - skips IdP logout if null |
 | `AuthenticatedHttpClient._getToken()` | `String?` | Returns null when unauthenticated | `_injectAuth()` - skips header if null |
 | `TokenRefreshSuccess.idToken` | `String?` | OIDC spec: refresh may not return id_token | `AuthNotifier` preserves existing idToken |
 
@@ -958,10 +959,9 @@ Single file `auth_flow.dart` with platform-appropriate implementation:
 Uses `flutter_appauth` with ASWebAuthenticationSession. PKCE handled automatically.
 
 ```dart
-Future<AuthTokens> authenticate({
-  required OidcIssuer issuer,
-  required String redirectUri,
-}) async {
+const _redirectUri = 'ai.soliplex.client://callback';
+
+Future<AuthResult> authenticate(OidcIssuer issuer) async {
   // flutter_appauth handles:
   // - PKCE code_verifier/code_challenge generation
   // - State parameter generation and validation
@@ -971,21 +971,18 @@ Future<AuthTokens> authenticate({
   final result = await appAuth.authorizeAndExchangeCode(
     AuthorizationTokenRequest(
       issuer.clientId,
-      redirectUri, // e.g., 'net.soliplex.app://callback'
-      discoveryUrl: '${issuer.serverUrl}/.well-known/openid-configuration',
+      _redirectUri,
+      discoveryUrl: issuer.discoveryUrl,
       scopes: issuer.scope.split(' '),
-      preferEphemeralSession: true, // Don't persist browser session
+      externalUserAgent: ExternalUserAgent.ephemeralAsWebAuthenticationSession,
     ),
   );
 
-  if (result == null) {
-    throw AuthException('Authentication cancelled or failed');
-  }
-
-  return AuthTokens(
+  return AuthResult(
     accessToken: result.accessToken!,
-    refreshToken: result.refreshToken!,
-    expiresAt: result.accessTokenExpirationDateTime!,
+    refreshToken: result.refreshToken,
+    idToken: result.idToken,
+    expiresAt: result.accessTokenExpirationDateTime,
   );
 }
 ```
@@ -1130,7 +1127,6 @@ const storage = FlutterSecureStorage(
   ),
   mOptions: MacOsOptions(
     accessibility: KeychainAccessibility.first_unlock_this_device,
-    accountName: 'com.enfold.soliplex.oidc',
   ),
 );
 ```
@@ -1269,7 +1265,7 @@ access until it expires.
 |-------------|----------------|
 | PKCE | flutter_appauth handles automatically |
 | No embedded WebView | flutter_appauth uses ASWebAuthenticationSession |
-| Secure token storage | flutter_secure_storage (Keychain) with `whenUnlockedThisDeviceOnly` |
+| Secure token storage | flutter_secure_storage (Keychain) with `first_unlock_this_device` |
 | Token filtering in logs | HttpObserver sanitization |
 | State parameter | flutter_appauth handles automatically |
 | HTTPS only | Enforced by config validation |
@@ -1396,6 +1392,12 @@ packages/soliplex_client/lib/src/http/
 packages/soliplex_client/lib/src/auth/
 └── token_refresh_service.dart   # Pure Dart service for token refresh
 
+packages/soliplex_client/lib/src/api/
+└── fetch_auth_providers.dart    # Backend API for /api/login
+
+packages/soliplex_client/lib/src/domain/
+└── auth_provider_config.dart    # Domain model for auth providers
+
 lib/core/providers/
 └── api_provider.dart            # HTTP client wiring with RefreshingHttpClient
 
@@ -1431,7 +1433,7 @@ Platform config:
 5. **Multiple providers**: Support one at a time (can switch by logging out first)
 6. **Auth observability**: Browser flow not observable; refresh calls are observable
 7. **Platform scope**: MVP = macOS + iOS; Desktop/Web deferred
-8. **Keychain security**: `whenUnlockedThisDeviceOnly` to prevent backup/restore attacks
+8. **Keychain security**: `first_unlock_this_device` to enable background refresh while preventing backup/restore attacks
 9. **Startup UX**: Loading indicator until auth state resolves
 10. **refreshExpiresAt**: Omitted - let `invalid_grant` signal refresh token expiry
 
