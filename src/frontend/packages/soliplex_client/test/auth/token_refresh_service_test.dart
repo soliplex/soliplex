@@ -311,6 +311,37 @@ void main() {
         final failure = result as TokenRefreshFailure;
         expect(failure.reason, TokenRefreshFailureReason.unknownError);
       });
+
+      test('returns unknownError on SSRF attempt (http downgrade)', () async {
+        // Same host but HTTP instead of HTTPS - potential MITM attack
+        setupDiscoverySuccess(tokenEndpoint: 'http://idp.example.com/oauth2/token');
+
+        final result = await service.refresh(
+          discoveryUrl: discoveryUrl,
+          refreshToken: refreshToken,
+          clientId: clientId,
+        );
+
+        expect(result, isA<TokenRefreshFailure>());
+        final failure = result as TokenRefreshFailure;
+        expect(failure.reason, TokenRefreshFailureReason.unknownError);
+      });
+
+      test('returns unknownError on SSRF attempt (different port)', () async {
+        // Same host and scheme but different port
+        const maliciousEndpoint = 'https://idp.example.com:8443/oauth2/token';
+        setupDiscoverySuccess(tokenEndpoint: maliciousEndpoint);
+
+        final result = await service.refresh(
+          discoveryUrl: discoveryUrl,
+          refreshToken: refreshToken,
+          clientId: clientId,
+        );
+
+        expect(result, isA<TokenRefreshFailure>());
+        final failure = result as TokenRefreshFailure;
+        expect(failure.reason, TokenRefreshFailureReason.unknownError);
+      });
     });
 
     group('token response validation', () {
