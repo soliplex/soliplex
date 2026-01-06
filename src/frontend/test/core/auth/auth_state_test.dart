@@ -40,7 +40,6 @@ void main() {
       String issuerDiscoveryUrl = 'https://idp.example.com/.well-known',
       String clientId = 'client-app',
       String idToken = 'id-token',
-      Map<String, dynamic>? userInfo,
     }) {
       return Authenticated(
         accessToken: accessToken,
@@ -50,7 +49,6 @@ void main() {
         issuerDiscoveryUrl: issuerDiscoveryUrl,
         clientId: clientId,
         idToken: idToken,
-        userInfo: userInfo,
       );
     }
 
@@ -103,20 +101,6 @@ void main() {
         final b = createAuth(idToken: 'id-b');
 
         expect(a, isNot(equals(b)));
-      });
-
-      test('equal when only userInfo differs', () {
-        final a = createAuth(userInfo: {'name': 'Alice'});
-        final b = createAuth(userInfo: {'name': 'Bob'});
-
-        expect(a, equals(b));
-      });
-
-      test('equal when one has userInfo and other does not', () {
-        final a = createAuth(userInfo: {'name': 'Alice'});
-        final b = createAuth();
-
-        expect(a, equals(b));
       });
     });
 

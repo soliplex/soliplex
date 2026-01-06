@@ -62,7 +62,7 @@ are semantically correct - events arrive asynchronously and may not all be prese
 |------|-------|--------|
 | `auth_flow.dart:10` | `refreshToken` | Optional per OAuth 2.0 spec (RFC 6749 Section 4.1.4). Null vs empty string distinction needed for debugging auth issues. |
 | `auth_storage.dart:165` | `idToken` | Optional per OIDC spec. Empty string could reach `endSession()` causing undefined IdP behavior. |
-| `auth_state.dart:35-36` | `idToken`, `userInfo` | Genuinely optional from IdP |
+| `auth_state.dart:37` | `idToken` | Required for OIDC logout |
 | `loading_indicator.dart:7` | `message` | Null means "show no message" (spinner only). Default would change behavior - always showing text. |
 | `async_value_handler.dart:46-47` | `onRetry`, `loading` | Callbacks legitimately optional |
 | `shell_config.dart` | `title`, `drawer`, `fab` | UI configuration truly optional |

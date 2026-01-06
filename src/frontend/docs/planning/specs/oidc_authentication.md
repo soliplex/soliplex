@@ -448,7 +448,7 @@ Auth Flow (Direct OIDC via flutter_appauth):
 │  │  │ Unauthenticated │    │ Authenticated                            │ │ │
 │  │  │                 │    │   accessToken, refreshToken, idToken     │ │ │
 │  │  │                 │    │   expiresAt, issuerId, clientId          │ │ │
-│  │  │                 │    │   issuerDiscoveryUrl, userInfo?          │ │ │
+│  │  │                 │    │   issuerDiscoveryUrl                      │ │ │
 │  │  │                 │    │   isExpired, needsRefresh (computed)     │ │ │
 │  │  └─────────────────┘    └──────────────────────────────────────────┘ │ │
 │  └───────────────────────────────────────────────────────────────────────┘ │
@@ -821,7 +821,6 @@ class Authenticated extends AuthState {
   final String issuerId;            // Which IdP issued tokens (for refresh)
   final String issuerDiscoveryUrl;  // OIDC discovery URL (for endSession)
   final String idToken;             // Required for OIDC endSession
-  final Map<String, dynamic>? userInfo;
 
   const Authenticated({
     required this.accessToken,
@@ -829,8 +828,7 @@ class Authenticated extends AuthState {
     required this.expiresAt,
     required this.issuerId,
     required this.issuerDiscoveryUrl,
-    this.idToken,
-    this.userInfo,
+    required this.idToken,
   });
 
   bool get isExpired => DateTime.now().isAfter(expiresAt);
@@ -852,9 +850,6 @@ The 1-minute buffer before token expiry provides:
 For shorter token lifetimes (< 2 minutes), this buffer may be too aggressive. Consider making it
 configurable or percentage-based (e.g., 80% of lifetime) if supporting IdPs with very short tokens.
 
-Note: `userInfo` is intentionally excluded from equality checks as it may be
-fetched/updated independently of token state.
-
 Note: `refreshExpiresAt` intentionally omitted. Refresh token expiry is handled by
 `invalid_grant` error response from IdP, avoiding client-side clock drift issues.
 
@@ -869,7 +864,6 @@ to avoid spreading null checks throughout the codebase.
 | `AuthResult.idToken` | `String?` | Some IdPs may not return id_token | Stored as-is; checked in `endSession()` |
 | `AuthResult.expiresAt` | `DateTime?` | Some IdP responses omit `expires_in` | `AuthNotifier.signIn()` - defaults to 1 hour from now |
 | `Authenticated.idToken` | `String?` | Propagated from `AuthResult` | `endSession()` - skips IdP logout if null |
-| `Authenticated.userInfo` | `Map<String, dynamic>?` | Optionally fetched after auth | Consumers check before use |
 | `AuthenticatedHttpClient._getToken()` | `String?` | Returns null when unauthenticated | `_injectAuth()` - skips header if null |
 | `TokenRefreshSuccess.idToken` | `String?` | OIDC spec: refresh may not return id_token | `AuthNotifier` preserves existing idToken |
 

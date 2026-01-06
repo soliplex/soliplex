@@ -35,7 +35,6 @@ class Authenticated extends AuthState {
     required this.issuerDiscoveryUrl,
     required this.clientId,
     required this.idToken,
-    this.userInfo,
   });
 
   final String accessToken;
@@ -45,7 +44,6 @@ class Authenticated extends AuthState {
   final String issuerDiscoveryUrl;
   final String clientId;
   final String idToken;
-  final Map<String, dynamic>? userInfo;
 
   /// Whether the access token has expired.
   bool get isExpired => DateTime.now().isAfter(expiresAt);
@@ -55,8 +53,6 @@ class Authenticated extends AuthState {
         expiresAt.subtract(TokenRefreshService.refreshThreshold),
       );
 
-  // userInfo excluded from equality: it's derived/optional data that may be
-  // fetched lazily. Two auth states with same tokens are logically equal.
   @override
   bool operator ==(Object other) =>
       other is Authenticated &&

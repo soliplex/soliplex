@@ -174,7 +174,6 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
     required String issuerDiscoveryUrl,
     required String clientId,
     required String fallbackIdToken,
-    Map<String, dynamic>? userInfo,
   }) async {
     final idToken = result.idToken ?? fallbackIdToken;
 
@@ -200,7 +199,6 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
       issuerDiscoveryUrl: issuerDiscoveryUrl,
       clientId: clientId,
       idToken: idToken,
-      userInfo: userInfo,
     );
   }
 
@@ -376,7 +374,6 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
       issuerDiscoveryUrl: current.issuerDiscoveryUrl,
       clientId: current.clientId,
       fallbackIdToken: current.idToken,
-      userInfo: current.userInfo,
     );
 
     _log('Token refresh successful');
