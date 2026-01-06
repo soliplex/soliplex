@@ -443,7 +443,7 @@ def config_as_yaml(
     ctx: typer.Context,
     installation_path: installation_path_type,
 ):
-    """Export the installatin config as YAML"""
+    """Export the installation config as YAML"""
     the_installation = get_installation(installation_path)
 
     try:
@@ -474,7 +474,7 @@ def agui_feature_schemas(
     ctx: typer.Context,
     installation_path: installation_path_type,
 ):
-    """Export the installatin config as YAML"""
+    """Export AG-UI feature schemas as JSON"""
     the_installation = get_installation(installation_path)
 
     feature_schemas = {

@@ -70,6 +70,7 @@ Tokens are obtained via the OIDC flow:
 | GET | `/v1/rooms/{id}/agui/{thread_id}/{run_id}` | Get run |
 | POST | `/v1/rooms/{id}/agui/{thread_id}/{run_id}` | Execute run (SSE) |
 | POST | `/v1/rooms/{id}/agui/{thread_id}/{run_id}/meta` | Update run metadata |
+| POST | `/v1/rooms/{id}/agui/{thread_id}/{run_id}/feedback` | Add/update run feedback |
 
 ### Completions
 
@@ -91,6 +92,30 @@ Tokens are obtained via the OIDC flow:
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/v1/installation` | Get installation info |
+
+## Endpoint Details
+
+### Feedback Endpoint
+
+`POST /v1/rooms/{id}/agui/{thread_id}/{run_id}/feedback`
+
+Add or update feedback for a completed run.
+
+**Request Body:**
+
+```json
+{
+  "feedback": "thumbs_up",
+  "reason": "Helpful and accurate response"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `feedback` | string | Yes | Feedback value (e.g., "thumbs_up", "thumbs_down") |
+| `reason` | string | No | Optional explanation for the feedback |
+
+**Response:** HTTP 205 (Reset Content) on success.
 
 ## Response Formats
 

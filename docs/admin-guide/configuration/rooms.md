@@ -82,7 +82,7 @@ tools:
 
   - tool_name: "soliplex.tools.search_documents"
     rag_lancedb_stem: "knowledge"
-    search_documents_limit: 10
+    search_documents_limit: 10  # Default: 5
     allow_mcp: true
 ```
 

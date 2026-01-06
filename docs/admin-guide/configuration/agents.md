@@ -210,12 +210,39 @@ agent:
   with_agent_config: true
   extra_config:
     joke_style: "puns"
+    max_jokes: 5
 ```
 
 Factory agents have access to:
 - Full installation configuration
 - Dynamic tool registration
 - Multi-agent orchestration
+
+### extra_config
+
+The `extra_config` field is a dictionary of custom parameters passed to the factory function. Use it to configure factory-specific behavior:
+
+```yaml
+agent:
+  kind: "factory"
+  factory_name: "mypackage.agent_factory"
+  extra_config:
+    api_endpoint: "https://api.example.com"
+    timeout_seconds: 30
+    feature_flags:
+      enable_cache: true
+```
+
+Access in factory:
+
+```python
+def my_agent_factory(agent_config: FactoryAgentConfig) -> Agent:
+    endpoint = agent_config.extra_config.get("api_endpoint")
+    timeout = agent_config.extra_config.get("timeout_seconds", 10)
+    # ...
+```
+
+**Note:** `extra_config` accepts any JSON-compatible structure (strings, numbers, booleans, lists, nested objects).
 
 ## Agent Caching
 

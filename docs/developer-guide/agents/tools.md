@@ -215,12 +215,56 @@ The tool config is registered in the room's `tools` section and made available v
 class SearchDocumentsToolConfig(ToolConfig, _RAGToolBase):
     kind: str = "search_documents"
     tool_name: str = "soliplex.tools.search_documents"
-    search_documents_limit: int = 5
+    search_documents_limit: int = 5  # Default: 5
     # Inherited from _RAGToolBase:
     # rag_lancedb_stem: str = None
     # rag_lancedb_override_path: str = None
     # haiku_rag_config is a @property, not a field
 ```
+
+### AG-UI Feature Registration
+
+Tools can register AG-UI state features using `agui_feature_names`. This declares which state sections the tool reads from or writes to:
+
+```python
+@dataclasses.dataclass
+class AskWithRichCitationsToolConfig(ToolConfig, _RAGToolBase):
+    kind: str = "ask_with_rich_citations"
+    tool_name: str = "soliplex.tools.ask_with_rich_citations"
+    agui_feature_names: tuple[str, ...] = ("filter_documents", "ask_history")
+```
+
+When a tool declares features:
+1. The system registers the feature schemas with AG-UI
+2. The client can send/receive state for those features
+3. The tool can emit `STATE_DELTA` events to update feature state
+
+**Built-in features:**
+
+| Feature | Description | Source |
+|---------|-------------|--------|
+| `filter_documents` | Document IDs to filter search results | CLIENT |
+| `ask_history` | Question/answer history with citations | SERVER |
+
+### Custom Tool Config Pattern
+
+When creating custom tool configs that need extra initialization, override `get_extra_parameters()`:
+
+```python
+@dataclasses.dataclass
+class CustomToolConfig(ToolConfig):
+    api_key_secret: str = None
+    custom_option: str = "default"
+
+    def get_extra_parameters(self) -> dict[str, typing.Any]:
+        """Return extra parameters to inject into the tool function."""
+        return {
+            "api_key": self._installation_config.get_secret(self.api_key_secret),
+            "option": self.custom_option,
+        }
+```
+
+The returned dict is merged with tool function kwargs when the tool is called.
 
 ## Creating Custom Tools
 

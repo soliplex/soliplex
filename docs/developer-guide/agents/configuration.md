@@ -239,6 +239,32 @@ agent_configs:
       Write clean, well-documented code.
 ```
 
+## Agent Caching
+
+Agents are cached by their ID to avoid recreation overhead. When you request an agent:
+
+1. The system checks the `_agent_cache` for an existing agent with that ID
+2. If found, returns the cached instance
+3. If not found, creates a new agent and caches it
+
+```python
+# Internal caching (src/soliplex/agents.py)
+_agent_cache: dict[str, Agent] = {}
+
+def get_agent(agent_config: AgentConfig) -> Agent:
+    if agent_config.id in _agent_cache:
+        return _agent_cache[agent_config.id]
+    agent = create_agent(agent_config)
+    _agent_cache[agent_config.id] = agent
+    return agent
+```
+
+**Implications:**
+- Configuration changes require server restart to take effect
+- Agent state persists across requests (within the same process)
+- Memory usage scales with the number of unique agent IDs
+
 ## Source Code
 
 Configuration parsing: `src/soliplex/config.py` (lines 780-937)
+Agent caching: `src/soliplex/agents.py`

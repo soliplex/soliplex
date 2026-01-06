@@ -474,32 +474,29 @@ Installation configuration response from `GET /v1/installation`:
 
 ```python
 class Installation(pydantic.BaseModel):
-    id: str                             # Installation identifier
-    rooms: ConfiguredRooms              # Available rooms
-    completions: ConfiguredCompletions  # Available completions
-    oidc_auth_systems: ConfiguredOIDCAuthSystems  # Auth providers
-    agui_features: list[AGUI_Feature]   # Registered AG-UI features
+    id: str                                       # Installation identifier
+    secrets: list[Secret] = []                    # Secret configurations
+    environment: dict[str, str] = {}              # Environment variables
+    haiku_rag_config_file: pathlib.Path | None    # Path to haiku-rag config
+    agents: list[DefaultAgent] = []               # Default agent templates
+    agui_features: list[AGUI_Feature] = []        # Registered AG-UI features
+    oidc_paths: list[pathlib.Path] = []           # OIDC config file paths
+    room_paths: list[pathlib.Path] = []           # Room config directory paths
+    completion_paths: list[pathlib.Path] = []     # Completion config paths
+    quizzes_paths: list[pathlib.Path] = []        # Quiz config paths
+    oidc_auth_systems: list[OIDCAuthSystem] = []  # Auth providers
+    thread_persistence_dburi_sync: str | None     # Sync DB connection string
+    thread_persistence_dburi_async: str | None    # Async DB connection string
 
     @classmethod
     def from_config(cls, installation_config) -> "Installation":
         ...
 ```
 
-**Note:** The API response is a subset of the full internal `InstallationConfig`. Additional internal fields include:
+**Note:** To get the list of available rooms and completions, use the dedicated endpoints:
 
-```python
-# Internal InstallationConfig fields (not exposed in API)
-secrets: list[Secret] = []                    # Secret configurations
-environment: dict[str, str] = {}              # Environment variables
-haiku_rag_config_file: pathlib.Path | None    # Path to haiku-rag config
-agents: list[DefaultAgent] = []               # Default agent templates
-oidc_paths: list[pathlib.Path] = []           # OIDC config file paths
-room_paths: list[pathlib.Path] = []           # Room config directory paths
-completion_paths: list[pathlib.Path] = []     # Completion config paths
-quizzes_paths: list[pathlib.Path] = []        # Quiz config paths
-thread_persistence_dburi_sync: str | None     # Sync DB connection string
-thread_persistence_dburi_async: str | None    # Async DB connection string
-```
+- `GET /v1/rooms` - Returns `ConfiguredRooms` with room metadata
+- `GET /v1/chat/completions` - Returns completion endpoints
 
 ---
 

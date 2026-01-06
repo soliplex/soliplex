@@ -105,6 +105,17 @@ oidc_paths:
 
 Or use CLI flag: `soliplex-cli serve --no-auth-mode`
 
+### quizzes_paths
+
+Paths to search for quiz data files. See [Quizzes](quizzes.md).
+
+```yaml
+quizzes_paths:
+  - "./quizzes"
+```
+
+Default: `["./quizzes"]`
+
 ### thread_persistence_dburi
 
 Database URIs for thread storage.
@@ -171,6 +182,8 @@ installation/
 ├── completions/
 │   └── default/
 │       └── completion_config.yaml
+├── quizzes/
+│   └── intro.json
 └── db/
     └── rag/
         └── knowledge.lancedb/

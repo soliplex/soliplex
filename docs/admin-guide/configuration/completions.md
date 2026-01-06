@@ -38,10 +38,10 @@ id: "code-assistant"
 name: "Code Assistant"   # Display name
 
 agent:
-  model_name: "claude-sonnet-4-20250514"
-  provider_type: "anthropic"
-  provider_base_url: "https://api.anthropic.com/v1"
-  provider_key: "secret:ANTHROPIC_API_KEY"
+  model_name: "gpt-4o"
+  provider_type: "openai"
+  provider_base_url: "https://api.openai.com/v1"
+  provider_key: "secret:OPENAI_API_KEY"
   system_prompt: "./prompt.txt"  # Load from file
   retries: 3
   model_settings:
@@ -67,7 +67,7 @@ The file path must start with `./` to indicate it's relative to the config file 
 
 The `agent` section follows the same schema as room agents. See [Agents Configuration](agents.md) for full details on:
 
-- Provider types (`ollama`, `openai`, `anthropic`)
+- Provider types (`ollama`, `openai`)
 - Model settings
 - Secret references
 - Template inheritance
@@ -83,6 +83,44 @@ tools:
   - tool_name: "soliplex.tools.search_documents"
     rag_lancedb_stem: "knowledge"
 ```
+
+## MCP Client Toolsets
+
+Completions can connect to external MCP servers. Supports both stdio and HTTP transports.
+
+### Stdio Transport
+
+Run MCP server as a subprocess:
+
+```yaml
+mcp_client_toolsets:
+  filesystem:
+    kind: "stdio"
+    command: "npx"
+    args: ["-y", "@anthropic-ai/mcp-server-filesystem", "./workspace"]
+    env:
+      API_KEY: "secret:MCP_API_KEY"
+    allowed_tools:
+      - "read_file"
+      - "list_directory"
+```
+
+### HTTP Transport
+
+Connect to remote MCP server over HTTP:
+
+```yaml
+mcp_client_toolsets:
+  remote:
+    kind: "http"
+    url: "https://mcp.example.com/v1"
+    headers:
+      Authorization: "Bearer secret:MCP_TOKEN"
+    allowed_tools:
+      - "search"
+```
+
+See [MCP Client](../../developer-guide/mcp/client.md) for full details on transport options and configuration.
 
 ## API Access
 

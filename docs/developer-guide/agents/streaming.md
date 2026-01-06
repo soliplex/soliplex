@@ -88,6 +88,109 @@ event: RUN_ERROR
 data: {"type": "RUN_ERROR", "error": "Something went wrong"}
 ```
 
+### Step Lifecycle Events
+
+Track individual agent processing steps:
+
+```
+event: STEP_STARTED
+data: {"type": "STEP_STARTED", "step_id": "step-1"}
+
+event: STEP_FINISHED
+data: {"type": "STEP_FINISHED", "step_id": "step-1"}
+```
+
+### Thinking Events
+
+For models that support extended thinking (e.g., Claude with thinking enabled):
+
+```
+event: THINKING_TEXT_MESSAGE_START
+data: {"type": "THINKING_TEXT_MESSAGE_START", "message_id": "thinking-1"}
+
+event: THINKING_TEXT_MESSAGE_CONTENT
+data: {"type": "THINKING_TEXT_MESSAGE_CONTENT", "delta": "Let me analyze..."}
+
+event: THINKING_TEXT_MESSAGE_END
+data: {"type": "THINKING_TEXT_MESSAGE_END"}
+```
+
+### State Management Events
+
+AG-UI supports client-server state synchronization:
+
+```
+event: STATE_SNAPSHOT
+data: {"type": "STATE_SNAPSHOT", "state": {"filter_documents": ["doc-1"]}}
+
+event: STATE_DELTA
+data: {"type": "STATE_DELTA", "delta": [{"op": "add", "path": "/selected", "value": "doc-2"}]}
+
+event: MESSAGES_SNAPSHOT
+data: {"type": "MESSAGES_SNAPSHOT", "messages": [...]}
+
+event: ACTIVITY_SNAPSHOT
+data: {"type": "ACTIVITY_SNAPSHOT", "activity": {"status": "processing"}}
+
+event: ACTIVITY_DELTA
+data: {"type": "ACTIVITY_DELTA", "delta": [{"op": "replace", "path": "/status", "value": "complete"}]}
+```
+
+State deltas use [JSON Patch](https://jsonpatch.com/) format (RFC 6902).
+
+### Chunk Variants
+
+Alternative event formats for streaming chunks:
+
+```
+event: TEXT_MESSAGE_CHUNK
+data: {"type": "TEXT_MESSAGE_CHUNK", "chunk": "Hello"}
+
+event: TOOL_CALL_CHUNK
+data: {"type": "TOOL_CALL_CHUNK", "tool_call_id": "tc-1", "chunk": "{\"q"}
+```
+
+### Custom Events
+
+For application-specific events:
+
+```
+event: RAW
+data: {"type": "RAW", "payload": {...}}
+
+event: CUSTOM
+data: {"type": "CUSTOM", "name": "progress", "data": {"percent": 50}}
+```
+
+## Complete Event Type Reference
+
+| Category | Event Type | Description |
+|----------|------------|-------------|
+| **Text** | `TEXT_MESSAGE_START` | Begin text message |
+| | `TEXT_MESSAGE_CONTENT` | Text delta |
+| | `TEXT_MESSAGE_CHUNK` | Text chunk (alternative) |
+| | `TEXT_MESSAGE_END` | End text message |
+| **Thinking** | `THINKING_TEXT_MESSAGE_START` | Begin thinking |
+| | `THINKING_TEXT_MESSAGE_CONTENT` | Thinking delta |
+| | `THINKING_TEXT_MESSAGE_END` | End thinking |
+| **Tool** | `TOOL_CALL_START` | Begin tool call |
+| | `TOOL_CALL_ARGS` | Tool arguments delta |
+| | `TOOL_CALL_CHUNK` | Tool call chunk (alternative) |
+| | `TOOL_CALL_END` | End tool call |
+| | `TOOL_CALL_RESULT` | Tool result |
+| **Run** | `RUN_STARTED` | Run began |
+| | `RUN_FINISHED` | Run completed |
+| | `RUN_ERROR` | Run failed |
+| **Step** | `STEP_STARTED` | Step began |
+| | `STEP_FINISHED` | Step completed |
+| **State** | `STATE_SNAPSHOT` | Full state |
+| | `STATE_DELTA` | State patch |
+| | `MESSAGES_SNAPSHOT` | Full messages |
+| | `ACTIVITY_SNAPSHOT` | Activity state |
+| | `ACTIVITY_DELTA` | Activity patch |
+| **Custom** | `RAW` | Raw payload |
+| | `CUSTOM` | Named custom event |
+
 ## Event Compaction
 
 Consecutive text events are compacted to reduce overhead:

@@ -218,9 +218,10 @@ def federate(site_dir, site_url):
         site_url += '/'
     
     # Define sections we want to extract and their base filenames
+    # These must match section names in mkdocs.yml llmstxt plugin config
     sections = {
-        "Project Documentation": "llms-project.txt",
-        "Server API Reference": "llms-server.txt",
+        "Getting Started": "llms-getting-started.txt",
+        "Reference": "llms-server.txt",
         "Client API Reference": "llms-client.txt"
     }
 

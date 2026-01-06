@@ -55,6 +55,7 @@ haiku_rag_config_file: string       # Path to haiku.rag.yaml
 room_paths: [string]                # Room config directories
 completion_paths: [string]          # Completion config directories
 oidc_paths: [string]                # OIDC config directories
+quizzes_paths: [string]             # Quiz data directories (default: ["./quizzes"])
 
 # Meta-configuration (advanced)
 meta:
@@ -109,6 +110,7 @@ agent:
 tools:
   - tool_name: string               # Required: Python import path
     allow_mcp: boolean              # Expose via MCP (default: false)
+    agui_feature_names: [string]    # AG-UI features to register
     # RAG tool options
     rag_lancedb_stem: string        # Database in RAG_LANCE_DB_PATH
     rag_lancedb_override_path: string  # Explicit database path
