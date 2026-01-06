@@ -1193,6 +1193,66 @@ using the same HTTP stack (so refresh calls are observable).
 | Network error | Retry with exponential backoff, max 3 attempts |
 | Other OAuth error | Log error, require re-login |
 
+### Token Refresh Failure Handling Policy
+
+Token refresh failures are handled differently at **startup** vs **runtime**. This
+asymmetry is intentional.
+
+#### Startup (Session Restore)
+
+When the app launches with stored but expired tokens, `_tryRefreshStoredTokens` attempts
+refresh. **All failures result in logout:**
+
+| Failure Reason | Action |
+|----------------|--------|
+| `invalidGrant` | Clear tokens, logout |
+| `networkError` | Clear tokens, logout |
+| `noRefreshToken` | Clear tokens, logout |
+| Exception thrown | Clear tokens, logout |
+
+**Rationale:** At startup, we're trying to *establish* trust from stored credentials.
+If we can't validate tokens (for any reason), we have nothing useful—the tokens are
+stale and we can't verify them. Failing fast with "please log in" is clearer than
+pretending authentication succeeded when we can't verify it.
+
+#### Runtime (Active Session)
+
+When refresh is triggered during an active session (proactive refresh or 401 retry),
+`tryRefresh` distinguishes between failure types:
+
+| Failure Reason | Action |
+|----------------|--------|
+| `invalidGrant` | Clear tokens, logout (refresh token is dead) |
+| `networkError` | Preserve session, return `false` (transient failure) |
+| `noRefreshToken` | Preserve session, return `false` (can't recover) |
+| `unknownError` | Preserve session, return `false` (optimistic) |
+
+**Rationale:** At runtime, we already established trust. A transient network error
+shouldn't destroy a valid session. The user stays "authenticated" in local state and
+can retry when network returns. Only a definitive rejection from the IdP (`invalidGrant`)
+triggers logout.
+
+#### Why Not Align Both to the Same Policy?
+
+**Option: Make startup lenient (like runtime)**
+
+If the device is offline at launch with valid refresh tokens, the user would stay
+"authenticated" but unable to make API calls. This creates confusing UX: "I'm logged
+in but nothing works." Every API call would fail, attempt refresh, fail again.
+
+**Option: Make runtime strict (like startup)**
+
+Network blips would log users out, destroying valid sessions unnecessarily. Users
+would need to re-authenticate after every transient network failure.
+
+**Chosen: Asymmetric policy**
+
+- Startup: Strict (fail fast, clear "please log in" prompt)
+- Runtime: Lenient (preserve session through transient failures)
+
+This matches user expectations: "If I was logged in, a bad wifi moment shouldn't
+kick me out. But if I'm starting fresh, just show me the login screen."
+
 ## Deployment Requirements
 
 These are backend/infrastructure requirements outside the app's control:
