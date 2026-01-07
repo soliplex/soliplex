@@ -89,7 +89,7 @@ class ThreadMessageCache extends Notifier<ThreadMessageCacheState> {
     String threadId,
   ) async {
     // Remove from cache to force refetch
-    state = Map.from(state)..remove(threadId);
+    state = {...state}..remove(threadId);
     // Discard any in-flight fetch for this thread (we'll start a new one)
     final _ = _inFlightFetches.remove(threadId);
     // Fetch fresh data

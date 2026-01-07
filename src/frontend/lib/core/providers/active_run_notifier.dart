@@ -324,18 +324,15 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
         ),
     };
 
-    // Update cache when run completes
-    if (newState is CompletedState) {
-      _updateCacheOnCompletion(newState);
-    }
-
     return newState;
   }
 
   /// Updates the message cache when a run completes.
   void _updateCacheOnCompletion(CompletedState completedState) {
+    final threadId = completedState.threadId;
+    if (threadId.isEmpty) return;
     ref.read(threadMessageCacheProvider.notifier).updateMessages(
-          completedState.threadId,
+          threadId,
           completedState.messages,
         );
   }

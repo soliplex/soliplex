@@ -11,7 +11,7 @@ import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 /// Manages AG-UI streaming for the current thread. Use this to:
 /// - Start a new chat run
 /// - Cancel an active run
-/// - Watch streaming status and messages
+/// - Watch streaming status (use [allMessagesProvider] for messages)
 ///
 /// Example:
 /// ```dart
