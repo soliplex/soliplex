@@ -387,6 +387,7 @@ class SoliplexApi {
     var conversation = Conversation.empty(threadId: threadId);
     var streaming = const NotStreaming() as StreamingState;
     const decoder = EventDecoder();
+    var skippedEventCount = 0;
 
     for (final runEntry in sortedRuns) {
       final runData = runEntry.value as Map<String, dynamic>;
@@ -402,6 +403,7 @@ class SoliplexApi {
           // Skip malformed events - don't fail entire history for one bad
           // event. This can happen if the backend stores events from a newer
           // protocol version or if data corruption occurs.
+          skippedEventCount++;
           assert(
             () {
               // ignore: avoid_print
@@ -412,6 +414,16 @@ class SoliplexApi {
           );
         }
       }
+    }
+
+    if (skippedEventCount > 0) {
+      // Log skipped events for observability. Uses print() since
+      // soliplex_client is pure Dart without logging dependencies.
+      // ignore: avoid_print
+      print(
+        'Warning: Skipped $skippedEventCount malformed event(s) '
+        'while loading thread $threadId',
+      );
     }
 
     return conversation.messages;
