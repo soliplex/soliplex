@@ -9,6 +9,8 @@ import 'package:web/web.dart' as web;
 /// Used by [CallbackParamsCapture.captureNow] in main() before ProviderScope.
 CallbackParams captureCallbackParamsNow() {
   debugPrint('Web auth: Capturing URL params at startup');
+  debugPrint('Web auth: window.location.href = ${web.window.location.href}');
+  debugPrint('Web auth: window.location.hash = ${web.window.location.hash}');
   final params = _extractParamsFromUrl();
   debugPrint('Web auth: Captured params: $params');
   return params;
@@ -34,21 +36,21 @@ class WebCallbackParamsService implements CallbackParamsService {
 
   @override
   void clearUrlParams() {
-    final hash = web.window.location.hash;
-    var cleanHash = hash;
+    final origin = web.window.location.origin;
+    final pathname = web.window.location.pathname;
+    var hash = web.window.location.hash;
 
-    // With hash routing, clean up params: #/path?query → #/path
+    // Clean params from hash if present: #/path?query → #/path
     if (hash.isNotEmpty) {
       final queryIndex = hash.indexOf('?');
       if (queryIndex != -1) {
-        cleanHash = hash.substring(0, queryIndex);
+        hash = hash.substring(0, queryIndex);
       }
     }
 
-    // Build clean URL without query params
-    final origin = web.window.location.origin;
-    final pathname = web.window.location.pathname;
-    final cleanUrl = '$origin$pathname$cleanHash';
+    // Build clean URL: origin + pathname + hash (no query string).
+    // This clears both window.location.search AND any params in the hash.
+    final cleanUrl = '$origin$pathname$hash';
     web.window.history.replaceState(JSObject(), '', cleanUrl);
   }
 }

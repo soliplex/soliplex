@@ -26,11 +26,12 @@ class _AuthCallbackScreenState extends ConsumerState<AuthCallbackScreen> {
   }
 
   Future<void> _processCallback() async {
-    // Get params captured at startup (before GoRouter modified URL)
-    final params = ref.read(capturedCallbackParamsProvider);
+    debugPrint('AuthCallbackScreen: Processing callback');
 
-    // Clean up URL (security: remove tokens from browser history)
-    ref.read(callbackParamsServiceProvider).clearUrlParams();
+    // Get params captured at startup (before GoRouter modified URL).
+    // URL was already cleared in main() immediately after capture.
+    final params = ref.read(capturedCallbackParamsProvider);
+    debugPrint('AuthCallbackScreen: Params type: ${params.runtimeType}');
 
     switch (params) {
       case WebCallbackParams(:final error?, :final errorDescription):
@@ -46,6 +47,7 @@ class _AuthCallbackScreenState extends ConsumerState<AuthCallbackScreen> {
           :final expiresIn,
         ):
         // Success - complete authentication
+        debugPrint('AuthCallbackScreen: Got tokens, completing auth');
         await _completeAuth(
           accessToken: token,
           refreshToken: refreshToken,
@@ -73,19 +75,24 @@ class _AuthCallbackScreenState extends ConsumerState<AuthCallbackScreen> {
     String? refreshToken,
     int? expiresIn,
   }) async {
+    debugPrint('AuthCallbackScreen: _completeAuth called');
     try {
       await ref.read(authProvider.notifier).completeWebAuth(
             accessToken: accessToken,
             refreshToken: refreshToken,
             expiresIn: expiresIn,
           );
+      debugPrint('AuthCallbackScreen: completeWebAuth succeeded');
 
       if (mounted) {
+        debugPrint('AuthCallbackScreen: Navigating to /');
         context.go('/');
       }
     } on Exception catch (e) {
       // Log internally for debugging; show generic message to user
-      debugPrint('completeWebAuth failed: ${e.runtimeType}');
+      debugPrint(
+        'AuthCallbackScreen: completeWebAuth failed: ${e.runtimeType}',
+      );
       if (mounted) {
         setState(() {
           _error = 'Failed to complete authentication. Please try again.';

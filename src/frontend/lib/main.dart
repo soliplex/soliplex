@@ -12,6 +12,13 @@ Future<void> main() async {
   // GoRouter may modify the URL, losing the callback tokens.
   final callbackParams = CallbackParamsCapture.captureNow();
 
+  // Clear URL params immediately after capture (security: remove tokens).
+  // Must happen before GoRouter initializes to avoid URL state conflicts.
+  final callbackService = createCallbackParamsService();
+  if (callbackParams is WebCallbackParams) {
+    callbackService.clearUrlParams();
+  }
+
   // Clear stale keychain tokens on first launch after reinstall.
   // iOS preserves Keychain across uninstall/reinstall.
   await clearAuthStorageOnReinstall();
