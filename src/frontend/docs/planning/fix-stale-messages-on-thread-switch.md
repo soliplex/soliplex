@@ -176,12 +176,12 @@ will trigger the listener.
 - [x] Reuses `processEvent()` for consistency
 - [x] All tests pass
 
-### Slice 3b: Thread Message Cache Provider (REQUIRED)
+### Slice 3b: Thread Message Cache Provider (COMPLETED)
 
-- [ ] `threadMessageCacheProvider` is single source of truth
-- [ ] Cache hit returns instantly, cache miss fetches from backend
-- [ ] `updateMessages()` updates cache on run completion
-- [ ] All tests pass
+- [x] `threadMessageCacheProvider` is single source of truth
+- [x] Cache hit returns instantly, cache miss fetches from backend
+- [x] `updateMessages()` updates cache on run completion
+- [x] All tests pass
 
 ### Slice 3c: Integration (REQUIRED)
 
@@ -654,3 +654,27 @@ Added `getThreadMessages(roomId, threadId)` method to `SoliplexApi`:
 - `validates non-empty threadId` - input validation
 - `uses correct URL` - URL construction
 - `supports cancellation` - cancellation token
+
+### Slice 3b: COMPLETED
+
+**Files created:**
+
+- `lib/core/providers/thread_message_cache.dart` - new cache provider
+- `test/core/providers/thread_message_cache_test.dart` - 10 tests
+
+**Implementation:**
+
+Created `ThreadMessageCache` as a Riverpod `Notifier<Map<String, List<ChatMessage>>>`:
+
+1. `getMessages(roomId, threadId)` - returns cached messages on hit, fetches via
+   `api.getThreadMessages()` on miss, caches result
+2. `updateMessages(threadId, messages)` - updates cache entry (for run completion)
+3. `clearThread(threadId)` - removes cache entry (for thread deletion)
+4. `clearAll()` - clears entire cache (for logout)
+
+**Tests (10 passing):**
+
+- `getMessages` group (4 tests): cache hit, cache miss, subsequent calls, separate threads
+- `updateMessages` group (3 tests): update, overwrite, isolation
+- `clearThread` group (2 tests): removal, isolation
+- `clearAll` group (1 test): full clear
