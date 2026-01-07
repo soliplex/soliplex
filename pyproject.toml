@@ -48,6 +48,7 @@ dev = [
     "anyio",
     "trio",
     "ruff",
+    "mypy",
 ]
 docs = [
     "mkdocs>=1.6.1",
@@ -120,3 +121,17 @@ force-single-line = true
 
 [tool.ruff.lint.flake8-pytest-style]
 parametrize-names-type = "csv"
+
+[tool.mypy]
+python_version = "3.13"
+show_error_codes = true
+files = ["src/soliplex"]
+# Exclusions - gradually remove as types are fixed
+exclude = [
+    "tests/",
+    "src/soliplex/tui/",
+]
+# Relaxed settings for gradual adoption
+ignore_missing_imports = true
+disallow_untyped_defs = false
+check_untyped_defs = false

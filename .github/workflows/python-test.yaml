@@ -63,6 +63,10 @@ jobs:
       - name: Run ruff linter
         run: ruff check
 
+      - name: Run mypy type checker
+        run: mypy
+        continue-on-error: true  # Advisory for now, fix types gradually
+
       - name: Security scan dependencies
         run: pip-audit --strict --progress-spinner=off
         continue-on-error: true  # Advisory for now, can make strict later
