@@ -754,6 +754,284 @@ void main() {
       });
     });
 
+    // ============================================================
+    // Thread Messages
+    // ============================================================
+
+    group('getThreadMessages', () {
+      test('returns messages reconstructed from events', () async {
+        when(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'room_id': 'room-123',
+            'thread_id': 'thread-456',
+            'runs': {
+              'run-1': {
+                'created': '2026-01-07T01:00:00.000Z',
+                'events': [
+                  {
+                    'type': 'TEXT_MESSAGE_START',
+                    'messageId': 'msg-1',
+                    'role': 'assistant',
+                  },
+                  {
+                    'type': 'TEXT_MESSAGE_CONTENT',
+                    'messageId': 'msg-1',
+                    'delta': 'Hello ',
+                  },
+                  {
+                    'type': 'TEXT_MESSAGE_CONTENT',
+                    'messageId': 'msg-1',
+                    'delta': 'World',
+                  },
+                  {
+                    'type': 'TEXT_MESSAGE_END',
+                    'messageId': 'msg-1',
+                  },
+                ],
+              },
+            },
+          },
+        );
+
+        final messages = await api.getThreadMessages('room-123', 'thread-456');
+
+        expect(messages.length, equals(1));
+        expect(messages[0].id, equals('msg-1'));
+        expect((messages[0] as TextMessage).text, equals('Hello World'));
+      });
+
+      test('processes runs in chronological order', () async {
+        when(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'room_id': 'room-123',
+            'thread_id': 'thread-456',
+            'runs': {
+              // Note: Map order is not guaranteed, so we rely on timestamps
+              'run-2': {
+                'created': '2026-01-07T02:00:00.000Z',
+                'events': [
+                  {
+                    'type': 'TEXT_MESSAGE_START',
+                    'messageId': 'msg-2',
+                    'role': 'assistant',
+                  },
+                  {
+                    'type': 'TEXT_MESSAGE_CONTENT',
+                    'messageId': 'msg-2',
+                    'delta': 'Second',
+                  },
+                  {'type': 'TEXT_MESSAGE_END', 'messageId': 'msg-2'},
+                ],
+              },
+              'run-1': {
+                'created': '2026-01-07T01:00:00.000Z',
+                'events': [
+                  {
+                    'type': 'TEXT_MESSAGE_START',
+                    'messageId': 'msg-1',
+                    'role': 'assistant',
+                  },
+                  {
+                    'type': 'TEXT_MESSAGE_CONTENT',
+                    'messageId': 'msg-1',
+                    'delta': 'First',
+                  },
+                  {'type': 'TEXT_MESSAGE_END', 'messageId': 'msg-1'},
+                ],
+              },
+            },
+          },
+        );
+
+        final messages = await api.getThreadMessages('room-123', 'thread-456');
+
+        expect(messages.length, equals(2));
+        // First message should be from run-1 (earlier timestamp)
+        expect((messages[0] as TextMessage).text, equals('First'));
+        expect((messages[1] as TextMessage).text, equals('Second'));
+      });
+
+      test('returns empty list when no runs', () async {
+        when(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'room_id': 'room-123',
+            'thread_id': 'thread-456',
+            'runs': <String, dynamic>{},
+          },
+        );
+
+        final messages = await api.getThreadMessages('room-123', 'thread-456');
+
+        expect(messages, isEmpty);
+      });
+
+      test('returns empty list when runs have no events', () async {
+        when(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'room_id': 'room-123',
+            'thread_id': 'thread-456',
+            'runs': {
+              'run-1': {
+                'created': '2026-01-07T01:00:00.000Z',
+                'events': <dynamic>[],
+              },
+            },
+          },
+        );
+
+        final messages = await api.getThreadMessages('room-123', 'thread-456');
+
+        expect(messages, isEmpty);
+      });
+
+      test('handles null runs gracefully', () async {
+        when(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'room_id': 'room-123',
+            'thread_id': 'thread-456',
+            'runs': null,
+          },
+        );
+
+        final messages = await api.getThreadMessages('room-123', 'thread-456');
+
+        expect(messages, isEmpty);
+      });
+
+      test('validates non-empty roomId', () {
+        expect(
+          () => api.getThreadMessages('', 'thread-123'),
+          throwsA(isA<ArgumentError>()),
+        );
+      });
+
+      test('validates non-empty threadId', () {
+        expect(
+          () => api.getThreadMessages('room-123', ''),
+          throwsA(isA<ArgumentError>()),
+        );
+      });
+
+      test('uses correct URL', () async {
+        Uri? capturedUri;
+        when(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((invocation) async {
+          capturedUri = invocation.positionalArguments[1] as Uri;
+          return {
+            'room_id': 'room-123',
+            'thread_id': 'thread-456',
+            'runs': <String, dynamic>{},
+          };
+        });
+
+        await api.getThreadMessages('room-123', 'thread-456');
+
+        expect(
+          capturedUri?.path,
+          equals('/api/v1/rooms/room-123/agui/thread-456'),
+        );
+      });
+
+      test('supports cancellation', () async {
+        final cancelToken = CancelToken();
+
+        when(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            any(),
+            cancelToken: cancelToken,
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'room_id': 'room-123',
+            'thread_id': 'thread-456',
+            'runs': <String, dynamic>{},
+          },
+        );
+
+        await api.getThreadMessages(
+          'room-123',
+          'thread-456',
+          cancelToken: cancelToken,
+        );
+
+        verify(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            any(),
+            cancelToken: cancelToken,
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).called(1);
+      });
+    });
+
     group('getRun', () {
       test('returns run by ID', () async {
         when(

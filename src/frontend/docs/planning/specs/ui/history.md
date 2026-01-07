@@ -9,9 +9,15 @@ Thread list for current room with selection and auto-selection.
 
 ## Provider Integration
 
+`HistoryPanel` receives `roomId` as an explicit constructor parameter to avoid
+timing issues with global state synchronization.
+
 ```dart
-final room = ref.watch(currentRoomProvider);
-final threads = ref.watch(threadsProvider);
+// Constructor
+const HistoryPanel({required this.roomId, super.key});
+
+// In build()
+final threads = ref.watch(threadsProvider(roomId));
 final currentThread = ref.watch(currentThreadProvider);
 ```
 

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:soliplex_client/soliplex_client.dart';
+import 'package:soliplex_frontend/core/providers/thread_message_cache.dart';
 
 /// Standard error display widget with retry button.
 ///
@@ -24,27 +25,36 @@ class ErrorDisplay extends StatelessWidget {
   final Object error;
   final VoidCallback? onRetry;
 
+  /// Unwraps wrapper exceptions to get the underlying cause.
+  Object _unwrapError() {
+    if (error is MessageFetchException) {
+      return (error as MessageFetchException).cause;
+    }
+    return error;
+  }
+
   String _getErrorMessage() {
-    if (error is AuthException) {
+    final unwrapped = _unwrapError();
+    if (unwrapped is AuthException) {
       // AM1-AM6: No auth implemented yet
       // AM7+: This should trigger redirect to login
       return 'Authentication required. Coming in AM7.';
-    } else if (error is NetworkException) {
-      final netErr = error as NetworkException;
+    } else if (unwrapped is NetworkException) {
+      final netErr = unwrapped;
       if (netErr.isTimeout) {
         return 'Request timed out. Please try again.';
       }
       return 'Network error. Please check your connection.';
-    } else if (error is NotFoundException) {
-      final notFound = error as NotFoundException;
+    } else if (unwrapped is NotFoundException) {
+      final notFound = unwrapped;
       if (notFound.resource != null) {
         return '${notFound.resource} not found.';
       }
       return 'Resource not found.';
-    } else if (error is ApiException) {
-      final apiError = error as ApiException;
+    } else if (unwrapped is ApiException) {
+      final apiError = unwrapped;
       return 'Server error (${apiError.statusCode}): ${apiError.message}';
-    } else if (error is CancelledException) {
+    } else if (unwrapped is CancelledException) {
       return 'Operation cancelled.';
     } else {
       return 'An unexpected error occurred.';
@@ -52,17 +62,19 @@ class ErrorDisplay extends StatelessWidget {
   }
 
   IconData _getErrorIcon() {
-    if (error is AuthException) return Icons.lock_outline;
-    if (error is NetworkException) return Icons.wifi_off;
-    if (error is NotFoundException) return Icons.search_off;
-    if (error is CancelledException) return Icons.cancel_outlined;
+    final unwrapped = _unwrapError();
+    if (unwrapped is AuthException) return Icons.lock_outline;
+    if (unwrapped is NetworkException) return Icons.wifi_off;
+    if (unwrapped is NotFoundException) return Icons.search_off;
+    if (unwrapped is CancelledException) return Icons.cancel_outlined;
     return Icons.error_outline;
   }
 
   bool _canRetry() {
+    final unwrapped = _unwrapError();
     // AuthException should not show retry button (need login flow)
     // CancelledException should not show retry button (user cancelled)
-    return error is! AuthException && error is! CancelledException;
+    return unwrapped is! AuthException && unwrapped is! CancelledException;
   }
 
   @override

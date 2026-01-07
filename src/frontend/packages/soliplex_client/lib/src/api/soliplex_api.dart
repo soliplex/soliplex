@@ -1,4 +1,9 @@
+import 'package:ag_ui/ag_ui.dart' hide CancelToken;
 import 'package:soliplex_client/src/api/mappers.dart';
+import 'package:soliplex_client/src/application/agui_event_processor.dart';
+import 'package:soliplex_client/src/application/streaming_state.dart';
+import 'package:soliplex_client/src/domain/chat_message.dart';
+import 'package:soliplex_client/src/domain/conversation.dart';
 import 'package:soliplex_client/src/domain/room.dart';
 import 'package:soliplex_client/src/domain/run_info.dart';
 import 'package:soliplex_client/src/domain/thread_info.dart';
@@ -321,6 +326,126 @@ class SoliplexApi {
       cancelToken: cancelToken,
       fromJson: runInfoFromJson,
     );
+  }
+
+  // ============================================================
+  // Messages
+  // ============================================================
+
+  /// Fetches historical messages for a thread by replaying stored events.
+  ///
+  /// Parameters:
+  /// - [roomId]: The room ID (must not be empty)
+  /// - [threadId]: The thread ID (must not be empty)
+  ///
+  /// Returns a list of [ChatMessage] reconstructed from stored AG-UI events.
+  /// Messages are ordered chronologically (oldest first) based on run creation
+  /// time.
+  ///
+  /// This method fetches all runs for a thread, sorts them by creation time,
+  /// and replays their events to reconstruct the message history. Use this
+  /// when loading a thread that already has conversation history.
+  ///
+  /// Throws:
+  /// - [ArgumentError] if [roomId] or [threadId] is empty
+  /// - [NotFoundException] if thread not found (404)
+  /// - [AuthException] if not authenticated (401/403)
+  /// - [NetworkException] if connection fails
+  /// - [ApiException] for other server errors
+  /// - [CancelledException] if cancelled via [cancelToken]
+  Future<List<ChatMessage>> getThreadMessages(
+    String roomId,
+    String threadId, {
+    CancelToken? cancelToken,
+  }) async {
+    _requireNonEmpty(roomId, 'roomId');
+    _requireNonEmpty(threadId, 'threadId');
+
+    final response = await _transport.request<Map<String, dynamic>>(
+      'GET',
+      _urlBuilder.build(pathSegments: ['rooms', roomId, 'agui', threadId]),
+      cancelToken: cancelToken,
+    );
+
+    final runs = response['runs'] as Map<String, dynamic>? ?? {};
+    return _extractMessagesFromRuns(runs, threadId);
+  }
+
+  /// Extracts messages from runs by replaying events in chronological order.
+  List<ChatMessage> _extractMessagesFromRuns(
+    Map<String, dynamic> runs,
+    String threadId,
+  ) {
+    if (runs.isEmpty) {
+      return [];
+    }
+
+    // Sort runs by creation time
+    final sortedRuns = _sortRunsByCreationTime(runs);
+
+    // Replay events to reconstruct messages
+    var conversation = Conversation.empty(threadId: threadId);
+    var streaming = const NotStreaming() as StreamingState;
+    const decoder = EventDecoder();
+    var skippedEventCount = 0;
+
+    for (final runEntry in sortedRuns) {
+      final runData = runEntry.value as Map<String, dynamic>;
+      final events = runData['events'] as List<dynamic>? ?? [];
+
+      for (final eventJson in events) {
+        try {
+          final event = decoder.decodeJson(eventJson as Map<String, dynamic>);
+          final result = processEvent(conversation, streaming, event);
+          conversation = result.conversation;
+          streaming = result.streaming;
+        } catch (e) {
+          // Skip malformed events - don't fail entire history for one bad
+          // event. This can happen if the backend stores events from a newer
+          // protocol version or if data corruption occurs.
+          skippedEventCount++;
+          assert(
+            () {
+              // ignore: avoid_print
+              print('Skipped malformed event during replay: $e');
+              return true;
+            }(),
+            'Debug logging for malformed events',
+          );
+        }
+      }
+    }
+
+    if (skippedEventCount > 0) {
+      // Log skipped events for observability. Uses print() since
+      // soliplex_client is pure Dart without logging dependencies.
+      // ignore: avoid_print
+      print(
+        'Warning: Skipped $skippedEventCount malformed event(s) '
+        'while loading thread $threadId',
+      );
+    }
+
+    return conversation.messages;
+  }
+
+  /// Sorts runs by creation time (oldest first).
+  List<MapEntry<String, dynamic>> _sortRunsByCreationTime(
+    Map<String, dynamic> runs,
+  ) {
+    return runs.entries.toList()
+      ..sort((a, b) {
+        final aData = a.value as Map<String, dynamic>;
+        final bData = b.value as Map<String, dynamic>;
+        final aCreated = aData['created'] as String?;
+        final bCreated = bData['created'] as String?;
+
+        if (aCreated == null && bCreated == null) return 0;
+        if (aCreated == null) return 1;
+        if (bCreated == null) return -1;
+
+        return DateTime.parse(aCreated).compareTo(DateTime.parse(bCreated));
+      });
   }
 
   // ============================================================

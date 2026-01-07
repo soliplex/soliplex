@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
-import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 import 'package:soliplex_frontend/features/history/widgets/new_conversation_button.dart';
 import 'package:soliplex_frontend/features/history/widgets/thread_list_item.dart';
@@ -31,7 +30,7 @@ import 'package:soliplex_frontend/shared/widgets/empty_state.dart';
 ///     children: [
 ///       SizedBox(
 ///         width: 300,
-///         child: HistoryPanel(),
+///         child: HistoryPanel(roomId: 'room-123'),
 ///       ),
 ///       Expanded(child: ChatPanel()),
 ///     ],
@@ -39,21 +38,14 @@ import 'package:soliplex_frontend/shared/widgets/empty_state.dart';
 /// )
 /// ```
 class HistoryPanel extends ConsumerWidget {
-  /// Creates a history panel.
-  const HistoryPanel({super.key});
+  /// Creates a history panel for the specified room.
+  const HistoryPanel({required this.roomId, super.key});
+
+  /// The room whose threads to display.
+  final String roomId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Get current room ID
-    final roomId = ref.watch(currentRoomIdProvider);
-
-    if (roomId == null) {
-      return const EmptyState(
-        message: 'Select a room to view conversations',
-        icon: Icons.forum_outlined,
-      );
-    }
-
     // Watch threads for this room
     final threadsAsync = ref.watch(threadsProvider(roomId));
 

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:soliplex_client/soliplex_client.dart' show Streaming;
+import 'package:soliplex_client/soliplex_client.dart' show ChatMessage, Streaming;
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/features/chat/widgets/chat_message_widget.dart';
 import 'package:soliplex_frontend/shared/widgets/empty_state.dart';
+import 'package:soliplex_frontend/shared/widgets/error_display.dart';
 
 /// Widget that displays the list of messages in the current thread.
 ///
@@ -56,20 +57,49 @@ class _MessageListState extends ConsumerState<MessageList> {
 
   @override
   Widget build(BuildContext context) {
-    final messages = ref.watch(allMessagesProvider);
+    final messagesAsync = ref.watch(allMessagesProvider);
     final isStreaming = ref.watch(isStreamingProvider);
     final runState = ref.watch(activeRunNotifierProvider);
 
     // Scroll to bottom when messages change
-    ref.listen<int>(
-      allMessagesProvider.select((messages) => messages.length),
+    ref.listen<AsyncValue<List<ChatMessage>>>(
+      allMessagesProvider,
       (previous, next) {
-        if (next > (previous ?? 0)) {
+        final prevLength = switch (previous) {
+          AsyncData(:final value) => value.length,
+          _ => 0,
+        };
+        final nextLength = switch (next) {
+          AsyncData(:final value) => value.length,
+          _ => 0,
+        };
+        if (nextLength > prevLength) {
           _scrollToBottom();
         }
       },
     );
 
+    return messagesAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, stackTrace) => ErrorDisplay(
+        error: error,
+        onRetry: () => ref.invalidate(allMessagesProvider),
+      ),
+      data: (messages) => _buildMessageList(
+        context,
+        messages,
+        isStreaming,
+        runState,
+      ),
+    );
+  }
+
+  Widget _buildMessageList(
+    BuildContext context,
+    List<ChatMessage> messages,
+    bool isStreaming,
+    ActiveRunState runState,
+  ) {
     // Empty state
     if (messages.isEmpty && !isStreaming) {
       return const EmptyState(

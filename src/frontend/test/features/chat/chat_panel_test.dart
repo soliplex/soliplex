@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_client/soliplex_client.dart' as domain
     show Conversation, Failed, Running;
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
+import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 import 'package:soliplex_frontend/features/chat/chat_panel.dart';
@@ -206,9 +207,12 @@ void main() {
               currentRoomProvider.overrideWith((ref) => mockRoom),
               currentThreadProvider.overrideWith((ref) => mockThread),
               activeRunNotifierOverride(const IdleState()),
+              // Override to avoid API call
+              allMessagesProvider.overrideWith((ref) async => []),
             ],
           ),
         );
+        await tester.pumpAndSettle();
 
         // Assert
         final textField = tester.widget<TextField>(find.byType(TextField));

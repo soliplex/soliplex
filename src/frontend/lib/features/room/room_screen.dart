@@ -63,6 +63,9 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     if (_initializedForRoomId == widget.roomId) return;
     _initializedForRoomId = widget.roomId;
 
+    // Sync global room ID for currentRoomProvider and currentThreadProvider
+    ref.read(currentRoomIdProvider.notifier).set(widget.roomId);
+
     final threads = await ref.read(threadsProvider(widget.roomId).future);
     if (!mounted) return;
 
@@ -113,7 +116,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
       config: ShellConfig(
         leading: isDesktop ? _buildSidebarToggle() : null,
         title: _buildRoomDropdown(),
-        drawer: isDesktop ? null : const HistoryPanel(),
+        drawer: isDesktop ? null : HistoryPanel(roomId: widget.roomId),
         floatingActionButton: Semantics(
           label: 'Create new thread',
           child: FloatingActionButton(
@@ -196,7 +199,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                   ),
                 ),
               ),
-              child: const HistoryPanel(),
+              child: HistoryPanel(roomId: widget.roomId),
             ),
           ),
         const Expanded(child: ChatPanel()),

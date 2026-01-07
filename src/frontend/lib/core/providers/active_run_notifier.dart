@@ -1,12 +1,14 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:meta/meta.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_client/soliplex_client.dart' as domain
     show Cancelled, Completed, Conversation, Failed, Idle, Running;
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
+import 'package:soliplex_frontend/core/providers/thread_message_cache.dart';
+import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 
 /// Internal state representing the notifier's resource management.
 ///
@@ -69,11 +71,18 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
   ActiveRunState build() {
     _agUiClient = ref.watch(agUiClientProvider);
 
-    ref.onDispose(() {
-      if (_internalState is RunningInternalState) {
-        (_internalState as RunningInternalState).dispose();
-      }
-    });
+    ref
+      // Reset when leaving a selected thread (run state is scoped to thread)
+      ..listen(threadSelectionProvider, (previous, next) {
+        if (previous is ThreadSelected) {
+          unawaited(reset());
+        }
+      })
+      ..onDispose(() {
+        if (_internalState is RunningInternalState) {
+          (_internalState as RunningInternalState).dispose();
+        }
+      });
 
     return const IdleState();
   }
@@ -170,12 +179,14 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
         onError: (Object error, StackTrace stackTrace) {
           final currentState = state;
           if (currentState is RunningState) {
-            state = CompletedState(
+            final completed = CompletedState(
               conversation: currentState.conversation.withStatus(
                 domain.Failed(error: error.toString()),
               ),
               result: FailedResult(errorMessage: error.toString()),
             );
+            state = completed;
+            _updateCacheOnCompletion(completed);
           }
         },
         onDone: () {
@@ -183,12 +194,14 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
           // mark as finished
           final currentState = state;
           if (currentState is RunningState) {
-            state = CompletedState(
+            final completed = CompletedState(
               conversation: currentState.conversation.withStatus(
                 const domain.Completed(),
               ),
               result: const Success(),
             );
+            state = completed;
+            _updateCacheOnCompletion(completed);
           }
         },
         cancelOnError: false,
@@ -201,20 +214,24 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
       );
     } on CancellationError {
       // User cancelled - already handled in cancelRun
-      state = CompletedState(
+      final completed = CompletedState(
         conversation: conversation.withStatus(
           const domain.Cancelled(reason: 'Cancelled by user'),
         ),
         result: const CancelledResult(reason: 'Cancelled by user'),
       );
+      state = completed;
+      _updateCacheOnCompletion(completed);
       _internalState = const IdleInternalState();
     } catch (e) {
-      state = CompletedState(
+      final completed = CompletedState(
         conversation: conversation.withStatus(
           domain.Failed(error: e.toString()),
         ),
         result: FailedResult(errorMessage: e.toString()),
       );
+      state = completed;
+      _updateCacheOnCompletion(completed);
       _internalState = const IdleInternalState();
     }
   }
@@ -231,23 +248,34 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
     }
 
     if (currentState is RunningState) {
-      state = CompletedState(
+      final completed = CompletedState(
         conversation: currentState.conversation.withStatus(
           const domain.Cancelled(reason: 'User cancelled'),
         ),
         result: const CancelledResult(reason: 'Cancelled by user'),
       );
+      state = completed;
+      _updateCacheOnCompletion(completed);
     }
   }
 
   /// Resets to idle state, clearing all messages and state.
-  void reset() {
-    if (_internalState is RunningInternalState) {
-      (_internalState as RunningInternalState).dispose();
-      _internalState = const IdleInternalState();
-    }
-
+  ///
+  /// Clears UI state immediately so the UI updates instantly, then awaits
+  /// disposal of any active resources. Disposal errors are caught and logged
+  /// to ensure fire-and-forget callers (like Riverpod listeners) are safe.
+  Future<void> reset() async {
+    final previousState = _internalState;
+    _internalState = const IdleInternalState();
     state = const IdleState();
+
+    if (previousState is RunningInternalState) {
+      try {
+        await previousState.dispose();
+      } catch (e, st) {
+        debugPrint('Disposal error during reset: $e\n$st');
+      }
+    }
   }
 
   /// Processes a single AG-UI event and updates state accordingly.
@@ -271,7 +299,7 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
     RunningState previousState,
     EventProcessingResult result,
   ) {
-    return switch (result.conversation.status) {
+    final newState = switch (result.conversation.status) {
       domain.Completed() => CompletedState(
           conversation: result.conversation,
           streaming: result.streaming,
@@ -295,5 +323,17 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
           'Unexpected Idle status during event processing',
         ),
     };
+
+    return newState;
+  }
+
+  /// Updates the message cache when a run completes.
+  void _updateCacheOnCompletion(CompletedState completedState) {
+    final threadId = completedState.threadId;
+    if (threadId.isEmpty) return;
+    ref.read(threadMessageCacheProvider.notifier).updateMessages(
+          threadId,
+          completedState.messages,
+        );
   }
 }

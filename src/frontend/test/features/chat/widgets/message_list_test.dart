@@ -1,20 +1,80 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_client/soliplex_client.dart' as domain
-    show Conversation, Running;
+    show ChatMessage, Conversation, Running;
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 import 'package:soliplex_frontend/features/chat/widgets/chat_message_widget.dart';
 import 'package:soliplex_frontend/features/chat/widgets/message_list.dart';
 import 'package:soliplex_frontend/shared/widgets/empty_state.dart';
+import 'package:soliplex_frontend/shared/widgets/error_display.dart';
 
 import '../../../helpers/test_helpers.dart';
 
 void main() {
   group('MessageList', () {
+    group('Loading State', () {
+      testWidgets('shows loading indicator while fetching messages',
+          (tester) async {
+        // Arrange: Provider that never completes
+        final completer = Completer<List<domain.ChatMessage>>();
+
+        await tester.pumpWidget(
+          createTestApp(
+            home: const Scaffold(
+              body: MessageList(),
+            ),
+            overrides: [
+              currentThreadProvider
+                  .overrideWith((ref) => TestData.createThread()),
+              allMessagesProvider.overrideWith((ref) => completer.future),
+              activeRunNotifierOverride(const IdleState()),
+            ],
+          ),
+        );
+        // Don't use pumpAndSettle - we want to see loading state
+        await tester.pump();
+
+        // Assert
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(find.byType(ChatMessageWidget), findsNothing);
+      });
+    });
+
+    group('Error State', () {
+      testWidgets('shows error display when message fetch fails',
+          (tester) async {
+        // Arrange: Provider that throws
+        await tester.pumpWidget(
+          createTestApp(
+            home: const Scaffold(
+              body: MessageList(),
+            ),
+            overrides: [
+              currentThreadProvider
+                  .overrideWith((ref) => TestData.createThread()),
+              allMessagesProvider.overrideWith(
+                (ref) => Future<List<domain.ChatMessage>>.error(
+                  Exception('Network error'),
+                ),
+              ),
+              activeRunNotifierOverride(const IdleState()),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Assert
+        expect(find.byType(ErrorDisplay), findsOneWidget);
+        expect(find.byType(ChatMessageWidget), findsNothing);
+      });
+    });
+
     group('Empty State', () {
       testWidgets('displays empty state when no messages', (tester) async {
         // Arrange
@@ -25,10 +85,13 @@ void main() {
             ),
             overrides: [
               currentThreadProvider.overrideWith((ref) => null),
+              allMessagesProvider
+                  .overrideWith((ref) async => <domain.ChatMessage>[]),
               activeRunNotifierOverride(const IdleState()),
             ],
           ),
         );
+        await tester.pumpAndSettle();
 
         // Assert
         expect(find.byType(EmptyState), findsOneWidget);
@@ -47,10 +110,13 @@ void main() {
             ),
             overrides: [
               currentThreadProvider.overrideWith((ref) => null),
+              allMessagesProvider
+                  .overrideWith((ref) async => <domain.ChatMessage>[]),
               activeRunNotifierOverride(const IdleState()),
             ],
           ),
         );
+        await tester.pumpAndSettle();
 
         // Assert
         expect(find.byIcon(Icons.chat_bubble_outline), findsOneWidget);
@@ -86,12 +152,12 @@ void main() {
             ),
             overrides: [
               currentThreadProvider.overrideWith((ref) => mockThread),
-              threadMessagesProvider(mockThread.id)
-                  .overrideWith((ref) => messages),
+              allMessagesProvider.overrideWith((ref) async => messages),
               activeRunNotifierOverride(const IdleState()),
             ],
           ),
         );
+        await tester.pumpAndSettle();
 
         // Assert
         expect(find.byType(ChatMessageWidget), findsNWidgets(3));
@@ -117,12 +183,12 @@ void main() {
             ),
             overrides: [
               currentThreadProvider.overrideWith((ref) => mockThread),
-              threadMessagesProvider(mockThread.id)
-                  .overrideWith((ref) => messages),
+              allMessagesProvider.overrideWith((ref) async => messages),
               activeRunNotifierOverride(const IdleState()),
             ],
           ),
         );
+        await tester.pumpAndSettle();
 
         // Assert
         expect(find.byType(ListView), findsOneWidget);
@@ -145,12 +211,12 @@ void main() {
             ),
             overrides: [
               currentThreadProvider.overrideWith((ref) => mockThread),
-              threadMessagesProvider(mockThread.id)
-                  .overrideWith((ref) => messages),
+              allMessagesProvider.overrideWith((ref) async => messages),
               activeRunNotifierOverride(const IdleState()),
             ],
           ),
         );
+        await tester.pumpAndSettle();
 
         // Assert
         final messageWidgets = tester.widgetList<ChatMessageWidget>(
@@ -178,15 +244,20 @@ void main() {
             ),
             overrides: [
               currentThreadProvider.overrideWith((ref) => mockThread),
-              threadMessagesProvider(mockThread.id).overrideWith((ref) => []),
+              allMessagesProvider
+                  .overrideWith((ref) async => <domain.ChatMessage>[]),
               activeRunNotifierOverride(
                 const RunningState(conversation: conversation),
               ),
             ],
           ),
         );
+        // Use pump() instead of pumpAndSettle() because
+        // CircularProgressIndicator animation never settles.
+        await tester.pump();
+        await tester.pump();
 
-        // Assert
+        // Assert - One in loading state, one as streaming indicator
         expect(find.byType(CircularProgressIndicator), findsOneWidget);
         expect(find.text('Assistant is thinking...'), findsOneWidget);
       });
@@ -207,12 +278,12 @@ void main() {
             ),
             overrides: [
               currentThreadProvider.overrideWith((ref) => mockThread),
-              threadMessagesProvider(mockThread.id)
-                  .overrideWith((ref) => messages),
+              allMessagesProvider.overrideWith((ref) async => messages),
               activeRunNotifierOverride(const IdleState()),
             ],
           ),
         );
+        await tester.pumpAndSettle();
 
         // Assert
         expect(find.text('Assistant is thinking...'), findsNothing);
@@ -239,14 +310,17 @@ void main() {
             ),
             overrides: [
               currentThreadProvider.overrideWith((ref) => mockThread),
-              threadMessagesProvider(mockThread.id)
-                  .overrideWith((ref) => messages),
+              allMessagesProvider.overrideWith((ref) async => messages),
               activeRunNotifierOverride(
                 const RunningState(conversation: conversation),
               ),
             ],
           ),
         );
+        // Use pump() instead of pumpAndSettle() because
+        // CircularProgressIndicator animation never settles.
+        await tester.pump();
+        await tester.pump();
 
         // Assert
         // Should have 2 messages + 1 indicator
@@ -278,9 +352,7 @@ void main() {
             ),
             overrides: [
               currentThreadProvider.overrideWith((ref) => mockThread),
-              // Don't provide duplicate messages in threadMessagesProvider
-              // since they're already in activeRunNotifierProvider.messages
-              threadMessagesProvider(mockThread.id).overrideWith((ref) => []),
+              allMessagesProvider.overrideWith((ref) async => messages),
               activeRunNotifierOverride(
                 RunningState(
                   conversation: conversation,
@@ -293,6 +365,10 @@ void main() {
             ],
           ),
         );
+        // Use pump() instead of pumpAndSettle() because the streaming
+        // indicator's CircularProgressIndicator animation never settles.
+        await tester.pump();
+        await tester.pump();
 
         // Assert
         // Now there should be only one message widget
@@ -325,9 +401,7 @@ void main() {
             ),
             overrides: [
               currentThreadProvider.overrideWith((ref) => mockThread),
-              // Don't provide duplicate messages in threadMessagesProvider
-              // since they're already in activeRunNotifierProvider.messages
-              threadMessagesProvider(mockThread.id).overrideWith((ref) => []),
+              allMessagesProvider.overrideWith((ref) async => messages),
               activeRunNotifierOverride(
                 RunningState(
                   conversation: conversation,
@@ -340,6 +414,10 @@ void main() {
             ],
           ),
         );
+        // Use pump() instead of pumpAndSettle() because the streaming
+        // indicator's CircularProgressIndicator animation never settles.
+        await tester.pump();
+        await tester.pump();
 
         // Assert
         final messageWidgets = tester.widgetList<ChatMessageWidget>(
@@ -367,12 +445,12 @@ void main() {
             ),
             overrides: [
               currentThreadProvider.overrideWith((ref) => mockThread),
-              threadMessagesProvider(mockThread.id)
-                  .overrideWith((ref) => messages),
+              allMessagesProvider.overrideWith((ref) async => messages),
               activeRunNotifierOverride(const IdleState()),
             ],
           ),
         );
+        await tester.pumpAndSettle();
 
         // Assert
         final listView = tester.widget<ListView>(find.byType(ListView));
@@ -401,7 +479,7 @@ void main() {
         final container = ProviderContainer(
           overrides: [
             currentThreadProvider.overrideWith((ref) => mockThread),
-            allMessagesProvider.overrideWith((ref) {
+            allMessagesProvider.overrideWith((ref) async {
               return useUpdatedMessages ? updatedMessages : initialMessages;
             }),
             activeRunNotifierOverride(const IdleState()),
@@ -454,12 +532,12 @@ void main() {
             ),
             overrides: [
               currentThreadProvider.overrideWith((ref) => mockThread),
-              threadMessagesProvider(mockThread.id)
-                  .overrideWith((ref) => messages),
+              allMessagesProvider.overrideWith((ref) async => messages),
               activeRunNotifierOverride(const IdleState()),
             ],
           ),
         );
+        await tester.pumpAndSettle();
 
         // Assert
         expect(find.byType(ChatMessageWidget), findsOneWidget);
@@ -486,8 +564,7 @@ void main() {
             ),
             overrides: [
               currentThreadProvider.overrideWith((ref) => mockThread),
-              threadMessagesProvider(mockThread.id)
-                  .overrideWith((ref) => messages),
+              allMessagesProvider.overrideWith((ref) async => messages),
               activeRunNotifierOverride(const IdleState()),
             ],
           ),

@@ -135,7 +135,7 @@ class MockActiveRunNotifier extends Notifier<ActiveRunState>
   Future<void> cancelRun() async {}
 
   @override
-  void reset() {}
+  Future<void> reset() async {}
 }
 
 /// Creates an override for activeRunNotifierProvider with a mock state.

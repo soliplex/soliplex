@@ -10,6 +10,7 @@ import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_notifier.dart';
 import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
+import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 
 import '../../helpers/test_helpers.dart';
 
@@ -63,18 +64,167 @@ void main() {
     });
 
     group('reset', () {
-      test('returns to IdleState', () {
-        container.read(activeRunNotifierProvider.notifier).reset();
+      test('returns to IdleState', () async {
+        await container.read(activeRunNotifierProvider.notifier).reset();
 
         final state = container.read(activeRunNotifierProvider);
         expect(state, isA<IdleState>());
       });
 
-      test('clears messages', () {
-        container.read(activeRunNotifierProvider.notifier).reset();
+      test('clears messages', () async {
+        await container.read(activeRunNotifierProvider.notifier).reset();
 
         final state = container.read(activeRunNotifierProvider);
         expect(state.messages, isEmpty);
+      });
+
+      test('clears state immediately and awaits disposal', () async {
+        final eventStreamController = StreamController<BaseEvent>();
+        var disposeCalled = false;
+        final disposeCompleter = Completer<void>();
+
+        when(
+          () => mockApi.createRun(
+            any(),
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+          ),
+        ).thenAnswer(
+          (_) async => RunInfo(
+            id: 'run-1',
+            threadId: 'thread-1',
+            createdAt: DateTime.now(),
+          ),
+        );
+
+        when(
+          () => mockAgUiClient.runAgent(
+            any(),
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+          ),
+        ).thenAnswer((_) => eventStreamController.stream);
+
+        final testContainer = ProviderContainer(
+          overrides: [
+            apiProvider.overrideWithValue(mockApi),
+            agUiClientProvider.overrideWithValue(mockAgUiClient),
+          ],
+        );
+
+        addTearDown(() {
+          eventStreamController.close();
+          testContainer.dispose();
+        });
+
+        // Start a run
+        await testContainer.read(activeRunNotifierProvider.notifier).startRun(
+              roomId: 'room-1',
+              threadId: 'thread-1',
+              userMessage: 'Hello',
+            );
+
+        // Verify running
+        expect(
+          testContainer.read(activeRunNotifierProvider),
+          isA<RunningState>(),
+        );
+
+        // Capture the cancel token to track disposal
+        final capturedToken = verify(
+          () => mockAgUiClient.runAgent(
+            any(),
+            any(),
+            cancelToken: captureAny(named: 'cancelToken'),
+          ),
+        ).captured.single as CancelToken;
+
+        // Override the stream subscription's cancel to track disposal
+        eventStreamController.onCancel = () {
+          disposeCalled = true;
+          disposeCompleter.complete();
+        };
+
+        // Call reset
+        final resetFuture =
+            testContainer.read(activeRunNotifierProvider.notifier).reset();
+
+        // State should be IdleState immediately
+        expect(
+          testContainer.read(activeRunNotifierProvider),
+          isA<IdleState>(),
+        );
+
+        // Token should be cancelled
+        expect(capturedToken.isCancelled, isTrue);
+
+        // Wait for reset to complete
+        await resetFuture;
+
+        // Disposal should have completed
+        expect(disposeCalled, isTrue);
+      });
+
+      test('calling reset multiple times is idempotent', () async {
+        final eventStreamController = StreamController<BaseEvent>.broadcast();
+
+        when(
+          () => mockApi.createRun(
+            any(),
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+          ),
+        ).thenAnswer(
+          (_) async => RunInfo(
+            id: 'run-1',
+            threadId: 'thread-1',
+            createdAt: DateTime.now(),
+          ),
+        );
+
+        when(
+          () => mockAgUiClient.runAgent(
+            any(),
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+          ),
+        ).thenAnswer((_) => eventStreamController.stream);
+
+        final testContainer = ProviderContainer(
+          overrides: [
+            apiProvider.overrideWithValue(mockApi),
+            agUiClientProvider.overrideWithValue(mockAgUiClient),
+          ],
+        );
+
+        addTearDown(() {
+          eventStreamController.close();
+          testContainer.dispose();
+        });
+
+        // Start a run
+        await testContainer.read(activeRunNotifierProvider.notifier).startRun(
+              roomId: 'room-1',
+              threadId: 'thread-1',
+              userMessage: 'Hello',
+            );
+
+        // Call reset multiple times in quick succession
+        final futures = <Future<void>>[];
+        for (var i = 0; i < 5; i++) {
+          futures.add(
+            testContainer.read(activeRunNotifierProvider.notifier).reset(),
+          );
+        }
+
+        // All futures should complete without exception
+        await Future.wait(futures);
+
+        // Final state should be idle
+        expect(
+          testContainer.read(activeRunNotifierProvider),
+          isA<IdleState>(),
+        );
       });
     });
 
@@ -455,6 +605,186 @@ void main() {
       final state = container.read(activeRunNotifierProvider);
       expect(state.messages.length, 1);
       expect((state.messages.first as TextMessage).text, 'Hello');
+    });
+  });
+
+  group('thread change behavior', () {
+    late MockAgUiClient mockAgUiClient;
+    late MockSoliplexApi mockApi;
+    late StreamController<BaseEvent> eventStreamController;
+
+    setUp(() {
+      mockAgUiClient = MockAgUiClient();
+      mockApi = MockSoliplexApi();
+      eventStreamController = StreamController<BaseEvent>.broadcast();
+
+      when(
+        () => mockApi.createRun(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).thenAnswer(
+        (_) async => RunInfo(
+          id: 'run-1',
+          threadId: 'thread-1',
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      when(
+        () => mockAgUiClient.runAgent(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).thenAnswer((_) => eventStreamController.stream);
+    });
+
+    tearDown(() {
+      eventStreamController.close();
+    });
+
+    test('resets state when switching from one thread to another', () async {
+      final container = ProviderContainer(
+        overrides: [
+          apiProvider.overrideWithValue(mockApi),
+          agUiClientProvider.overrideWithValue(mockAgUiClient),
+          threadSelectionProvider.overrideWith(ThreadSelectionNotifier.new),
+        ],
+      );
+
+      addTearDown(container.dispose);
+
+      // Select thread A
+      container
+          .read(threadSelectionProvider.notifier)
+          .set(const ThreadSelected('thread-a'));
+
+      // Start a run on thread A
+      await container.read(activeRunNotifierProvider.notifier).startRun(
+            roomId: 'room-1',
+            threadId: 'thread-a',
+            userMessage: 'Hello from thread A',
+          );
+
+      // Verify running with messages
+      expect(
+        container.read(activeRunNotifierProvider),
+        isA<RunningState>(),
+      );
+      expect(
+        container.read(activeRunNotifierProvider).messages,
+        isNotEmpty,
+      );
+
+      // Switch to thread B
+      container
+          .read(threadSelectionProvider.notifier)
+          .set(const ThreadSelected('thread-b'));
+
+      // Allow listener to fire
+      await Future<void>.delayed(Duration.zero);
+
+      // State should be reset to IdleState
+      expect(
+        container.read(activeRunNotifierProvider),
+        isA<IdleState>(),
+      );
+      expect(
+        container.read(activeRunNotifierProvider).messages,
+        isEmpty,
+      );
+    });
+
+    test('does not reset when selecting the same thread again', () async {
+      final container = ProviderContainer(
+        overrides: [
+          apiProvider.overrideWithValue(mockApi),
+          agUiClientProvider.overrideWithValue(mockAgUiClient),
+          threadSelectionProvider.overrideWith(ThreadSelectionNotifier.new),
+        ],
+      );
+
+      addTearDown(container.dispose);
+
+      // Select thread A
+      container
+          .read(threadSelectionProvider.notifier)
+          .set(const ThreadSelected('thread-a'));
+
+      // Start a run on thread A
+      await container.read(activeRunNotifierProvider.notifier).startRun(
+            roomId: 'room-1',
+            threadId: 'thread-a',
+            userMessage: 'Hello from thread A',
+          );
+
+      // Verify running with messages
+      expect(
+        container.read(activeRunNotifierProvider),
+        isA<RunningState>(),
+      );
+
+      // Select thread A again (same thread)
+      container
+          .read(threadSelectionProvider.notifier)
+          .set(const ThreadSelected('thread-a'));
+
+      // Allow any listener to fire
+      await Future<void>.delayed(Duration.zero);
+
+      // State should still be RunningState (not reset)
+      expect(
+        container.read(activeRunNotifierProvider),
+        isA<RunningState>(),
+      );
+      expect(
+        container.read(activeRunNotifierProvider).messages,
+        isNotEmpty,
+      );
+    });
+
+    test('does not reset when initially selecting a thread', () async {
+      final container = ProviderContainer(
+        overrides: [
+          apiProvider.overrideWithValue(mockApi),
+          agUiClientProvider.overrideWithValue(mockAgUiClient),
+          threadSelectionProvider.overrideWith(ThreadSelectionNotifier.new),
+        ],
+      );
+
+      addTearDown(container.dispose);
+
+      // Verify initial state is NoThreadSelected
+      expect(
+        container.read(threadSelectionProvider),
+        isA<NoThreadSelected>(),
+      );
+
+      // Read the notifier to initialize it
+      container.read(activeRunNotifierProvider);
+
+      // Initial state should be IdleState
+      expect(
+        container.read(activeRunNotifierProvider),
+        isA<IdleState>(),
+      );
+
+      // Select a thread for the first time (null -> threadId)
+      container
+          .read(threadSelectionProvider.notifier)
+          .set(const ThreadSelected('thread-a'));
+
+      // Allow listener to fire
+      await Future<void>.delayed(Duration.zero);
+
+      // State should still be IdleState (no reset triggered)
+      // The key is that reset() was NOT called unnecessarily
+      expect(
+        container.read(activeRunNotifierProvider),
+        isA<IdleState>(),
+      );
     });
   });
 }

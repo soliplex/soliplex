@@ -23,10 +23,13 @@ Web (primary), iOS, Android, macOS, Windows, Linux
 | `clientProvider` | Provider | SoliplexClient instance (AM7+) |
 | `authStateProvider` | StateProvider | Auth state (AM7+) |
 | `roomsProvider` | FutureProvider | Room list |
-| `currentRoomProvider` | StateProvider | Selected room |
-| `threadsProvider` | FutureProvider | Thread list for room |
-| `currentThreadProvider` | StateProvider | Selected thread |
-| `activeRunProvider` | StateNotifierProvider | AG-UI run state |
+| `currentRoomProvider` | Provider | Selected room (derived) |
+| `threadsProvider` | FutureProvider.family | Thread list for room |
+| `currentThreadProvider` | Provider | Selected thread (derived) |
+| `threadSelectionProvider` | NotifierProvider | Thread selection state |
+| `activeRunNotifierProvider` | NotifierProvider | AG-UI run state |
+| `threadMessageCacheProvider` | NotifierProvider | Message cache per thread |
+| `allMessagesProvider` | FutureProvider | Merged cached + streaming messages |
 
 ## ActiveRunState
 
