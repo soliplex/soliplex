@@ -23,6 +23,9 @@ typedef ThreadMessageCacheState = Map<String, List<ChatMessage>>;
 ///     .updateMessages(threadId, allMessages);
 /// ```
 class ThreadMessageCache extends Notifier<ThreadMessageCacheState> {
+  /// Tracks in-flight fetches to prevent duplicate concurrent requests.
+  final _inFlightFetches = <String, Future<List<ChatMessage>>>{};
+
   @override
   ThreadMessageCacheState build() => {};
 
@@ -32,23 +35,34 @@ class ThreadMessageCache extends Notifier<ThreadMessageCacheState> {
   /// from backend via [SoliplexApi.getThreadMessages], caches the result,
   /// and returns it.
   ///
+  /// Concurrent calls for the same thread share a single fetch request.
+  ///
   /// Throws on network/API errors from the backend fetch.
   Future<List<ChatMessage>> getMessages(
     String roomId,
     String threadId,
   ) async {
     // Cache hit
-    if (state.containsKey(threadId)) {
-      return state[threadId]!;
+    final cached = state[threadId];
+    if (cached != null) return cached;
+
+    // Join existing fetch or start new one
+    return _inFlightFetches[threadId] ??= _fetchAndCache(roomId, threadId);
+  }
+
+  /// Fetches messages from backend and caches the result.
+  Future<List<ChatMessage>> _fetchAndCache(
+    String roomId,
+    String threadId,
+  ) async {
+    try {
+      final api = ref.read(apiProvider);
+      final messages = await api.getThreadMessages(roomId, threadId);
+      state = {...state, threadId: messages};
+      return messages;
+    } finally {
+      final _ = _inFlightFetches.remove(threadId);
     }
-
-    // Cache miss - fetch from backend
-    final api = ref.read(apiProvider);
-    final messages = await api.getThreadMessages(roomId, threadId);
-
-    // Store in cache
-    state = {...state, threadId: messages};
-    return messages;
   }
 
   /// Update cached messages for a thread.
@@ -63,7 +77,7 @@ class ThreadMessageCache extends Notifier<ThreadMessageCacheState> {
   ///
   /// Call this when a thread is deleted to free memory.
   void clearThread(String threadId) {
-    state = Map<String, List<ChatMessage>>.from(state)..remove(threadId);
+    state = {...state}..remove(threadId);
   }
 
   /// Clear all cached messages.

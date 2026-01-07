@@ -393,10 +393,24 @@ class SoliplexApi {
       final events = runData['events'] as List<dynamic>? ?? [];
 
       for (final eventJson in events) {
-        final event = decoder.decodeJson(eventJson as Map<String, dynamic>);
-        final result = processEvent(conversation, streaming, event);
-        conversation = result.conversation;
-        streaming = result.streaming;
+        try {
+          final event = decoder.decodeJson(eventJson as Map<String, dynamic>);
+          final result = processEvent(conversation, streaming, event);
+          conversation = result.conversation;
+          streaming = result.streaming;
+        } catch (e) {
+          // Skip malformed events - don't fail entire history for one bad
+          // event. This can happen if the backend stores events from a newer
+          // protocol version or if data corruption occurs.
+          assert(
+            () {
+              // ignore: avoid_print
+              print('Skipped malformed event during replay: $e');
+              return true;
+            }(),
+            'Debug logging for malformed events',
+          );
+        }
       }
     }
 

@@ -1,8 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
+import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/thread_message_cache.dart';
+import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 
 import '../../helpers/test_helpers.dart';
 
@@ -106,6 +109,46 @@ void main() {
         // Assert: API only called once
         verify(() => mockApi.getThreadMessages('room-abc', 'thread-123'))
             .called(1);
+      });
+
+      test('concurrent fetches share single API request', () async {
+        // Arrange: Slow API response
+        final apiMessages = [
+          TestData.createMessage(id: 'msg-1', text: 'From API'),
+        ];
+
+        when(() => mockApi.getThreadMessages('room-abc', 'thread-123'))
+            .thenAnswer((_) async {
+          // Simulate slow API
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          return apiMessages;
+        });
+
+        final container = ProviderContainer(
+          overrides: [
+            apiProvider.overrideWithValue(mockApi),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final cache = container.read(threadMessageCacheProvider.notifier);
+
+        // Act: Start two concurrent fetches
+        final future1 = cache.getMessages('room-abc', 'thread-123');
+        final future2 = cache.getMessages('room-abc', 'thread-123');
+
+        // Both should complete with same result
+        final results = await Future.wait([future1, future2]);
+
+        // Assert: API called only once despite two concurrent requests
+        verify(() => mockApi.getThreadMessages('room-abc', 'thread-123'))
+            .called(1);
+
+        // Both callers get the same messages
+        expect(results[0], hasLength(1));
+        expect(results[1], hasLength(1));
+        expect(results[0][0].id, 'msg-1');
+        expect(results[1][0].id, 'msg-1');
       });
 
       test('different threads have separate cache entries', () async {
@@ -293,6 +336,97 @@ void main() {
         final cacheState = container.read(threadMessageCacheProvider);
         expect(cacheState, isEmpty);
       });
+    });
+  });
+
+  group('threadMessagesProvider integration', () {
+    late MockSoliplexApi mockApi;
+
+    setUp(() {
+      mockApi = MockSoliplexApi();
+    });
+
+    test('uses cache on hit (no API call)', () async {
+      // Arrange: Pre-populate cache with messages
+      final cachedMessages = [
+        TestData.createMessage(id: 'cached-msg', text: 'From cache'),
+      ];
+
+      final mockRoom = TestData.createRoom(id: 'room-1');
+      final mockThread = TestData.createThread(id: 'thread-1');
+
+      final container = ProviderContainer(
+        overrides: [
+          apiProvider.overrideWithValue(mockApi),
+          currentRoomProvider.overrideWith((ref) => mockRoom),
+          currentThreadProvider.overrideWith((ref) => mockThread),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      // Pre-populate cache
+      container
+          .read(threadMessageCacheProvider.notifier)
+          .updateMessages('thread-1', cachedMessages);
+
+      // Act: Read threadMessagesProvider
+      final messages =
+          await container.read(threadMessagesProvider('thread-1').future);
+
+      // Assert: Returns cached messages, no API call
+      expect(messages, hasLength(1));
+      expect(messages[0].id, 'cached-msg');
+      verifyNever(() => mockApi.getThreadMessages(any(), any()));
+    });
+
+    test('fetches from API on cache miss', () async {
+      // Arrange
+      final apiMessages = [
+        TestData.createMessage(id: 'api-msg', text: 'From API'),
+      ];
+
+      when(() => mockApi.getThreadMessages('room-1', 'thread-1'))
+          .thenAnswer((_) async => apiMessages);
+
+      final mockRoom = TestData.createRoom(id: 'room-1');
+      final mockThread = TestData.createThread(id: 'thread-1');
+
+      final container = ProviderContainer(
+        overrides: [
+          apiProvider.overrideWithValue(mockApi),
+          currentRoomProvider.overrideWith((ref) => mockRoom),
+          currentThreadProvider.overrideWith((ref) => mockThread),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      // Act: Read threadMessagesProvider (cache miss)
+      final messages =
+          await container.read(threadMessagesProvider('thread-1').future);
+
+      // Assert: Fetched from API
+      expect(messages, hasLength(1));
+      expect(messages[0].id, 'api-msg');
+      verify(() => mockApi.getThreadMessages('room-1', 'thread-1')).called(1);
+    });
+
+    test('returns empty list when no room selected', () async {
+      // Arrange
+      final container = ProviderContainer(
+        overrides: [
+          apiProvider.overrideWithValue(mockApi),
+          currentRoomProvider.overrideWith((ref) => null),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      // Act
+      final messages =
+          await container.read(threadMessagesProvider('thread-1').future);
+
+      // Assert: Empty list, no API call
+      expect(messages, isEmpty);
+      verifyNever(() => mockApi.getThreadMessages(any(), any()));
     });
   });
 }
