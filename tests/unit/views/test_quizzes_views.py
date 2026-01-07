@@ -60,7 +60,7 @@ def test_quiz(qa_question, mc_question):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_miss", [None, "room", "quiz"])
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 async def test_get_quiz(auth_fn, test_quiz, w_miss):
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.Mock(spec_set=["get_room_config"])
@@ -122,7 +122,7 @@ async def test_get_quiz(auth_fn, test_quiz, w_miss):
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_miss", [None, "room", "quiz", "question"])
 @mock.patch("soliplex.quizzes.check_answer")
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.Mock(spec_set=["get_room_config"])

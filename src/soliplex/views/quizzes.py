@@ -1,7 +1,7 @@
 import fastapi
 from fastapi import security
 
-from soliplex import auth
+from soliplex import authn
 from soliplex import installation
 from soliplex import models
 from soliplex import quizzes
@@ -17,10 +17,10 @@ async def get_quiz(
     room_id: str,
     quiz_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.Quiz:
     """Return a quiz as configured from a room"""
-    user = auth.authenticate(the_installation, token)
+    user = authn.authenticate(the_installation, token)
 
     try:
         room_config = the_installation.get_room_config(room_id, user=user)
@@ -49,10 +49,10 @@ async def post_quiz_question(
     question_uuid: str,
     answer: models.QuizAnswer,
     the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.QuizQuestionResponse:
     """Check a user's response to a quiz question."""
-    user = auth.authenticate(the_installation, token)
+    user = authn.authenticate(the_installation, token)
 
     try:
         room_config = the_installation.get_room_config(room_id, user=user)

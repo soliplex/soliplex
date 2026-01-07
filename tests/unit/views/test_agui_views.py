@@ -171,7 +171,7 @@ def raises_httpexc(*, match, code) -> pytest.raises:
         (True, raises_httpexc(code=404, match="No such room")),
     ],
 )
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 async def test__check_user_in_room(auth_fn, w_miss, expectation):
     auth_fn.return_value = {"preferred_username": USER_NAME}
 
@@ -206,7 +206,7 @@ async def test__check_user_in_room(auth_fn, w_miss, expectation):
         (True, raises_httpexc(code=404, match="No such room")),
     ],
 )
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 async def test__check_user_room_agent(auth_fn, w_miss, expectation):
     auth_fn.return_value = {"preferred_username": USER_NAME}
 

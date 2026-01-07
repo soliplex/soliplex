@@ -4,7 +4,7 @@ import fastapi
 import jwt
 import pytest
 
-from soliplex import auth
+from soliplex import authn
 from soliplex import installation
 
 OIDC_CLIENT_PEM_PATH = "/dev/null"
@@ -48,8 +48,8 @@ EXISTING = object()
 @pytest.mark.parametrize("w_before", [None, EXISTING])
 @mock.patch("os.urandom")
 def test__get_session_secret_key(urandom, w_before):
-    with mock.patch.multiple(auth, _session_secret_key=w_before):
-        found = auth._get_session_secret_key()
+    with mock.patch.multiple(authn, _session_secret_key=w_before):
+        found = authn._get_session_secret_key()
 
     if w_before is None:
         assert found is urandom.return_value.hex.return_value
@@ -59,7 +59,7 @@ def test__get_session_secret_key(urandom, w_before):
         urandom.assert_not_called()
 
 
-@mock.patch("soliplex.auth._get_session_secret_key")
+@mock.patch("soliplex.authn._get_session_secret_key")
 @mock.patch("starlette.config.Config")
 @mock.patch("authlib.integrations.starlette_client.OAuth")
 def test_get_oauth_wo_initialized(
@@ -73,9 +73,9 @@ def test_get_oauth_wo_initialized(
     the_installation.oidc_auth_system_configs = with_auth_systems
 
     with (
-        mock.patch("soliplex.auth._oauth", None),
+        mock.patch("soliplex.authn._oauth", None),
     ):
-        found = auth.get_oauth(the_installation)
+        found = authn.get_oauth(the_installation)
 
     assert found is oauth_klass.return_value
 
@@ -100,8 +100,8 @@ def test_get_oauth_w_initialized():
     the_installation = mock.create_autospec(installation.Installation)
     expected = object()
 
-    with mock.patch("soliplex.auth._oauth", expected):
-        found = auth.get_oauth(the_installation)
+    with mock.patch("soliplex.authn._oauth", expected):
+        found = authn.get_oauth(the_installation)
 
     assert found is expected
 
@@ -116,19 +116,19 @@ def test_authenticate_w_token_none(w_auth_disabled):
     the_installation.auth_disabled = w_auth_disabled
 
     if w_auth_disabled:
-        found = auth.authenticate(the_installation, None)
+        found = authn.authenticate(the_installation, None)
         assert found == DUMMY_USER
 
     else:
         with pytest.raises(fastapi.HTTPException) as exc:
-            auth.authenticate(the_installation, None)
+            authn.authenticate(the_installation, None)
 
         assert exc.value.status_code == 401
         assert exc.value.detail == "JWT validation failed (no token)"
 
 
 @pytest.mark.parametrize("w_hit", [None, "first", "second"])
-@mock.patch("soliplex.auth.validate_access_token")
+@mock.patch("soliplex.authn.validate_access_token")
 def test_authenticate(vat, with_auth_systems, w_hit):
     FIRST_USER = {"test": "pydio"}
     SECOND_USER = {"test": "josce"}
@@ -151,19 +151,19 @@ def test_authenticate(vat, with_auth_systems, w_hit):
         vat.side_effect = [None, SECOND_USER]
 
     if no_auth:
-        found = auth.authenticate(the_installation, token)
+        found = authn.authenticate(the_installation, token)
         assert found == DUMMY_USER
 
     else:
         if w_hit is None or w_hit == "second" and len(with_auth_systems) < 2:
             with pytest.raises(fastapi.HTTPException) as exc:
-                auth.authenticate(the_installation, token)
+                authn.authenticate(the_installation, token)
 
             assert exc.value.status_code == 401
             assert exc.value.detail == "JWT validation failed (invalid token)"
 
         else:
-            found = auth.authenticate(the_installation, token)
+            found = authn.authenticate(the_installation, token)
 
             if w_hit == "first":
                 assert found is FIRST_USER
@@ -196,7 +196,7 @@ def test_validate_access_token(jwtd, w_hit):
     else:
         jwtd.side_effect = jwt.InvalidTokenError
 
-    found = auth.validate_access_token(TOKEN, PEM)
+    found = authn.validate_access_token(TOKEN, PEM)
 
     if w_hit:
         assert found == PAYLOAD

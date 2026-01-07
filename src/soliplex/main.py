@@ -10,12 +10,12 @@ import uvicorn
 from fastapi.middleware import cors as fastapi_mw_cors
 from starlette.middleware import sessions as starlette_mw_sessions
 
-from soliplex import auth
+from soliplex import authn
 from soliplex import installation
 from soliplex import util
 from soliplex import views
 from soliplex.views import agui as agui_views
-from soliplex.views import auth as auth_views
+from soliplex.views import authn as authn_views
 from soliplex.views import completions as completions_views
 from soliplex.views import installation as installation_views
 from soliplex.views import quizzes as quizzes_views
@@ -64,7 +64,7 @@ def create_app(
     app.add_middleware(
         starlette_mw_sessions.SessionMiddleware,
         # Deliberately not an envvar
-        secret_key=auth._get_session_secret_key(),
+        secret_key=authn._get_session_secret_key(),
     )
 
     current_git_hash = util.get_git_hash_for_file(__file__)
@@ -76,7 +76,7 @@ def create_app(
         return response
 
     app.include_router(agui_views.router, prefix="/api")
-    app.include_router(auth_views.router, prefix="/api")
+    app.include_router(authn_views.router, prefix="/api")
     app.include_router(completions_views.router, prefix="/api")
     app.include_router(installation_views.router, prefix="/api")
     app.include_router(quizzes_views.router, prefix="/api")

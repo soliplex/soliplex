@@ -9,7 +9,7 @@ from soliplex.views import installation as installation_views
 
 @pytest.mark.anyio
 @mock.patch("soliplex.models.Installation.from_config")
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 async def test_get_installation(auth_fn, fc):
     from soliplex import installation
 

@@ -1,4 +1,4 @@
-"""Test auth views with hash-based routing."""
+"""Test authn views with hash-based routing."""
 
 from unittest.mock import AsyncMock
 from unittest.mock import Mock
@@ -7,19 +7,19 @@ from unittest.mock import patch
 import pytest
 from fastapi import responses
 
-from soliplex.views import auth
+from soliplex.views import authn as authn_views
 
 
 @pytest.mark.anyio
-async def test_get_auth_system_with_hash_routing():
-    """Test that auth callback handles hash-based routing correctly."""
+async def test_get_authn_system_with_hash_routing():
+    """Test that authn callback handles hash-based routing correctly."""
 
     # Mock request with hash-based return_to URL
     request = Mock()
-    request.query_params = {"return_to": "/#/auth/callback"}
+    request.query_params = {"return_to": "/#/authn/callback"}
     request.url_for = Mock(
         return_value=Mock(
-            replace_query_params=Mock(return_value="http://test/auth/system")
+            replace_query_params=Mock(return_value="http://test/authn/system")
         )
     )
 
@@ -43,40 +43,42 @@ async def test_get_auth_system_with_hash_routing():
 
     # Patch auth functions
     with (
-        patch("soliplex.auth.get_oauth", return_value=oauth),
-        patch("soliplex.auth.authenticate"),
+        patch("soliplex.authn.get_oauth", return_value=oauth),
+        patch("soliplex.authn.authenticate"),
     ):
         # Call the function
-        result = await auth.get_auth_system(request, "pydio", installation)
+        result = await authn_views.get_auth_system(
+            request, "pydio", installation
+        )
 
     # Check that the redirect URL has query params before the hash
     assert isinstance(result, responses.RedirectResponse)
     redirect_url = result.headers.get("location")
 
-    # Should be /?token=xxx&refresh_token=xxx#/auth/callback
-    # Not /#/auth/callback?token=xxx
+    # Should be /?token=xxx&refresh_token=xxx#/authn/callback
+    # Not /#/authn/callback?token=xxx
     assert redirect_url.startswith("/")
     assert "?token=test_access_token" in redirect_url
     assert "&refresh_token=test_refresh_token" in redirect_url
-    assert redirect_url.endswith("#/auth/callback")
+    assert redirect_url.endswith("#/authn/callback")
 
     # Verify the correct structure
     parts = redirect_url.split("#")
     assert len(parts) == 2
     assert "?token=" in parts[0]  # Query params before hash
-    assert parts[1] == "/auth/callback"  # Hash fragment preserved
+    assert parts[1] == "/authn/callback"  # Hash fragment preserved
 
 
 @pytest.mark.anyio
-async def test_get_auth_system_without_hash():
-    """Test that auth callback still works without hash routing."""
+async def test_get_authn_system_without_hash():
+    """Test that authn callback still works without hash routing."""
 
     # Mock request without hash in return_to
     request = Mock()
     request.query_params = {"return_to": "/dashboard"}
     request.url_for = Mock(
         return_value=Mock(
-            replace_query_params=Mock(return_value="http://test/auth/system")
+            replace_query_params=Mock(return_value="http://test/authn/system")
         )
     )
 
@@ -100,11 +102,13 @@ async def test_get_auth_system_without_hash():
 
     # Patch auth functions
     with (
-        patch("soliplex.auth.get_oauth", return_value=oauth),
-        patch("soliplex.auth.authenticate"),
+        patch("soliplex.authn.get_oauth", return_value=oauth),
+        patch("soliplex.authn.authenticate"),
     ):
         # Call the function
-        result = await auth.get_auth_system(request, "pydio", installation)
+        result = await authn_views.get_auth_system(
+            request, "pydio", installation
+        )
 
     # Check that the redirect URL has standard query params
     assert isinstance(result, responses.RedirectResponse)

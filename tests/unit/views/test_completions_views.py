@@ -40,7 +40,7 @@ def completion_configs(request):
 
 
 @pytest.mark.anyio
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 @mock.patch("soliplex.models.Completion.from_config")
 async def test_get_chat_completions(fc, auth_fn, completion_configs):
     request = mock.create_autospec(fastapi.Request)
@@ -72,7 +72,7 @@ async def test_get_chat_completions(fc, auth_fn, completion_configs):
 
 
 @pytest.mark.anyio
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 @mock.patch("soliplex.models.Completion.from_config")
 async def test_get_chat_completion(fc, auth_fn, completion_configs):
     COMPLETION_ID = "foo"
@@ -130,7 +130,7 @@ async def test_get_chat_completion(fc, auth_fn, completion_configs):
         (AUTH_USER, AUTH_USER),
     ],
 )
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 async def test_post_chat_completion_miss(auth_fn, w_auth_user, exp_user):
     auth_fn.return_value = w_auth_user
 
@@ -166,7 +166,7 @@ async def test_post_chat_completion_miss(auth_fn, w_auth_user, exp_user):
 )
 @pytest.mark.parametrize("w_msg", [False, True])
 @mock.patch("soliplex.completions.openai_chat_completion")
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 async def test_post_chat_completion_hit(
     auth_fn,
     occ,

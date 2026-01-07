@@ -65,7 +65,7 @@ def room_configs(request):
 
 
 @pytest.mark.anyio
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 @mock.patch("soliplex.models.Room.from_config")
 async def test_get_rooms(fc, auth_fn, room_configs):
     request = mock.create_autospec(fastapi.Request)
@@ -97,7 +97,7 @@ async def test_get_rooms(fc, auth_fn, room_configs):
 
 
 @pytest.mark.anyio
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 @mock.patch("soliplex.models.Room.from_config")
 async def test_get_room(fc, auth_fn, room_configs):
     ROOM_ID = "foo"
@@ -145,7 +145,7 @@ async def test_get_room(fc, auth_fn, room_configs):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_image", [False, True])
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
     ROOM_ID = "foo"
     IMAGE_FILENAME = "logo.svg"
@@ -212,7 +212,7 @@ async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_error", [False, True])
 @mock.patch("soliplex.mcp_auth.generate_url_safe_token")
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 async def test_get_room_mcp_token(auth_fn, gust, w_error):
     ROOM_ID = "test-room"
     ROOM_CONFIG = object()
@@ -277,7 +277,7 @@ async def test_get_room_mcp_token(auth_fn, gust, w_error):
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_hr_tool", [False, True])
 @mock.patch("haiku.rag.client.HaikuRAG")
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 async def test_get_room_documents(
     auth_fn,
     hr_klass,
@@ -370,7 +370,7 @@ async def test_get_room_documents(
 @pytest.mark.parametrize("w_hr_tool", [False, True])
 @mock.patch("haiku.rag.client.HaikuRAG")
 @mock.patch("base64.b64encode")
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 async def test_get_chunk_visualization(
     auth_fn,
     b64enc,

@@ -6,7 +6,7 @@ from fastapi import responses
 from fastapi import security
 from haiku.rag import client as rag_client
 
-from soliplex import auth
+from soliplex import authn
 from soliplex import installation
 from soliplex import mcp_auth
 from soliplex import models
@@ -22,10 +22,10 @@ depend_the_installation = installation.depend_the_installation
 async def get_rooms(
     request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.ConfiguredRooms:
     """Return a manifest of the rooms available to the user"""
-    user = auth.authenticate(the_installation, token)
+    user = authn.authenticate(the_installation, token)
     room_configs = the_installation.get_room_configs(user)
 
     def _key(item):
@@ -45,10 +45,10 @@ async def get_room(
     request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.Room:
     """Return a single room's configuration"""
-    user = auth.authenticate(the_installation, token)
+    user = authn.authenticate(the_installation, token)
 
     try:
         room_config = the_installation.get_room_config(room_id, user)
@@ -70,10 +70,10 @@ async def get_room_bg_image(
     request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> str:  # file path, converted to file response by FastAPI
     """Return a room's background image"""
-    user = auth.authenticate(the_installation, token)
+    user = authn.authenticate(the_installation, token)
 
     try:
         room_config = the_installation.get_room_config(room_id, user)
@@ -100,10 +100,10 @@ async def get_room_mcp_token(
     request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.MCPToken:
     """Return a token for use in an MCP client addressing the room"""
-    user = auth.authenticate(the_installation, token)
+    user = authn.authenticate(the_installation, token)
 
     try:
         the_installation.get_room_config(room_id, user=user)
@@ -124,10 +124,10 @@ async def get_room_documents(
     request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.RoomDocuments:
     """Return a list of the documents in the room's RAG database"""
-    user = auth.authenticate(the_installation, token)
+    user = authn.authenticate(the_installation, token)
 
     try:
         room_config = the_installation.get_room_config(room_id, user)
@@ -174,10 +174,10 @@ async def get_chunk_visualization(
     room_id: str,
     chunk_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.ChunkVisualization:
     """Return a set of page images for a chunk, highlighting the chunk text"""
-    user = auth.authenticate(the_installation, token)
+    user = authn.authenticate(the_installation, token)
 
     try:
         room_config = the_installation.get_room_config(room_id, user)
