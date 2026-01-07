@@ -17,53 +17,59 @@ ALL_SECTIONS = [
     "Developer Guide - Flutter",
     "Reference",
     "Troubleshooting",
-    "Contributing"
+    "Contributing",
 ]
 
 # Map output filename -> (display_name, [source_section_names])
 SECTION_GROUPS = {
     "llms-getting-started.txt": ("Getting Started", ["Getting Started"]),
     "llms-user-guide.txt": ("User Guide", ["User Guide"]),
-    "llms-admin-guide.txt": ("Admin Guide", [
-        "Admin Guide - Configuration",
-        "Admin Guide - Authentication",
-        "Admin Guide - Deployment"
-    ]),
-    "llms-developer-guide.txt": ("Developer Guide", [
-        "Developer Guide - Architecture",
-        "Developer Guide - Agents",
-        "Developer Guide - RAG",
-        "Developer Guide - MCP",
-        "Developer Guide - API",
-        "Developer Guide - Flutter"
-    ]),
+    "llms-admin-guide.txt": (
+        "Admin Guide",
+        [
+            "Admin Guide - Configuration",
+            "Admin Guide - Authentication",
+            "Admin Guide - Deployment",
+        ],
+    ),
+    "llms-developer-guide.txt": (
+        "Developer Guide",
+        [
+            "Developer Guide - Architecture",
+            "Developer Guide - Agents",
+            "Developer Guide - RAG",
+            "Developer Guide - MCP",
+            "Developer Guide - API",
+            "Developer Guide - Flutter",
+        ],
+    ),
     "llms-reference.txt": ("Reference", ["Reference"]),
     "llms-extras.txt": (
         "Troubleshooting & Contributing",
-        ["Troubleshooting", "Contributing"]
-    )
+        ["Troubleshooting", "Contributing"],
+    ),
 }
 
 
 def on_post_build(config, **kwargs):
     """Hook called by MkDocs after build."""
-    site_dir = config['site_dir']
+    site_dir = config["site_dir"]
 
-    mode = os.environ.get('DOCS_MODE')
+    mode = os.environ.get("DOCS_MODE")
 
-    if mode == 'local':
+    if mode == "local":
         # Use absolute filesystem paths (Best for local agents)
-        site_url = config['site_dir']
-        if not site_url.endswith('/'):
-            site_url += '/'
+        site_url = config["site_dir"]
+        if not site_url.endswith("/"):
+            site_url += "/"
         print(f"--- Federation: LOCAL MODE (Absolute Paths: {site_url}) ---")
-    elif mode == 'relative':
+    elif mode == "relative":
         # Use relative paths (Portable)
         site_url = ""
         print("--- Federation: RELATIVE MODE (Relative Paths) ---")
     else:
         # Default: Use configured site_url (Remote/Hosted)
-        site_url = config.get('site_url', '/')
+        site_url = config.get("site_url", "/")
 
     federate(site_dir, site_url)
 
@@ -72,8 +78,13 @@ def clean_map_content(content):
     """Filter out noisy lines from map content (e.g., API details)."""
     lines = content.splitlines()
     filtered_lines = []
-    noisy_markers = ("Method:", "Property:", "Constructor:",
-                     "Operator:", "Static Method:")
+    noisy_markers = (
+        "Method:",
+        "Property:",
+        "Constructor:",
+        "Operator:",
+        "Static Method:",
+    )
     for line in lines:
         if line.strip().startswith("- ["):
             # Filter out granular API details
@@ -108,7 +119,7 @@ def extract_section(content, section_name):
     end_match = re.search(next_section_pattern, remaining_content)
 
     if end_match:
-        return remaining_content[:end_match.start()].strip()
+        return remaining_content[: end_match.start()].strip()
     else:
         return remaining_content.strip()
 
@@ -181,8 +192,8 @@ def federate(site_dir, site_url):
     full_file = os.path.join(site_dir, "llms-full.txt")
 
     # Ensure site_url ends with / to safely append filenames
-    if not site_url.endswith('/'):
-        site_url += '/'
+    if not site_url.endswith("/"):
+        site_url += "/"
 
     # Pass 1: Split the Map (llms.txt) -> llms-{domain}.txt
     print("--- Splitting Map ---")
