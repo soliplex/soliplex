@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:soliplex_client/soliplex_client.dart' show NetworkException;
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
 import 'package:soliplex_frontend/core/providers/thread_message_cache.dart';
 
@@ -146,6 +147,77 @@ void main() {
         expect(results[1], hasLength(1));
         expect(results[0][0].id, 'msg-1');
         expect(results[1][0].id, 'msg-1');
+      });
+
+      test('propagates API errors wrapped with thread context', () async {
+        // Arrange
+        when(() => mockApi.getThreadMessages('room-abc', 'thread-123'))
+            .thenThrow(const NetworkException(message: 'Connection failed'));
+
+        final container = ProviderContainer(
+          overrides: [
+            apiProvider.overrideWithValue(mockApi),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        // Act & Assert: Error is wrapped with MessageFetchException
+        await expectLater(
+          container
+              .read(threadMessageCacheProvider.notifier)
+              .getMessages('room-abc', 'thread-123'),
+          throwsA(
+            allOf([
+              isA<MessageFetchException>(),
+              predicate<MessageFetchException>(
+                (e) =>
+                    e.threadId == 'thread-123' && e.cause is NetworkException,
+                'has correct threadId and cause',
+              ),
+            ]),
+          ),
+        );
+
+        // Cache should remain empty (no partial caching on error)
+        final cacheState = container.read(threadMessageCacheProvider);
+        expect(cacheState.containsKey('thread-123'), isFalse);
+      });
+
+      test('allows retry after API error', () async {
+        // Arrange: First call fails, second succeeds
+        var callCount = 0;
+        when(() => mockApi.getThreadMessages('room-abc', 'thread-123'))
+            .thenAnswer((_) async {
+          callCount++;
+          if (callCount == 1) {
+            throw const NetworkException(message: 'Connection failed');
+          }
+          return [TestData.createMessage(id: 'msg-1', text: 'Success')];
+        });
+
+        final container = ProviderContainer(
+          overrides: [
+            apiProvider.overrideWithValue(mockApi),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final cache = container.read(threadMessageCacheProvider.notifier);
+
+        // First call fails (wrapped in MessageFetchException)
+        await expectLater(
+          cache.getMessages('room-abc', 'thread-123'),
+          throwsA(isA<MessageFetchException>()),
+        );
+
+        // Second call retries and succeeds
+        final messages = await cache.getMessages('room-abc', 'thread-123');
+        expect(messages, hasLength(1));
+        expect(messages[0].id, 'msg-1');
+
+        // API was called twice (retry after failure)
+        verify(() => mockApi.getThreadMessages('room-abc', 'thread-123'))
+            .called(2);
       });
 
       test('different threads have separate cache entries', () async {

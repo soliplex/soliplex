@@ -56,6 +56,10 @@ class ThreadMessageCache extends Notifier<ThreadMessageCacheState> {
   }
 
   /// Fetches messages from backend and caches the result.
+  ///
+  /// On success, caches messages and returns them. On error, the exception
+  /// is wrapped with thread context and re-thrown. The in-flight tracking
+  /// is always cleaned up, allowing subsequent calls to retry the fetch.
   Future<List<ChatMessage>> _fetchAndCache(
     String roomId,
     String threadId,
@@ -65,6 +69,11 @@ class ThreadMessageCache extends Notifier<ThreadMessageCacheState> {
       final messages = await api.getThreadMessages(roomId, threadId);
       state = {...state, threadId: messages};
       return messages;
+    } on Exception catch (e, st) {
+      Error.throwWithStackTrace(
+        MessageFetchException(threadId: threadId, cause: e),
+        st,
+      );
     } finally {
       final _ = _inFlightFetches.remove(threadId);
     }
@@ -104,3 +113,20 @@ final threadMessageCacheProvider =
     NotifierProvider<ThreadMessageCache, ThreadMessageCacheState>(
   ThreadMessageCache.new,
 );
+
+/// Exception thrown when fetching messages for a thread fails.
+///
+/// Wraps the underlying exception with thread context for better debugging.
+class MessageFetchException implements Exception {
+  /// Creates an exception for a failed message fetch.
+  const MessageFetchException({required this.threadId, required this.cause});
+
+  /// The thread that failed to load.
+  final String threadId;
+
+  /// The underlying exception that caused the failure.
+  final Exception cause;
+
+  @override
+  String toString() => 'Failed to load messages for thread $threadId: $cause';
+}
