@@ -148,14 +148,16 @@ final soliplexHttpClientProvider = Provider<SoliplexHttpClient>((ref) {
 +-------------------------------------+
 ```
 
-**Colors:**
+**Colors:** (implemented in `HttpStatusDisplay._colorForStatus`)
 
-- Request sent: blue
-- Response success (2xx): green
-- Response error (4xx/5xx): orange
-- Network error: red
-- Stream active: purple
-- Stream complete: green
+- Request pending: onSurfaceVariant (gray)
+- Response success (2xx): tertiary (green)
+- Client error (4xx): warning (orange)
+- Server error (5xx): error (red)
+- Network error: error (red)
+- Stream active: secondary (purple)
+- Stream complete: tertiary (green)
+- Stream error: error (red)
 
 ## Commit Plan
 
@@ -219,3 +221,66 @@ Standalone observer that stores HTTP events. Includes event cap (500 max) to pre
 
 - No new packages
 - Uses existing `HttpObserver` from `soliplex_client`
+
+## Planned Enhancements
+
+### Enhancement: Highlight Non-2xx Responses as Errors
+
+**Status:** Proposed
+
+**Problem:**
+HTTP responses with 4xx/5xx status codes are logged as `HttpResponseEvent` (not
+`HttpErrorEvent`), making them appear as normal responses in the inspector. Users
+expect API errors (like 500 Internal Server Error) to be visually distinct and
+easy to find.
+
+**Current Behavior:**
+
+- `HttpErrorEvent` is only emitted for network-level failures (connection refused,
+  timeout, DNS failure)
+- A 500 response from the server emits `HttpResponseEvent` with `statusCode: 500`
+- The UI does use different text colors (orange for 4xx, red for 5xx) but lacks
+  other visual distinction (no icons, no background color, no filtering)
+
+**Proposed Changes:**
+
+1. **Visual distinction in HttpEventTile:**
+   - Add error icon (warning/error) for 4xx/5xx responses
+   - Use more prominent error styling (red background tint, border)
+   - Show response body preview for error responses (truncated)
+
+2. **Filter/highlight controls:**
+   - Add "Show errors only" toggle to filter non-2xx responses
+   - Add error count badge on the inspector toggle button
+   - Visual separator or grouping for error responses
+
+3. **Error details expansion:**
+   - Auto-expand error responses by default
+   - Show parsed error message from response body (supports `message`, `error`,
+     `detail` fields from JSON)
+
+**Implementation Notes:**
+
+The `HttpResponseEvent` already contains `statusCode`. Changes needed:
+
+```dart
+// In HttpEventTile
+bool get isErrorResponse =>
+    event is HttpResponseEvent &&
+    (event as HttpResponseEvent).statusCode >= 400;
+
+// Styling
+Color get tileColor => isErrorResponse
+    ? Theme.of(context).colorScheme.errorContainer
+    : null;
+```
+
+**Files to Modify:**
+
+| File | Change |
+|------|--------|
+| `lib/features/inspector/widgets/http_event_tile.dart` | Add error styling for 4xx/5xx |
+| `lib/features/inspector/http_inspector_panel.dart` | Add error filter toggle, error count |
+| `test/features/inspector/widgets/http_event_tile_test.dart` | Add tests for error styling |
+
+**Date Proposed:** 2025-01-07
