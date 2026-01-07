@@ -483,7 +483,7 @@ class _ChunkVisualizationDialog extends StatefulWidget {
   final Citation citation;
   final ConnectionManager connectionManager;
   final void Function(String imageBase64, int pageNumber, int totalPages)
-      onShowFullImage;
+  onShowFullImage;
 
   @override
   State<_ChunkVisualizationDialog> createState() =>
@@ -508,7 +508,8 @@ class _ChunkVisualizationDialogState extends State<_ChunkVisualizationDialog> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final images = (data['images_base_64'] as List<dynamic>?)
+        final images =
+            (data['images_base_64'] as List<dynamic>?)
                 ?.map((e) => e as String)
                 .toList() ??
             [];
@@ -586,8 +587,9 @@ class _ChunkVisualizationDialogState extends State<_ChunkVisualizationDialog> {
                             '${_imagesBase64!.length} '
                             'page${_imagesBase64!.length == 1 ? '' : 's'}',
                             style: TextStyle(
-                              color: colorScheme.onPrimaryContainer
-                                  .withValues(alpha: 0.7),
+                              color: colorScheme.onPrimaryContainer.withValues(
+                                alpha: 0.7,
+                              ),
                               fontSize: 12,
                             ),
                           )
@@ -595,8 +597,9 @@ class _ChunkVisualizationDialogState extends State<_ChunkVisualizationDialog> {
                           Text(
                             'Loading...',
                             style: TextStyle(
-                              color: colorScheme.onPrimaryContainer
-                                  .withValues(alpha: 0.7),
+                              color: colorScheme.onPrimaryContainer.withValues(
+                                alpha: 0.7,
+                              ),
                               fontSize: 12,
                             ),
                           ),

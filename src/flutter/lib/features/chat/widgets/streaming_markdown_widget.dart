@@ -48,8 +48,9 @@ class _StreamingMarkdownWidgetState
     final colorScheme = Theme.of(context).colorScheme;
 
     // Normalize line endings to prevent parsing issues with CRLF
-    var normalizedText =
-        widget.text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    var normalizedText = widget.text
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n');
 
     // Strip outer markdown code block if present
     // Matches ```markdown ... ``` or ```md ... ```

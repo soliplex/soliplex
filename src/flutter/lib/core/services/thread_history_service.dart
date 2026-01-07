@@ -172,8 +172,9 @@ class ThreadHistoryNotifier extends StateNotifier<ThreadHistoryState> {
         }
 
         // Remove from local list
-        final updatedThreads =
-            state.threads.where((t) => t.threadId != threadId).toList();
+        final updatedThreads = state.threads
+            .where((t) => t.threadId != threadId)
+            .toList();
 
         // If the deleted thread was selected, clear selection
         final shouldClearSelection = state.selectedThreadId == threadId;

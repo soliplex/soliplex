@@ -400,16 +400,17 @@ class OidcWebAuthInteractor extends OidcAuthInteractorBase {
     // Build logout URL with redirect
     // We use the front-channel logout (redirect) to ensure cookies are cleared
     // at IdP
-    final logoutUri = Uri.parse(
-      '${config.endpoint}/protocol/openid-connect/logout',
-    ).replace(
-      queryParameters: {
-        'post_logout_redirect_uri': config.redirectUrl,
-        'client_id': config.clientId,
-        if (tokens != null && tokens.idToken.isNotEmpty)
-          'id_token_hint': tokens.idToken,
-      },
-    );
+    final logoutUri =
+        Uri.parse(
+          '${config.endpoint}/protocol/openid-connect/logout',
+        ).replace(
+          queryParameters: {
+            'post_logout_redirect_uri': config.redirectUrl,
+            'client_id': config.clientId,
+            if (tokens != null && tokens.idToken.isNotEmpty)
+              'id_token_hint': tokens.idToken,
+          },
+        );
 
     DebugLog.service(
       'OidcWebAuthInteractor: Redirecting to logout: $logoutUri',

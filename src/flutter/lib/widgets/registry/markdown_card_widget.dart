@@ -68,10 +68,11 @@ class MarkdownCardWidget extends ConsumerWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final hooks = ref.watch(markdownHooksProvider); // Retrieve hooks
-    
+
     // Normalize line endings
-    final normalizedContent =
-        content.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final normalizedContent = content
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n');
 
     return Card(
       child: Column(
@@ -148,8 +149,10 @@ class MarkdownCardWidget extends ConsumerWidget {
                 var sanitizedUri = uri.trim();
                 if (sanitizedUri.startsWith('<') &&
                     sanitizedUri.endsWith('>')) {
-                  sanitizedUri =
-                      sanitizedUri.substring(1, sanitizedUri.length - 1);
+                  sanitizedUri = sanitizedUri.substring(
+                    1,
+                    sanitizedUri.length - 1,
+                  );
                 }
 
                 return TrackedMarkdownImage(

@@ -114,7 +114,8 @@ class Citation extends Equatable {
       documentUri: json['document_uri'] as String? ?? '',
       content: json['content'] as String? ?? '',
       documentTitle: json['document_title'] as String?,
-      pageNumbers: (json['page_numbers'] as List<dynamic>?)
+      pageNumbers:
+          (json['page_numbers'] as List<dynamic>?)
               ?.map((e) => e as int)
               .toList() ??
           const [],

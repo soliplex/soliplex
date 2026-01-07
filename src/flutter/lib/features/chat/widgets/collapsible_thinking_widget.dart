@@ -109,8 +109,9 @@ class CollapsibleThinkingWidget extends StatelessWidget {
 
   Widget _buildContent(BuildContext context, ColorScheme colorScheme) {
     // Normalize line endings
-    final normalizedText =
-        thinkingText.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final normalizedText = thinkingText
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n');
 
     return Container(
       constraints: const BoxConstraints(maxHeight: 300),
@@ -129,25 +130,26 @@ class CollapsibleThinkingWidget extends StatelessWidget {
               )
             : SmoothMarkdown(
                 data: normalizedText,
-                styleSheet: MarkdownStyleSheet.fromTheme(
-                  Theme.of(context),
-                ).copyWith(
-                  paragraphStyle: TextStyle(
-                    color: colorScheme.onSurfaceVariant,
-                    fontSize: 13,
-                    height: 1.5,
-                  ),
-                  inlineCodeStyle: TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                    color: colorScheme.onSurfaceVariant,
-                    backgroundColor: colorScheme.surfaceContainerHighest,
-                  ),
-                  codeBlockDecoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ),
+                styleSheet:
+                    MarkdownStyleSheet.fromTheme(
+                      Theme.of(context),
+                    ).copyWith(
+                      paragraphStyle: TextStyle(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 13,
+                        height: 1.5,
+                      ),
+                      inlineCodeStyle: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        color: colorScheme.onSurfaceVariant,
+                        backgroundColor: colorScheme.surfaceContainerHighest,
+                      ),
+                      codeBlockDecoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
               ),
       ),
     );

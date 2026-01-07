@@ -480,8 +480,7 @@ class EventProcessor {
       messageIdMapUpdate: MapUpdate(removes: {aguiMessageId}),
       textBuffersUpdate: MapUpdate(removes: {aguiMessageId}),
       // Clear citations buffer after attaching
-      citationsBufferUpdate:
-          hasCitations ? CitationsBufferState.empty() : null,
+      citationsBufferUpdate: hasCitations ? CitationsBufferState.empty() : null,
       contextUpdate: ContextUpdate(AgUiEventTypes.textMessage, summary: text),
     );
   }
@@ -604,8 +603,10 @@ class EventProcessor {
         return const [];
       }
 
-      DebugLog.agui('_extractLatestCitations: ask_history keys: '
-          '${askHistory.keys.toList()}');
+      DebugLog.agui(
+        '_extractLatestCitations: ask_history keys: '
+        '${askHistory.keys.toList()}',
+      );
 
       final questions = askHistory['questions'] as List<dynamic>?;
       if (questions == null || questions.isEmpty) {
@@ -613,21 +614,29 @@ class EventProcessor {
         return const [];
       }
 
-      DebugLog.agui('_extractLatestCitations: found ${questions.length} '
-          'questions');
+      DebugLog.agui(
+        '_extractLatestCitations: found ${questions.length} '
+        'questions',
+      );
 
       // Get the most recent question entry
       final lastQuestion = questions.last as Map<String, dynamic>;
-      DebugLog.agui('_extractLatestCitations: lastQuestion keys: '
-          '${lastQuestion.keys.toList()}');
+      DebugLog.agui(
+        '_extractLatestCitations: lastQuestion keys: '
+        '${lastQuestion.keys.toList()}',
+      );
 
       final citationsJson = lastQuestion['citations'] as List<dynamic>? ?? [];
-      DebugLog.agui('_extractLatestCitations: found ${citationsJson.length} '
-          'citations');
+      DebugLog.agui(
+        '_extractLatestCitations: found ${citationsJson.length} '
+        'citations',
+      );
 
       if (citationsJson.isNotEmpty) {
-        DebugLog.agui('_extractLatestCitations: first citation: '
-            '${citationsJson.first}');
+        DebugLog.agui(
+          '_extractLatestCitations: first citation: '
+          '${citationsJson.first}',
+        );
       }
 
       return citationsJson

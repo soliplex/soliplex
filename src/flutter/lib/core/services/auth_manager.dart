@@ -179,7 +179,7 @@ class AuthManager {
   /// Logout - clear tokens and OIDC session.
   Future<void> logout(ServerConnection server) async {
     DebugLog.service('AuthManager: Logout initiated for server ${server.id}');
-    
+
     // Clear local tokens FIRST to ensure we are locally logged out
     // before any potential redirects or network calls.
     await _storage.clearTokens(server.id);
@@ -189,7 +189,7 @@ class AuthManager {
       // Try to logout via OIDC provider
       final ssoConfig = await _oidcInteractor.getSsoConfig(server.id);
       DebugLog.service('AuthManager: SSO config found: ${ssoConfig != null}');
-      
+
       if (ssoConfig != null) {
         await _oidcInteractor.logout(server.id, ssoConfig);
       } else {
@@ -250,7 +250,6 @@ class AuthManager {
     if (token == null) return {};
     return {'Authorization': 'Bearer $token'};
   }
-
 
   /// Force a token refresh and get auth headers.
   ///
