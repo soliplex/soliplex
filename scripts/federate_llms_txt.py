@@ -1,17 +1,56 @@
 import os
 import re
 
+# All section names from mkdocs.yml llmstxt config (used for boundary detection)
+ALL_SECTIONS = [
+    "Getting Started",
+    "User Guide",
+    "Admin Guide - Configuration",
+    "Admin Guide - Authentication",
+    "Admin Guide - Deployment",
+    "Developer Guide - Architecture",
+    "Developer Guide - Agents",
+    "Developer Guide - RAG",
+    "Developer Guide - MCP",
+    "Developer Guide - API",
+    "Developer Guide - Flutter",
+    "Reference",
+    "Troubleshooting",
+    "Contributing"
+]
+
+# Map output filename -> (display_name, [source_section_names])
+SECTION_GROUPS = {
+    "llms-getting-started.txt": ("Getting Started", ["Getting Started"]),
+    "llms-user-guide.txt": ("User Guide", ["User Guide"]),
+    "llms-admin-guide.txt": ("Admin Guide", [
+        "Admin Guide - Configuration",
+        "Admin Guide - Authentication",
+        "Admin Guide - Deployment"
+    ]),
+    "llms-developer-guide.txt": ("Developer Guide", [
+        "Developer Guide - Architecture",
+        "Developer Guide - Agents",
+        "Developer Guide - RAG",
+        "Developer Guide - MCP",
+        "Developer Guide - API",
+        "Developer Guide - Flutter"
+    ]),
+    "llms-reference.txt": ("Reference", ["Reference"]),
+    "llms-extras.txt": ("Troubleshooting & Contributing", ["Troubleshooting", "Contributing"])
+}
+
+
 def on_post_build(config, **kwargs):
     """
     Hook called by MkDocs after build.
     """
     site_dir = config['site_dir']
-    
+
     mode = os.environ.get('DOCS_MODE')
-    
+
     if mode == 'local':
         # Use absolute filesystem paths (Best for local agents)
-        # config['site_dir'] provides the absolute path to the build output
         site_url = config['site_dir']
         if not site_url.endswith('/'):
             site_url += '/'
@@ -23,123 +62,17 @@ def on_post_build(config, **kwargs):
     else:
         # Default: Use configured site_url (Remote/Hosted)
         site_url = config.get('site_url', '/')
-        
+
     federate(site_dir, site_url)
 
-def categorize_path(path):
+
+def clean_map_content(content):
     """
-    Maps a directory path to a semantic category.
-    Modify this function to curate the Client API map structure.
+    Filters out noisy lines from the map content (e.g., granular API details).
     """
-    # 1. High-priority explicit mappings
-    if "agui_events" in path: return "AG-UI Protocol"
-    if "widget_registry" in path: return "Core Architecture"
-    
-    # 2. Keyword heuristics
-    if "service" in path or "notifier" in path or "manager" in path:
-        return "Services & State"
-    if "model" in path or "entity" in path or "types" in path:
-        return "Models & Data"
-    if "network" in path or "transport" in path or "client" in path or "api" in path:
-        return "Network & API"
-    if "widget" in path or "screen" in path or "dialog" in path or "view" in path or "layout" in path or "card" in path or "chip" in path or "drawer" in path:
-        return "UI Components"
-    if "auth" in path or "oidc" in path:
-        return "Authentication"
-        
-    # 3. Default fallback
-    return "Utilities & Misc"
-
-def restructure_client_map(content):
-    """
-    Parses the flat list of Client API links, filters tests, and categorizes them semantically.
-    """
-    lines = content.splitlines()
-    categories = {}
-    other_lines = []
-
-    # Regex to extract directory from URL
-    # Matches: .../reference/client_api/{directory}/{class}/...
-    url_pattern = re.compile(r"\(.*?/reference/client_api/([^/]+)/")
-
-    for line in lines:
-        if line.strip().startswith("- ["):
-            # Check for noise first
-            if "Method:" in line or "Property:" in line or "Constructor:" in line or "Operator:" in line or "Static Method:" in line:
-                continue
-            
-            # EXCLUDE TESTS
-            if "_test" in line or "test/" in line or "Test" in line:
-                continue
-            
-            # Simplify link text: "Overview for ClassName" -> "ClassName"
-            line = line.replace("Overview for ", "")
-
-            match = url_pattern.search(line)
-            if match:
-                directory = match.group(1)
-                
-                # Apply Semantic Categorization
-                category = categorize_path(directory)
-                
-                if category not in categories:
-                    categories[category] = []
-                categories[category].append(line)
-            else:
-                other_lines.append(line)
-        else:
-            other_lines.append(line)
-
-    # Build new content
-    output = []
-    
-    # Add non-categorized lines first (like the header and index link)
-    for line in other_lines:
-        if line.strip() == "": continue
-        output.append(line)
-    
-    output.append("") 
-
-    # Define Sort Order for Categories
-    sort_order = [
-        "Core Architecture",
-        "AG-UI Protocol",
-        "Services & State",
-        "Models & Data",
-        "Network & API",
-        "Authentication",
-        "UI Components",
-        "Utilities & Misc"
-    ]
-    
-    # Add categorized sections in specific order
-    for category in sort_order:
-        if category in categories and categories[category]:
-            output.append(f"## {category}")
-            output.extend(sorted(categories[category]))
-            output.append("")
-            
-    # Add any remaining categories that weren't in the sort list (fallback)
-    for category in sorted(categories.keys()):
-        if category not in sort_order:
-            output.append(f"## {category}")
-            output.extend(sorted(categories[category]))
-            output.append("")
-
-    return "\n".join(output)
-
-def clean_map_content(content, section_name):
-    """
-    Filters out noisy lines from the map content.
-    For Client API, it applies structural grouping.
-    """
-    if section_name == "Client API Reference":
-        return restructure_client_map(content)
-
     lines = content.splitlines()
     filtered_lines = []
     for line in lines:
-        # Check if line is a list item
         if line.strip().startswith("- ["):
             # Filter out granular API details
             if "Method:" in line or "Property:" in line or "Constructor:" in line or "Operator:" in line or "Static Method:" in line:
@@ -147,9 +80,45 @@ def clean_map_content(content, section_name):
         filtered_lines.append(line)
     return "\n".join(filtered_lines)
 
-def split_file(source_path, sections, suffix=""):
+
+def extract_section(content, section_name):
     """
-    Splits a source file into multiple files based on section headers.
+    Extract a single section's content from the full document.
+    Returns the content between this section's header and the next section header.
+    """
+    # Pattern to find this section's header
+    header_pattern = r"(^|\n)#+ " + re.escape(section_name)
+    start_match = re.search(header_pattern, content)
+
+    if not start_match:
+        print(f"Warning: Section '{section_name}' not found")
+        return None
+
+    start_index = start_match.end()
+
+    # Find the next section (any section from ALL_SECTIONS except current)
+    other_sections = [s for s in ALL_SECTIONS if s != section_name]
+    next_section_pattern = r"\n#+ (" + "|".join([re.escape(s) for s in other_sections]) + ")"
+
+    remaining_content = content[start_index:]
+    end_match = re.search(next_section_pattern, remaining_content)
+
+    if end_match:
+        return remaining_content[:end_match.start()].strip()
+    else:
+        return remaining_content.strip()
+
+
+def split_file(source_path, is_map=False):
+    """
+    Splits a source file into federated files based on SECTION_GROUPS.
+
+    Args:
+        source_path: Path to llms.txt or llms-full.txt
+        is_map: True for llms.txt (map), False for llms-full.txt (content)
+
+    Returns:
+        List of (display_name, filename) tuples for successfully generated files
     """
     if not os.path.exists(source_path):
         print(f"File not found: {source_path}")
@@ -160,83 +129,66 @@ def split_file(source_path, sections, suffix=""):
 
     found_files = []
     site_dir = os.path.dirname(source_path)
+    suffix = "" if is_map else "-full"
 
-    for section_name, filename_base in sections.items():
-        # The output filename depends on whether we are splitting the map or the full content
-        filename = f"{filename_base}{suffix}"
-        
-        # Pattern: look for the header (allowing # or ##) and capture until the next header or EOF
-        # We need to match the specific section name provided
-        # Escape the section name but allow for variable whitespace
-        header_pattern = r"(^|\n)#+ " + re.escape(section_name)
-        
-        # Find start of this section
-        start_match = re.search(header_pattern, content)
-        if not start_match:
-            print(f"Warning: Section '{section_name}' not found in {source_path}")
-            continue
-            
-        start_index = start_match.end()
-        
-        # Find the start of the NEXT section (excluding the current one to prevent early stopping)
-        other_sections = [s for s in sections.keys() if s != section_name]
-        
-        if other_sections:
-            next_section_pattern = r"\n#+ (" + "|".join([re.escape(s) for s in other_sections]) + ")"
-            
-            # We need to search *from* the start_index
-            remaining_content = content[start_index:]
-            end_match = re.search(next_section_pattern, remaining_content)
-            
-            if end_match:
-                section_content = remaining_content[:end_match.start()].strip()
-            else:
-                section_content = remaining_content.strip()
+    for base_filename, (display_name, section_names) in SECTION_GROUPS.items():
+        # Build output filename (add -full suffix for content files)
+        if suffix:
+            filename = base_filename.replace(".txt", f"{suffix}.txt")
         else:
-            # If no other sections, just take everything
-            section_content = content[start_index:].strip()
+            filename = base_filename
 
-        # Clean up map content if this is a map (empty suffix)
-        if suffix == "":
-            section_content = clean_map_content(section_content, section_name)
+        # Extract content for all sections in this group
+        combined_content = []
+        for section_name in section_names:
+            section_content = extract_section(content, section_name)
+            if section_content:
+                # Add section header for multi-section groups
+                if len(section_names) > 1:
+                    combined_content.append(f"## {section_name}\n")
+                combined_content.append(section_content)
+                combined_content.append("")  # blank line between sections
 
+        if not combined_content:
+            print(f"Warning: No content found for {filename}")
+            continue
+
+        final_content = "\n".join(combined_content).strip()
+
+        # Clean up map content (filter noisy API details)
+        if is_map:
+            final_content = clean_map_content(final_content)
+
+        # Write the federated file
         dest_path = os.path.join(site_dir, filename)
         with open(dest_path, "w") as f:
-            f.write(f"# Soliplex - {section_name}\n\n")
-            f.write(section_content)
+            f.write(f"# Soliplex - {display_name}\n\n")
+            f.write(final_content)
+
         print(f"Generated {dest_path}")
-        found_files.append((section_name, filename))
-            
+        found_files.append((display_name, filename))
+
     return found_files
 
+
 def federate(site_dir, site_url):
+    """
+    Main federation logic. Splits llms.txt and llms-full.txt into domain-specific files.
+    """
     map_file = os.path.join(site_dir, "llms.txt")
     full_file = os.path.join(site_dir, "llms-full.txt")
-    
+
     # Ensure site_url ends with / to safely append filenames
     if not site_url.endswith('/'):
         site_url += '/'
-    
-    # Define sections we want to extract and their base filenames
-    # These must match section names in mkdocs.yml llmstxt plugin config
-    sections = {
-        "Getting Started": "llms-getting-started.txt",
-        "Reference": "llms-server.txt",
-        "Client API Reference": "llms-client.txt"
-    }
 
-    # Pass 1: Split the Map (llms.txt) -> llms-domain.txt
+    # Pass 1: Split the Map (llms.txt) -> llms-{domain}.txt
     print("--- Splitting Map ---")
-    domain_maps = split_file(map_file, sections, suffix="")
+    domain_maps = split_file(map_file, is_map=True)
 
-    # Pass 2: Split the Content (llms-full.txt) -> llms-domain-full.txt
+    # Pass 2: Split the Content (llms-full.txt) -> llms-{domain}-full.txt
     print("--- Splitting Content ---")
-    
-    full_sections = {
-        name: base.replace(".txt", "-full.txt") 
-        for name, base in sections.items()
-    }
-    split_file(full_file, full_sections, suffix="")
+    split_file(full_file, is_map=False)
 
     # Finalize: Rewrite root llms.txt to point to the Domain Maps
     if domain_maps:
@@ -244,10 +196,10 @@ def federate(site_dir, site_url):
             f.write("# Soliplex - AI Discovery Map\n\n")
             f.write("This file points to domain-specific documentation maps. Select a domain to see available topics.\n\n")
             f.write("## Domains\n\n")
-            for name, filename in domain_maps:
-                # Link to the Map file using absolute URL
-                f.write(f"- [{name}]({site_url}{filename})\n")
+            for display_name, filename in domain_maps:
+                f.write(f"- [{display_name}]({site_url}{filename})\n")
         print(f"Updated root discovery map at {map_file}")
+
 
 if __name__ == "__main__":
     # For testing manually
