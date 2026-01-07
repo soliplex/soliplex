@@ -234,8 +234,8 @@ and will NOT work with `[dependency-groups]`. Always use `--group dev` instead.
 # Run unit tests with coverage
 pytest
 
-# Run with specific coverage threshold
-pytest --cov-fail-under=50
+# Run with specific coverage threshold (CI enforces 100%)
+pytest --cov-fail-under=100
 
 # Run linting
 ruff check
