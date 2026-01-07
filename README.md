@@ -156,6 +156,50 @@ as though you typed:
 soliplex-tui --url http://127.0.0.1:8000 --room haiku
 ```
 
+## Development
+
+This project uses [PEP 735 Dependency Groups](https://peps.python.org/pep-0735/)
+for managing development dependencies. This is the modern standard supported by
+`uv` and recent versions of `pip`.
+
+### Installing dev dependencies
+
+```bash
+# Using pip (requires pip 24.0+)
+pip install -e . --group dev
+
+# Using uv (recommended)
+uv sync --group dev
+```
+
+**Note:** The older syntax `pip install -e ".[dev]"` is for `[project.optional-dependencies]`
+and will NOT work with `[dependency-groups]`. Always use `--group dev` instead.
+
+### Available dependency groups
+
+| Group | Purpose |
+|-------|---------|
+| `dev` | Testing tools (pytest, ruff, coverage) |
+| `docs` | Documentation (mkdocs, mkdocs-material) |
+| `postgres` | PostgreSQL support (asyncpg) |
+| `tui` | Terminal UI (textual, typer) |
+
+### Running tests
+
+```bash
+# Run unit tests with coverage
+pytest
+
+# Run with specific coverage threshold
+pytest --cov-fail-under=50
+
+# Run linting
+ruff check
+
+# Check formatting
+ruff format --check
+```
+
 ## Configuration
 
 YAML-based configuration with:
