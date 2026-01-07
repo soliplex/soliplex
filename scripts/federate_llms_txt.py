@@ -1,7 +1,8 @@
 import os
 import re
 
-# All section names from mkdocs.yml llmstxt config (used for boundary detection)
+# All section names from mkdocs.yml llmstxt config
+# (used for boundary detection when extracting sections)
 ALL_SECTIONS = [
     "Getting Started",
     "User Guide",
@@ -37,14 +38,15 @@ SECTION_GROUPS = {
         "Developer Guide - Flutter"
     ]),
     "llms-reference.txt": ("Reference", ["Reference"]),
-    "llms-extras.txt": ("Troubleshooting & Contributing", ["Troubleshooting", "Contributing"])
+    "llms-extras.txt": (
+        "Troubleshooting & Contributing",
+        ["Troubleshooting", "Contributing"]
+    )
 }
 
 
 def on_post_build(config, **kwargs):
-    """
-    Hook called by MkDocs after build.
-    """
+    """Hook called by MkDocs after build."""
     site_dir = config['site_dir']
 
     mode = os.environ.get('DOCS_MODE')
@@ -67,15 +69,15 @@ def on_post_build(config, **kwargs):
 
 
 def clean_map_content(content):
-    """
-    Filters out noisy lines from the map content (e.g., granular API details).
-    """
+    """Filter out noisy lines from map content (e.g., API details)."""
     lines = content.splitlines()
     filtered_lines = []
+    noisy_markers = ("Method:", "Property:", "Constructor:",
+                     "Operator:", "Static Method:")
     for line in lines:
         if line.strip().startswith("- ["):
             # Filter out granular API details
-            if "Method:" in line or "Property:" in line or "Constructor:" in line or "Operator:" in line or "Static Method:" in line:
+            if any(marker in line for marker in noisy_markers):
                 continue
         filtered_lines.append(line)
     return "\n".join(filtered_lines)
@@ -84,7 +86,8 @@ def clean_map_content(content):
 def extract_section(content, section_name):
     """
     Extract a single section's content from the full document.
-    Returns the content between this section's header and the next section header.
+
+    Returns content between this section's header and the next header.
     """
     # Pattern to find this section's header
     header_pattern = r"(^|\n)#+ " + re.escape(section_name)
@@ -98,7 +101,8 @@ def extract_section(content, section_name):
 
     # Find the next section (any section from ALL_SECTIONS except current)
     other_sections = [s for s in ALL_SECTIONS if s != section_name]
-    next_section_pattern = r"\n#+ (" + "|".join([re.escape(s) for s in other_sections]) + ")"
+    escaped_sections = [re.escape(s) for s in other_sections]
+    next_section_pattern = r"\n#+ (" + "|".join(escaped_sections) + ")"
 
     remaining_content = content[start_index:]
     end_match = re.search(next_section_pattern, remaining_content)
@@ -111,20 +115,20 @@ def extract_section(content, section_name):
 
 def split_file(source_path, is_map=False):
     """
-    Splits a source file into federated files based on SECTION_GROUPS.
+    Split a source file into federated files based on SECTION_GROUPS.
 
     Args:
         source_path: Path to llms.txt or llms-full.txt
         is_map: True for llms.txt (map), False for llms-full.txt (content)
 
     Returns:
-        List of (display_name, filename) tuples for successfully generated files
+        List of (display_name, filename) tuples for generated files
     """
     if not os.path.exists(source_path):
         print(f"File not found: {source_path}")
         return []
 
-    with open(source_path, "r") as f:
+    with open(source_path) as f:
         content = f.read()
 
     found_files = []
@@ -172,9 +176,7 @@ def split_file(source_path, is_map=False):
 
 
 def federate(site_dir, site_url):
-    """
-    Main federation logic. Splits llms.txt and llms-full.txt into domain-specific files.
-    """
+    """Split llms.txt and llms-full.txt into domain-specific files."""
     map_file = os.path.join(site_dir, "llms.txt")
     full_file = os.path.join(site_dir, "llms-full.txt")
 
@@ -194,7 +196,10 @@ def federate(site_dir, site_url):
     if domain_maps:
         with open(map_file, "w") as f:
             f.write("# Soliplex - AI Discovery Map\n\n")
-            f.write("This file points to domain-specific documentation maps. Select a domain to see available topics.\n\n")
+            f.write(
+                "This file points to domain-specific documentation maps. "
+                "Select a domain to see available topics.\n\n"
+            )
             f.write("## Domains\n\n")
             for display_name, filename in domain_maps:
                 f.write(f"- [{display_name}]({site_url}{filename})\n")
