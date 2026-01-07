@@ -5,18 +5,16 @@ import 'package:flutter/material.dart';
 /// Interactive search widget for selecting items from a list.
 ///
 /// Data schema:
-/// ```json
 /// {
 ///   "placeholder": "Search...",
 ///   "multi_select": true,
 ///   "items": [{"id": "1", "title": "Name", "subtitle": "Description"}],
 ///   "min_chars": 1,
 /// }
-/// ```
 ///
 /// Events emitted:
-/// - "submit": `{"selected": [{"id", "title", "subtitle"}, ...]}`
-/// - "cancel": `{}`
+/// - "submit": {selected: [{id, title, subtitle}, ...]}
+/// - "cancel": {}
 class SearchWidget extends StatefulWidget {
   const SearchWidget({required this.data, super.key, this.onEvent});
   final Map<String, dynamic> data;

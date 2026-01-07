@@ -4,16 +4,16 @@ import 'package:flutter/services.dart';
 /// ProjectCard widget for displaying project info with required skills.
 ///
 /// Data schema:
-/// ```json
 /// {
 ///   "id": "p1",
 ///   "title": "Mobile App Redesign",
-///   "description": "Complete overhaul of the mobile application",
+/// "description": "Complete overhaul of the customer-facing mobile
+/// application",
 ///   "required_skills": ["Flutter", "Dart", "Figma"],
 ///   "status": "open" | "in_progress" | "completed",
-///   "matched_skills": ["Flutter", "Dart"] // (optional - skills that match a candidate)
+/// "matched_skills": ["Flutter", "Dart"] (optional - skills that match a
+/// candidate)
 /// }
-/// ```
 class ProjectCardWidget extends StatelessWidget {
   const ProjectCardWidget({
     required this.id,
