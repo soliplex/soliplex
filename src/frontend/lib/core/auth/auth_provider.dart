@@ -11,7 +11,12 @@ import 'package:soliplex_frontend/core/providers/api_provider.dart';
 import 'package:soliplex_frontend/core/providers/config_provider.dart';
 
 /// Provider for platform-specific authentication flow.
-final authFlowProvider = Provider<AuthFlow>((ref) => createAuthFlow());
+///
+/// On web, uses backend baseUrl for BFF endpoints.
+final authFlowProvider = Provider<AuthFlow>((ref) {
+  final config = ref.watch(configProvider);
+  return createAuthFlow(backendBaseUrl: config.baseUrl);
+});
 
 /// Provider for callback params captured at startup.
 ///

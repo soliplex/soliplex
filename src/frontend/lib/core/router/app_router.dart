@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:soliplex_frontend/core/auth/auth_provider.dart';
 import 'package:soliplex_frontend/core/auth/auth_state.dart';
+import 'package:soliplex_frontend/core/auth/web_auth_callback.dart';
 import 'package:soliplex_frontend/features/auth/auth_callback_screen.dart';
 import 'package:soliplex_frontend/features/home/home_screen.dart';
 import 'package:soliplex_frontend/features/login/login_screen.dart';
@@ -83,28 +84,43 @@ final routerProvider = Provider<GoRouter>((ref) {
   // The listenable only fires on actual login/logout transitions.
   final authStatusListenable = ref.watch(authStatusListenableProvider);
 
+  // Check if this is an OAuth callback (tokens in URL from backend BFF)
+  final capturedParams = ref.read(capturedCallbackParamsProvider);
+  final isOAuthCallback = capturedParams is WebCallbackParams;
+  debugPrint('Router: isOAuthCallback = $isOAuthCallback');
+
+  // Route to callback screen if we have OAuth tokens to process
+  final initialPath = isOAuthCallback ? '/auth/callback' : '/';
+
   return GoRouter(
-    initialLocation: '/',
+    initialLocation: initialPath.split('?').first, // Strip query params
     // Triggers redirect re-evaluation on auth transitions without
     // recreating the router.
     refreshListenable: authStatusListenable,
     redirect: (context, state) {
+      debugPrint('Router: redirect called for ${state.matchedLocation}');
       // CRITICAL: Use ref.read() for fresh auth state, not a captured variable.
       // This ensures the redirect always sees current auth status.
       final authState = ref.read(authProvider);
       final isAuthenticated = authState is Authenticated;
       final isPublicRoute = _publicRoutes.contains(state.matchedLocation);
+      debugPrint(
+        'Router: isAuthenticated=$isAuthenticated, isPublic=$isPublicRoute',
+      );
 
       // Unauthenticated users go to login (except for public routes)
       if (!isAuthenticated && !isPublicRoute) {
+        debugPrint('Router: redirecting to /login');
         return '/login';
       }
 
       // Authenticated users on login page go to home
       if (isAuthenticated && state.matchedLocation == '/login') {
+        debugPrint('Router: redirecting to /');
         return '/';
       }
 
+      debugPrint('Router: no redirect');
       return null;
     },
     routes: [

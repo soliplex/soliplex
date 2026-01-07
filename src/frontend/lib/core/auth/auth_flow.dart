@@ -72,4 +72,8 @@ abstract class AuthFlow {
 }
 
 /// Creates a platform-appropriate [AuthFlow] implementation.
-AuthFlow createAuthFlow() => impl.createAuthFlow();
+///
+/// [backendBaseUrl] is the backend server URL for BFF endpoints (web only).
+/// On native platforms, this parameter is ignored.
+AuthFlow createAuthFlow({String? backendBaseUrl}) =>
+    impl.createAuthFlow(backendBaseUrl: backendBaseUrl);

@@ -24,8 +24,14 @@ class WindowUrlNavigator implements UrlNavigator {
 }
 
 /// Creates the web platform implementation of [AuthFlow].
-AuthFlow createAuthFlow({UrlNavigator? navigator}) =>
-    WebAuthFlow(navigator: navigator);
+///
+/// [backendBaseUrl] is the backend server URL for BFF endpoints.
+/// Defaults to same origin (production: frontend served by backend).
+AuthFlow createAuthFlow({
+  String? backendBaseUrl,
+  UrlNavigator? navigator,
+}) =>
+    WebAuthFlow(backendBaseUrl: backendBaseUrl, navigator: navigator);
 
 /// Web implementation of OIDC authentication using BFF pattern.
 ///
@@ -34,11 +40,16 @@ AuthFlow createAuthFlow({UrlNavigator? navigator}) =>
 class WebAuthFlow implements AuthFlow {
   /// Creates a web auth flow.
   ///
+  /// [backendBaseUrl] is the backend server URL for BFF endpoints.
+  /// If null, uses the current origin (for production where frontend is
+  /// served by backend).
   /// [navigator] is injected for testability. Defaults to [WindowUrlNavigator].
   @visibleForTesting
-  WebAuthFlow({UrlNavigator? navigator})
-      : _navigator = navigator ?? WindowUrlNavigator();
+  WebAuthFlow({String? backendBaseUrl, UrlNavigator? navigator})
+      : _backendBaseUrl = backendBaseUrl,
+        _navigator = navigator ?? WindowUrlNavigator();
 
+  final String? _backendBaseUrl;
   final UrlNavigator _navigator;
 
   @override
@@ -46,14 +57,16 @@ class WebAuthFlow implements AuthFlow {
 
   @override
   Future<AuthResult> authenticate(OidcIssuer issuer) async {
-    // Build the return URL for the callback
-    final currentOrigin = _navigator.origin;
-    final returnTo = Uri.encodeFull('$currentOrigin/#/auth/callback');
+    // Build the return URL for the callback (always frontend origin)
+    final frontendOrigin = _navigator.origin;
+    final returnTo = Uri.encodeFull('$frontendOrigin/#/auth/callback');
+
+    // Use backend URL for BFF endpoints, fall back to same origin for prod
+    final backendUrl = _backendBaseUrl ?? frontendOrigin;
 
     // Redirect to backend BFF login endpoint
     // Backend handles PKCE, token exchange, and redirects back with tokens
-    final loginUrl =
-        '$currentOrigin/api/login/${issuer.id}?return_to=$returnTo';
+    final loginUrl = '$backendUrl/api/login/${issuer.id}?return_to=$returnTo';
 
     debugPrint('Web auth: Redirecting to $loginUrl');
     _navigator.navigateTo(loginUrl);

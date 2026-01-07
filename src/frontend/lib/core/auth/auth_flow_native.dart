@@ -7,10 +7,11 @@ const _redirectUri = 'ai.soliplex.client://callback';
 
 /// Creates the native platform implementation of [AuthFlow].
 ///
-/// The [appAuth] parameter enables integration testing with a mock
-/// FlutterAppAuth. For unit tests, override the auth flow provider in
-/// Riverpod to inject a mock [AuthFlow] directly.
-AuthFlow createAuthFlow({FlutterAppAuth? appAuth}) =>
+/// [backendBaseUrl] is ignored on native (only used by web BFF flow).
+/// [appAuth] enables integration testing with a mock FlutterAppAuth.
+/// For unit tests, override the auth flow provider in Riverpod to inject
+/// a mock [AuthFlow] directly.
+AuthFlow createAuthFlow({String? backendBaseUrl, FlutterAppAuth? appAuth}) =>
     NativeAuthFlow(appAuth: appAuth ?? const FlutterAppAuth());
 
 /// Native implementation of OIDC authentication using flutter_appauth.
