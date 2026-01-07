@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:soliplex_frontend/core/auth/auth_state.dart';
 import 'package:soliplex_frontend/core/auth/auth_storage.dart';
+import 'package:soliplex_frontend/core/auth/auth_storage_native.dart';
 
 class MockFlutterSecureStorage extends Mock implements FlutterSecureStorage {}
 
@@ -12,7 +13,7 @@ void main() {
 
   setUp(() {
     mockStorage = MockFlutterSecureStorage();
-    authStorage = AuthStorage(storage: mockStorage);
+    authStorage = NativeAuthStorage(storage: mockStorage);
   });
 
   group('saveTokens', () {

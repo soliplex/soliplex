@@ -9,7 +9,7 @@ import 'package:soliplex_frontend/core/providers/api_provider.dart';
 import 'package:soliplex_frontend/core/providers/config_provider.dart';
 
 /// Provider for secure token storage.
-final authStorageProvider = Provider<AuthStorage>((ref) => AuthStorage());
+final authStorageProvider = Provider<AuthStorage>((ref) => createAuthStorage());
 
 /// Provider for token refresh service.
 ///

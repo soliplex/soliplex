@@ -8,7 +8,7 @@ Future<void> main() async {
 
   // Clear stale keychain tokens on first launch after reinstall.
   // iOS preserves Keychain across uninstall/reinstall.
-  await AuthStorage.clearOnReinstall();
+  await clearAuthStorageOnReinstall();
 
   runApp(
     const ProviderScope(
