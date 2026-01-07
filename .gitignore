@@ -27,7 +27,6 @@ tmp/
 ._*
 
 # Generated documentation
-docs/reference/client_api/
 site/
 
 # IDE
