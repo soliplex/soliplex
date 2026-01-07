@@ -1,3 +1,6 @@
+@TestOn('vm')
+library;
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -5,7 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:mocktail/mocktail.dart';
 import 'package:soliplex_client/soliplex_client.dart';
-import 'package:soliplex_client_native/soliplex_client_native.dart';
+// Import implementation directly since package uses conditional exports
+import 'package:soliplex_client_native/src/clients/cupertino_http_client.dart';
 
 class MockHttpClient extends Mock implements http.Client {}
 

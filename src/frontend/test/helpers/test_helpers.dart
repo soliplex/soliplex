@@ -32,6 +32,16 @@ class MockAuthStorage extends Mock implements AuthStorage {}
 /// Mock TokenRefreshService for testing.
 class MockTokenRefreshService extends Mock implements TokenRefreshService {}
 
+/// Fake PreAuthState for mocktail fallback registration.
+class FakePreAuthState extends Fake implements PreAuthState {}
+
+/// Registers fallback values for mocktail.
+///
+/// Call this in setUpAll() for tests that use any() with these types.
+void registerMocktailFallbacks() {
+  registerFallbackValue(FakePreAuthState());
+}
+
 /// Creates mocked auth dependencies and their provider overrides.
 ///
 /// Returns a record with:

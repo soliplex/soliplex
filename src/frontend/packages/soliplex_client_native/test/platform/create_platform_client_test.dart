@@ -1,8 +1,13 @@
+@TestOn('vm')
+library;
+
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_client/soliplex_client.dart';
-import 'package:soliplex_client_native/soliplex_client_native.dart';
+// Import implementation directly since package uses conditional exports
+import 'package:soliplex_client_native/src/clients/cupertino_http_client.dart';
+import 'package:soliplex_client_native/src/platform/platform.dart';
 
 /// Tests for platform detection.
 ///

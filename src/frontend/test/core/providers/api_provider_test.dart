@@ -9,6 +9,8 @@ import '../../helpers/test_helpers.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  setUpAll(registerMocktailFallbacks);
+
   group('httpTransportProvider', () {
     test('creates HttpTransport instance', () {
       final container = createContainerWithMockedAuth();
