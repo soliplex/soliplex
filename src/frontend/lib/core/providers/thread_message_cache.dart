@@ -27,7 +27,12 @@ class ThreadMessageCache extends Notifier<ThreadMessageCacheState> {
   final _inFlightFetches = <String, Future<List<ChatMessage>>>{};
 
   @override
-  ThreadMessageCacheState build() => {};
+  ThreadMessageCacheState build() {
+    // Clear in-flight fetches on rebuild to prevent race conditions
+    // if the notifier is recreated while fetches are pending.
+    _inFlightFetches.clear();
+    return {};
+  }
 
   /// Get messages for a thread (from cache or backend).
   ///
@@ -73,18 +78,22 @@ class ThreadMessageCache extends Notifier<ThreadMessageCacheState> {
     state = {...state, threadId: messages};
   }
 
-  /// Clear cache entry for a thread.
+  /// Invalidate cache and refetch messages for a thread.
   ///
-  /// Call this when a thread is deleted to free memory.
-  void clearThread(String threadId) {
-    state = {...state}..remove(threadId);
-  }
-
-  /// Clear all cached messages.
+  /// Clears the cached entry and fetches fresh data from the backend.
+  /// Use this when cached data may be stale and a refresh is needed.
   ///
-  /// Call this on logout to ensure no stale data remains.
-  void clearAll() {
-    state = {};
+  /// Throws on network/API errors from the backend fetch.
+  Future<List<ChatMessage>> refreshMessages(
+    String roomId,
+    String threadId,
+  ) async {
+    // Remove from cache to force refetch
+    state = Map.from(state)..remove(threadId);
+    // Discard any in-flight fetch for this thread (we'll start a new one)
+    final _ = _inFlightFetches.remove(threadId);
+    // Fetch fresh data
+    return getMessages(roomId, threadId);
   }
 }
 

@@ -207,12 +207,12 @@ void main() {
               currentRoomProvider.overrideWith((ref) => mockRoom),
               currentThreadProvider.overrideWith((ref) => mockThread),
               activeRunNotifierOverride(const IdleState()),
-              // Override cache to avoid API call
-              threadMessagesProvider
-                  .overrideWith((ref, threadId) => Future.value([])),
+              // Override to avoid API call
+              allMessagesProvider.overrideWith((ref) async => []),
             ],
           ),
         );
+        await tester.pumpAndSettle();
 
         // Assert
         final textField = tester.widget<TextField>(find.byType(TextField));

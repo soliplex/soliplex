@@ -1,11 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
-import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/thread_message_cache.dart';
-import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 
 import '../../helpers/test_helpers.dart';
 
@@ -264,9 +261,19 @@ void main() {
       });
     });
 
-    group('clearThread', () {
-      test('removes cache entry for thread', () {
-        // Arrange
+    group('refreshMessages', () {
+      test('clears cache and refetches from API', () async {
+        // Arrange: Pre-populate cache with stale data
+        final staleMessages = [
+          TestData.createMessage(id: 'stale-msg', text: 'Stale'),
+        ];
+        final freshMessages = [
+          TestData.createMessage(id: 'fresh-msg', text: 'Fresh'),
+        ];
+
+        when(() => mockApi.getThreadMessages('room-abc', 'thread-123'))
+            .thenAnswer((_) async => freshMessages);
+
         final container = ProviderContainer(
           overrides: [
             apiProvider.overrideWithValue(mockApi),
@@ -274,20 +281,44 @@ void main() {
         );
         addTearDown(container.dispose);
 
-        container.read(threadMessageCacheProvider.notifier)
-          ..updateMessages('thread-123', [
-            TestData.createMessage(id: 'msg-1', text: 'Test'),
-          ])
-          // Act
-          ..clearThread('thread-123');
+        // Pre-populate cache
+        container
+            .read(threadMessageCacheProvider.notifier)
+            .updateMessages('thread-123', staleMessages);
 
-        // Assert
+        // Verify stale data is cached
+        expect(
+          container.read(threadMessageCacheProvider)['thread-123']![0].id,
+          'stale-msg',
+        );
+
+        // Act
+        final messages = await container
+            .read(threadMessageCacheProvider.notifier)
+            .refreshMessages('room-abc', 'thread-123');
+
+        // Assert: Got fresh data
+        expect(messages, hasLength(1));
+        expect(messages[0].id, 'fresh-msg');
+
+        // Assert: Cache updated with fresh data
         final cacheState = container.read(threadMessageCacheProvider);
-        expect(cacheState.containsKey('thread-123'), isFalse);
+        expect(cacheState['thread-123']![0].id, 'fresh-msg');
+
+        // Assert: API was called
+        verify(() => mockApi.getThreadMessages('room-abc', 'thread-123'))
+            .called(1);
       });
 
-      test('does not affect other thread entries', () {
+      test('does not affect other thread entries', () async {
         // Arrange
+        when(() => mockApi.getThreadMessages('room-abc', 'thread-1'))
+            .thenAnswer(
+          (_) async => [
+            TestData.createMessage(id: 'refreshed-t1', text: 'Refreshed'),
+          ],
+        );
+
         final container = ProviderContainer(
           overrides: [
             apiProvider.overrideWithValue(mockApi),
@@ -295,138 +326,25 @@ void main() {
         );
         addTearDown(container.dispose);
 
+        // Pre-populate both threads
         container.read(threadMessageCacheProvider.notifier)
           ..updateMessages('thread-1', [
-            TestData.createMessage(id: 'msg-t1', text: 'Thread 1'),
+            TestData.createMessage(id: 'old-t1', text: 'Old T1'),
           ])
           ..updateMessages('thread-2', [
             TestData.createMessage(id: 'msg-t2', text: 'Thread 2'),
-          ])
-          // Act
-          ..clearThread('thread-1');
+          ]);
 
-        // Assert
+        // Act: Refresh thread-1
+        await container
+            .read(threadMessageCacheProvider.notifier)
+            .refreshMessages('room-abc', 'thread-1');
+
+        // Assert: thread-2 unchanged
         final cacheState = container.read(threadMessageCacheProvider);
-        expect(cacheState.containsKey('thread-1'), isFalse);
-        expect(cacheState.containsKey('thread-2'), isTrue);
+        expect(cacheState['thread-1']![0].id, 'refreshed-t1');
+        expect(cacheState['thread-2']![0].id, 'msg-t2');
       });
-    });
-
-    group('clearAll', () {
-      test('removes all cache entries', () {
-        // Arrange
-        final container = ProviderContainer(
-          overrides: [
-            apiProvider.overrideWithValue(mockApi),
-          ],
-        );
-        addTearDown(container.dispose);
-
-        container.read(threadMessageCacheProvider.notifier)
-          ..updateMessages('thread-1', [
-            TestData.createMessage(id: 'msg-t1', text: 'Thread 1'),
-          ])
-          ..updateMessages('thread-2', [
-            TestData.createMessage(id: 'msg-t2', text: 'Thread 2'),
-          ])
-          // Act
-          ..clearAll();
-
-        // Assert
-        final cacheState = container.read(threadMessageCacheProvider);
-        expect(cacheState, isEmpty);
-      });
-    });
-  });
-
-  group('threadMessagesProvider integration', () {
-    late MockSoliplexApi mockApi;
-
-    setUp(() {
-      mockApi = MockSoliplexApi();
-    });
-
-    test('uses cache on hit (no API call)', () async {
-      // Arrange: Pre-populate cache with messages
-      final cachedMessages = [
-        TestData.createMessage(id: 'cached-msg', text: 'From cache'),
-      ];
-
-      final mockRoom = TestData.createRoom(id: 'room-1');
-      final mockThread = TestData.createThread(id: 'thread-1');
-
-      final container = ProviderContainer(
-        overrides: [
-          apiProvider.overrideWithValue(mockApi),
-          currentRoomProvider.overrideWith((ref) => mockRoom),
-          currentThreadProvider.overrideWith((ref) => mockThread),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      // Pre-populate cache
-      container
-          .read(threadMessageCacheProvider.notifier)
-          .updateMessages('thread-1', cachedMessages);
-
-      // Act: Read threadMessagesProvider
-      final messages =
-          await container.read(threadMessagesProvider('thread-1').future);
-
-      // Assert: Returns cached messages, no API call
-      expect(messages, hasLength(1));
-      expect(messages[0].id, 'cached-msg');
-      verifyNever(() => mockApi.getThreadMessages(any(), any()));
-    });
-
-    test('fetches from API on cache miss', () async {
-      // Arrange
-      final apiMessages = [
-        TestData.createMessage(id: 'api-msg', text: 'From API'),
-      ];
-
-      when(() => mockApi.getThreadMessages('room-1', 'thread-1'))
-          .thenAnswer((_) async => apiMessages);
-
-      final mockRoom = TestData.createRoom(id: 'room-1');
-      final mockThread = TestData.createThread(id: 'thread-1');
-
-      final container = ProviderContainer(
-        overrides: [
-          apiProvider.overrideWithValue(mockApi),
-          currentRoomProvider.overrideWith((ref) => mockRoom),
-          currentThreadProvider.overrideWith((ref) => mockThread),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      // Act: Read threadMessagesProvider (cache miss)
-      final messages =
-          await container.read(threadMessagesProvider('thread-1').future);
-
-      // Assert: Fetched from API
-      expect(messages, hasLength(1));
-      expect(messages[0].id, 'api-msg');
-      verify(() => mockApi.getThreadMessages('room-1', 'thread-1')).called(1);
-    });
-
-    test('returns empty list when no room selected', () async {
-      // Arrange
-      final container = ProviderContainer(
-        overrides: [
-          apiProvider.overrideWithValue(mockApi),
-          currentRoomProvider.overrideWith((ref) => null),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      // Act
-      final messages =
-          await container.read(threadMessagesProvider('thread-1').future);
-
-      // Assert: Empty list, no API call
-      expect(messages, isEmpty);
-      verifyNever(() => mockApi.getThreadMessages(any(), any()));
     });
   });
 }

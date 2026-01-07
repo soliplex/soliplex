@@ -78,42 +78,37 @@ final canSendMessageProvider = Provider<bool>((ref) {
   );
 });
 
-/// Provider for historical messages for a thread.
-///
-/// Fetches messages from the cache (instant) or backend (on cache miss).
-/// The cache is populated on first access and updated when runs complete.
-final threadMessagesProvider =
-    FutureProvider.family<List<ChatMessage>, String>((ref, threadId) async {
-  final room = ref.watch(currentRoomProvider);
-  if (room == null) return [];
-
-  return ref.read(threadMessageCacheProvider.notifier).getMessages(
-        room.id,
-        threadId,
-      );
-});
-
 /// Provider for all messages to display in chat.
 ///
 /// Merges cached messages (historical) with active run messages (streaming),
-/// deduplicating by message ID. Automatically updates as either source changes.
+/// deduplicating by message ID. Returns [AsyncValue] to represent loading,
+/// error, and data states. Automatically updates as either source changes.
 ///
 /// Example:
 /// ```dart
-/// final messages = ref.watch(allMessagesProvider);
-/// ListView.builder(
-///   itemCount: messages.length,
-///   itemBuilder: (context, index) => MessageWidget(messages[index]),
+/// final messagesAsync = ref.watch(allMessagesProvider);
+/// messagesAsync.when(
+///   data: (messages) => ListView.builder(...),
+///   loading: () => CircularProgressIndicator(),
+///   error: (e, st) => Text('Error: $e'),
 /// )
 /// ```
-final allMessagesProvider = Provider<List<ChatMessage>>((ref) {
+final allMessagesProvider = FutureProvider<List<ChatMessage>>((ref) async {
   final thread = ref.watch(currentThreadProvider);
-  if (thread == null) return [];
+  final room = ref.watch(currentRoomProvider);
+  if (thread == null || room == null) return [];
 
-  final historyAsync = ref.watch(threadMessagesProvider(thread.id));
+  // Watch cache state to react to updates from updateMessages().
+  final cacheState = ref.watch(threadMessageCacheProvider);
+  final cached = cacheState[thread.id];
+
+  // Use cached messages if available, otherwise fetch (which updates cache).
+  final history = cached ??
+      await ref
+          .read(threadMessageCacheProvider.notifier)
+          .getMessages(room.id, thread.id);
+
   final runState = ref.watch(activeRunNotifierProvider);
-
-  final history = historyAsync.value ?? [];
   return _mergeMessages(history, runState.messages);
 });
 
