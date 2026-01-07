@@ -295,6 +295,9 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
   }
 
   /// Maps an EventProcessingResult to the appropriate ActiveRunState.
+  ///
+  /// When the run completes (Completed/Failed/Cancelled), also updates
+  /// the message cache so messages persist after thread switching.
   ActiveRunState _mapResultToState(
     RunningState previousState,
     EventProcessingResult result,
@@ -323,6 +326,11 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
           'Unexpected Idle status during event processing',
         ),
     };
+
+    // Update cache when run completes via event (RUN_FINISHED, RUN_ERROR)
+    if (newState is CompletedState) {
+      _updateCacheOnCompletion(newState);
+    }
 
     return newState;
   }

@@ -18,6 +18,129 @@ void main() {
       mockApi = MockSoliplexApi();
     });
 
+    group('thread switching', () {
+      test('messages persist in cache after switching threads', () async {
+        // Arrange: Two threads with different messages
+        final threadAMessages = [
+          TestData.createMessage(id: 'msg-a1', text: 'Thread A message 1'),
+          TestData.createMessage(id: 'msg-a2', text: 'Thread A message 2'),
+        ];
+        final threadBMessages = [
+          TestData.createMessage(id: 'msg-b1', text: 'Thread B message'),
+        ];
+
+        final threadA = TestData.createThread(id: 'thread-a');
+        final threadB = TestData.createThread(id: 'thread-b');
+        final mockRoom = TestData.createRoom(id: 'room-abc');
+
+        // Shared map that persists across provider rebuilds
+        final sharedData = <String, List<ChatMessage>>{
+          'thread-a': threadAMessages,
+          'thread-b': threadBMessages,
+        };
+
+        // Step 1: View Thread A
+        var container = ProviderContainer(
+          overrides: [
+            apiProvider.overrideWithValue(mockApi),
+            currentThreadProvider.overrideWith((ref) => threadA),
+            currentRoomProvider.overrideWith((ref) => mockRoom),
+            threadMessageCacheProvider.overrideWith(
+              () => _SharedDataCache(sharedData),
+            ),
+            activeRunNotifierOverride(const IdleState()),
+          ],
+        );
+
+        var messages = await container.read(allMessagesProvider.future);
+        expect(messages, hasLength(2));
+        expect(messages[0].id, 'msg-a1');
+        expect(messages[1].id, 'msg-a2');
+        container.dispose();
+
+        // Step 2: Switch to Thread B
+        container = ProviderContainer(
+          overrides: [
+            apiProvider.overrideWithValue(mockApi),
+            currentThreadProvider.overrideWith((ref) => threadB),
+            currentRoomProvider.overrideWith((ref) => mockRoom),
+            threadMessageCacheProvider.overrideWith(
+              () => _SharedDataCache(sharedData),
+            ),
+            activeRunNotifierOverride(const IdleState()),
+          ],
+        );
+
+        messages = await container.read(allMessagesProvider.future);
+        expect(messages, hasLength(1));
+        expect(messages[0].id, 'msg-b1');
+        container.dispose();
+
+        // Step 3: Switch back to Thread A - messages should still be cached
+        container = ProviderContainer(
+          overrides: [
+            apiProvider.overrideWithValue(mockApi),
+            currentThreadProvider.overrideWith((ref) => threadA),
+            currentRoomProvider.overrideWith((ref) => mockRoom),
+            threadMessageCacheProvider.overrideWith(
+              () => _SharedDataCache(sharedData),
+            ),
+            activeRunNotifierOverride(const IdleState()),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        messages = await container.read(allMessagesProvider.future);
+
+        // Assert: Thread A messages are still available (not lost)
+        expect(
+          messages,
+          hasLength(2),
+          reason: 'Thread A messages should persist after switching',
+        );
+        expect(messages[0].id, 'msg-a1');
+        expect(messages[1].id, 'msg-a2');
+      });
+
+      test('cache persists messages when run completes on thread', () async {
+        // This tests that updateMessages() correctly persists run results
+        final mockRoom = TestData.createRoom(id: 'room-abc');
+        final threadA = TestData.createThread(id: 'thread-a');
+
+        // Start with empty cache, then populate via updateMessages
+        final sharedData = <String, List<ChatMessage>>{};
+
+        final container = ProviderContainer(
+          overrides: [
+            apiProvider.overrideWithValue(mockApi),
+            currentThreadProvider.overrideWith((ref) => threadA),
+            currentRoomProvider.overrideWith((ref) => mockRoom),
+            threadMessageCacheProvider.overrideWith(
+              () => _SharedDataCache(sharedData),
+            ),
+            activeRunNotifierOverride(const IdleState()),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        // Simulate run completion by updating cache
+        final newMessages = [
+          TestData.createMessage(id: 'msg-1', text: 'User message'),
+          TestData.createMessage(id: 'msg-2', text: 'AI response'),
+        ];
+        container
+            .read(threadMessageCacheProvider.notifier)
+            .updateMessages('thread-a', newMessages);
+
+        // Verify messages are retrievable
+        final cacheState = container.read(threadMessageCacheProvider);
+        expect(cacheState['thread-a'], hasLength(2));
+        expect(cacheState['thread-a']![0].id, 'msg-1');
+        expect(cacheState['thread-a']![1].id, 'msg-2');
+      });
+
+    });
+
     group('message deduplication', () {
       test('deduplicates messages by ID (cached messages take precedence)',
           () async {
@@ -160,4 +283,36 @@ class _PrePopulatedCache extends ThreadMessageCache {
 
   @override
   ThreadMessageCacheState build() => _initialState;
+}
+
+/// Test helper: Cache backed by shared map for thread switching tests.
+///
+/// Each ProviderContainer creates a new instance, but they all
+/// read/write to the same shared map to simulate cache persistence.
+class _SharedDataCache extends ThreadMessageCache {
+  _SharedDataCache(this._sharedData);
+
+  final Map<String, List<ChatMessage>> _sharedData;
+
+  @override
+  ThreadMessageCacheState build() => Map.from(_sharedData);
+
+  @override
+  Future<List<ChatMessage>> getMessages(String roomId, String threadId) async {
+    // Check shared data first (simulates persistent cache)
+    final cached = _sharedData[threadId];
+    if (cached != null) return cached;
+
+    // Delegate to parent for API fetch
+    final messages = await super.getMessages(roomId, threadId);
+    // Persist to shared data
+    _sharedData[threadId] = messages;
+    return messages;
+  }
+
+  @override
+  void updateMessages(String threadId, List<ChatMessage> messages) {
+    _sharedData[threadId] = messages;
+    state = Map.from(_sharedData);
+  }
 }

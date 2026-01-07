@@ -10,6 +10,7 @@ import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_notifier.dart';
 import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
+import 'package:soliplex_frontend/core/providers/thread_message_cache.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 
 import '../../helpers/test_helpers.dart';
@@ -785,6 +786,135 @@ void main() {
         container.read(activeRunNotifierProvider),
         isA<IdleState>(),
       );
+    });
+  });
+
+  group('cache update on completion', () {
+    late MockAgUiClient mockAgUiClient;
+    late MockSoliplexApi mockApi;
+    late StreamController<BaseEvent> eventStreamController;
+
+    setUp(() {
+      mockAgUiClient = MockAgUiClient();
+      mockApi = MockSoliplexApi();
+      eventStreamController = StreamController<BaseEvent>();
+
+      when(
+        () => mockApi.createRun(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).thenAnswer(
+        (_) async => RunInfo(
+          id: 'run-1',
+          threadId: 'thread-1',
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      when(
+        () => mockAgUiClient.runAgent(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).thenAnswer((_) => eventStreamController.stream);
+    });
+
+    tearDown(() {
+      eventStreamController.close();
+    });
+
+    test('updates cache when RUN_FINISHED event is received', () async {
+      final container = ProviderContainer(
+        overrides: [
+          apiProvider.overrideWithValue(mockApi),
+          agUiClientProvider.overrideWithValue(mockAgUiClient),
+        ],
+      );
+
+      addTearDown(container.dispose);
+
+      // Start a run
+      await container.read(activeRunNotifierProvider.notifier).startRun(
+            roomId: 'room-1',
+            threadId: 'thread-1',
+            userMessage: 'Hello',
+          );
+
+      // Verify running
+      expect(
+        container.read(activeRunNotifierProvider),
+        isA<RunningState>(),
+      );
+
+      // Cache should be empty initially
+      final cacheBefore = container.read(threadMessageCacheProvider);
+      expect(cacheBefore['thread-1'], isNull);
+
+      // Send RUN_FINISHED event
+      eventStreamController.add(
+        const RunFinishedEvent(threadId: 'thread-1', runId: 'run-1'),
+      );
+
+      // Allow event to be processed
+      await Future<void>.delayed(Duration.zero);
+
+      // Verify state is CompletedState
+      expect(
+        container.read(activeRunNotifierProvider),
+        isA<CompletedState>(),
+      );
+
+      // Cache should now contain the messages
+      final cacheAfter = container.read(threadMessageCacheProvider);
+      expect(cacheAfter['thread-1'], isNotNull);
+      expect(cacheAfter['thread-1'], hasLength(1));
+      expect(
+        (cacheAfter['thread-1']!.first as TextMessage).text,
+        'Hello',
+      );
+    });
+
+    test('updates cache when RUN_ERROR event is received', () async {
+      final container = ProviderContainer(
+        overrides: [
+          apiProvider.overrideWithValue(mockApi),
+          agUiClientProvider.overrideWithValue(mockAgUiClient),
+        ],
+      );
+
+      addTearDown(container.dispose);
+
+      // Start a run
+      await container.read(activeRunNotifierProvider.notifier).startRun(
+            roomId: 'room-1',
+            threadId: 'thread-1',
+            userMessage: 'Hello',
+          );
+
+      // Cache should be empty initially
+      final cacheBefore = container.read(threadMessageCacheProvider);
+      expect(cacheBefore['thread-1'], isNull);
+
+      // Send RUN_ERROR event
+      eventStreamController.add(
+        const RunErrorEvent(message: 'Test error'),
+      );
+
+      // Allow event to be processed
+      await Future<void>.delayed(Duration.zero);
+
+      // Verify state is CompletedState with failure
+      final state = container.read(activeRunNotifierProvider);
+      expect(state, isA<CompletedState>());
+      expect((state as CompletedState).result, isA<FailedResult>());
+
+      // Cache should still contain the messages (even on error)
+      final cacheAfter = container.read(threadMessageCacheProvider);
+      expect(cacheAfter['thread-1'], isNotNull);
+      expect(cacheAfter['thread-1'], hasLength(1));
     });
   });
 }
