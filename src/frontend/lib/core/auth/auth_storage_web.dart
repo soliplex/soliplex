@@ -81,4 +81,62 @@ class WebAuthStorage implements AuthStorage {
       ..removeItem(AuthStorageKeys.issuerDiscoveryUrl)
       ..removeItem(AuthStorageKeys.clientId);
   }
+
+  @override
+  Future<void> savePreAuthState(PreAuthState state) async {
+    _storage
+      ..setItem(AuthStorageKeys.preAuthIssuerId, state.issuerId)
+      ..setItem(AuthStorageKeys.preAuthDiscoveryUrl, state.discoveryUrl)
+      ..setItem(AuthStorageKeys.preAuthClientId, state.clientId)
+      ..setItem(
+        AuthStorageKeys.preAuthCreatedAt,
+        state.createdAt.toIso8601String(),
+      );
+  }
+
+  @override
+  Future<PreAuthState?> loadPreAuthState() async {
+    final issuerId = _storage.getItem(AuthStorageKeys.preAuthIssuerId);
+    final discoveryUrl = _storage.getItem(AuthStorageKeys.preAuthDiscoveryUrl);
+    final clientId = _storage.getItem(AuthStorageKeys.preAuthClientId);
+    final createdAtStr = _storage.getItem(AuthStorageKeys.preAuthCreatedAt);
+
+    if (issuerId == null ||
+        discoveryUrl == null ||
+        clientId == null ||
+        createdAtStr == null) {
+      return null;
+    }
+
+    final createdAt = DateTime.tryParse(createdAtStr);
+    if (createdAt == null) return null;
+
+    final state = PreAuthState(
+      issuerId: issuerId,
+      discoveryUrl: discoveryUrl,
+      clientId: clientId,
+      createdAt: createdAt,
+    );
+
+    // Reject expired pre-auth state
+    if (state.isExpired) {
+      try {
+        await clearPreAuthState();
+      } on Exception {
+        // Cleanup failed - still return null for expired state
+      }
+      return null;
+    }
+
+    return state;
+  }
+
+  @override
+  Future<void> clearPreAuthState() async {
+    _storage
+      ..removeItem(AuthStorageKeys.preAuthIssuerId)
+      ..removeItem(AuthStorageKeys.preAuthDiscoveryUrl)
+      ..removeItem(AuthStorageKeys.preAuthClientId)
+      ..removeItem(AuthStorageKeys.preAuthCreatedAt);
+  }
 }

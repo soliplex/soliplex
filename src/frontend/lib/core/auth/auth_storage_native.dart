@@ -146,4 +146,16 @@ class NativeAuthStorage implements AuthStorage {
       _storage.delete(key: AuthStorageKeys.clientId),
     ]);
   }
+
+  /// No-op on native - flutter_appauth handles OAuth in-process.
+  @override
+  Future<void> savePreAuthState(PreAuthState state) async {}
+
+  /// Always returns null on native - pre-auth state is web-only.
+  @override
+  Future<PreAuthState?> loadPreAuthState() async => null;
+
+  /// No-op on native.
+  @override
+  Future<void> clearPreAuthState() async {}
 }
