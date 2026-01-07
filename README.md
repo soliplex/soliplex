@@ -169,8 +169,9 @@ See `example/` directory for sample configurations.
 ## Related Repositories
 
 - **[soliplex/flutter](https://github.com/soliplex/flutter)** - Flutter frontend (cross-platform mobile/desktop)
-- **[soliplex/docs](https://github.com/soliplex/docs)** - Documentation site (MkDocs)
+- **[Documentation](https://soliplex.github.io/)** - Documentation site (MkDocs)
 - **[soliplex/ingester](https://github.com/soliplex/ingester)** - Content ingestion pipeline
+- **[soliplex/ingester-agents](https://github.com/soliplex/ingester-agents)** - Document ingestion agents
 - **[soliplex/whitelabel](https://github.com/soliplex/whitelabel)** - Customer white-label appshell template
 
 ## License
