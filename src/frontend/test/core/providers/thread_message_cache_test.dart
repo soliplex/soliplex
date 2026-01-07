@@ -333,6 +333,27 @@ void main() {
       });
     });
 
+    group('MessageFetchException', () {
+      test('asserts threadId is not empty', () {
+        expect(
+          () => MessageFetchException(
+            threadId: '',
+            cause: const NetworkException(message: 'Failed'),
+          ),
+          throwsA(isA<AssertionError>()),
+        );
+      });
+
+      test('allows non-empty threadId', () {
+        final exception = MessageFetchException(
+          threadId: 'valid-thread-id',
+          cause: const NetworkException(message: 'Failed'),
+        );
+        expect(exception.threadId, 'valid-thread-id');
+        expect(exception.cause, isA<NetworkException>());
+      });
+    });
+
     group('refreshMessages', () {
       test('clears cache and refetches from API', () async {
         // Arrange: Pre-populate cache with stale data

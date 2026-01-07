@@ -119,7 +119,8 @@ final threadMessageCacheProvider =
 /// Wraps the underlying exception with thread context for better debugging.
 class MessageFetchException implements Exception {
   /// Creates an exception for a failed message fetch.
-  const MessageFetchException({required this.threadId, required this.cause});
+  MessageFetchException({required this.threadId, required this.cause})
+      : assert(threadId.isNotEmpty, 'threadId must not be empty');
 
   /// The thread that failed to load.
   final String threadId;
