@@ -3,6 +3,7 @@ import 'package:soliplex_client/soliplex_client.dart';
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/active_run_notifier.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
+import 'package:soliplex_frontend/core/providers/thread_message_cache.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 
 /// Provider for active run state and actions.
@@ -77,24 +78,25 @@ final canSendMessageProvider = Provider<bool>((ref) {
   );
 });
 
-/// Provider for historical messages for the current thread.
+/// Provider for historical messages for a thread.
 ///
-/// In AM3, this returns an empty list since the backend doesn't provide
-/// a dedicated endpoint for historical messages. AM4 will implement
-/// message caching/persistence.
-///
-/// See: planning/ui/chat.md - Phase 2 (Message History)
+/// Fetches messages from the cache (instant) or backend (on cache miss).
+/// The cache is populated on first access and updated when runs complete.
 final threadMessagesProvider =
     FutureProvider.family<List<ChatMessage>, String>((ref, threadId) async {
-  // AM3: No historical messages
-  // AM4: Implement message caching
-  return [];
+  final room = ref.watch(currentRoomProvider);
+  if (room == null) return [];
+
+  return ref.read(threadMessageCacheProvider.notifier).getMessages(
+        room.id,
+        threadId,
+      );
 });
 
 /// Provider for all messages to display in chat.
 ///
-/// Merges historical messages (from API) with active run messages (streaming).
-/// Automatically updates as either source changes.
+/// Merges cached messages (historical) with active run messages (streaming),
+/// deduplicating by message ID. Automatically updates as either source changes.
 ///
 /// Example:
 /// ```dart
@@ -112,8 +114,35 @@ final allMessagesProvider = Provider<List<ChatMessage>>((ref) {
   final runState = ref.watch(activeRunNotifierProvider);
 
   final history = historyAsync.value ?? [];
-  return [...history, ...runState.messages];
+  return _mergeMessages(history, runState.messages);
 });
+
+/// Merges cached and running messages, deduplicating by ID.
+///
+/// Preserves order: cached messages first, then new running messages.
+List<ChatMessage> _mergeMessages(
+  List<ChatMessage> cached,
+  List<ChatMessage> running,
+) {
+  final seenIds = <String>{};
+  final result = <ChatMessage>[];
+
+  // Add cached first (historical messages)
+  for (final msg in cached) {
+    if (seenIds.add(msg.id)) {
+      result.add(msg);
+    }
+  }
+
+  // Add running (may include new messages not yet cached)
+  for (final msg in running) {
+    if (seenIds.add(msg.id)) {
+      result.add(msg);
+    }
+  }
+
+  return result;
+}
 
 /// Provider indicating whether a run is currently streaming.
 ///

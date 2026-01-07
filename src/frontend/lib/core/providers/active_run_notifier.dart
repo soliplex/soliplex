@@ -7,6 +7,7 @@ import 'package:soliplex_client/soliplex_client.dart' as domain
     show Cancelled, Completed, Conversation, Failed, Idle, Running;
 import 'package:soliplex_frontend/core/models/active_run_state.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
+import 'package:soliplex_frontend/core/providers/thread_message_cache.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 
 /// Internal state representing the notifier's resource management.
@@ -178,12 +179,14 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
         onError: (Object error, StackTrace stackTrace) {
           final currentState = state;
           if (currentState is RunningState) {
-            state = CompletedState(
+            final completed = CompletedState(
               conversation: currentState.conversation.withStatus(
                 domain.Failed(error: error.toString()),
               ),
               result: FailedResult(errorMessage: error.toString()),
             );
+            state = completed;
+            _updateCacheOnCompletion(completed);
           }
         },
         onDone: () {
@@ -191,12 +194,14 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
           // mark as finished
           final currentState = state;
           if (currentState is RunningState) {
-            state = CompletedState(
+            final completed = CompletedState(
               conversation: currentState.conversation.withStatus(
                 const domain.Completed(),
               ),
               result: const Success(),
             );
+            state = completed;
+            _updateCacheOnCompletion(completed);
           }
         },
         cancelOnError: false,
@@ -209,20 +214,24 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
       );
     } on CancellationError {
       // User cancelled - already handled in cancelRun
-      state = CompletedState(
+      final completed = CompletedState(
         conversation: conversation.withStatus(
           const domain.Cancelled(reason: 'Cancelled by user'),
         ),
         result: const CancelledResult(reason: 'Cancelled by user'),
       );
+      state = completed;
+      _updateCacheOnCompletion(completed);
       _internalState = const IdleInternalState();
     } catch (e) {
-      state = CompletedState(
+      final completed = CompletedState(
         conversation: conversation.withStatus(
           domain.Failed(error: e.toString()),
         ),
         result: FailedResult(errorMessage: e.toString()),
       );
+      state = completed;
+      _updateCacheOnCompletion(completed);
       _internalState = const IdleInternalState();
     }
   }
@@ -239,12 +248,14 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
     }
 
     if (currentState is RunningState) {
-      state = CompletedState(
+      final completed = CompletedState(
         conversation: currentState.conversation.withStatus(
           const domain.Cancelled(reason: 'User cancelled'),
         ),
         result: const CancelledResult(reason: 'Cancelled by user'),
       );
+      state = completed;
+      _updateCacheOnCompletion(completed);
     }
   }
 
@@ -288,7 +299,7 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
     RunningState previousState,
     EventProcessingResult result,
   ) {
-    return switch (result.conversation.status) {
+    final newState = switch (result.conversation.status) {
       domain.Completed() => CompletedState(
           conversation: result.conversation,
           streaming: result.streaming,
@@ -312,5 +323,20 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
           'Unexpected Idle status during event processing',
         ),
     };
+
+    // Update cache when run completes
+    if (newState is CompletedState) {
+      _updateCacheOnCompletion(newState);
+    }
+
+    return newState;
+  }
+
+  /// Updates the message cache when a run completes.
+  void _updateCacheOnCompletion(CompletedState completedState) {
+    ref.read(threadMessageCacheProvider.notifier).updateMessages(
+          completedState.threadId,
+          completedState.messages,
+        );
   }
 }
