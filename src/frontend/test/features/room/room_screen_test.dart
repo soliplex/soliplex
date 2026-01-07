@@ -281,6 +281,87 @@ void main() {
     });
   });
 
+  group('RoomScreen room ID sync', () {
+    testWidgets('syncs currentRoomIdProvider on initialization',
+        (tester) async {
+      final mockThreads = [
+        TestData.createThread(id: 'thread-1', roomId: 'room-abc'),
+      ];
+
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        createTestApp(
+          home: const RoomScreen(roomId: 'room-abc'),
+          overrides: [
+            threadsProvider('room-abc')
+                .overrideWith((ref) async => mockThreads),
+            lastViewedThreadProvider('room-abc')
+                .overrideWith((ref) async => const NoLastViewed()),
+          ],
+          onContainerCreated: (c) => container = c,
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // currentRoomIdProvider should be synced with widget.roomId
+      final roomId = container.read(currentRoomIdProvider);
+      expect(roomId, equals('room-abc'));
+    });
+
+    testWidgets('updates currentRoomIdProvider when room changes',
+        (tester) async {
+      final roomAThreads = [
+        TestData.createThread(id: 'thread-a', roomId: 'room-a'),
+      ];
+      final roomBThreads = [
+        TestData.createThread(id: 'thread-b', roomId: 'room-b'),
+      ];
+
+      late ProviderContainer container;
+
+      // Start with room-a
+      await tester.pumpWidget(
+        createTestApp(
+          home: const RoomScreen(roomId: 'room-a'),
+          overrides: [
+            threadsProvider('room-a').overrideWith((ref) async => roomAThreads),
+            threadsProvider('room-b').overrideWith((ref) async => roomBThreads),
+            lastViewedThreadProvider('room-a')
+                .overrideWith((ref) async => const NoLastViewed()),
+            lastViewedThreadProvider('room-b')
+                .overrideWith((ref) async => const NoLastViewed()),
+          ],
+          onContainerCreated: (c) => container = c,
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(container.read(currentRoomIdProvider), equals('room-a'));
+
+      // Navigate to room-b by rebuilding with different roomId
+      await tester.pumpWidget(
+        createTestApp(
+          home: const RoomScreen(roomId: 'room-b'),
+          overrides: [
+            threadsProvider('room-a').overrideWith((ref) async => roomAThreads),
+            threadsProvider('room-b').overrideWith((ref) async => roomBThreads),
+            lastViewedThreadProvider('room-a')
+                .overrideWith((ref) async => const NoLastViewed()),
+            lastViewedThreadProvider('room-b')
+                .overrideWith((ref) async => const NoLastViewed()),
+          ],
+          onContainerCreated: (c) => container = c,
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // currentRoomIdProvider should now be room-b
+      expect(container.read(currentRoomIdProvider), equals('room-b'));
+    });
+  });
+
   group('RoomScreen room dropdown', () {
     testWidgets('shows room dropdown', (tester) async {
       await tester.pumpWidget(
