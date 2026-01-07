@@ -71,6 +71,9 @@ dart format lib test
 ### TUI
 
 ```bash
+# Install TUI dependencies
+pip install -e ".[tui]"
+
 # Run TUI client (requires backend with --no-auth-mode)
 soliplex-tui --url http://127.0.0.1:8000
 ```
@@ -85,7 +88,7 @@ soliplex-tui --url http://127.0.0.1:8000
 
 ### Backend Structure
 
-- `views/` - FastAPI route handlers (auth, completions, rooms, quizzes, agui)
+- `views/` - FastAPI route handlers (auth, completions, rooms, quizzes, agui, installation)
 - `agents.py` - Pydantic AI agent configuration and management with agent caching
 - `config.py` - YAML configuration parsing with secret/environment variable resolution
 - `tools.py` - AI agent tool definitions
@@ -113,18 +116,26 @@ Factory agents support custom dependencies, tools, and dynamic system prompts vi
 
 ### Key Dependencies
 
-- **haiku.rag**: Vector database and RAG engine (LanceDB storage)
-- **Pydantic AI**: Agent framework for LLM integration
-- **FastMCP**: Model Context Protocol server/client (version 2.13.0.2 - 2.14)
-- **ag-ui-protocol**: AG-UI streaming protocol (0.1.10+)
+- **haiku.rag-slim**: Vector database and RAG engine (LanceDB storage)
+- **pydantic-ai-slim**: Agent framework for LLM integration (via haiku.rag-slim)
+- **FastMCP**: Model Context Protocol server/client (>= 2.13.0.2, < 2.14)
+- **ag-ui-protocol**: AG-UI streaming protocol (>= 0.1.10)
+- **Textual**: TUI framework (install with `pip install -e ".[tui]"`)
 - **Riverpod**: Flutter state management
 
 ### API Endpoints
 
 REST API at `/api/v1/`:
-- `GET/POST /rooms/{room_id}/agui` - Thread management
+- `GET /rooms/{room_id}/agui` - List threads
+- `POST /rooms/{room_id}/agui` - Create thread with initial run
+- `GET /rooms/{room_id}/agui/{thread_id}` - Get thread details
+- `POST /rooms/{room_id}/agui/{thread_id}` - Create new run
+- `POST /rooms/{room_id}/agui/{thread_id}/meta` - Update thread metadata
+- `DELETE /rooms/{room_id}/agui/{thread_id}` - Delete thread
+- `GET /rooms/{room_id}/agui/{thread_id}/{run_id}` - Get run details
 - `POST /rooms/{room_id}/agui/{thread_id}/{run_id}` - Execute run (SSE stream)
-- `POST /rooms/{room_id}/agui/{thread_id}/{run_id}/cancel` - Cancel active run
+- `POST /rooms/{room_id}/agui/{thread_id}/{run_id}/meta` - Update run metadata
+- `POST /rooms/{room_id}/agui/{thread_id}/{run_id}/feedback` - Add run feedback
 
 See `src/flutter/SOLIPLEX.md` for full API documentation.
 
