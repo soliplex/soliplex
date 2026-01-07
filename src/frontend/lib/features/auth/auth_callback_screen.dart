@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:soliplex_frontend/core/auth/auth_flow.dart' show AuthException;
 import 'package:soliplex_frontend/core/auth/auth_provider.dart';
 import 'package:soliplex_frontend/core/auth/web_auth_callback.dart';
 
@@ -28,8 +29,6 @@ class _AuthCallbackScreenState extends ConsumerState<AuthCallbackScreen> {
   Future<void> _processCallback() async {
     debugPrint('AuthCallbackScreen: Processing callback');
 
-    // Get params captured at startup (before GoRouter modified URL).
-    // URL was already cleared in main() immediately after capture.
     final params = ref.read(capturedCallbackParamsProvider);
     debugPrint('AuthCallbackScreen: Params type: ${params.runtimeType}');
 
@@ -88,8 +87,15 @@ class _AuthCallbackScreenState extends ConsumerState<AuthCallbackScreen> {
         debugPrint('AuthCallbackScreen: Navigating to /');
         context.go('/');
       }
+    } on AuthException catch (e) {
+      debugPrint('AuthCallbackScreen: Auth error: ${e.message}');
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _processing = false;
+        });
+      }
     } on Exception catch (e) {
-      // Log internally for debugging; show generic message to user
       debugPrint(
         'AuthCallbackScreen: completeWebAuth failed: ${e.runtimeType}',
       );

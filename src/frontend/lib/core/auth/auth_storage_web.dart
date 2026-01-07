@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:soliplex_frontend/core/auth/auth_state.dart';
 import 'package:soliplex_frontend/core/auth/auth_storage.dart';
 import 'package:web/web.dart' as web;
@@ -17,7 +18,7 @@ Future<void> clearOnReinstall() async {
 /// XSS attacks. This is acceptable for this internal tool because:
 /// - CSP headers block XSS vectors
 /// - Server validates tokens on every request
-/// - Tokens have short expiry with refresh rotation
+/// - Tokens have short expiry (BFF refresh endpoint is pending implementation)
 /// - sessionStorage would lose tokens on tab close, breaking legitimate
 ///   workflows (accidental refresh, opening new tabs)
 class WebAuthStorage implements AuthStorage {
@@ -122,8 +123,8 @@ class WebAuthStorage implements AuthStorage {
     if (state.isExpired) {
       try {
         await clearPreAuthState();
-      } on Exception {
-        // Cleanup failed - still return null for expired state
+      } on Exception catch (e) {
+        debugPrint('WebAuthStorage: Failed to clear expired pre-auth: $e');
       }
       return null;
     }

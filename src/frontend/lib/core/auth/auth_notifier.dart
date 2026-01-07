@@ -126,8 +126,6 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
   /// **At runtime:** We already established trust. A transient network error
   /// shouldn't destroy a valid session. The user stays "authenticated" in
   /// local state and can retry when network returns.
-  ///
-  /// See OIDC spec section "Token Refresh Failure Handling Policy" for details.
   Future<bool> _tryRefreshStoredTokens(Authenticated tokens) async {
     final TokenRefreshResult result;
     try {
@@ -201,14 +199,21 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
     // On web, save issuer info before redirect - needed to complete auth
     // after callback since the BFF doesn't return issuer metadata
     if (_authFlow.isWeb) {
-      await _storage.savePreAuthState(
-        PreAuthState(
-          issuerId: issuer.id,
-          discoveryUrl: issuer.discoveryUrl,
-          clientId: issuer.clientId,
-          createdAt: DateTime.now(),
-        ),
-      );
+      try {
+        await _storage.savePreAuthState(
+          PreAuthState(
+            issuerId: issuer.id,
+            discoveryUrl: issuer.discoveryUrl,
+            clientId: issuer.clientId,
+            createdAt: DateTime.now(),
+          ),
+        );
+      } on Exception catch (e) {
+        _log('Failed to save pre-auth state: ${e.runtimeType}');
+        throw const AuthException(
+          'Unable to prepare sign in. Please try again.',
+        );
+      }
     }
 
     try {
@@ -304,14 +309,17 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
       issuerId: preAuthState.issuerId,
       issuerDiscoveryUrl: preAuthState.discoveryUrl,
       clientId: preAuthState.clientId,
-      // Web BFF flow doesn't return id_token - use empty string
-      // This means web logout won't redirect to IdP (acceptable tradeoff)
+      // Web BFF flow doesn't return id_token - use empty string.
+      // This means web logout won't redirect to IdP (acceptable tradeoff).
+      // See docs/planning/backend-frontend-integration.md for details.
       idToken: '',
     );
 
     try {
       await _storage.saveTokens(newState);
     } on Exception catch (e) {
+      // TODO(auth): Surface warning to user when persist fails - session works
+      // but won't survive browser refresh.
       _log('Failed to persist web auth tokens: ${e.runtimeType}');
     }
 
@@ -378,8 +386,6 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
   ///
   /// This is more lenient than [_tryRefreshStoredTokens] because at runtime we
   /// have an established session worth preserving through transient failures.
-  ///
-  /// See OIDC spec section "Token Refresh Failure Handling Policy" for details.
   @override
   Future<bool> tryRefresh() async {
     final current = state;

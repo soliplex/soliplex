@@ -83,8 +83,12 @@ abstract class AuthStorage {
 
   /// Saves pre-auth state before OAuth redirect (web BFF flow only).
   ///
-  /// On native platforms, this is a no-op since native uses flutter_appauth
-  /// which handles the full OAuth flow in-process.
+  /// Required because the BFF callback URL only includes tokens, not issuer
+  /// metadata (issuerId, discoveryUrl, clientId). We need these for token
+  /// refresh, so we save them before redirect and retrieve after callback.
+  ///
+  /// On native platforms, this is a no-op since flutter_appauth handles
+  /// the full OAuth flow in-process without page redirects.
   Future<void> savePreAuthState(PreAuthState state);
 
   /// Loads pre-auth state saved before OAuth redirect.

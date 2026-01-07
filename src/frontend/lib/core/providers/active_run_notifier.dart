@@ -272,7 +272,7 @@ class ActiveRunNotifier extends Notifier<ActiveRunState> {
     if (previousState is RunningInternalState) {
       try {
         await previousState.dispose();
-      } catch (e, st) {
+      } on Exception catch (e, st) {
         debugPrint('Disposal error during reset: $e\n$st');
       }
     }

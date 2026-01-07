@@ -31,8 +31,12 @@ class AuthException implements Exception {
 /// Thrown when web auth triggers a redirect to the IdP.
 ///
 /// On web, [AuthFlow.authenticate] redirects the browser to the IdP login page
-/// and throws this exception. Auth completion happens via callback URL, handled
-/// by AuthNotifier.completeWebAuth.
+/// and throws this exception. The full flow is:
+/// 1. AuthNotifier.signIn saves PreAuthState to storage
+/// 2. AuthFlow.authenticate redirects to BFF, throws AuthRedirectInitiated
+/// 3. User authenticates with IdP, BFF redirects back with tokens in URL
+/// 4. AuthCallbackScreen extracts tokens from URL params
+/// 5. AuthCallbackScreen calls AuthNotifier.completeWebAuth with tokens
 ///
 /// This exception makes the web auth flow type-honest: instead of returning a
 /// never-completing Future<AuthResult>, we throw to indicate "auth initiated,
