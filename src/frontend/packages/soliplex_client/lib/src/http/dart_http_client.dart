@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -97,21 +96,17 @@ class DartHttpClient implements SoliplexHttpClient {
         originalError: e,
         stackTrace: stackTrace,
       );
-    } on SocketException catch (e, stackTrace) {
-      throw NetworkException(
-        message: 'Connection failed: ${e.message}',
-        originalError: e,
-        stackTrace: stackTrace,
-      );
-    } on HttpException catch (e, stackTrace) {
-      throw NetworkException(
-        message: 'HTTP error: ${e.message}',
-        originalError: e,
-        stackTrace: stackTrace,
-      );
     } on http.ClientException catch (e, stackTrace) {
       throw NetworkException(
         message: 'Client error: ${e.message}',
+        originalError: e,
+        stackTrace: stackTrace,
+      );
+    } on Exception catch (e, stackTrace) {
+      // Generic fallback for platform-specific exceptions (SocketException on
+      // native, browser exceptions on web)
+      throw NetworkException(
+        message: 'Network error: $e',
         originalError: e,
         stackTrace: stackTrace,
       );
@@ -152,34 +147,32 @@ class DartHttpClient implements SoliplexHttpClient {
           subscription = streamedResponse.stream.listen(
             controller.add,
             onError: (Object error, StackTrace stackTrace) {
-              if (error is SocketException) {
-                controller.addError(
-                  NetworkException(
-                    message: 'Connection lost: ${error.message}',
-                    originalError: error,
-                    stackTrace: stackTrace,
-                  ),
-                );
-              } else {
-                controller.addError(error, stackTrace);
-              }
+              // Wrap all stream errors as NetworkException
+              controller.addError(
+                NetworkException(
+                  message: 'Stream error: $error',
+                  originalError: error,
+                  stackTrace: stackTrace,
+                ),
+              );
             },
             onDone: controller.close,
             cancelOnError: true,
           );
-        } on SocketException catch (e, stackTrace) {
+        } on http.ClientException catch (e, stackTrace) {
           controller.addError(
             NetworkException(
-              message: 'Connection failed: ${e.message}',
+              message: 'Client error: ${e.message}',
               originalError: e,
               stackTrace: stackTrace,
             ),
           );
           await controller.close();
-        } on http.ClientException catch (e, stackTrace) {
+        } on Exception catch (e, stackTrace) {
+          // Generic fallback for platform-specific exceptions
           controller.addError(
             NetworkException(
-              message: 'Client error: ${e.message}',
+              message: 'Connection failed: $e',
               originalError: e,
               stackTrace: stackTrace,
             ),
