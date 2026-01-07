@@ -378,6 +378,160 @@ dependencies:
 1. **Multi-tab state**: Web browsers can have multiple tabs with different auth states
    - Not addressed in this plan; accept as known limitation
 
+## Implementation Status
+
+### Slice 1: Web Platform Configuration - ⏳ Pending
+
+Not yet started. Verify web/index.html and pubspec.yaml.
+
+### Slice 2: CORS Verification - ⏳ Pending
+
+Not yet tested. Requires running backend.
+
+### Slice 3: HTTP Layer Web Compatibility - ✅ Complete
+
+Commit: `2b50a57 feat(web): HTTP layer web compatibility (Slice 3)`
+
+### Slice 4: Platform-Aware Auth Storage - ✅ Complete
+
+Commit: `43ee727 feat(web): platform-aware auth storage (Slice 4)`
+
+Added PreAuthState support for web BFF flow:
+
+- `PreAuthState` class with 5-minute expiry for CSRF protection
+- Storage handles expiry check internally (callers don't need to check)
+
+### Slice 5: Web Authentication Flow - ✅ Complete
+
+Commits:
+
+- `9e6d64a feat(web): callback params capture abstraction`
+- `ef190ee feat(web): pre-auth state storage for web BFF`
+- `1e42deb feat(web): platform-aware auth flow with BFF pattern`
+- `9adc28a feat(web): web auth completion flow (Slice 5)`
+- `92082ca test(web): web auth flow tests`
+- `bf21508 docs: backend-frontend integration notes`
+
+### Slice 6: Testing & Validation - ⏳ Pending
+
+Unit tests pass. Manual testing not yet done.
+
+---
+
+## Implementation Notes
+
+### Actual Files Created
+
+| Planned | Actual | Notes |
+|---------|--------|-------|
+| `web_auth_callback_stub.dart` | `web_auth_callback_native.dart` | Renamed for clarity |
+| (not planned) | `callback_params.dart` | Extracted sealed class |
+| (not planned) | `web_auth_callback.dart` | Dispatcher + interface |
+
+### Why Native Stub Files Are Required
+
+**Question**: Could we use `kIsWeb` in main.dart instead of conditional imports?
+
+**Answer**: No. Dart conditional imports are **compile-time** decisions, not runtime.
+
+```dart
+// This WON'T work:
+void main() async {
+  final params = kIsWeb
+      ? WebCapture.captureNow()  // FAILS: imports dart:js_interop
+      : const NoCallbackParams();
+}
+```
+
+The problem: `web_auth_callback_web.dart` imports `package:web` which uses
+`dart:js_interop`. That import **fails at compile time** on native platforms,
+even if the code path is never executed at runtime.
+
+**Why we need the native file:**
+
+1. Dart conditional imports require a real file on both branches
+2. We can't "not import anything" - must provide the functions/classes
+3. The native file provides no-op implementations (27 lines)
+
+**Why not inline the conditional import per-callsite?**
+
+Two call sites exist:
+
+1. `main.dart` - captures params at startup
+2. `AuthCallbackScreen` - clears URL params after processing
+
+Centralizing in `web_auth_callback.dart` avoids duplicating conditional imports.
+
+### Design Decision: AuthRedirectInitiated Exception
+
+Web auth flow fundamentally differs from native:
+
+- **Native**: `authenticate()` completes with tokens after browser flow
+- **Web**: `authenticate()` triggers redirect, never returns; tokens via callback
+
+Original implementation returned a never-completing `Future<AuthResult>` on web.
+This is a "type system lie" - the type promises completion that never happens.
+
+**Fix**: Throw `AuthRedirectInitiated` exception after triggering redirect.
+
+```dart
+// auth_flow_web.dart
+Future<AuthResult> authenticate(OidcIssuer issuer) async {
+  _navigator.navigateTo(loginUrl);
+  throw const AuthRedirectInitiated();  // Type-honest
+}
+```
+
+Callers explicitly handle this case:
+
+```dart
+// login_screen.dart
+try {
+  await ref.read(authProvider.notifier).signIn(issuer);
+} on AuthRedirectInitiated {
+  return;  // Browser redirecting, page will unload
+} on AuthException catch (e) {
+  // Handle error
+}
+```
+
+### Design Decision: Provider Override Pattern
+
+**Problem**: Need to capture URL params in `main()` before GoRouter initializes
+(GoRouter may modify the URL), but `main()` runs before `ProviderScope` exists.
+
+**Solution**: Static utility + provider override
+
+```dart
+// main.dart
+void main() async {
+  final callbackParams = CallbackParamsCapture.captureNow();  // Static, no DI
+  runApp(ProviderScope(
+    overrides: [
+      capturedCallbackParamsProvider.overrideWithValue(callbackParams),
+    ],
+    child: const SoliplexApp(),
+  ));
+}
+```
+
+This allows `AuthCallbackScreen` to read params via normal Riverpod:
+
+```dart
+final params = ref.read(capturedCallbackParamsProvider);
+```
+
+### Backend Limitations Documented
+
+See `docs/planning/backend-frontend-integration.md` for:
+
+- OAuth state parameter not echoed (CAT II security finding)
+- Tokens delivered via URL query parameters
+- No id_token in web BFF callback
+- Issuer metadata not in callback (requires PreAuthState workaround)
+
+---
+
 ## Review Notes
 
 Plan reviewed by blacksmith and pathfinder agents (2026-01-07):
@@ -398,3 +552,9 @@ Additional blacksmith review (2026-01-07) - CupertinoHttpClient handling:
 - Decision: No stub file needed - conditional export that exports nothing on web
 - Rationale: Simpler solution, compile error for misuse is better than runtime error
 - Avoided: "stub" naming confusion (sounds like test mock, but isn't)
+
+Implementation review (2026-01-07) - blacksmith and sentinel:
+
+- All code issues resolved (fire-and-forget, type honesty, error handling)
+- Security findings documented in backend-frontend-integration.md
+- 59 auth tests pass
