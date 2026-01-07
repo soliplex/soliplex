@@ -1,0 +1,23 @@
+id: "mcptest"
+name: "MCP Test"
+description: "Test MCP tool interaction."
+suggestions:
+- "What is the weather in <your location>?"
+
+agent:
+  template_id: "default_chat"
+  system_prompt: "./prompt.txt"
+
+tools:
+  - tool_name: "soliplex.tools.get_current_datetime"
+
+mcp_client_toolsets:
+
+ google_maps:
+   kind: "stdio"
+   command: "npx"
+   args: 
+     - "-y"
+     - "@modelcontextprotocol/server-google-maps"
+   env: 
+     GOOGLE_MAPS_API_KEY: GOOGLE_MAPS_API_KEY
