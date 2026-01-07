@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,11 +12,69 @@ import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 import 'package:soliplex_frontend/features/chat/widgets/chat_message_widget.dart';
 import 'package:soliplex_frontend/features/chat/widgets/message_list.dart';
 import 'package:soliplex_frontend/shared/widgets/empty_state.dart';
+import 'package:soliplex_frontend/shared/widgets/error_display.dart';
 
 import '../../../helpers/test_helpers.dart';
 
 void main() {
   group('MessageList', () {
+    group('Loading State', () {
+      testWidgets('shows loading indicator while fetching messages',
+          (tester) async {
+        // Arrange: Provider that never completes
+        final completer = Completer<List<domain.ChatMessage>>();
+
+        await tester.pumpWidget(
+          createTestApp(
+            home: const Scaffold(
+              body: MessageList(),
+            ),
+            overrides: [
+              currentThreadProvider
+                  .overrideWith((ref) => TestData.createThread()),
+              allMessagesProvider.overrideWith((ref) => completer.future),
+              activeRunNotifierOverride(const IdleState()),
+            ],
+          ),
+        );
+        // Don't use pumpAndSettle - we want to see loading state
+        await tester.pump();
+
+        // Assert
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(find.byType(ChatMessageWidget), findsNothing);
+      });
+    });
+
+    group('Error State', () {
+      testWidgets('shows error display when message fetch fails',
+          (tester) async {
+        // Arrange: Provider that throws
+        await tester.pumpWidget(
+          createTestApp(
+            home: const Scaffold(
+              body: MessageList(),
+            ),
+            overrides: [
+              currentThreadProvider
+                  .overrideWith((ref) => TestData.createThread()),
+              allMessagesProvider.overrideWith(
+                (ref) => Future<List<domain.ChatMessage>>.error(
+                  Exception('Network error'),
+                ),
+              ),
+              activeRunNotifierOverride(const IdleState()),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Assert
+        expect(find.byType(ErrorDisplay), findsOneWidget);
+        expect(find.byType(ChatMessageWidget), findsNothing);
+      });
+    });
+
     group('Empty State', () {
       testWidgets('displays empty state when no messages', (tester) async {
         // Arrange
