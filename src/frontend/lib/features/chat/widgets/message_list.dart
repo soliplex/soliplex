@@ -81,7 +81,10 @@ class _MessageListState extends ConsumerState<MessageList> {
 
     return messagesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stackTrace) => ErrorDisplay(error: error),
+      error: (error, stackTrace) => ErrorDisplay(
+        error: error,
+        onRetry: () => ref.invalidate(allMessagesProvider),
+      ),
       data: (messages) => _buildMessageList(
         context,
         messages,

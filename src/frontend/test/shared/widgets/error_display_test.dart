@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_client/soliplex_client.dart';
+import 'package:soliplex_frontend/core/providers/thread_message_cache.dart';
 import 'package:soliplex_frontend/shared/widgets/error_display.dart';
 
 import '../../helpers/test_helpers.dart';
@@ -93,5 +94,84 @@ void main() {
         expect(find.text('Retry'), findsNothing);
       },
     );
+
+    group('MessageFetchException unwrapping', () {
+      testWidgets('unwraps NetworkException from MessageFetchException',
+          (tester) async {
+        await tester.pumpWidget(
+          createTestApp(
+            home: ErrorDisplay(
+              error: MessageFetchException(
+                threadId: 'thread-123',
+                cause: const NetworkException(message: 'Connection failed'),
+              ),
+            ),
+          ),
+        );
+
+        expect(find.textContaining('Network error'), findsOneWidget);
+        expect(find.byIcon(Icons.wifi_off), findsOneWidget);
+      });
+
+      testWidgets('unwraps ApiException from MessageFetchException',
+          (tester) async {
+        await tester.pumpWidget(
+          createTestApp(
+            home: ErrorDisplay(
+              error: MessageFetchException(
+                threadId: 'thread-123',
+                cause: const ApiException(
+                  statusCode: 500,
+                  message: 'Internal Server Error',
+                ),
+              ),
+            ),
+          ),
+        );
+
+        expect(find.textContaining('Server error (500)'), findsOneWidget);
+      });
+
+      testWidgets('shows retry button for wrapped NetworkException',
+          (tester) async {
+        var retryPressed = false;
+
+        await tester.pumpWidget(
+          createTestApp(
+            home: ErrorDisplay(
+              error: MessageFetchException(
+                threadId: 'thread-123',
+                cause: const NetworkException(message: 'Failed'),
+              ),
+              onRetry: () => retryPressed = true,
+            ),
+          ),
+        );
+
+        expect(find.text('Retry'), findsOneWidget);
+
+        await tester.tap(find.text('Retry'));
+        await tester.pump();
+
+        expect(retryPressed, true);
+      });
+
+      testWidgets('hides retry button for wrapped AuthException',
+          (tester) async {
+        await tester.pumpWidget(
+          createTestApp(
+            home: ErrorDisplay(
+              error: MessageFetchException(
+                threadId: 'thread-123',
+                cause: const AuthException(message: 'Unauthorized'),
+              ),
+              onRetry: () {},
+            ),
+          ),
+        );
+
+        expect(find.text('Retry'), findsNothing);
+      });
+    });
   });
 }
