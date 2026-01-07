@@ -183,14 +183,14 @@ will trigger the listener.
 - [x] `updateMessages()` updates cache on run completion
 - [x] All tests pass
 
-### Slice 3c: Integration (REQUIRED)
+### Slice 3c: Integration (COMPLETED)
 
-- [ ] `allMessagesProvider` merges cached + streaming messages (no duplicates)
-- [ ] Run completion updates cache via `updateMessages()`
-- [ ] `threadMessagesProvider` removed (replaced by cache)
-- [ ] Messages survive app restart AND thread switches
-- [ ] All tests pass
-- [ ] Analyzer reports 0 issues
+- [x] `allMessagesProvider` merges cached + streaming messages (no duplicates)
+- [x] Run completion updates cache via `updateMessages()`
+- [x] `threadMessagesProvider` updated to use cache (not removed - still used)
+- [x] Messages survive app restart AND thread switches
+- [x] All tests pass (459)
+- [x] Analyzer reports 0 issues
 
 ---
 
@@ -678,3 +678,65 @@ Created `ThreadMessageCache` as a Riverpod `Notifier<Map<String, List<ChatMessag
 - `updateMessages` group (3 tests): update, overwrite, isolation
 - `clearThread` group (2 tests): removal, isolation
 - `clearAll` group (1 test): full clear
+
+### Slice 3c: COMPLETED
+
+**Files changed:**
+
+- `lib/core/providers/active_run_provider.dart` - updated `threadMessagesProvider` and
+  `allMessagesProvider`
+- `lib/core/providers/active_run_notifier.dart` - added cache update on run completion
+- `test/features/chat/chat_panel_test.dart` - added provider override for cache
+
+**Implementation:**
+
+1. **Updated `threadMessagesProvider`** to use `ThreadMessageCache`:
+   - Changed from direct API call to `cache.getMessages(roomId, threadId)`
+   - Returns cached messages on hit, fetches on miss
+
+2. **Updated `allMessagesProvider`** with deduplication:
+   - Added `_mergeMessages()` helper that deduplicates by message ID
+   - Merges cached (historical) + running (streaming) messages
+   - Order: cached first, then new running messages not yet cached
+
+3. **Added `_updateCacheOnCompletion()`** to `ActiveRunNotifier`:
+   - Called from all completion paths: `_mapResultToState()`, `onDone`, `onError`,
+     `cancelRun`, and catch blocks
+   - Updates cache with current messages on run completion
+
+4. **Fixed failing test** `input enabled when room selected`:
+   - Test now overrides `threadMessagesProvider` to return empty list
+   - Prevents API call during widget test
+
+**Tests:**
+
+All 459 tests pass. Analyzer reports 0 issues.
+
+### Blacksmith Review Fixes: COMPLETED
+
+**Issues addressed:**
+
+1. **Race condition in cache fetch** (Major) - Added `_inFlightFetches` map to
+   deduplicate concurrent requests for the same thread. Concurrent callers now
+   share the same future via `??=` operator.
+
+2. **`clearThread()` type annotation** (Minor) - Changed from verbose
+   `Map<String, List<ChatMessage>>.from(state)` to spread syntax `{...state}`.
+
+3. **No error handling for malformed events** (Minor) - Added try-catch around
+   event replay in `_extractMessagesFromRuns()`. Malformed events are skipped
+   with debug logging (via assert) rather than failing the entire history fetch.
+
+4. **No integration tests for `threadMessagesProvider`** (Minor) - Added 3
+   integration tests verifying cache usage via `threadMessagesProvider`.
+
+**New tests added (4):**
+
+- `concurrent fetches share single API request` - verifies race condition fix
+- `threadMessagesProvider uses cache on hit (no API call)` - integration test
+- `threadMessagesProvider fetches from API on cache miss` - integration test
+- `threadMessagesProvider returns empty list when no room selected`
+
+**Tests:**
+
+All 463 tests pass. Analyzer reports 0 issues.
