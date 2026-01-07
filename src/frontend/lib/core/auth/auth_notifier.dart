@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soliplex_client/soliplex_client.dart' hide AuthException;
-import 'package:soliplex_frontend/core/auth/auth_flow.dart';
+import 'package:soliplex_frontend/core/auth/auth_flow.dart'
+    show AuthException, AuthFlow, AuthRedirectInitiated;
 import 'package:soliplex_frontend/core/auth/auth_provider.dart';
 import 'package:soliplex_frontend/core/auth/auth_state.dart';
 import 'package:soliplex_frontend/core/auth/auth_storage.dart';
@@ -42,6 +43,7 @@ import 'package:soliplex_frontend/core/auth/oidc_issuer.dart';
 /// **Testing:** Override [authStorageProvider] and
 /// [tokenRefreshServiceProvider] in tests to inject mocks.
 class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
+  late final AuthFlow _authFlow;
   late final AuthStorage _storage;
   late final TokenRefreshService _refreshService;
 
@@ -49,16 +51,19 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
 
   @override
   AuthState build() {
+    _authFlow = ref.read(authFlowProvider);
     _storage = ref.read(authStorageProvider);
     _refreshService = ref.read(tokenRefreshServiceProvider);
 
     // Fire-and-forget: _restoreSession runs async while we return AuthLoading.
     // Any refresh calls during restore fail gracefully (state is not
     // Authenticated yet) and will succeed after restore completes.
-    // Defense-in-depth: catch any unhandled errors to avoid silent failures.
-    _restoreSession().catchError(
-      (Object e) => _log('Unhandled restore error: ${e.runtimeType}'),
-    );
+    // Defense-in-depth: catch any unhandled errors and transition to
+    // Unauthenticated to avoid being stuck in AuthLoading.
+    _restoreSession().catchError((Object e) {
+      _log('Unhandled restore error: ${e.runtimeType}');
+      state = const Unauthenticated();
+    });
     return const AuthLoading();
   }
 
@@ -193,8 +198,21 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
   /// Throws [AuthException] if authentication fails or if the IdP doesn't
   /// return an id_token (required for proper OIDC logout).
   Future<void> signIn(OidcIssuer issuer) async {
+    // On web, save issuer info before redirect - needed to complete auth
+    // after callback since the BFF doesn't return issuer metadata
+    if (_authFlow.isWeb) {
+      await _storage.savePreAuthState(
+        PreAuthState(
+          issuerId: issuer.id,
+          discoveryUrl: issuer.discoveryUrl,
+          clientId: issuer.clientId,
+          createdAt: DateTime.now(),
+        ),
+      );
+    }
+
     try {
-      final result = await authenticate(issuer);
+      final result = await _authFlow.authenticate(issuer);
 
       final accessToken = result.accessToken;
       final refreshToken = result.refreshToken ?? '';
@@ -234,11 +252,70 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
       }
 
       state = newState;
+    } on AuthRedirectInitiated {
+      // Web: browser redirecting to IdP. Auth completes via callback URL.
+      // State remains unchanged; completeWebAuth() handles completion.
+      rethrow;
     } on AuthException {
       // Auth failed or was cancelled - stay unauthenticated
       state = const Unauthenticated();
       rethrow;
     }
+  }
+
+  /// Complete web authentication with tokens from callback URL.
+  ///
+  /// Called by AuthCallbackScreen after extracting tokens from the
+  /// BFF redirect URL. Creates an authenticated state and persists tokens.
+  ///
+  /// Reads pre-auth state (saved before redirect) to get issuer metadata
+  /// needed for token refresh. Throws [AuthException] if pre-auth state is
+  /// missing (storage already rejects expired state).
+  Future<void> completeWebAuth({
+    required String accessToken,
+    String? refreshToken,
+    int? expiresIn,
+  }) async {
+    // Load pre-auth state saved before redirect.
+    // Storage returns null if missing OR expired (expiry check is in storage).
+    final preAuthState = await _storage.loadPreAuthState();
+    if (preAuthState == null) {
+      _log('Pre-auth state missing or expired - invalid callback');
+      throw const AuthException(
+        'Authentication session expired. Please try signing in again.',
+      );
+    }
+
+    // Clear pre-auth state immediately to prevent reuse
+    try {
+      await _storage.clearPreAuthState();
+    } on Exception catch (e) {
+      _log('Failed to clear pre-auth state: ${e.runtimeType}');
+    }
+
+    final expiresAt = expiresIn != null
+        ? DateTime.now().add(Duration(seconds: expiresIn))
+        : DateTime.now().add(TokenRefreshService.fallbackTokenLifetime);
+
+    final newState = Authenticated(
+      accessToken: accessToken,
+      refreshToken: refreshToken ?? '',
+      expiresAt: expiresAt,
+      issuerId: preAuthState.issuerId,
+      issuerDiscoveryUrl: preAuthState.discoveryUrl,
+      clientId: preAuthState.clientId,
+      // Web BFF flow doesn't return id_token - use empty string
+      // This means web logout won't redirect to IdP (acceptable tradeoff)
+      idToken: '',
+    );
+
+    try {
+      await _storage.saveTokens(newState);
+    } on Exception catch (e) {
+      _log('Failed to persist web auth tokens: ${e.runtimeType}');
+    }
+
+    state = newState;
   }
 
   /// Sign out, end IdP session, and clear tokens.
@@ -249,7 +326,7 @@ class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
   Future<void> signOut() async {
     final current = state;
     if (current is Authenticated) {
-      await endSession(
+      await _authFlow.endSession(
         discoveryUrl: current.issuerDiscoveryUrl,
         idToken: current.idToken,
       );

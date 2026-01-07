@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:soliplex_frontend/core/auth/auth_provider.dart';
 import 'package:soliplex_frontend/core/auth/auth_state.dart';
+import 'package:soliplex_frontend/features/auth/auth_callback_screen.dart';
 import 'package:soliplex_frontend/features/home/home_screen.dart';
 import 'package:soliplex_frontend/features/login/login_screen.dart';
 import 'package:soliplex_frontend/features/room/room_screen.dart';
@@ -54,7 +55,7 @@ NoTransitionPage<void> _staticPage({
 }
 
 /// Routes that don't require authentication.
-const _publicRoutes = {'/login'};
+const _publicRoutes = {'/login', '/auth/callback'};
 
 /// Application router provider.
 ///
@@ -114,6 +115,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'login',
         pageBuilder: (context, state) => const NoTransitionPage(
           child: LoginScreen(),
+        ),
+      ),
+      // OAuth callback for web BFF flow - must bypass auth guard
+      GoRoute(
+        path: '/auth/callback',
+        name: 'auth-callback',
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: AuthCallbackScreen(),
         ),
       ),
       GoRoute(

@@ -1,12 +1,39 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soliplex_client/soliplex_client.dart';
+import 'package:soliplex_frontend/core/auth/auth_flow.dart';
 import 'package:soliplex_frontend/core/auth/auth_notifier.dart';
 import 'package:soliplex_frontend/core/auth/auth_state.dart';
 import 'package:soliplex_frontend/core/auth/auth_storage.dart';
 import 'package:soliplex_frontend/core/auth/oidc_issuer.dart';
+import 'package:soliplex_frontend/core/auth/web_auth_callback.dart';
 import 'package:soliplex_frontend/core/providers/api_provider.dart';
 import 'package:soliplex_frontend/core/providers/config_provider.dart';
+
+/// Provider for platform-specific authentication flow.
+final authFlowProvider = Provider<AuthFlow>((ref) => createAuthFlow());
+
+/// Provider for callback params captured at startup.
+///
+/// Override this in [ProviderScope.overrides] with the value from
+/// [CallbackParamsCapture.captureNow] called in main().
+///
+/// Example:
+/// ```dart
+/// final params = CallbackParamsCapture.captureNow();
+/// runApp(ProviderScope(
+///   overrides: [capturedCallbackParamsProvider.overrideWithValue(params)],
+///   child: App(),
+/// ));
+/// ```
+final capturedCallbackParamsProvider = Provider<CallbackParams>(
+  (ref) => const NoCallbackParams(),
+);
+
+/// Provider for OAuth callback URL operations (extract, clear).
+final callbackParamsServiceProvider = Provider<CallbackParamsService>(
+  (ref) => createCallbackParamsService(),
+);
 
 /// Provider for secure token storage.
 final authStorageProvider = Provider<AuthStorage>((ref) => createAuthStorage());

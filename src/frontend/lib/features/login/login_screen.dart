@@ -31,6 +31,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (mounted) {
         context.go('/');
       }
+    } on AuthRedirectInitiated {
+      // Web: browser is redirecting to IdP, page will unload.
+      // Auth completes via callback URL → AuthCallbackScreen.
+      return;
     } on AuthException catch (e) {
       setState(() {
         _errorMessage = e.message;
