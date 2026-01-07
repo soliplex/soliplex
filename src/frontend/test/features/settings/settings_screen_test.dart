@@ -29,6 +29,13 @@ class _MockAuthNotifier extends Notifier<AuthState> implements AuthNotifier {
 
   @override
   Future<bool> tryRefresh() async => false;
+
+  @override
+  Future<void> completeWebAuth({
+    required String accessToken,
+    String? refreshToken,
+    int? expiresIn,
+  }) async {}
 }
 
 void main() {

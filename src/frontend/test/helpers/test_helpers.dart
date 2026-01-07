@@ -11,6 +11,7 @@ import 'package:riverpod/src/framework.dart' show Override;
 // Hide ag_ui's CancelToken - HttpTransport uses our local one.
 import 'package:soliplex_client/soliplex_client.dart' hide CancelToken;
 import 'package:soliplex_client/src/utils/cancel_token.dart';
+import 'package:soliplex_frontend/core/auth/auth_flow.dart';
 import 'package:soliplex_frontend/core/auth/auth_provider.dart';
 import 'package:soliplex_frontend/core/auth/auth_state.dart';
 import 'package:soliplex_frontend/core/auth/auth_storage.dart';
@@ -22,6 +23,9 @@ import 'package:soliplex_frontend/core/providers/config_provider.dart';
 import 'package:soliplex_frontend/core/providers/rooms_provider.dart';
 import 'package:soliplex_frontend/core/providers/threads_provider.dart';
 
+/// Mock AuthFlow for testing.
+class MockAuthFlow extends Mock implements AuthFlow {}
+
 /// Mock AuthStorage for testing.
 class MockAuthStorage extends Mock implements AuthStorage {}
 
@@ -31,13 +35,15 @@ class MockTokenRefreshService extends Mock implements TokenRefreshService {}
 /// Creates mocked auth dependencies and their provider overrides.
 ///
 /// Returns a record with:
-/// - `overrides`: Provider overrides for [authStorageProvider] and
-///   [tokenRefreshServiceProvider]
+/// - `overrides`: Provider overrides for [authFlowProvider],
+///   [authStorageProvider], and [tokenRefreshServiceProvider]
+/// - `authFlow`: The [MockAuthFlow] instance for stubbing
 /// - `storage`: The [MockAuthStorage] instance for stubbing
 /// - `refreshService`: The [MockTokenRefreshService] instance for stubbing
 ///
 /// The mock storage is configured to return null from `loadTokens()` by
-/// default (unauthenticated state).
+/// default (unauthenticated state). The mock auth flow is configured with
+/// `isWeb = false` by default.
 ///
 /// Use with [ProviderContainer] or [createContainerWithMockedAuth]:
 /// ```dart
@@ -47,19 +53,30 @@ class MockTokenRefreshService extends Mock implements TokenRefreshService {}
 /// ```
 ({
   List<Override> overrides,
+  MockAuthFlow authFlow,
   MockAuthStorage storage,
   MockTokenRefreshService refreshService,
 }) createMockedAuthDependencies() {
+  final authFlow = MockAuthFlow();
   final storage = MockAuthStorage();
   final refreshService = MockTokenRefreshService();
 
+  // Default stub for auth flow
+  when(() => authFlow.isWeb).thenReturn(false);
+
   when(storage.loadTokens).thenAnswer((_) async => null);
+  // Default stubs for pre-auth state (web BFF flow)
+  when(storage.loadPreAuthState).thenAnswer((_) async => null);
+  when(() => storage.savePreAuthState(any())).thenAnswer((_) async {});
+  when(storage.clearPreAuthState).thenAnswer((_) async {});
 
   return (
     overrides: [
+      authFlowProvider.overrideWithValue(authFlow),
       authStorageProvider.overrideWithValue(storage),
       tokenRefreshServiceProvider.overrideWithValue(refreshService),
     ],
+    authFlow: authFlow,
     storage: storage,
     refreshService: refreshService,
   );
@@ -414,6 +431,28 @@ class TestData {
       issuerDiscoveryUrl: issuerDiscoveryUrl,
       clientId: clientId,
       idToken: idToken,
+    );
+  }
+
+  /// Creates a PreAuthState for web auth flow testing.
+  ///
+  /// By default creates a valid (non-expired) state. Use [expired] parameter
+  /// to create a state that expired 10 minutes ago.
+  static PreAuthState createPreAuthState({
+    bool expired = false,
+    String issuerId = 'issuer-1',
+    String discoveryUrl = 'https://idp.example.com/.well-known/openid-configuration',
+    String clientId = 'client-app',
+  }) {
+    final createdAt = expired
+        ? DateTime.now().subtract(const Duration(minutes: 10))
+        : DateTime.now();
+
+    return PreAuthState(
+      issuerId: issuerId,
+      discoveryUrl: discoveryUrl,
+      clientId: clientId,
+      createdAt: createdAt,
     );
   }
 }

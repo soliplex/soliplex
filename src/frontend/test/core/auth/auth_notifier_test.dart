@@ -2,8 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:soliplex_client/soliplex_client.dart';
+import 'package:soliplex_frontend/core/auth/auth_flow.dart' as auth_flow;
 import 'package:soliplex_frontend/core/auth/auth_provider.dart';
 import 'package:soliplex_frontend/core/auth/auth_state.dart';
+import 'package:soliplex_frontend/core/auth/auth_storage.dart';
 
 import '../../helpers/test_helpers.dart';
 
@@ -13,6 +15,7 @@ void main() {
 
   setUpAll(() {
     registerFallbackValue(TestData.createAuthenticated());
+    registerFallbackValue(TestData.createPreAuthState());
   });
 
   setUp(() {
@@ -500,6 +503,173 @@ void main() {
           clientId: any(named: 'clientId'),
         ),
       );
+    });
+  });
+
+  group('AuthNotifier.completeWebAuth', () {
+    Future<ProviderContainer> setupUnauthenticatedContainer() async {
+      when(() => mockStorage.loadTokens()).thenAnswer((_) async => null);
+      when(() => mockStorage.saveTokens(any())).thenAnswer((_) async {});
+      when(() => mockStorage.loadPreAuthState()).thenAnswer((_) async => null);
+      when(() => mockStorage.clearPreAuthState()).thenAnswer((_) async {});
+
+      final container = createContainer()..read(authProvider);
+      await waitForAuthRestore(container);
+
+      expect(container.read(authProvider), isA<Unauthenticated>());
+      return container;
+    }
+
+    test('creates Authenticated with issuer from pre-auth state', () async {
+      final container = await setupUnauthenticatedContainer();
+      addTearDown(container.dispose);
+
+      final preAuthState = TestData.createPreAuthState(
+        issuerId: 'test-issuer',
+        discoveryUrl: 'https://test.com/.well-known/openid-configuration',
+        clientId: 'test-client',
+      );
+
+      when(() => mockStorage.loadPreAuthState())
+          .thenAnswer((_) async => preAuthState);
+
+      await container.read(authProvider.notifier).completeWebAuth(
+            accessToken: 'web-access-token',
+            refreshToken: 'web-refresh-token',
+            expiresIn: 3600,
+          );
+
+      final state = container.read(authProvider);
+      expect(state, isA<Authenticated>());
+
+      final auth = state as Authenticated;
+      expect(auth.accessToken, 'web-access-token');
+      expect(auth.refreshToken, 'web-refresh-token');
+      expect(auth.issuerId, 'test-issuer');
+      expect(
+        auth.issuerDiscoveryUrl,
+        'https://test.com/.well-known/openid-configuration',
+      );
+      expect(auth.clientId, 'test-client');
+      expect(auth.idToken, isEmpty); // Web doesn't have id_token
+    });
+
+    test('clears pre-auth state after reading', () async {
+      final container = await setupUnauthenticatedContainer();
+      addTearDown(container.dispose);
+
+      final preAuthState = TestData.createPreAuthState();
+      when(() => mockStorage.loadPreAuthState())
+          .thenAnswer((_) async => preAuthState);
+
+      await container.read(authProvider.notifier).completeWebAuth(
+            accessToken: 'web-access-token',
+          );
+
+      verify(() => mockStorage.clearPreAuthState()).called(1);
+    });
+
+    test('throws AuthException when pre-auth state is missing', () async {
+      final container = await setupUnauthenticatedContainer();
+      addTearDown(container.dispose);
+
+      // loadPreAuthState returns null (no pre-auth state)
+      when(() => mockStorage.loadPreAuthState()).thenAnswer((_) async => null);
+
+      expect(
+        () => container.read(authProvider.notifier).completeWebAuth(
+              accessToken: 'web-access-token',
+            ),
+        throwsA(isA<auth_flow.AuthException>()),
+      );
+    });
+
+    test('uses fallback expiry when expiresIn is null', () async {
+      final container = await setupUnauthenticatedContainer();
+      addTearDown(container.dispose);
+
+      final preAuthState = TestData.createPreAuthState();
+      when(() => mockStorage.loadPreAuthState())
+          .thenAnswer((_) async => preAuthState);
+
+      final before = DateTime.now();
+      // Call without expiresIn to test fallback behavior
+      await container.read(authProvider.notifier).completeWebAuth(
+            accessToken: 'web-access-token',
+          );
+      final after = DateTime.now();
+
+      final state = container.read(authProvider) as Authenticated;
+
+      // Should use fallback lifetime (30 minutes from TokenRefreshService)
+      expect(
+        state.expiresAt.isAfter(before.add(const Duration(minutes: 29))),
+        isTrue,
+      );
+      expect(
+        state.expiresAt.isBefore(after.add(const Duration(minutes: 31))),
+        isTrue,
+      );
+    });
+
+    test('saves tokens to storage', () async {
+      final container = await setupUnauthenticatedContainer();
+      addTearDown(container.dispose);
+
+      final preAuthState = TestData.createPreAuthState();
+      when(() => mockStorage.loadPreAuthState())
+          .thenAnswer((_) async => preAuthState);
+
+      await container.read(authProvider.notifier).completeWebAuth(
+            accessToken: 'web-access-token',
+            refreshToken: 'web-refresh-token',
+          );
+
+      verify(() => mockStorage.saveTokens(any())).called(1);
+    });
+
+    test('continues when storage save fails', () async {
+      final container = await setupUnauthenticatedContainer();
+      addTearDown(container.dispose);
+
+      final preAuthState = TestData.createPreAuthState();
+      when(() => mockStorage.loadPreAuthState())
+          .thenAnswer((_) async => preAuthState);
+      when(() => mockStorage.saveTokens(any()))
+          .thenThrow(Exception('Storage full'));
+
+      // Should not throw - storage failure is non-fatal
+      await container.read(authProvider.notifier).completeWebAuth(
+            accessToken: 'web-access-token',
+          );
+
+      // State should still be updated
+      final state = container.read(authProvider);
+      expect(state, isA<Authenticated>());
+    });
+  });
+
+  group('PreAuthState', () {
+    test('isExpired returns true when older than maxAge', () {
+      final expiredState = PreAuthState(
+        issuerId: 'test',
+        discoveryUrl: 'https://test.com',
+        clientId: 'client',
+        createdAt: DateTime.now().subtract(const Duration(minutes: 6)),
+      );
+
+      expect(expiredState.isExpired, isTrue);
+    });
+
+    test('isExpired returns false when within maxAge', () {
+      final validState = PreAuthState(
+        issuerId: 'test',
+        discoveryUrl: 'https://test.com',
+        clientId: 'client',
+        createdAt: DateTime.now().subtract(const Duration(minutes: 4)),
+      );
+
+      expect(validState.isExpired, isFalse);
     });
   });
 }
