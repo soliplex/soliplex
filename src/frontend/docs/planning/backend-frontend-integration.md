@@ -1,157 +1,278 @@
 # Backend-Frontend Integration Notes
 
-This document tracks backend limitations that affect the frontend implementation,
-and opportunities where backend changes would simplify the frontend.
+This document tracks backend changes needed for web platform support, organized by
+priority.
 
-## Current Backend Limitations
+## Quick Reference: Backend Changes Needed
 
-### 1. OAuth State Parameter Not Echoed (CAT II Security)
+### 🚫 BLOCKING - Web Platform Non-Functional Without These
 
-**Location**: BFF OAuth flow (`/api/login/{provider}`)
+| Change | Endpoint | Description |
+|--------|----------|-------------|
+| **BFF Token Refresh** | `POST /api/refresh` | Proxy refresh requests to IdP (CORS blocks direct calls) |
 
-**Issue**: The BFF doesn't generate or echo an OAuth `state` parameter in the callback.
-OAuth 2.0 RFC 6749 Section 10.12 recommends a cryptographically random `state` parameter
-bound to the user's session for CSRF protection.
+### 🔒 SECURITY - Recommended for Production
 
-**Frontend Workaround**: Uses time-limited `PreAuthState` (5-minute expiry) stored in
-localStorage before redirect. This provides partial CSRF protection but is not as robust
-as proper state parameter validation.
+| Change | Endpoint | Description |
+|--------|----------|-------------|
+| **OAuth State Parameter** | `/api/login/{provider}` | Echo `state` param for CSRF protection |
+| **Fragment-based Tokens** | Callback redirect | Use `#token=` instead of `?token=` |
 
-**Impact**: Narrow window (5 minutes) for login CSRF attacks. An attacker could initiate
-an OAuth flow, then trick a victim into completing auth with the attacker's account within
-the time window.
+### ✨ CONVENIENCE - Simplifies Frontend Code
 
-**Backend Change to Simplify**: Generate a cryptographic nonce, include it in the redirect
-URL as `state` parameter, and echo it back in the callback URL. Frontend would then:
+| Change | Endpoint | Description |
+|--------|----------|-------------|
+| **Include id_token** | Callback redirect | Enables proper OIDC logout |
+| **Include Issuer Metadata** | Callback redirect | Removes need for PreAuthState storage |
 
-1. Generate state locally and include in `return_to` URL
-2. BFF echoes state in callback
-3. Frontend validates state matches before accepting tokens
+---
 
-Files affected if backend is updated:
+## API Specifications
 
-- `lib/core/auth/auth_flow_web.dart` - Add state parameter generation
-- `lib/core/auth/auth_notifier.dart` - Validate state in `completeWebAuth()`
-- `lib/core/auth/auth_storage.dart` - Store state alongside PreAuthState
+### 1. BFF Token Refresh Endpoint (BLOCKING)
 
-### 2. Tokens Delivered via URL Query Parameters (CAT III)
+**Status**: ❌ Missing - Web auth broken without this
 
-**Location**: BFF callback redirect
+**Why needed**: Frontend cannot call IdP token endpoint directly due to CORS. Browsers
+block cross-origin requests to `https://pydio-kc.enfoldsystems.net/...` from the
+frontend origin.
 
-**Issue**: The BFF returns tokens in URL query parameters (`?token=xxx&refresh_token=xxx`).
-This briefly exposes tokens in:
-
-- Browser address bar
-- Browser history (until cleanup)
-- Potential referrer headers
-- Browser extensions observing URL changes
-
-**Frontend Workaround**: Immediately calls `replaceState()` to remove tokens from browser
-history. CSP blocks external resources that could leak referrer.
-
-**Backend Change to Simplify**: Use one of:
-
-1. **Fragment-based delivery** (`#access_token=`) - Fragments aren't sent in referrers
-2. **POST to callback** - Tokens in request body, not URL
-3. **Authorization code flow** - Return code in URL, exchange for tokens via POST
-
-Files affected if backend is updated:
-
-- `lib/core/auth/web_auth_callback_web.dart` - Update token extraction logic
-- `lib/core/auth/callback_params.dart` - Update parameter model
-
-### 3. No id_token in Web BFF Flow
-
-**Location**: BFF token response
-
-**Issue**: The BFF doesn't return `id_token` in the callback. OIDC logout requires
-`id_token_hint` to properly terminate the IdP session.
-
-**Frontend Workaround**: Uses empty string for `idToken` on web. Web logout only clears
-local tokens without redirecting to IdP's `end_session_endpoint`.
-
-**Impact**: Users remain logged into the IdP even after "logging out" of the app. If
-they visit the login page again, they may be auto-logged-in without re-entering
-credentials.
-
-**Backend Change to Simplify**: Include `id_token` in the callback redirect. Frontend
-would store it and use for proper OIDC logout.
-
-Files affected if backend is updated:
-
-- `lib/core/auth/callback_params.dart` - Add `idToken` field to `WebCallbackParams`
-- `lib/core/auth/auth_notifier.dart` - Store id_token from callback
-- `lib/core/auth/auth_flow_web.dart` - Implement `endSession()` with id_token_hint
-
-### 4. Issuer Metadata Not in Callback
-
-**Location**: BFF callback redirect
-
-**Issue**: The BFF callback only includes tokens (`token`, `refresh_token`, `expires_in`,
-`error`, `error_description`). It doesn't include issuer metadata needed for token
-refresh (issuer ID, discovery URL, client ID).
-
-**Frontend Workaround**: Saves `PreAuthState` (issuer metadata) to localStorage before
-redirect. After callback, loads PreAuthState to get issuer info needed for refresh.
-
-**Complexity**: Requires two storage operations, expiry checking, and cleanup logic.
-Creates the "duplicate expiry check" pattern that was recently refactored.
-
-**Backend Change to Simplify**: Include issuer metadata in callback:
+**Error without this**:
 
 ```text
-?token=xxx&refresh_token=xxx&expires_in=xxx&issuer_id=xxx&discovery_url=xxx&client_id=xxx
+Access to fetch at 'https://pydio-kc.../token' from origin 'http://localhost:...'
+has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header
 ```
 
-Or return a signed/encrypted blob that frontend can pass back for refresh.
+**Specification**:
 
-Files affected if backend is updated:
+```text
+POST /api/refresh
+Content-Type: application/json
+
+Request:
+{
+  "refresh_token": "eyJhbGci..."
+}
+
+Response (success):
+{
+  "access_token": "eyJhbGci...",
+  "refresh_token": "eyJhbGci...",   // New refresh token if rotated
+  "expires_in": 3600,
+  "token_type": "Bearer"
+}
+
+Response (error - invalid/expired refresh token):
+HTTP 401
+{
+  "error": "invalid_grant",
+  "error_description": "Refresh token expired"
+}
+
+Response (error - other):
+HTTP 500
+{
+  "error": "server_error",
+  "error_description": "..."
+}
+```
+
+**Backend implementation**:
+
+1. Extract `refresh_token` from request body
+2. Call IdP token endpoint server-side:
+
+   ```text
+   POST https://{idp}/protocol/openid-connect/token
+   Content-Type: application/x-www-form-urlencoded
+
+   grant_type=refresh_token&
+   refresh_token={refresh_token}&
+   client_id={client_id}&
+   client_secret={client_secret}  // If confidential client
+   ```
+
+3. Return IdP response to frontend (or transform errors)
+
+**Frontend changes when ready**:
+
+- `packages/soliplex_client/lib/src/auth/token_refresh_service.dart`
+- `lib/core/auth/auth_notifier.dart`
+
+---
+
+### 2. OAuth State Parameter Echo (SECURITY)
+
+**Status**: ⚠️ Missing - CSRF vulnerability (CAT II)
+
+**Current behavior**: BFF ignores any `state` parameter in the OAuth flow.
+
+**Why needed**: OAuth 2.0 RFC 6749 Section 10.12 requires `state` for CSRF protection.
+Without it, an attacker could:
+
+1. Start OAuth flow on their own device
+2. Get the callback URL with tokens
+3. Trick victim into visiting that URL
+4. Victim's session now uses attacker's account
+
+**Specification**:
+
+```text
+Current:
+  GET /api/login/pydio?return_to=https://app.example.com/callback
+  → Redirects to IdP
+  → IdP redirects to: https://app.example.com/callback?token=xxx
+
+With state:
+  GET /api/login/pydio?return_to=https://app.example.com/callback&state=abc123
+  → Redirects to IdP with state=abc123
+  → IdP redirects to: https://app.example.com/callback?token=xxx&state=abc123
+```
+
+**Backend implementation**:
+
+1. Accept `state` parameter in `/api/login/{provider}`
+2. Include `state` in redirect to IdP
+3. Echo `state` in callback redirect URL
+
+**Frontend changes when ready**:
+
+- `lib/core/auth/auth_flow_web.dart` - Generate cryptographic state
+- `lib/core/auth/auth_notifier.dart` - Validate state in callback
+
+---
+
+### 3. Fragment-Based Token Delivery (SECURITY)
+
+**Status**: ⚠️ Current method exposes tokens (CAT III)
+
+**Current behavior**: Tokens in URL query string `?token=xxx` are:
+
+- Visible in browser address bar for ~1-2 seconds
+- Stored in browser history
+- Potentially sent in Referer headers
+
+**Why needed**: URL fragments (`#token=xxx`) are:
+
+- Never sent in HTTP requests (including Referer)
+- Not stored in browser history in the same way
+- Cleared faster by frontend code
+
+**Specification**:
+
+```text
+Current:
+  Redirect to: https://app.example.com/?token=xxx&refresh_token=yyy
+
+With fragments:
+  Redirect to: https://app.example.com/#access_token=xxx&refresh_token=yyy&expires_in=3600
+```
+
+**Note**: This follows the OAuth 2.0 Implicit Flow response format, which is well-understood
+by frontend libraries.
+
+**Frontend changes when ready**:
+
+- `lib/core/auth/web_auth_callback_web.dart` - Extract from fragment
+- `lib/core/auth/callback_params.dart` - Update parameter model
+
+---
+
+### 4. Include id_token in Callback (CONVENIENCE)
+
+**Status**: ⚠️ Missing - Logout doesn't terminate IdP session
+
+**Current behavior**: BFF callback only returns `token`, `refresh_token`, `expires_in`.
+No `id_token` is provided.
+
+**Why needed**: OIDC logout (`end_session_endpoint`) requires `id_token_hint` to properly
+terminate the IdP session. Without it:
+
+- User clicks "Logout" in app
+- App clears local tokens
+- User visits app again
+- IdP auto-logs them in (session still active)
+
+**Specification**:
+
+```text
+Current:
+  ?token=xxx&refresh_token=yyy&expires_in=3600
+
+With id_token:
+  ?token=xxx&refresh_token=yyy&expires_in=3600&id_token=zzz
+```
+
+**Frontend changes when ready**:
+
+- `lib/core/auth/callback_params.dart` - Add `idToken` field
+- `lib/core/auth/auth_flow_web.dart` - Use for `endSession()`
+
+---
+
+### 5. Include Issuer Metadata in Callback (CONVENIENCE)
+
+**Status**: ⚠️ Missing - Frontend uses complex workaround
+
+**Current behavior**: Frontend must:
+
+1. Store issuer info in localStorage before OAuth redirect (`PreAuthState`)
+2. Set 5-minute expiry for security
+3. Load and validate after callback
+4. Clean up storage
+
+**Why needed**: Simplifies frontend significantly. Frontend needs issuer metadata
+(discovery URL, client ID) for token refresh.
+
+**Specification**:
+
+```text
+Current:
+  ?token=xxx&refresh_token=yyy&expires_in=3600
+
+With metadata:
+  ?token=xxx&refresh_token=yyy&expires_in=3600&issuer_id=pydio&discovery_url=https://...&client_id=xxx
+```
+
+**Alternative**: If implementing BFF refresh endpoint (#1), this becomes less important
+since the backend handles refresh internally.
+
+**Frontend changes when ready**:
 
 - `lib/core/auth/callback_params.dart` - Add issuer fields
 - `lib/core/auth/auth_notifier.dart` - Remove PreAuthState handling
 - `lib/core/auth/auth_storage.dart` - Remove PreAuthState methods
-- `lib/core/auth/auth_storage_web.dart` - Remove PreAuthState storage
+
+---
+
+## Current Frontend Workarounds
+
+| Issue | Workaround | Limitation |
+|-------|------------|------------|
+| Token refresh CORS | None | ❌ Web auth broken after token expires |
+| CSRF (no state) | PreAuthState with 5-min expiry | Narrow attack window remains |
+| Tokens in URL | Clear via `replaceState()` in main() | ~1-2s visibility during load |
+| No id_token | Skip IdP logout | Users auto-login on return |
+| No issuer metadata | PreAuthState localStorage | Complex code, expiry handling |
+
+---
 
 ## Summary Table
 
-| Limitation | Security Impact | Frontend Complexity | Backend Fix Effort |
-|------------|-----------------|--------------------|--------------------|
-| No state parameter | CAT II (CSRF) | Medium | Low - add state echo |
-| Tokens in URL | CAT III | Low (cleanup works) | Medium - change delivery |
-| No id_token | User confusion | Low | Low - include in response |
-| No issuer metadata | None | High | Low - include in response |
+| Issue | Priority | Security | Frontend Impact | Backend Effort |
+|-------|----------|----------|-----------------|----------------|
+| No BFF refresh | **BLOCKING** | N/A | Broken | Medium |
+| No state param | Security | CAT II | Workaround exists | Low |
+| Tokens in query | Security | CAT III | Workaround exists | Medium |
+| No id_token | Convenience | None | Workaround exists | Low |
+| No issuer metadata | Convenience | None | Complex workaround | Low |
 
-## Recommendation Priority
-
-1. **State parameter** (security improvement + simplifies frontend)
-2. **Issuer metadata in callback** (simplifies frontend significantly)
-3. **id_token in callback** (enables proper logout)
-4. **Token delivery method** (defense-in-depth, current mitigation adequate)
-
-## Acceptance Criteria for Backend Changes
-
-If backend team implements these changes:
-
-### State Parameter
-
-- BFF generates cryptographic random state (min 32 bytes, base64url encoded)
-- State included in redirect to IdP
-- State echoed in callback URL as `state` parameter
-- Frontend validates state matches before accepting tokens
-
-### Issuer Metadata
-
-- Callback includes `issuer_id`, `discovery_url`, `client_id` parameters
-- Values match what was passed to `/api/login/{provider}`
-- Frontend can use directly without PreAuthState lookup
-
-### id_token
-
-- Callback includes `id_token` parameter when available from IdP
-- Frontend stores and uses for `end_session_endpoint` redirect
+---
 
 ## References
 
+- OAuth 2.0 RFC 6749: <https://datatracker.ietf.org/doc/html/rfc6749>
 - OAuth 2.0 Security BCP: <https://datatracker.ietf.org/doc/html/draft-ietf-oauth-security-topics>
-- OIDC Core 1.0 Section 12.2 (id_token in refresh): <https://openid.net/specs/openid-connect-core-1_0.html#RefreshTokenResponse>
+- OIDC Core 1.0: <https://openid.net/specs/openid-connect-core-1_0.html>
 - OWASP CSRF Prevention: <https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html>
