@@ -69,7 +69,7 @@ jobs:
 
       - name: Run unit tests with coverage
         run: |
-          py.test -s --cov-fail-under=50
+          py.test -s --cov-fail-under=100
 
       - name: Run functional tests
         run: |
