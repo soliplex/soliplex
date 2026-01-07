@@ -1,5 +1,6 @@
-import 'package:flutter/foundation.dart';
-import 'package:flutter_appauth/flutter_appauth.dart';
+import 'package:soliplex_frontend/core/auth/auth_flow_native.dart'
+    if (dart.library.js_interop) 'package:soliplex_frontend/core/auth/auth_flow_web.dart'
+    as impl;
 import 'package:soliplex_frontend/core/auth/oidc_issuer.dart';
 
 /// Result of a successful authentication.
@@ -27,62 +28,48 @@ class AuthException implements Exception {
   String toString() => 'AuthException: $message';
 }
 
-const _redirectUri = 'ai.soliplex.client://callback';
-
-/// Authenticate using OIDC via flutter_appauth.
+/// Thrown when web auth triggers a redirect to the IdP.
 ///
-/// Opens system browser to IdP login page, handles PKCE automatically.
-/// The [appAuth] parameter allows injection for testing.
-Future<AuthResult> authenticate(
-  OidcIssuer issuer, {
-  FlutterAppAuth appAuth = const FlutterAppAuth(),
-}) async {
-  try {
-    final result = await appAuth.authorizeAndExchangeCode(
-      AuthorizationTokenRequest(
-        issuer.clientId,
-        _redirectUri,
-        discoveryUrl: issuer.discoveryUrl,
-        scopes: issuer.scope.split(' '),
-        // Use ephemeral session to avoid "wants to sign in" prompts
-        externalUserAgent:
-            ExternalUserAgent.ephemeralAsWebAuthenticationSession,
-      ),
-    );
+/// On web, [AuthFlow.authenticate] redirects the browser to the IdP login page
+/// and throws this exception. Auth completion happens via callback URL, handled
+/// by AuthNotifier.completeWebAuth.
+///
+/// This exception makes the web auth flow type-honest: instead of returning a
+/// never-completing Future<AuthResult>, we throw to indicate "auth initiated,
+/// completion via callback."
+class AuthRedirectInitiated implements Exception {
+  const AuthRedirectInitiated();
 
-    return AuthResult(
-      accessToken: result.accessToken!,
-      refreshToken: result.refreshToken,
-      idToken: result.idToken,
-      expiresAt: result.accessTokenExpirationDateTime,
-    );
-  } on Exception {
-    // Note: Don't log exception details - may contain sensitive data
-    debugPrint('Authentication failed');
-    throw const AuthException('Authentication failed. Please try again.');
-  }
+  @override
+  String toString() => 'AuthRedirectInitiated: Browser redirecting to IdP';
 }
 
-/// End the OIDC session at the IdP.
+/// Platform authentication service.
 ///
-/// Opens system browser to IdP's end_session_endpoint.
-/// The [appAuth] parameter allows injection for testing.
-Future<void> endSession({
-  required String discoveryUrl,
-  required String idToken,
-  FlutterAppAuth appAuth = const FlutterAppAuth(),
-}) async {
-  try {
-    await appAuth.endSession(
-      EndSessionRequest(
-        idTokenHint: idToken,
-        discoveryUrl: discoveryUrl,
-        postLogoutRedirectUrl: _redirectUri,
-      ),
-    );
-  } on Exception {
-    // endSession failure shouldn't prevent local logout
-    // Note: Don't log exception details - may contain sensitive data
-    debugPrint('IdP session termination failed (local logout proceeds)');
-  }
+/// Handles OIDC authentication with platform-specific implementations:
+/// - Native (iOS/macOS): Opens system browser via flutter_appauth
+/// - Web: Redirects to backend BFF endpoint which handles OAuth flow
+abstract class AuthFlow {
+  /// Authenticate using OIDC.
+  ///
+  /// Returns [AuthResult] on success, throws [AuthException] on failure.
+  Future<AuthResult> authenticate(OidcIssuer issuer);
+
+  /// End the OIDC session.
+  ///
+  /// Platform behavior:
+  /// - Native: Opens browser to IdP's end_session_endpoint
+  /// - Web: No-op (local logout only, no IdP redirect)
+  Future<void> endSession({
+    required String discoveryUrl,
+    required String idToken,
+  });
+
+  /// Whether this is a web platform implementation.
+  ///
+  /// Used to determine if web-specific callback handling is needed.
+  bool get isWeb;
 }
+
+/// Creates a platform-appropriate [AuthFlow] implementation.
+AuthFlow createAuthFlow() => impl.createAuthFlow();
