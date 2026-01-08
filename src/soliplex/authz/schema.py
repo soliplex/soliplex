@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import contextlib
 import datetime
-import enum
 import typing
 
 import sqlalchemy
 from sqlalchemy import orm as sqla_orm
 from sqlalchemy import schema as sqla_schema
+from sqlalchemy import sql as sqla_sql
 from sqlalchemy.ext import asyncio as sqla_asyncio
 from sqlalchemy.sql import sqltypes as sqla_sqltypes
 
+from soliplex import authz as authz_package
 from soliplex import config
 
 AsyncAttrs = sqla_asyncio.AsyncAttrs
@@ -36,14 +38,8 @@ NAMING_CONVENTION = {
 }
 
 JSON_Mapped_From = dict[str, typing.Any]
-UserToken = dict[str, typing.Any]
 
 metadata = sqla_schema.MetaData(naming_convention=NAMING_CONVENTION)
-
-
-class AllowDeny(enum.Enum):
-    ALLOW = "allow"
-    DENY = "deny"
 
 
 class Base(AsyncAttrs, DeclarativeBase):
@@ -76,8 +72,8 @@ class RoomPolicy(Base):
         default=_timestamp,
     )
 
-    default_allow_deny: Mapped[AllowDeny] = mapped_column(
-        default=AllowDeny.DENY,
+    default_allow_deny: Mapped[authz_package.AllowDeny] = mapped_column(
+        default=authz_package.AllowDeny.DENY,
     )
 
     acl_entries: Mapped[list[ACLEntry]] = relationship(
@@ -87,7 +83,10 @@ class RoomPolicy(Base):
         passive_deletes=True,
     )
 
-    def check_token(self, user_token: UserToken | None) -> AllowDeny:
+    def check_token(
+        self,
+        user_token: authz_package.UserToken | None,
+    ) -> authz_package.AllowDeny:
         """Check the supplied token against our ACL entries
 
         If one of them returns non-None, return that value.
@@ -122,7 +121,7 @@ class ACLEntry(Base):
         default=_timestamp,
     )
 
-    allow_deny: Mapped[AllowDeny]
+    allow_deny: Mapped[authz_package.AllowDeny]
 
     # Discriminators
     everyone: Mapped[bool] = mapped_column(default=False)
@@ -130,7 +129,10 @@ class ACLEntry(Base):
     preferred_username: Mapped[str | None] = mapped_column(default=None)
     email: Mapped[str | None] = mapped_column(default=None)
 
-    def check_token(self, user_token: UserToken | None) -> AllowDeny | None:
+    def check_token(
+        self,
+        user_token: authz_package.UserToken | None,
+    ) -> authz_package.AllowDeny | None:
         """Check the supplied token against our discriminators
 
         If 'user_token' matches one of our discriminators, return our flag
@@ -155,6 +157,76 @@ class ACLEntry(Base):
                 return self.allow_deny
 
         return None
+
+
+class RoomAuthorization(authz_package.RoomAuthorization):
+    def __init__(self, session: sqla_asyncio.AsyncSession):
+        self._session = session
+
+    @property
+    @contextlib.asynccontextmanager
+    async def session(self):
+        async with self._session.begin():
+            yield self._session
+
+    async def _find_room_policy(
+        self,
+        room_id: str,
+        session,
+    ) -> RoomPolicy | None:
+        query = sqla_sql.select(RoomPolicy).where(
+            RoomPolicy.room_id == room_id
+        )
+        policy = (await session.scalars(query)).first()
+
+        return policy
+
+    async def check_room_access(
+        self,
+        room_id: str,
+        user_token: authz_package.UserToken | None,
+    ) -> bool:
+        """Can the user represented by 'user_token' can access a room?
+
+        If an authorization policy exists for the room, check that it allows
+        access for the user token.
+
+        Otherwise, return True (i.e., the room is public).
+        """
+        async with self.session as session:
+            policy = await self._find_room_policy(room_id, session)
+
+        if policy is not None:
+            await policy.awaitable_attrs.acl_entries
+            allow_deny = policy.check_token(user_token)
+            return allow_deny == authz_package.AllowDeny.ALLOW
+        else:
+            return True
+
+    async def filter_room_ids(
+        self,
+        room_ids: list[str],
+        user_token: authz_package.UserToken | None,
+    ) -> list[str]:
+        """Filter room IDs based on room authz policies for 'user_token'
+
+        For each room, if an authorization policy exists for the room,
+        check that it allows access for the user token.
+
+        Otherwise, treat the room as public.
+        """
+        result = []
+        async with self.session as session:
+            for room_id in room_ids:
+                policy = await self._find_room_policy(room_id, session)
+                if policy is not None:
+                    await policy.awaitable_attrs.acl_entries
+                    allow_deny = policy.check_token(user_token)
+                    if allow_deny != authz_package.AllowDeny.ALLOW:
+                        continue
+                result.append(room_id)
+
+        return result
 
 
 def get_session(

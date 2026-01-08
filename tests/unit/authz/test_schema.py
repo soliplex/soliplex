@@ -2,9 +2,12 @@ import datetime
 from unittest import mock
 
 import pytest
+import pytest_asyncio
+import sqlalchemy
 from sqlalchemy import orm as sqla_orm
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
+from soliplex import authz as authz_package
 from soliplex import config
 from soliplex.authz import schema as authz_schema
 
@@ -22,12 +25,43 @@ def test__timestamp(dt, tz):
     dt.now.assert_called_once_with(tz.utc)
 
 
+@pytest.fixture
+def the_engine():
+    engine = sqlalchemy.create_engine(config.SYNC_MEMORY_ENGINE_URL)
+
+    yield engine
+
+    engine.dispose()
+
+
+@pytest.fixture
+def the_session(the_engine):
+    with the_engine.connect() as connection:
+        authz_schema.Base.metadata.create_all(connection)
+
+    assert connection.closed
+
+    with sqla_orm.Session(bind=the_engine) as session:
+        yield session
+
+
+def test_roompolicy_ctor(the_session):
+    policy = authz_schema.RoomPolicy(
+        room_id=ROOM_ID,
+    )
+
+    the_session.add(policy)
+    the_session.commit()
+
+    assert policy.default_allow_deny == authz_package.AllowDeny.DENY
+
+
 @pytest.mark.parametrize("token", [None, {}, {"foo": "bar"}])
 @pytest.mark.parametrize(
     "default_allow_deny",
     [
-        authz_schema.AllowDeny.ALLOW,
-        authz_schema.AllowDeny.DENY,
+        authz_package.AllowDeny.ALLOW,
+        authz_package.AllowDeny.DENY,
     ],
 )
 def test_roompolicy_check_token_w_empty(default_allow_deny, token):
@@ -45,8 +79,8 @@ def test_roompolicy_check_token_w_empty(default_allow_deny, token):
 @pytest.mark.parametrize(
     "default_allow_deny",
     [
-        authz_schema.AllowDeny.ALLOW,
-        authz_schema.AllowDeny.DENY,
+        authz_package.AllowDeny.ALLOW,
+        authz_package.AllowDeny.DENY,
     ],
 )
 def test_roompolicy_check_token_w_acl_miss(default_allow_deny, token):
@@ -56,7 +90,7 @@ def test_roompolicy_check_token_w_acl_miss(default_allow_deny, token):
     )
     _entry = authz_schema.ACLEntry(
         room_policy=policy,
-        allow_deny=authz_schema.AllowDeny.ALLOW,
+        allow_deny=authz_package.AllowDeny.ALLOW,
     )
 
     found = policy.check_token(token)
@@ -68,8 +102,8 @@ def test_roompolicy_check_token_w_acl_miss(default_allow_deny, token):
 @pytest.mark.parametrize(
     "default_allow_deny",
     [
-        authz_schema.AllowDeny.ALLOW,
-        authz_schema.AllowDeny.DENY,
+        authz_package.AllowDeny.ALLOW,
+        authz_package.AllowDeny.DENY,
     ],
 )
 def test_roompolicy_check_token_w_acl_hit(default_allow_deny, token):
@@ -79,20 +113,20 @@ def test_roompolicy_check_token_w_acl_hit(default_allow_deny, token):
     )
     _entry = authz_schema.ACLEntry(
         room_policy=policy,
-        allow_deny=authz_schema.AllowDeny.ALLOW,
+        allow_deny=authz_package.AllowDeny.ALLOW,
         everyone=True,
     )
 
     found = policy.check_token(token)
 
-    assert found == authz_schema.AllowDeny.ALLOW
+    assert found == authz_package.AllowDeny.ALLOW
 
 
 @pytest.fixture
 def the_room_policy():
     return authz_schema.RoomPolicy(
         room_id=ROOM_ID,
-        default_allow_deny=authz_schema.AllowDeny.DENY,
+        default_allow_deny=authz_package.AllowDeny.DENY,
     )
 
 
@@ -100,8 +134,8 @@ def the_room_policy():
 @pytest.mark.parametrize(
     "allow_deny",
     [
-        authz_schema.AllowDeny.ALLOW,
-        authz_schema.AllowDeny.DENY,
+        authz_package.AllowDeny.ALLOW,
+        authz_package.AllowDeny.DENY,
     ],
 )
 def test_aclentry_check_token_wo_discrim(the_room_policy, allow_deny, token):
@@ -119,8 +153,8 @@ def test_aclentry_check_token_wo_discrim(the_room_policy, allow_deny, token):
 @pytest.mark.parametrize(
     "allow_deny",
     [
-        authz_schema.AllowDeny.ALLOW,
-        authz_schema.AllowDeny.DENY,
+        authz_package.AllowDeny.ALLOW,
+        authz_package.AllowDeny.DENY,
     ],
 )
 def test_aclentry_check_token_w_everyone(the_room_policy, allow_deny, token):
@@ -146,8 +180,8 @@ def test_aclentry_check_token_w_everyone(the_room_policy, allow_deny, token):
 @pytest.mark.parametrize(
     "allow_deny",
     [
-        authz_schema.AllowDeny.ALLOW,
-        authz_schema.AllowDeny.DENY,
+        authz_package.AllowDeny.ALLOW,
+        authz_package.AllowDeny.DENY,
     ],
 )
 def test_aclentry_check_token_w_authenticated(
@@ -182,8 +216,8 @@ def test_aclentry_check_token_w_authenticated(
 @pytest.mark.parametrize(
     "allow_deny",
     [
-        authz_schema.AllowDeny.ALLOW,
-        authz_schema.AllowDeny.DENY,
+        authz_package.AllowDeny.ALLOW,
+        authz_package.AllowDeny.DENY,
     ],
 )
 def test_aclentry_check_token_w_preferred_username(
@@ -218,8 +252,8 @@ def test_aclentry_check_token_w_preferred_username(
 @pytest.mark.parametrize(
     "allow_deny",
     [
-        authz_schema.AllowDeny.ALLOW,
-        authz_schema.AllowDeny.DENY,
+        authz_package.AllowDeny.ALLOW,
+        authz_package.AllowDeny.DENY,
     ],
 )
 def test_aclentry_check_token_w_email(
@@ -240,6 +274,100 @@ def test_aclentry_check_token_w_email(
         assert found == allow_deny
     else:
         assert found is None
+
+
+@pytest.fixture
+def faux_sqlaa_session():
+    return mock.create_autospec(
+        sqla_asyncio.AsyncSession,
+    )
+
+
+@pytest.mark.anyio
+async def test_roomauthorization_session(faux_sqlaa_session):
+    ra = authz_schema.RoomAuthorization(faux_sqlaa_session)
+    begin = faux_sqlaa_session.begin
+
+    async with ra.session as session:
+        assert session is faux_sqlaa_session
+
+        begin.assert_called_once_with()
+        begin.return_value.__aenter__.assert_called_once_with()
+        begin.return_value.__aexit__.assert_not_called()
+
+    begin.return_value.__aenter__.assert_called_once_with()
+
+
+@pytest_asyncio.fixture()
+async def the_async_engine():  # pragma: NO COVER
+    engine = sqla_asyncio.create_async_engine(
+        config.ASYNC_MEMORY_ENGINE_URL,
+    )
+    async with engine.begin() as connection:
+        await connection.run_sync(authz_schema.Base.metadata.create_all)
+
+    yield engine
+
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture()
+async def the_async_session(the_async_engine):  # pragma: NO COVER
+    session = sqla_asyncio.AsyncSession(bind=the_async_engine)
+    yield session
+    await session.close()
+
+
+@pytest.mark.asyncio
+async def test_roomauthorization_check_room_access(the_async_session):
+    ra = authz_schema.RoomAuthorization(the_async_session)
+
+    # No policy -> public room
+    assert await ra.check_room_access(ROOM_ID, None)
+
+    # Policy w/ deny as default, no ACL entries
+    denier = authz_schema.RoomPolicy(room_id=ROOM_ID)
+    the_async_session.add(denier)
+    await the_async_session.commit()
+
+    assert not await ra.check_room_access(ROOM_ID, None)
+
+    allower = authz_schema.ACLEntry(
+        room_policy=denier,
+        allow_deny=authz_package.AllowDeny.ALLOW,
+        everyone=True,
+    )
+    the_async_session.add(allower)
+    await the_async_session.commit()
+
+    assert await ra.check_room_access(ROOM_ID, None)
+
+
+@pytest.mark.asyncio
+async def test_roomauthorization_filter_room_ids(the_async_session):
+    ra = authz_schema.RoomAuthorization(the_async_session)
+
+    room_ids = [ROOM_ID]
+
+    # No policy -> public room
+    assert await ra.filter_room_ids(room_ids, None) == room_ids
+
+    # Policy w/ deny as default, no ACL entries
+    denier = authz_schema.RoomPolicy(room_id=ROOM_ID)
+    the_async_session.add(denier)
+    await the_async_session.commit()
+
+    assert await ra.filter_room_ids(room_ids, None) == []
+
+    allower = authz_schema.ACLEntry(
+        room_policy=denier,
+        allow_deny=authz_package.AllowDeny.ALLOW,
+        everyone=True,
+    )
+    the_async_session.add(allower)
+    await the_async_session.commit()
+
+    assert await ra.filter_room_ids(room_ids, None) == room_ids
 
 
 @pytest.mark.parametrize("init_schema", [False, True])

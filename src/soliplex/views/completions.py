@@ -26,7 +26,9 @@ async def get_chat_completions(
 ) -> models.ConfiguredCompletions:
     """Return the completions available to the user"""
     user = authn.authenticate(the_installation, token)
-    completion_configs = the_installation.get_completion_configs(user)
+    completion_configs = await the_installation.get_completion_configs(
+        user=user,
+    )
 
     return {
         key: models.Completion.from_config(completion_config)
@@ -48,9 +50,9 @@ async def get_chat_completion(
     """Return an individual completion"""
     user = authn.authenticate(the_installation, token)
     try:
-        completion_config = the_installation.get_completion_config(
-            completion_id,
-            user,
+        completion_config = await the_installation.get_completion_config(
+            completion_id=completion_id,
+            user=user,
         )
     except KeyError:
         raise fastapi.HTTPException(
@@ -81,17 +83,17 @@ async def post_chat_completion(
     )
 
     try:
-        agent = the_installation.get_agent_for_completion(
-            completion_id,
-            user,
+        agent = await the_installation.get_agent_for_completion(
+            completion_id=completion_id,
+            user=user,
         )
     except KeyError:
         raise fastapi.HTTPException(
             status_code=404, detail=f"No such completion: {completion_id}"
         ) from None
 
-    agent_deps = the_installation.get_agent_deps_for_completion(
-        completion_id,
+    agent_deps = await the_installation.get_agent_deps_for_completion(
+        completion_id=completion_id,
         user=user_profile,
     )
 

@@ -170,6 +170,26 @@ def test_installation_thread_persistence_dburi_async():
     )
 
 
+def test_installation_room_authz_dburi_sync():
+    i_config = mock.create_autospec(config.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    assert (
+        the_installation.room_authz_dburi_sync
+        is i_config.room_authz_dburi_sync
+    )
+
+
+def test_installation_room_authz_dburi_async():
+    i_config = mock.create_autospec(config.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    assert (
+        the_installation.room_authz_dburi_async
+        is i_config.room_authz_dburi_async
+    )
+
+
 @pytest.mark.parametrize("w_oidc_configs", [[], [object()]])
 def test_installation_auth_disabled(w_oidc_configs):
     i_config = mock.create_autospec(config.InstallationConfig)
@@ -190,38 +210,108 @@ def test_installation_oidc_auth_system_configs():
     )
 
 
-def test_installation_get_room_configs(test_user):
+@pytest.fixture
+def r_configs():
     r_config = mock.create_autospec(config.RoomConfig)
-    r_configs = {"room_id": r_config}
+    return {"room_id": r_config}
+
+
+class FauxRoomAuthz:
+    def __init__(self, allowed):
+        self.allowed = allowed
+
+    async def check_room_access(self, room_id, user_token):
+        return self.allowed
+
+    async def filter_room_ids(self, room_ids, user_token):
+        if self.allowed:
+            return room_ids
+        else:
+            return []
+
+
+@pytest.fixture(params=[None, False, True])
+def room_authz(request):
+    kw = {}
+    if request.param is not None:
+        kw["the_room_authz"] = FauxRoomAuthz(request.param)
+    return kw
+
+
+@pytest.mark.anyio
+async def test_installation_get_room_configs(
+    test_user,
+    room_authz,
+    r_configs,
+):
     i_config = mock.create_autospec(config.InstallationConfig)
     i_config.room_configs = r_configs
 
     the_installation = installation.Installation(i_config)
 
-    assert the_installation.get_room_configs(test_user) == r_configs
+    found = await the_installation.get_room_configs(
+        user=test_user,
+        **room_authz,
+    )
+
+    if room_authz:
+        allowed = room_authz["the_room_authz"].allowed
+        if allowed:
+            assert found == r_configs
+        else:
+            assert found == {}
+    else:
+        assert found == r_configs
 
 
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     "w_room_id, raises", [("room_id", False), ("nonesuch", True)]
 )
-def test_installation_get_room_config(test_user, w_room_id, raises):
-    r_config = mock.create_autospec(config.RoomConfig)
-    r_configs = {"room_id": r_config}
+async def test_installation_get_room_config(
+    test_user,
+    room_authz,
+    r_configs,
+    w_room_id,
+    raises,
+):
     i_config = mock.create_autospec(config.InstallationConfig)
     i_config.room_configs = r_configs
 
     the_installation = installation.Installation(i_config)
 
+    if room_authz:
+        allowed = room_authz["the_room_authz"].allowed
+    else:
+        allowed = True
+
     if raises:
         with pytest.raises(KeyError):
-            the_installation.get_room_config(w_room_id, test_user)
+            await the_installation.get_room_config(
+                room_id=w_room_id,
+                user=test_user,
+                **room_authz,
+            )
     else:
-        found = the_installation.get_room_config(w_room_id, test_user)
+        if not allowed:
+            with pytest.raises(KeyError):
+                await the_installation.get_room_config(
+                    room_id=w_room_id,
+                    user=test_user,
+                    **room_authz,
+                )
+        else:
+            found = await the_installation.get_room_config(
+                room_id=w_room_id,
+                user=test_user,
+                **room_authz,
+            )
 
-        assert found is r_config
+            assert found is r_configs[w_room_id]
 
 
-def test_installation_get_completion_configs(test_user):
+@pytest.mark.anyio
+async def test_installation_get_completion_configs(test_user):
     c_config = mock.create_autospec(config.CompletionConfig)
     c_configs = {"completion_id": c_config}
     i_config = mock.create_autospec(config.InstallationConfig)
@@ -229,13 +319,16 @@ def test_installation_get_completion_configs(test_user):
 
     the_installation = installation.Installation(i_config)
 
-    assert the_installation.get_completion_configs(test_user) == c_configs
+    found = await the_installation.get_completion_configs(user=test_user)
+
+    assert found == c_configs
 
 
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     "w_completion_id, raises", [("completion_id", False), ("nonesuch", True)]
 )
-def test_installation_get_completion_config(
+async def test_installation_get_completion_config(
     test_user,
     w_completion_id,
     raises,
@@ -249,14 +342,17 @@ def test_installation_get_completion_config(
 
     if raises:
         with pytest.raises(KeyError):
-            the_installation.get_completion_config(
-                w_completion_id,
-                test_user,
+            await the_installation.get_completion_config(
+                completion_id=w_completion_id,
+                user=test_user,
             )
     else:
-        found = the_installation.get_completion_configs(test_user)
+        found = await the_installation.get_completion_config(
+            completion_id=w_completion_id,
+            user=test_user,
+        )
 
-        assert found is c_configs
+        assert found is c_config
 
 
 @pytest.mark.parametrize(
@@ -280,11 +376,18 @@ def test_installation_get_agent_by_id(gafc, w_agent_id, raises):
         gafc.assert_called_once_with(a_config, {}, {})
 
 
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     "w_room_id, raises", [("room_id", False), ("nonesuch", True)]
 )
 @mock.patch("soliplex.agents.get_agent_from_configs")
-def test_installation_get_agent_for_room(gafc, test_user, w_room_id, raises):
+async def test_installation_get_agent_for_room(
+    gafc,
+    test_user,
+    room_authz,
+    w_room_id,
+    raises,
+):
     a_config = mock.create_autospec(config.AgentConfig)
 
     tc_config = mock.create_autospec(config.ToolConfig)
@@ -312,22 +415,49 @@ def test_installation_get_agent_for_room(gafc, test_user, w_room_id, raises):
     i_config = mock.create_autospec(config.InstallationConfig)
     i_config.room_configs = r_configs
 
+    if room_authz:
+        allowed = room_authz["the_room_authz"].allowed
+    else:
+        allowed = True
+
     the_installation = installation.Installation(i_config)
 
     if raises:
         with pytest.raises(KeyError):
-            the_installation.get_agent_for_room(w_room_id, test_user)
+            await the_installation.get_agent_for_room(
+                room_id=w_room_id,
+                user=test_user,
+                **room_authz,
+            )
     else:
-        found = the_installation.get_agent_for_room(w_room_id, test_user)
-        assert found is gafc.return_value
-        gafc.assert_called_once_with(a_config, t_configs, mcp_configs)
+        if not allowed:
+            with pytest.raises(KeyError):
+                await the_installation.get_agent_for_room(
+                    room_id=w_room_id,
+                    user=test_user,
+                    **room_authz,
+                )
+
+            gafc.assert_not_called()
+
+        else:
+            found = await the_installation.get_agent_for_room(
+                room_id=w_room_id,
+                user=test_user,
+                **room_authz,
+            )
+
+            assert found is gafc.return_value
+
+            gafc.assert_called_once_with(a_config, t_configs, mcp_configs)
 
 
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     "w_completion_id, raises", [("completion_id", False), ("nonesuch", True)]
 )
 @mock.patch("soliplex.agents.get_agent_from_configs")
-def test_installation_get_agent_for_completion(
+async def test_installation_get_agent_for_completion(
     gafc,
     test_user,
     w_completion_id,
@@ -364,25 +494,28 @@ def test_installation_get_agent_for_completion(
 
     if raises:
         with pytest.raises(KeyError):
-            the_installation.get_agent_for_completion(
-                w_completion_id,
-                test_user,
+            await the_installation.get_agent_for_completion(
+                completion_id=w_completion_id,
+                user=test_user,
             )
+        gafc.assert_not_called()
     else:
-        found = the_installation.get_agent_for_completion(
-            w_completion_id,
-            test_user,
+        found = await the_installation.get_agent_for_completion(
+            completion_id=w_completion_id,
+            user=test_user,
         )
         assert found is gafc.return_value
         gafc.assert_called_once_with(a_config, t_configs, mcp_configs)
 
 
+@pytest.mark.anyio
 @pytest.mark.parametrize("w_run_agent_input", [False, True])
 @pytest.mark.parametrize(
     "w_room_id, raises", [("room_id", False), ("nonesuch", True)]
 )
-def test_installation_get_agent_deps_for_room(
+async def test_installation_get_agent_deps_for_room(
     test_user,
+    room_authz,
     w_room_id,
     raises,
     w_run_agent_input,
@@ -400,6 +533,11 @@ def test_installation_get_agent_deps_for_room(
     i_config = mock.create_autospec(config.InstallationConfig)
     i_config.room_configs = r_configs
 
+    if room_authz:
+        allowed = room_authz["the_room_authz"].allowed
+    else:
+        allowed = True
+
     the_installation = installation.Installation(i_config)
 
     kw = {}
@@ -408,37 +546,49 @@ def test_installation_get_agent_deps_for_room(
 
     if raises:
         with pytest.raises(KeyError):
-            the_installation.get_agent_deps_for_room(
-                w_room_id,
-                test_user,
+            await the_installation.get_agent_deps_for_room(
+                room_id=w_room_id,
+                user=test_user,
+                **room_authz,
                 **kw,
             )
     else:
-        found = the_installation.get_agent_deps_for_room(
-            w_room_id,
-            test_user,
-            **kw,
-        )
-
-        assert isinstance(found, agents.AgentDependencies)
-
-        assert found.the_installation is the_installation
-        assert found.user == test_user
-        assert found.tool_configs == t_configs
-
-        if w_run_agent_input:
-            assert isinstance(found.agui_emitter, hr_agui.AGUIEmitter)
-            assert found.agui_emitter.thread_id == THREAD_ID
-            assert found.agui_emitter.run_id == RUN_ID
+        if not allowed:
+            with pytest.raises(KeyError):
+                await the_installation.get_agent_deps_for_room(
+                    room_id=w_room_id,
+                    user=test_user,
+                    **room_authz,
+                    **kw,
+                )
         else:
-            assert found.agui_emitter is None
+            found = await the_installation.get_agent_deps_for_room(
+                room_id=w_room_id,
+                user=test_user,
+                **room_authz,
+                **kw,
+            )
+
+            assert isinstance(found, agents.AgentDependencies)
+
+            assert found.the_installation is the_installation
+            assert found.user == test_user
+            assert found.tool_configs == t_configs
+
+            if w_run_agent_input:
+                assert isinstance(found.agui_emitter, hr_agui.AGUIEmitter)
+                assert found.agui_emitter.thread_id == THREAD_ID
+                assert found.agui_emitter.run_id == RUN_ID
+            else:
+                assert found.agui_emitter is None
 
 
+@pytest.mark.anyio
 @pytest.mark.parametrize("w_run_agent_input", [False, True])
 @pytest.mark.parametrize(
     "w_completion_id, raises", [("completion_id", False), ("nonesuch", True)]
 )
-def test_installation_get_agent_deps_for_completion(
+async def test_installation_get_agent_deps_for_completion(
     test_user,
     w_completion_id,
     raises,
@@ -465,15 +615,15 @@ def test_installation_get_agent_deps_for_completion(
 
     if raises:
         with pytest.raises(KeyError):
-            the_installation.get_agent_deps_for_completion(
-                w_completion_id,
-                test_user,
+            await the_installation.get_agent_deps_for_completion(
+                completion_id=w_completion_id,
+                user=test_user,
                 **kw,
             )
     else:
-        found = the_installation.get_agent_deps_for_completion(
-            w_completion_id,
-            test_user,
+        found = await the_installation.get_agent_deps_for_completion(
+            completion_id=w_completion_id,
+            user=test_user,
             **kw,
         )
 
@@ -578,6 +728,9 @@ async def test_lifespan(
 
     threads_engine = found[0]["threads_engine"]
     assert isinstance(threads_engine, sqla_asyncio.AsyncEngine)
+
+    room_authz_engine = found[0]["room_authz_engine"]
+    assert isinstance(room_authz_engine, sqla_asyncio.AsyncEngine)
 
     for f_call, (key, mcp_app) in zip(
         app.mount.call_args_list,

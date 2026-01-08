@@ -8,6 +8,7 @@ import pytest
 from ag_ui import core as agui_core
 
 from soliplex import agui as agui_package
+from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex import models
 from soliplex.views import agui as agui_views
@@ -176,6 +177,7 @@ async def test__check_user_in_room(auth_fn, w_miss, expectation):
     auth_fn.return_value = {"preferred_username": USER_NAME}
 
     the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
     token = object()
 
     if w_miss:
@@ -185,15 +187,17 @@ async def test__check_user_in_room(auth_fn, w_miss, expectation):
         found = await agui_views._check_user_in_room(
             room_id=TEST_ROOM_ID,
             the_installation=the_installation,
+            the_room_authz=the_room_authz,
             token=token,
         )
 
     if isinstance(expected, str):
         assert found == expected
 
-    the_installation.get_room_config.assert_called_once_with(
-        TEST_ROOM_ID,
+    the_installation.get_room_config.assert_awaited_once_with(
+        room_id=TEST_ROOM_ID,
         user=auth_fn.return_value,
+        the_room_authz=the_room_authz,
     )
     auth_fn.assert_called_once_with(the_installation, token)
 
@@ -211,6 +215,7 @@ async def test__check_user_room_agent(auth_fn, w_miss, expectation):
     auth_fn.return_value = {"preferred_username": USER_NAME}
 
     the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
     token = object()
 
     if w_miss:
@@ -220,6 +225,7 @@ async def test__check_user_room_agent(auth_fn, w_miss, expectation):
         found = await agui_views._check_user_room_agent(
             room_id=TEST_ROOM_ID,
             the_installation=the_installation,
+            the_room_authz=the_room_authz,
             token=token,
         )
 
@@ -229,9 +235,10 @@ async def test__check_user_room_agent(auth_fn, w_miss, expectation):
         assert agent is the_installation.get_agent_for_room.return_value
         assert user_profile.preferred_username == expected
 
-    the_installation.get_agent_for_room.assert_called_once_with(
-        TEST_ROOM_ID,
+    the_installation.get_agent_for_room.assert_awaited_once_with(
+        room_id=TEST_ROOM_ID,
         user=auth_fn.return_value,
+        the_room_authz=the_room_authz,
     )
     auth_fn.assert_called_once_with(the_installation, token)
 
@@ -244,6 +251,7 @@ async def test_get_room_agui(cuir, the_threads, test_thread, w_thread_meta):
 
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
     token = object()
 
     if w_thread_meta:
@@ -265,6 +273,7 @@ async def test_get_room_agui(cuir, the_threads, test_thread, w_thread_meta):
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
         the_threads=the_threads,
+        the_room_authz=the_room_authz,
         token=token,
     )
 
@@ -287,6 +296,7 @@ async def test_get_room_agui(cuir, the_threads, test_thread, w_thread_meta):
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
+        the_room_authz=the_room_authz,
         token=token,
     )
 
@@ -365,6 +375,7 @@ async def test_get_room_agui_thread_id(
 
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
     token = object()
 
     if tsgt_side_effect is not None:
@@ -379,6 +390,7 @@ async def test_get_room_agui_thread_id(
             thread_id=TEST_THREAD_ID,
             the_installation=the_installation,
             the_threads=the_threads,
+            the_room_authz=the_room_authz,
             token=token,
         )
 
@@ -407,6 +419,7 @@ async def test_get_room_agui_thread_id(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
+        the_room_authz=the_room_authz,
         token=token,
     )
 
@@ -487,6 +500,7 @@ async def test_get_room_agui_thread_id_run_id(
 
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
     token = object()
 
     if tsgr_side_effect is not None:
@@ -502,6 +516,7 @@ async def test_get_room_agui_thread_id_run_id(
             run_id=TEST_RUN_ID,
             the_installation=the_installation,
             the_threads=the_threads,
+            the_room_authz=the_room_authz,
             token=token,
         )
 
@@ -525,6 +540,7 @@ async def test_get_room_agui_thread_id_run_id(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
+        the_room_authz=the_room_authz,
         token=token,
     )
 
@@ -573,6 +589,7 @@ async def test_post_room_agui(
     token = object()
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
 
     the_threads.new_thread.return_value = test_thread
     test_thread.list_runs.return_value = [test_run]
@@ -600,6 +617,7 @@ async def test_post_room_agui(
         new_thread_request=new_thread_request,
         the_installation=the_installation,
         the_threads=the_threads,
+        the_room_authz=the_room_authz,
         token=token,
     )
 
@@ -622,6 +640,7 @@ async def test_post_room_agui(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
+        the_room_authz=the_room_authz,
         token=token,
     )
 
@@ -695,6 +714,7 @@ async def test_post_room_agui_thread_id(
     new_run_request = models.AGUI_NewRunRequest.model_validate(nrr)
 
     the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
     token = object()
 
     with expectation as expected:
@@ -705,6 +725,7 @@ async def test_post_room_agui_thread_id(
             new_run_request=new_run_request,
             the_installation=the_installation,
             the_threads=the_threads,
+            the_room_authz=the_room_authz,
             token=token,
         )
 
@@ -731,6 +752,7 @@ async def test_post_room_agui_thread_id(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
+        the_room_authz=the_room_authz,
         token=token,
     )
 
@@ -772,6 +794,7 @@ async def test_post_room_agui_thread_id_meta(
         r_meta = models.AGUI_ThreadMetadata()
 
     the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
     token = object()
 
     the_threads.update_thread_metadata.side_effect = tsutm_side_effect
@@ -784,6 +807,7 @@ async def test_post_room_agui_thread_id_meta(
             new_metadata=r_meta,
             the_installation=the_installation,
             the_threads=the_threads,
+            the_room_authz=the_room_authz,
             token=token,
         )
 
@@ -800,6 +824,7 @@ async def test_post_room_agui_thread_id_meta(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
+        the_room_authz=the_room_authz,
         token=token,
     )
 
@@ -871,6 +896,7 @@ async def test_post_room_agui_thread_id_run_id(
 
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_agent_for_room.return_value = agent
+    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
 
     exp_deps = the_installation.get_agent_deps_for_room.return_value
     exp_emitter = exp_deps.agui_emitter = mock.Mock(spec_set=["close"])
@@ -902,6 +928,7 @@ async def test_post_room_agui_thread_id_run_id(
             run_id=TEST_RUN_ID,
             the_installation=the_installation,
             the_threads=the_threads,
+            the_room_authz=the_room_authz,
             token=token,
         )
 
@@ -982,9 +1009,9 @@ async def test_post_room_agui_thread_id_run_id(
         exp_emitter.close.assert_awaited_once_with()
 
         the_installation.get_agent_deps_for_room.assert_called_once_with(
-            TEST_ROOM_ID,
-            USER_PROFILE,
-            exp_adapter.run_input,
+            room_id=TEST_ROOM_ID,
+            user=USER_PROFILE,
+            run_agent_input=exp_adapter.run_input,
         )
 
         aga.from_request.assert_called_once_with(
@@ -1003,6 +1030,7 @@ async def test_post_room_agui_thread_id_run_id(
         cura.assert_called_once_with(
             room_id=TEST_ROOM_ID,
             the_installation=the_installation,
+            the_room_authz=the_room_authz,
             token=token,
         )
 
@@ -1044,6 +1072,7 @@ async def test_post_room_agui_thread_id_run_id_meta(
         r_meta = models.AGUI_RunMetadata()
 
     the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
     token = object()
 
     the_threads.update_run_metadata.side_effect = tsurm_side_effect
@@ -1057,6 +1086,7 @@ async def test_post_room_agui_thread_id_run_id_meta(
             new_metadata=r_meta,
             the_installation=the_installation,
             the_threads=the_threads,
+            the_room_authz=the_room_authz,
             token=token,
         )
 
@@ -1074,6 +1104,7 @@ async def test_post_room_agui_thread_id_run_id_meta(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
+        the_room_authz=the_room_authz,
         token=token,
     )
 
@@ -1105,6 +1136,7 @@ async def test_post_room_agui_thread_id_run_id_feedback(
     )
 
     the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
     token = object()
 
     the_threads.save_run_feedback.side_effect = tssrf_side_effect
@@ -1118,6 +1150,7 @@ async def test_post_room_agui_thread_id_run_id_feedback(
             new_feedback=r_feedback,
             the_installation=the_installation,
             the_threads=the_threads,
+            the_room_authz=the_room_authz,
             token=token,
         )
 
@@ -1136,6 +1169,7 @@ async def test_post_room_agui_thread_id_run_id_feedback(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
+        the_room_authz=the_room_authz,
         token=token,
     )
 
@@ -1161,6 +1195,7 @@ async def test_delete_room_agui_thread_id(
 
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
     token = object()
 
     the_threads.delete_thread.side_effect = tsdr_side_effect
@@ -1172,6 +1207,7 @@ async def test_delete_room_agui_thread_id(
             thread_id=TEST_THREAD_ID,
             the_installation=the_installation,
             the_threads=the_threads,
+            the_room_authz=the_room_authz,
             token=token,
         )
 
@@ -1187,5 +1223,6 @@ async def test_delete_room_agui_thread_id(
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
+        the_room_authz=the_room_authz,
         token=token,
     )

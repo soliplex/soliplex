@@ -7,6 +7,7 @@ from fastapi import security
 from haiku.rag import client as rag_client
 
 from soliplex import authn
+from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex import mcp_auth
 from soliplex import models
@@ -15,6 +16,7 @@ from soliplex import util
 router = fastapi.APIRouter(tags=["rooms"])
 
 depend_the_installation = installation.depend_the_installation
+depend_the_room_authz = authz_package.depend_the_room_authz
 
 
 @util.logfire_span("GET /v1/rooms")
@@ -22,11 +24,15 @@ depend_the_installation = installation.depend_the_installation
 async def get_rooms(
     request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
+    the_room_authz: authz_package.RoomAuthorization = depend_the_room_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.ConfiguredRooms:
     """Return a manifest of the rooms available to the user"""
     user = authn.authenticate(the_installation, token)
-    room_configs = the_installation.get_room_configs(user)
+    room_configs = await the_installation.get_room_configs(
+        user=user,
+        the_room_authz=the_room_authz,
+    )
 
     def _key(item):
         key, value = item
@@ -45,13 +51,18 @@ async def get_room(
     request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
+    the_room_authz: authz_package.RoomAuthorization = depend_the_room_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.Room:
     """Return a single room's configuration"""
     user = authn.authenticate(the_installation, token)
 
     try:
-        room_config = the_installation.get_room_config(room_id, user)
+        room_config = await the_installation.get_room_config(
+            room_id=room_id,
+            user=user,
+            the_room_authz=the_room_authz,
+        )
     except KeyError:
         raise fastapi.HTTPException(
             status_code=404,
@@ -70,13 +81,18 @@ async def get_room_bg_image(
     request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
+    the_room_authz: authz_package.RoomAuthorization = depend_the_room_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> str:  # file path, converted to file response by FastAPI
     """Return a room's background image"""
     user = authn.authenticate(the_installation, token)
 
     try:
-        room_config = the_installation.get_room_config(room_id, user)
+        room_config = await the_installation.get_room_config(
+            room_id=room_id,
+            user=user,
+            the_room_authz=the_room_authz,
+        )
     except KeyError:
         raise fastapi.HTTPException(
             status_code=404,
@@ -100,13 +116,18 @@ async def get_room_mcp_token(
     request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
+    the_room_authz: authz_package.RoomAuthorization = depend_the_room_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.MCPToken:
     """Return a token for use in an MCP client addressing the room"""
     user = authn.authenticate(the_installation, token)
 
     try:
-        the_installation.get_room_config(room_id, user=user)
+        _room_config = await the_installation.get_room_config(
+            room_id=room_id,
+            user=user,
+            the_room_authz=the_room_authz,
+        )
     except ValueError as e:
         raise fastapi.HTTPException(
             status_code=404,
@@ -124,13 +145,18 @@ async def get_room_documents(
     request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
+    the_room_authz: authz_package.RoomAuthorization = depend_the_room_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.RoomDocuments:
     """Return a list of the documents in the room's RAG database"""
     user = authn.authenticate(the_installation, token)
 
     try:
-        room_config = the_installation.get_room_config(room_id, user)
+        room_config = await the_installation.get_room_config(
+            room_id=room_id,
+            user=user,
+            the_room_authz=the_room_authz,
+        )
     except KeyError:
         raise fastapi.HTTPException(
             status_code=404,
@@ -174,13 +200,18 @@ async def get_chunk_visualization(
     room_id: str,
     chunk_id: str,
     the_installation: installation.Installation = depend_the_installation,
+    the_room_authz: authz_package.RoomAuthorization = depend_the_room_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.ChunkVisualization:
     """Return a set of page images for a chunk, highlighting the chunk text"""
     user = authn.authenticate(the_installation, token)
 
     try:
-        room_config = the_installation.get_room_config(room_id, user)
+        room_config = await the_installation.get_room_config(
+            room_id=room_id,
+            user=user,
+            the_room_authz=the_room_authz,
+        )
     except KeyError:
         raise fastapi.HTTPException(
             status_code=404,

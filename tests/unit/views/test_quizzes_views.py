@@ -3,7 +3,9 @@ from unittest import mock
 import fastapi
 import pytest
 
+from soliplex import authz as authz_package
 from soliplex import config
+from soliplex import installation
 from soliplex import models
 from soliplex import quizzes
 from soliplex.views import quizzes as quizzes_views
@@ -63,7 +65,8 @@ def test_quiz(qa_question, mc_question):
 @mock.patch("soliplex.authn.authenticate")
 async def test_get_quiz(auth_fn, test_quiz, w_miss):
     request = fastapi.Request(scope={"type": "http"})
-    the_installation = mock.Mock(spec_set=["get_room_config"])
+    the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
     token = object()
 
     if w_miss == "room":
@@ -75,6 +78,7 @@ async def test_get_quiz(auth_fn, test_quiz, w_miss):
                 room_id=TEST_ROOM_ID,
                 quiz_id=TEST_QUIZ_ID,
                 the_installation=the_installation,
+                the_room_authz=the_room_authz,
                 token=token,
             )
 
@@ -92,6 +96,7 @@ async def test_get_quiz(auth_fn, test_quiz, w_miss):
                     room_id=TEST_ROOM_ID,
                     quiz_id=TEST_QUIZ_ID,
                     the_installation=the_installation,
+                    the_room_authz=the_room_authz,
                     token=token,
                 )
 
@@ -105,15 +110,17 @@ async def test_get_quiz(auth_fn, test_quiz, w_miss):
                 room_id=TEST_ROOM_ID,
                 quiz_id=TEST_QUIZ_ID,
                 the_installation=the_installation,
+                the_room_authz=the_room_authz,
                 token=token,
             )
 
             expected = models.Quiz.from_config(test_quiz)
             assert found == expected
 
-    the_installation.get_room_config.assert_called_once_with(
-        TEST_ROOM_ID,
+    the_installation.get_room_config.assert_awaited_once_with(
+        room_id=TEST_ROOM_ID,
         user=auth_fn.return_value,
+        the_room_authz=the_room_authz,
     )
 
     auth_fn.assert_called_once_with(the_installation, token)
@@ -125,7 +132,8 @@ async def test_get_quiz(auth_fn, test_quiz, w_miss):
 @mock.patch("soliplex.authn.authenticate")
 async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
     request = fastapi.Request(scope={"type": "http"})
-    the_installation = mock.Mock(spec_set=["get_room_config"])
+    the_installation = mock.create_autospec(installation.Installation)
+    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
     answer = models.QuizAnswer(text="Answer")
     token = object()
 
@@ -140,6 +148,7 @@ async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
                 question_uuid=QA_QUESTION_UUID,
                 answer=answer,
                 the_installation=the_installation,
+                the_room_authz=the_room_authz,
                 token=token,
             )
 
@@ -159,6 +168,7 @@ async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
                     question_uuid=QA_QUESTION_UUID,
                     answer=answer,
                     the_installation=the_installation,
+                    the_room_authz=the_room_authz,
                     token=token,
                 )
 
@@ -183,6 +193,7 @@ async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
                         question_uuid=QA_QUESTION_UUID,
                         answer=answer,
                         the_installation=the_installation,
+                        the_room_authz=the_room_authz,
                         token=token,
                     )
 
@@ -196,6 +207,7 @@ async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
                     question_uuid=QA_QUESTION_UUID,
                     answer=answer,
                     the_installation=the_installation,
+                    the_room_authz=the_room_authz,
                     token=token,
                 )
 
@@ -206,5 +218,11 @@ async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
                 QA_QUESTION_UUID,
                 answer.text,
             )
+
+    the_installation.get_room_config.assert_awaited_once_with(
+        room_id=TEST_ROOM_ID,
+        user=auth_fn.return_value,
+        the_room_authz=the_room_authz,
+    )
 
     auth_fn.assert_called_once_with(the_installation, token)
