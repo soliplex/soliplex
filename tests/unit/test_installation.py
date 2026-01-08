@@ -170,6 +170,26 @@ def test_installation_thread_persistence_dburi_async():
     )
 
 
+def test_installation_room_authz_dburi_sync():
+    i_config = mock.create_autospec(config.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    assert (
+        the_installation.room_authz_dburi_sync
+        is i_config.room_authz_dburi_sync
+    )
+
+
+def test_installation_room_authz_dburi_async():
+    i_config = mock.create_autospec(config.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    assert (
+        the_installation.room_authz_dburi_async
+        is i_config.room_authz_dburi_async
+    )
+
+
 @pytest.mark.parametrize("w_oidc_configs", [[], [object()]])
 def test_installation_auth_disabled(w_oidc_configs):
     i_config = mock.create_autospec(config.InstallationConfig)
@@ -578,6 +598,9 @@ async def test_lifespan(
 
     threads_engine = found[0]["threads_engine"]
     assert isinstance(threads_engine, sqla_asyncio.AsyncEngine)
+
+    room_authz_engine = found[0]["room_authz_engine"]
+    assert isinstance(room_authz_engine, sqla_asyncio.AsyncEngine)
 
     for f_call, (key, mcp_app) in zip(
         app.mount.call_args_list,
