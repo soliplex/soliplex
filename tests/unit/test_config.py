@@ -1249,14 +1249,14 @@ quizzes_paths:
     -
 """
 
-TP_DBURI_SYNC = "sqlite+pysqlite:////tmp/testing.sqlite"
+TP_DBURI_SYNC = "sqlite+pysqlite:////tmp/tp_testing.sqlite"
 TP_DBURI_SYNC_W_SECRET = (
-    f"sqlite+pysqlcipher://secret:{DB_SECRET_NAME}//tmp/testing.sqlite"
+    f"sqlite+pysqlcipher://secret:{DB_SECRET_NAME}//tmp/tp_testing.sqlite"
 )
 TP_DBURI_SYNC_W_SECRET_RESOLVED = (
-    f"sqlite+pysqlcipher://{DB_SECRET_VALUE}//tmp/testing.sqlite"
+    f"sqlite+pysqlcipher://{DB_SECRET_VALUE}//tmp/tp_testing.sqlite"
 )
-TP_DBURI_ASYNC = "sqlite+aiosqlite:////tmp/testing.sqlite"
+TP_DBURI_ASYNC = "sqlite+aiosqlite:////tmp/tp_testing.sqlite"
 
 W_TP_DBURI_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
@@ -1281,6 +1281,40 @@ id: "{INSTALLATION_ID}"
 thread_persistence_dburi:
     sync: {TP_DBURI_SYNC_W_SECRET}
     async: {TP_DBURI_ASYNC}
+"""
+
+RA_DBURI_SYNC = "sqlite+pysqlite:////tmp/ra_testing.sqlite"
+RA_DBURI_SYNC_W_SECRET = (
+    f"sqlite+pysqlcipher://secret:{DB_SECRET_NAME}//tmp/ra_testing.sqlite"
+)
+RA_DBURI_SYNC_W_SECRET_RESOLVED = (
+    f"sqlite+pysqlcipher://{DB_SECRET_VALUE}//tmp/ra_testing.sqlite"
+)
+RA_DBURI_ASYNC = "sqlite+aiosqlite:////tmp/ra_testing.sqlite"
+
+W_RA_DBURI_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "_room_authz_dburi_sync": RA_DBURI_SYNC,
+    "_room_authz_dburi_async": RA_DBURI_ASYNC,
+}
+W_RA_DBURI_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+room_authz_dburi:
+    sync: {RA_DBURI_SYNC}
+    async: {RA_DBURI_ASYNC}
+"""
+
+W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "_room_authz_dburi_sync": RA_DBURI_SYNC_W_SECRET,
+    # aiosqlite doesn't support secrets
+    "_room_authz_dburi_async": RA_DBURI_ASYNC,
+}
+W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+room_authz_dburi:
+    sync: {RA_DBURI_SYNC_W_SECRET}
+    async: {RA_DBURI_ASYNC}
 """
 
 
@@ -4566,6 +4600,49 @@ def test_installationconfig_thread_persistence_dburi_async(w_kw, expected):
 
 
 @pytest.mark.parametrize(
+    "w_kw, expected",
+    [
+        (
+            BARE_INSTALLATION_CONFIG_KW.copy(),
+            config.SYNC_MEMORY_ENGINE_URL,
+        ),
+        (W_RA_DBURI_INSTALLATION_CONFIG_KW.copy(), RA_DBURI_SYNC),
+        (
+            (
+                W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_KW
+                | {"secrets": [DB_SECRET_CONFIG]}
+            ),
+            RA_DBURI_SYNC_W_SECRET_RESOLVED,
+        ),
+    ],
+)
+def test_installationconfig_room_authz_dburi_sync(w_kw, expected):
+    installation_config = config.InstallationConfig(**w_kw)
+
+    found = installation_config.room_authz_dburi_sync
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "w_kw, expected",
+    [
+        (
+            BARE_INSTALLATION_CONFIG_KW.copy(),
+            config.ASYNC_MEMORY_ENGINE_URL,
+        ),
+        (W_RA_DBURI_INSTALLATION_CONFIG_KW.copy(), RA_DBURI_ASYNC),
+    ],
+)
+def test_installationconfig_room_authz_dburi_async(w_kw, expected):
+    installation_config = config.InstallationConfig(**w_kw)
+
+    found = installation_config.room_authz_dburi_async
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
     "config_yaml, expected_kw",
     [
         (
@@ -4639,6 +4716,18 @@ def test_installationconfig_thread_persistence_dburi_async(w_kw, expected):
         (
             W_TP_DBURI_INSTALLATION_CONFIG_YAML,
             W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(),
+        ),
+        (
+            W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML,
+            W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_KW.copy(),
+        ),
+        (
+            W_RA_DBURI_INSTALLATION_CONFIG_YAML,
+            W_RA_DBURI_INSTALLATION_CONFIG_KW.copy(),
+        ),
+        (
+            W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML,
+            W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_KW.copy(),
         ),
     ],
 )

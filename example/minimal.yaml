@@ -87,6 +87,13 @@ thread_persistence_dburi:
   async: "sqlite+aiosqlite://"
 
 #==========================================================================
+# Room authorization policies:  SQLAlchemy DBURIs
+#==========================================================================
+room_authz_dburi:
+  sync: "sqlite://"
+  async: "sqlite+aiosqlite://"
+
+#==========================================================================
 # OIDC authentication provider configuration
 #==========================================================================
 

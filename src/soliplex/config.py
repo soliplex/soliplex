@@ -2204,16 +2204,19 @@ class InstallationConfig:
     quizzes_paths: list[pathlib.Path] = None
 
     #
-    # Thread persistence DB-URI
+    #   DB-URI secret handling
     #
-    _thread_persistence_dburi_sync: str = None
-    _thread_persistence_dburi_async: str = None
-
     def _dburi_w_secret(self, dburi: str | None, default: str) -> str:
         if dburi is None:
             return default
 
         return self.interpolate_secrets(dburi)
+
+    #
+    # Thread persistence DB-URI
+    #
+    _thread_persistence_dburi_sync: str = None
+    _thread_persistence_dburi_async: str = None
 
     @property
     def thread_persistence_dburi_sync(self):
@@ -2226,6 +2229,26 @@ class InstallationConfig:
     def thread_persistence_dburi_async(self):
         return self._dburi_w_secret(
             self._thread_persistence_dburi_async,
+            ASYNC_MEMORY_ENGINE_URL,
+        )
+
+    #
+    # Room authorization DB-URI
+    #
+    _room_authz_dburi_sync: str = None
+    _room_authz_dburi_async: str = None
+
+    @property
+    def room_authz_dburi_sync(self):
+        return self._dburi_w_secret(
+            self._room_authz_dburi_sync,
+            SYNC_MEMORY_ENGINE_URL,
+        )
+
+    @property
+    def room_authz_dburi_async(self):
+        return self._dburi_w_secret(
+            self._room_authz_dburi_async,
             ASYNC_MEMORY_ENGINE_URL,
         )
 
@@ -2284,6 +2307,10 @@ class InstallationConfig:
             tp_dburi = config.pop("thread_persistence_dburi", {})
             config["_thread_persistence_dburi_sync"] = tp_dburi.get("sync")
             config["_thread_persistence_dburi_async"] = tp_dburi.get("async")
+
+            ra_dburi = config.pop("room_authz_dburi", {})
+            config["_room_authz_dburi_sync"] = ra_dburi.get("sync")
+            config["_room_authz_dburi_async"] = ra_dburi.get("async")
 
             return cls(**config)
 
