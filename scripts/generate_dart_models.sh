@@ -8,9 +8,29 @@
 #   Run ./scripts/generate_feature_schemas.sh first to create schema.json
 #
 # Usage:
-#   ./scripts/generate_dart_models.sh
+#   ./scripts/generate_dart_models.sh <target_directory>
+#
+# Arguments:
+#   target_directory: Path where Dart model files will be generated
 
 set -e
+
+# Check for required argument
+if [ $# -eq 0 ]; then
+    echo -e "${RED}Error: Missing required argument${NC}" >&2
+    echo ""
+    echo "Usage: $0 <target_directory>"
+    echo ""
+    echo "Arguments:"
+    echo "  target_directory: Path where Dart model files will be generated"
+    echo ""
+    echo "Example:"
+    echo "  $0 src/flutter/lib/core/models/agui_features"
+    echo ""
+    exit 1
+fi
+
+TARGET_DIR="$1"
 
 # Colors for output
 RED='\033[0;31m'
@@ -18,11 +38,27 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Check if target directory exists
+if [ ! -d "$TARGET_DIR" ]; then
+    echo -e "${RED}Error: Target directory does not exist${NC}" >&2
+    echo ""
+    echo "The specified target directory does not exist:"
+    echo "  $TARGET_DIR"
+    echo ""
+    echo -e "${YELLOW}Please create the directory first or specify an existing directory.${NC}"
+    echo ""
+    echo "Example:"
+    echo "  mkdir -p $TARGET_DIR"
+    echo "  $0 $TARGET_DIR"
+    echo ""
+    exit 1
+fi
+
 # Directories
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCHEMAS_DIR="$REPO_ROOT/schemas"
 COMBINED_SCHEMA="$SCHEMAS_DIR/schema.json"
-OUTPUT_DIR="$REPO_ROOT/src/flutter/lib/core/models/agui_features"
+OUTPUT_DIR="$TARGET_DIR"
 
 # Check if schema.json exists
 if [ ! -f "$COMBINED_SCHEMA" ]; then
@@ -84,9 +120,6 @@ fi
 
 echo -e "${GREEN}Extracting individual feature schemas...${NC}"
 echo ""
-
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
 
 # Create temporary directory for individual schemas
 TEMP_SCHEMAS_DIR="$SCHEMAS_DIR/temp"
