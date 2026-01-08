@@ -10,7 +10,7 @@ def test_health_check(client_no_llm):
     assert response.text == "OK"
 
 
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 def test_rooms_endpoints(auth_fn, client_no_llm):
     get_rooms_response = client_no_llm.get("/api/v1/rooms")
     rooms_manifest = get_rooms_response.json()
@@ -31,7 +31,7 @@ def test_rooms_endpoints(auth_fn, client_no_llm):
     )
 
 
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 @pytest.mark.needs_llm
 def test_get_quiz_post_quiz_question(auth_fn, client):
     auth_fn.return_value = {
