@@ -28,13 +28,22 @@ class TUI_REST_API:
         return f"{self.thread_url(room_id, thread_id)}/{run_id}"
 
     def get_rooms(self):
-        return requests.get(f"{self.api_v1_base}/rooms").json()
+        response = requests.get(f"{self.api_v1_base}/rooms")
+        response.raise_for_status()
+
+        return response.json()
 
     def get_room_threads(self, room_id: str):
-        return requests.get(self.room_agui_base(room_id)).json()
+        response = requests.get(self.room_agui_base(room_id))
+        response.raise_for_status()
+
+        return response.json()
 
     def get_thread(self, room_id: str, thread_id: str) -> models.AGUI_Thread:
-        return requests.get(self.thread_url(room_id, thread_id)).json()
+        response = requests.get(self.thread_url(room_id, thread_id))
+        response.raise_for_status()
+
+        return response.json()
 
     def post_new_thread(
         self,
@@ -46,7 +55,10 @@ class TUI_REST_API:
         if isinstance(request, models.AGUI_NewThreadRequest):
             request = request.model_dump()
 
-        return requests.post(new_thread_request_url, json=request).json()
+        response = requests.post(new_thread_request_url, json=request)
+        response.raise_for_status()
+
+        return response.json()
 
     def post_thread_metadata(
         self,
@@ -59,7 +71,8 @@ class TUI_REST_API:
         if isinstance(meta, models.AGUI_ThreadMetadata):
             meta = meta.model_dump()
 
-        requests.post(meta_url, json=meta)
+        response = requests.post(meta_url, json=meta)
+        response.raise_for_status()
 
     def post_new_run(
         self,
@@ -72,7 +85,10 @@ class TUI_REST_API:
         if isinstance(request, models.AGUI_NewRunRequest):
             request = request.model_dump()
 
-        return requests.post(new_run_request_url, json=request).json()
+        response = requests.post(new_run_request_url, json=request)
+        response.raise_for_status()
+
+        return response.json()
 
     def get_run(
         self,
@@ -80,7 +96,10 @@ class TUI_REST_API:
         thread_id: str,
         run_id: str,
     ) -> models.AGUI_Run:
-        return requests.get(self.run_url(room_id, thread_id, run_id)).json()
+        response = requests.get(self.run_url(room_id, thread_id, run_id))
+        response.raise_for_status()
+
+        return response.json()
 
     def post_start_run(
         self,
@@ -94,7 +113,10 @@ class TUI_REST_API:
         if isinstance(run_agent_input, agui_core.RunAgentInput):
             run_agent_input = run_agent_input.model_dump()
 
-        return requests.post(run_url, json=run_agent_input, stream=True)
+        response = requests.post(run_url, json=run_agent_input, stream=True)
+        response.raise_for_status()
+
+        return response
 
     def post_run_metadata(
         self,
@@ -108,4 +130,5 @@ class TUI_REST_API:
         if isinstance(meta, models.AGUI_RunMetadata):
             meta = meta.model_dump()
 
-        requests.post(meta_url, json=meta)
+        response = requests.post(meta_url, json=meta)
+        response.raise_for_status()
