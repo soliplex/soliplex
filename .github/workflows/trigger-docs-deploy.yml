@@ -1,0 +1,61 @@
+# Template workflow for submodule repositories
+# Copy this file to each submodule's .github/workflows/ directory
+#
+# Installation instructions:
+# 1. Create PAT with 'public_repo' scope at: https://github.com/settings/tokens
+# 2. Add secret 'DOCS_DEPLOY_TOKEN' to each submodule repository
+# 3. Copy this file to .github/workflows/trigger-docs-deploy.yml in each submodule
+# 4. Update the 'paths' section if needed for your project structure
+
+name: Trigger Documentation Rebuild
+
+on:
+  push:
+    branches: [main, master]  # Adjust branches as needed
+    paths:
+      # Trigger only when markdown documentation changes
+      - 'docs/**/*.md'
+      - 'docs/**/*.mdx'
+      - 'README.md'
+      - '.github/workflows/trigger-docs-deploy.yml'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  trigger-docs-rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger soliplex.github.io documentation rebuild
+        run: |
+          echo "📚 Triggering documentation rebuild for ${{ github.repository }}"
+
+          response=$(curl -X POST \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: token ${{ secrets.DOCS_DEPLOY_TOKEN }}" \
+            -w "\n%{http_code}" \
+            https://api.github.com/repos/soliplex/soliplex.github.io/dispatches \
+            -d '{
+              "event_type": "docs_update",
+              "client_payload": {
+                "repository": "${{ github.repository }}",
+                "ref": "${{ github.ref }}",
+                "sha": "${{ github.sha }}",
+                "pusher": "${{ github.actor }}",
+                "commit_message": "${{ github.event.head_commit.message }}"
+              }
+            }')
+
+          http_code=$(echo "$response" | tail -n1)
+
+          if [ "$http_code" -eq 204 ]; then
+            echo "✅ Successfully triggered documentation rebuild"
+            echo "🔗 View workflow at: https://github.com/soliplex/soliplex.github.io/actions"
+          else
+            echo "❌ Failed to trigger documentation rebuild (HTTP $http_code)"
+            echo "$response"
+            exit 1
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::warning::Failed to trigger documentation rebuild. Check DOCS_DEPLOY_TOKEN secret."
