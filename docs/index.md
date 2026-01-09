@@ -6,11 +6,13 @@ and question answering.
 
 ## Quick Start
 
-1. **[Overview](overview.md)** - Learn about the system architecture and features
-2. **[RAG Database Setup](rag.md)** - Set up the RAG search database
-2. **[Server Setup](server.md)** - Set up the FastAPI backend server
-3. **[Client Setup](client.md)** - Configure the Flutter web client
-4. **[Usage Guide](usage.md)** - Start using the system
+1. **[Prerequisites](prerequisites.md)** - Complete installation checklist and setup guide
+2. **[Overview](overview.md)** - Learn about the system architecture and features
+3. **[RAG Database Setup](rag.md)** - Set up the RAG search database
+4. **[Server Setup](server.md)** - Set up the FastAPI backend server
+5. **[Client Setup](client.md)** - Configure the Flutter web client
+6. **[Docker Deployment](docker.md)** - Run Soliplex with Docker and Docker Compose
+7. **[Usage Guide](usage.md)** - Start using the system
 
 ## What is Soliplex?
 

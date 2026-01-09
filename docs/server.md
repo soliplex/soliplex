@@ -132,25 +132,108 @@ Each installation configuration includes a number of rooms that
 
 ## Running the Server
 
-Start the FastAPI server with auto-reload:
+Start the FastAPI server:
 
 ```bash
-soliplex-cli serve example/installation.yaml -r both
+soliplex-cli serve example/installation.yaml
 ```
 
 The server will be available at `http://localhost:8000` by default.
 
-For testing purposes, the server can be run with authentication disabled.
-To run without authentication:
+### Server Command Options
+
 ```bash
-soliplex-cli serve example/no_auth.yaml -r both
+soliplex-cli serve [OPTIONS] INSTALLATION_CONFIG_PATH
 ```
+
+**Basic Options:**
+
+- `INSTALLATION_CONFIG_PATH` - Path to installation YAML file (required)
+- `--help` - Show help message
+
+**Network Options:**
+
+- `--host HOST` - Bind to specific host (default: `127.0.0.1`)
+  - Use `0.0.0.0` to accept connections from any network interface
+  - Example: `--host 0.0.0.0`
+
+- `--port PORT` - Listen on specific port (default: `8000`)
+  - Example: `--port 8080`
+
+**Authentication Options:**
+
+- `--no-auth-mode` - Disable authentication (development/testing only)
+  - **WARNING**: Never use in production
+  - Example: `--no-auth-mode`
+
+**Hot Reload Options:**
+
+- `--reload {code,config,both}` / `-r {code,config,both}` - Enable hot reload
+  - `code` - Watch Python source files for changes
+  - `config` - Watch YAML configuration files for changes
+  - `both` - Watch both code and config files
+  - Example: `--reload both` or `-r both`
+
+- `--reload-dirs DIRS` - Additional directories to watch (repeatable)
+  - Example: `--reload-dirs ./custom_modules --reload-dirs ./plugins`
+
+- `--reload-includes PATTERNS` - File patterns to include in watch (repeatable)
+  - Example: `--reload-includes "*.yaml" --reload-includes "*.json"`
+
+**Proxy Options:**
+
+- `--proxy-headers` - Enable parsing of X-Forwarded-* headers
+  - Use when running behind a reverse proxy (nginx, traefik, etc.)
+  - Example: `--proxy-headers`
+
+- `--forwarded-allow-ips IPS` - Trusted IP addresses for proxy headers (comma-separated)
+  - Default: `127.0.0.1`
+  - Example: `--forwarded-allow-ips "127.0.0.1,10.0.0.0/8"`
+
+### Common Usage Examples
+
+**Development with hot reload:**
+```bash
+soliplex-cli serve example/installation.yaml \
+  --reload both \
+  --no-auth-mode
+```
+
+**Production (behind nginx):**
+```bash
+soliplex-cli serve example/installation.yaml \
+  --host 127.0.0.1 \
+  --port 8000 \
+  --proxy-headers \
+  --forwarded-allow-ips "127.0.0.1"
+```
+
+**Docker container (all network interfaces):**
+```bash
+soliplex-cli serve example/installation.yaml \
+  --host 0.0.0.0 \
+  --port 8000
+```
+
+**Custom port for testing:**
+```bash
+soliplex-cli serve example/minimal.yaml \
+  --port 8080 \
+  --no-auth-mode
+```
+
+### Verifying the Server
 
 To confirm your room configuration:
 ```bash
 curl -X 'GET' \
   'http://127.0.0.1:8000/api/v1/rooms' \
   -H 'accept: application/json'
+```
+
+To check server health:
+```bash
+curl http://127.0.0.1:8000/health
 ```
 
 ## API Endpoints

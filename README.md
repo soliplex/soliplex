@@ -59,6 +59,8 @@ Quick-and-dirty client for room queries
 
 ## Quick Start
 
+For detailed installation instructions, see the [Prerequisites Guide](docs/prerequisites.md).
+
 ### Install Soliplex and dependencies
 
 ```bash
@@ -66,6 +68,10 @@ Quick-and-dirty client for room queries
 python3.13 -m venv venv
 source venv/bin/activate
 pip install -e .
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your settings
 ```
 
 ### Index Soliplex docs into RAG database
@@ -86,24 +92,74 @@ haiku-rag --config example/haiku.rag.yaml \
 
 See: `docs/rag.md` for more options.
 
-### Check the backend server configuration
+### Backend Server CLI Commands
 
+The `soliplex-cli` command provides several utilities for managing your Soliplex installation:
+
+#### Check Configuration
+Validate your configuration file and report any missing secrets or environment variables:
 ```bash
 soliplex-cli check-config example/minimal.yaml
 ```
 
-### List the rooms in the backend server configuration
-
+#### List Rooms
+Show all configured chat rooms:
 ```bash
 soliplex-cli list-rooms example/minimal.yaml
 ```
 
-### Run Soliplex backend server
+#### List Completions
+Show all configured completion endpoints:
+```bash
+soliplex-cli list-completions example/minimal.yaml
+```
 
+#### List Secrets
+Display all configured secrets and their status:
+```bash
+soliplex-cli list-secrets example/minimal.yaml
+```
+
+#### List Environment Variables
+Show all environment variables and their values:
+```bash
+soliplex-cli list-environment example/minimal.yaml
+```
+
+#### List OIDC Providers
+Display configured OIDC authentication providers:
+```bash
+soliplex-cli list-oidc-auth-providers example/minimal.yaml
+```
+
+#### Export Configuration
+Export the installation configuration as YAML:
+```bash
+soliplex-cli config example/minimal.yaml
+```
+
+#### Export AG-UI Feature Schemas
+Export AG-UI feature schemas as JSON:
+```bash
+soliplex-cli agui-feature-schemas example/minimal.yaml
+```
+
+#### Run Backend Server
+Start the Soliplex backend server:
 ```bash
 export OLLAMA_BASE_URL=<your Ollama server / port>
 soliplex-cli serve example/minimal.yaml --no-auth-mode
 ```
+
+Server options:
+- `--no-auth-mode` - Disable authentication (for development/testing)
+- `--host HOST` - Bind to specific host (default: 127.0.0.1)
+- `--port PORT` - Listen on specific port (default: 8000)
+- `--reload {code,config,both}` - Enable hot reload for code, config, or both
+- `--reload-dirs DIRS` - Additional directories to watch for reload
+- `--reload-includes PATTERNS` - File patterns to include in reload watch
+- `--proxy-headers` - Enable proxy header parsing
+- `--forwarded-allow-ips IPS` - Trusted IP addresses for proxy headers
 
 ### Frontend
 
@@ -115,32 +171,21 @@ flutter run -d chrome --web-port 59001
 
 ### TUI
 
-The TUI does not yet grok authentication, so run the back-end with
+The TUI does not yet support authentication, so run the back-end with
 `--no-auth-mode` when using the TUI.
 
 Within the virtual environment where you installed `soliplex`:
 
 ```bash
 soliplex-tui --help
-                                                                                
- Usage: soliplex-tui [OPTIONS]                                                  
-                                                                                
+
+ Usage: soliplex-tui [OPTIONS]
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --version             -v                                                     │
-│ --url                                  TEXT  Base URL for Soliplex back-end  │
-│                                              [default:                       │
-│                                              http://127.0.0.1:8000]          │
-│ --room                -r               TEXT  Room name for the agent         │
-│                                              [default: haiku]                │
-│ --agui                    --no-agui          Connect using Soliplex AG-UI    │
-│                                              endpoint                        │
-│                                              [default: agui]                 │
-│ --install-completion                         Install completion for the      │
-│                                              current shell.                  │
-│ --show-completion                            Show completion for the current │
-│                                              shell, to copy it or customize  │
-│                                              the installation.               │
-│ --help                -h                     Show this message and exit.     │
+│ --url                      TEXT  Base URL for Soliplex back-end              │
+│                                  [default: http://127.0.0.1:8000]            │
+│ --help                -h         Show this message and exit.                 │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -149,11 +194,10 @@ soliplex-tui
 ```
 
 By default, the TUI connects to a Soliplex back-end server running
-on port 8000 on your local machine, and uses the "haiku" romm, just
-as though you typed:
+on port 8000 on your local machine:
 
 ```bash
-soliplex-tui --url http://127.0.0.1:8000 --room haiku
+soliplex-tui --url http://127.0.0.1:8000
 ```
 
 ## Configuration
@@ -165,6 +209,45 @@ YAML-based configuration with:
 - **OIDC** (`oidc/*.yaml`) - Authentication provider settings
 
 See `example/` directory for sample configurations.
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and configure with your values:
+
+```bash
+cp .env.example .env
+```
+
+The `.env.example` file contains comprehensive documentation for all available environment variables.
+
+## Documentation
+
+Comprehensive documentation is available in the `docs/` directory:
+
+- **[Prerequisites Guide](docs/prerequisites.md)** - Step-by-step installation checklist
+- **[Server Setup](docs/server.md)** - Backend server configuration and CLI reference
+- **[Client Setup](docs/client.md)** - Frontend Flutter application setup
+- **[Docker Deployment](docs/docker.md)** - Complete Docker and docker-compose guide
+- **[RAG Setup](docs/rag.md)** - RAG database initialization and management
+- **[Configuration](docs/config/)** - Detailed configuration options
+
+### Running with Docker
+
+See the [Docker Deployment Guide](docs/docker.md) for complete instructions:
+
+```bash
+# Setup
+cp .env.example .env
+# Edit .env with your settings
+
+# Run
+docker-compose up
+```
+
+Access:
+- Backend API: http://localhost:8000
+- API Documentation: http://localhost:8000/docs
+- Frontend Web UI: http://localhost:9000
 
 ## Related Repositories
 
