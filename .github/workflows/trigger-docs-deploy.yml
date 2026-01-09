@@ -28,21 +28,30 @@ jobs:
         run: |
           echo "📚 Triggering documentation rebuild for ${{ github.repository }}"
 
+          # Properly escape JSON using jq
+          payload=$(jq -n \
+            --arg repo "${{ github.repository }}" \
+            --arg ref "${{ github.ref }}" \
+            --arg sha "${{ github.sha }}" \
+            --arg pusher "${{ github.actor }}" \
+            --arg message "${{ github.event.head_commit.message }}" \
+            '{
+              event_type: "docs_update",
+              client_payload: {
+                repository: $repo,
+                ref: $ref,
+                sha: $sha,
+                pusher: $pusher,
+                commit_message: $message
+              }
+            }')
+
           response=$(curl -X POST \
             -H "Accept: application/vnd.github.v3+json" \
             -H "Authorization: token ${{ secrets.DOCS_DEPLOY_TOKEN }}" \
             -w "\n%{http_code}" \
             https://api.github.com/repos/soliplex/soliplex.github.io/dispatches \
-            -d '{
-              "event_type": "docs_update",
-              "client_payload": {
-                "repository": "${{ github.repository }}",
-                "ref": "${{ github.ref }}",
-                "sha": "${{ github.sha }}",
-                "pusher": "${{ github.actor }}",
-                "commit_message": "${{ github.event.head_commit.message }}"
-              }
-            }')
+            -d "$payload")
 
           http_code=$(echo "$response" | tail -n1)
 
