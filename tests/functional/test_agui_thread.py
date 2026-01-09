@@ -12,7 +12,7 @@ EVENT_DESERIALIZER = pydantic.TypeAdapter(agui_core.Event)
 IDENTITY_QUERY = "Who am I?"
 
 
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 def test_post_rooms_roomid_agui_etc(auth_fn, client_no_llm):
     new_thread_request = {"metadata": {"name": "functest"}}
 

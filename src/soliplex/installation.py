@@ -10,10 +10,12 @@ from haiku.rag.graph import agui as hr_agui
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
+from soliplex import authz as authz_package
 from soliplex import config
 from soliplex import mcp_server
 from soliplex import secrets
 from soliplex.agui import persistence as agui_persistence
+from soliplex.authz import schema as authz_schema
 
 
 @dataclasses.dataclass
@@ -46,6 +48,14 @@ class Installation:
         return self._config.thread_persistence_dburi_async
 
     @property
+    def room_authz_dburi_sync(self) -> str:
+        return self._config.room_authz_dburi_sync
+
+    @property
+    def room_authz_dburi_async(self) -> str:
+        return self._config.room_authz_dburi_async
+
+    @property
     def auth_disabled(self):
         return len(self._config.oidc_auth_system_configs) == 0
 
@@ -53,28 +63,56 @@ class Installation:
     def oidc_auth_system_configs(self) -> list[config.OIDCAuthSystemConfig]:
         return self._config.oidc_auth_system_configs
 
-    def get_room_configs(
+    async def get_room_configs(
         self,
+        *,
         user: dict,
+        the_room_authz: authz_package.RoomAuthorization = None,
     ) -> dict[str, config.RoomConfig]:
-        return self._config.room_configs
+        """Return room configs available to the user"""
+        configs = self._config.room_configs
 
-    def get_room_config(
+        if the_room_authz is not None:
+            allowed = await the_room_authz.filter_room_ids(
+                configs.keys(),
+                user_token=user,
+            )
+            configs = {
+                room_id: room_config
+                for room_id, room_config in configs.items()
+                if room_id in allowed
+            }
+
+        return configs
+
+    async def get_room_config(
         self,
-        room_id,
+        *,
+        room_id: str,
         user: dict,
+        the_room_authz: authz_package.RoomAuthorization = None,
     ) -> config.RoomConfig:
+        """Return a room configs IFF available to the user"""
+        if the_room_authz is not None:
+            if not await the_room_authz.check_room_access(
+                room_id=room_id,
+                user_token=user,
+            ):
+                raise KeyError(room_id)
+
         return self._config.room_configs[room_id]
 
-    def get_completion_configs(
+    async def get_completion_configs(
         self,
+        *,
         user: dict,
     ) -> dict[str, config.CompletionConfig]:
         return self._config.completion_configs
 
-    def get_completion_config(
+    async def get_completion_config(
         self,
-        completion_id,
+        *,
+        completion_id: str,
         user: dict,
     ) -> config.CompletionConfig:
         return self._config.completion_configs[completion_id]
@@ -89,37 +127,54 @@ class Installation:
             {},
         )
 
-    def get_agent_for_room(
+    async def get_agent_for_room(
         self,
+        *,
         room_id: str,
         user: dict,
+        the_room_authz: authz_package.RoomAuthorization = None,
     ) -> pydantic_ai.Agent:
-        room_config = self.get_room_config(room_id, user)
+        room_config = await self.get_room_config(
+            room_id=room_id,
+            user=user,
+            the_room_authz=the_room_authz,
+        )
+
         return agents.get_agent_from_configs(
             room_config.agent_config,
             room_config.tool_configs,
             room_config.mcp_client_toolset_configs,
         )
 
-    def get_agent_for_completion(
+    async def get_agent_for_completion(
         self,
+        *,
         completion_id: str,
         user: dict,
     ) -> pydantic_ai.Agent:
-        completion_config = self.get_completion_config(completion_id, user)
+        completion_config = await self.get_completion_config(
+            completion_id=completion_id,
+            user=user,
+        )
         return agents.get_agent_from_configs(
             completion_config.agent_config,
             completion_config.tool_configs,
             completion_config.mcp_client_toolset_configs,
         )
 
-    def get_agent_deps_for_room(
+    async def get_agent_deps_for_room(
         self,
+        *,
         room_id: str,
         user: dict,
+        the_room_authz: authz_package.RoomAuthorization = None,
         run_agent_input: agui_core.RunAgentInput = None,
     ) -> pydantic_ai.Agent:
-        room_config = self.get_room_config(room_id, user)
+        room_config = await self.get_room_config(
+            room_id=room_id,
+            user=user,
+            the_room_authz=the_room_authz,
+        )
 
         kwargs = {}
 
@@ -137,13 +192,17 @@ class Installation:
             **kwargs,
         )
 
-    def get_agent_deps_for_completion(
+    async def get_agent_deps_for_completion(
         self,
+        *,
         completion_id: str,
         user: dict,
         run_agent_input: agui_core.RunAgentInput = None,
     ) -> pydantic_ai.Agent:
-        completion_config = self.get_completion_config(completion_id, user)
+        completion_config = await self.get_completion_config(
+            completion_id=completion_id,
+            user=user,
+        )
 
         kwargs = {}
 
@@ -186,15 +245,26 @@ async def lifespan(
     the_installation.resolve_secrets()
     the_installation.resolve_environment()
 
-    engine = sqla_asyncio.create_async_engine(
+    tp_engine = sqla_asyncio.create_async_engine(
         the_installation.thread_persistence_dburi_async
     )
-    async with engine.begin() as connection:
-        await connection.run_sync(agui_persistence.Base.metadata.create_all)
+    async with tp_engine.begin() as tp_connection:
+        await tp_connection.run_sync(
+            agui_persistence.Base.metadata.create_all,
+        )
+
+    ra_engine = sqla_asyncio.create_async_engine(
+        the_installation.thread_persistence_dburi_async
+    )
+    async with ra_engine.begin() as ra_connection:
+        await ra_connection.run_sync(
+            authz_schema.Base.metadata.create_all,
+        )
 
     context = {
         "the_installation": the_installation,
-        "threads_engine": engine,
+        "threads_engine": tp_engine,
+        "room_authz_engine": ra_engine,
     }
 
     async with contextlib.AsyncExitStack() as stack:
@@ -207,4 +277,5 @@ async def lifespan(
 
         yield context
 
-    await engine.dispose()
+    await tp_engine.dispose()
+    await ra_engine.dispose()

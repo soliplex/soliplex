@@ -297,7 +297,10 @@ def check_config(
     the_console.line()
     the_console.rule("Validating room models")
     the_console.line()
-    for room_config in the_installation.get_room_configs(None).values():
+    room_configs = the_installation.get_room_configs(
+        user=None,
+    )
+    for room_config in room_configs.values():
         the_console.print(f"Room: {room_config.id}")
         try:
             models.Room.from_config(room_config)
@@ -310,7 +313,9 @@ def check_config(
     the_console.line()
     the_console.rule("Validating completion models")
     the_console.line()
-    for compl_config in the_installation.get_completion_configs(None).values():
+    completion_configs = the_installation.get_completion_configs(user=None)
+
+    for compl_config in completion_configs.values():
         the_console.print(f"Completion: {compl_config.id}")
         try:
             models.Completion.from_config(compl_config)

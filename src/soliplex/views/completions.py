@@ -2,7 +2,7 @@ import fastapi
 from fastapi import responses
 from fastapi import security
 
-from soliplex import auth
+from soliplex import authn
 from soliplex import completions
 from soliplex import installation
 from soliplex import models
@@ -22,11 +22,13 @@ depend_the_installation = installation.depend_the_installation
 async def get_chat_completions(
     request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.ConfiguredCompletions:
     """Return the completions available to the user"""
-    user = auth.authenticate(the_installation, token)
-    completion_configs = the_installation.get_completion_configs(user)
+    user = authn.authenticate(the_installation, token)
+    completion_configs = await the_installation.get_completion_configs(
+        user=user,
+    )
 
     return {
         key: models.Completion.from_config(completion_config)
@@ -43,14 +45,14 @@ async def get_chat_completion(
     request: fastapi.Request,
     completion_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.Completion:
     """Return an individual completion"""
-    user = auth.authenticate(the_installation, token)
+    user = authn.authenticate(the_installation, token)
     try:
-        completion_config = the_installation.get_completion_config(
-            completion_id,
-            user,
+        completion_config = await the_installation.get_completion_config(
+            completion_id=completion_id,
+            user=user,
         )
     except KeyError:
         raise fastapi.HTTPException(
@@ -70,9 +72,9 @@ async def post_chat_completion(
     completion_id: str,
     chat_request: models.ChatCompletionRequest,
     the_installation: installation.Installation = depend_the_installation,
-    token: security.HTTPAuthorizationCredentials = auth.oauth2_predicate,
+    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> responses.StreamingResponse:
-    user = auth.authenticate(the_installation, token)
+    user = authn.authenticate(the_installation, token)
     user_profile = models.UserProfile(
         given_name=user.get("given_name", "<unknown>"),
         family_name=user.get("family_name", "<unknown>"),
@@ -81,17 +83,17 @@ async def post_chat_completion(
     )
 
     try:
-        agent = the_installation.get_agent_for_completion(
-            completion_id,
-            user,
+        agent = await the_installation.get_agent_for_completion(
+            completion_id=completion_id,
+            user=user,
         )
     except KeyError:
         raise fastapi.HTTPException(
             status_code=404, detail=f"No such completion: {completion_id}"
         ) from None
 
-    agent_deps = the_installation.get_agent_deps_for_completion(
-        completion_id,
+    agent_deps = await the_installation.get_agent_deps_for_completion(
+        completion_id=completion_id,
         user=user_profile,
     )
 

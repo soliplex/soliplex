@@ -7,7 +7,7 @@ from fastapi import responses
 
 from soliplex import installation
 from soliplex import models
-from soliplex.views import auth as auth_views
+from soliplex.views import authn as authn_views
 
 USER_NAME = "phreddy"
 GIVEN_NAME = "Phred"
@@ -27,7 +27,7 @@ async def test_get_login(with_auth_systems):
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.oidc_auth_system_configs = with_auth_systems
 
-    found = await auth_views.get_login(the_installation)
+    found = await authn_views.get_login(the_installation)
 
     with_auth_systems_map = {asys.id: asys for asys in with_auth_systems}
 
@@ -44,7 +44,7 @@ async def test_get_login(with_auth_systems):
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_auth_disabled", [False, True])
 @pytest.mark.parametrize("w_return_to", [False, True])
-@mock.patch("soliplex.auth.get_oauth")
+@mock.patch("soliplex.authn.get_oauth")
 async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
     system = "test_oauth_appname"
     the_installation = mock.create_autospec(installation.Installation)
@@ -72,7 +72,7 @@ async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
 
     if w_auth_disabled:
         with pytest.raises(fastapi.HTTPException) as exc:
-            await auth_views.get_login_system(
+            await authn_views.get_login_system(
                 request,
                 system,
                 the_installation,
@@ -88,7 +88,7 @@ async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
         cc.assert_not_called()
 
     else:
-        found = await auth_views.get_login_system(
+        found = await authn_views.get_login_system(
             request,
             system,
             the_installation,
@@ -106,8 +106,8 @@ async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
 @pytest.mark.parametrize("w_auth_disabled", [False, True])
 @pytest.mark.parametrize("w_return_to", [False, True])
 @pytest.mark.parametrize("w_error", [None, "aat", "authenticate"])
-@mock.patch("soliplex.auth.get_oauth")
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.get_oauth")
+@mock.patch("soliplex.authn.authenticate")
 async def test_get_auth_system(
     auth_fn,
     get_oauth,
@@ -178,7 +178,7 @@ async def test_get_auth_system(
 
     if w_auth_disabled:
         with pytest.raises(fastapi.HTTPException) as exc:
-            await auth_views.get_auth_system(
+            await authn_views.get_auth_system(
                 request,
                 system,
                 the_installation,
@@ -194,7 +194,7 @@ async def test_get_auth_system(
     else:
         if w_error is not None:
             with pytest.raises(fastapi.HTTPException) as exc:
-                await auth_views.get_auth_system(
+                await authn_views.get_auth_system(
                     request,
                     system,
                     the_installation,
@@ -202,7 +202,7 @@ async def test_get_auth_system(
 
             assert exc.value.status_code == 401
         else:
-            response = await auth_views.get_auth_system(
+            response = await authn_views.get_auth_system(
                 request,
                 system,
                 the_installation,
@@ -224,7 +224,7 @@ async def test_get_auth_system(
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_auth_disabled", [False, True])
-@mock.patch("soliplex.auth.authenticate")
+@mock.patch("soliplex.authn.authenticate")
 async def test_get_user_info(authenticate, w_auth_disabled):
     authenticate.return_value = AUTH_USER
 
@@ -234,7 +234,7 @@ async def test_get_user_info(authenticate, w_auth_disabled):
 
     if w_auth_disabled:
         with pytest.raises(fastapi.HTTPException) as exc:
-            await auth_views.get_user_info(the_installation, token)
+            await authn_views.get_user_info(the_installation, token)
 
         assert exc.value.status_code == 404
         assert exc.value.detail == "system in no-auth mode"
@@ -242,7 +242,7 @@ async def test_get_user_info(authenticate, w_auth_disabled):
         authenticate.assert_not_called()
 
     else:
-        found = await auth_views.get_user_info(the_installation, token)
+        found = await authn_views.get_user_info(the_installation, token)
 
         assert found == AUTH_USER
 
