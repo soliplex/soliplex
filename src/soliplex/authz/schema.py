@@ -13,6 +13,7 @@ from sqlalchemy.sql import sqltypes as sqla_sqltypes
 
 from soliplex import authz as authz_package
 from soliplex import config
+from soliplex import models
 
 AsyncAttrs = sqla_asyncio.AsyncAttrs
 DeclarativeBase = sqla_orm.DeclarativeBase
@@ -83,6 +84,26 @@ class RoomPolicy(Base):
         passive_deletes=True,
     )
 
+    @classmethod
+    def from_model(cls, model: models.RoomPolicy):
+        return cls(
+            room_id=model.room_id,
+            default_allow_deny=model.default_allow_deny,
+            acl_entries=[
+                ACLEntry.from_model(model=acl_entry_model)
+                for acl_entry_model in model.acl_entries
+            ],
+        )
+
+    @property
+    def as_model(self) -> models.RoomPolicy:
+        acl_entries = [acl_entry.as_model for acl_entry in self.acl_entries]
+        return models.RoomPolicy(
+            room_id=self.room_id,
+            default_allow_deny=self.default_allow_deny,
+            acl_entries=acl_entries,
+        )
+
     def check_token(
         self,
         user_token: authz_package.UserToken | None,
@@ -128,6 +149,26 @@ class ACLEntry(Base):
     authenticated: Mapped[bool] = mapped_column(default=False)
     preferred_username: Mapped[str | None] = mapped_column(default=None)
     email: Mapped[str | None] = mapped_column(default=None)
+
+    @classmethod
+    def from_model(cls, model: models.ACLEntry):
+        return cls(
+            allow_deny=model.allow_deny,
+            everyone=model.everyone,
+            authenticated=model.authenticated,
+            preferred_username=model.preferred_username,
+            email=model.email,
+        )
+
+    @property
+    def as_model(self) -> models.ACLEntry:
+        return models.ACLEntry(
+            allow_deny=self.allow_deny,
+            everyone=self.everyone,
+            authenticated=self.authenticated,
+            preferred_username=self.preferred_username,
+            email=self.email,
+        )
 
     def check_token(
         self,
@@ -227,6 +268,72 @@ class RoomAuthorization(authz_package.RoomAuthorization):
                 result.append(room_id)
 
         return result
+
+    async def get_room_policy(
+        self,
+        room_id: str,
+        user_token: authz_package.UserToken | None,
+    ) -> models.RoomPolicy | None:
+        """Return the authorization policy for the room"""
+        async with self.session as session:
+            policy = await self._find_room_policy(room_id, session)
+
+        if policy is not None:
+            await policy.awaitable_attrs.acl_entries
+            allowed = policy.check_token(user_token)
+
+            if allowed != authz_package.AllowDeny.ALLOW:
+                raise KeyError(room_id)
+
+            return policy.as_model
+
+        return None
+
+    async def update_room_policy(
+        self,
+        room_id: str,
+        room_policy: models.RoomPolicy,
+        user_token: authz_package.UserToken | None,
+    ) -> None:
+        """Update the authorization policy for the room"""
+        async with self.session as session:
+            policy = await self._find_room_policy(room_id, session)
+
+            if policy is not None:
+                await policy.awaitable_attrs.acl_entries
+                allowed = policy.check_token(user_token)
+
+                if allowed != authz_package.AllowDeny.ALLOW:
+                    raise KeyError(room_id)
+
+                async with session.begin_nested():
+                    await session.delete(policy)
+
+            new_policy = RoomPolicy.from_model(room_policy)
+
+            async with session.begin_nested():
+                session.add(new_policy)
+
+        return None
+
+    async def delete_room_policy(
+        self,
+        room_id: str,
+        user_token: authz_package.UserToken | None,
+    ) -> None:
+        """Delete any existing authorization policy for the room"""
+        async with self.session as session:
+            policy = await self._find_room_policy(room_id, session)
+
+            if policy is not None:
+                await policy.awaitable_attrs.acl_entries
+                allowed = policy.check_token(user_token)
+
+                if allowed != authz_package.AllowDeny.ALLOW:
+                    raise KeyError(room_id)
+
+                async with session.begin_nested():
+                    await session.delete(policy)
 
 
 def get_session(

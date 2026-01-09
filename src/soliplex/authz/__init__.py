@@ -7,6 +7,9 @@ import typing
 import fastapi
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
+# Avoid circular import when only used for typing
+# from soliplex import models
+
 UserToken = dict[str, typing.Any]
 
 
@@ -33,6 +36,31 @@ class RoomAuthorization(abc.ABC):
         user_token: UserToken | None,
     ) -> list[str]:
         """Filter room IDs based on room authz policies for 'user_token'"""
+
+    @abc.abstractmethod
+    async def get_room_policy(
+        self,
+        room_id: str,
+        user_token: UserToken | None,
+    ) -> models.RoomPolicy | None:  # noqa: F821
+        """Return the authorization policy for the room"""
+
+    @abc.abstractmethod
+    async def update_room_policy(
+        self,
+        room_id: str,
+        room_policy: models.RoomPolicy,  # noqa: F821
+        user_token: UserToken | None,
+    ) -> None:
+        """Update the authorization policy for the room"""
+
+    @abc.abstractmethod
+    async def delete_room_policy(
+        self,
+        room_id: str,
+        user_token: UserToken | None,
+    ) -> None:
+        """Delete the authorization policy for the room"""
 
 
 async def get_the_room_authz(request: fastapi.Request) -> RoomAuthorization:

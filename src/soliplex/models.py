@@ -9,6 +9,7 @@ import pydantic
 from ag_ui import core as agui_core
 
 from soliplex import agui as agui_package
+from soliplex import authz as authz_package
 from soliplex import config
 
 KW_ONLY = pydantic.Field(kw_only=True)
@@ -584,6 +585,25 @@ class AGUI_Thread(pydantic.BaseModel):
 
 class AGUI_Threads(pydantic.BaseModel):
     threads: list[AGUI_Thread]
+
+
+# ----------------------------------------------------------------------------
+#   Room Authorization models
+# ----------------------------------------------------------------------------
+
+
+class ACLEntry(pydantic.BaseModel):
+    allow_deny: authz_package.AllowDeny = authz_package.AllowDeny.DENY
+    everyone: bool = False
+    authenticated: bool = False
+    preferred_username: str | None = None
+    email: str | None = None
+
+
+class RoomPolicy(pydantic.BaseModel):
+    room_id: str
+    default_allow_deny: authz_package.AllowDeny = authz_package.AllowDeny.DENY
+    acl_entries: list[ACLEntry] = pydantic.Field(default_factory=list)
 
 
 # ----------------------------------------------------------------------------

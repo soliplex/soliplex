@@ -9,10 +9,25 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import authz as authz_package
 from soliplex import config
+from soliplex import models
 from soliplex.authz import schema as authz_schema
 
 NOW = datetime.datetime.now(datetime.UTC)
 ROOM_ID = "test-room"
+
+ACL_ENTRY_DEFAULTS = {
+    "everyone": False,
+    "authenticated": False,
+    "preferred_username": None,
+    "email": None,
+    "allow_deny": authz_package.AllowDeny.DENY,
+}
+
+ROOM_POLICY_DEFAULTS = {
+    "room_id": ROOM_ID,
+    "default_allow_deny": authz_package.AllowDeny.DENY,
+    "acl_entries": [],
+}
 
 
 @mock.patch("datetime.timezone")
@@ -54,6 +69,56 @@ def test_roompolicy_ctor(the_session):
     the_session.commit()
 
     assert policy.default_allow_deny == authz_package.AllowDeny.DENY
+
+
+@pytest.mark.parametrize(
+    "model_kwargs",
+    [
+        {},
+        {"default_allow_deny": authz_package.AllowDeny.ALLOW},
+        {
+            "acl_entries_kwargs": [
+                {
+                    "allow_deny": authz_package.AllowDeny.ALLOW,
+                    "authenticated": True,
+                },
+            ],
+        },
+        {
+            "acl_entries_kwargs": [
+                {
+                    "allow_deny": authz_package.AllowDeny.ALLOW,
+                    "email": "phreddy@example.com",
+                },
+                {
+                    "allow_deny": authz_package.AllowDeny.DENY,
+                    "everyone": True,
+                },
+            ],
+        },
+    ],
+)
+def test_roompolicy_from_model(model_kwargs):
+    model_kwargs = model_kwargs.copy()
+    acl_entries_kwargs = model_kwargs.pop("acl_entries_kwargs", ())
+    acl_entries = [
+        models.ACLEntry(**(ACL_ENTRY_DEFAULTS | acl_entry_kwargs))
+        for acl_entry_kwargs in acl_entries_kwargs
+    ]
+    if acl_entries:
+        model_kwargs["acl_entries"] = acl_entries
+
+    model = models.RoomPolicy(**(ROOM_POLICY_DEFAULTS | model_kwargs))
+    found = authz_schema.RoomPolicy.from_model(model)
+
+    assert found.default_allow_deny == model.default_allow_deny
+
+    for f_entry, e_entry in zip(
+        found.acl_entries,
+        model.acl_entries,
+        strict=True,
+    ):
+        assert f_entry.as_model == e_entry
 
 
 @pytest.mark.parametrize("token", [None, {}, {"foo": "bar"}])
@@ -128,6 +193,35 @@ def the_room_policy():
         room_id=ROOM_ID,
         default_allow_deny=authz_package.AllowDeny.DENY,
     )
+
+
+@pytest.mark.parametrize(
+    "model_kwargs",
+    [
+        {},
+        {"allow_deny": authz_package.AllowDeny.ALLOW},
+        {"everyone": True, "allow_deny": authz_package.AllowDeny.DENY},
+        {"authenticated": True, "allow_deny": authz_package.AllowDeny.ALLOW},
+        {
+            "preferred_username": "phreddy",
+            "allow_deny": authz_package.AllowDeny.ALLOW,
+        },
+        {
+            "email": "phreddy@example.com",
+            "allow_deny": authz_package.AllowDeny.ALLOW,
+        },
+    ],
+)
+def test_aclentry_from_model(the_session, the_room_policy, model_kwargs):
+    model = models.ACLEntry(**(ACL_ENTRY_DEFAULTS | model_kwargs))
+    found = authz_schema.ACLEntry.from_model(model)
+    found.room_policy = the_room_policy
+
+    the_session.add(the_room_policy)
+    the_session.add(found)
+    the_session.commit()
+
+    assert found.as_model == model
 
 
 @pytest.mark.parametrize("token", [None, {}, {"foo": "bar"}])
@@ -368,6 +462,71 @@ async def test_roomauthorization_filter_room_ids(the_async_session):
     await the_async_session.commit()
 
     assert await ra.filter_room_ids(room_ids, None) == room_ids
+
+
+@pytest.mark.asyncio
+async def test_roomauthorization_room_policy_crud(the_async_session):
+    ra = authz_schema.RoomAuthorization(the_async_session)
+
+    # No policy -> public room
+    policy = await ra.get_room_policy(ROOM_ID, None)
+    assert policy is None
+
+    acl_entry_model = models.ACLEntry(
+        allow_deny=authz_package.AllowDeny.ALLOW,
+        everyone=True,
+    )
+    policy_model = models.RoomPolicy(
+        room_id=ROOM_ID,
+        acl_entries=[acl_entry_model],
+    )
+    await ra.update_room_policy(ROOM_ID, policy_model, None)
+    await the_async_session.commit()
+
+    after = await ra.get_room_policy(ROOM_ID, None)
+    assert after == policy_model
+    await the_async_session.commit()
+
+    new_acl_entry_model = models.ACLEntry(
+        allow_deny=authz_package.AllowDeny.ALLOW,
+        preferred_username="phreddy",
+    )
+    new_policy_model = policy_model.model_copy(
+        update={"acl_entries": [new_acl_entry_model]},
+    )
+    await ra.update_room_policy(ROOM_ID, new_policy_model, None)
+    await the_async_session.commit()
+
+    with pytest.raises(KeyError):
+        await ra.get_room_policy(ROOM_ID, None)
+
+    await the_async_session.commit()
+
+    with pytest.raises(KeyError):
+        await ra.update_room_policy(ROOM_ID, new_policy_model, None)
+
+    await the_async_session.commit()
+
+    with pytest.raises(KeyError):
+        await ra.delete_room_policy(ROOM_ID, None)
+
+    await the_async_session.commit()
+
+    policy = await ra.get_room_policy(
+        ROOM_ID, {"preferred_username": "phreddy"}
+    )
+    assert policy == new_policy_model
+    await the_async_session.commit()
+
+    await ra.delete_room_policy(ROOM_ID, {"preferred_username": "phreddy"})
+    await the_async_session.commit()
+
+    gone = await ra.get_room_policy(ROOM_ID, None)
+    assert gone is None
+    await the_async_session.commit()
+
+    await ra.delete_room_policy(ROOM_ID, None)
+    await the_async_session.commit()
 
 
 @pytest.mark.parametrize("init_schema", [False, True])
