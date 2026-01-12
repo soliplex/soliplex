@@ -297,9 +297,7 @@ def check_config(
     the_console.line()
     the_console.rule("Validating room models")
     the_console.line()
-    room_configs = the_installation.get_room_configs(
-        user=None,
-    )
+    room_configs = the_installation._config.room_configs
     for room_config in room_configs.values():
         the_console.print(f"Room: {room_config.id}")
         try:
@@ -313,7 +311,7 @@ def check_config(
     the_console.line()
     the_console.rule("Validating completion models")
     the_console.line()
-    completion_configs = the_installation.get_completion_configs(user=None)
+    completion_configs = the_installation._config.completion_configs
 
     for compl_config in completion_configs.values():
         the_console.print(f"Completion: {compl_config.id}")

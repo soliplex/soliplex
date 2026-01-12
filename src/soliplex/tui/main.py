@@ -1,5 +1,6 @@
 import json
 
+import requests
 import textual
 from ag_ui import core as agui_core
 from textual import app as t_app
@@ -44,6 +45,123 @@ class LabeledInputWidget(t_widget.Widget):
         text-align: left;
     }
     """
+
+
+class LoginDialog(t_screen.Screen):
+    BINDINGS = [
+        t_binding.Binding("escape", "dismiss(None)", "Exit"),
+    ]
+
+    def __init__(
+        self,
+        oidc_provider: dict,
+        *args,
+        **kwargs,
+    ):
+        self._oidc_provider = oidc_provider
+        super().__init__()
+
+    def compose(self) -> t_app.ComposeResult:
+        yield t_widgets.Header()
+
+        yield t_widgets.Label(f"Login: {self._oidc_provider['title']}")
+
+        with LabeledInputWidget():
+            yield t_widgets.Label("Username:")
+            yield t_widgets.Input("", id="username")
+
+        with LabeledInputWidget():
+            yield t_widgets.Label("Password:")
+            yield t_widgets.Input("", id="password", password=True)
+
+        yield t_widgets.Footer()
+
+    @property
+    def oidc_provider_token_data(self):
+        oidc_provider = self._oidc_provider
+        result = {
+            "client_id": oidc_provider["client_id"],
+            "grant_type": "password",
+        }
+        client_secret = oidc_provider.get("client_secret")
+
+        if client_secret is not None:
+            result["client_secret"] = client_secret
+
+        return result
+
+    @property
+    def oidc_provider_token_url(self):
+        base = self._oidc_provider["server_url"]
+        return f"{base}/protocol/openid-connect/token"
+
+    @textual.on(t_widgets.Input.Submitted)
+    async def on_input(self, event: t_widgets.Input.Submitted) -> None:
+        """When the user hits return."""
+
+        w_username = self.query_one("#username")
+        username = w_username.value.strip()
+
+        w_password = self.query_one("#password")
+        password = w_password.value.strip()
+
+        payload = {
+            "username": username,
+            "password": password,
+        }
+
+        self.dismiss(payload)
+
+
+class OIDCProviderSelectView(t_screen.Screen):
+    BINDINGS = [
+        t_binding.Binding("escape", "dismiss(None)", "Exit"),
+    ]
+
+    def __init__(
+        self,
+        oidc_providers: list[dict],
+        *args,
+        **kwargs,
+    ):
+        self.oidc_providers = oidc_providers
+        super().__init__()
+
+    def compose(self) -> t_app.ComposeResult:
+        yield t_widgets.Header()
+
+        with ListHeaderWidget():
+            yield t_widgets.Label("Select OIDC Provider:")
+
+        with t_containers.VerticalScroll(id="provider-list"):
+            for provider_id, provider_info in self.oidc_providers.items():
+                yield t_widgets.Button(
+                    name=provider_id,
+                    label=f"{provider_id}:\n{provider_info['title']}",
+                    variant="primary",
+                )
+
+        yield t_widgets.Footer()
+
+    @textual.work
+    async def on_button_pressed(
+        self,
+        event: t_widgets.Button.Pressed,
+    ) -> None:
+        provider_id = event.button.name
+        provider_info = self.oidc_providers[provider_id]
+        login_dialog = LoginDialog(provider_info)
+        payload = await self.app.push_screen_wait(login_dialog)
+
+        if payload:
+            token_url = login_dialog.oidc_provider_token_url
+            token_request = login_dialog.oidc_provider_token_data | payload
+            response = requests.post(token_url, data=token_request)
+            response.raise_for_status()
+            token_data = response.json()
+            self.dismiss((token_url, token_data))
+        else:
+            self.dismiss(None)
 
 
 class EditRunMetadataDialog(t_screen.Screen):
@@ -815,35 +933,21 @@ class RoomView(t_screen.Screen):
         self.run_agent_input.messages[:] = new_run_agent_input.messages[:]
 
 
-class SoliplexTUI(t_app.App):
-    TITLE = "Soliplex TUI"
-
+class RoomListView(t_screen.Screen):
     BINDINGS = [
-        t_binding.Binding("ctrl+q", "quit", "quit", id="quit"),
+        t_binding.Binding("escape", "app.pop_screen", "Exit"),
     ]
-    DEFAULT_CSS = """
-    VerticalScroll {
-        width: 100%;
-    }
-    VerticalScroll Button {
-        width: 100%;
-    }
-    """
 
     def __init__(self, soliplex_url="http://localhost:8000", *args, **kw):
-        self.soliplex_url = soliplex_url
-        self.rest_api = rest_api.TUI_REST_API(soliplex_url)
         self._rooms = None
 
         super().__init__(*args, **kw)
 
-    def on_mount(self) -> None:
-        self.border_subtitle = self.soliplex_url
-
     @property
     def rooms(self) -> dict[str, dict]:
-        if self._rooms is None:
-            self._rooms = self.rest_api.get_rooms()
+        attempts = 0
+        while self._rooms is None and attempts < 3:
+            self._rooms = self.app.rest_api.get_rooms()
 
         return self._rooms
 
@@ -869,9 +973,54 @@ class SoliplexTUI(t_app.App):
         room_id = event.button.name
         room_info = self.rooms[room_id]
         room_view = RoomView(room_id, room_info)
-        await self.push_screen(room_view)
+        await self.app.push_screen(room_view)
 
+
+class SoliplexTUI(t_app.App):
+    TITLE = "Soliplex TUI"
+
+    BINDINGS = [
+        t_binding.Binding("ctrl+q", "quit", "quit", id="quit"),
+    ]
+    DEFAULT_CSS = """
+    VerticalScroll {
+        width: 100%;
+    }
+    VerticalScroll Button {
+        width: 100%;
+    }
+    """
+
+    def __init__(self, soliplex_url="http://localhost:8000", *args, **kw):
+        self.soliplex_url = soliplex_url
+        self.rest_api = rest_api.TUI_REST_API(soliplex_url)
+        self._oidc_providers = None
+
+        super().__init__(*args, **kw)
+
+    @textual.work
+    async def on_mount(self) -> None:
+        self.border_subtitle = self.soliplex_url
+        self._oidc_providers = self.rest_api.get_oidc_providers()
+
+        if self._oidc_providers:
+            oidcps_view = OIDCProviderSelectView(self._oidc_providers)
+            oidc_response = await self.push_screen_wait(oidcps_view)
+
+            if oidc_response is None:
+                self.exit("Authentication failed", 1)
+
+            token_url, token_data = oidc_response
+            self.rest_api.oidc_token_url = token_url
+            self.rest_api.oidc_token_data = token_data
+
+        rl_view = RoomListView()
+        await self.push_screen_wait(rl_view)
+
+
+app = SoliplexTUI()
 
 if __name__ == "__main__":
-    app = SoliplexTUI()
-    app.run()
+    status = app.run()
+    if status is not None:
+        print(status)
