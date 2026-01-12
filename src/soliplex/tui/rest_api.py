@@ -27,13 +27,6 @@ class TUI_REST_API:
 
         return response.json()
 
-    def get_oidc_provider(self, system: str):
-        oidc_provider_url = f"{self.api_base}/login/{system}"
-        response = requests.get(oidc_provider_url)
-        response.raise_for_status()
-
-        return response.json()
-
     def auth_url(self, system: str) -> str:
         return f"{self.api_base}/auth"
 
