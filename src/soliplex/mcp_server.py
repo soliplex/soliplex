@@ -68,9 +68,9 @@ def setup_mcp_for_rooms(the_installation: installation.Installation):
 
     # Deliberately bypass auth check done by 'get_room_configs' here.
     available_rooms = the_installation._config.room_configs
-    max_age = the_installation.get_environment("MCP_TOKEN_MAX_AGE")
+    max_age = the_installation.get_environment("MCP_TOKEN_MAX_AGE", 3600)
 
-    if max_age is not None:
+    if isinstance(max_age, str):
         max_age = int(max_age)
 
     for key, room_config in available_rooms.items():

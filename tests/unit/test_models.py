@@ -56,7 +56,8 @@ AGUI_FEATURE_MODEL_KLASS = "soliplex.agui.features.testing"
 INSTALLATION_ID = "test-installation"
 INSTALLATION_SECRET = "Seeeeeekrit!"
 INSTALLATION_ENVVAR_NAME = "TEST_ENVVAR"
-INSTALLATION_ENVVAR_VALUE = "Test Envvar"
+INSTALLATION_ENVVAR_STR_VALUE = "Test Envvar"
+INSTALLATION_ENVVAR_INT_VALUE = 54321
 INSTALLATION_AGENT_ID = "test-agent"
 INSTALLATION_AGENT_MODEL_NAME = "test-agent-model"
 INSTALLATION_AGENT_SYSTEM_PROMPT = "You are a test!"
@@ -719,7 +720,8 @@ def installation_secrets(request):
 @pytest.fixture(
     params=[
         None,
-        {INSTALLATION_ENVVAR_NAME: INSTALLATION_ENVVAR_VALUE},
+        {INSTALLATION_ENVVAR_NAME: INSTALLATION_ENVVAR_STR_VALUE},
+        {INSTALLATION_ENVVAR_NAME: INSTALLATION_ENVVAR_INT_VALUE},
     ],
 )
 def installation_environment(request):

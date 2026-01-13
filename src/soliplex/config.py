@@ -1726,12 +1726,17 @@ def strip_secret_prefix(config_str: str) -> str:
     return config_str[len(SECRET_PREFIX) :]
 
 
-def resolve_file_prefix(config_str: str, config_path: pathlib.Path) -> str:
-    if config_str.startswith(FILE_PREFIX):
-        config_str = config_path.parent / config_str[len(FILE_PREFIX) :]
-        config_str = config_str.resolve()
+def resolve_file_prefix(
+    config_value: typing.Any,
+    config_path: pathlib.Path,
+) -> str:
+    if isinstance(config_value, str):
+        if config_value.startswith(FILE_PREFIX):
+            file_part = config_value[len(FILE_PREFIX) :]
+            config_value = config_path.parent / file_part
+            config_value = str(config_value.resolve())
 
-    return str(config_str)
+    return config_value
 
 
 def resolve_environment_entry(
@@ -2088,7 +2093,7 @@ class InstallationConfig:
     #
     # Map values similar to 'os.environ'.
     #
-    environment: dict[str, str] = dataclasses.field(
+    environment: dict[str, typing.Any] = dataclasses.field(
         default_factory=dict,
     )
 

@@ -126,7 +126,7 @@ def test_room_mcp_tools(mcp_tool, tool_configs, exp_mcp_tools, allow_mcp):
         assert len(found) == 0
 
 
-@pytest.mark.parametrize("w_max_age", [None, "3600"])
+@pytest.mark.parametrize("w_max_age", [3600, "3600"])
 @mock.patch("soliplex.mcp_server.room_mcp_tools")
 @mock.patch("soliplex.mcp_auth.FastMCPTokenProvider")
 @mock.patch("fastmcp.server.FastMCP")
@@ -141,10 +141,10 @@ def test_setup_mcp_for_rooms(fmcp_klass, fmtp_klass, rmt, w_max_age):
     the_installation._config = i_config
     the_installation.get_environment.return_value = w_max_age
 
-    if w_max_age is not None:
+    if isinstance(w_max_age, str):
         exp_max_age = int(w_max_age)
     else:
-        exp_max_age = None
+        exp_max_age = w_max_age
 
     found = mcp_server.setup_mcp_for_rooms(the_installation)
 
@@ -168,3 +168,8 @@ def test_setup_mcp_for_rooms(fmcp_klass, fmtp_klass, rmt, w_max_age):
             )
             in fmtp_klass.call_args_list
         )
+
+    the_installation.get_environment.assert_called_once_with(
+        "MCP_TOKEN_MAX_AGE",
+        3600,
+    )
