@@ -9,6 +9,7 @@ import typing
 from collections import abc
 from pathlib import Path
 
+from ag_ui.core import EventType
 from haiku.rag import client as rag_client
 from haiku.rag.agents.chat import agent as chat_agent
 from haiku.rag.agents.chat.state import ChatDeps
@@ -81,6 +82,27 @@ class ChatAgentWrapper:
                 deps=chat_deps,
                 **kwargs,
             ):
+                # Intercept FunctionToolResultEvent to extract StateSnapshotEvent
+                # from tool metadata and emit under CHAT_STATE_KEY for persistence.
+                # haiku.rag tools emit state via ToolReturn.metadata, but that
+                # does a full state replace. We re-emit under our key to preserve
+                # other state and ensure proper persistence.
+                if (
+                    isinstance(event, ai_messages.FunctionToolResultEvent)
+                    and deps.agui_emitter
+                ):
+                    result = getattr(event, "result", None)
+                    metadata = getattr(result, "metadata", None) if result else None
+                    if metadata:
+                        for meta_event in metadata:
+                            if (
+                                hasattr(meta_event, "type")
+                                and meta_event.type == EventType.STATE_SNAPSHOT
+                            ):
+                                snapshot = getattr(meta_event, "snapshot", {})
+                                deps.agui_emitter.update_state(
+                                    {CHAT_STATE_KEY: snapshot}
+                                )
                 yield event
 
 

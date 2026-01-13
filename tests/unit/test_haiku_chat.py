@@ -108,6 +108,7 @@ async def test_chat_agent_wrapper_run_stream_events_wo_state(mock_haiku_rag):
 
     mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
     mock_deps.state = {}
+    mock_deps.agui_emitter = None
 
     events = []
     async for event in wrapper.run_stream_events(
@@ -162,6 +163,7 @@ async def test_chat_agent_wrapper_run_stream_events_w_state(mock_haiku_rag):
 
     mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
     mock_deps.state = {haiku_chat.CHAT_STATE_KEY: existing_state.model_dump()}
+    mock_deps.agui_emitter = None
 
     events = []
     async for event in wrapper.run_stream_events(
@@ -197,6 +199,7 @@ async def test_chat_agent_wrapper_passes_kwargs(mock_haiku_rag):
 
     mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
     mock_deps.state = {}
+    mock_deps.agui_emitter = None
 
     mock_output_type = mock.MagicMock()
     mock_message_history = [mock.MagicMock()]
@@ -217,6 +220,191 @@ async def test_chat_agent_wrapper_passes_kwargs(mock_haiku_rag):
     assert call_kwargs["message_history"] is mock_message_history
     assert call_kwargs["deferred_tool_results"] is mock_deferred
     assert call_kwargs["extra_kwarg"] == "test_value"
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.HaikuRAG")
+async def test_chat_agent_wrapper_emits_state_from_tool_metadata(mock_haiku_rag):
+    """Test that StateSnapshotEvent from tool metadata is emitted under key."""
+    from ag_ui.core import EventType
+    from pydantic_ai import messages as ai_messages
+
+    mock_agent = mock.MagicMock()
+    mock_config = mock.MagicMock()
+    mock_client = mock.MagicMock()
+    mock_emitter = mock.MagicMock()
+
+    mock_haiku_rag.return_value.__aenter__.return_value = mock_client
+
+    # Create a mock StateSnapshotEvent in tool result metadata
+    mock_state_event = mock.MagicMock()
+    mock_state_event.type = EventType.STATE_SNAPSHOT
+    mock_state_event.snapshot = {"qa_history": [{"q": "test", "a": "answer"}]}
+
+    mock_result = mock.MagicMock()
+    mock_result.metadata = [mock_state_event]
+
+    mock_tool_event = mock.MagicMock(spec=ai_messages.FunctionToolResultEvent)
+    mock_tool_event.result = mock_result
+
+    async def mock_events():
+        yield mock_tool_event
+        yield "text_event"
+
+    mock_agent.run_stream_events.return_value = mock_events()
+
+    wrapper = haiku_chat.ChatAgentWrapper(
+        agent=mock_agent,
+        config=mock_config,
+        db_path=Path(RAG_DB_PATH),
+    )
+
+    mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
+    mock_deps.state = {}
+    mock_deps.agui_emitter = mock_emitter
+
+    events = []
+    async for event in wrapper.run_stream_events(
+        message_history=[],
+        deps=mock_deps,
+    ):
+        events.append(event)
+
+    # Verify state was emitted under CHAT_STATE_KEY
+    mock_emitter.update_state.assert_called_once()
+    call_args = mock_emitter.update_state.call_args[0][0]
+    assert haiku_chat.CHAT_STATE_KEY in call_args
+    assert call_args[haiku_chat.CHAT_STATE_KEY] == mock_state_event.snapshot
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.HaikuRAG")
+async def test_chat_agent_wrapper_no_emit_wo_state_snapshot(mock_haiku_rag):
+    """Test that non-StateSnapshotEvent metadata doesn't trigger emission."""
+    from pydantic_ai import messages as ai_messages
+
+    mock_agent = mock.MagicMock()
+    mock_config = mock.MagicMock()
+    mock_client = mock.MagicMock()
+    mock_emitter = mock.MagicMock()
+
+    mock_haiku_rag.return_value.__aenter__.return_value = mock_client
+
+    # Create tool result with non-StateSnapshotEvent metadata
+    mock_other_event = mock.MagicMock()
+    mock_other_event.type = "OTHER_EVENT"
+
+    mock_result = mock.MagicMock()
+    mock_result.metadata = [mock_other_event]
+
+    mock_tool_event = mock.MagicMock(spec=ai_messages.FunctionToolResultEvent)
+    mock_tool_event.result = mock_result
+
+    async def mock_events():
+        yield mock_tool_event
+
+    mock_agent.run_stream_events.return_value = mock_events()
+
+    wrapper = haiku_chat.ChatAgentWrapper(
+        agent=mock_agent,
+        config=mock_config,
+        db_path=Path(RAG_DB_PATH),
+    )
+
+    mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
+    mock_deps.state = {}
+    mock_deps.agui_emitter = mock_emitter
+
+    events = []
+    async for event in wrapper.run_stream_events(
+        message_history=[],
+        deps=mock_deps,
+    ):
+        events.append(event)
+
+    # Verify no state was emitted
+    mock_emitter.update_state.assert_not_called()
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.HaikuRAG")
+async def test_chat_agent_wrapper_no_emit_wo_metadata(mock_haiku_rag):
+    """Test that FunctionToolResultEvent without metadata doesn't emit."""
+    from pydantic_ai import messages as ai_messages
+
+    mock_agent = mock.MagicMock()
+    mock_config = mock.MagicMock()
+    mock_client = mock.MagicMock()
+    mock_emitter = mock.MagicMock()
+
+    mock_haiku_rag.return_value.__aenter__.return_value = mock_client
+
+    # Create tool result with no metadata
+    mock_result = mock.MagicMock()
+    mock_result.metadata = None
+
+    mock_tool_event = mock.MagicMock(spec=ai_messages.FunctionToolResultEvent)
+    mock_tool_event.result = mock_result
+
+    async def mock_events():
+        yield mock_tool_event
+
+    mock_agent.run_stream_events.return_value = mock_events()
+
+    wrapper = haiku_chat.ChatAgentWrapper(
+        agent=mock_agent,
+        config=mock_config,
+        db_path=Path(RAG_DB_PATH),
+    )
+
+    mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
+    mock_deps.state = {}
+    mock_deps.agui_emitter = mock_emitter
+
+    events = []
+    async for event in wrapper.run_stream_events(
+        message_history=[],
+        deps=mock_deps,
+    ):
+        events.append(event)
+
+    # Verify no state was emitted
+    mock_emitter.update_state.assert_not_called()
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.HaikuRAG")
+async def test_chat_agent_wrapper_no_emit_wo_emitter(mock_haiku_rag):
+    """Test that no error occurs when agui_emitter is None."""
+    mock_agent = mock.MagicMock()
+    mock_config = mock.MagicMock()
+    mock_client = mock.MagicMock()
+
+    mock_haiku_rag.return_value.__aenter__.return_value = mock_client
+
+    async def mock_events():
+        yield "event"
+
+    mock_agent.run_stream_events.return_value = mock_events()
+
+    wrapper = haiku_chat.ChatAgentWrapper(
+        agent=mock_agent,
+        config=mock_config,
+        db_path=Path(RAG_DB_PATH),
+    )
+
+    mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
+    mock_deps.state = {}
+    mock_deps.agui_emitter = None
+
+    events = []
+    async for event in wrapper.run_stream_events(
+        message_history=[],
+        deps=mock_deps,
+    ):
+        events.append(event)
+
+    assert events == ["event"]
 
 
 def test_resolve_db_path_w_override(mock_installation_config):

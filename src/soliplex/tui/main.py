@@ -920,17 +920,21 @@ class RoomView(t_screen.Screen):
 
                 elif chunk["type"] == "RUN_FINISHED":
                     response_content += "\n\n** done **"
+                    self.app.call_from_thread(response.update, response_content)
+                    break
 
                 elif chunk["type"] == "RUN_ERROR":
                     response_content += (
                         f"\n\n** error **\n\n{chunk['message']}"
                     )
+                    self.app.call_from_thread(response.update, response_content)
+                    break
 
                 self.app.call_from_thread(response.update, response_content)
 
         new_run_agent_input = esp.as_run_agent_input
-
         self.run_agent_input.messages[:] = new_run_agent_input.messages[:]
+        self.run_agent_input.state = new_run_agent_input.state
 
 
 class RoomListView(t_screen.Screen):
