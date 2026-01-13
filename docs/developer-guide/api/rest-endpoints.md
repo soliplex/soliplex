@@ -182,6 +182,57 @@ Get visual representation of a document chunk with highlighted text.
 }
 ```
 
+### GET /v1/rooms/{room_id}/authz
+
+Get authorization policy for a room.
+
+**Parameters:**
+- `room_id` - Room identifier
+
+**Response:**
+```json
+{
+  "room_id": "research",
+  "default_allow_deny": "deny",
+  "acl_entries": [
+    {
+      "allow_deny": "allow",
+      "everyone": false,
+      "authenticated": true,
+      "preferred_username": null,
+      "email": null
+    },
+    {
+      "allow_deny": "allow",
+      "everyone": false,
+      "authenticated": false,
+      "preferred_username": "admin",
+      "email": null
+    }
+  ]
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `room_id` | string | Room identifier |
+| `default_allow_deny` | string | Default policy: `"allow"` or `"deny"` |
+| `acl_entries` | array | Access control list entries |
+
+**ACLEntry Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `allow_deny` | string | Entry action: `"allow"` or `"deny"` |
+| `everyone` | boolean | Applies to all users (including anonymous) |
+| `authenticated` | boolean | Applies to all authenticated users |
+| `preferred_username` | string | Specific username to match |
+| `email` | string | Specific email to match |
+
+**Note:** Returns `null` if no authorization policy is configured for the room.
+
 ---
 
 ## AG-UI Endpoints
@@ -597,7 +648,8 @@ Common status codes:
 ## Source Code
 
 - Debug/health views: `src/soliplex/views/__init__.py`
-- Auth views: `src/soliplex/views/auth.py`
+- Auth views: `src/soliplex/views/authn.py`
+- Authorization views: `src/soliplex/views/authz.py`
 - Room views: `src/soliplex/views/rooms.py`
 - AGUI views: `src/soliplex/views/agui.py`
 - Completions views: `src/soliplex/views/completions.py`

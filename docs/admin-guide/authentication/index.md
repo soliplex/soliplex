@@ -245,7 +245,7 @@ This profile is accessible to agents via `ctx.deps.user`.
 
 | Component | File |
 |-----------|------|
-| OAuth setup | `src/soliplex/auth.py` |
-| Auth endpoints | `src/soliplex/views/auth.py` |
+| OAuth setup | `src/soliplex/authn.py` |
+| Auth endpoints | `src/soliplex/views/authn.py` |
 | OIDC config parsing | `src/soliplex/config.py` (OIDCAuthSystemConfig) |
 | MCP token auth | `src/soliplex/mcp_auth.py` |

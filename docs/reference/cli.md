@@ -399,11 +399,13 @@ soliplex-tui --url https://soliplex.example.com
 
 **Features:**
 
+- OIDC authentication (login with configured identity providers)
 - Room selection and navigation
 - Thread management (create, select, view history)
 - Run viewing with messages and events
 - Metadata editing for threads and runs
 - Real-time streaming responses
+- Installation and room configuration viewing
 
 **Screen Navigation:**
 
@@ -426,15 +428,36 @@ Press `Ctrl+Z` to edit metadata in context:
 
 A dialog appears with input fields. Press `Enter` to save or `Escape` to cancel.
 
-**Requirements:**
+**Authentication:**
 
-The TUI client requires the backend to be running with `--no-auth-mode` for local development:
+The TUI supports two authentication modes:
+
+**1. OIDC Authentication (Production)**
+
+When connecting to a server with OIDC enabled, the TUI presents a login screen:
+
+1. Select an OIDC provider from the list
+2. Enter your username and password
+3. The TUI authenticates via the provider's token endpoint
+4. On success, you're taken to the room selection screen
 
 ```bash
-# Terminal 1: Start backend
+# Start backend with OIDC configured
+soliplex-cli serve production.yaml
+
+# Connect TUI - login screen appears
+soliplex-tui --url https://soliplex.example.com
+```
+
+**2. No-Auth Mode (Development)**
+
+For local development without authentication:
+
+```bash
+# Terminal 1: Start backend without auth
 soliplex-cli serve example/minimal.yaml --no-auth-mode
 
-# Terminal 2: Start TUI
+# Terminal 2: Connect TUI - no login required
 soliplex-tui --url http://127.0.0.1:8000
 ```
 

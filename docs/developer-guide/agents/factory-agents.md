@@ -218,6 +218,61 @@ def orchestrator_factory(agent_config, tool_configs, mcp_configs):
     return orchestrator
 ```
 
+## Example: Faux Agent (Testing)
+
+The `faux_agent_factory` creates a simulated agent for testing purposes. It doesn't use a real LLM but simulates agent behavior with delays and mock responses.
+
+```python
+# src/soliplex/examples.py
+
+@dataclasses.dataclass
+class FauxAgent:
+    agent_config: config.FactoryAgentConfig
+    tool_configs: config.ToolConfigMap = None
+    mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap = None
+
+    async def run_stream_events(self, message_history, deps, **kwargs):
+        # 1. Emit thinking events with delays
+        yield ai_messages.PartStartEvent(index=0, part=ThinkingPart("I'm thinking"))
+        await asyncio.sleep(random.uniform(0.5, 2.0))
+        yield ai_messages.PartEndEvent(index=0, part=think_part)
+
+        # 2. Call each configured tool
+        for tool_name, tool_config in self.tool_configs.items():
+            yield ai_messages.PartStartEvent(index=i, part=ToolCallPart(tool_name))
+            await tool_config.tool(ctx)
+            yield ai_messages.PartEndEvent(index=i, part=tc_part)
+
+        # 3. Return static response
+        yield ai_messages.PartStartEvent(index=n, part=TextPart("I don't know!"))
+        yield ai_messages.PartEndEvent(index=n, part=text_part)
+
+
+def faux_agent_factory(agent_config, tool_configs, mcp_client_toolset_configs):
+    return FauxAgent(agent_config, tool_configs, mcp_client_toolset_configs)
+```
+
+### Room Configuration
+
+```yaml
+# example/rooms/faux/room_config.yaml
+id: "faux"
+name: "Test Room"
+description: "Room for testing agent streaming behavior"
+agent:
+  kind: "factory"
+  factory_name: "soliplex.examples.faux_agent_factory"
+  with_agent_config: true
+allow_mcp: false
+```
+
+### Use Cases
+
+- Testing AG-UI event streaming without LLM costs
+- Verifying tool call behavior in isolation
+- UI development with predictable agent responses
+- Integration testing with controlled delays
+
 ## Best Practices
 
 1. **Share usage tracking** - Pass `ctx.usage` between agents
