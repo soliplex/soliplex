@@ -1,0 +1,14 @@
+id: "chat"
+name: "Haiku Chat"
+description: "Conversational RAG with search, ask, and document retrieval"
+suggestions:
+  - "What documents are available?"
+  - "Search for information about Soliplex"
+  - "Explain how the authentication system works"
+agent:
+  kind: "factory"
+  factory_name: "soliplex.haiku_chat.chat_agent_factory"
+  with_agent_config: true
+  extra_config:
+    rag_lancedb_stem: "rag"
+allow_mcp: false

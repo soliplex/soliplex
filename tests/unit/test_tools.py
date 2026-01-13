@@ -2,12 +2,12 @@ import datetime
 from unittest import mock
 
 import pytest
-from haiku.rag.graph import agui as rag_agui
 
 from soliplex import agents
 from soliplex import config
 from soliplex import installation
 from soliplex import tools
+from soliplex.agui import emitter as agui_emitter
 from soliplex.agui import features as agui_features
 
 USER = {
@@ -115,12 +115,12 @@ async def test_search_documents(rag_client, n_docs, w_radius, w_limit):
 
 @pytest.mark.anyio
 async def test_rag_research_wo_tool_config(the_installation):
-    agui_emitter = mock.create_autospec(rag_agui.AGUIEmitter)
+    emitter = mock.create_autospec(agui_emitter.AGUIEmitter)
     deps = agents.AgentDependencies(
         the_installation=the_installation,
         user=USER,
         tool_configs={},
-        agui_emitter=agui_emitter,
+        agui_emitter=emitter,
     )
     ctx = mock.Mock(spec_set=(["deps"]), deps=deps)
     with pytest.raises(tools.NoToolConfig):
@@ -162,12 +162,12 @@ async def test_rag_research(
     )
     tool_configs = {"research_report": rrt_config}
 
-    agui_emitter = mock.create_autospec(rag_agui.AGUIEmitter)
+    emitter = mock.create_autospec(agui_emitter.AGUIEmitter)
     deps = agents.AgentDependencies(
         the_installation=the_installation,
         user=USER,
         tool_configs=tool_configs,
-        agui_emitter=agui_emitter,
+        agui_emitter=emitter,
     )
     ctx = mock.Mock(spec_set=(["deps"]), deps=deps)
 
@@ -185,7 +185,6 @@ async def test_rag_research(
 
     rd_class.assert_called_once_with(
         client=client,
-        agui_emitter=agui_emitter,
     )
 
     rs_class.from_config.assert_called_once_with(
@@ -239,12 +238,12 @@ async def test_agui_state(the_installation, w_state):
 
 @pytest.mark.anyio
 async def test_ask_with_rich_citations_wo_tool_config(the_installation):
-    agui_emitter = mock.create_autospec(rag_agui.AGUIEmitter)
+    emitter = mock.create_autospec(agui_emitter.AGUIEmitter)
     deps = agents.AgentDependencies(
         the_installation=the_installation,
         user=USER,
         tool_configs={},
-        agui_emitter=agui_emitter,
+        agui_emitter=emitter,
     )
     ctx = mock.Mock(spec_set=(["deps"]), deps=deps)
     with pytest.raises(tools.NoToolConfig):

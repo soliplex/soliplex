@@ -112,6 +112,7 @@ room_authz_dburi:
 #==========================================================================
 room_paths:
   - "./rooms/ask_soliplex"
+  - "./rooms/chat"
   - "./rooms/haiku"
   - "./rooms/joker"
   - "./rooms/faux"

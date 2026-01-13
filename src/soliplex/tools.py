@@ -3,9 +3,9 @@ import datetime
 import pydantic
 import pydantic_ai
 from haiku.rag import client as rag_client
-from haiku.rag.graph import research as rag_research
-from haiku.rag.graph.research import graph as rag_research_graph
-from haiku.rag.graph.research import state as rag_research_state
+from haiku.rag.agents import research as rag_research
+from haiku.rag.agents.research import graph as rag_research_graph
+from haiku.rag.agents.research import state as rag_research_state
 from haiku.rag.store.models import chunk as rag_store_models_chunk
 
 from soliplex import agents
@@ -114,7 +114,6 @@ async def research_report(
         )
         graph_deps = rag_research_state.ResearchDeps(
             client=client,
-            agui_emitter=ctx.deps.agui_emitter,
         )
         return await graph.run(state=state, deps=graph_deps)
 

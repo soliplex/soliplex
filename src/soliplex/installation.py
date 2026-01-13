@@ -6,7 +6,6 @@ import fastapi
 import pydantic_ai
 from ag_ui import core as agui_core
 from haiku.rag import config as hr_config
-from haiku.rag.graph import agui as hr_agui
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
@@ -14,6 +13,7 @@ from soliplex import authz as authz_package
 from soliplex import config
 from soliplex import mcp_server
 from soliplex import secrets
+from soliplex.agui import emitter as agui_emitter
 from soliplex.agui import persistence as agui_persistence
 from soliplex.authz import schema as authz_schema
 
@@ -179,7 +179,7 @@ class Installation:
         kwargs = {}
 
         if run_agent_input is not None:
-            kwargs["agui_emitter"] = hr_agui.AGUIEmitter(
+            kwargs["agui_emitter"] = agui_emitter.AGUIEmitter(
                 thread_id=run_agent_input.thread_id,
                 run_id=run_agent_input.run_id,
                 use_deltas=True,
@@ -207,7 +207,7 @@ class Installation:
         kwargs = {}
 
         if run_agent_input is not None:
-            kwargs["agui_emitter"] = hr_agui.AGUIEmitter(
+            kwargs["agui_emitter"] = agui_emitter.AGUIEmitter(
                 thread_id=run_agent_input.thread_id,
                 run_id=run_agent_input.run_id,
                 use_deltas=False,

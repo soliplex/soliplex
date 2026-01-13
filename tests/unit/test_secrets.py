@@ -102,7 +102,7 @@ def test_get_file_path_secret(temp_dir, file_path, expectation, expected):
     "command, args, expectation, expected",
     [
         ("/nowhere/not_executable", (), SubprocessError, ERROR_MISS),
-        ("/bin/true", (), SubprocessError, ERROR_MISS),
+        ("printf", [""], SubprocessError, ERROR_MISS),  # Empty output
         ("echo", [SECRET_VALUE], NoRaise, SECRET_VALUE),
     ],
 )

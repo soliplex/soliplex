@@ -1,11 +1,7 @@
 """Features defined by soliplex"""
 
 import pydantic
-
-try:
-    from haiku.rag.graph.common import models as hr_graph_models
-except ImportError:  # pragma: NO COVER haiku-rag-slim >= 0.21.0
-    from haiku.rag.graph.research import models as hr_graph_models
+from haiku.rag.agents.research import models as hr_graph_models
 
 KW_ONLY_NONE = pydantic.Field(kw_only=True, default=None)
 
