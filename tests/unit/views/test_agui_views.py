@@ -831,27 +831,94 @@ async def test_post_room_agui_thread_id_meta(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("w_event_count", [0, 1, 10])
-async def test_tee_events(w_event_count):
+@pytest.mark.parametrize("w_finished_error", [None, "finished", "error"])
+@mock.patch("soliplex.views.agui._debug_print")
+async def test_tee_events(dprint, w_finished_error, w_event_count):
     event_log = []
     on_done = mock.AsyncMock(spec_set=())
 
+    finished_event = agui_core.events.RunFinishedEvent(
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+    )
+    error_event = agui_core.events.RunErrorEvent(message="test error")
+
     async def event_iter():
-        for event in range(w_event_count):
-            yield event
+        for i_event in range(w_event_count):
+            yield agui_core.events.RawEvent(event=i_event)
+
+        if w_finished_error == "finished":
+            yield finished_event
+
+        elif w_finished_error == "error":
+            yield error_event
 
     expected = [
         event
         async for event in agui_views.tee_events(
             event_iter(),
             event_log,
-            on_done,
+            on_done=on_done,
+            thread_id=TEST_THREAD_ID,
+            run_id=TEST_RUN_ID,
         )
     ]
 
-    assert len(event_log) == w_event_count
     assert event_log == expected
 
     on_done.assert_awaited_once_with(events=event_log)
+
+    if len(expected) == 0:
+        dprint.assert_called_once_with(
+            f"Stream {TEST_THREAD_ID}/{TEST_RUN_ID}: EMPTY"
+        )
+    elif w_finished_error == "finished":
+        dprint.assert_called_once_with(
+            f"Stream {TEST_THREAD_ID}/{TEST_RUN_ID}: FINISHED"
+        )
+    elif w_finished_error == "error":
+        stat_call, msg_call = dprint.call_args_list
+        assert stat_call == mock.call(
+            f"Stream {TEST_THREAD_ID}/{TEST_RUN_ID}: ERROR"
+        )
+        assert msg_call == mock.call("  test error")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("w_finished_error", [None, "finished", "error"])
+async def test_ensure_closed(w_finished_error):
+    emitter = mock.Mock(spec_set=["close"])
+    emitter.close = mock.AsyncMock(spec_set=())
+
+    raw_event = agui_core.events.RawEvent(
+        event="raw",
+    )
+    finished_event = agui_core.events.RunFinishedEvent(
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+    )
+    error_event = agui_core.events.RunErrorEvent(message="test error")
+
+    async def event_iter():
+        yield raw_event
+
+        if w_finished_error == "finished":
+            yield finished_event
+
+        elif w_finished_error == "error":
+            yield error_event
+
+    found = [
+        event
+        async for event in agui_views.ensure_closed(event_iter(), emitter)
+    ]
+
+    if w_finished_error is None:
+        assert len(found) == 1
+        emitter.close.assert_not_awaited()
+    else:
+        assert len(found) == 2
+        emitter.close.assert_awaited_once_with()
 
 
 @pytest.mark.asyncio
@@ -872,9 +939,11 @@ async def test_tee_events(w_event_count):
 @mock.patch("soliplex.agui.mpx.multiplex_streams")
 @mock.patch("soliplex.agui.compact_event_stream")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
+@mock.patch("soliplex.views.agui.ensure_closed")
 @mock.patch("soliplex.views.agui.tee_events")
 async def test_post_room_agui_thread_id_run_id(
     tee,
+    ensure,
     cura,
     ces,
     mpx,
@@ -899,8 +968,7 @@ async def test_post_room_agui_thread_id_run_id(
     the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
 
     exp_deps = the_installation.get_agent_deps_for_room.return_value
-    exp_emitter = exp_deps.agui_emitter = mock.Mock(spec_set=["close"])
-    exp_emitter.close = mock.AsyncMock(spec_set=())
+    exp_deps.agui_emitter = mock.Mock(spec_set=["close"])
 
     token = object()
 
@@ -945,8 +1013,13 @@ async def test_post_room_agui_thread_id_run_id(
         tee.assert_called_once()
         event_stream, event_list = tee.call_args_list[0].args
 
-        assert event_stream is mpx.return_value
+        assert event_stream is ensure.return_value
         assert event_list == []
+
+        ensure.assert_called_once_with(
+            mpx.return_value,
+            exp_deps.agui_emitter,
+        )
 
         on_done = tee.call_args_list[0].kwargs["on_done"]
         assert isinstance(on_done, functools.partial)
@@ -962,16 +1035,12 @@ async def test_post_room_agui_thread_id_run_id(
 
         ces.assert_called_once_with(exp_agent_stream)
 
-        aefd.assert_called_once_with(exp_emitter)
+        aefd.assert_called_once_with(exp_deps.agui_emitter)
 
         exp_adapter.run_stream.assert_called_once()
         (rs_call_0,) = exp_adapter.run_stream.call_args_list
         assert rs_call_0.args == ()
         assert rs_call_0.kwargs["deps"] is exp_deps
-
-        # the 'agui_emitter' stream does not get closed until the
-        # adapter's 'run_stream' calls its 'on_complete' callback.
-        exp_emitter.close.assert_not_awaited()
 
         # the 'ts.save_run_usage' API does not get called until the
         # adapter's 'run_stream' calls its 'on_complete' callback.
@@ -1005,8 +1074,6 @@ async def test_post_room_agui_thread_id_run_id(
             )
         else:
             the_threads.save_run_usage.assert_not_awaited()
-
-        exp_emitter.close.assert_awaited_once_with()
 
         the_installation.get_agent_deps_for_room.assert_called_once_with(
             room_id=TEST_ROOM_ID,
