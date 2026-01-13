@@ -72,6 +72,7 @@ plugins:
           - admin-guide/configuration/secrets.md
           - admin-guide/configuration/environment.md
           - admin-guide/configuration/oidc.md
+          - admin-guide/configuration/authorization.md
           - admin-guide/configuration/quizzes.md
           - admin-guide/configuration/meta.md
         Admin Guide - Authentication:
@@ -171,6 +172,7 @@ nav:
           - Secrets: admin-guide/configuration/secrets.md
           - Environment: admin-guide/configuration/environment.md
           - OIDC: admin-guide/configuration/oidc.md
+          - Authorization: admin-guide/configuration/authorization.md
           - Quizzes: admin-guide/configuration/quizzes.md
           - Meta: admin-guide/configuration/meta.md
       - Deployment:

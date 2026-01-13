@@ -1,6 +1,11 @@
 # Flutter Architecture
 
-The Soliplex Flutter app uses a layered architecture with Riverpod for state management.
+!!! warning "Deprecated - Flutter Client Removed"
+    The Flutter frontend was removed from the repository in January 2025. This documentation is retained for historical reference only.
+
+---
+
+The Soliplex Flutter app used a layered architecture with Riverpod for state management.
 
 ## Directory Structure
 

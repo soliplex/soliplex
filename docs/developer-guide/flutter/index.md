@@ -1,6 +1,18 @@
 # Flutter Frontend
 
-The Soliplex Flutter app provides a cross-platform chat interface that connects to the backend API.
+!!! warning "Deprecated - Flutter Client Removed"
+    The Flutter frontend was removed from the repository in January 2025. This documentation is retained for historical reference only. The source code at `src/flutter/lib/` no longer exists.
+
+    **Current clients:**
+
+    - **TUI** - Terminal-based client at `src/soliplex/tui/`. See [CLI Reference](../../reference/cli.md#tui-client).
+    - **Custom clients** - Build your own using the [REST API](../api/rest-endpoints.md) and [AG-UI Protocol](../api/agui-protocol.md).
+
+---
+
+*The following documentation describes the removed Flutter client and is kept for reference.*
+
+The Soliplex Flutter app provided a cross-platform chat interface that connected to the backend API.
 
 ## Overview
 

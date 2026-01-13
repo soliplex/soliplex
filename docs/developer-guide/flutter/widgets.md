@@ -1,6 +1,11 @@
 # Widget Registry
 
-Soliplex includes a widget registry system for rendering native Flutter widgets from agent responses (GenUI).
+!!! warning "Deprecated - Flutter Client Removed"
+    The Flutter frontend was removed from the repository in January 2025. This documentation is retained for historical reference only.
+
+---
+
+Soliplex included a widget registry system for rendering native Flutter widgets from agent responses (GenUI).
 
 ## Overview
 

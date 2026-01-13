@@ -47,27 +47,6 @@ ruff check src/
 ruff format src/
 ```
 
-### Frontend (Flutter)
-
-```bash
-cd src/flutter
-
-# Install dependencies
-flutter pub get
-
-# Run web app
-flutter run -d chrome --web-port 59001
-
-# Run tests
-flutter test
-
-# Analyze code (must have zero warnings)
-flutter analyze
-
-# Format code
-dart format lib test
-```
-
 ### TUI
 
 ```bash
@@ -83,7 +62,6 @@ soliplex-tui --url http://127.0.0.1:8000
 ### Multi-Component System
 
 - **Backend** (`src/soliplex/`): Python 3.13+ FastAPI server handling RAG, AI agents, and API endpoints
-- **Frontend** (`src/flutter/`): Flutter web/mobile/desktop app with Riverpod state management
 - **TUI** (`src/soliplex/tui/`): Textual-based terminal client
 
 ### Backend Structure
@@ -110,9 +88,9 @@ Example configs in `example/` directory. Use `example/minimal.yaml` for local de
 
 Agents can be configured via:
 1. **CompletionAgentConfig** - Standard LLM provider setup (Ollama, OpenAI)
-2. **FactoryAgentConfig** - Custom agent factories for specialized behavior (see `src/flutter/SOLIPLEX.md`)
+2. **FactoryAgentConfig** - Custom agent factories for specialized behavior
 
-Factory agents support custom dependencies, tools, and dynamic system prompts via `@agent.system_prompt` decorator.
+Factory agents support custom dependencies, tools, and dynamic system prompts via `@agent.system_prompt` decorator. See `docs/developer-guide/agents/factory-agents.md` for details.
 
 ### Key Dependencies
 
@@ -121,7 +99,6 @@ Factory agents support custom dependencies, tools, and dynamic system prompts vi
 - **FastMCP**: Model Context Protocol server/client (>= 2.13.0.2, < 2.14)
 - **ag-ui-protocol**: AG-UI streaming protocol (>= 0.1.10)
 - **Textual**: TUI framework (install with `pip install -e ".[tui]"`)
-- **Riverpod**: Flutter state management
 
 ### API Endpoints
 
@@ -137,17 +114,9 @@ REST API at `/api/v1/`:
 - `POST /rooms/{room_id}/agui/{thread_id}/{run_id}/meta` - Update run metadata
 - `POST /rooms/{room_id}/agui/{thread_id}/{run_id}/feedback` - Add run feedback
 
-See `src/flutter/SOLIPLEX.md` for full API documentation.
+See `docs/developer-guide/api/rest-endpoints.md` for full API documentation.
 
 ### Test Structure
 
 - `tests/unit/` - Unit tests (run by default, 100% coverage required)
 - `tests/functional/` - Integration tests requiring LLM (marked with `@pytest.mark.needs_llm`)
-
-## Flutter-Specific Notes
-
-See `src/flutter/CLAUDE.md` for Flutter-specific guidance including:
-- Platform-specific code patterns (`*_io.dart` / `*_web.dart`)
-- Server-scoped provider pattern for panel state
-- Zero-tolerance policy for analyzer warnings
-- Documentation lifecycle system for feature work

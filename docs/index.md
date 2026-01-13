@@ -6,13 +6,18 @@ and question answering.
 
 ## Quick Start
 
-1. **[Prerequisites](prerequisites.md)** - Complete installation checklist and setup guide
-2. **[Overview](overview.md)** - Learn about the system architecture and features
-3. **[RAG Database Setup](rag.md)** - Set up the RAG search database
-4. **[Server Setup](server.md)** - Set up the FastAPI backend server
-5. **[Client Setup](client.md)** - Configure the Flutter web client
-6. **[Docker Deployment](docker.md)** - Run Soliplex with Docker and Docker Compose
-7. **[Usage Guide](usage.md)** - Start using the system
+1. **[Installation](getting-started/installation.md)** - Install Python, Ollama, and dependencies
+2. **[Quickstart](getting-started/quickstart.md)** - Get up and running in minutes
+3. **[First Chat](getting-started/first-chat.md)** - Start your first conversation
+
+## Guides
+
+| Guide | Description |
+|-------|-------------|
+| [User Guide](user-guide/index.md) | Using chat rooms and document search |
+| [Admin Guide](admin-guide/index.md) | Configuration, deployment, and authentication |
+| [Developer Guide](developer-guide/index.md) | Architecture, agents, RAG, MCP, and API |
+| [Reference](reference/index.md) | CLI, config schema, and server API |
 
 ## What is Soliplex?
 

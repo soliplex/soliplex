@@ -142,6 +142,25 @@ thread_persistence_dburi:
 
 **Note:** Use `secret:SECRET_NAME` to reference a configured secret.
 
+### room_authz_dburi
+
+Database URIs for room authorization policies. See [Authorization](authorization.md).
+
+```yaml
+room_authz_dburi:
+  sync: "sqlite:///data/authz.db"
+  async: "sqlite+aiosqlite:///data/authz.db"
+```
+
+Default (in-memory):
+```yaml
+room_authz_dburi:
+  sync: "sqlite://"
+  async: "sqlite+aiosqlite://"
+```
+
+**Note:** Without persistent storage, authorization policies are lost on server restart.
+
 ### haiku_rag_config_file
 
 Path to haiku-rag configuration file.

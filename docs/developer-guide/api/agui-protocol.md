@@ -501,6 +501,117 @@ State is shared between client and server:
 
 This enables features like document filtering and citation tracking.
 
+## AG-UI Features
+
+AG-UI features define contracts between client and server for typed state data. Each feature has a name, schema, and source specification.
+
+### Feature Registration
+
+Features are registered in `config.py`:
+
+```python
+from soliplex.agui import features
+
+AGUI_FEATURES_BY_NAME = {
+    "filter_documents": AGUI_Feature(
+        name="filter_documents",
+        model_klass=features.FilterDocuments,
+        source=AGUI_FeatureSource.CLIENT,  # Client writes, server reads
+    ),
+    "ask_history": AGUI_Feature(
+        name="ask_history",
+        model_klass=features.AskedAndAnswered,
+        source=AGUI_FeatureSource.SERVER,  # Server writes, client reads
+    ),
+}
+```
+
+### Source Types
+
+| Source | Description |
+|--------|-------------|
+| `CLIENT` | Client can write, server reads only |
+| `SERVER` | Server can write, client reads only |
+| `EITHER` | Both client and server can write |
+
+### Built-in Features
+
+#### filter_documents (CLIENT)
+
+Documents selected by the user to filter RAG queries:
+
+```json
+{
+  "filter_documents": {
+    "document_ids": ["doc-1", "doc-2"]
+  }
+}
+```
+
+If `document_ids` is empty or null, no filter is applied.
+
+#### ask_history (SERVER)
+
+History of questions and responses from `ask_with_rich_citations` tool:
+
+```json
+{
+  "ask_history": {
+    "questions": [
+      {
+        "question": "What is RAG?",
+        "response": "RAG stands for...",
+        "citations": [
+          {"chunk_id": "...", "text": "..."}
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Feature Schemas CLI
+
+Export feature schemas for client code generation:
+
+```bash
+soliplex-cli agui-feature-schemas installation.yaml
+```
+
+Output:
+```json
+{
+  "filter_documents": {
+    "source": "client",
+    "json_schema": {
+      "title": "FilterDocuments",
+      "properties": {
+        "document_ids": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  },
+  "ask_history": {
+    "source": "server",
+    "json_schema": {...}
+  }
+}
+```
+
+### Custom Features
+
+Register custom features via meta configuration:
+
+```yaml
+# installation.yaml
+meta:
+  agui_features:
+    - name: "my_feature"
+      model_klass: "mypackage.features.MyFeatureModel"
+      source: "either"
+```
+
+The model class must be a Pydantic model with a docstring (used as description).
+
 ## Source Code
 
 - AG-UI endpoint: `src/soliplex/views/agui.py`
