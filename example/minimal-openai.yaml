@@ -57,6 +57,13 @@ environment:
   - name: "RAG_LANCE_DB_PATH"
     value: "file:../db/rag"
 
+  #------------------------------------------------------------------------
+  # Expire MCP room server tokens after one hour.
+  #------------------------------------------------------------------------
+  #
+  - name: "MCP_TOKEN_MAX_AGE"
+    value: 3600
+
 
 #==========================================================================
 # Global 'haiku-rag' configuration

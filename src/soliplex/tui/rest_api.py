@@ -44,6 +44,15 @@ class TUI_REST_API:
         else:
             return {}
 
+    def get_installation(self):
+        response = requests.get(
+            f"{self.api_v1_base}/installation",
+            headers=self.api_v1_headers,
+        )
+        response.raise_for_status()
+
+        return response.json()
+
     def get_rooms(self):
         response = requests.get(
             f"{self.api_v1_base}/rooms",

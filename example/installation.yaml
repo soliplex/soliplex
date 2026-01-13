@@ -188,12 +188,11 @@ environment:
     value: "soliplex"
 
   #------------------------------------------------------------------------
-  # Uncomment this stanza to expire MCP room server tokens after one hour.
-  # (by default they do not expire):
-  #
-  # - name: "MCP_TOKEN_MAX_AGE"
-  #   value: 3600
+  # Expire MCP room server tokens after one hour.
   #------------------------------------------------------------------------
+  #
+  - name: "MCP_TOKEN_MAX_AGE"
+    value: 3600
 
 #==========================================================================
 # Global 'haiku-rag' configuration

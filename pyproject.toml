@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "soliplex"
-version = "0.32dev0"
+version = "0.33dev0"
 description = "An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web interface."
 authors = [{ name = "Enfold", email = "info@enfoldsystems.net" }]
 readme = "README.md"
@@ -20,7 +20,7 @@ dependencies = [
     "fastapi",
     "fastmcp >= 2.13.0.2, < 2.14",
     "greenlet",
-    "haiku.rag-slim >= 0.23.0",
+    "haiku.rag-slim >= 0.23.0, < 0.26dev0",
     "itsdangerous",
     "jsonpatch",
     "jwcrypto",

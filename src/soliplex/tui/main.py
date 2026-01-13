@@ -938,7 +938,7 @@ class RoomListView(t_screen.Screen):
         t_binding.Binding("escape", "app.pop_screen", "Exit"),
     ]
 
-    def __init__(self, soliplex_url="http://localhost:8000", *args, **kw):
+    def __init__(self, *args, **kw):
         self._rooms = None
 
         super().__init__(*args, **kw)
@@ -976,10 +976,59 @@ class RoomListView(t_screen.Screen):
         await self.app.push_screen(room_view)
 
 
+class RoomConfigsView(t_screen.Screen):
+    BINDINGS = [
+        t_binding.Binding("escape", "app.pop_screen", "Exit"),
+    ]
+
+    def __init__(self, room_configs, *args, **kw):
+        self._room_configs = room_configs
+
+        super().__init__(*args, **kw)
+
+    def compose(self) -> t_app.ComposeResult:
+        yield t_widgets.Header()
+        yield t_widgets.Label("Room Configurations")
+        tree = t_widgets.Tree(label="Root")
+        tree.add_json(self._room_configs)
+        tree.root.expand()
+        yield tree
+        yield t_widgets.Footer()
+
+
+class InstallationConfigView(t_screen.Screen):
+    BINDINGS = [
+        t_binding.Binding("ctrl+r", "room_configs", "Rooms"),
+        t_binding.Binding("escape", "app.pop_screen", "Exit"),
+    ]
+
+    def __init__(self, installation_config, *args, **kw):
+        self._installation_config = installation_config
+
+        super().__init__(*args, **kw)
+
+    def compose(self) -> t_app.ComposeResult:
+        yield t_widgets.Header()
+        yield t_widgets.Label("Installation Configuration")
+        tree = t_widgets.Tree(label="Root")
+        tree.add_json(self._installation_config)
+        tree.root.expand()
+        yield tree
+        yield t_widgets.Footer()
+
+    @textual.work
+    async def action_room_configs(self) -> None:
+        room_configs = self.app.rest_api.get_rooms()
+
+        rc_view = RoomConfigsView(room_configs)
+        await self.app.push_screen_wait(rc_view)
+
+
 class SoliplexTUI(t_app.App):
     TITLE = "Soliplex TUI"
 
     BINDINGS = [
+        t_binding.Binding("ctrl+n", "installation_config", "Installation"),
         t_binding.Binding("ctrl+q", "quit", "quit", id="quit"),
     ]
     DEFAULT_CSS = """
@@ -1016,6 +1065,13 @@ class SoliplexTUI(t_app.App):
 
         rl_view = RoomListView()
         await self.push_screen_wait(rl_view)
+
+    @textual.work
+    async def action_installation_config(self) -> None:
+        config = self.rest_api.get_installation()
+
+        ic_view = InstallationConfigView(config)
+        await self.push_screen_wait(ic_view)
 
 
 app = SoliplexTUI()

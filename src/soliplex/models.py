@@ -321,7 +321,7 @@ class Installation(pydantic.BaseModel):
 
     id: str
     secrets: list[Secret] = []
-    environment: dict[str, str] = {}
+    environment: dict[str, typing.Any] = {}
     haiku_rag_config_file: pathlib.Path | None = None
     agents: list[DefaultAgent] = []
     agui_features: list[AGUI_Feature] = []

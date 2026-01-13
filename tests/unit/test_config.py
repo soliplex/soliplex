@@ -3853,18 +3853,20 @@ def test_strip_secret_prefix(config_str, expectation, expected):
 
 
 @pytest.mark.parametrize(
-    "config_str, expected",
+    "config_value, expected",
     [
         ("no_prefix", "no_prefix"),
         ("file:test.foo", "{temp_dir}/test.foo"),
+        (1234, 1234),
     ],
 )
-def test_resolve_file_prefix(temp_dir, config_str, expected):
+def test_resolve_file_prefix(temp_dir, config_value, expected):
     config_path = temp_dir / "config.yaml"
 
-    expected = expected.format(temp_dir=temp_dir.resolve())
+    if isinstance(expected, str):
+        expected = expected.format(temp_dir=temp_dir.resolve())
 
-    found = config.resolve_file_prefix(config_str, config_path)
+    found = config.resolve_file_prefix(config_value, config_path)
 
     assert found == expected
 
