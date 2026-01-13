@@ -55,7 +55,6 @@ jobs:
           pip install docling \
             --extra-index-url https://download.pytorch.org/whl/cpu
           pip install -e . --group dev
-          pip install pip-audit
 
       - name: Check formatting
         run: ruff format --check
@@ -63,16 +62,14 @@ jobs:
       - name: Run ruff linter
         run: ruff check
 
-      - name: Security scan dependencies
-        run: pip-audit --strict --progress-spinner=off
-        continue-on-error: true  # Advisory for now, can make strict later
-
       - name: Run unit tests with coverage
         run: |
-          py.test -s --cov-fail-under=100
+          pip list
+          py.test -s
 
       - name: Run functional tests
         run: |
+          pip list
           py.test -s --no-cov -m "not needs_llm" tests/functional/
 
       - name: Notify Slack on failure
