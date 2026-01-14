@@ -26,6 +26,10 @@ depend_the_threads = agui_package.depend_the_threads
 depend_the_room_authz = authz_package.depend_the_room_authz
 
 
+def _debug_print(msg):  # pragma: NO COVER
+    print(msg)
+
+
 async def _check_user_in_room(
     *,
     room_id: str,
@@ -414,12 +418,38 @@ async def tee_events(
     event_stream: agui_package.AGUI_EventStream,
     event_list: agui_package.AGUI_Events,
     on_done,
+    thread_id: str,
+    run_id: str,
 ):
     async for event in event_stream:
         event_list.append(event)
         yield event
 
+    if event_list:
+        last = event_list[-1]
+
+        if last.type == agui_core.EventType.RUN_FINISHED:
+            _debug_print(f"Stream {thread_id}/{run_id}: FINISHED")
+
+        if last.type == agui_core.EventType.RUN_ERROR:
+            _debug_print(f"Stream {thread_id}/{run_id}: ERROR")
+            _debug_print(f"  {last.message}")
+
+    else:
+        _debug_print(f"Stream {thread_id}/{run_id}: EMPTY")
+
     await on_done(events=event_list)
+
+
+async def ensure_closed(stream, emitter):
+    async for event in stream:
+        if event.type in (
+            agui_core.EventType.RUN_ERROR,
+            agui_core.EventType.RUN_FINISHED,
+        ):
+            await emitter.close()
+
+        yield event
 
 
 @util.logfire_span("POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}")
@@ -476,8 +506,6 @@ async def post_room_agui_thread_id_run_id(
     events = []
 
     async def finish_stream(result):
-        await emitter.close()
-
         usage = getattr(result, "usage", None)
 
         if usage is not None:
@@ -511,9 +539,11 @@ async def post_room_agui_thread_id_run_id(
     )
 
     db_stream = tee_events(
-        mpx,
+        ensure_closed(mpx, emitter),
         events,
         on_done=save_events,
+        thread_id=thread_id,
+        run_id=run_id,
     )
 
     sse_stream = agui_adapter.encode_stream(db_stream)
