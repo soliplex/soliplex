@@ -1,4 +1,4 @@
-Stop all running background services (Ollama, Soliplex backend, Flutter).
+Stop all running background services (Ollama, Soliplex backend, Flutter, docling-serve).
 
 Kill all background shell tasks that are currently running. Use the KillShell tool to terminate each one.
 
