@@ -109,7 +109,7 @@ jobs:
       - name: Run unit tests with coverage
         run: |
           pip list
-          py.test -s
+          py.test -s ${{ matrix.pytest-args }}
 
       - name: Run functional tests
         run: |
