@@ -16,14 +16,18 @@ installation.yaml                    # Main entry point
 
 ## Sections
 
+- **[Filesystem Layout](filesystem-layout.md)** - Directory structure and file organization
 - **[Installation](installation.md)** - Main installation.yaml configuration
 - **[Agents](agents.md)** - Agent configuration and templates
 - **[Rooms](rooms.md)** - Room configuration with tools and RAG
+- **[Completions](completions.md)** - LLM provider and model configuration
 - **[RAG](rag.md)** - RAG and haiku-rag configuration
 - **[Secrets](secrets.md)** - Secret management and sources
 - **[Environment](environment.md)** - Environment variable configuration
 - **[OIDC](oidc.md)** - OpenID Connect provider configuration
+- **[Authorization](authorization.md)** - Room access control and policies
 - **[Quizzes](quizzes.md)** - Quiz configuration
+- **[Meta](meta.md)** - Custom type registration and extensions
 
 ## Quick Start
 

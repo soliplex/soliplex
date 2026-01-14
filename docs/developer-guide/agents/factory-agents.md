@@ -47,6 +47,40 @@ def my_factory(
 
 When `with_agent_config: true`, the config system uses `functools.partial` to bind the `agent_config` parameter automatically.
 
+## Minimal Example
+
+The simplest factory agent just creates and returns a Pydantic AI agent:
+
+```python
+# mypackage/agents.py
+import pydantic_ai
+from pydantic_ai.providers import openai as openai_providers
+from pydantic_ai.models import openai as openai_models
+
+def simple_factory(agent_config, tool_configs=None, mcp_client_toolset_configs=None):
+    """Minimal factory agent example."""
+    installation = agent_config._installation_config
+    ollama_url = installation.get_environment("OLLAMA_BASE_URL")
+
+    return pydantic_ai.Agent(
+        model=openai_models.OpenAIChatModel(
+            model_name="gpt-oss:latest",
+            provider=openai_providers.OpenAIProvider(base_url=f"{ollama_url}/v1"),
+        ),
+        system_prompt="You are a helpful assistant.",
+    )
+```
+
+```yaml
+# rooms/simple/room_config.yaml
+id: "simple"
+name: "Simple Factory"
+agent:
+  kind: "factory"
+  factory_name: "mypackage.agents.simple_factory"
+  with_agent_config: true
+```
+
 ## Example: Joke Generator
 
 The `joker_agent_factory` demonstrates multi-agent orchestration:

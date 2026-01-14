@@ -53,6 +53,9 @@ graph TB
 
 ### Frontend (Flutter)
 
+!!! note "Separate Repository"
+    The Flutter frontend is maintained at [github.com/soliplex/flutter](https://github.com/soliplex/flutter).
+
 | Component | Technology | Purpose |
 |-----------|------------|---------|
 | **UI Framework** | Flutter 3.x | Cross-platform rendering |
@@ -322,12 +325,24 @@ src/soliplex/
 ├── tools.py           # Tool implementations
 ├── examples.py        # Factory agent examples
 ├── agui/              # AG-UI protocol
-│   └── __init__.py
+│   ├── __init__.py    # Core AG-UI types and utilities
+│   ├── features.py    # Feature flags
+│   ├── mpx.py         # Multiplexing utilities
+│   ├── parser.py      # Event parsing
+│   ├── persistence.py # Thread/run storage
+│   └── util.py        # Helper functions
+├── authz/             # Authorization
+│   ├── __init__.py    # Authorization service
+│   └── schema.py      # SQLAlchemy models
 ├── views/             # FastAPI routes
-│   ├── agui.py
-│   ├── auth.py
-│   ├── rooms.py
-│   └── ...
+│   ├── agui.py        # AG-UI streaming
+│   ├── auth.py        # Legacy auth
+│   ├── authn.py       # Authentication
+│   ├── authz.py       # Authorization endpoints
+│   ├── completions.py # Completion configs
+│   ├── installation.py # Installation info
+│   ├── quizzes.py     # Quiz endpoints
+│   └── rooms.py       # Room endpoints
 └── tui/               # Terminal UI client
     ├── __init__.py
     ├── cli.py         # CLI entry point

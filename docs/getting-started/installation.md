@@ -18,9 +18,11 @@ Complete installation instructions for all Soliplex components.
 | Requirement | Version | Installation |
 |-------------|---------|--------------|
 | **Python** | 3.13+ | [python.org](https://python.org) |
-| **Flutter** | 3.x | [flutter.dev](https://flutter.dev) |
 | **Ollama** | Latest | [ollama.com](https://ollama.com) |
 | **Git** | Any | System package manager |
+
+!!! note "Frontend"
+    The Flutter frontend is maintained in a separate repository at [github.com/soliplex/flutter](https://github.com/soliplex/flutter).
 
 ## Backend Installation
 
@@ -99,25 +101,21 @@ ollama ps
 
 Look for GPU usage in the output. If showing 100% CPU on Apple Silicon, you may have an x86_64 binary - reinstall using ARM64 Homebrew.
 
-## Frontend Installation
+## Frontend Installation (Optional)
 
-### 1. Navigate to Flutter Directory
-
-```bash
-cd src/flutter
-```
-
-### 2. Install Dependencies
+The Flutter frontend is maintained in a separate repository. To use the web UI:
 
 ```bash
+# Clone the Flutter repo as a sibling directory
+git clone https://github.com/soliplex/flutter ../flutter
+cd ../flutter
 flutter pub get
 ```
 
-### 3. Verify Installation
+See the [Flutter repository](https://github.com/soliplex/flutter) for full installation instructions.
 
-```bash
-flutter doctor
-```
+!!! tip "Alternative: TUI Client"
+    Soliplex includes a built-in terminal UI client. Install with `pip install -e ".[tui]"` and run with `soliplex-tui --url http://localhost:8000`.
 
 ## Configuration
 
@@ -191,9 +189,12 @@ source venv/bin/activate
 OLLAMA_BASE_URL=http://127.0.0.1:11434 \
   soliplex-cli serve example/minimal.yaml --no-auth-mode
 
-# Terminal 3: Flutter
-cd src/flutter
-flutter run -d chrome --web-port 59001
+# Terminal 3 (Optional): Flutter - if you have the frontend cloned
+cd ../flutter
+flutter run -d chrome --web-port 59001 --dart-define=DEFAULT_SERVER_URL=http://localhost:8000
+
+# Or use the TUI client:
+soliplex-tui --url http://localhost:8000
 ```
 
 ### Validate Configuration
@@ -211,8 +212,7 @@ After installation:
 ```
 soliplex/
 ├── src/
-│   ├── soliplex/          # Backend Python code
-│   └── flutter/           # Frontend Flutter code
+│   └── soliplex/          # Backend Python code
 ├── example/               # Example configurations
 │   ├── minimal.yaml       # Minimal config
 │   ├── installation.yaml  # Full config
@@ -221,6 +221,9 @@ soliplex/
 │   └── rag/               # RAG vector store
 └── venv/                  # Virtual environment
 ```
+
+!!! note "Frontend Repository"
+    The Flutter frontend is maintained at [github.com/soliplex/flutter](https://github.com/soliplex/flutter). Clone it as `../flutter` for local development.
 
 ## Next Steps
 

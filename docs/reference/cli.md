@@ -384,18 +384,18 @@ soliplex-tui --url https://soliplex.example.com
 
 **Keyboard Shortcuts:**
 
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+Q` | Quit application |
-| `Ctrl+N` | New thread |
-| `Ctrl+T` | List threads |
-| `Ctrl+R` | List runs |
-| `Ctrl+Z` | Edit metadata |
-| `Escape` | Exit/dismiss screen |
-| `Enter` | Submit input |
+| Shortcut | Context | Action |
+|----------|---------|--------|
+| `Ctrl+Q` | Global | Quit application |
+| `Ctrl+N` | Room Selection | View installation config |
+| `Ctrl+N` | Room Chat | New thread |
+| `Ctrl+T` | Room Chat | List threads |
+| `Ctrl+R` | Room Chat | List runs |
+| `Ctrl+Z` | Room Chat / Run Details | Edit metadata |
+| `Escape` | Any | Exit/dismiss screen |
+| `Enter` | Any | Submit input / Select item |
 
-**Note:** Some shortcuts require an active thread selection:
-- `Ctrl+R`, `Ctrl+N`, `Ctrl+Z` are only available after selecting a thread
+**Note:** Context-dependent shortcuts like `Ctrl+N` have different functions depending on your current screen.
 
 **Features:**
 

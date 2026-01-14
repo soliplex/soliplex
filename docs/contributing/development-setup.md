@@ -5,9 +5,9 @@ Set up your development environment for contributing to Soliplex.
 ## Prerequisites
 
 - Python 3.13+
-- Flutter 3.x
 - Git
 - Ollama (for local LLM)
+- Flutter 3.x (optional, see [Flutter repository](https://github.com/soliplex/flutter))
 
 ## Clone Repository
 
@@ -40,21 +40,19 @@ pip install -e ".[dev]"
 soliplex-cli --help
 ```
 
-## Frontend Setup
+## Frontend Setup (Optional)
 
-### Install Flutter Dependencies
+The Flutter frontend is maintained in a separate repository. To develop on the frontend:
 
 ```bash
-cd src/flutter
+# Clone the Flutter repo as a sibling directory
+git clone https://github.com/soliplex/flutter ../flutter
+cd ../flutter
 flutter pub get
-```
-
-### Verify Flutter
-
-```bash
 flutter doctor
-flutter analyze  # Should show "No issues found!"
 ```
+
+See the [Flutter repository](https://github.com/soliplex/flutter) for detailed frontend development instructions.
 
 ## Start Development Services
 
@@ -73,11 +71,12 @@ export OLLAMA_BASE_URL=http://127.0.0.1:11434
 soliplex-cli serve example/minimal.yaml --no-auth-mode
 ```
 
-### Start Frontend
+### Start Frontend (Optional)
 
 ```bash
-cd src/flutter
-flutter run -d chrome --web-port 59001
+# If you have the Flutter repo cloned at ../flutter
+cd ../flutter
+flutter run -d chrome --web-port 59001 --dart-define=DEFAULT_SERVER_URL=http://localhost:8000
 ```
 
 ## Running Tests
@@ -97,10 +96,7 @@ pytest --cov=soliplex --cov-report=html
 
 ### Frontend Tests
 
-```bash
-cd src/flutter
-flutter test
-```
+See the [Flutter repository](https://github.com/soliplex/flutter) for frontend testing instructions.
 
 ### Functional Tests (requires LLM)
 
@@ -125,39 +121,30 @@ ruff format src/
 
 ### Flutter Linting
 
-```bash
-cd src/flutter
-
-# Check for issues (must show "No issues found!")
-flutter analyze
-
-# Format code
-dart format lib test
-```
+See the [Flutter repository](https://github.com/soliplex/flutter) for frontend linting instructions.
 
 ## Project Structure
 
 ```
 soliplex/
 ├── src/
-│   ├── soliplex/          # Python backend
-│   │   ├── views/         # FastAPI routes
-│   │   ├── agui/          # AG-UI protocol
-│   │   ├── agents.py      # Agent management
-│   │   ├── config.py      # Configuration
-│   │   └── tools.py       # Agent tools
-│   └── flutter/           # Flutter frontend
-│       ├── lib/
-│       │   ├── core/      # Core functionality
-│       │   ├── features/  # UI features
-│       │   └── widgets/   # Shared widgets
-│       └── test/          # Flutter tests
+│   └── soliplex/          # Python backend
+│       ├── views/         # FastAPI routes
+│       ├── agui/          # AG-UI protocol
+│       ├── authz/         # Authorization
+│       ├── tui/           # Terminal UI client
+│       ├── agents.py      # Agent management
+│       ├── config.py      # Configuration
+│       └── tools.py       # Agent tools
 ├── tests/
 │   ├── unit/              # Unit tests
 │   └── functional/        # Integration tests
 ├── docs/                  # Documentation
 └── example/               # Example configurations
 ```
+
+!!! note "Frontend Repository"
+    The Flutter frontend is maintained separately at [github.com/soliplex/flutter](https://github.com/soliplex/flutter).
 
 ## Development Workflow
 
@@ -175,8 +162,7 @@ soliplex/
 Recommended extensions:
 - Python
 - Pylance
-- Flutter
-- Dart
+- Ruff
 
 ### PyCharm
 
@@ -253,14 +239,6 @@ soliplex-cli serve example/minimal.yaml --no-auth-mode --log-level DEBUG
 
 ```bash
 pip install -e ".[dev]"
-```
-
-### Flutter Analyzer Warnings
-
-```bash
-flutter clean
-flutter pub get
-flutter analyze
 ```
 
 ### Test Database Issues

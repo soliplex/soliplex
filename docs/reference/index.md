@@ -54,6 +54,6 @@ http://localhost:8000/api/
 For AI agents consuming this documentation, key entry points:
 
 - **Backend**: `src/soliplex/` - FastAPI server
-- **Frontend**: `src/flutter/lib/` - Flutter application
 - **Config**: `example/` - Example configurations
 - **Docs**: `docs/`
+- **Frontend**: [github.com/soliplex/flutter](https://github.com/soliplex/flutter) - Flutter application (separate repo)

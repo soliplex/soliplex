@@ -8,7 +8,6 @@ Before starting, ensure you have:
 
 - **Python 3.13+** - Check with `python3 --version`
 - **Ollama** - Install from [ollama.com](https://ollama.com)
-- **Flutter** - Install from [flutter.dev](https://flutter.dev)
 - **Git** - Any recent version
 
 ## Step 1: Clone and Install
@@ -52,17 +51,40 @@ You should see:
 INFO:     Uvicorn running on http://127.0.0.1:8000
 ```
 
-## Step 4: Start the Flutter App
+## Step 4: Use a Client
 
-Open a new terminal:
+Choose one of these options:
+
+### Option A: TUI (Terminal UI)
 
 ```bash
-cd src/flutter
+# Install TUI dependencies
+pip install -e ".[tui]"
+
+# Run the TUI client
+soliplex-tui --url http://localhost:8000
+```
+
+### Option B: Flutter Web App
+
+The Flutter frontend is maintained separately. To use it:
+
+```bash
+# Clone the Flutter repo
+git clone https://github.com/soliplex/flutter ../flutter
+cd ../flutter
 flutter pub get
-flutter run -d chrome --web-port 59001
+flutter run -d chrome --web-port 59001 --dart-define=DEFAULT_SERVER_URL=http://localhost:8000
 ```
 
 ## Step 5: Chat!
+
+**TUI:**
+
+1. Select a room from the list
+2. Type a message and press Enter
+
+**Flutter:**
 
 1. Open http://localhost:59001 in your browser
 2. Enter `http://localhost:8000` as the server URL
@@ -74,13 +96,13 @@ flutter run -d chrome --web-port 59001
 | Service | URL | Purpose |
 |---------|-----|---------|
 | Backend | http://localhost:8000 | API server |
-| Flutter | http://localhost:59001 | Web UI |
 | Ollama | http://localhost:11434 | LLM inference |
+| Flutter (optional) | http://localhost:59001 | Web UI |
 
 ## Stopping Services
 
 ```bash
-# Stop Flutter: Ctrl+C in Flutter terminal
+# Stop TUI/Flutter: Ctrl+C in client terminal
 # Stop Backend: Ctrl+C in backend terminal
 # Stop Ollama:
 pkill ollama

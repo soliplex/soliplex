@@ -45,13 +45,10 @@ git checkout -b fix/issue-description
 pytest                    # Must pass with 100% coverage
 ruff check src/          # No linting errors
 ruff format src/         # Code formatted
-
-# Frontend
-cd src/flutter
-flutter test             # Tests pass
-flutter analyze          # Zero warnings
-dart format lib test     # Code formatted
 ```
+
+!!! note "Frontend"
+    The Flutter frontend is in a [separate repository](https://github.com/soliplex/flutter). See that repo's contributing guide for frontend testing.
 
 ### 5. Commit
 

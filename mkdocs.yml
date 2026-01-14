@@ -105,10 +105,6 @@ plugins:
           - developer-guide/api/rest-endpoints.md
           - developer-guide/api/agui-protocol.md
           - developer-guide/api/models.md
-        Developer Guide - Flutter:
-          - developer-guide/flutter/index.md
-          - developer-guide/flutter/architecture.md
-          - developer-guide/flutter/widgets.md
         Reference:
           - reference/index.md
           - reference/cli.md
@@ -203,10 +199,6 @@ nav:
           - REST Endpoints: developer-guide/api/rest-endpoints.md
           - AG-UI Protocol: developer-guide/api/agui-protocol.md
           - Models: developer-guide/api/models.md
-      - Flutter:
-          - developer-guide/flutter/index.md
-          - Architecture: developer-guide/flutter/architecture.md
-          - Widgets: developer-guide/flutter/widgets.md
   - Reference:
       - reference/index.md
       - CLI: reference/cli.md
