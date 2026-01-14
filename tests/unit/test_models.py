@@ -2,6 +2,7 @@ import dataclasses
 import datetime
 import json
 import pathlib
+import textwrap
 import uuid
 from unittest import mock
 
@@ -318,6 +319,12 @@ def test_tool_from_config_w_toolconfig():
     assert tool_model.extra_parameters == {}
 
 
+def _dedent_docstring(docstring: str) -> str:
+    first_line, *rest = docstring.splitlines()
+    maybe_indented = "\n".join(rest)
+    return first_line + "\n" + textwrap.dedent(maybe_indented)
+
+
 def test_tool_from_config_w_sdtc(temp_dir):
     sdtc_rag_lance_db_path = temp_dir / "rag.lancedb"
     sdtc_rag_lance_db_path.mkdir()
@@ -332,9 +339,9 @@ def test_tool_from_config_w_sdtc(temp_dir):
 
     assert tool_model.kind == "search_documents"
     assert tool_model.tool_name == "soliplex.tools.search_documents"
-    assert (
-        tool_model.tool_description == tools.search_documents.__doc__.strip()
-    )
+    t_dsc = _dedent_docstring(tool_model.tool_description)
+    sd_doc = _dedent_docstring(tools.search_documents.__doc__.strip())
+    assert t_dsc == sd_doc
     assert tool_model.tool_requires == config.ToolRequires.TOOL_CONFIG
     assert tool_model.allow_mcp is True
     assert tool_model.agui_feature_names == []
@@ -356,10 +363,11 @@ def test_tool_from_config_w_awrctc(temp_dir):
 
     assert tool_model.kind == "ask_with_rich_citations"
     assert tool_model.tool_name == "soliplex.tools.ask_with_rich_citations"
-    assert (
-        tool_model.tool_description
-        == tools.ask_with_rich_citations.__doc__.strip()
+    t_dsc = _dedent_docstring(tool_model.tool_description)
+    awrctc_doc = _dedent_docstring(
+        tools.ask_with_rich_citations.__doc__.strip()
     )
+    assert t_dsc == awrctc_doc
     assert tool_model.tool_requires == config.ToolRequires.FASTAPI_CONTEXT
     assert tool_model.allow_mcp is False
     assert tool_model.agui_feature_names == [

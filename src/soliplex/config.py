@@ -12,6 +12,7 @@ import pathlib
 import random
 import re
 import ssl
+import sys
 import typing
 import warnings
 from collections import abc
@@ -2082,7 +2083,12 @@ class InstallationConfig:
         def resolved_tokens(value):
             tokens = SECRET_RE.split(value)
 
-            for two_or_one in itertools.batched(tokens, 2, strict=False):
+            if sys.version_info >= (3, 13):  # noqa: UP036
+                batch = itertools.batched(tokens, 2, strict=False)
+            else:  # pragma: NO COVER
+                batch = itertools.batched(tokens, 2)  # noqa: B911
+
+            for two_or_one in batch:
                 yield two_or_one[0]
 
                 if len(two_or_one) == 2:
