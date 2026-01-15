@@ -100,6 +100,17 @@ async def test_close(agui_emitter):
 
 
 @pytest.mark.asyncio
+async def test_close_idempotent(agui_emitter):
+    await agui_emitter.close()
+    # Queue has the sentinel None
+    assert agui_emitter._queue.qsize() == 1
+    # Calling close again should be a no-op
+    await agui_emitter.close()
+    # Queue should still have just one sentinel
+    assert agui_emitter._queue.qsize() == 1
+
+
+@pytest.mark.asyncio
 async def test_async_iteration(agui_emitter):
     agui_emitter.update_state({"event": 1})
     agui_emitter.update_state({"event": 2})

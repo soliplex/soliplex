@@ -28,7 +28,7 @@ class AGUIEmitter:
         self.run_id = run_id
         self.use_deltas = use_deltas
 
-        self._queue: asyncio.Queue = asyncio.Queue()
+        self._queue: asyncio.Queue[dict | None] = asyncio.Queue()
         self._closed = False
         self._last_state: dict = {}
 
@@ -84,22 +84,18 @@ class AGUIEmitter:
 
     async def close(self) -> None:
         """Signal that no more events will be emitted."""
+        if self._closed:
+            return
         self._closed = True
+        await self._queue.put(None)
 
     def __aiter__(self):
-        return self
+        return self._iter_events()
 
-    async def __anext__(self):
+    async def _iter_events(self):
+        """Iterate over events from the queue."""
         while True:
-            if self._closed and self._queue.empty():
-                raise StopAsyncIteration
-
-            try:
-                return await asyncio.wait_for(
-                    self._queue.get(),
-                    timeout=0.1,
-                )
-            except TimeoutError:
-                if self._closed:
-                    raise StopAsyncIteration from None
-                continue
+            event = await self._queue.get()
+            if event is None:
+                break
+            yield event

@@ -920,17 +920,11 @@ class RoomView(t_screen.Screen):
 
                 elif chunk["type"] == "RUN_FINISHED":
                     response_content += "\n\n** done **"
-                    self.app.call_from_thread(response.update, response_content)
-                    # requests.iter_lines() blocks waiting for more data even
-                    # after the server completes; break on terminal events.
-                    break
 
                 elif chunk["type"] == "RUN_ERROR":
                     response_content += (
                         f"\n\n** error **\n\n{chunk['message']}"
                     )
-                    self.app.call_from_thread(response.update, response_content)
-                    break
 
                 self.app.call_from_thread(response.update, response_content)
 
