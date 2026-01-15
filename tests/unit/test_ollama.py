@@ -449,7 +449,7 @@ def test_collect_models_skips_callback_for_files_without_models(temp_dir):
     (temp_dir / "empty.yaml").write_text("other_key: value")
     callback_calls = []
 
-    def on_found(file_path, models):
+    def on_found(file_path, models): # pragma: no cover
         callback_calls.append((file_path, models))
 
     found = ollama.collect_models(temp_dir, on_found=on_found)
