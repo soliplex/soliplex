@@ -31,6 +31,10 @@ meta:
   # - name: "ask_history"
   #   model_klass: "soliplex.agui.features.AskedAndAnswered"
   #   source: "server"
+  #
+  # - name: "haiku.rag.chat"
+  #   model_klass: "haiku.rag.agents.chat.state.ChatSessionState"
+  #   source: "server"
   #------------------------------------------------------------------------
 
   #------------------------------------------------------------------------
