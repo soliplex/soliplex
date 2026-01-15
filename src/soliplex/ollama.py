@@ -3,11 +3,10 @@ Collect and pull Ollama models referenced in soliplex configuration files.
 """
 
 import json
-import urllib.request
 import urllib.error
+import urllib.request
 
 import yaml
-
 
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 
@@ -124,7 +123,8 @@ def collect_models(directory, on_found=None):
 
     Args:
         directory: Path to scan for YAML files
-        on_found: Optional callback(file_path, models) called for each file with models
+        on_found: Optional callback(file_path, models) called for each
+            file with models
 
     Returns:
         Set of model names

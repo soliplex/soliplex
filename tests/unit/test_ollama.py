@@ -6,7 +6,6 @@ import pytest
 
 from soliplex import ollama
 
-
 # find_yaml_files tests
 
 def test_find_yaml_files_recursively(temp_dir):
@@ -119,12 +118,20 @@ def test_extract_models_from_agent_configs(data, expected):
         ({"environment": ["not_a_dict"]}, set()),
         # DEFAULT_AGENT_MODEL
         (
-            {"environment": [{"name": "DEFAULT_AGENT_MODEL", "value": "llama3"}]},
+            {
+                "environment": [
+                    {"name": "DEFAULT_AGENT_MODEL", "value": "llama3"}
+                ]
+            },
             {"llama3"},
         ),
         # EMBEDDINGS_MODEL
         (
-            {"environment": [{"name": "EMBEDDINGS_MODEL", "value": "nomic-embed"}]},
+            {
+                "environment": [
+                    {"name": "EMBEDDINGS_MODEL", "value": "nomic-embed"}
+                ]
+            },
             {"nomic-embed"},
         ),
         # QA_MODEL
@@ -196,12 +203,20 @@ def test_extract_models_from_environment(data, expected):
         ),
         # reranking section with ollama provider
         (
-            {"reranking": {"model": {"provider": "ollama", "name": "bge-reranker"}}},
+            {
+                "reranking": {
+                    "model": {"provider": "ollama", "name": "bge-reranker"}
+                }
+            },
             {"bge-reranker"},
         ),
         # Non-ollama provider
         (
-            {"embeddings": {"model": {"provider": "openai", "name": "ada-002"}}},
+            {
+                "embeddings": {
+                    "model": {"provider": "openai", "name": "ada-002"}
+                }
+            },
             set(),
         ),
         # Empty provider
@@ -227,9 +242,15 @@ def test_extract_models_from_environment(data, expected):
         # Multiple sections
         (
             {
-                "embeddings": {"model": {"provider": "ollama", "name": "nomic"}},
-                "qa": {"model": {"provider": "ollama", "name": "llama3"}},
-                "research": {"model": {"provider": "openai", "name": "gpt-4"}},
+                "embeddings": {
+                    "model": {"provider": "ollama", "name": "nomic"}
+                },
+                "qa": {
+                    "model": {"provider": "ollama", "name": "llama3"}
+                },
+                "research": {
+                    "model": {"provider": "openai", "name": "gpt-4"}
+                },
             },
             {"nomic", "llama3"},
         ),
@@ -442,7 +463,8 @@ def test_collect_models_skips_callback_for_files_without_models(temp_dir):
 
 def test_pull_model_successful_pull():
     mock_response = mock.MagicMock()
-    mock_response.read.return_value = json.dumps({"status": "success"}).encode()
+    response_data = json.dumps({"status": "success"}).encode()
+    mock_response.read.return_value = response_data
     mock_response.__enter__ = mock.MagicMock(return_value=mock_response)
     mock_response.__exit__ = mock.MagicMock(return_value=False)
 
@@ -466,7 +488,8 @@ def test_pull_model_successful_pull():
 
 def test_pull_model_successful_pull_without_callback():
     mock_response = mock.MagicMock()
-    mock_response.read.return_value = json.dumps({"status": "success"}).encode()
+    response_data = json.dumps({"status": "success"}).encode()
+    mock_response.read.return_value = response_data
     mock_response.__enter__ = mock.MagicMock(return_value=mock_response)
     mock_response.__exit__ = mock.MagicMock(return_value=False)
 

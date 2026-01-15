@@ -549,7 +549,8 @@ def pull_models(
             success_count += 1
 
     the_console.line()
-    the_console.rule(f"Pulled {success_count}/{len(models)} model(s) successfully")
+    msg = f"Pulled {success_count}/{len(models)} model(s) successfully"
+    the_console.rule(msg)
     the_console.line()
 
 
