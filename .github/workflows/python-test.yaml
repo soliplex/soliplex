@@ -82,10 +82,10 @@ jobs:
       fail-fast: true
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.12", "3.13"]
+        python-version: ">= 3.12"
         include:
-            # Only run coverage on Python 3.13.
-            - python-version: "3.12"
+            # Only run coverage on Python >= 3.13.
+            - python-version: "< 3.13"
               pytest-args: "--no-cov"
     steps:
       - uses: actions/checkout@v4
