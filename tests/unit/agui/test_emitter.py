@@ -1,6 +1,7 @@
 import asyncio
 from unittest import mock
 
+import jsonpatch
 import pydantic
 import pytest
 
@@ -80,13 +81,14 @@ def test_aguiemitter_update_state(w_closed, w_model, w_deltas):
         (event,) = called.args
 
         if w_deltas:
+            exp_patch = jsonpatch.make_patch(PRIOR_STATE, exp_state)
             assert event["type"] == "STATE_DELTA"
-            assert event["delta"] == exp_state
-            assert agui_emitter._last_state == PRIOR_STATE | NEW_STATE
+            assert event["delta"] == list(exp_patch)
         else:
             assert event["type"] == "STATE_SNAPSHOT"
             assert event["snapshot"] == exp_state
-            assert agui_emitter._last_state == exp_state
+
+        assert agui_emitter._last_state == exp_state
 
 
 @pytest.mark.parametrize("w_activity_id", [False, True])
@@ -155,13 +157,17 @@ def test_aguiemitter_update_activity(
         assert event["message_id"] == exp_activity_id
 
         if w_deltas:
+            exp_patch = jsonpatch.make_patch(
+                PRIOR_ACTIVITY_CONTENT,
+                exp_state,
+            )
             assert event["type"] == "ACTIVITY_DELTA"
-            assert event["patch"] == exp_state
-            assert after_activity == (PRIOR_ACTIVITY_CONTENT | exp_state)
+            assert event["patch"] == list(exp_patch)
         else:
             assert event["type"] == "ACTIVITY_SNAPSHOT"
             assert event["content"] == exp_state
-            assert after_activity == exp_state
+
+        assert after_activity == exp_state
 
 
 @pytest.mark.anyio

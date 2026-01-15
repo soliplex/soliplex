@@ -8,6 +8,7 @@ import asyncio
 import typing
 import uuid
 
+import jsonpatch
 import pydantic
 from ag_ui import core as agui_core
 
@@ -53,10 +54,10 @@ class AGUIEmitter:
             state_dict = state
 
         if self.use_deltas:
-            self._last_state |= state_dict
+            patch = list(jsonpatch.make_patch(self._last_state, state_dict))
             event = {
                 "type": agui_core.EventType.STATE_DELTA.value,
-                "delta": state_dict,
+                "delta": patch,
             }
         else:
             event = {
@@ -64,7 +65,7 @@ class AGUIEmitter:
                 "snapshot": state_dict,
             }
 
-            self._last_state = state_dict
+        self._last_state = state_dict
 
         self._queue.put_nowait(event)
 
@@ -95,12 +96,13 @@ class AGUIEmitter:
         prior_content = self._last_activities.get(activity_type, {})
 
         if self.use_deltas:
-            self._last_activities[activity_type] = prior_content | content_dict
+            self._last_activities[activity_type] = content_dict
+            patch = list(jsonpatch.make_patch(prior_content, content_dict))
             event = {
                 "type": agui_core.EventType.ACTIVITY_DELTA.value,
                 "message_id": activity_id,
                 "activity_type": activity_type,
-                "patch": content_dict,
+                "patch": patch,
             }
 
         else:
