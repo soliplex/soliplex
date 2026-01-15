@@ -110,7 +110,6 @@ async def test_chat_agent_wrapper_run_stream_events_wo_state(mock_haiku_rag):
 
     mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
     mock_deps.state = {}
-    mock_deps.agui_emitter = None
 
     events = []
     async for event in wrapper.run_stream_events(
@@ -165,7 +164,6 @@ async def test_chat_agent_wrapper_run_stream_events_w_state(mock_haiku_rag):
 
     mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
     mock_deps.state = {haiku_chat.AGUI_STATE_KEY: existing_state.model_dump()}
-    mock_deps.agui_emitter = None
 
     events = []
     async for event in wrapper.run_stream_events(
@@ -201,7 +199,6 @@ async def test_chat_agent_wrapper_passes_kwargs(mock_haiku_rag):
 
     mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
     mock_deps.state = {}
-    mock_deps.agui_emitter = None
 
     mock_output_type = mock.MagicMock()
     mock_message_history = [mock.MagicMock()]

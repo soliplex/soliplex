@@ -1,7 +1,9 @@
 import datetime
 
+import jsonpatch
 import pydantic
 import pydantic_ai
+from ag_ui import core as agui_core
 from haiku.rag import client as rag_client
 from haiku.rag.agents import research as rag_research
 from haiku.rag.agents.research import graph as rag_research_graph
@@ -133,7 +135,7 @@ class AWRC_AGUI_State(pydantic.BaseModel):
 async def ask_with_rich_citations(
     ctx: pydantic_ai.RunContext[agents.AgentDependencies],
     question: str,
-) -> str:
+) -> pydantic_ai.ToolReturn:
     """Use a document knowledge base to answer the user's question.
 
     Args:
@@ -148,10 +150,7 @@ async def ask_with_rich_citations(
     except KeyError as exc:
         raise NoToolConfig() from exc
 
-    agui_emitter = ctx.deps.agui_emitter
     agui_state = AWRC_AGUI_State.model_validate(ctx.deps.state)
-    agui_emitter.update_state(agui_state)
-    agui_state = agui_state.model_copy(deep=True)
 
     search_filter = None
 
@@ -180,6 +179,14 @@ async def ask_with_rich_citations(
                 citations=citations,
             )
         )
-        agui_emitter.update_state(agui_state)
-
-        return response
+        patch = jsonpatch.make_patch(
+            ctx.deps.state,
+            agui_state.model_dump(),
+        )
+        metadata = [
+            agui_core.StateDeltaEvent(delta=list(patch)),
+        ]
+        return pydantic_ai.ToolReturn(
+            return_value=response,
+            metadata=metadata,
+        )

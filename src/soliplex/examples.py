@@ -5,10 +5,11 @@ import contextlib
 import dataclasses
 import random
 import typing
-import uuid
 from collections import abc
 
+import jsonpatch
 import pydantic_ai
+from ag_ui import core as agui_core
 from pydantic_ai import messages as ai_messages
 from pydantic_ai import output as ai_output
 from pydantic_ai import run as ai_run
@@ -78,22 +79,28 @@ NativeEvent = (
 MessageHistory = typing.Sequence[ai_messages.ModelMessage]
 
 
-async def faux_tool(ctx: pydantic_ai.RunContext) -> str:
+async def faux_tool(
+    ctx: pydantic_ai.RunContext,
+    user_prompt: str | None = None,
+) -> pydantic_ai.ToolReturn:
     """Return something random"""
-    agui_emitter = ctx.deps.agui_emitter
-    activity_id = str(uuid.uuid4())
+    agui_state = ctx.deps.state
 
     await asyncio.sleep(random.uniform(0.25, 0.5))
 
-    agui_emitter.update_activity(
-        "idling",
-        {"how": "head scratching"},
-        activity_id,
+    if user_prompt is not None:
+        new_state = agui_state | {"faux": user_prompt.content}
+        patch = jsonpatch.make_patch(agui_state, new_state)
+        metadata = [
+            agui_core.StateDeltaEvent(delta=list(patch)),
+        ]
+    else:
+        metadata = None
+
+    return pydantic_ai.ToolReturn(
+        return_value="something random",
+        metadata=metadata,
     )
-
-    await asyncio.sleep(random.uniform(0.25, 0.5))
-
-    return "something random"
 
 
 @dataclasses.dataclass
@@ -222,13 +229,22 @@ class FauxAgent:
                 part=tc_part,
             )
 
-            await tool_config.tool(ctx)
+            result = await tool_config.tool(ctx=ctx, user_prompt=up)
 
             await asyncio.sleep(random.uniform(0.5, 2.0))
 
             yield ai_messages.PartEndEvent(
                 index=part_index,
                 part=tc_part,
+            )
+
+            yield ai_messages.FunctionToolResultEvent(
+                result=ai_messages.ToolReturnPart(
+                    tool_name=tool_name,
+                    tool_call_id=tc_part.tool_call_id,
+                    content=result.return_value,
+                    metadata=result.metadata,
+                )
             )
 
         await asyncio.sleep(random.uniform(2.5, 3.0))
