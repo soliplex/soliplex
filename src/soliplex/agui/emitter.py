@@ -5,10 +5,15 @@ AG-UI events (particularly state updates) alongside the main agent stream.
 """
 
 import asyncio
+import typing
 import uuid
 
 import pydantic
 from ag_ui import core as agui_core
+
+AGUI_State = dict[str, typing.Any]
+AGUI_ActivityContent = dict[str, typing.Any]
+AGUI_Activities = dict[str, AGUI_ActivityContent]
 
 
 class AGUIEmitter:
@@ -30,10 +35,11 @@ class AGUIEmitter:
 
         self._queue: asyncio.Queue[dict | None] = asyncio.Queue()
         self._closed = False
-        self._last_state: dict = {}
+        self._last_state: AGUI_State = {}
+        self._last_activities: AGUI_Activities = {}
 
     def update_state(self, state: pydantic.BaseModel | dict) -> None:
-        """Emit a state snapshot event.
+        """Emit a state snapshot / delta event.
 
         Args:
             state: The new state (Pydantic model or dict)
@@ -46,12 +52,20 @@ class AGUIEmitter:
         else:
             state_dict = state
 
-        event = {
-            "type": agui_core.EventType.STATE_SNAPSHOT.value,
-            "snapshot": state_dict,
-        }
+        if self.use_deltas:
+            self._last_state |= state_dict
+            event = {
+                "type": agui_core.EventType.STATE_DELTA.value,
+                "delta": state_dict,
+            }
+        else:
+            event = {
+                "type": agui_core.EventType.STATE_SNAPSHOT.value,
+                "snapshot": state_dict,
+            }
 
-        self._last_state = state_dict
+            self._last_state = state_dict
+
         self._queue.put_nowait(event)
 
     def update_activity(
@@ -70,15 +84,33 @@ class AGUIEmitter:
         if self._closed:
             return
 
+        if isinstance(content, pydantic.BaseModel):
+            content_dict = content.model_dump()
+        else:
+            content_dict = content
+
         if activity_id is None:
             activity_id = str(uuid.uuid4())
 
-        event = {
-            "type": agui_core.EventType.ACTIVITY_SNAPSHOT.value,
-            "message_id": activity_id,
-            "activity_type": activity_type,
-            "content": content,
-        }
+        prior_content = self._last_activities.get(activity_type, {})
+
+        if self.use_deltas:
+            self._last_activities[activity_type] = prior_content | content_dict
+            event = {
+                "type": agui_core.EventType.ACTIVITY_DELTA.value,
+                "message_id": activity_id,
+                "activity_type": activity_type,
+                "patch": content_dict,
+            }
+
+        else:
+            self._last_activities[activity_type] = content_dict
+            event = {
+                "type": agui_core.EventType.ACTIVITY_SNAPSHOT.value,
+                "message_id": activity_id,
+                "activity_type": activity_type,
+                "content": content_dict,
+            }
 
         self._queue.put_nowait(event)
 
