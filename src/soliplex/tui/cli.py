@@ -35,9 +35,13 @@ BASE_URL = typer.Option(
 
 @the_cli.command()
 def tui(
-    version: bool = typer.Option(None, "--version", "-v"),
+    version: bool = typer.Option(None, "--version", "-V"),
     soliplex_url: str = BASE_URL,
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
 ):
-    tui_app = main.SoliplexTUI(soliplex_url)
+    tui_app = main.SoliplexTUI(
+        soliplex_url=soliplex_url,
+        verbose=verbose,
+    )
 
     tui_app.run()
