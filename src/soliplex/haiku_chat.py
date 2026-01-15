@@ -10,6 +10,7 @@ from collections import abc
 from pathlib import Path
 
 from haiku.rag import client as rag_client
+from haiku.rag.agents.chat import AGUI_STATE_KEY
 from haiku.rag.agents.chat import agent as chat_agent
 from haiku.rag.agents.chat.state import ChatDeps
 from haiku.rag.agents.chat.state import ChatSessionState
@@ -23,8 +24,6 @@ from soliplex import config
 
 HaikuRAG = rag_client.HaikuRAG
 create_chat_agent = chat_agent.create_chat_agent
-
-CHAT_STATE_KEY = "haiku_chat"
 
 NativeEvent = (
     ai_messages.AgentStreamEvent | ai_run.AgentRunResultEvent[typing.Any]
@@ -58,7 +57,7 @@ class ChatAgentWrapper:
         Translates AgentDependencies to ChatDeps and manages the HaikuRAG
         client lifecycle.
         """
-        state_dict = deps.state.get(CHAT_STATE_KEY, {})
+        state_dict = deps.state.get(AGUI_STATE_KEY, {})
         if state_dict:
             session_state = ChatSessionState.model_validate(state_dict)
         else:
@@ -72,7 +71,7 @@ class ChatAgentWrapper:
                 client=client,
                 config=self.config,
                 session_state=session_state,
-                state_key=CHAT_STATE_KEY,
+                state_key=AGUI_STATE_KEY,
             )
 
             async for event in self.agent.run_stream_events(

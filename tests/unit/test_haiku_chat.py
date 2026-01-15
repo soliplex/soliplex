@@ -59,7 +59,9 @@ def test_chat_agent_factory_w_stem(
     assert isinstance(result, haiku_chat.ChatAgentWrapper)
     assert result.agent is mock_agent
     assert result.config is mock_installation_config.haiku_rag_config
-    assert result.db_path == Path(RAG_BASE_PATH) / f"{RAG_LANCEDB_STEM}.lancedb"
+    assert (
+        result.db_path == Path(RAG_BASE_PATH) / f"{RAG_LANCEDB_STEM}.lancedb"
+    )
 
     mock_create_chat_agent.assert_called_once_with(
         mock_installation_config.haiku_rag_config
@@ -162,7 +164,7 @@ async def test_chat_agent_wrapper_run_stream_events_w_state(mock_haiku_rag):
     )
 
     mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
-    mock_deps.state = {haiku_chat.CHAT_STATE_KEY: existing_state.model_dump()}
+    mock_deps.state = {haiku_chat.AGUI_STATE_KEY: existing_state.model_dump()}
     mock_deps.agui_emitter = None
 
     events = []
@@ -255,7 +257,7 @@ async def test_chat_agent_wrapper_passes_state_key(mock_haiku_rag):
 
     call_kwargs = mock_agent.run_stream_events.call_args.kwargs
     chat_deps = call_kwargs["deps"]
-    assert chat_deps.state_key == haiku_chat.CHAT_STATE_KEY
+    assert chat_deps.state_key == haiku_chat.AGUI_STATE_KEY
 
 
 def test_resolve_db_path_w_override(mock_installation_config):
