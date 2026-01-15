@@ -8,6 +8,7 @@ from soliplex import ollama
 
 # find_yaml_files tests
 
+
 def test_find_yaml_files_recursively(temp_dir):
     # Create nested structure with yaml and yml files
     (temp_dir / "config.yaml").touch()
@@ -31,6 +32,7 @@ def test_find_yaml_files_returns_empty_list_for_empty_dir(temp_dir):
 
 
 # _extract_models_from_agent_configs tests
+
 
 @pytest.mark.parametrize(
     "data, expected",
@@ -102,6 +104,7 @@ def test_extract_models_from_agent_configs(data, expected):
 
 
 # _extract_models_from_environment tests
+
 
 @pytest.mark.parametrize(
     "data, expected",
@@ -175,6 +178,7 @@ def test_extract_models_from_environment(data, expected):
 
 # _extract_models_from_haiku_rag tests
 
+
 @pytest.mark.parametrize(
     "data, expected",
     [
@@ -245,12 +249,8 @@ def test_extract_models_from_environment(data, expected):
                 "embeddings": {
                     "model": {"provider": "ollama", "name": "nomic"}
                 },
-                "qa": {
-                    "model": {"provider": "ollama", "name": "llama3"}
-                },
-                "research": {
-                    "model": {"provider": "openai", "name": "gpt-4"}
-                },
+                "qa": {"model": {"provider": "ollama", "name": "llama3"}},
+                "research": {"model": {"provider": "openai", "name": "gpt-4"}},
             },
             {"nomic", "llama3"},
         ),
@@ -263,6 +263,7 @@ def test_extract_models_from_haiku_rag(data, expected):
 
 
 # _extract_models_from_room_or_completion tests
+
 
 @pytest.mark.parametrize(
     "data, expected",
@@ -286,11 +287,7 @@ def test_extract_models_from_haiku_rag(data, expected):
         ),
         # quizzes with judge_agent
         (
-            {
-                "quizzes": [
-                    {"judge_agent": {"model_name": "mistral"}}
-                ]
-            },
+            {"quizzes": [{"judge_agent": {"model_name": "mistral"}}]},
             {"mistral"},
         ),
         # quizzes with non-dict entry
@@ -338,6 +335,7 @@ def test_extract_models_from_room_or_completion(data, expected):
 
 
 # extract_models_from_yaml tests
+
 
 def test_extract_models_from_yaml_extracts_from_valid_yaml(temp_dir):
     yaml_file = temp_dir / "config.yaml"
@@ -408,6 +406,7 @@ agent:
 
 # collect_models tests
 
+
 def test_collect_models_returns_empty_for_nonexistent_directory(temp_dir):
     nonexistent = temp_dir / "nonesuch"
 
@@ -460,6 +459,7 @@ def test_collect_models_skips_callback_for_files_without_models(temp_dir):
 
 
 # pull_model tests
+
 
 def test_pull_model_successful_pull():
     mock_response = mock.MagicMock()
@@ -592,6 +592,7 @@ def test_pull_model_response_without_status_field():
 
 
 # DEFAULT_OLLAMA_URL test
+
 
 def test_default_ollama_url_value():
     assert ollama.DEFAULT_OLLAMA_URL == "http://localhost:11434"

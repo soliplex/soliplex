@@ -157,6 +157,7 @@ def pull_model(model_name, ollama_url, on_status=None):
     Returns:
         True on success, False on failure
     """
+
     def status(msg, is_error=False):
         if on_status:
             on_status(msg, is_error)
