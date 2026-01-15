@@ -15,8 +15,6 @@ from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex import models
 from soliplex import util
-from soliplex.agui import mpx as agui_mpx
-from soliplex.agui import parser as agui_parser
 from soliplex.agui import persistence as agui_persistence
 
 router = fastapi.APIRouter(tags=["rooms"])
@@ -416,11 +414,12 @@ async def post_room_agui_thread_id_meta(
 
 async def tee_events(
     event_stream: agui_package.AGUI_EventStream,
-    event_list: agui_package.AGUI_Events,
     on_done,
     thread_id: str,
     run_id: str,
 ):
+    event_list = []
+
     async for event in event_stream:
         event_list.append(event)
         yield event
@@ -439,17 +438,6 @@ async def tee_events(
         _debug_print(f"Stream {thread_id}/{run_id}: EMPTY")
 
     await on_done(events=event_list)
-
-
-async def ensure_closed(stream, emitter):
-    async for event in stream:
-        if event.type in (
-            agui_core.EventType.RUN_ERROR,
-            agui_core.EventType.RUN_FINISHED,
-        ):
-            await emitter.close()
-
-        yield event
 
 
 @util.logfire_span("POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}")
@@ -501,10 +489,6 @@ async def post_room_agui_thread_id_run_id(
         run_agent_input=agui_adapter.run_input,
     )
 
-    emitter = agent_deps.agui_emitter
-
-    events = []
-
     async def finish_stream(result):
         usage = getattr(result, "usage", None)
 
@@ -525,10 +509,8 @@ async def post_room_agui_thread_id_run_id(
         deps=agent_deps,
         on_complete=finish_stream,
     )
-    compacted = agui_package.compact_event_stream(agent_stream)
-    emitter_stream = agui_parser.agui_events_from_dicts(emitter)
 
-    mpx = agui_mpx.multiplex_streams(compacted, emitter_stream)
+    compacted_stream = agui_package.compact_event_stream(agent_stream)
 
     save_events = functools.partial(
         the_threads.save_run_events,
@@ -539,8 +521,7 @@ async def post_room_agui_thread_id_run_id(
     )
 
     db_stream = tee_events(
-        ensure_closed(mpx, emitter),
-        events,
+        compacted_stream,
         on_done=save_events,
         thread_id=thread_id,
         run_id=run_id,

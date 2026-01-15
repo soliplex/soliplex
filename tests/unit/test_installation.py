@@ -11,7 +11,6 @@ from soliplex import config
 from soliplex import installation
 from soliplex import models
 from soliplex import secrets
-from soliplex.agui import emitter as agui_emitter
 
 KEY = "test-key"
 VALUE = "test-value"
@@ -575,13 +574,6 @@ async def test_installation_get_agent_deps_for_room(
             assert found.user == test_user
             assert found.tool_configs == t_configs
 
-            if w_run_agent_input:
-                assert isinstance(found.agui_emitter, agui_emitter.AGUIEmitter)
-                assert found.agui_emitter.thread_id == THREAD_ID
-                assert found.agui_emitter.run_id == RUN_ID
-            else:
-                assert found.agui_emitter is None
-
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_run_agent_input", [False, True])
@@ -632,13 +624,6 @@ async def test_installation_get_agent_deps_for_completion(
         assert found.the_installation is the_installation
         assert found.user == test_user
         assert found.tool_configs == t_configs
-
-        if w_run_agent_input:
-            assert isinstance(found.agui_emitter, agui_emitter.AGUIEmitter)
-            assert found.agui_emitter.thread_id == THREAD_ID
-            assert found.agui_emitter.run_id == RUN_ID
-        else:
-            assert found.agui_emitter is None
 
 
 @pytest.mark.anyio

@@ -834,7 +834,6 @@ async def test_post_room_agui_thread_id_meta(
 @pytest.mark.parametrize("w_finished_error", [None, "finished", "error"])
 @mock.patch("soliplex.views.agui._debug_print")
 async def test_tee_events(dprint, w_finished_error, w_event_count):
-    event_log = []
     on_done = mock.AsyncMock(spec_set=())
 
     finished_event = agui_core.events.RunFinishedEvent(
@@ -857,16 +856,13 @@ async def test_tee_events(dprint, w_finished_error, w_event_count):
         event
         async for event in agui_views.tee_events(
             event_iter(),
-            event_log,
             on_done=on_done,
             thread_id=TEST_THREAD_ID,
             run_id=TEST_RUN_ID,
         )
     ]
 
-    assert event_log == expected
-
-    on_done.assert_awaited_once_with(events=event_log)
+    on_done.assert_awaited_once_with(events=expected)
 
     if len(expected) == 0:
         dprint.assert_called_once_with(
@@ -884,43 +880,6 @@ async def test_tee_events(dprint, w_finished_error, w_event_count):
         assert msg_call == mock.call("  test error")
 
 
-@pytest.mark.anyio
-@pytest.mark.parametrize("w_finished_error", [None, "finished", "error"])
-async def test_ensure_closed(w_finished_error):
-    emitter = mock.Mock(spec_set=["close"])
-    emitter.close = mock.AsyncMock(spec_set=())
-
-    raw_event = agui_core.events.RawEvent(
-        event="raw",
-    )
-    finished_event = agui_core.events.RunFinishedEvent(
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
-    )
-    error_event = agui_core.events.RunErrorEvent(message="test error")
-
-    async def event_iter():
-        yield raw_event
-
-        if w_finished_error == "finished":
-            yield finished_event
-
-        elif w_finished_error == "error":
-            yield error_event
-
-    found = [
-        event
-        async for event in agui_views.ensure_closed(event_iter(), emitter)
-    ]
-
-    if w_finished_error is None:
-        assert len(found) == 1
-        emitter.close.assert_not_awaited()
-    else:
-        assert len(found) == 2
-        emitter.close.assert_awaited_once_with()
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "ari_side_effect, expectation",
@@ -935,19 +894,13 @@ async def test_ensure_closed(w_finished_error):
 @pytest.mark.parametrize("w_usage", [False, True])
 @mock.patch("fastapi.responses.StreamingResponse")
 @mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
-@mock.patch("soliplex.agui.parser.agui_events_from_dicts")
-@mock.patch("soliplex.agui.mpx.multiplex_streams")
 @mock.patch("soliplex.agui.compact_event_stream")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
-@mock.patch("soliplex.views.agui.ensure_closed")
 @mock.patch("soliplex.views.agui.tee_events")
 async def test_post_room_agui_thread_id_run_id(
     tee,
-    ensure,
     cura,
     ces,
-    mpx,
-    aefd,
     aga,
     sr,
     the_threads,
@@ -968,7 +921,6 @@ async def test_post_room_agui_thread_id_run_id(
     the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
 
     exp_deps = the_installation.get_agent_deps_for_room.return_value
-    exp_deps.agui_emitter = mock.Mock(spec_set=["close"])
 
     token = object()
 
@@ -1011,15 +963,9 @@ async def test_post_room_agui_thread_id_run_id(
         exp_adapter.encode_stream.assert_called_once_with(tee.return_value)
 
         tee.assert_called_once()
-        event_stream, event_list = tee.call_args_list[0].args
+        (event_stream,) = tee.call_args_list[0].args
 
-        assert event_stream is ensure.return_value
-        assert event_list == []
-
-        ensure.assert_called_once_with(
-            mpx.return_value,
-            exp_deps.agui_emitter,
-        )
+        assert event_stream is ces.return_value
 
         on_done = tee.call_args_list[0].kwargs["on_done"]
         assert isinstance(on_done, functools.partial)
@@ -1031,19 +977,13 @@ async def test_post_room_agui_thread_id_run_id(
             "run_id": TEST_RUN_ID,
         }
 
-        mpx.assert_called_once_with(ces.return_value, aefd.return_value)
-
         ces.assert_called_once_with(exp_agent_stream)
-
-        aefd.assert_called_once_with(exp_deps.agui_emitter)
 
         exp_adapter.run_stream.assert_called_once()
         (rs_call_0,) = exp_adapter.run_stream.call_args_list
         assert rs_call_0.args == ()
         assert rs_call_0.kwargs["deps"] is exp_deps
 
-        # the 'ts.save_run_usage' API does not get called until the
-        # adapter's 'run_stream' calls its 'on_complete' callback.
         the_threads.save_run_usage.assert_not_awaited()
 
         rs_on_complete = rs_call_0.kwargs["on_complete"]
