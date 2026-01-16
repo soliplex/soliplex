@@ -116,12 +116,17 @@ secrets:
   - "LOGFIRE_TOKEN"
 
   # ----------------------------------------------------------------------
+  # Google Gemini API key (for gemini_flash room)
+  # ----------------------------------------------------------------------
+  - "GEMINI_API_KEY"
+
+  # ----------------------------------------------------------------------
   # Credentials for the Smithery.AI MCP tool registry
   #
   # (required in order to test the 'example/room/mcp_test' tooling).
   # ----------------------------------------------------------------------
-  - "SMITHERY_AI_API_KEY"
-  - "SMITHERY_AI_PROFILE"
+  #- "SMITHERY_AI_API_KEY"
+  #- "SMITHERY_AI_PROFILE"
   - "GOOGLE_MAPS_API_KEY"
   # ----------------------------------------------------------------------
   # MCP room token generation / validation secret
@@ -188,11 +193,12 @@ environment:
     value: "soliplex"
 
   #------------------------------------------------------------------------
-  # Expire MCP room server tokens after one hour.
-  #------------------------------------------------------------------------
+  # Uncomment this stanza to expire MCP room server tokens after one hour.
+  # (by default they do not expire):
   #
-  - name: "MCP_TOKEN_MAX_AGE"
-    value: 3600
+  # - name: "MCP_TOKEN_MAX_AGE"
+  #   value: 3600
+  #------------------------------------------------------------------------
 
 #==========================================================================
 # Global 'haiku-rag' configuration

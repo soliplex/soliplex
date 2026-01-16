@@ -10,13 +10,10 @@ These tests validate the Gemini provider works end-to-end with:
 All tests require GEMINI_API_KEY to be set and are marked with
 @pytest.mark.needs_llm to allow skipping in CI environments.
 
-NOTE: Some tests are marked xfail due to pytest-asyncio + httpx event loop
-cleanup issues. These tests PASS when run individually. See implementation.md
-for the full analysis and recommended fixes:
-- Switch to pytest-anyio (used by pydantic-ai)
-- Or implement proper httpx client lifecycle management
+Uses pytest-anyio with close_cached_httpx_client fixture to properly
+manage httpx client lifecycle and prevent "Event loop is closed" errors.
 
-Related: https://github.com/pydantic/pydantic-ai/issues/748
+See: https://github.com/pydantic/pydantic-ai/blob/main/tests/conftest.py
 """
 
 import pathlib
@@ -28,16 +25,12 @@ from soliplex import agents
 from soliplex import config
 from soliplex import models
 
-# Configure all tests in this module to use module-scoped event loop
-# to reduce (but not eliminate) event loop cleanup issues
-pytestmark = pytest.mark.asyncio(loop_scope="module")
-
 # =============================================================================
 # Fixtures
 # =============================================================================
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def gemini_room_config():
     """Load the gemini_flash room configuration directly."""
     installation_path = pathlib.Path("example/installation.yaml")
@@ -45,12 +38,12 @@ def gemini_room_config():
     return installation_config.room_configs["gemini_flash"]
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def gemini_agent(gemini_room_config):
     """Get the gemini_flash agent configured for testing.
 
-    Uses module scope to share the agent across tests, reducing
-    API calls and connection churn.
+    Uses function scope to ensure fresh httpx clients per test,
+    avoiding "Event loop is closed" errors with pytest-anyio.
     """
     return agents.get_agent_from_configs(
         gemini_room_config.agent_config,
@@ -75,7 +68,7 @@ def mock_user():
 # =============================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.needs_llm
 async def test_gemini_simple_response(gemini_agent):
     """Verify Gemini can respond to a simple arithmetic question."""
@@ -88,12 +81,8 @@ async def test_gemini_simple_response(gemini_agent):
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.needs_llm
-@pytest.mark.xfail(
-    reason="Event loop issue in suite; PASSES when run individually",
-    strict=False,
-)
 async def test_gemini_tool_call_user(gemini_agent, mock_user):
     """Verify Gemini can call get_current_user tool with context."""
     deps = agents.AgentDependencies(
@@ -112,7 +101,7 @@ async def test_gemini_tool_call_user(gemini_agent, mock_user):
 # =============================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.needs_llm
 async def test_gemini_streaming_text(gemini_agent):
     """Verify streaming works for simple text response."""
@@ -138,12 +127,8 @@ async def test_gemini_streaming_text(gemini_agent):
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.needs_llm
-@pytest.mark.xfail(
-    reason="Event loop issue in suite; PASSES when run individually",
-    strict=False,
-)
 async def test_gemini_streaming_after_tool(gemini_agent):
     """Verify streaming works after tool call."""
     chunks = []
@@ -165,7 +150,7 @@ async def test_gemini_streaming_after_tool(gemini_agent):
 # =============================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.needs_llm
 @pytest.mark.xfail(
     reason="message_history not properly respected by Gemini provider",
@@ -191,12 +176,8 @@ async def test_gemini_multiturn_recall(gemini_agent):
     assert "alpha" in result2.output.lower() or "7" in result2.output
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.needs_llm
-@pytest.mark.xfail(
-    reason="Event loop issue in suite; PASSES when run individually",
-    strict=False,
-)
 async def test_gemini_multiturn_after_tool(gemini_agent, mock_user):
     """Verify Gemini remembers tool results across turns."""
     deps = agents.AgentDependencies(
@@ -224,7 +205,7 @@ async def test_gemini_multiturn_after_tool(gemini_agent, mock_user):
 # =============================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.needs_llm
 async def test_gemini_system_prompt(gemini_agent):
     """Verify system prompt is respected."""
@@ -242,12 +223,8 @@ async def test_gemini_system_prompt(gemini_agent):
 # =============================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.needs_llm
-@pytest.mark.xfail(
-    reason="Event loop issue in suite; PASSES when run individually",
-    strict=False,
-)
 async def test_gemini_handles_empty_input(gemini_agent):
     """Verify graceful handling of minimal input."""
     # Send a very short greeting prompt
@@ -269,7 +246,7 @@ async def test_gemini_handles_empty_input(gemini_agent):
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_gemini_model_structure(gemini_agent):
     """Verify agent has correct GoogleModel structure.
 
@@ -294,7 +271,7 @@ async def test_gemini_model_structure(gemini_agent):
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_gemini_agent_configuration(gemini_agent):
     """Verify agent configuration is correct.
 
@@ -318,7 +295,7 @@ async def test_gemini_agent_configuration(gemini_agent):
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_gemini_safety_filter(gemini_room_config):
     """Verify graceful handling of safety filter rejection.
 

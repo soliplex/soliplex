@@ -45,8 +45,10 @@ dev = [
     "pytest",
     "pytest-cov",
     "pytest-asyncio",
+    "pytest-anyio",
     "coverage",
     "anyio",
+    "httpx",
     "trio",
     "ruff",
 ]

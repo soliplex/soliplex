@@ -25,3 +25,7 @@ tmp/
 # osx
 .DS_Store
 ._*
+
+# Claude Code working files
+.claude/
+docs/implementation-notes/
