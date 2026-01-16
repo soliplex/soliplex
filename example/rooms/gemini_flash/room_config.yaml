@@ -1,0 +1,18 @@
+id: "gemini_flash"
+name: "Gemini 2.5 Flash"
+description: "Chat with Google Gemini 2.5 Flash"
+suggestions:
+  - "What time is it?"
+  - "Who am I?"
+  - "Tell me a fun fact about space"
+agent:
+  model_name: "gemini-2.5-flash"
+  provider_type: "google"
+  provider_key: "secret:GEMINI_API_KEY"
+  system_prompt: |
+    You are a friendly agent with enthusiasm for space travel.
+allow_mcp: true
+tools:
+  - tool_name: "soliplex.tools.get_current_datetime"
+    allow_mcp: true
+  - tool_name: "soliplex.tools.get_current_user"
