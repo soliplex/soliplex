@@ -279,3 +279,121 @@ def test_resolve_db_path_w_default_stem(mock_installation_config):
         extra_config, mock_installation_config
     )
     assert result == Path(RAG_BASE_PATH) / "rag.lancedb"
+
+
+@mock.patch("soliplex.haiku_chat.create_chat_agent")
+def test_chat_agent_factory_extracts_background_context(
+    mock_create_chat_agent,
+    mock_installation_config,
+):
+    """Test that factory extracts background_context from extra_config."""
+    mock_agent = mock.MagicMock()
+    mock_create_chat_agent.return_value = mock_agent
+
+    ac = mock.MagicMock(spec=config.FactoryAgentConfig)
+    ac.kind = "factory"
+    ac.id = ROOM_ID
+    ac._installation_config = mock_installation_config
+    ac.extra_config = {
+        "rag_lancedb_stem": RAG_LANCEDB_STEM,
+        "background_context": "Focus on medical regulations.",
+    }
+
+    result = haiku_chat.chat_agent_factory(
+        agent_config=ac,
+        tool_configs={},
+        mcp_client_toolset_configs={},
+    )
+
+    assert result.background_context == "Focus on medical regulations."
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.HaikuRAG")
+async def test_chat_agent_wrapper_uses_configured_background_context(
+    mock_haiku_rag,
+):
+    """Test that configured background_context is used when state has none."""
+    mock_agent = mock.MagicMock()
+    mock_config = mock.MagicMock()
+    mock_client = mock.MagicMock()
+
+    mock_haiku_rag.return_value.__aenter__.return_value = mock_client
+
+    async def mock_events():
+        yield "event"
+
+    mock_agent.run_stream_events.return_value = mock_events()
+
+    wrapper = haiku_chat.ChatAgentWrapper(
+        agent=mock_agent,
+        config=mock_config,
+        db_path=Path(RAG_DB_PATH),
+        background_context="Configured context from room.",
+    )
+
+    mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
+    mock_deps.state = {}
+
+    events = []
+    async for event in wrapper.run_stream_events(
+        message_history=[],
+        deps=mock_deps,
+    ):
+        events.append(event)
+
+    call_kwargs = mock_agent.run_stream_events.call_args.kwargs
+    chat_deps = call_kwargs["deps"]
+    assert chat_deps.session_state.background_context == (
+        "Configured context from room."
+    )
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.HaikuRAG")
+async def test_chat_agent_wrapper_configured_context_overrides_frontend(
+    mock_haiku_rag,
+):
+    """Test that configured background_context overrides frontend state."""
+    from haiku.rag.agents.chat.state import ChatSessionState
+
+    mock_agent = mock.MagicMock()
+    mock_config = mock.MagicMock()
+    mock_client = mock.MagicMock()
+
+    mock_haiku_rag.return_value.__aenter__.return_value = mock_client
+
+    async def mock_events():
+        yield "event"
+
+    mock_agent.run_stream_events.return_value = mock_events()
+
+    wrapper = haiku_chat.ChatAgentWrapper(
+        agent=mock_agent,
+        config=mock_config,
+        db_path=Path(RAG_DB_PATH),
+        background_context="Configured context from room.",
+    )
+
+    existing_state = ChatSessionState(
+        session_id="test-session",
+        background_context="Frontend user context.",
+    )
+
+    mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
+    mock_deps.state = {haiku_chat.AGUI_STATE_KEY: existing_state.model_dump()}
+
+    events = []
+    async for event in wrapper.run_stream_events(
+        message_history=[],
+        deps=mock_deps,
+    ):
+        events.append(event)
+
+    call_kwargs = mock_agent.run_stream_events.call_args.kwargs
+    chat_deps = call_kwargs["deps"]
+    # Configured context should override frontend
+    assert (
+        chat_deps.session_state.background_context
+        == "Configured context from room."
+    )

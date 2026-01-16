@@ -41,6 +41,7 @@ class ChatAgentWrapper:
     agent: Agent[ChatDeps, str]
     config: AppConfig
     db_path: Path
+    background_context: str | None = None
 
     output_type = None
 
@@ -62,6 +63,9 @@ class ChatAgentWrapper:
             session_state = ChatSessionState.model_validate(state_dict)
         else:
             session_state = ChatSessionState()
+
+        if self.background_context:
+            session_state.background_context = self.background_context
 
         async with HaikuRAG(
             db_path=self.db_path,
@@ -126,6 +130,7 @@ def chat_agent_factory(
     installation_config = agent_config._installation_config
     hr_config = installation_config.haiku_rag_config
     db_path = _resolve_db_path(agent_config.extra_config, installation_config)
+    background_context = agent_config.extra_config.get("background_context")
 
     agent = create_chat_agent(hr_config)
 
@@ -133,4 +138,5 @@ def chat_agent_factory(
         agent=agent,
         config=hr_config,
         db_path=db_path,
+        background_context=background_context,
     )
