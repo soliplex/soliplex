@@ -901,17 +901,23 @@ class AgentConfig:
             pass
 
     @property
-    def llm_provider_kw(self) -> dict:
-        if self.provider_base_url is None:
-            provider_base_url = self._installation_config.get_environment(
-                "OLLAMA_BASE_URL"
-            )
+    def llm_provider_base_url(self) -> str | None:
+        if (
+            self.provider_type == LLMProviderType.OLLAMA
+            and self.provider_base_url is None
+        ):
+            ic = self._installation_config
+            return ic.get_environment("OLLAMA_BASE_URL")
         else:
-            provider_base_url = self.provider_base_url
+            return self.provider_base_url
 
-        provider_kw = {
-            "base_url": f"{provider_base_url}/v1",
-        }
+    @property
+    def llm_provider_kw(self) -> dict:
+        provider_kw = {}
+        base_url = self.llm_provider_base_url
+
+        if base_url is not None:
+            provider_kw["base_url"] = f"{base_url}/v1"
 
         if self.provider_key is not None:
             provider_kw["api_key"] = self._installation_config.get_secret(
