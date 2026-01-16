@@ -1,3 +1,8 @@
+"""Functional test configuration.
+
+Includes fixtures for test clients.
+"""
+
 import pytest
 from fastapi import testclient
 
