@@ -784,6 +784,7 @@ MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME = {
 class LLMProviderType(enum.StrEnum):
     OPENAI = "openai"
     OLLAMA = "ollama"
+    GOOGLE = "google"
 
 
 @dataclasses.dataclass

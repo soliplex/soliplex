@@ -461,6 +461,12 @@ def installation_config():
             },
             f"{AGENT_BASE_URL}/v1",
         ),
+        (  # Google, no URL
+            {
+                "provider_type": config.LLMProviderType.GOOGLE,
+            },
+            None,
+        ),
     ],
 )
 def test_defaultagent_from_config(

@@ -2714,6 +2714,7 @@ def test_agentconfig_get_system_prompt(
             {"provider_base_url": PROVIDER_BASE_URL},
             PROVIDER_BASE_URL,
         ),
+        (config.LLMProviderType.GOOGLE, {}, None),
     ],
 )
 def test_agentconfig_llm_provider_base_url(
@@ -2861,6 +2862,38 @@ def test_agentconfig_llm_provider_kw_openai_w_provider_url(
         system_prompt="You are a test",
         provider_type=config.LLMProviderType.OPENAI,
         provider_base_url=PROVIDER_BASE_URL,
+        _installation_config=installation_config,
+        **kw,
+    )
+
+    found = aconfig.llm_provider_kw
+
+    assert found == expected
+
+    if has_pk:
+        installation_config.get_secret.assert_called_once_with(
+            "secret:SECRET_NAME"
+        )
+    else:
+        installation_config.get_secret.assert_not_called()
+
+
+@pytest.mark.parametrize("has_pk", [False, True])
+def test_agentconfig_llm_provider_kw_google(
+    installation_config,
+    has_pk,
+):
+    kw = {}
+    expected = {}
+
+    if has_pk:
+        kw["provider_key"] = "secret:SECRET_NAME"
+        expected["api_key"] = installation_config.get_secret.return_value
+
+    aconfig = config.AgentConfig(
+        id="test-agent",
+        system_prompt="You are a test",
+        provider_type=config.LLMProviderType.GOOGLE,
         _installation_config=installation_config,
         **kw,
     )
