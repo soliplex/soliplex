@@ -337,6 +337,7 @@ async def test_gemini_handles_empty_input(gemini_agent):
 
 
 @pytest.mark.anyio
+@pytest.mark.needs_llm
 async def test_gemini_model_structure(gemini_agent):
     """Verify agent has correct GoogleModel structure.
 
@@ -362,6 +363,7 @@ async def test_gemini_model_structure(gemini_agent):
 
 
 @pytest.mark.anyio
+@pytest.mark.needs_llm
 async def test_gemini_agent_configuration(gemini_agent):
     """Verify agent configuration is correct.
 
@@ -386,6 +388,7 @@ async def test_gemini_agent_configuration(gemini_agent):
 
 
 @pytest.mark.anyio
+@pytest.mark.needs_llm
 async def test_gemini_safety_filter(gemini_room_config):
     """Verify graceful handling of safety filter rejection.
 
