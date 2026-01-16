@@ -21,6 +21,9 @@ OPENAI_PROVIDER_KW = {
     "base_url": BASE_URL,
     "api_key": API_KEY,
 }
+GOOGLE_PROVIDER_KW = {
+    "api_key": API_KEY,
+}
 MODEL_SETTINGS = {
     "temperature": 0.875,
 }
@@ -92,25 +95,30 @@ def mcp_ct_configs_tools(request):
 
 @pytest.mark.parametrize("w_model_settings", [None, MODEL_SETTINGS])
 @pytest.mark.parametrize(
-    "llm_provider_kw, w_oai",
+    "llm_provider_kw, provider_type",
     [
-        (OLLAMA_PROVIDER_KW, False),
-        (OPENAI_PROVIDER_KW, True),
+        (OLLAMA_PROVIDER_KW, config.LLMProviderType.OLLAMA),
+        (OPENAI_PROVIDER_KW, config.LLMProviderType.OPENAI),
+        (GOOGLE_PROVIDER_KW, config.LLMProviderType.GOOGLE),
     ],
 )
-@mock.patch("pydantic_ai.providers.ollama.OllamaProvider")
-@mock.patch("pydantic_ai.providers.openai.OpenAIProvider")
-@mock.patch("pydantic_ai.models.openai.OpenAIChatModel")
+@mock.patch("soliplex.agents.GoogleProvider")
+@mock.patch("soliplex.agents.GoogleModel")
+@mock.patch("soliplex.agents.ollama_providers.OllamaProvider")
+@mock.patch("soliplex.agents.openai_providers.OpenAIProvider")
+@mock.patch("soliplex.agents.openai_models.OpenAIChatModel")
 @mock.patch("pydantic_ai.Agent")
 def test_get_agent_from_configs_wo_hit_w_default_kind(
     agent_klass,
     model_klass,
     oai_provider_klass,
     oll_provider_klass,
+    google_model_klass,
+    google_provider_klass,
     tool_configs_tools,
     mcp_ct_configs_tools,
     llm_provider_kw,
-    w_oai,
+    provider_type,
     w_model_settings,
 ):
     agent_config = mock.create_autospec(config.AgentConfig)
@@ -119,12 +127,7 @@ def test_get_agent_from_configs_wo_hit_w_default_kind(
     agent_config.model_name = MODEL
     agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
     agent_config.model_settings = w_model_settings
-
-    if w_oai:
-        agent_config.provider_type = config.LLMProviderType.OPENAI
-    else:
-        agent_config.provider_type = config.LLMProviderType.OLLAMA
-
+    agent_config.provider_type = provider_type
     agent_config.llm_provider_kw = llm_provider_kw
 
     tool_configs = {tc.tool_id: tc for (tc, _) in tool_configs_tools}
@@ -155,7 +158,6 @@ def test_get_agent_from_configs_wo_hit_w_default_kind(
 
     assert akc.args == ()
     akc_kw = akc.kwargs
-    assert akc_kw["model"] == model_klass.return_value
     assert akc_kw["instructions"] == SYSTEM_PROMPT
     assert akc_kw["model_settings"] == w_model_settings
 
@@ -176,23 +178,38 @@ def test_get_agent_from_configs_wo_hit_w_default_kind(
 
     assert akc_kw["deps_type"] is agents.AgentDependencies
 
-    if w_oai:
+    if provider_type == config.LLMProviderType.OPENAI:
+        assert akc_kw["model"] == model_klass.return_value
         model_klass.assert_called_once_with(
             model_name=MODEL,
             provider=oai_provider_klass.return_value,
         )
-
         oai_provider_klass.assert_called_once_with(**llm_provider_kw)
         oll_provider_klass.assert_not_called()
+        google_provider_klass.assert_not_called()
+        google_model_klass.assert_not_called()
 
-    else:
+    elif provider_type == config.LLMProviderType.GOOGLE:
+        assert akc_kw["model"] == google_model_klass.return_value
+        google_model_klass.assert_called_once_with(
+            model_name=MODEL,
+            provider=google_provider_klass.return_value,
+        )
+        google_provider_klass.assert_called_once_with(**llm_provider_kw)
+        oai_provider_klass.assert_not_called()
+        oll_provider_klass.assert_not_called()
+        model_klass.assert_not_called()
+
+    else:  # OLLAMA
+        assert akc_kw["model"] == model_klass.return_value
         model_klass.assert_called_once_with(
             model_name=MODEL,
             provider=oll_provider_klass.return_value,
         )
-
         oll_provider_klass.assert_called_once_with(**llm_provider_kw)
         oai_provider_klass.assert_not_called()
+        google_provider_klass.assert_not_called()
+        google_model_klass.assert_not_called()
 
 
 def test_get_agent_from_configs_wo_hit_w_python_kind():

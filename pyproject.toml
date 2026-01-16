@@ -32,6 +32,7 @@ dependencies = [
     "trio",
     "uvicorn[standard]",
     "certifi >= 2025.11.12",
+    "pydantic-ai[google]",
 ]
 
 [project.scripts]
