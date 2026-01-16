@@ -8,16 +8,16 @@ capabilities.
 
 The system consists of three main components:
 
-### 1. Backend Server (`soliplex/`)
-- **Technology**: FastAPI with Python 3.13
+### 1. Backend Server (`src/soliplex/`)
+- **Technology**: FastAPI with Python 3.12+
 - **Purpose**: Handles API requests, RAG processing, and AI model integration
-- **Features**: 
+- **Features**:
   - OpenAI API integration
   - Document indexing and retrieval
   - Authentication and authorization
   - Real-time WebSocket communication
 
-### 2. Frontend Client (`gen_ai_client/`)
+### 2. Frontend Client (`src/flutter/`)
 - **Technology**: Flutter web application
 - **Purpose**: Provides user interface for chat and document interaction
 - **Features**:

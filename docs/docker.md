@@ -18,7 +18,7 @@ The compose configuration defines two services:
 
 #### 1. `soliplex_backend` (Python Backend)
 - **Port**: 8000
-- **Technology**: Python 3.13 with FastAPI
+- **Technology**: Python 3.12 with FastAPI
 - **Purpose**: API server, RAG processing, AI integration
 - **Volumes**:
   - `./example:/app/installation` - Configuration files
@@ -105,7 +105,7 @@ docker-compose up --build
 
 ### Backend Dockerfile
 
-The backend [Dockerfile](../Dockerfile) uses Python 3.13 and installs Soliplex in editable mode.
+The backend [Dockerfile](../Dockerfile) uses Python 3.12 and installs Soliplex in editable mode.
 
 Build manually:
 ```bash
@@ -200,7 +200,7 @@ Initialize the database on your host machine before running Docker:
 
 ```bash
 # Create Python virtual environment
-python3.13 -m venv venv
+python3.12 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install haiku-rag (full version for ingestion)

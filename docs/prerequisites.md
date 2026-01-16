@@ -6,7 +6,7 @@ This guide provides a complete checklist for setting up Soliplex from scratch.
 
 ### Software Prerequisites
 
-- [ ] **Python 3.13+** - Required for backend server
+- [ ] **Python 3.12+** - Required for backend server
 - [ ] **pip** - Python package installer (usually included with Python)
 - [ ] **Git** - For cloning the repository
 - [ ] **Docker & Docker Compose** (Optional) - For containerized deployment
@@ -41,7 +41,7 @@ This guide provides a complete checklist for setting up Soliplex from scratch.
 
 Follow these steps in order for a successful setup.
 
-### Step 1: Install Python 3.13
+### Step 1: Install Python 3.12
 
 #### Windows
 ```bash
@@ -60,15 +60,15 @@ brew install python@3.13
 ```bash
 # Ubuntu/Debian
 sudo apt update
-sudo apt install python3.13 python3.13-venv python3.13-dev
+sudo apt install python3.12 python3.12-venv python3.12-dev
 
 # Fedora
-sudo dnf install python3.13
+sudo dnf install python3.12
 ```
 
 Verify installation:
 ```bash
-python3.13 --version
+python3.12 --version
 ```
 
 ### Step 2: Install and Configure Ollama (if using Ollama)
@@ -126,7 +126,7 @@ cd soliplex
 
 ```bash
 # Create virtual environment
-python3.13 -m venv venv
+python3.12 -m venv venv
 
 # Activate virtual environment
 # Linux/macOS:
@@ -368,7 +368,7 @@ For reference, here's the complete command sequence:
 # Setup
 git clone https://github.com/soliplex/soliplex.git
 cd soliplex
-python3.13 -m venv venv
+python3.12 -m venv venv
 source venv/bin/activate  # or venv\Scripts\activate on Windows
 pip install --upgrade pip setuptools
 pip install -e .
@@ -404,7 +404,7 @@ cp .env.example .env
 # Edit .env with your settings
 
 # Initialize RAG database (on host)
-python3.13 -m venv venv
+python3.12 -m venv venv
 source venv/bin/activate
 pip install haiku-rag
 export OLLAMA_BASE_URL=http://localhost:11434
@@ -419,9 +419,9 @@ docker-compose up
 
 ## Troubleshooting
 
-### Python 3.13 not found
-- Ensure Python 3.13 is installed and in your PATH
-- Try `python3.13 --version` to verify
+### Python 3.12 not found
+- Ensure Python 3.12 is installed and in your PATH
+- Try `python3.12 --version` to verify
 
 ### Ollama connection refused
 - Ensure Ollama service is running: `ollama serve`

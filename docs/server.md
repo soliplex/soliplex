@@ -5,7 +5,7 @@ to OpenAI and provides RAG functionality.
 
 ## Prerequisites
 
-- Python 3.13+
+- Python 3.12+
 
 - Access to LLM:
 
@@ -56,15 +56,15 @@ configurations:
   no secrets.
 
 - `example/installation.yaml` is a more fleshed-out example using Ollama:
-  it requires secrets for the exernal Model-Control Protocol (MCP) client
-  toosets for the room `mcptest`.
+  it requires secrets for the external Model-Control Protocol (MCP) client
+  toolsets for the room `mcptest`.
 
-- `example/minimal-openai.yaml` is a minimal example using OpenAI: 
+- `example/minimal-openai.yaml` is a minimal example using OpenAI:
   it requires no secrets beyond the `OPENAI_API_KEY`.
 
-- `example/installation.yaml` is a more fleshed-out example using OpenAI:
-  in addition tothe `OPENAI_API_KEY` secret, it requires secrets for the
-  exernal Model-Control Protocol (MCP) client toosets for the room `mcptest`.
+- `example/installation-openai.yaml` is a more fleshed-out example using OpenAI:
+  in addition to the `OPENAI_API_KEY` secret, it requires secrets for the
+  external Model-Control Protocol (MCP) client toolsets for the room `mcptest`.
 
 Each installation configuration includes a number of rooms that 
 
@@ -168,10 +168,10 @@ soliplex-cli serve [OPTIONS] INSTALLATION_CONFIG_PATH
 
 **Hot Reload Options:**
 
-- `--reload {code,config,both}` / `-r {code,config,both}` - Enable hot reload
-  - `code` - Watch Python source files for changes
+- `--reload {python,config,both}` / `-r {python,config,both}` - Enable hot reload
+  - `python` - Watch Python source files for changes
   - `config` - Watch YAML configuration files for changes
-  - `both` - Watch both code and config files
+  - `both` - Watch both Python and config files
   - Example: `--reload both` or `-r both`
 
 - `--reload-dirs DIRS` - Additional directories to watch (repeatable)

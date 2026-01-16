@@ -5,7 +5,7 @@ An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web inte
 ## Features
 
 - **RAG-Powered Search**: Semantic document retrieval using LanceDB vector database
-- **Multi-Room Architecture**: Independent chat environments with separate configurations and knowledge bases
+- **Multi-Room Architecture**: Independent chat environments (rooms) with separate configurations and knowledge bases
 - **Multiple LLM Providers**: OpenAI, Ollama, and compatible APIs
 - **AI Agent System**: Function calling and tool integration for AI agents
 - **OIDC Authentication**: Enterprise SSO with Keycloak integration
@@ -17,13 +17,13 @@ An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web inte
 ## Architecture
 
 ### Backend (`/src/soliplex/`)
-**Python 3.13+ / FastAPI**
+**Python 3.12+ / FastAPI**
 
 - **Core**: FastAPI application with async support
-- **RAG Engine**: Haiku RAG (0.12.1+) with LanceDB vector storage
+- **RAG Engine**: haiku.rag-slim (0.25.0) with LanceDB vector storage
 - **AI Integration**: Pydantic AI (1.0.11+) for agent management
 - **Authentication**: Python-Keycloak with OIDC/JWT support
-- **MCP**: FastMCP (2.12.3+) server and client implementations
+- **MCP**: FastMCP (2.13.0+) server and client implementations
 - **Configuration**: YAML-based configuration system
 
 Key modules:
@@ -65,7 +65,7 @@ For detailed installation instructions, see the [Prerequisites Guide](docs/prere
 
 ```bash
 # Install
-python3.13 -m venv venv
+python3.12 -m venv venv
 source venv/bin/activate
 pip install -e .
 
@@ -155,7 +155,7 @@ Server options:
 - `--no-auth-mode` - Disable authentication (for development/testing)
 - `--host HOST` - Bind to specific host (default: 127.0.0.1)
 - `--port PORT` - Listen on specific port (default: 8000)
-- `--reload {code,config,both}` - Enable hot reload for code, config, or both
+- `--reload {python,config,both}` - Enable hot reload for python code, config, or both
 - `--reload-dirs DIRS` - Additional directories to watch for reload
 - `--reload-includes PATTERNS` - File patterns to include in reload watch
 - `--proxy-headers` - Enable proxy header parsing
