@@ -6,7 +6,9 @@ import pydantic_ai
 from pydantic_ai import agent as ai_agent
 from pydantic_ai import mcp as ai_mcp
 from pydantic_ai import tools as ai_tools
+from pydantic_ai.models import google as google_models
 from pydantic_ai.models import openai as openai_models
+from pydantic_ai.providers import google as google_providers
 from pydantic_ai.providers import ollama as ollama_providers
 from pydantic_ai.providers import openai as openai_providers
 
@@ -71,11 +73,26 @@ def _get_default_agent_from_configs(
     """Build a Pydantic AI agent from a config"""
     provider_kw = agent_config.llm_provider_kw
 
-    if agent_config.provider_type == config.LLMProviderType.OLLAMA:
+    if agent_config.provider_type == config.LLMProviderType.GOOGLE:
+        provider = google_providers.GoogleProvider(**provider_kw)
+        model = google_models.GoogleModel(
+            model_name=agent_config.model_name,
+            provider=provider,
+        )
+
+    elif agent_config.provider_type == config.LLMProviderType.OLLAMA:
         provider_kw["api_key"] = "dummy"
         provider = ollama_providers.OllamaProvider(**provider_kw)
+        model = openai_models.OpenAIChatModel(
+            model_name=agent_config.model_name,
+            provider=provider,
+        )
     else:
         provider = openai_providers.OpenAIProvider(**provider_kw)
+        model = openai_models.OpenAIChatModel(
+            model_name=agent_config.model_name,
+            provider=provider,
+        )
 
     tools = [
         make_ai_tool(tool_config) for tool_config in tool_configs.values()
@@ -86,10 +103,7 @@ def _get_default_agent_from_configs(
     ]
 
     return pydantic_ai.Agent(
-        model=openai_models.OpenAIChatModel(
-            model_name=agent_config.model_name,
-            provider=provider,
-        ),
+        model=model,
         model_settings=agent_config.model_settings,
         tools=tools,
         toolsets=toolsets,
