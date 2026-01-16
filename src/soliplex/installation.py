@@ -1,5 +1,6 @@
 import contextlib
 import dataclasses
+import os
 import pathlib
 
 import fastapi
@@ -38,6 +39,52 @@ class Installation:
     @property
     def haiku_rag_config(self) -> hr_config.AppConfig:
         return self._config.haiku_rag_config
+
+    def get_all_models(self) -> set[str]:
+        ic = self._config
+        models = set()
+
+        # Models from standalone agent configs
+        for ac in ic.agent_configs:
+            if model_name := getattr(ac, "model_name", None):
+                models.add(model_name)
+
+        # Models from room configs
+        for rc in ic.room_configs.values():
+            if model_name := getattr(rc.agent_config, "model_name", None):
+                models.add(model_name)
+            # Models from quiz judge agents
+            for quiz in rc.quizzes:
+                if quiz.judge_agent:
+                    model_name = getattr(quiz.judge_agent, "model_name", None)
+                    if model_name:
+                        models.add(model_name)
+
+        # Models from completion configs
+        for cc in ic.completion_configs.values():
+            if model_name := getattr(cc.agent_config, "model_name", None):
+                models.add(model_name)
+
+        # Models from haiku.rag config
+        hr = ic.haiku_rag_config
+        for section in (hr.embeddings, hr.qa, hr.reranking, hr.research):
+            if not section or not section.model:
+                continue
+            models.add(section.model.name)
+
+        # Models from environment variables (both config and OS)
+        model_env_vars = (
+            "DEFAULT_AGENT_MODEL",
+            "EMBEDDINGS_MODEL",
+            "QA_MODEL",
+        )
+        for env_var in model_env_vars:
+            if model_name := ic.environment.get(env_var):
+                models.add(model_name)
+            if model_name := os.environ.get(env_var):
+                models.add(model_name)
+
+        return models
 
     @property
     def thread_persistence_dburi_sync(self) -> str:

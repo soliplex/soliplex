@@ -65,6 +65,8 @@ installation_path_type = typing.Annotated[
 def get_installation(
     installation_path: pathlib.Path,
 ) -> installation.Installation:
+    if installation_path.is_dir():
+        installation_path = installation_path / "installation.yaml"
     i_config = config.load_installation(installation_path)
     i_config.reload_configurations()
     return installation.Installation(i_config)
@@ -517,10 +519,8 @@ def pull_models(
     the_console.rule("Scanning for Ollama models")
     the_console.line()
 
-    def on_found(file_path, models):
-        the_console.print(f"Found models in {file_path}: {models}")
-
-    models = ollama.collect_models(installation_path, on_found=on_found)
+    the_installation = get_installation(installation_path)
+    models = the_installation.get_all_models()
 
     if not models:
         the_console.print("No Ollama models found in configuration files.")

@@ -150,6 +150,160 @@ def test_installation_haiku_rag_config():
     assert the_installation.haiku_rag_config is i_config.haiku_rag_config
 
 
+def test_installation_get_all_models():
+    # Create mock agent configs
+    standalone_agent = mock.create_autospec(config.AgentConfig)
+    standalone_agent.model_name = "standalone-model"
+
+    # Create mock room config with agent and quizzes
+    room_agent = mock.create_autospec(config.AgentConfig)
+    room_agent.model_name = "room-model"
+
+    judge_agent = mock.create_autospec(config.AgentConfig)
+    judge_agent.model_name = "judge-model"
+
+    quiz = mock.create_autospec(config.QuizConfig)
+    quiz.judge_agent = judge_agent
+
+    room_config = mock.create_autospec(config.RoomConfig)
+    room_config.agent_config = room_agent
+    room_config.quizzes = [quiz]
+
+    # Create mock completion config
+    completion_agent = mock.create_autospec(config.AgentConfig)
+    completion_agent.model_name = "completion-model"
+
+    completion_config = mock.create_autospec(config.CompletionConfig)
+    completion_config.agent_config = completion_agent
+
+    # Create mock haiku_rag_config with no models
+    hr_config = mock.MagicMock()
+    hr_config.embeddings = None
+    hr_config.qa = None
+    hr_config.reranking = None
+    hr_config.research = None
+
+    # Create installation config
+    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config.agent_configs = [standalone_agent]
+    i_config.room_configs = {"room1": room_config}
+    i_config.completion_configs = {"completion1": completion_config}
+    i_config.haiku_rag_config = hr_config
+    i_config.environment = {}
+
+    the_installation = installation.Installation(i_config)
+
+    models = the_installation.get_all_models()
+
+    assert models == {
+        "standalone-model",
+        "room-model",
+        "judge-model",
+        "completion-model",
+    }
+
+
+def test_installation_get_all_models_handles_none_model_names():
+    # Test that None model names are handled gracefully
+    standalone_agent = mock.create_autospec(config.AgentConfig)
+    standalone_agent.model_name = None
+
+    room_agent = mock.create_autospec(config.AgentConfig)
+    room_agent.model_name = "valid-model"
+
+    room_config = mock.create_autospec(config.RoomConfig)
+    room_config.agent_config = room_agent
+    room_config.quizzes = []
+
+    hr_config = mock.MagicMock()
+    hr_config.embeddings = None
+    hr_config.qa = None
+    hr_config.reranking = None
+    hr_config.research = None
+
+    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config.agent_configs = [standalone_agent]
+    i_config.room_configs = {"room1": room_config}
+    i_config.completion_configs = {}
+    i_config.haiku_rag_config = hr_config
+    i_config.environment = {}
+
+    the_installation = installation.Installation(i_config)
+
+    models = the_installation.get_all_models()
+
+    assert models == {"valid-model"}
+
+
+def test_installation_get_all_models_empty_configs():
+    hr_config = mock.MagicMock()
+    hr_config.embeddings = None
+    hr_config.qa = None
+    hr_config.reranking = None
+    hr_config.research = None
+
+    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config.agent_configs = []
+    i_config.room_configs = {}
+    i_config.completion_configs = {}
+    i_config.haiku_rag_config = hr_config
+    i_config.environment = {}
+
+    the_installation = installation.Installation(i_config)
+
+    models = the_installation.get_all_models()
+
+    assert models == set()
+
+
+def test_installation_get_all_models_none_in_room_and_completion():
+    # Test None model_name in room config, quiz judge, and completion config
+    room_agent = mock.create_autospec(config.AgentConfig)
+    room_agent.model_name = None  # Branch: line 54->57
+
+    # Quiz with no judge_agent
+    quiz_no_judge = mock.create_autospec(config.QuizConfig)
+    quiz_no_judge.judge_agent = None  # Branch: line 58->57
+
+    # Quiz with judge but None model_name
+    judge_agent_no_model = mock.create_autospec(config.AgentConfig)
+    judge_agent_no_model.model_name = None
+
+    quiz_judge_no_model = mock.create_autospec(config.QuizConfig)
+    quiz_judge_no_model.judge_agent = judge_agent_no_model
+
+    room_config = mock.create_autospec(config.RoomConfig)
+    room_config.agent_config = room_agent
+    room_config.quizzes = [quiz_no_judge, quiz_judge_no_model]
+
+    # Completion config with None model_name
+    completion_agent = mock.create_autospec(config.AgentConfig)
+    completion_agent.model_name = None  # Branch: line 63->62
+
+    completion_config = mock.create_autospec(config.CompletionConfig)
+    completion_config.agent_config = completion_agent
+
+    hr_config = mock.MagicMock()
+    hr_config.embeddings = None
+    hr_config.qa = None
+    hr_config.reranking = None
+    hr_config.research = None
+
+    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config.agent_configs = []
+    i_config.room_configs = {"room1": room_config}
+    i_config.completion_configs = {"completion1": completion_config}
+    i_config.haiku_rag_config = hr_config
+    i_config.environment = {}
+
+    the_installation = installation.Installation(i_config)
+
+    models = the_installation.get_all_models()
+
+    # All model names were None, so no models should be collected
+    assert models == set()
+
+
 def test_installation_thread_persistence_dburi_sync():
     i_config = mock.create_autospec(config.InstallationConfig)
     the_installation = installation.Installation(i_config)
