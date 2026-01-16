@@ -304,6 +304,82 @@ def test_installation_get_all_models_none_in_room_and_completion():
     assert models == set()
 
 
+def test_installation_get_all_models_from_haiku_rag_config():
+    # Test models extracted from haiku.rag config sections
+    embeddings_model = mock.MagicMock()
+    embeddings_model.name = "embedding-model"
+
+    qa_model = mock.MagicMock()
+    qa_model.name = "qa-model"
+
+    hr_config = mock.MagicMock()
+    hr_config.embeddings.model = embeddings_model
+    hr_config.qa.model = qa_model
+    hr_config.reranking = None
+    hr_config.research.model = None
+
+    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config.agent_configs = []
+    i_config.room_configs = {}
+    i_config.completion_configs = {}
+    i_config.haiku_rag_config = hr_config
+    i_config.environment = {}
+
+    the_installation = installation.Installation(i_config)
+
+    models = the_installation.get_all_models()
+
+    assert models == {"embedding-model", "qa-model"}
+
+
+def test_installation_get_all_models_from_config_environment():
+    # Test models extracted from installation config environment
+    hr_config = mock.MagicMock()
+    hr_config.embeddings = None
+    hr_config.qa = None
+    hr_config.reranking = None
+    hr_config.research = None
+
+    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config.agent_configs = []
+    i_config.room_configs = {}
+    i_config.completion_configs = {}
+    i_config.haiku_rag_config = hr_config
+    i_config.environment = {
+        "DEFAULT_AGENT_MODEL": "env-model",
+        "QA_MODEL": "qa-env-model",
+    }
+
+    the_installation = installation.Installation(i_config)
+
+    models = the_installation.get_all_models()
+
+    assert models == {"env-model", "qa-env-model"}
+
+
+@mock.patch.dict("os.environ", {"EMBEDDINGS_MODEL": "os-embedding-model"})
+def test_installation_get_all_models_from_os_environ():
+    # Test models extracted from OS environment variables
+    hr_config = mock.MagicMock()
+    hr_config.embeddings = None
+    hr_config.qa = None
+    hr_config.reranking = None
+    hr_config.research = None
+
+    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config.agent_configs = []
+    i_config.room_configs = {}
+    i_config.completion_configs = {}
+    i_config.haiku_rag_config = hr_config
+    i_config.environment = {}
+
+    the_installation = installation.Installation(i_config)
+
+    models = the_installation.get_all_models()
+
+    assert "os-embedding-model" in models
+
+
 def test_installation_thread_persistence_dburi_sync():
     i_config = mock.create_autospec(config.InstallationConfig)
     the_installation = installation.Installation(i_config)
