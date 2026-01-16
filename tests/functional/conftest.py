@@ -67,6 +67,9 @@ async def reset_gemini_client():
     yield
 
     # Close any google-genai httpx clients in cached agents
+    # Note: When using sync TestClient, the httpx client may be bound to a
+    # different event loop that's already closed. We catch RuntimeError to
+    # handle this gracefully.
     for agent in agents_mod._agent_cache.values():
         model = getattr(agent, "_model", None)
         if model is None:
@@ -79,7 +82,11 @@ async def reset_gemini_client():
             continue
         httpx_client = getattr(api_client, "_async_httpx_client", None)
         if httpx_client and not httpx_client.is_closed:
-            await httpx_client.aclose()
+            try:
+                await httpx_client.aclose()
+            except RuntimeError:
+                # Event loop may already be closed (e.g., sync TestClient)
+                pass
 
     # Clear the agent cache so fresh agents are created per test
     agents_mod._agent_cache.clear()
@@ -97,5 +104,14 @@ def client():
 def client_no_llm():
     with testclient.TestClient(
         main.create_app("example/functest_no_llm.yaml")
+    ) as client:
+        yield client
+
+
+@pytest.fixture
+def gemini_client():
+    """Test client with main installation that includes gemini_flash room."""
+    with testclient.TestClient(
+        main.create_app("example/installation.yaml")
     ) as client:
         yield client
