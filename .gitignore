@@ -29,3 +29,4 @@ tmp/
 # Claude Code working files
 .claude/
 docs/implementation-notes/
+uv.lock
