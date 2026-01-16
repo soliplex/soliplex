@@ -116,6 +116,16 @@ def test_get_subprocess_secret(command, args, expectation, expected):
         assert found == expected
 
 
+@mock.patch("subprocess.check_output")
+def test_get_subprocess_secret_empty_output(sco):
+    sco.return_value = ""
+
+    source = config.SubprocessSecretSource(SECRET_NAME, "some_cmd", ())
+
+    with SubprocessError:
+        secrets.get_subprocess_secret(source)
+
+
 @mock.patch("os.urandom")
 def test_random_chars_secret_source(o_ur):
     source = config.RandomCharsSecretSource(SECRET_NAME, 32)
