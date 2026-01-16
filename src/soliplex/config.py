@@ -784,6 +784,7 @@ MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME = {
 class LLMProviderType(enum.StrEnum):
     OPENAI = "openai"
     OLLAMA = "ollama"
+    GOOGLE = "google"
 
 
 @dataclasses.dataclass
@@ -902,6 +903,15 @@ class AgentConfig:
 
     @property
     def llm_provider_kw(self) -> dict:
+        # Early return for providers that don't need base_url
+        if self.provider_type == LLMProviderType.GOOGLE:
+            provider_kw = {}
+            if self.provider_key is not None:
+                provider_kw["api_key"] = self._installation_config.get_secret(
+                    self.provider_key
+                )
+            return provider_kw
+
         if self.provider_base_url is None:
             provider_base_url = self._installation_config.get_environment(
                 "OLLAMA_BASE_URL"

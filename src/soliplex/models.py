@@ -131,7 +131,7 @@ class DefaultAgent(pydantic.BaseModel):
     retries: int
     system_prompt: str | None
     provider_type: config.LLMProviderType  # enum, not dataclass
-    provider_base_url: str
+    provider_base_url: str | None
     provider_key: str
 
     @classmethod
@@ -143,7 +143,7 @@ class DefaultAgent(pydantic.BaseModel):
             retries=agent_config.retries,
             system_prompt=agent_config.get_system_prompt(),
             provider_type=agent_config.provider_type,
-            provider_base_url=llm_provider_kw["base_url"],
+            provider_base_url=llm_provider_kw.get("base_url"),
             provider_key=agent_config.provider_key or "dummy",
         )
 

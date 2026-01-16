@@ -2740,6 +2740,39 @@ def test_agentconfig_llm_provider_kw(
         installation_config.get_secret.assert_not_called()
 
 
+@pytest.mark.parametrize("has_pk", [False, True])
+def test_agentconfig_llm_provider_kw_google(
+    installation_config,
+    has_pk,
+):
+    """Test llm_provider_kw for GOOGLE provider returns no base_url."""
+    kw = {
+        "_installation_config": installation_config,
+        "provider_type": config.LLMProviderType.GOOGLE,
+    }
+
+    expected = {}
+
+    if has_pk:
+        kw["provider_key"] = "secret:SECRET_NAME"
+        expected["api_key"] = installation_config.get_secret.return_value
+
+    aconfig = config.AgentConfig(
+        id="test-agent", system_prompt="You are a test", **kw
+    )
+
+    found = aconfig.llm_provider_kw
+
+    assert found == expected
+
+    if has_pk:
+        installation_config.get_secret.assert_called_once_with(
+            "secret:SECRET_NAME"
+        )
+    else:
+        installation_config.get_secret.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "agent_config_kw",
     [

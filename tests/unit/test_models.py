@@ -474,7 +474,13 @@ def test_defaultagent_from_config(
     assert agent_model.model_name == AGENT_MODEL
     assert agent_model.retries == exp_retries
     assert agent_model.system_prompt == AGENT_PROMPT
-    assert agent_model.provider_base_url == exp_base
+
+    # Handle GOOGLE provider having no base_url
+    provider_type = agent_provider_type.get("provider_type")
+    if provider_type == config.LLMProviderType.GOOGLE:
+        assert agent_model.provider_base_url is None
+    else:
+        assert agent_model.provider_base_url == exp_base
 
 
 class FeatureModel(pydantic.BaseModel):
