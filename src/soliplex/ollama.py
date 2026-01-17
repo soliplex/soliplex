@@ -6,7 +6,7 @@ import json
 import urllib.error
 import urllib.request
 
-DEFAULT_OLLAMA_URL = "http://localhost:11434"
+DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
 
 
 def pull_model(model_name, ollama_url, on_status=None):

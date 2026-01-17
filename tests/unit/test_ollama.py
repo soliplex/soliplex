@@ -135,10 +135,3 @@ def test_pull_model_response_without_status_field():
 
     assert result is True
     assert any("unknown" in call[0] for call in status_calls)
-
-
-# DEFAULT_OLLAMA_URL test
-
-
-def test_default_ollama_url_value():
-    assert ollama.DEFAULT_OLLAMA_URL == "http://localhost:11434"

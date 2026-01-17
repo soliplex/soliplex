@@ -501,11 +501,11 @@ def pull_models(
     ctx: typer.Context,
     installation_path: installation_path_type,
     ollama_url: str = typer.Option(
-        os.environ.get("OLLAMA_BASE_URL", ollama.DEFAULT_OLLAMA_URL),
+        os.environ.get("OLLAMA_BASE_URL", ollama.DEFAULT_OLLAMA_BASE_URL),
         "-u",
         "--ollama-url",
         help="Ollama API base URL (default: $OLLAMA_BASE_URL or "
-        f"{ollama.DEFAULT_OLLAMA_URL})",
+        f"{ollama.DEFAULT_OLLAMA_BASE_URL})",
     ),
     dry_run: bool = typer.Option(
         False,
