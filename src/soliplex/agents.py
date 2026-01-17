@@ -31,7 +31,6 @@ class AgentDependencies:
     the_installation: typing.Any  # installation.Installation
     user: models.UserProfile = None  # TBD make required
     tool_configs: ToolConfigMap = None
-    agui_emitter: typing.Any = None
     state: agui.AGUI_State = dataclasses.field(default_factory=dict)
 
 

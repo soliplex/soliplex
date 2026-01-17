@@ -2,13 +2,12 @@ import datetime
 from unittest import mock
 
 import pytest
-from haiku.rag.graph import agui as rag_agui
+from ag_ui import core as agui_core
 
 from soliplex import agents
 from soliplex import config
 from soliplex import installation
 from soliplex import tools
-from soliplex.agui import features as agui_features
 
 USER = {
     "full_name": "Phreddy Phlyntstone",
@@ -115,12 +114,10 @@ async def test_search_documents(rag_client, n_docs, w_radius, w_limit):
 
 @pytest.mark.anyio
 async def test_rag_research_wo_tool_config(the_installation):
-    agui_emitter = mock.create_autospec(rag_agui.AGUIEmitter)
     deps = agents.AgentDependencies(
         the_installation=the_installation,
         user=USER,
         tool_configs={},
-        agui_emitter=agui_emitter,
     )
     ctx = mock.Mock(spec_set=(["deps"]), deps=deps)
     with pytest.raises(tools.NoToolConfig):
@@ -162,12 +159,10 @@ async def test_rag_research(
     )
     tool_configs = {"research_report": rrt_config}
 
-    agui_emitter = mock.create_autospec(rag_agui.AGUIEmitter)
     deps = agents.AgentDependencies(
         the_installation=the_installation,
         user=USER,
         tool_configs=tool_configs,
-        agui_emitter=agui_emitter,
     )
     ctx = mock.Mock(spec_set=(["deps"]), deps=deps)
 
@@ -185,7 +180,6 @@ async def test_rag_research(
 
     rd_class.assert_called_once_with(
         client=client,
-        agui_emitter=agui_emitter,
     )
 
     rs_class.from_config.assert_called_once_with(
@@ -239,12 +233,10 @@ async def test_agui_state(the_installation, w_state):
 
 @pytest.mark.anyio
 async def test_ask_with_rich_citations_wo_tool_config(the_installation):
-    agui_emitter = mock.create_autospec(rag_agui.AGUIEmitter)
     deps = agents.AgentDependencies(
         the_installation=the_installation,
         user=USER,
         tool_configs={},
-        agui_emitter=agui_emitter,
     )
     ctx = mock.Mock(spec_set=(["deps"]), deps=deps)
     with pytest.raises(tools.NoToolConfig):
@@ -274,6 +266,7 @@ async def test_ask_with_rich_citations(
     ask.return_value = ANSWER, []
 
     state = {}
+    expected_delta = []
 
     if w_filter:
         state["filter_documents"] = {
@@ -285,6 +278,11 @@ async def test_ask_with_rich_citations(
         exp_filter = "id IN ('DOCID1', 'DOCID2')"
     else:
         exp_filter = None
+        expected_delta.append(
+            {"op": "add", "path": "/filter_documents", "value": None}
+        )
+
+    exp_question = {"question": QUESTION, "citations": [], "response": ANSWER}
 
     if w_history:
         state["ask_history"] = {
@@ -296,10 +294,26 @@ async def test_ask_with_rich_citations(
                 }
             ],
         }
+        expected_delta.append(
+            {
+                "op": "add",
+                "path": "/ask_history/questions/1",
+                "value": exp_question,
+            }
+        )
+    else:
+        expected_delta.append(
+            {
+                "op": "add",
+                "path": "/ask_history",
+                "value": {
+                    "questions": [
+                        exp_question,
+                    ],
+                },
+            }
+        )
 
-    exp_initial_state = tools.AWRC_AGUI_State.model_validate(state)
-
-    emitter = mock.Mock(spec_set=["update_state"])
     awrctc = mock.create_autospec(
         config.AskWithRichCitationsToolConfig,
     )
@@ -308,7 +322,6 @@ async def test_ask_with_rich_citations(
         the_installation=the_installation,
         user=USER,
         tool_configs={"ask_with_rich_citations": awrctc},
-        agui_emitter=emitter,
         state=state,
     )
 
@@ -319,31 +332,16 @@ async def test_ask_with_rich_citations(
         question=QUESTION,
     )
 
-    assert found is ANSWER
+    assert found.return_value is ANSWER
+
+    (sd_event,) = found.metadata
+    assert isinstance(sd_event, agui_core.StateDeltaEvent)
+    found_delta = sd_event.delta
+
+    # jsonpatch.make_patch does not guarantee order of patches.
+    assert len(found_delta) == len(expected_delta)
+
+    for ed in expected_delta:
+        assert ed in found_delta
 
     ask.assert_called_once_with(QUESTION, filter=exp_filter)
-
-    us_1, us_2 = emitter.update_state.call_args_list
-
-    (us_1_state,) = us_1.args
-    assert us_1_state == exp_initial_state
-    assert us_1.kwargs == {}
-
-    if w_history:
-        exp_final_history = exp_initial_state.ask_history.model_copy(deep=True)
-    else:
-        exp_final_history = agui_features.AskedAndAnswered()
-
-    exp_final_history.questions.append(
-        agui_features.QuestionResponseCitations(
-            question=QUESTION,
-            response=ANSWER,
-            citations=[],
-        )
-    )
-    exp_final_state = exp_initial_state.model_copy(
-        update={"ask_history": exp_final_history},
-    )
-    (us_2_state,) = us_2.args
-    assert us_2 == mock.call(exp_final_state)
-    assert us_2.kwargs == {}

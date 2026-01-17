@@ -1,11 +1,12 @@
 """Features defined by soliplex"""
 
 import pydantic
+from haiku.rag.agents.chat import state as hr_chat_state
+from haiku.rag.agents.research import models as hr_graph_models
 
-try:
-    from haiku.rag.graph.common import models as hr_graph_models
-except ImportError:  # pragma: NO COVER haiku-rag-slim >= 0.21.0
-    from haiku.rag.graph.research import models as hr_graph_models
+FILTER_DOCUMENTS_FEATURE = "filter_documents"
+ASK_HISTORY_FEATURE = "ask_history"
+HAIKU_CHAT_FEATURE = hr_chat_state.AGUI_STATE_KEY
 
 KW_ONLY_NONE = pydantic.Field(kw_only=True, default=None)
 

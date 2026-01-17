@@ -1642,13 +1642,18 @@ AGUI_FEATURES_BY_NAME = {
     agui_feature.name: agui_feature
     for agui_feature in [
         AGUI_Feature(
-            name="filter_documents",
+            name=features.FILTER_DOCUMENTS_FEATURE,
             model_klass=features.FilterDocuments,
             source=AGUI_FeatureSource.CLIENT,
         ),
         AGUI_Feature(
-            name="ask_history",
+            name=features.ASK_HISTORY_FEATURE,
             model_klass=features.AskedAndAnswered,
+            source=AGUI_FeatureSource.SERVER,
+        ),
+        AGUI_Feature(
+            name=features.HAIKU_CHAT_FEATURE,
+            model_klass=features.hr_chat_state.ChatSessionState,
             source=AGUI_FeatureSource.SERVER,
         ),
     ]

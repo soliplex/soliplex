@@ -4,7 +4,6 @@ from unittest import mock
 import fastapi
 import pytest
 from ag_ui import core as agui_core
-from haiku.rag.graph import agui as hr_agui
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
@@ -575,13 +574,6 @@ async def test_installation_get_agent_deps_for_room(
             assert found.user == test_user
             assert found.tool_configs == t_configs
 
-            if w_run_agent_input:
-                assert isinstance(found.agui_emitter, hr_agui.AGUIEmitter)
-                assert found.agui_emitter.thread_id == THREAD_ID
-                assert found.agui_emitter.run_id == RUN_ID
-            else:
-                assert found.agui_emitter is None
-
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_run_agent_input", [False, True])
@@ -632,13 +624,6 @@ async def test_installation_get_agent_deps_for_completion(
         assert found.the_installation is the_installation
         assert found.user == test_user
         assert found.tool_configs == t_configs
-
-        if w_run_agent_input:
-            assert isinstance(found.agui_emitter, hr_agui.AGUIEmitter)
-            assert found.agui_emitter.thread_id == THREAD_ID
-            assert found.agui_emitter.run_id == RUN_ID
-        else:
-            assert found.agui_emitter is None
 
 
 @pytest.mark.anyio

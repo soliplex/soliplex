@@ -6,7 +6,6 @@ import fastapi
 import pydantic_ai
 from ag_ui import core as agui_core
 from haiku.rag import config as hr_config
-from haiku.rag.graph import agui as hr_agui
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
@@ -178,13 +177,6 @@ class Installation:
 
         kwargs = {}
 
-        if run_agent_input is not None:
-            kwargs["agui_emitter"] = hr_agui.AGUIEmitter(
-                thread_id=run_agent_input.thread_id,
-                run_id=run_agent_input.run_id,
-                use_deltas=True,
-            )
-
         return agents.AgentDependencies(
             the_installation=self,
             user=user,
@@ -205,13 +197,6 @@ class Installation:
         )
 
         kwargs = {}
-
-        if run_agent_input is not None:
-            kwargs["agui_emitter"] = hr_agui.AGUIEmitter(
-                thread_id=run_agent_input.thread_id,
-                run_id=run_agent_input.run_id,
-                use_deltas=False,
-            )
 
         return agents.AgentDependencies(
             the_installation=self,

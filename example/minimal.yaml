@@ -12,6 +12,95 @@ id: "soliplex-conf-minimal"
 #==========================================================================
 meta:
 
+  #------------------------------------------------------------------------
+  # Register AG-UI feature models so that they can be referenced by
+  # their 'name'
+  #
+  # 'soliplex.agui.features.FilterDocuments' and
+  # 'soliplex.agui.features.AskedAndAnswered' are registered by default,
+  # just as if we configured here:
+  #
+  # agui_features:
+  #
+  # - name: "filter_documents"
+  #   model_klass: "soliplex.agui.features.FilterDocuments"
+  #   source: "client"
+  #
+  # - name: "ask_history"
+  #   model_klass: "soliplex.agui.features.AskedAndAnswered"
+  #   source: "server"
+  #
+  # - name: "haiku.rag.chat"
+  #   model_klass: "haiku.rag.agents.chat.state.ChatSessionState"
+  #   source: "server"
+  #------------------------------------------------------------------------
+
+  #------------------------------------------------------------------------
+  # Register tool configuration types so that they can be referenced by
+  # their 'tool_name'
+  #
+  # 'soliplex.config.SearchDocumentsToolConfig' is registered by default,
+  # just as if we configured here:
+  #
+  # tool_configs:
+  # - "soliplex.config.SearchDocumentsToolConfig"
+  #------------------------------------------------------------------------
+
+  #------------------------------------------------------------------------
+  # Register MCP client toolset configuration types so that they can be
+  # referenced by their 'kind'.
+  #
+  # 'soliplex.config.Stdio_MCP_ClientToolsetConfig' and
+  # 'soliplex.config.HTTP_MCP_ClientToolsetConfig' are registered by default,
+  # just as if we configured here:
+  #
+  # mcp_toolset_configs:
+  # - "soliplex.config.Stdio_MCP_ClientToolsetConfig"
+  # - "soliplex.config.HTTP_MCP_ClientToolsetConfig"
+  #------------------------------------------------------------------------
+
+  #------------------------------------------------------------------------
+  # Register MCP server tool wrapper types so that they can be used to
+  # wrap tools from a given tool configuration class.
+  #
+  # By default, 'soliplex.config.WithQueryMCPWrapper' is configured as
+  # the wrapper for 'soliplex.config.SearchDocumentsToolConfig',
+  # just as if we configured here:
+  #
+  # mcp_server_tool_wrappers:
+  # - config_klass: "soliplex.config.SearchDocumentsToolConfig"
+  #   wrapper_klass: "soliplex.config.WithQueryMCPWrapper"
+  #------------------------------------------------------------------------
+
+  #------------------------------------------------------------------------
+  # Register agent configuration types so that they can be referenced by
+  # their 'kind'
+  #
+  # 'soliplex.config.AgentConfig' and 'soliplex.config.FactoryAgentConfig'
+  # are registered by default, just as if we configured here:
+  #
+  # agent_configs:
+  # - "soliplex.config.AgentConfig"
+  # - "soliplex.config.FactoryAgentConfig"
+  #------------------------------------------------------------------------
+
+  #------------------------------------------------------------------------
+  # Register implementation functions for different secret source classes
+  #
+  # By default, these classes are configured to use the corresponding
+  # functions in 'soliplex.secrets', just as if we configured here:
+  #
+  # secret_sources:
+  # - config_klass: "soliplex.config.EnvVarSecretSource"
+  #   registered_func: "soliplex.secrets.get_env_var_secret"
+  # - config_klass: "soliplex.config.FilePathSecretSource"
+  #   registered_func: "soliplex.secrets.get_file_path_secret"
+  # - config_klass: "soliplex.config.SubprocessSecretSource"
+  #   registered_func: "soliplex.secrets.get_subprocess_secret"
+  # - config_klass: "soliplex.config.RandomCharsSecretSource"
+  #   registered_func: "soliplex.secrets.get_random_chars_secret"
+  #------------------------------------------------------------------------
+
 #==========================================================================
 # Secrets
 #
@@ -112,6 +201,7 @@ room_authz_dburi:
 #==========================================================================
 room_paths:
   - "./rooms/ask_soliplex"
+  - "./rooms/chat"
   - "./rooms/haiku"
   - "./rooms/joker"
   - "./rooms/faux"

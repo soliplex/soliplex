@@ -683,6 +683,10 @@ class RoomView(t_screen.Screen):
     def rest_api(self) -> rest_api.TUI_REST_API:
         return self.app.rest_api
 
+    @property
+    def verbose(self) -> bool:
+        return self.app.verbose
+
     def compose(self) -> t_app.ComposeResult:
         room_info = self.room_info
         yield t_widgets.Header()
@@ -913,9 +917,25 @@ class RoomView(t_screen.Screen):
                 elif chunk["type"] == "TEXT_MESSAGE_CONTENT":
                     response_content += chunk["delta"]
 
-                elif chunk["type"] == "ACTIVITY_SNAPSHOT":
+                elif chunk["type"] == "STATE_SNAPSHOT" and self.verbose:
                     response_content += (
-                        f"\n\n** activity **\n\n{chunk['content']}\n\n"
+                        f"\n\n** state snapshot **\n\n{chunk['content']}\n\n"
+                    )
+
+                elif chunk["type"] == "STATE_DELTA" and self.verbose:
+                    response_content += (
+                        f"\n\n** state delta **\n\n{chunk['delta']}\n\n"
+                    )
+
+                elif chunk["type"] == "ACTIVITY_SNAPSHOT" and self.verbose:
+                    response_content += (
+                        f"\n\n** activity snapshot "
+                        f"**\n\n{chunk['content']}\n\n"
+                    )
+
+                elif chunk["type"] == "ACTIVITY_DELTA" and self.verbose:
+                    response_content += (
+                        f"\n\n** activity delta**\n\n{chunk['patch']}\n\n"
                     )
 
                 elif chunk["type"] == "RUN_FINISHED":
@@ -929,8 +949,8 @@ class RoomView(t_screen.Screen):
                 self.app.call_from_thread(response.update, response_content)
 
         new_run_agent_input = esp.as_run_agent_input
-
         self.run_agent_input.messages[:] = new_run_agent_input.messages[:]
+        self.run_agent_input.state = new_run_agent_input.state
 
 
 class RoomListView(t_screen.Screen):
@@ -1040,8 +1060,15 @@ class SoliplexTUI(t_app.App):
     }
     """
 
-    def __init__(self, soliplex_url="http://localhost:8000", *args, **kw):
+    def __init__(
+        self,
+        soliplex_url: str = "http://localhost:8000",
+        verbose: bool = False,
+        *args,
+        **kw,
+    ):
         self.soliplex_url = soliplex_url
+        self.verbose = verbose
         self.rest_api = rest_api.TUI_REST_API(soliplex_url)
         self._oidc_providers = None
 
