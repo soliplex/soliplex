@@ -1016,9 +1016,30 @@ class RoomConfigsView(t_screen.Screen):
         yield t_widgets.Footer()
 
 
+class InstalledVersionsView(t_screen.Screen):
+    BINDINGS = [
+        t_binding.Binding("escape", "app.pop_screen", "Exit"),
+    ]
+
+    def __init__(self, installed_versions, *args, **kw):
+        self._installed_versions = installed_versions
+
+        super().__init__(*args, **kw)
+
+    def compose(self) -> t_app.ComposeResult:
+        yield t_widgets.Header()
+        yield t_widgets.Label("Installed Versions")
+        tree = t_widgets.Tree(label="Root")
+        tree.add_json(self._installed_versions)
+        tree.root.expand()
+        yield tree
+        yield t_widgets.Footer()
+
+
 class InstallationConfigView(t_screen.Screen):
     BINDINGS = [
         t_binding.Binding("ctrl+r", "room_configs", "Rooms"),
+        t_binding.Binding("ctrl+v", "installed_versions", "Versions"),
         t_binding.Binding("escape", "app.pop_screen", "Exit"),
     ]
 
@@ -1042,6 +1063,13 @@ class InstallationConfigView(t_screen.Screen):
 
         rc_view = RoomConfigsView(room_configs)
         await self.app.push_screen_wait(rc_view)
+
+    @textual.work
+    async def action_installed_versions(self) -> None:
+        installed_versions = self.app.rest_api.get_installed_versions()
+
+        iv_view = InstalledVersionsView(installed_versions)
+        await self.app.push_screen_wait(iv_view)
 
 
 class SoliplexTUI(t_app.App):

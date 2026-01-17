@@ -382,6 +382,15 @@ class Installation(pydantic.BaseModel):
 
 
 # ----------------------------------------------------------------------------
+#   Python software manifest models
+# ----------------------------------------------------------------------------
+InstalledPackage = dict[str, str]
+
+
+InstalledPackages = dict[str, InstalledPackage]
+
+
+# ----------------------------------------------------------------------------
 #   MCP auth-related models
 # ----------------------------------------------------------------------------
 class MCPToken(pydantic.BaseModel):
