@@ -51,21 +51,29 @@ agent:
 
 ## Optional Agent Elements
 
-- `provider_type`: a string, must be one of `"ollama"` (the default) or
-  `"openai"`.
+- `provider_type`: a string, must be one of `"ollama"` (the default),
+  `"openai"`, or `"google"`.
 
-- `provider_base_url`: a string, defaulting to the value configured in
-  the installation environment as `OLLAMA_BASE_URL` is the base API URL
-  for the agent's LLM provider. Must be specified *without* the `/v1`
-    suffix. E.g.:
+- `provider_base_url`: a string, is the base API URL for the agent's LLM
+  provider.
+
+  If not provided, and `provider_type` is set to `"ollama"`, defaults to
+  the value configured in the installation environment as `OLLAMA_BASE_URL`
+
+  If not provided, and `provider_type` is set to `"openai"`, defaults to
+  the default OpenAI service URL.
+
+  **Must not be set** if `provider_type` is set to `"google"`.
+
+  Must be specified *without* the `/v1` suffix. E.g.:
 
   ```yaml
   provider_base_url: "https://provider.example.com/api"
   ```
 
-- `provider_key` (a string, default's to None) should be the
-  *name* of the secret holding the LLM provider's API key
-  (*not* the value of the API key), prefixed with `secret:`
+- `provider_key` (a string, default None) should be the *name* of the secret
+  holding the LLM provider's API key (*not* the value of the API key),
+  prefixed with `secret:`
 
   ```yaml
   provider_key: "secret:FOO_PROVIDER_API_KEY"
@@ -101,6 +109,25 @@ provider_model_settings:
 ```yaml
 model_name: "mistral:7b"
 provider_type: "openai"
+provider_model_settings:
+  temperature: 0.90
+  top_p: 0.70
+  frequency_penalty: 0.25
+  presence_penalty: 0.50
+  parallel_tool_calls: false
+  truncation: "disabled"
+  max_tokens: 2048
+  verbosity: "high"
+```
+
+## Example Google Configuration
+
+**NOTE**: the values below show types, but should not be used without
+          testing.
+
+```yaml
+model_name: "gemini-2.5-flash"
+provider_type: "google"
 provider_model_settings:
   temperature: 0.90
   top_p: 0.70

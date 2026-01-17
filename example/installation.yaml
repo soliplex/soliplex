@@ -118,11 +118,19 @@ secrets:
   # ----------------------------------------------------------------------
   # Credentials for the Smithery.AI MCP tool registry
   #
-  # (required in order to test the 'example/room/mcp_test' tooling).
+  # (required in order to test the 'example/rooms/mcp_test' tooling).
   # ----------------------------------------------------------------------
   - "SMITHERY_AI_API_KEY"
   - "SMITHERY_AI_PROFILE"
   - "GOOGLE_MAPS_API_KEY"
+
+  # ----------------------------------------------------------------------
+  # Credentials for the Google Gemini
+  #
+  # (required in order to test the 'example/rooms/gemini_flash' room).
+  # ----------------------------------------------------------------------
+  - "GEMINI_API_KEY"
+
   # ----------------------------------------------------------------------
   # MCP room token generation / validation secret
   #

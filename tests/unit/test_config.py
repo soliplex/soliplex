@@ -2699,25 +2699,57 @@ def test_agentconfig_get_system_prompt(
             assert agent_config.get_system_prompt() is None
 
 
-@pytest.mark.parametrize("has_pk", [False, True])
-@pytest.mark.parametrize("has_base_url", [False, True])
-def test_agentconfig_llm_provider_kw(
+@pytest.mark.parametrize(
+    "provider_type, kw, expected",
+    [
+        (config.LLMProviderType.OLLAMA, {}, OLLAMA_BASE_URL),
+        (
+            config.LLMProviderType.OLLAMA,
+            {"provider_base_url": PROVIDER_BASE_URL},
+            PROVIDER_BASE_URL,
+        ),
+        (config.LLMProviderType.OPENAI, {}, None),
+        (
+            config.LLMProviderType.OPENAI,
+            {"provider_base_url": PROVIDER_BASE_URL},
+            PROVIDER_BASE_URL,
+        ),
+        (config.LLMProviderType.GOOGLE, {}, None),
+    ],
+)
+def test_agentconfig_llm_provider_base_url(
     installation_config,
-    has_base_url,
+    provider_type,
+    kw,
+    expected,
+):
+    ic_environ = {"OLLAMA_BASE_URL": OLLAMA_BASE_URL}
+    installation_config.get_environment = ic_environ.get
+
+    aconfig = config.AgentConfig(
+        id="test-agent",
+        system_prompt="You are a test",
+        provider_type=provider_type,
+        _installation_config=installation_config,
+        **kw,
+    )
+
+    found = aconfig.llm_provider_base_url
+
+    assert found == expected
+
+
+@pytest.mark.parametrize("has_pk", [False, True])
+def test_agentconfig_llm_provider_kw_ollama_w_default_base_url(
+    installation_config,
     has_pk,
 ):
     ic_environ = {"OLLAMA_BASE_URL": OLLAMA_BASE_URL}
     installation_config.get_environment = ic_environ.get
 
-    kw = {"_installation_config": installation_config}
-
-    if has_base_url:
-        expected_base_url = kw["provider_base_url"] = PROVIDER_BASE_URL
-    else:
-        expected_base_url = OLLAMA_BASE_URL
-
+    kw = {}
     expected = {
-        "base_url": expected_base_url + "/v1",
+        "base_url": f"{OLLAMA_BASE_URL}/v1",
     }
 
     if has_pk:
@@ -2725,7 +2757,145 @@ def test_agentconfig_llm_provider_kw(
         expected["api_key"] = installation_config.get_secret.return_value
 
     aconfig = config.AgentConfig(
-        id="test-agent", system_prompt="You are a test", **kw
+        id="test-agent",
+        system_prompt="You are a test",
+        provider_type=config.LLMProviderType.OLLAMA,
+        _installation_config=installation_config,
+        **kw,
+    )
+
+    found = aconfig.llm_provider_kw
+
+    assert found == expected
+
+    if has_pk:
+        installation_config.get_secret.assert_called_once_with(
+            "secret:SECRET_NAME"
+        )
+    else:
+        installation_config.get_secret.assert_not_called()
+
+
+@pytest.mark.parametrize("has_pk", [False, True])
+def test_agentconfig_llm_provider_kw_ollama_w_explicit_base_url(
+    installation_config,
+    has_pk,
+):
+    kw = {}
+    expected = {
+        "base_url": f"{PROVIDER_BASE_URL}/v1",
+    }
+
+    if has_pk:
+        kw["provider_key"] = "secret:SECRET_NAME"
+        expected["api_key"] = installation_config.get_secret.return_value
+
+    aconfig = config.AgentConfig(
+        id="test-agent",
+        system_prompt="You are a test",
+        provider_type=config.LLMProviderType.OLLAMA,
+        provider_base_url=PROVIDER_BASE_URL,
+        _installation_config=installation_config,
+        **kw,
+    )
+
+    found = aconfig.llm_provider_kw
+
+    assert found == expected
+
+    if has_pk:
+        installation_config.get_secret.assert_called_once_with(
+            "secret:SECRET_NAME"
+        )
+    else:
+        installation_config.get_secret.assert_not_called()
+
+
+@pytest.mark.parametrize("has_pk", [False, True])
+def test_agentconfig_llm_provider_kw_openai_wo_provider_url(
+    installation_config,
+    has_pk,
+):
+    kw = {}
+    expected = {}
+
+    if has_pk:
+        kw["provider_key"] = "secret:SECRET_NAME"
+        expected["api_key"] = installation_config.get_secret.return_value
+
+    aconfig = config.AgentConfig(
+        id="test-agent",
+        system_prompt="You are a test",
+        provider_type=config.LLMProviderType.OPENAI,
+        _installation_config=installation_config,
+        **kw,
+    )
+
+    found = aconfig.llm_provider_kw
+
+    assert found == expected
+
+    if has_pk:
+        installation_config.get_secret.assert_called_once_with(
+            "secret:SECRET_NAME"
+        )
+    else:
+        installation_config.get_secret.assert_not_called()
+
+
+@pytest.mark.parametrize("has_pk", [False, True])
+def test_agentconfig_llm_provider_kw_openai_w_provider_url(
+    installation_config,
+    has_pk,
+):
+    kw = {}
+    expected = {
+        "base_url": f"{PROVIDER_BASE_URL}/v1",
+    }
+
+    if has_pk:
+        kw["provider_key"] = "secret:SECRET_NAME"
+        expected["api_key"] = installation_config.get_secret.return_value
+
+    aconfig = config.AgentConfig(
+        id="test-agent",
+        system_prompt="You are a test",
+        provider_type=config.LLMProviderType.OPENAI,
+        provider_base_url=PROVIDER_BASE_URL,
+        _installation_config=installation_config,
+        **kw,
+    )
+
+    found = aconfig.llm_provider_kw
+
+    assert found == expected
+
+    if has_pk:
+        installation_config.get_secret.assert_called_once_with(
+            "secret:SECRET_NAME"
+        )
+    else:
+        installation_config.get_secret.assert_not_called()
+
+
+@pytest.mark.parametrize("has_pk", [False, True])
+def test_agentconfig_llm_provider_kw_google(
+    installation_config,
+    has_pk,
+):
+    kw = {}
+    expected = {}
+
+    if has_pk:
+        kw["provider_key"] = "secret:SECRET_NAME"
+        expected["api_key"] = installation_config.get_secret.return_value
+
+    aconfig = config.AgentConfig(
+        id="test-agent",
+        system_prompt="You are a test",
+        provider_type=config.LLMProviderType.GOOGLE,
+        _installation_config=installation_config,
+        **kw,
     )
 
     found = aconfig.llm_provider_kw
