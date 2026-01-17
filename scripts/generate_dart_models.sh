@@ -186,6 +186,9 @@ for dart_file in "$OUTPUT_DIR"/*.dart; do
 // ignore_for_file: always_put_required_named_parameters_first
 // ignore_for_file: argument_type_not_assignable
 // ignore_for_file: unnecessary_ignore
+// ignore_for_file: avoid_dynamic_calls
+// ignore_for_file: inference_failure_on_untyped_parameter
+// ignore_for_file: inference_failure_on_collection_literal
 
 EOF
         cat "$dart_file" >> "${dart_file}.tmp"
