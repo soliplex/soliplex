@@ -5,6 +5,7 @@ import pathlib
 import typing
 from importlib.metadata import version
 
+import requests
 import typer
 import uvicorn
 import uvicorn.config
@@ -501,11 +502,13 @@ def pull_models(
     ctx: typer.Context,
     installation_path: installation_path_type,
     ollama_url: str = typer.Option(
-        os.environ.get("OLLAMA_BASE_URL", ollama.DEFAULT_OLLAMA_BASE_URL),
+        None,
         "-u",
         "--ollama-url",
-        help="Ollama API base URL (default: $OLLAMA_BASE_URL or "
-        f"{ollama.DEFAULT_OLLAMA_BASE_URL})",
+        help=(
+            "Ollama API base URL (defaults to 'OLLAMA_BASE_URL' from "
+            "installation enviroment)"
+        ),
     ),
     dry_run: bool = typer.Option(
         False,
@@ -515,43 +518,58 @@ def pull_models(
     ),
 ):
     """Pull Ollama models referenced in the installation configuration"""
-    the_console.line()
-    the_console.rule("Scanning for Ollama models")
-    the_console.line()
-
-    the_installation = get_installation(installation_path)
-    models = the_installation.get_all_models()
-
-    if not models:
-        the_console.print("No Ollama models found in configuration files.")
-        return
-
-    the_console.line()
-    the_console.rule(f"Found {len(models)} unique Ollama model(s)")
-    the_console.line()
-    for model in sorted(models):
-        the_console.print(f"  - {model}")
-
-    if dry_run:
-        return
-
-    the_console.line()
-    the_console.rule(f"Pulling models from {ollama_url}")
 
     def on_status(msg, is_error=False):
         style = "red" if is_error else None
         the_console.print(f"  {msg}", style=style)
 
-    success_count = 0
-    for model in sorted(models):
-        the_console.print(f"\nPulling: {model}")
-        if ollama.pull_model(model, ollama_url, on_status=on_status):
-            success_count += 1
+    the_console.line()
+    the_console.rule("Scanning for Ollama models")
+    the_console.line()
 
-    the_console.line()
-    msg = f"Pulled {success_count}/{len(models)} model(s) successfully"
-    the_console.rule(msg)
-    the_console.line()
+    the_installation = get_installation(installation_path)
+    the_installation.resolve_environment()
+    models = the_installation.get_all_models()
+
+    if ollama_url is None:
+        ollama_url = the_installation.get_environment("OLLAMA_BASE_URL")
+
+    rest_api = ollama.REST_API(ollama_url)
+
+    if not models:
+        the_console.line()
+        the_console.print("No Ollama models found in configuration files.")
+        the_console.line()
+
+    else:
+        the_console.line()
+        the_console.rule(f"Found {len(models)} unique Ollama model(s)")
+        the_console.line()
+
+        for model in sorted(models):
+            the_console.print(f"  - {model}")
+
+        if not dry_run:
+            success_count = 0
+
+            for model in sorted(models):
+                the_console.print(f"\nPulling: {model}")
+
+                try:
+                    result = rest_api.pull_model(model, stream=False)
+                    status_text = result["status"]
+                except requests.RequestException as exc:
+                    on_status(str(exc.args), True)
+                except KeyError:
+                    on_status("No status returned", True)
+                else:
+                    on_status(status_text, False)
+                    success_count += 1
+
+            the_console.line()
+            msg = f"Pulled {success_count}/{len(models)} model(s) successfully"
+            the_console.rule(msg)
+            the_console.line()
 
 
 if __name__ == "__main__":
