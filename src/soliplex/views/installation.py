@@ -1,3 +1,7 @@
+import json
+import subprocess
+import traceback
+
 import fastapi
 from fastapi import security
 
@@ -21,3 +25,34 @@ async def get_installation(
     """Return the installation's top-level configuration"""
     authn.authenticate(the_installation, token)
     return models.Installation.from_config(the_installation._config)
+
+
+@util.logfire_span("GET /v1/installation/versions")
+@router.get("/v1/installation/versions")
+async def get_installation_versions(
+    request: fastapi.Request,
+    the_installation: installation.Installation = depend_the_installation,
+    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+) -> models.InstalledPackages:
+    """Return the installation's top-level configuration"""
+    authn.authenticate(the_installation, token)
+
+    try:
+        found = (
+            subprocess.check_output(
+                ["pip", "list", "--format", "json"],
+            )
+            .decode("utf-8")
+            .strip()
+        )
+    except Exception:
+        error = traceback.format_exc()
+        raise fastapi.HTTPException(
+            status_code=500,
+            detail=error,
+        ) from None
+
+    installed = json.loads(found)
+    packages = {package.pop("name"): package for package in installed}
+
+    return packages
