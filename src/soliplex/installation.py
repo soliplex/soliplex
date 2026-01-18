@@ -132,7 +132,6 @@ class Installation:
 
         # Models from environment variables (both config and OS)
         model_env_vars = (
-            "DEFAULT_AGENT_MODEL",
             "EMBEDDINGS_MODEL",
             "QA_MODEL",
         )

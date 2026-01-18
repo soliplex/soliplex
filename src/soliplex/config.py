@@ -14,7 +14,6 @@ import re
 import ssl
 import sys
 import typing
-import warnings
 from collections import abc
 from urllib import parse as url_parse
 
@@ -816,12 +815,6 @@ class AgentConfig:
     _template_id: str = None
 
     def __post_init__(self, system_prompt):
-        if self.model_name is None:
-            if self._installation_config is not None:
-                self.model_name = self._installation_config.get_environment(
-                    "DEFAULT_AGENT_MODEL",
-                )
-
         if system_prompt is not None:
             self._system_prompt_text = system_prompt
 
@@ -859,13 +852,6 @@ class AgentConfig:
                     | config
                     | {"_template_id": template_id}
                 )
-
-            if "model_name" not in config:
-                msg = (
-                    f"Missing 'model_name' in agent configuration "
-                    f"(configured in {config_path})"
-                )
-                warnings.warn(msg, DeprecationWarning)  # noqa B028
 
             if "system_prompt" in config:
                 system_prompt = config.pop("system_prompt")

@@ -675,7 +675,6 @@ def test_installation_get_all_models_from_config_environment():
     i_config.completion_configs = {}
     i_config.haiku_rag_config = hr_config
     i_config.get_environment.side_effect = {
-        "DEFAULT_AGENT_MODEL": "env-model",
         "QA_MODEL": "qa-env-model",
     }.get
 
@@ -683,7 +682,7 @@ def test_installation_get_all_models_from_config_environment():
 
     models = the_installation.get_all_models()
 
-    assert models == {"env-model", "qa-env-model"}
+    assert models == {"qa-env-model"}
 
 
 @mock.patch.dict("os.environ", {"EMBEDDINGS_MODEL": "os-embedding-model"})

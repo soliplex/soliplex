@@ -7,7 +7,6 @@ import json
 import pathlib
 import ssl
 import typing
-import warnings
 from unittest import mock
 from urllib import parse as url_parse
 
@@ -280,7 +279,6 @@ OLLAMA_BASE_URL = "https://example.com:12345"
 
 BARE_INSTALLATION_CONFIG_ENVIRONMENT = {
     "OLLAMA_BASE_URL": PROVIDER_BASE_URL,
-    "DEFAULT_AGENT_MODEL": MODEL_NAME,
 }
 
 TEST_QUIZ_ID = "test_quiz"
@@ -381,16 +379,9 @@ FADTC_CONFIG_KW = {
 
 BOGUS_AGENT_CONFIG_YAML = ""
 
-EMPTY_AGENT_CONFIG_KW = dict(
+W_KIND_AGENT_CONFIG_KW = dict(
     id=AGENT_ID,
-)
-EMPTY_AGENT_CONFIG_YAML = f"""
-id: "{AGENT_ID}"
-"""
-
-# XXX DEPRECATED:  'model_name' will be required.
-EMPTY_W_KIND_AGENT_CONFIG_KW = dict(
-    id=AGENT_ID,
+    model_name=MODEL_NAME,
     kind="testing",
 )
 
@@ -2524,7 +2515,6 @@ def test_withquerymcpwrapper_call():
 @pytest.mark.parametrize(
     "kw",
     [
-        EMPTY_AGENT_CONFIG_KW.copy(),
         BARE_AGENT_CONFIG_KW.copy(),
     ],
 )
@@ -2533,64 +2523,45 @@ def test_agentconfig_ctor(installation_config, kw):
 
     found = config.AgentConfig(**kw)
 
-    if "model_name" in kw:
-        assert found.model_name == kw["model_name"]
-    else:
-        assert (
-            found.model_name
-            is installation_config.get_environment.return_value
-        )
+    assert found.model_name == kw["model_name"]
 
 
 @pytest.mark.parametrize(
-    "config_yaml, expectation, warns",
+    "config_yaml, expectation",
     [
         (
             BOGUS_AGENT_CONFIG_YAML,
             pytest.raises(config.FromYamlException),
-            False,
-        ),
-        (
-            EMPTY_AGENT_CONFIG_YAML,
-            contextlib.nullcontext(EMPTY_AGENT_CONFIG_KW.copy()),
-            True,
         ),
         (
             BARE_AGENT_CONFIG_YAML,
             contextlib.nullcontext(BARE_AGENT_CONFIG_KW.copy()),
-            False,
         ),
         (
             W_PROVIDER_KW_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_PROVIDER_KW_AGENT_CONFIG_KW.copy()),
-            False,
         ),
         (
             W_RETRIES_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_RETRIES_AGENT_CONFIG_KW.copy()),
-            False,
         ),
         (
             W_MODEL_SETTINGS_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_MODEL_SETTINGS_AGENT_CONFIG_KW.copy()),
-            False,
         ),
         (
             W_PROMPT_FILE_AGENT_CONFIG_YAML,
             contextlib.nullcontext(W_PROMPT_FILE_AGENT_CONFIG_KW.copy()),
-            False,
         ),
         (
             W_PROMPT_FILE_W_TEMPLATE_ID_AGENT_CONFIG_YAML,
             contextlib.nullcontext(
                 W_PROMPT_FILE_W_TEMPLATE_ID_AGENT_CONFIG_KW.copy()
             ),
-            False,
         ),
         (
             W_PROMPT_FILE_W_BOGUS_TEMPLATE_ID_AGENT_CONFIG_YAML,
             pytest.raises(config.FromYamlException),
-            False,
         ),
     ],
 )
@@ -2599,7 +2570,6 @@ def test_agentconfig_from_yaml(
     temp_dir,
     config_yaml,
     expectation,
-    warns,
 ):
     yaml_file = temp_dir / "test.yaml"
     yaml_file.write_text(config_yaml)
@@ -2624,10 +2594,7 @@ def test_agentconfig_from_yaml(
         template_kw = {}
         installation_config.agent_configs = []
 
-    with (
-        expectation as expected,
-        warnings.catch_warnings(record=True) as log,
-    ):
+    with expectation as expected:
         found = config.AgentConfig.from_yaml(
             installation_config,
             yaml_file,
@@ -2635,11 +2602,6 @@ def test_agentconfig_from_yaml(
         )
 
     if isinstance(expected, dict):
-        if warns:
-            assert len(log) == 1
-        else:
-            assert len(log) == 0
-
         exp_agent_config = config.AgentConfig(
             _installation_config=installation_config,
             _config_path=yaml_file,
@@ -2656,7 +2618,6 @@ def test_agentconfig_from_yaml(
 @pytest.mark.parametrize(
     "agent_config_kw",
     [
-        EMPTY_AGENT_CONFIG_KW.copy(),
         BARE_AGENT_CONFIG_KW.copy(),
         W_MODEL_SETTINGS_AGENT_CONFIG_KW.copy(),
         W_PROMPT_FILE_AGENT_CONFIG_KW.copy(),
@@ -2913,7 +2874,6 @@ def test_agentconfig_llm_provider_kw_google(
 @pytest.mark.parametrize(
     "agent_config_kw",
     [
-        EMPTY_AGENT_CONFIG_KW.copy(),
         BARE_AGENT_CONFIG_KW.copy(),
         W_PROVIDER_KW_AGENT_CONFIG_KW.copy(),
         W_RETRIES_AGENT_CONFIG_KW.copy(),
@@ -2928,7 +2888,6 @@ def test_agentconfig_as_yaml(
 
     ic_environ = {
         "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
-        "DEFAULT_AGENT_MODEL": MODEL_NAME,
     }
     installation_config.get_environment = ic_environ.get
     agent_config_kw["_installation_config"] = installation_config
@@ -3098,7 +3057,7 @@ def test_factoryagentconfig_as_yaml(
     "agent_config, expected_kw",
     [
         (BARE_AGENT_CONFIG_KW.copy(), BARE_AGENT_CONFIG_KW),
-        (EMPTY_W_KIND_AGENT_CONFIG_KW.copy(), EMPTY_W_KIND_AGENT_CONFIG_KW),
+        (W_KIND_AGENT_CONFIG_KW.copy(), W_KIND_AGENT_CONFIG_KW),
     ],
 )
 def test_extract_agent_configs(
@@ -3107,9 +3066,10 @@ def test_extract_agent_configs(
     agent_config,
     expected_kw,
 ):
-    @dataclasses.dataclass
+    @dataclasses.dataclass(kw_only=True)
     class TestAgentConfig:
         id: str
+        model_name: str
         kind: typing.ClassVar[str] = "testing"
         _installation_config: config.InstallationConfig = None
         _config_path: pathlib.Path = None

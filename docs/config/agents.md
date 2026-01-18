@@ -21,7 +21,7 @@ agent:
   agent.
 
   **NOTE**: this value was previously optional, defaulting to the value
-            of the since-deprecated `DEFAULT_AGENT_MODEL` key in the
+            of the now-removed `DEFAULT_AGENT_MODEL` key in the
             installation environment.
 
 - `system_prompt` is the "instructions" for the LLM serving the room.
