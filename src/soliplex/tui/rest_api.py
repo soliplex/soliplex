@@ -71,6 +71,15 @@ class TUI_REST_API:
 
         return response.json()
 
+    def get_provider_models(self):
+        response = requests.get(
+            f"{self.api_v1_base}/installation/providers",
+            headers=self.api_v1_headers,
+        )
+        response.raise_for_status()
+
+        return response.json()
+
     def room_agui_base(self, room_id: str) -> str:
         return f"{self.api_v1_base}/rooms/{room_id}/agui"
 

@@ -56,3 +56,15 @@ async def get_installation_versions(
     packages = {package.pop("name"): package for package in installed}
 
     return packages
+
+
+@util.logfire_span("GET /v1/installation/providers")
+@router.get("/v1/installation/providers")
+async def get_installation_providers(
+    request: fastapi.Request,
+    the_installation: installation.Installation = depend_the_installation,
+    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+) -> installation.ProviderInfoMap:
+    """Return the installation's top-level configuration"""
+    authn.authenticate(the_installation, token)
+    return the_installation.all_provider_info

@@ -5,7 +5,12 @@ import fastapi
 import pytest
 
 from soliplex import config
+from soliplex import installation
 from soliplex.views import installation as installation_views
+
+OLLAMA_BASE_URL = "http://ollama.example.com:11434"
+TEST_MODEL_ONE = "test-model-one:1.2.3"
+TEST_MODEL_TWO = "test-model-two:4.5.6"
 
 
 @pytest.mark.anyio
@@ -89,5 +94,30 @@ async def test_get_installation_versions_wo_error(auth_fn, sp):
     )
 
     assert found == expected
+
+    auth_fn.assert_called_once_with(the_installation, token)
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.authn.authenticate")
+async def test_get_installation_providers(auth_fn):
+    PROVIDER_INFO = {
+        config.LLMProviderType.OLLAMA: {
+            OLLAMA_BASE_URL: set([TEST_MODEL_ONE, TEST_MODEL_TWO]),
+        }
+    }
+
+    request = mock.create_autospec(fastapi.Request)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.all_provider_info = PROVIDER_INFO
+    token = object()
+
+    found = await installation_views.get_installation_providers(
+        request,
+        the_installation=the_installation,
+        token=token,
+    )
+
+    assert found == PROVIDER_INFO
 
     auth_fn.assert_called_once_with(the_installation, token)

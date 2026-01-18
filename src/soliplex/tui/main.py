@@ -1036,10 +1036,31 @@ class InstalledVersionsView(t_screen.Screen):
         yield t_widgets.Footer()
 
 
+class ProviderModelsView(t_screen.Screen):
+    BINDINGS = [
+        t_binding.Binding("escape", "app.pop_screen", "Exit"),
+    ]
+
+    def __init__(self, provider_models, *args, **kw):
+        self._provider_models = provider_models
+
+        super().__init__(*args, **kw)
+
+    def compose(self) -> t_app.ComposeResult:
+        yield t_widgets.Header()
+        yield t_widgets.Label("Provider Models")
+        tree = t_widgets.Tree(label="Root")
+        tree.add_json(self._provider_models)
+        tree.root.expand()
+        yield tree
+        yield t_widgets.Footer()
+
+
 class InstallationConfigView(t_screen.Screen):
     BINDINGS = [
         t_binding.Binding("ctrl+r", "room_configs", "Rooms"),
         t_binding.Binding("ctrl+v", "installed_versions", "Versions"),
+        t_binding.Binding("ctrl+d", "provider_models", "Providers"),
         t_binding.Binding("escape", "app.pop_screen", "Exit"),
     ]
 
@@ -1069,6 +1090,13 @@ class InstallationConfigView(t_screen.Screen):
         installed_versions = self.app.rest_api.get_installed_versions()
 
         iv_view = InstalledVersionsView(installed_versions)
+        await self.app.push_screen_wait(iv_view)
+
+    @textual.work
+    async def action_provider_models(self) -> None:
+        provider_models = self.app.rest_api.get_provider_models()
+
+        iv_view = ProviderModelsView(provider_models)
         await self.app.push_screen_wait(iv_view)
 
 
