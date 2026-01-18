@@ -19,8 +19,8 @@ DEFAULT = "test-default"
 
 SECRET_NAME_1 = "TEST_SECRET"
 SECRET_NAME_2 = "OTHER_SECRET"
-SECRET_CONFIG_1 = config.SecretConfig(SECRET_NAME_1)
-SECRET_CONFIG_2 = config.SecretConfig(SECRET_NAME_2)
+SECRET_CONFIG_1 = config.SecretConfig(secret_name=SECRET_NAME_1)
+SECRET_CONFIG_2 = config.SecretConfig(secret_name=SECRET_NAME_2)
 MISS_ERROR = object()
 OLLAMA_BASE_URL = "http://ollama.example.com:11434"
 

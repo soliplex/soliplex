@@ -948,15 +948,17 @@ FULL_ICMETA_KW = {
             source="server",
         ),
     ],
-    "tool_configs": [config.ConfigMeta(config.SearchDocumentsToolConfig)],
+    "tool_configs": [
+        config.ConfigMeta(config_klass=config.SearchDocumentsToolConfig),
+    ],
     "mcp_toolset_configs": [
-        config.ConfigMeta(config.Stdio_MCP_ClientToolsetConfig),
-        config.ConfigMeta(config.HTTP_MCP_ClientToolsetConfig),
+        config.ConfigMeta(config_klass=config.Stdio_MCP_ClientToolsetConfig),
+        config.ConfigMeta(config_klass=config.HTTP_MCP_ClientToolsetConfig),
     ],
     "mcp_server_tool_wrappers": [
         config.ConfigMeta(
-            config.SearchDocumentsToolConfig,
-            config.WithQueryMCPWrapper,
+            config_klass=config.SearchDocumentsToolConfig,
+            wrapper_klass=config.WithQueryMCPWrapper,
         ),
     ],
     "agent_configs": [
@@ -1029,10 +1031,10 @@ SECRET_NAME_2 = "TEST_SECRET_TWO"
 DB_SECRET_NAME = "DBSECRET"
 DB_SECRET_VALUE = "R34ll7#S33KR1T"
 
-SECRET_CONFIG_1 = config.SecretConfig(SECRET_NAME_1)
-SECRET_CONFIG_2 = config.SecretConfig(SECRET_NAME_2)
+SECRET_CONFIG_1 = config.SecretConfig(secret_name=SECRET_NAME_1)
+SECRET_CONFIG_2 = config.SecretConfig(secret_name=SECRET_NAME_2)
 DB_SECRET_CONFIG = config.SecretConfig(
-    DB_SECRET_NAME,
+    secret_name=DB_SECRET_NAME,
     _resolved=DB_SECRET_VALUE,
 )
 
@@ -1045,18 +1047,27 @@ SECRET_NCHARS = 37
 W_SECRETS_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
     "secrets": [
-        config.SecretConfig(SECRET_NAME_1),
+        config.SecretConfig(secret_name=SECRET_NAME_1),
         config.SecretConfig(
-            SECRET_NAME_2,
+            secret_name=SECRET_NAME_2,
             sources=[
-                config.EnvVarSecretSource(SECRET_NAME_2, SECRET_ENV_VAR),
-                config.FilePathSecretSource(SECRET_NAME_2, SECRET_FILE_PATH),
-                config.SubprocessSecretSource(
-                    SECRET_NAME_2,
-                    SECRET_COMAND,
-                    SECRET_ARGS,
+                config.EnvVarSecretSource(
+                    secret_name=SECRET_NAME_2,
+                    env_var_name=SECRET_ENV_VAR,
                 ),
-                config.RandomCharsSecretSource(SECRET_NAME_2, SECRET_NCHARS),
+                config.FilePathSecretSource(
+                    secret_name=SECRET_NAME_2,
+                    file_path=SECRET_FILE_PATH,
+                ),
+                config.SubprocessSecretSource(
+                    secret_name=SECRET_NAME_2,
+                    command=SECRET_COMAND,
+                    args=SECRET_ARGS,
+                ),
+                config.RandomCharsSecretSource(
+                    secret_name=SECRET_NAME_2,
+                    n_chars=SECRET_NCHARS,
+                ),
             ],
         ),
     ],
@@ -1127,7 +1138,7 @@ W_AGENT_CONFIG_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
     "agent_configs": [
         config.AgentConfig(
-            AGENT_CONFIG_ID,
+            id=AGENT_CONFIG_ID,
             model_name=MODEL_NAME,
             system_prompt=SYSTEM_PROMPT,
         ),
@@ -2501,7 +2512,7 @@ def test_noargsmcpwrapper_call():
     func = mock.Mock(spec_set=())
     tool_config = mock.create_autospec(config.ToolConfig)
 
-    wrapper = config.NoArgsMCPWrapper(func, tool_config)
+    wrapper = config.NoArgsMCPWrapper(func=func, tool_config=tool_config)
 
     found = wrapper()
 
@@ -2513,7 +2524,7 @@ def test_withquerymcpwrapper_call():
     func = mock.Mock(spec_set=())
     tool_config = mock.create_autospec(config.ToolConfig)
 
-    wrapper = config.WithQueryMCPWrapper(func, tool_config)
+    wrapper = config.WithQueryMCPWrapper(func=func, tool_config=tool_config)
 
     found = wrapper(query="text")
 
@@ -3691,7 +3702,7 @@ def test_completionconfig_from_yaml(
     ],
 )
 def test_envvar_secret_source_ctor(w_params, exp_env_var_name):
-    source = config.EnvVarSecretSource(SECRET_NAME, **w_params)
+    source = config.EnvVarSecretSource(secret_name=SECRET_NAME, **w_params)
 
     assert source.env_var_name == exp_env_var_name
     assert source.extra_arguments == {"env_var_name": exp_env_var_name}
@@ -3775,7 +3786,11 @@ def test_filepathsecretsource_as_yaml():
     ],
 )
 def test_subprocess_secret_source_command_line(w_args, exp_command_line):
-    source = config.SubprocessSecretSource(SECRET_NAME, COMMAND, w_args)
+    source = config.SubprocessSecretSource(
+        secret_name=SECRET_NAME,
+        command=COMMAND,
+        args=w_args,
+    )
     assert source.command_line == exp_command_line
     assert source.extra_arguments == {"command_line": exp_command_line}
 
@@ -3816,7 +3831,7 @@ def test_subprocesssecretsource_as_yaml(w_args):
     ],
 )
 def test_randomcharssecretsource_extra_args(kwargs, exp_nc):
-    source = config.RandomCharsSecretSource(SECRET_NAME, **kwargs)
+    source = config.RandomCharsSecretSource(secret_name=SECRET_NAME, **kwargs)
 
     assert source.extra_arguments == {"n_chars": exp_nc}
 
@@ -3845,15 +3860,23 @@ def test_randomcharssecretsource_as_yaml(kwargs, exp_nc):
 @pytest.mark.parametrize(
     "w_sources, exp_sources",
     [
-        (None, [config.EnvVarSecretSource(SECRET_NAME)]),
-        ([config.EnvVarSecretSource(SECRET_NAME, ENV_VAR_NAME)], None),
+        (None, [config.EnvVarSecretSource(secret_name=SECRET_NAME)]),
+        (
+            [
+                config.EnvVarSecretSource(
+                    secret_name=SECRET_NAME,
+                    env_var_name=ENV_VAR_NAME,
+                ),
+            ],
+            None,
+        ),
     ],
 )
 def test_secretconfig_ctor(w_sources, exp_sources):
     if exp_sources is None:
         exp_sources = w_sources
 
-    secret = config.SecretConfig(SECRET_NAME, w_sources)
+    secret = config.SecretConfig(secret_name=SECRET_NAME, sources=w_sources)
 
     assert secret.secret_name == SECRET_NAME
     assert secret.sources == exp_sources
@@ -3862,7 +3885,10 @@ def test_secretconfig_ctor(w_sources, exp_sources):
 def test_secretconfig_as_yaml():
     source_1 = mock.Mock(spec_set=["as_yaml"])
     source_2 = mock.Mock(spec_set=["as_yaml"])
-    secret = config.SecretConfig(SECRET_NAME, [source_1, source_2])
+    secret = config.SecretConfig(
+        secret_name=SECRET_NAME,
+        sources=[source_1, source_2],
+    )
 
     expected = {
         "secret_name": SECRET_NAME,
@@ -3877,7 +3903,7 @@ def test_secretconfig_as_yaml():
 
 
 def test_secretconfig_resolved():
-    secret = config.SecretConfig(SECRET_NAME)
+    secret = config.SecretConfig(secret_name=SECRET_NAME)
 
     assert secret.resolved is None
     secret._resolved = SECRET_VALUE
@@ -4190,7 +4216,7 @@ def test_configmeta_dottedname():
         __module__="some.module",
         __name__="some_config",
     )
-    meta = config.ConfigMeta(config_klass)
+    meta = config.ConfigMeta(config_klass=config_klass)
 
     assert meta.dotted_name == "some.module.some_config"
 

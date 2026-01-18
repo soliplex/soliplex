@@ -191,7 +191,7 @@ def _no_repr_none(**kw):
 WELL_KNOWN_OPENID_CONFIGURATION = ".well-known/openid-configuration"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class OIDCAuthSystemConfig:
     id: str
     title: str
@@ -262,7 +262,7 @@ class OIDCAuthSystemConfig:
         }
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class AvailableOIDCAuthSystemConfigs:
     systems: list[OIDCAuthSystemConfig] = dataclasses.field(
         default_factory=list,
@@ -280,7 +280,7 @@ class ToolRequires(enum.StrEnum):
     BARE = "bare"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class ToolConfig:
     tool_name: str
     agui_feature_names: tuple[str] = ()
@@ -369,7 +369,7 @@ class ToolConfig:
         return {}
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class _RAGToolBase:
     # Set in '__post_init__' below
     _rag_lancedb_path: pathlib.Path = None
@@ -456,7 +456,7 @@ class _RAGToolBase:
         }
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class SearchDocumentsToolConfig(ToolConfig, _RAGToolBase):
     kind: str = "search_documents"
     tool_name: str = "soliplex.tools.search_documents"
@@ -495,7 +495,7 @@ class SearchDocumentsToolConfig(ToolConfig, _RAGToolBase):
         )
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class RAGResearchToolConfig(ToolConfig, _RAGToolBase):
     kind: str = "research_report"
     tool_name: str = "soliplex.tools.research_report"
@@ -524,7 +524,7 @@ class RAGResearchToolConfig(ToolConfig, _RAGToolBase):
         )
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class AskWithRichCitationsToolConfig(ToolConfig, _RAGToolBase):
     kind: str = "ask_with_rich_citations"
     tool_name: str = "soliplex.tools.ask_with_rich_citations"
@@ -591,7 +591,7 @@ def extract_tool_configs(
     return tool_configs
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class Stdio_MCP_ClientToolsetConfig:
     """Configure an MCP client toolset which runs as a subprocess"""
 
@@ -652,7 +652,7 @@ class Stdio_MCP_ClientToolsetConfig:
         }
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class HTTP_MCP_ClientToolsetConfig:
     """Configure an MCP client toolset which makes calls over streaming HTTP"""
 
@@ -753,22 +753,22 @@ MCP_ClientToolsetConfig = (
 MCP_ClientToolsetConfigMap = dict[str, MCP_ClientToolsetConfig]
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class NoArgsMCPWrapper:
-    _func: abc.Callable[..., typing.Any]
-    _tool_config: ToolConfig
+    func: abc.Callable[..., typing.Any]
+    tool_config: ToolConfig
 
     def __call__(self):
-        return self._func(tool_config=self._tool_config)
+        return self.func(tool_config=self.tool_config)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class WithQueryMCPWrapper:
-    _func: abc.Callable[..., typing.Any]
-    _tool_config: ToolConfig
+    func: abc.Callable[..., typing.Any]
+    tool_config: ToolConfig
 
     def __call__(self, query):
-        return self._func(query, tool_config=self._tool_config)
+        return self.func(query, tool_config=self.tool_config)
 
 
 MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME = {
@@ -787,7 +787,7 @@ class LLMProviderType(enum.StrEnum):
     GOOGLE = "google"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class AgentConfig:
     #
     # Agent-specific options
@@ -956,7 +956,7 @@ class AgentConfig:
 AgentFactory = abc.Callable[[], ai_ag_abstract.AbstractAgent]
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class FactoryAgentConfig:
     id: str
     factory_name: str  # dotted name for import
@@ -1060,7 +1060,7 @@ class QuizQuestionType(enum.StrEnum):
     MULTIPLE_CHOICE = "multiple-choice"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class QuizQuestionMetadata:
     type: QuizQuestionType
     uuid: str
@@ -1069,14 +1069,14 @@ class QuizQuestionMetadata:
     )
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class QuizQuestion:
     inputs: str
     expected_output: str
     metadata: QuizQuestionMetadata
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class QuizConfig:
     id: str
     question_file: dataclasses.InitVar[str] = None
@@ -1219,7 +1219,7 @@ class QuizConfig:
 # ============================================================================
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class RoomConfig:
     """Configuration for a chat room."""
 
@@ -1362,7 +1362,7 @@ class RoomConfig:
 # ============================================================================
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class CompletionConfig:
     """Configuration for a completion endpoint."""
 
@@ -1451,7 +1451,7 @@ class _BaseSecretSource:
         }
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class EnvVarSecretSource(_BaseSecretSource):
     kind: typing.ClassVar[str] = "env_var"
     secret_name: str
@@ -1467,7 +1467,7 @@ class EnvVarSecretSource(_BaseSecretSource):
         return {"env_var_name": self.env_var_name}
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class FilePathSecretSource(_BaseSecretSource):
     kind: typing.ClassVar[str] = "file_path"
     secret_name: str
@@ -1479,7 +1479,7 @@ class FilePathSecretSource(_BaseSecretSource):
         return {"file_path": self.file_path}
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class SubprocessSecretSource(_BaseSecretSource):
     kind: typing.ClassVar[str] = "subprocess"
     secret_name: str
@@ -1506,7 +1506,7 @@ class SubprocessSecretSource(_BaseSecretSource):
         }
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class RandomCharsSecretSource(_BaseSecretSource):
     kind: typing.ClassVar[str] = "random_chars"
     secret_name: str
@@ -1540,7 +1540,7 @@ SourceClassesByKind = {
 }
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class SecretConfig:
     secret_name: str
     sources: SecretSources = None
@@ -1551,7 +1551,7 @@ class SecretConfig:
 
     def __post_init__(self):
         if self.sources is None:
-            self.sources = [EnvVarSecretSource(self.secret_name)]
+            self.sources = [EnvVarSecretSource(secret_name=self.secret_name)]
 
     @classmethod
     def from_yaml(cls, config_path: pathlib.Path, config: dict | str):
@@ -1602,7 +1602,7 @@ class AGUI_FeatureSource(enum.StrEnum):
     EITHER = "either"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class AGUI_Feature:
     """Registration of schema and semantics defining a Soliplex AGUI feature
 
@@ -1777,7 +1777,7 @@ def _from_dotted_name(dotted_name: str):
     return getattr(module, target)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class AGUI_FeatureConfigMeta:
     """Registered config class
 
@@ -1801,7 +1801,7 @@ class AGUI_FeatureConfigMeta:
         return cls(**yaml_config)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class ConfigMeta:
     """Registered config class
 
@@ -1827,7 +1827,7 @@ class ConfigMeta:
     def from_yaml(cls, yaml_config: str | dict):
         if isinstance(yaml_config, str):
             config_klass = _from_dotted_name(yaml_config)
-            return cls(config_klass)
+            return cls(config_klass=config_klass)
         else:
             config_klass = yaml_config["config_klass"]
 
@@ -1856,7 +1856,7 @@ class ConfigMeta:
         return f"{klass.__module__}.{klass.__name__}"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class InstallationConfigMeta:
     """Configuration for pluggable components
 
@@ -2037,7 +2037,7 @@ class InstallationConfigMeta:
         }
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class InstallationConfig:
     """Configuration for a set of rooms, completion, etc."""
 

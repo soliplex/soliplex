@@ -86,8 +86,8 @@ def test_mcp_tool(tool_config, hit, wrapper_type):
         if wrapper_type is not None:
             wrapper = found.fn.__self__
             assert isinstance(wrapper, wrapper_type)
-            assert wrapper._func is tool_config.tool
-            assert wrapper._tool_config is tool_config
+            assert wrapper.func is tool_config.tool
+            assert wrapper.tool_config is tool_config
 
         else:
             assert found.fn is tool_config.tool

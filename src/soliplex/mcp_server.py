@@ -20,7 +20,10 @@ def mcp_tool(tool_config: config.ToolConfig) -> fmcp_tools.Tool | None:
         )
 
         if wrapper_type is not None:
-            tool_wrapper = wrapper_type(tool_config.tool, tool_config)
+            tool_wrapper = wrapper_type(
+                func=tool_config.tool,
+                tool_config=tool_config,
+            )
             tool_doc = inspect.getdoc(tool_config.tool)
 
             return fmcp_tools.Tool.from_function(

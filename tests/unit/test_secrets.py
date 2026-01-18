@@ -13,8 +13,8 @@ ERROR_MISS = object()
 
 SECRET_NAME_1 = "TEST_SECRET"
 SECRET_NAME_2 = "OTHER_SECRET"
-SECRET_CONFIG_1 = config.SecretConfig(SECRET_NAME_1)
-SECRET_CONFIG_2 = config.SecretConfig(SECRET_NAME_2)
+SECRET_CONFIG_1 = config.SecretConfig(secret_name=SECRET_NAME_1)
+SECRET_CONFIG_2 = config.SecretConfig(secret_name=SECRET_NAME_2)
 
 NoRaise = contextlib.nullcontext()
 EnvVarNotFound = pytest.raises(secrets.SecretEnvVarNotFound)
@@ -59,9 +59,12 @@ def test_get_env_var_secret(
     expected,
 ):
     if env_var_name is None:
-        source = config.EnvVarSecretSource(SECRET_NAME)
+        source = config.EnvVarSecretSource(secret_name=SECRET_NAME)
     else:
-        source = config.EnvVarSecretSource(SECRET_NAME, ENV_VAR_NAME)
+        source = config.EnvVarSecretSource(
+            secret_name=SECRET_NAME,
+            env_var_name=ENV_VAR_NAME,
+        )
 
     with mock.patch.dict("os.environ", clear=True, **env_patch):
         with expectation:
@@ -86,8 +89,8 @@ def test_get_file_path_secret(temp_dir, file_path, expectation, expected):
             write_file_path.write_text(expected)
 
     source = config.FilePathSecretSource(
-        SECRET_NAME,
-        file_path,
+        secret_name=SECRET_NAME,
+        file_path=file_path,
         _config_path=temp_dir / "installation.yaml",
     )
 
@@ -107,7 +110,11 @@ def test_get_file_path_secret(temp_dir, file_path, expectation, expected):
     ],
 )
 def test_get_subprocess_secret(command, args, expectation, expected):
-    source = config.SubprocessSecretSource(SECRET_NAME, command, args)
+    source = config.SubprocessSecretSource(
+        secret_name=SECRET_NAME,
+        command=command,
+        args=args,
+    )
 
     with expectation:
         found = secrets.get_subprocess_secret(source)
@@ -120,7 +127,11 @@ def test_get_subprocess_secret(command, args, expectation, expected):
 def test_get_subprocess_secret_empty_output(sco):
     sco.return_value = ""
 
-    source = config.SubprocessSecretSource(SECRET_NAME, "some_cmd", ())
+    source = config.SubprocessSecretSource(
+        secret_name=SECRET_NAME,
+        command="some_cmd",
+        args=(),
+    )
 
     with SubprocessError:
         secrets.get_subprocess_secret(source)
@@ -128,7 +139,10 @@ def test_get_subprocess_secret_empty_output(sco):
 
 @mock.patch("os.urandom")
 def test_random_chars_secret_source(o_ur):
-    source = config.RandomCharsSecretSource(SECRET_NAME, 32)
+    source = config.RandomCharsSecretSource(
+        secret_name=SECRET_NAME,
+        n_chars=32,
+    )
 
     found = secrets.get_random_chars_secret(source)
 
@@ -137,9 +151,15 @@ def test_random_chars_secret_source(o_ur):
     o_ur.assert_called_once_with(32)
 
 
-ENV_VAR_MISS = config.EnvVarSecretSource(SECRET_NAME, "NONESUCH")
-ENV_VAR_HIT = config.EnvVarSecretSource(SECRET_NAME, ENV_VAR_NAME)
-RANDOM_CHARS = config.RandomCharsSecretSource(SECRET_NAME)
+ENV_VAR_MISS = config.EnvVarSecretSource(
+    secret_name=SECRET_NAME,
+    env_var_name="NONESUCH",
+)
+ENV_VAR_HIT = config.EnvVarSecretSource(
+    secret_name=SECRET_NAME,
+    env_var_name=ENV_VAR_NAME,
+)
+RANDOM_CHARS = config.RandomCharsSecretSource(secret_name=SECRET_NAME)
 
 
 @pytest.mark.parametrize(
@@ -151,7 +171,10 @@ RANDOM_CHARS = config.RandomCharsSecretSource(SECRET_NAME)
 )
 @mock.patch("os.urandom")
 def test_secret_ctor_w_sources(o_ur, sources, expectation, expected):
-    secret_config = config.SecretConfig(SECRET_NAME, sources)
+    secret_config = config.SecretConfig(
+        secret_name=SECRET_NAME,
+        sources=sources,
+    )
 
     env_patch = {ENV_VAR_NAME: SECRET_VALUE}
 

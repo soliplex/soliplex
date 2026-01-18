@@ -741,7 +741,12 @@ def test_completion_from_config(room_agent, room_tools):
         assert completion_model.tools == {}
 
 
-@pytest.fixture(params=[None, [config.SecretConfig(INSTALLATION_SECRET)]])
+@pytest.fixture(
+    params=[
+        None,
+        [config.SecretConfig(secret_name=INSTALLATION_SECRET)],
+    ]
+)
 def installation_secrets(request):
     return _from_param(request, "secrets")
 

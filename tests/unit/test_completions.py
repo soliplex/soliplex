@@ -13,7 +13,7 @@ SYSTEM_PROMPT = "You are a test"
 MODEL_NAME = "test-model"
 
 BARE_CONFIG = config.CompletionConfig(
-    COMPLETION_ID,
+    id=COMPLETION_ID,
     agent_config=config.AgentConfig(
         id=f"completions-{COMPLETION_ID}",
         system_prompt=SYSTEM_PROMPT,
@@ -28,7 +28,7 @@ agent:
 """
 
 W_TOOLS_CONFIG = config.CompletionConfig(
-    COMPLETION_ID,
+    id=COMPLETION_ID,
     agent_config=config.AgentConfig(
         id=f"completions-{COMPLETION_ID}",
         system_prompt=SYSTEM_PROMPT,
