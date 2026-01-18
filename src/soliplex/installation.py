@@ -1,6 +1,5 @@
 import contextlib
 import dataclasses
-import os
 import pathlib
 
 import fastapi
@@ -115,33 +114,6 @@ class Installation:
             ollama_url_info[base_url] = base_url_models | no_url_models
 
         return found
-
-    def get_all_models(self) -> set[str]:
-        models = set()
-
-        for _ac_id, ac in self.all_agent_configs.items():
-            if model_name := getattr(ac, "model_name", None):
-                models.add(model_name)
-
-        # Models from haiku.rag config
-        hr = self.haiku_rag_config
-        for section in (hr.embeddings, hr.qa, hr.reranking, hr.research):
-            if not section or not section.model:
-                continue
-            models.add(section.model.name)
-
-        # Models from environment variables (both config and OS)
-        model_env_vars = (
-            "EMBEDDINGS_MODEL",
-            "QA_MODEL",
-        )
-        for env_var in model_env_vars:
-            if model_name := self.get_environment(env_var):
-                models.add(model_name)
-            if model_name := os.environ.get(env_var):
-                models.add(model_name)
-
-        return models
 
     @property
     def thread_persistence_dburi_sync(self) -> str:
