@@ -1027,6 +1027,8 @@ AGENT_CONFIG_CLASSES_BY_KIND = {
     ]
 }
 
+AgentConfigMap = dict[str, AgentConfig | FactoryAgentConfig]
+
 
 def extract_agent_config(
     installation_config: InstallationConfig,
@@ -2172,10 +2174,10 @@ class InstallationConfig:
     agent_configs: list[AgentConfig] = dataclasses.field(
         default_factory=list,
     )
-    _agent_configs_map: dict[str, AgentConfig] = None
+    _agent_configs_map: AgentConfigMap = None
 
     @property
-    def agent_configs_map(self) -> dict[str, AgentConfig]:
+    def agent_configs_map(self) -> AgentConfigMap:
         if self._agent_configs_map is None:
             self._agent_configs_map = {
                 agent_config.id: agent_config

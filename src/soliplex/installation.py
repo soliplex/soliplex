@@ -17,6 +17,11 @@ from soliplex import secrets
 from soliplex.agui import persistence as agui_persistence
 from soliplex.authz import schema as authz_schema
 
+ProviderURL = str | None
+ProviderModelNames = set[str]
+ProviderTypeInfo = dict[ProviderURL, ProviderModelNames]
+ProviderInfoMap = dict[config.LLMProviderType, ProviderTypeInfo]
+
 
 @dataclasses.dataclass
 class Installation:
@@ -39,33 +44,87 @@ class Installation:
     def haiku_rag_config(self) -> hr_config.AppConfig:
         return self._config.haiku_rag_config
 
-    def get_all_models(self) -> set[str]:
-        ic = self._config
-        models = set()
+    @property
+    def all_agent_configs(self) -> config.AgentConfigMap:
+        """Return a mapping by ID of all defined agent configs"""
+        found: config.AgentConfigMap = {}
 
-        # Models from standalone agent configs
-        for ac in ic.agent_configs:
-            if model_name := getattr(ac, "model_name", None):
-                models.add(model_name)
+        for ac in self._config.agent_configs:
+            found[ac.id] = ac
 
-        # Models from room configs
-        for rc in ic.room_configs.values():
-            if model_name := getattr(rc.agent_config, "model_name", None):
-                models.add(model_name)
+        for rc in self._config.room_configs.values():
+            found[rc.agent_config.id] = rc.agent_config
             # Models from quiz judge agents
             for quiz in rc.quizzes:
                 if quiz.judge_agent:
-                    model_name = getattr(quiz.judge_agent, "model_name", None)
-                    if model_name:
-                        models.add(model_name)
+                    found[quiz.judge_agent.id] = quiz.judge_agent
 
-        # Models from completion configs
-        for cc in ic.completion_configs.values():
-            if model_name := getattr(cc.agent_config, "model_name", None):
+        for cc in self._config.completion_configs.values():
+            found[cc.agent_config.id] = cc.agent_config
+
+        return found
+
+    @property
+    def agent_provider_info(self) -> ProviderInfoMap:
+        """Return a set of unique provider info across all agent configs"""
+        found: ProviderInfoMap = {}
+
+        for agent_config in self.all_agent_configs.values():
+            provider_type = getattr(agent_config, "provider_type", None)
+
+            if provider_type is not None:
+                type_info = found.setdefault(provider_type, {})
+                base_url = agent_config.llm_provider_base_url
+                url_models = type_info.setdefault(base_url, set())
+                url_models.add(agent_config.model_name)
+
+        return found
+
+    @property
+    def haiku_rag_provider_info(self) -> ProviderInfoMap:
+        hr = self.haiku_rag_config
+        found: ProviderInfoMap = {}
+
+        for section in (hr.embeddings, hr.qa, hr.reranking, hr.research):
+            if section and section.model:
+                provider_type = section.model.provider
+                type_info = found.setdefault(provider_type, {})
+                base_url = section.model.base_url
+                url_models = type_info.setdefault(base_url, set())
+                url_models.add(section.model.name)
+
+        return found
+
+    @property
+    def all_provider_info(self) -> ProviderInfoMap:
+        found = self.agent_provider_info
+
+        for provider_type, hr_info in self.haiku_rag_provider_info.items():
+            ac_info = found.setdefault(provider_type, {})
+
+            for hr_url, hr_models in hr_info.items():
+                ac_models = ac_info.get(hr_url, set())
+                ac_info[hr_url] = ac_models | hr_models
+
+        ollama_url_info = found.get(config.LLMProviderType.OLLAMA)
+
+        if ollama_url_info is not None:
+            no_url_models = ollama_url_info.pop(None, set())
+            base_url = self.get_environment("OLLAMA_BASE_URL")
+            base_url_models = ollama_url_info.get(base_url, set())
+            ollama_url_info[base_url] = base_url_models | no_url_models
+
+        return found
+
+    def get_all_models(self) -> set[str]:
+        models = set()
+
+        for _ac_id, ac in self.all_agent_configs.items():
+            if model_name := getattr(ac, "model_name", None):
                 models.add(model_name)
 
         # Models from haiku.rag config
-        hr = ic.haiku_rag_config
+        hr = self.haiku_rag_config
         for section in (hr.embeddings, hr.qa, hr.reranking, hr.research):
             if not section or not section.model:
                 continue
@@ -78,7 +137,7 @@ class Installation:
             "QA_MODEL",
         )
         for env_var in model_env_vars:
-            if model_name := ic.environment.get(env_var):
+            if model_name := self.get_environment(env_var):
                 models.add(model_name)
             if model_name := os.environ.get(env_var):
                 models.add(model_name)

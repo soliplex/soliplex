@@ -1,4 +1,5 @@
 import contextlib
+import dataclasses
 from unittest import mock
 
 import fastapi
@@ -149,16 +150,339 @@ def test_installation_haiku_rag_config():
     assert the_installation.haiku_rag_config is i_config.haiku_rag_config
 
 
+@pytest.fixture(params=[None, "agent", "factory"])
+def standalone_agents(request):
+    kw = {}
+    agent_configs = kw["agent_configs"] = []
+
+    if request.param == "agent":
+        standalone_agent = mock.create_autospec(
+            config.AgentConfig,
+            id="standalone-agent",
+            provider_type=config.LLMProviderType.OLLAMA,
+            llm_provider_base_url=OLLAMA_BASE_URL,
+            model_name="standalone-model",
+        )
+
+        agent_configs.append(
+            standalone_agent,
+        )
+
+    elif request.param == "factory":
+        standalone_factory_agent = mock.create_autospec(
+            config.FactoryAgentConfig,
+            id="standalone-factory-agent",
+        )
+
+        agent_configs.append(
+            standalone_factory_agent,
+        )
+
+    return kw
+
+
+@pytest.fixture(params=[False, True])
+def quiz_judge_agents(request):
+    kw = {}
+
+    if request.param:
+        kw["judge_agent"] = mock.create_autospec(
+            config.AgentConfig,
+            id="judge-agent",
+            provider_type=config.LLMProviderType.OLLAMA,
+            llm_provider_base_url=OLLAMA_BASE_URL,
+            model_name="judge-model",
+        )
+    else:
+        kw["judge_agent"] = None
+
+    return kw
+
+
+@pytest.fixture(params=[False, True])
+def room_quizzes(request, quiz_judge_agents):
+    kw = {"quizzes": []}
+
+    if request.param:
+        kw["quizzes"].append(
+            mock.create_autospec(
+                config.QuizConfig,
+                **quiz_judge_agents,
+            )
+        )
+
+    return kw
+
+
+@pytest.fixture(params=[False, True])
+def rooms_with_agents(request, room_quizzes):
+    kw = {}
+    room_configs = kw["room_configs"] = {}
+
+    if request.param:
+        room_agent = mock.create_autospec(
+            config.AgentConfig,
+            id="room-agent",
+            provider_type=config.LLMProviderType.OLLAMA,
+            llm_provider_base_url=OLLAMA_BASE_URL,
+            model_name="room-model",
+        )
+        room_config = mock.create_autospec(
+            config.RoomConfig,
+            id="test-room",
+            agent_config=room_agent,
+            **room_quizzes,
+        )
+        room_configs["test-room"] = room_config
+
+    return kw
+
+
+@pytest.fixture(params=[False, True])
+def completions_with_agents(request):
+    kw = {}
+    completion_configs = kw["completion_configs"] = {}
+
+    if request.param:
+        completion_agent = mock.create_autospec(
+            config.AgentConfig,
+            id="completion-agent",
+            provider_type=config.LLMProviderType.OLLAMA,
+            llm_provider_base_url=OLLAMA_BASE_URL,
+            model_name="completion-model",
+        )
+        completion_config = mock.create_autospec(
+            config.CompletionConfig,
+            id="test-completion",
+            agent_config=completion_agent,
+        )
+        completion_configs["test-completion"] = completion_config
+
+    return kw
+
+
+def test_installation_all_agent_configs(
+    standalone_agents,
+    rooms_with_agents,
+    completions_with_agents,
+):
+    i_config = mock.create_autospec(
+        config.InstallationConfig,
+        **standalone_agents,
+        **rooms_with_agents,
+        **completions_with_agents,
+    )
+
+    expected = {}
+
+    if standalone_agents["agent_configs"]:
+        expected |= {
+            agent.id: agent for agent in standalone_agents["agent_configs"]
+        }
+
+    if rooms_with_agents["room_configs"]:
+        expected |= {
+            room.agent_config.id: room.agent_config
+            for room in rooms_with_agents["room_configs"].values()
+        }
+        quizzes = []
+
+        for room in rooms_with_agents["room_configs"].values():
+            quizzes.extend(room.quizzes)
+
+        expected |= {
+            quiz.judge_agent.id: quiz.judge_agent
+            for quiz in quizzes
+            if quiz.judge_agent is not None
+        }
+
+    if completions_with_agents["completion_configs"]:
+        expected |= {
+            completion.agent_config.id: completion.agent_config
+            for completion in (
+                completions_with_agents["completion_configs"].values()
+            )
+        }
+
+    the_installation = installation.Installation(i_config)
+
+    found = the_installation.all_agent_configs
+
+    assert found == expected
+
+
+def test_installation_agent_provider_info(
+    standalone_agents,
+    rooms_with_agents,
+    completions_with_agents,
+):
+    i_config = mock.create_autospec(
+        config.InstallationConfig,
+        **standalone_agents,
+        **rooms_with_agents,
+        **completions_with_agents,
+    )
+
+    expected = {}
+
+    def _add_agent(agent):
+        # FactoryAgentConfig has no provider info or model
+        provider_type = getattr(agent, "provider_type", None)
+
+        if provider_type is not None:
+            type_urls = expected.setdefault(agent.provider_type, {})
+            url_models = type_urls.setdefault(
+                agent.llm_provider_base_url, set()
+            )
+            url_models.add(agent.model_name)
+
+    if standalone_agents["agent_configs"]:
+        for agent in standalone_agents["agent_configs"]:
+            _add_agent(agent)
+
+    if rooms_with_agents["room_configs"]:
+        for room in rooms_with_agents["room_configs"].values():
+            _add_agent(room.agent_config)
+
+            for quiz in room.quizzes:
+                if quiz.judge_agent:
+                    _add_agent(quiz.judge_agent)
+
+    if completions_with_agents["completion_configs"]:
+        completion_configs = completions_with_agents["completion_configs"]
+        for completion in completion_configs.values():
+            _add_agent(completion.agent_config)
+
+    the_installation = installation.Installation(i_config)
+
+    found = the_installation.agent_provider_info
+
+    assert found == expected
+
+
+HR_CONFIG_SECTIONS = ["embeddings", "qa", "reranking", "research"]
+TEST_MODEL_PROVIDER = "test-model-provider"
+TEST_MODEL_BASE_URL = "https://provider.example.com:11434"
+TEST_MODEL_NAME = "test-model-name"
+
+
+@dataclasses.dataclass
+class FauxHRModel:
+    provider: str = TEST_MODEL_PROVIDER
+    base_url: str = TEST_MODEL_BASE_URL
+    name: str = TEST_MODEL_NAME
+
+
+@pytest.fixture(params=[None] + HR_CONFIG_SECTIONS)
+def hr_config_w_providers(request):
+    hr_config = mock.Mock(
+        spec_set=HR_CONFIG_SECTIONS + ["which"],
+        which=request.param,
+        embeddings=None,
+        qa=None,
+        reranking=None,
+        research=None,
+    )
+    model = FauxHRModel()
+    section = mock.Mock(spec_set=["model"], model=model)
+
+    for section_name in HR_CONFIG_SECTIONS:
+        if section_name == request.param:
+            setattr(hr_config, section_name, section)
+
+    return hr_config
+
+
+def test_installation_haiku_rag_provider_info(hr_config_w_providers):
+    i_config = mock.create_autospec(
+        config.InstallationConfig,
+        haiku_rag_config=hr_config_w_providers,
+    )
+    the_installation = installation.Installation(i_config)
+
+    expected = {}
+
+    if hr_config_w_providers.which is not None:
+        expected[TEST_MODEL_PROVIDER] = {
+            TEST_MODEL_BASE_URL: set([TEST_MODEL_NAME]),
+        }
+
+    found = the_installation.haiku_rag_provider_info
+
+    assert found == expected
+
+
+def test_installation_all_provider_info(
+    standalone_agents,
+    rooms_with_agents,
+    completions_with_agents,
+    hr_config_w_providers,
+):
+    i_config = mock.create_autospec(
+        config.InstallationConfig,
+        haiku_rag_config=hr_config_w_providers,
+        **standalone_agents,
+        **rooms_with_agents,
+        **completions_with_agents,
+    )
+    i_config.get_environment.side_effect = {
+        "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+    }.get
+    the_installation = installation.Installation(i_config)
+
+    expected = {}
+
+    def _add_agent(agent):
+        # FactoryAgentConfig has no provider info or model
+        provider_type = getattr(agent, "provider_type", None)
+
+        if provider_type is not None:
+            type_urls = expected.setdefault(agent.provider_type, {})
+            url_models = type_urls.setdefault(
+                agent.llm_provider_base_url, set()
+            )
+            url_models.add(agent.model_name)
+
+    if standalone_agents["agent_configs"]:
+        for agent in standalone_agents["agent_configs"]:
+            _add_agent(agent)
+
+    if rooms_with_agents["room_configs"]:
+        for room in rooms_with_agents["room_configs"].values():
+            _add_agent(room.agent_config)
+
+            for quiz in room.quizzes:
+                if quiz.judge_agent:
+                    _add_agent(quiz.judge_agent)
+
+    if completions_with_agents["completion_configs"]:
+        completion_configs = completions_with_agents["completion_configs"]
+        for completion in completion_configs.values():
+            _add_agent(completion.agent_config)
+
+    if hr_config_w_providers.which is not None:
+        expected[TEST_MODEL_PROVIDER] = {
+            TEST_MODEL_BASE_URL: set([TEST_MODEL_NAME]),
+        }
+
+    found = the_installation.all_provider_info
+
+    assert found == expected
+
+
 def test_installation_get_all_models():
     # Create mock agent configs
     standalone_agent = mock.create_autospec(config.AgentConfig)
+    standalone_agent.id = "standalone-agent"
     standalone_agent.model_name = "standalone-model"
 
     # Create mock room config with agent and quizzes
     room_agent = mock.create_autospec(config.AgentConfig)
+    room_agent.id = "room-agent"
     room_agent.model_name = "room-model"
 
     judge_agent = mock.create_autospec(config.AgentConfig)
+    judge_agent.id = "judge-agent"
     judge_agent.model_name = "judge-model"
 
     quiz = mock.create_autospec(config.QuizConfig)
@@ -170,6 +494,7 @@ def test_installation_get_all_models():
 
     # Create mock completion config
     completion_agent = mock.create_autospec(config.AgentConfig)
+    completion_agent.id = "completion-agent"
     completion_agent.model_name = "completion-model"
 
     completion_config = mock.create_autospec(config.CompletionConfig)
@@ -188,7 +513,7 @@ def test_installation_get_all_models():
     i_config.room_configs = {"room1": room_config}
     i_config.completion_configs = {"completion1": completion_config}
     i_config.haiku_rag_config = hr_config
-    i_config.environment = {}
+    i_config.get_environment.return_value = None
 
     the_installation = installation.Installation(i_config)
 
@@ -205,9 +530,11 @@ def test_installation_get_all_models():
 def test_installation_get_all_models_handles_none_model_names():
     # Test that None model names are handled gracefully
     standalone_agent = mock.create_autospec(config.AgentConfig)
+    standalone_agent.id = "standalone-agent"
     standalone_agent.model_name = None
 
     room_agent = mock.create_autospec(config.AgentConfig)
+    room_agent.id = "room-agent"
     room_agent.model_name = "valid-model"
 
     room_config = mock.create_autospec(config.RoomConfig)
@@ -225,7 +552,7 @@ def test_installation_get_all_models_handles_none_model_names():
     i_config.room_configs = {"room1": room_config}
     i_config.completion_configs = {}
     i_config.haiku_rag_config = hr_config
-    i_config.environment = {}
+    i_config.get_environment.return_value = None
 
     the_installation = installation.Installation(i_config)
 
@@ -246,7 +573,7 @@ def test_installation_get_all_models_empty_configs():
     i_config.room_configs = {}
     i_config.completion_configs = {}
     i_config.haiku_rag_config = hr_config
-    i_config.environment = {}
+    i_config.get_environment.return_value = None
 
     the_installation = installation.Installation(i_config)
 
@@ -258,6 +585,7 @@ def test_installation_get_all_models_empty_configs():
 def test_installation_get_all_models_none_in_room_and_completion():
     # Test None model_name in room config, quiz judge, and completion config
     room_agent = mock.create_autospec(config.AgentConfig)
+    room_agent.id = "room-agent"
     room_agent.model_name = None  # Branch: line 54->57
 
     # Quiz with no judge_agent
@@ -266,6 +594,7 @@ def test_installation_get_all_models_none_in_room_and_completion():
 
     # Quiz with judge but None model_name
     judge_agent_no_model = mock.create_autospec(config.AgentConfig)
+    judge_agent_no_model.id = "judge-agent-no-model"
     judge_agent_no_model.model_name = None
 
     quiz_judge_no_model = mock.create_autospec(config.QuizConfig)
@@ -277,6 +606,7 @@ def test_installation_get_all_models_none_in_room_and_completion():
 
     # Completion config with None model_name
     completion_agent = mock.create_autospec(config.AgentConfig)
+    completion_agent.id = "completion-agent"
     completion_agent.model_name = None  # Branch: line 63->62
 
     completion_config = mock.create_autospec(config.CompletionConfig)
@@ -293,7 +623,7 @@ def test_installation_get_all_models_none_in_room_and_completion():
     i_config.room_configs = {"room1": room_config}
     i_config.completion_configs = {"completion1": completion_config}
     i_config.haiku_rag_config = hr_config
-    i_config.environment = {}
+    i_config.get_environment.return_value = None
 
     the_installation = installation.Installation(i_config)
 
@@ -322,7 +652,7 @@ def test_installation_get_all_models_from_haiku_rag_config():
     i_config.room_configs = {}
     i_config.completion_configs = {}
     i_config.haiku_rag_config = hr_config
-    i_config.environment = {}
+    i_config.get_environment.return_value = None
 
     the_installation = installation.Installation(i_config)
 
@@ -344,10 +674,10 @@ def test_installation_get_all_models_from_config_environment():
     i_config.room_configs = {}
     i_config.completion_configs = {}
     i_config.haiku_rag_config = hr_config
-    i_config.environment = {
+    i_config.get_environment.side_effect = {
         "DEFAULT_AGENT_MODEL": "env-model",
         "QA_MODEL": "qa-env-model",
-    }
+    }.get
 
     the_installation = installation.Installation(i_config)
 
@@ -370,7 +700,7 @@ def test_installation_get_all_models_from_os_environ():
     i_config.room_configs = {}
     i_config.completion_configs = {}
     i_config.haiku_rag_config = hr_config
-    i_config.environment = {}
+    i_config.get_environment.return_value = None
 
     the_installation = installation.Installation(i_config)
 
