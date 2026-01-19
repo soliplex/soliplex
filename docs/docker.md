@@ -105,7 +105,7 @@ docker-compose up --build
 
 ### Backend Dockerfile
 
-The backend [Dockerfile](../Dockerfile) uses Python 3.12 and installs Soliplex in editable mode.
+The backend [Dockerfile](../Dockerfile) uses Python 3.13 and installs Soliplex in editable mode.
 
 Build manually:
 ```bash
