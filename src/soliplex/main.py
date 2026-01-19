@@ -21,6 +21,7 @@ from soliplex.views import completions as completions_views
 from soliplex.views import installation as installation_views
 from soliplex.views import quizzes as quizzes_views
 from soliplex.views import rooms as rooms_views
+from soliplex.views import streaming as streaming_views
 
 
 def curry_lifespan(
@@ -83,6 +84,7 @@ def create_app(
     app.include_router(installation_views.router, prefix="/api")
     app.include_router(quizzes_views.router, prefix="/api")
     app.include_router(rooms_views.router, prefix="/api")
+    app.include_router(streaming_views.router, prefix="/api")
     app.include_router(views.router, prefix="/api")
 
     # pragma: NO COVER
