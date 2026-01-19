@@ -1,4 +1,4 @@
-name: Notify Slack on New issue
+name: Notify Slack on New Issue
 
 on:
   issues:
@@ -8,14 +8,25 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Slack notification when new issue is opened
+      - name: Send Slack notification
         env:
           SLACK_NOTIFY_URL: ${{ secrets.SLACK_NOTIFY_URL }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_URL: ${{ github.event.issue.html_url }}
           ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
         run: |
-          curl -X POST \
-            --data-urlencode \
-            "payload={\"channel\": \"#soliplex\", \"username\": \"soliplex\", \"text\": \":bell: New issue by *${ISSUE_AUTHOR}*:\n*${ISSUE_TITLE}*\n${ISSUE_URL}\", \"icon_emoji\": \":ghost:\"}" \
+          if [ -z "$SLACK_NOTIFY_URL" ]; then
+            echo "::warning::SLACK_NOTIFY_URL secret not configured, skipping"
+            exit 0
+          fi
+
+          payload=$(jq -n \
+            --arg author "$ISSUE_AUTHOR" \
+            --arg title "$ISSUE_TITLE" \
+            --arg url "$ISSUE_URL" \
+            '{text: ":bell: New Issue by *\($author)*:\n*\($title)*\n\($url)"}')
+
+          curl --fail-with-body -X POST \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
             "$SLACK_NOTIFY_URL"

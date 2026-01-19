@@ -8,14 +8,25 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Slack notification when new PR is opened
+      - name: Send Slack notification
         env:
           SLACK_NOTIFY_URL: ${{ secrets.SLACK_NOTIFY_URL }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_URL: ${{ github.event.pull_request.html_url }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
-          curl -X POST \
-            --data-urlencode \
-            "payload={\"channel\": \"#soliplex\", \"username\": \"soliplex\", \"text\": \":bell: New Pull Request by *${PR_AUTHOR}*:\n*${PR_TITLE}*\n${PR_URL}\", \"icon_emoji\": \":ghost:\"}" \
+          if [ -z "$SLACK_NOTIFY_URL" ]; then
+            echo "::warning::SLACK_NOTIFY_URL secret not configured, skipping"
+            exit 0
+          fi
+
+          payload=$(jq -n \
+            --arg author "$PR_AUTHOR" \
+            --arg title "$PR_TITLE" \
+            --arg url "$PR_URL" \
+            '{text: ":bell: New Pull Request by *\($author)*:\n*\($title)*\n\($url)"}')
+
+          curl --fail-with-body -X POST \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
             "$SLACK_NOTIFY_URL"
