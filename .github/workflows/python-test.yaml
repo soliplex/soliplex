@@ -25,13 +25,6 @@ jobs:
   lint-soliplex:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
-    env:
-      BRANCH: "${{ github.head_ref }}"
-      RUN_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-      COMMIT_MSG: "${{ github.event.head_commit.message }}"
-      SLACK_NOTIFY_URL: "${{ secrets.SLACK_NOTIFY_URL }}"
-      ENFOLD_GH_PAT: "${{ secrets.ENFOLD_GH_PAT }}"
-      ENFOLD_GH_USER: "${{ secrets.ENFOLD_GH_USER }}"
     strategy:
       fail-fast: true
       matrix:
@@ -62,22 +55,21 @@ jobs:
 
       - name: Notify Slack on failure
         if: failure()
-        run: |
-          curl -X POST \
-            --data-urlencode \
-            "payload={\"channel\": \"#soliplex\", \"username\": \"soliplex\", \"text\": \":x: $GITHUB_WORKFLOW failed on $BRANCH:\n$COMMIT_MSG\n$RUN_URL\", \"icon_emoji\": \":ghost:\"}" \
-            "$SLACK_NOTIFY_URL"
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          webhook: ${{ secrets.SLACK_NOTIFY_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "channel": "#soliplex",
+              "username": "soliplex",
+              "text": ":x: ${{ github.workflow }} failed on ${{ github.head_ref }}:\n${{ github.event.head_commit.message }}\nhttps://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "icon_emoji": ":ghost:"
+            }
 
   test-soliplex:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
-    env:
-      BRANCH: "${{ github.head_ref }}"
-      RUN_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-      COMMIT_MSG: "${{ github.event.head_commit.message }}"
-      SLACK_NOTIFY_URL: "${{ secrets.SLACK_NOTIFY_URL }}"
-      ENFOLD_GH_PAT: "${{ secrets.ENFOLD_GH_PAT }}"
-      ENFOLD_GH_USER: "${{ secrets.ENFOLD_GH_USER }}"
     strategy:
       fail-fast: true
       matrix:
@@ -118,8 +110,14 @@ jobs:
 
       - name: Notify Slack on failure
         if: failure()
-        run: |
-          curl -X POST \
-            --data-urlencode \
-            "payload={\"channel\": \"#soliplex\", \"username\": \"soliplex\", \"text\": \":x: $GITHUB_WORKFLOW failed on $BRANCH:\n$COMMIT_MSG\n$RUN_URL\", \"icon_emoji\": \":ghost:\"}" \
-            "$SLACK_NOTIFY_URL"
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          webhook: ${{ secrets.SLACK_NOTIFY_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "channel": "#soliplex",
+              "username": "soliplex",
+              "text": ":x: ${{ github.workflow }} failed on ${{ github.head_ref }}:\n${{ github.event.head_commit.message }}\nhttps://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "icon_emoji": ":ghost:"
+            }
