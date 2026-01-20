@@ -126,7 +126,7 @@ cd soliplex
 
 ```bash
 # Create virtual environment
-python3.12 -m venv venv
+python3.13 -m venv venv
 
 # Activate virtual environment
 # Linux/macOS:
