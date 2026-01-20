@@ -959,6 +959,18 @@ async def test_get_the_installation():
     assert found is the_installation
 
 
+@mock.patch("soliplex.installation.logfire")
+def test_apply_logfire_configuration(logfire):
+    app = mock.Mock(spec_set=())
+    the_installation = mock.Mock(spec_set=())
+
+    installation.apply_logfire_configuration(app, the_installation)
+
+    logfire.configure.assert_called_with(send_to_logfire="if-token-present")
+    logfire.instrument_pydantic_ai.assert_called_with()
+    logfire.instrument_fastapi.assert_called_with(app, capture_headers=True)
+
+
 def _mock_mcp_app(key):
     async def _mock_lifespan(_ignored):
         yield None
@@ -982,6 +994,7 @@ def mcp_apps():
         (True, []),
     ],
 )
+@mock.patch("soliplex.installation.apply_logfire_configuration")
 @mock.patch("soliplex.secrets.resolve_secrets")
 @mock.patch("soliplex.mcp_server.setup_mcp_for_rooms")
 @mock.patch("soliplex.config.load_installation")
@@ -989,6 +1002,7 @@ async def test_lifespan(
     load_installation,
     smfr,
     srs,
+    alc,
     mcp_apps,
     w_no_auth_mode,
     exp_oidc_paths,
@@ -1045,5 +1059,6 @@ async def test_lifespan(
     ):
         assert f_call.args == ("/mcp/" + key, mcp_app)
 
+    alc.assert_called_once_with(app, the_installation)
     srs.assert_called_once_with(the_installation._config.secrets)
     smfr.assert_called_once_with(the_installation)

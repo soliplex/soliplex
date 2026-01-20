@@ -182,16 +182,3 @@ def test_app_with_soliplex_routers():
     assert mock.call(installation_views.router, prefix="/api") in air_calls
     assert mock.call(quizzes_views.router, prefix="/api") in air_calls
     assert mock.call(rooms_views.router, prefix="/api") in air_calls
-
-
-@mock.patch("soliplex.main.logfire")
-def test_app_with_logfire_config(logfire):
-    app = mock.Mock(spec_set=())
-
-    found = main.app_with_logfire_config(app)
-
-    assert found is app
-
-    logfire.configure.assert_called_with(send_to_logfire="if-token-present")
-    logfire.instrument_pydantic_ai.assert_called_with()
-    logfire.instrument_fastapi.assert_called_with(app, capture_headers=True)

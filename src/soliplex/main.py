@@ -8,7 +8,6 @@ import sys
 import typing
 
 import fastapi
-import logfire
 import uvicorn
 from fastapi.middleware import cors as fastapi_mw_cors
 from starlette.middleware import sessions as starlette_mw_sessions
@@ -111,16 +110,6 @@ def app_with_soliplex_routers(app: fastapi.FastAPI) -> fastapi.FastAPI:
     return app
 
 
-def app_with_logfire_config(app: fastapi.FastAPI) -> fastapi.FastAPI:
-    # 'if-token-present' means nothing will be sent (and the example will work)
-    # if you don't have logfire configured
-    logfire.configure(send_to_logfire="if-token-present")
-    logfire.instrument_pydantic_ai()
-    logfire.instrument_fastapi(app, capture_headers=True)
-
-    return app
-
-
 def create_app(
     installation_path: pathlib.Path = None,
     no_auth_mode: bool = None,
@@ -130,7 +119,6 @@ def create_app(
     app_with_session=app_with_session,
     app_with_git_hash=app_with_git_hash,
     app_with_soliplex_routers=app_with_soliplex_routers,
-    app_with_logfire_config=app_with_logfire_config,
 ):  # pragma: NO COVER
     """Construct the Soliplex FastAPI application
 
@@ -146,7 +134,6 @@ def create_app(
     app = app_with_session(app)
     app = app_with_git_hash(app)
     app = app_with_soliplex_routers(app)
-    app = app_with_logfire_config(app)
 
     return app
 

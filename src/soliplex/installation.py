@@ -3,6 +3,7 @@ import dataclasses
 import pathlib
 
 import fastapi
+import logfire
 import pydantic_ai
 from ag_ui import core as agui_core
 from haiku.rag import config as hr_config
@@ -292,6 +293,17 @@ async def get_the_installation(
 depend_the_installation = fastapi.Depends(get_the_installation)
 
 
+def apply_logfire_configuration(
+    app: fastapi.FastAPI,
+    the_installation: Installation,
+):
+    # 'if-token-present' means nothing will be sent (and the example will work)
+    # if you don't have logfire configured
+    logfire.configure(send_to_logfire="if-token-present")
+    logfire.instrument_pydantic_ai()
+    logfire.instrument_fastapi(app, capture_headers=True)
+
+
 async def lifespan(
     app: fastapi.FastAPI,
     installation_path: pathlib.Path,
@@ -306,6 +318,8 @@ async def lifespan(
     the_installation = Installation(i_config)
     the_installation.resolve_secrets()
     the_installation.resolve_environment()
+
+    apply_logfire_configuration(app, the_installation)
 
     tp_engine = sqla_asyncio.create_async_engine(
         the_installation.thread_persistence_dburi_async
