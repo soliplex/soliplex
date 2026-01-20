@@ -368,7 +368,7 @@ For reference, here's the complete command sequence:
 # Setup
 git clone https://github.com/soliplex/soliplex.git
 cd soliplex
-python3.12 -m venv venv
+python3.13 -m venv venv
 source venv/bin/activate  # or venv\Scripts\activate on Windows
 pip install --upgrade pip setuptools
 pip install -e .
