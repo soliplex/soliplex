@@ -404,7 +404,7 @@ cp .env.example .env
 # Edit .env with your settings
 
 # Initialize RAG database (on host)
-python3.12 -m venv venv
+python3.13 -m venv venv
 source venv/bin/activate
 pip install haiku-rag
 export OLLAMA_BASE_URL=http://localhost:11434
