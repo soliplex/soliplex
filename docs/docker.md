@@ -200,7 +200,7 @@ Initialize the database on your host machine before running Docker:
 
 ```bash
 # Create Python virtual environment
-python3.12 -m venv venv
+python3.13 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install haiku-rag (full version for ingestion)
