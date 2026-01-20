@@ -419,9 +419,9 @@ docker-compose up
 
 ## Troubleshooting
 
-### Python 3.12 not found
-- Ensure Python 3.12 is installed and in your PATH
-- Try `python3.12 --version` to verify
+### Python 3.13 not found
+- Ensure Python 3.13 is installed and in your PATH
+- Try `python3.13 --version` to verify
 
 ### Ollama connection refused
 - Ensure Ollama service is running: `ollama serve`
