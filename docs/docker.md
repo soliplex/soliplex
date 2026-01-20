@@ -18,7 +18,7 @@ The compose configuration defines two services:
 
 #### 1. `soliplex_backend` (Python Backend)
 - **Port**: 8000
-- **Technology**: Python 3.12 with FastAPI
+- **Technology**: Python 3.13 with FastAPI
 - **Purpose**: API server, RAG processing, AI integration
 - **Volumes**:
   - `./example:/app/installation` - Configuration files
