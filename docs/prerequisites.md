@@ -41,7 +41,7 @@ This guide provides a complete checklist for setting up Soliplex from scratch.
 
 Follow these steps in order for a successful setup.
 
-### Step 1: Install Python 3.12
+### Step 1: Install Python 3.13
 
 #### Windows
 ```bash
