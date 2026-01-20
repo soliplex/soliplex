@@ -63,7 +63,7 @@ sudo apt update
 sudo apt install python3.13 python3.13-venv python3.13-dev
 
 # Fedora
-sudo dnf install python3.12
+sudo dnf install python3.13
 ```
 
 Verify installation:
