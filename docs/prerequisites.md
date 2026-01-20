@@ -68,7 +68,7 @@ sudo dnf install python3.12
 
 Verify installation:
 ```bash
-python3.12 --version
+python3.13 --version
 ```
 
 ### Step 2: Install and Configure Ollama (if using Ollama)
