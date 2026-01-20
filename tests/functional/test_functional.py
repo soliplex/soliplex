@@ -2,6 +2,9 @@ from unittest import mock  # s.b. only for the 'auth_module.authenticate' call
 
 import pytest
 
+USER_NAME = "Phreddy Phlyntstone"
+EMAIL = "phreddy@example.com"
+
 
 def test_health_check(client_no_llm):
     response = client_no_llm.get("/api/ok")
@@ -32,11 +35,62 @@ def test_rooms_endpoints(auth_fn, client_no_llm):
 
 
 @mock.patch("soliplex.authn.authenticate")
+def test_room_authz_endpoints(auth_fn, client_no_llm):
+    auth_fn.return_value = {
+        "name": USER_NAME,
+        "email": EMAIL,
+    }
+
+    get_authz_response = client_no_llm.get("/api/v1/rooms/functest/authz")
+    assert get_authz_response.status_code == 200
+    room_policy = get_authz_response.json()
+
+    assert room_policy is None
+
+    NEW_POLICY = {
+        "room_id": "functest",
+        "default_allow_deny": "deny",
+        "acl_entries": [
+            {
+                "allow_deny": "allow",
+                "everyone": False,
+                "authenticated": False,
+                "preferred_username": None,
+                "email": EMAIL,
+            },
+        ],
+    }
+
+    post_authz_response = client_no_llm.post(
+        "/api/v1/rooms/functest/authz",
+        json=NEW_POLICY,
+    )
+    assert post_authz_response.status_code == 204
+
+    after_post_response = client_no_llm.get("/api/v1/rooms/functest/authz")
+    assert after_post_response.status_code == 200
+    after_post_room_policy = after_post_response.json()
+
+    assert after_post_room_policy == NEW_POLICY
+
+    delete_authz_response = client_no_llm.delete(
+        "/api/v1/rooms/functest/authz",
+    )
+    assert delete_authz_response.status_code == 204
+
+    after_delete_response = client_no_llm.get("/api/v1/rooms/functest/authz")
+    assert after_delete_response.status_code == 200
+    after_delete_room_policy = after_delete_response.json()
+
+    assert after_delete_room_policy is None
+
+
+@mock.patch("soliplex.authn.authenticate")
 @pytest.mark.needs_llm
 def test_get_quiz_post_quiz_question(auth_fn, client):
     auth_fn.return_value = {
-        "name": "Phreddy Phlyntstone",
-        "email": "phreddy@example.com",
+        "name": USER_NAME,
+        "email": EMAIL,
     }
 
     get_room_response = client.get("/api/v1/rooms/quiztest")
