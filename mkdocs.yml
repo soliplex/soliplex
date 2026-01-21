@@ -74,6 +74,7 @@ nav:
       - RAG: config/rag.md
       - Quizzes: config/quizzes.md
       - OIDC Authentication: config/oidc_providers.md
+      - Logfire: config/logfire.md
   - Usage: usage.md
 markdown_extensions:
   - admonition

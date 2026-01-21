@@ -15,9 +15,11 @@ to OpenAI and provides RAG functionality.
 - Logfire (optional):
 
   A token from logfire ([login here](https://logfire-us.pydantic.dev/login))
-  allows for visibility into the application. (see the
-  [docs on FastAPI integration](https://logfire.pydantic.dev/docs/integrations/web-frameworks/fastapi/)
-  for more information).
+  allows for visibility into the application. See:
+
+  - [Soliplex Logfire configuration](config/logfire.md)
+
+  - [Logfire docs on FastAPI integration](https://logfire.pydantic.dev/docs/integrations/web-frameworks/fastapi/)
 
 ## Installation
 
@@ -41,11 +43,12 @@ to OpenAI and provides RAG functionality.
 
 4. Set up environment variables:
 
-   An environment file can be used to configure secrets.
-   For logfire, create a `.env` file with:
+   An environment file (`.env`) can be used to configure secrets, e.g.:
+
    ```
-   LOGFIRE_TOKEN=<your_token_here>
+   SOME_API_TOKEN=<your_token_here>
    ```
+
 ## Running the example
 
 The example configuration provides an overview of how a soliplex

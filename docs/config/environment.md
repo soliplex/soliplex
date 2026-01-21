@@ -42,7 +42,7 @@ environment:
 
 The `soliplex-cli` application has a sub-command, `list-environment`.
 It loads the configuration, attempts to resolve any values not found, and
-reports them:
+reports them.  For example:
 
 ```bash
 $ soliplex-cli list-environment example/installation.yaml 

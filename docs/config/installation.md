@@ -248,3 +248,7 @@ To disable all completions, list a single, "null" path, e.g.:
 completion_paths:
   -
 ```
+
+## Logfire Configuration
+
+See the [Solipex logfire configuration](logfire.md) page.
