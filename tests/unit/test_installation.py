@@ -966,30 +966,56 @@ async def test_get_the_installation():
     assert found is the_installation
 
 
-@pytest.mark.parametrize("w_logfire_config", [False, True])
+@pytest.mark.parametrize("w_logfire_config", [None, "bare", "ipydai", "ifapi"])
 @mock.patch("soliplex.installation.logfire")
 def test_apply_logfire_configuration(logfire, w_logfire_config):
     app = mock.Mock(spec_set=())
     the_installation = mock.Mock(spec_set=["logfire_config"])
 
-    if w_logfire_config:
+    if w_logfire_config is not None:
         logfire_config = mock.create_autospec(config.LogfireConfig)
         logfire_config.logfire_config_kwargs = {"foo": "bar"}
+
+        if w_logfire_config == "ipydai":
+            ipydai = logfire_config.instrument_pydantic_ai
+            ipydai.instrument_pydantic_ai_kwargs = {"baz": "bam"}
+        else:
+            logfire_config.instrument_pydantic_ai = None
+
+        if w_logfire_config == "ifapi":
+            ifapi = logfire_config.instrument_fast_api
+            ifapi.instrument_fast_api_kwargs = {"qux": "spam"}
+        else:
+            logfire_config.instrument_fast_api = None
+
         the_installation.logfire_config = logfire_config
     else:
         the_installation.logfire_config = None
 
     installation.apply_logfire_configuration(app, the_installation)
 
-    if w_logfire_config:
+    if w_logfire_config is not None:
         logfire.configure.assert_called_once_with(foo="bar")
+
+        if w_logfire_config == "ipydai":
+            logfire.instrument_pydantic_ai.assert_called_once_with(
+                baz="bam",
+            )
+        elif w_logfire_config == "ifapi":
+            logfire.instrument_fastapi.assert_called_once_with(
+                app,
+                qux="spam",
+            )
     else:
         logfire.configure.assert_called_once_with(
             send_to_logfire="if-token-present",
         )
 
-    logfire.instrument_pydantic_ai.assert_called_with()
-    logfire.instrument_fastapi.assert_called_with(app, capture_headers=True)
+        logfire.instrument_pydantic_ai.assert_called_with()
+        logfire.instrument_fastapi.assert_called_with(
+            app,
+            capture_headers=True,
+        )
 
 
 def _mock_mcp_app(key):

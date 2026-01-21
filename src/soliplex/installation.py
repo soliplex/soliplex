@@ -305,13 +305,31 @@ def apply_logfire_configuration(
 
     if logfire_config is not None:
         logfire.configure(**logfire_config.logfire_config_kwargs)
+
+        ipydai = logfire_config.instrument_pydantic_ai
+
+        if ipydai is not None:
+            logfire.instrument_pydantic_ai(
+                **ipydai.instrument_pydantic_ai_kwargs,
+            )
+        else:
+            logfire.instrument_pydantic_ai()
+
+        ifapi = logfire_config.instrument_fast_api
+
+        if ifapi is not None:
+            logfire.instrument_fastapi(
+                app,
+                **ifapi.instrument_fast_api_kwargs,
+            )
+        else:
+            logfire.instrument_fastapi(app, capture_headers=True)
     else:
         # 'if-token-present' means nothing will be sent (and the example
         # will work) if you don't have logfire configured
         logfire.configure(send_to_logfire="if-token-present")
-
-    logfire.instrument_pydantic_ai()
-    logfire.instrument_fastapi(app, capture_headers=True)
+        logfire.instrument_pydantic_ai()
+        logfire.instrument_fastapi(app, capture_headers=True)
 
 
 async def lifespan(

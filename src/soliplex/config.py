@@ -1653,6 +1653,86 @@ FalseToDisable = typing.Literal[False]
 
 
 @dataclasses.dataclass(kw_only=True)
+class LogfireInstrumentPydanticAI:
+    include_binary_content: bool = True
+    include_content: bool = True
+
+    # Set by `from_yaml` factory
+    _config_path: pathlib.Path = None
+
+    @classmethod
+    def from_yaml(
+        cls,
+        config_path: pathlib.Path,
+        config: dict | None,
+    ):
+        try:
+            return cls(
+                _config_path=config_path,
+                **config,
+            )
+        except Exception as exc:
+            raise FromYamlException(
+                config_path,
+                "logfire_instrument_pydantic_ai",
+                config,
+            ) from exc
+
+    @property
+    def instrument_pydantic_ai_kwargs(self) -> dict[str, typing.Any]:
+        return {
+            "include_binary_content": self.include_binary_content,
+            "include_content": self.include_content,
+        }
+
+    @property
+    def as_yaml(self) -> dict[str, typing.Any]:
+        return self.instrument_pydantic_ai_kwargs
+
+
+@dataclasses.dataclass(kw_only=True)
+class LogfireInstrumentFastAPI:
+    capture_headers: bool = False
+    excluded_urls: list[str] = None
+    record_send_receive: bool = False
+    extra_spans: bool = False
+
+    # Set by `from_yaml` factory
+    _config_path: pathlib.Path = None
+
+    @classmethod
+    def from_yaml(
+        cls,
+        config_path: pathlib.Path,
+        config: dict | None,
+    ):
+        try:
+            return cls(
+                _config_path=config_path,
+                **config,
+            )
+        except Exception as exc:
+            raise FromYamlException(
+                config_path,
+                "logfire_instrument_fast_api",
+                config,
+            ) from exc
+
+    @property
+    def instrument_fast_api_kwargs(self) -> dict[str, typing.Any]:
+        return {
+            "capture_headers": self.capture_headers,
+            "excluded_urls": self.excluded_urls,
+            "record_send_receive": self.record_send_receive,
+            "extra_spans": self.extra_spans,
+        }
+
+    @property
+    def as_yaml(self) -> dict[str, typing.Any]:
+        return self.instrument_fast_api_kwargs
+
+
+@dataclasses.dataclass(kw_only=True)
 class LogfireConfig:
     token: str  # "secret:LOGFIRE_TOKEN" or similar
     service_name: str = "env:LOGFIRE_SERVICE_NAME"
@@ -1666,6 +1746,9 @@ class LogfireConfig:
     distributed_tracing: bool = None
     base_url: str = None
     scrubbing_patterns: list[str] = None
+
+    instrument_pydantic_ai: LogfireInstrumentPydanticAI = None
+    instrument_fast_api: LogfireInstrumentFastAPI = None
 
     # Set by `from_yaml` factory
     _installation_config: InstallationConfig = _no_repr_none()
@@ -1705,7 +1788,7 @@ class LogfireConfig:
         return kwargs
 
     @property
-    def as_yaml(self):
+    def as_yaml(self) -> dict[str, typing.Any]:
         result = {
             "token": self.token,
             "service_name": self.service_name,
@@ -1729,6 +1812,14 @@ class LogfireConfig:
         if self.scrubbing_patterns is not None:
             result["scrubbing_patterns"] = self.scrubbing_patterns
 
+        if self.instrument_pydantic_ai is not None:
+            result["instrument_pydantic_ai"] = (
+                self.instrument_pydantic_ai.as_yaml
+            )
+
+        if self.instrument_fast_api is not None:
+            result["instrument_fast_api"] = self.instrument_fast_api.as_yaml
+
         return result
 
     @classmethod
@@ -1736,9 +1827,27 @@ class LogfireConfig:
         cls,
         installation_config: InstallationConfig,
         config_path: pathlib.Path,
-        config: dict | None,
+        config: dict,
     ):
         try:
+            ipydai = config.pop("instrument_pydantic_ai", None)
+
+            if ipydai is not None:
+                ipydai = LogfireInstrumentPydanticAI.from_yaml(
+                    config_path,
+                    ipydai,
+                )
+                config["instrument_pydantic_ai"] = ipydai
+
+            ifapi = config.pop("instrument_fast_api", None)
+
+            if ifapi is not None:
+                ifapi = LogfireInstrumentFastAPI.from_yaml(
+                    config_path,
+                    ifapi,
+                )
+                config["instrument_fast_api"] = ifapi
+
             return cls(
                 _installation_config=installation_config,
                 _config_path=config_path,

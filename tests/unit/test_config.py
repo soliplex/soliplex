@@ -786,6 +786,48 @@ mcp_client_toolsets:
         {HTTP_MCP_QP_KEY}: "{HTTP_MCP_QP_VALUE}"
 """
 
+EMPTY_LFIPYDAI_CONFIG_YAML = ""  # raises
+DEFAULT_LFIPYDAI_EXP_KWARGS = {
+    "include_binary_content": True,
+    "include_content": True,
+}
+
+W_VALUES_LFIPYDAI_CONFIG_KW = {
+    "include_binary_content": False,
+    "include_content": False,
+}
+W_VALUES_LFIPYDAI_CONFIG_YAML = """\
+include_binary_content: false
+include_content: false
+"""
+W_VALUES_LFIPYDAI_CONFIG_EXP_KW = W_VALUES_LFIPYDAI_CONFIG_KW
+
+
+EMPTY_LFIFAPI_CONFIG_YAML = ""  # raises
+DEFAULT_LFIFAPI_EXP_KWARGS = {
+    "capture_headers": False,
+    "excluded_urls": None,
+    "record_send_receive": False,
+    "extra_spans": False,
+}
+
+LFIFAPI_EXCLUDE_URL = "https://exclude-ifapi.example.com"
+W_VALUES_LFIFAPI_CONFIG_KW = {
+    "capture_headers": True,
+    "excluded_urls": [LFIFAPI_EXCLUDE_URL],
+    "record_send_receive": True,
+    "extra_spans": True,
+}
+W_VALUES_LFIFAPI_CONFIG_YAML = f"""\
+capture_headers: true
+excluded_urls:
+    - "{LFIFAPI_EXCLUDE_URL}"
+record_send_receive: true
+extra_spans: true
+"""
+W_VALUES_LFIFAPI_CONFIG_EXP_KW = W_VALUES_LFIFAPI_CONFIG_KW
+
+
 EMPTY_LOGFIRE_CONFIG_YAML = ""  # raises
 
 #
@@ -982,6 +1024,69 @@ W_SCRUBBING_LOGFIRE_CONFIG_AS_YAML = {
     "min_level": "env:LOGFIRE_MIN_LEVEL",
     "add_baggage_to_attributes": True,
     "scrubbing_patterns": [".*"],
+}
+
+W_IPYDAI_LOGFIRE_CONFIG_INIT_KW = {
+    "token": "secret:LOGFIRE_TOKEN",
+    "instrument_pydantic_ai": config.LogfireInstrumentPydanticAI(
+        include_binary_content=False,
+        include_content=False,
+    ),
+}
+W_IPYDAI_LOGFIRE_CONFIG_YAML = """\
+token: "secret:LOGFIRE_TOKEN"
+instrument_pydantic_ai:
+    include_binary_content: false
+    include_content: false
+"""
+W_IPYDAI_LOGFIRE_CONFIG_AS_YAML = {
+    "token": "secret:LOGFIRE_TOKEN",
+    "service_name": "env:LOGFIRE_SERVICE_NAME",
+    "service_version": "env:LOGFIRE_SERVICE_VERSION",
+    "environment": "env:LOGFIRE_ENVIRONMENT",
+    "config_dir": "env:LOGFIRE_CONFIG_DIR",
+    "data_dir": "env:LOGFIRE_DATA_DIR",
+    "min_level": "env:LOGFIRE_MIN_LEVEL",
+    "add_baggage_to_attributes": True,
+    "instrument_pydantic_ai": {
+        "include_binary_content": False,
+        "include_content": False,
+    },
+}
+
+W_IFAPI_LOGFIRE_CONFIG_INIT_KW = {
+    "token": "secret:LOGFIRE_TOKEN",
+    "instrument_fast_api": config.LogfireInstrumentFastAPI(
+        capture_headers=True,
+        excluded_urls=[LFIFAPI_EXCLUDE_URL],
+        record_send_receive=True,
+        extra_spans=True,
+    ),
+}
+W_IFAPI_LOGFIRE_CONFIG_YAML = f"""\
+token: "secret:LOGFIRE_TOKEN"
+instrument_fast_api:
+    capture_headers: true
+    excluded_urls:
+        - "{LFIFAPI_EXCLUDE_URL}"
+    record_send_receive: true
+    extra_spans: true
+"""
+W_IFAPI_LOGFIRE_CONFIG_AS_YAML = {
+    "token": "secret:LOGFIRE_TOKEN",
+    "service_name": "env:LOGFIRE_SERVICE_NAME",
+    "service_version": "env:LOGFIRE_SERVICE_VERSION",
+    "environment": "env:LOGFIRE_ENVIRONMENT",
+    "config_dir": "env:LOGFIRE_CONFIG_DIR",
+    "data_dir": "env:LOGFIRE_DATA_DIR",
+    "min_level": "env:LOGFIRE_MIN_LEVEL",
+    "add_baggage_to_attributes": True,
+    "instrument_fast_api": {
+        "capture_headers": True,
+        "excluded_urls": [LFIFAPI_EXCLUDE_URL],
+        "record_send_receive": True,
+        "extra_spans": True,
+    },
 }
 
 
@@ -4118,6 +4223,152 @@ def test_aguifeature_json_schema(the_agui_feature):
 
 
 @pytest.mark.parametrize(
+    "init_kw, expected",
+    [
+        ({}, DEFAULT_LFIPYDAI_EXP_KWARGS),
+        (W_VALUES_LFIPYDAI_CONFIG_KW, W_VALUES_LFIPYDAI_CONFIG_EXP_KW),
+    ],
+)
+def test_lfipydai_instrument_pydantic_ai_kwargs(init_kw, expected):
+    ipydai_config = config.LogfireInstrumentPydanticAI(**init_kw)
+
+    found = ipydai_config.instrument_pydantic_ai_kwargs
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "init_kw, expected",
+    [
+        ({}, DEFAULT_LFIPYDAI_EXP_KWARGS),
+        (W_VALUES_LFIPYDAI_CONFIG_KW, W_VALUES_LFIPYDAI_CONFIG_EXP_KW),
+    ],
+)
+def test_lfipydai_as_yaml(init_kw, expected):
+    ipydai_config = config.LogfireInstrumentPydanticAI(**init_kw)
+
+    found = ipydai_config.as_yaml
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "config_yaml, expected_kw",
+    [
+        (EMPTY_LFIPYDAI_CONFIG_YAML, None),
+        (W_VALUES_LFIPYDAI_CONFIG_YAML, W_VALUES_LFIPYDAI_CONFIG_KW),
+    ],
+)
+def test_lfipydai_from_yaml(
+    temp_dir,
+    config_yaml,
+    expected_kw,
+):
+    pass
+    yaml_file = temp_dir / "test.yaml"
+    yaml_file.write_text(config_yaml)
+
+    with yaml_file.open() as stream:
+        config_dict = yaml.safe_load(stream)
+
+    if expected_kw is None:
+        with pytest.raises(config.FromYamlException) as exc:
+            config.LogfireInstrumentPydanticAI.from_yaml(
+                yaml_file,
+                config_dict,
+            )
+
+        assert exc.value._config_path == yaml_file
+
+    else:
+        expected = config.LogfireInstrumentPydanticAI(**expected_kw)
+        expected = dataclasses.replace(
+            expected,
+            _config_path=yaml_file,
+        )
+
+        found = config.LogfireInstrumentPydanticAI.from_yaml(
+            yaml_file,
+            config_dict,
+        )
+
+        assert found == expected
+
+
+@pytest.mark.parametrize(
+    "init_kw, expected",
+    [
+        ({}, DEFAULT_LFIFAPI_EXP_KWARGS),
+        (W_VALUES_LFIFAPI_CONFIG_KW, W_VALUES_LFIFAPI_CONFIG_EXP_KW),
+    ],
+)
+def test_lfifapi_instrument_fast_api_kwargs(init_kw, expected):
+    ipydai_config = config.LogfireInstrumentFastAPI(**init_kw)
+
+    found = ipydai_config.instrument_fast_api_kwargs
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "init_kw, expected",
+    [
+        ({}, DEFAULT_LFIFAPI_EXP_KWARGS),
+        (W_VALUES_LFIFAPI_CONFIG_KW, W_VALUES_LFIFAPI_CONFIG_EXP_KW),
+    ],
+)
+def test_lfifapi_as_yaml(init_kw, expected):
+    ipydai_config = config.LogfireInstrumentFastAPI(**init_kw)
+
+    found = ipydai_config.as_yaml
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "config_yaml, expected_kw",
+    [
+        (EMPTY_LFIFAPI_CONFIG_YAML, None),
+        (W_VALUES_LFIFAPI_CONFIG_YAML, W_VALUES_LFIFAPI_CONFIG_KW),
+    ],
+)
+def test_lfifapi_from_yaml(
+    temp_dir,
+    config_yaml,
+    expected_kw,
+):
+    pass
+    yaml_file = temp_dir / "test.yaml"
+    yaml_file.write_text(config_yaml)
+
+    with yaml_file.open() as stream:
+        config_dict = yaml.safe_load(stream)
+
+    if expected_kw is None:
+        with pytest.raises(config.FromYamlException) as exc:
+            config.LogfireInstrumentFastAPI.from_yaml(
+                yaml_file,
+                config_dict,
+            )
+
+        assert exc.value._config_path == yaml_file
+
+    else:
+        expected = config.LogfireInstrumentFastAPI(**expected_kw)
+        expected = dataclasses.replace(
+            expected,
+            _config_path=yaml_file,
+        )
+
+        found = config.LogfireInstrumentFastAPI.from_yaml(
+            yaml_file,
+            config_dict,
+        )
+
+        assert found == expected
+
+
+@pytest.mark.parametrize(
     "init_kw, ic_secrets, ic_env, expected",
     [
         (
@@ -4190,6 +4441,14 @@ def test_logfireconfig_logfire_config_kwargs(
             W_SCRUBBING_LOGFIRE_CONFIG_INIT_KW,
             W_SCRUBBING_LOGFIRE_CONFIG_AS_YAML,
         ),
+        (
+            W_IPYDAI_LOGFIRE_CONFIG_INIT_KW,
+            W_IPYDAI_LOGFIRE_CONFIG_AS_YAML,
+        ),
+        (
+            W_IFAPI_LOGFIRE_CONFIG_INIT_KW,
+            W_IFAPI_LOGFIRE_CONFIG_AS_YAML,
+        ),
     ],
 )
 def test_logfireconfig_logfire_as_yaml(
@@ -4227,6 +4486,14 @@ def test_logfireconfig_logfire_as_yaml(
             W_SCRUBBING_LOGFIRE_CONFIG_YAML,
             W_SCRUBBING_LOGFIRE_CONFIG_INIT_KW,
         ),
+        (
+            W_IPYDAI_LOGFIRE_CONFIG_YAML,
+            W_IPYDAI_LOGFIRE_CONFIG_INIT_KW,
+        ),
+        (
+            W_IFAPI_LOGFIRE_CONFIG_YAML,
+            W_IFAPI_LOGFIRE_CONFIG_INIT_KW,
+        ),
     ],
 )
 def test_logfireconfig_from_yaml(
@@ -4252,6 +4519,18 @@ def test_logfireconfig_from_yaml(
         assert exc.value._config_path == yaml_file
 
     else:
+        ipydai = expected_kw.pop("instrument_pydantic_ai", None)
+
+        if ipydai is not None:
+            ipydai = dataclasses.replace(ipydai, _config_path=yaml_file)
+            expected_kw["instrument_pydantic_ai"] = ipydai
+
+        ifapi = expected_kw.pop("instrument_fast_api", None)
+
+        if ifapi is not None:
+            ifapi = dataclasses.replace(ifapi, _config_path=yaml_file)
+            expected_kw["instrument_fast_api"] = ifapi
+
         expected = config.LogfireConfig(**expected_kw)
         expected = dataclasses.replace(
             expected,
