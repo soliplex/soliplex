@@ -470,6 +470,13 @@ def test_installation_all_provider_info(
     assert found == expected
 
 
+def test_installation_logfire_config():
+    i_config = mock.create_autospec(config.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    assert the_installation.logfire_config is i_config.logfire_config
+
+
 def test_installation_thread_persistence_dburi_sync():
     i_config = mock.create_autospec(config.InstallationConfig)
     the_installation = installation.Installation(i_config)
@@ -959,14 +966,28 @@ async def test_get_the_installation():
     assert found is the_installation
 
 
+@pytest.mark.parametrize("w_logfire_config", [False, True])
 @mock.patch("soliplex.installation.logfire")
-def test_apply_logfire_configuration(logfire):
+def test_apply_logfire_configuration(logfire, w_logfire_config):
     app = mock.Mock(spec_set=())
-    the_installation = mock.Mock(spec_set=())
+    the_installation = mock.Mock(spec_set=["logfire_config"])
+
+    if w_logfire_config:
+        logfire_config = mock.create_autospec(config.LogfireConfig)
+        logfire_config.logfire_config_kwargs = {"foo": "bar"}
+        the_installation.logfire_config = logfire_config
+    else:
+        the_installation.logfire_config = None
 
     installation.apply_logfire_configuration(app, the_installation)
 
-    logfire.configure.assert_called_with(send_to_logfire="if-token-present")
+    if w_logfire_config:
+        logfire.configure.assert_called_once_with(foo="bar")
+    else:
+        logfire.configure.assert_called_once_with(
+            send_to_logfire="if-token-present",
+        )
+
     logfire.instrument_pydantic_ai.assert_called_with()
     logfire.instrument_fastapi.assert_called_with(app, capture_headers=True)
 

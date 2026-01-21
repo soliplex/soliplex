@@ -117,6 +117,10 @@ class Installation:
         return found
 
     @property
+    def logfire_config(self) -> config.LogfireConfig | None:
+        return self._config.logfire_config
+
+    @property
     def thread_persistence_dburi_sync(self) -> str:
         return self._config.thread_persistence_dburi_sync
 
@@ -297,9 +301,15 @@ def apply_logfire_configuration(
     app: fastapi.FastAPI,
     the_installation: Installation,
 ):
-    # 'if-token-present' means nothing will be sent (and the example will work)
-    # if you don't have logfire configured
-    logfire.configure(send_to_logfire="if-token-present")
+    logfire_config = the_installation.logfire_config
+
+    if logfire_config is not None:
+        logfire.configure(**logfire_config.logfire_config_kwargs)
+    else:
+        # 'if-token-present' means nothing will be sent (and the example
+        # will work) if you don't have logfire configured
+        logfire.configure(send_to_logfire="if-token-present")
+
     logfire.instrument_pydantic_ai()
     logfire.instrument_fastapi(app, capture_headers=True)
 

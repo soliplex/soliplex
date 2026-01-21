@@ -786,6 +786,205 @@ mcp_client_toolsets:
         {HTTP_MCP_QP_KEY}: "{HTTP_MCP_QP_VALUE}"
 """
 
+EMPTY_LOGFIRE_CONFIG_YAML = ""  # raises
+
+#
+#   Secret / environment for default 'logfire_config' (token-only)
+#
+TEST_LOGFIRE_TOKEN = "DEADBEEF"
+TEST_LOGFIRE_SERVICE_NAME = "test-service-name"
+TEST_LOGFIRE_SERVICE_VERSION = "test-service-version"
+TEST_LOGFIRE_ENVIRONMENT = "test-environment"
+TEST_LOGFIRE_CONFIG_DIR = "/path/to/logfire/config"
+TEST_LOGFIRE_DATA_DIR = "/path/to/logfire/data"
+TEST_LOGFIRE_MIN_LEVEL = "debug"
+TEST_LOGFIRE_BASE_URL = "https://logfire.example.com"
+
+TEST_LOGFIRE_IC_DEFAULT_SECRETS = {
+    "secret:LOGFIRE_TOKEN": TEST_LOGFIRE_TOKEN,
+}
+
+TEST_LOGFIRE_IC_DEFAULT_ENV = {
+    "LOGFIRE_SERVICE_NAME": TEST_LOGFIRE_SERVICE_NAME,
+    "LOGFIRE_SERVICE_VERSION": TEST_LOGFIRE_SERVICE_VERSION,
+    "LOGFIRE_ENVIRONMENT": TEST_LOGFIRE_ENVIRONMENT,
+    "LOGFIRE_CONFIG_DIR": TEST_LOGFIRE_CONFIG_DIR,
+    "LOGFIRE_DATA_DIR": TEST_LOGFIRE_DATA_DIR,
+    "LOGFIRE_MIN_LEVEL": TEST_LOGFIRE_MIN_LEVEL,
+}
+
+W_TOKEN_ONLY_LOGFIRE_CONFIG_INIT_KW = {
+    "token": "secret:LOGFIRE_TOKEN",
+}
+W_TOKEN_ONLY_LOGFIRE_CONFIG_YAML = """\
+token: "secret:LOGFIRE_TOKEN"
+"""
+W_TOKEN_ONLY_LOGFIRE_CONFIG_EXP_LC_KWARGS = {
+    "token": TEST_LOGFIRE_TOKEN,
+    "service_name": TEST_LOGFIRE_SERVICE_NAME,
+    "service_version": TEST_LOGFIRE_SERVICE_VERSION,
+    "environment": TEST_LOGFIRE_ENVIRONMENT,
+    "config_dir": TEST_LOGFIRE_CONFIG_DIR,
+    "data_dir": TEST_LOGFIRE_DATA_DIR,
+    "min_level": TEST_LOGFIRE_MIN_LEVEL,
+    "add_baggage_to_attributes": True,
+}
+W_TOKEN_ONLY_LOGFIRE_CONFIG_AS_YAML = {
+    "token": "secret:LOGFIRE_TOKEN",
+    "service_name": "env:LOGFIRE_SERVICE_NAME",
+    "service_version": "env:LOGFIRE_SERVICE_VERSION",
+    "environment": "env:LOGFIRE_ENVIRONMENT",
+    "config_dir": "env:LOGFIRE_CONFIG_DIR",
+    "data_dir": "env:LOGFIRE_DATA_DIR",
+    "min_level": "env:LOGFIRE_MIN_LEVEL",
+    "add_baggage_to_attributes": True,
+}
+
+#
+#   Secret / environment for full 'logfire_config' (all scalars)
+#
+TEST_LOGFIRE_OTHER_TOKEN = "FACEDACE"
+TEST_LOGFIRE_OTHER_SERVICE_NAME = "other-service-name"
+TEST_LOGFIRE_OTHER_SERVICE_VERSION = "other-service-version"
+TEST_LOGFIRE_OTHER_ENVIRONMENT = "other-environment"
+TEST_LOGFIRE_OTHER_CONFIG_DIR = "/other/path/to/logfire/config"
+TEST_LOGFIRE_OTHER_DATA_DIR = "/other/path/to/logfire/data"
+TEST_LOGFIRE_OTHER_MIN_LEVEL = "other"
+TEST_LOGFIRE_OTHER_BASE_URL = "https://logfire-other.example.com"
+
+TEST_LOGFIRE_IC_OTHER_SECRETS = {
+    "secret:LOGFIRE_TOKEN": TEST_LOGFIRE_OTHER_TOKEN,
+}
+
+TEST_LOGFIRE_IC_OTHER_ENV = {
+    "LOGFIRE_SERVICE_NAME": TEST_LOGFIRE_OTHER_SERVICE_NAME,
+    "LOGFIRE_SERVICE_VERSION": TEST_LOGFIRE_OTHER_SERVICE_VERSION,
+    "LOGFIRE_ENVIRONMENT": TEST_LOGFIRE_OTHER_ENVIRONMENT,
+    "LOGFIRE_CONFIG_DIR": TEST_LOGFIRE_OTHER_CONFIG_DIR,
+    "LOGFIRE_DATA_DIR": TEST_LOGFIRE_OTHER_DATA_DIR,
+    "LOGFIRE_MIN_LEVEL": TEST_LOGFIRE_OTHER_MIN_LEVEL,
+    "LOGFIRE_BASE_URL": TEST_LOGFIRE_OTHER_BASE_URL,
+}
+
+W_SCALARS_LOGFIRE_CONFIG_INIT_KW = {
+    "token": "secret:LOGFIRE_TOKEN",
+    "service_name": "env:LOGFIRE_SERVICE_NAME",
+    "service_version": "env:LOGFIRE_SERVICE_VERSION",
+    "environment": "env:LOGFIRE_ENVIRONMENT",
+    "config_dir": "env:LOGFIRE_CONFIG_DIR",
+    "data_dir": "env:LOGFIRE_DATA_DIR",
+    "min_level": "env:LOGFIRE_MIN_LEVEL",
+    "inspect_arguments": False,
+    "add_baggage_to_attributes": False,
+    "distributed_tracing": True,
+}
+W_SCALARS_LOGFIRE_CONFIG_YAML = """\
+token: "secret:LOGFIRE_TOKEN"
+service_name: "env:LOGFIRE_SERVICE_NAME"
+service_version: "env:LOGFIRE_SERVICE_VERSION"
+environment: "env:LOGFIRE_ENVIRONMENT"
+config_dir: "env:LOGFIRE_CONFIG_DIR"
+data_dir: "env:LOGFIRE_DATA_DIR"
+min_level: "env:LOGFIRE_MIN_LEVEL"
+inspect_arguments: False
+add_baggage_to_attributes: False
+distributed_tracing: True
+"""
+W_SCALARS_LOGFIRE_CONFIG_EXP_LC_KWARGS = {
+    "token": TEST_LOGFIRE_OTHER_TOKEN,
+    "service_name": TEST_LOGFIRE_OTHER_SERVICE_NAME,
+    "service_version": TEST_LOGFIRE_OTHER_SERVICE_VERSION,
+    "environment": TEST_LOGFIRE_OTHER_ENVIRONMENT,
+    "config_dir": TEST_LOGFIRE_OTHER_CONFIG_DIR,
+    "data_dir": TEST_LOGFIRE_OTHER_DATA_DIR,
+    "min_level": TEST_LOGFIRE_OTHER_MIN_LEVEL,
+    "inspect_arguments": False,
+    "add_baggage_to_attributes": False,
+    "distributed_tracing": True,
+}
+W_SCALARS_LOGFIRE_CONFIG_AS_YAML = {
+    "token": "secret:LOGFIRE_TOKEN",
+    "service_name": "env:LOGFIRE_SERVICE_NAME",
+    "service_version": "env:LOGFIRE_SERVICE_VERSION",
+    "environment": "env:LOGFIRE_ENVIRONMENT",
+    "config_dir": "env:LOGFIRE_CONFIG_DIR",
+    "data_dir": "env:LOGFIRE_DATA_DIR",
+    "min_level": "env:LOGFIRE_MIN_LEVEL",
+    "inspect_arguments": False,
+    "add_baggage_to_attributes": False,
+    "distributed_tracing": True,
+}
+
+W_BASE_URL_LOGFIRE_CONFIG_INIT_KW = {
+    "token": "secret:LOGFIRE_TOKEN",
+    "base_url": "env:LOGFIRE_BASE_URL",
+}
+W_BASE_URL_LOGFIRE_CONFIG_YAML = """\
+token: "secret:LOGFIRE_TOKEN"
+base_url: "env:LOGFIRE_BASE_URL"
+"""
+W_BASE_URL_LOGFIRE_CONFIG_EXP_LC_KWARGS = {
+    "token": TEST_LOGFIRE_OTHER_TOKEN,
+    "service_name": TEST_LOGFIRE_OTHER_SERVICE_NAME,
+    "service_version": TEST_LOGFIRE_OTHER_SERVICE_VERSION,
+    "environment": TEST_LOGFIRE_OTHER_ENVIRONMENT,
+    "config_dir": TEST_LOGFIRE_OTHER_CONFIG_DIR,
+    "data_dir": TEST_LOGFIRE_OTHER_DATA_DIR,
+    "min_level": TEST_LOGFIRE_OTHER_MIN_LEVEL,
+    "add_baggage_to_attributes": True,
+    "advanced": {
+        "base_url": TEST_LOGFIRE_OTHER_BASE_URL,
+    },
+}
+W_BASE_URL_LOGFIRE_CONFIG_AS_YAML = {
+    "token": "secret:LOGFIRE_TOKEN",
+    "service_name": "env:LOGFIRE_SERVICE_NAME",
+    "service_version": "env:LOGFIRE_SERVICE_VERSION",
+    "environment": "env:LOGFIRE_ENVIRONMENT",
+    "config_dir": "env:LOGFIRE_CONFIG_DIR",
+    "data_dir": "env:LOGFIRE_DATA_DIR",
+    "min_level": "env:LOGFIRE_MIN_LEVEL",
+    "add_baggage_to_attributes": True,
+    "base_url": "env:LOGFIRE_BASE_URL",
+}
+
+W_SCRUBBING_LOGFIRE_CONFIG_INIT_KW = {
+    "token": "secret:LOGFIRE_TOKEN",
+    "scrubbing_patterns": [".*"],
+}
+W_SCRUBBING_LOGFIRE_CONFIG_YAML = """\
+token: "secret:LOGFIRE_TOKEN"
+scrubbing_patterns:
+    - ".*"
+"""
+W_SCRUBBING_LOGFIRE_CONFIG_EXP_LC_KWARGS = {
+    "token": TEST_LOGFIRE_TOKEN,
+    "service_name": TEST_LOGFIRE_SERVICE_NAME,
+    "service_version": TEST_LOGFIRE_SERVICE_VERSION,
+    "environment": TEST_LOGFIRE_ENVIRONMENT,
+    "config_dir": TEST_LOGFIRE_CONFIG_DIR,
+    "data_dir": TEST_LOGFIRE_DATA_DIR,
+    "min_level": TEST_LOGFIRE_MIN_LEVEL,
+    "add_baggage_to_attributes": True,
+    "scrubbing": {
+        "extra_patterns": [
+            ".*",
+        ],
+    },
+}
+W_SCRUBBING_LOGFIRE_CONFIG_AS_YAML = {
+    "token": "secret:LOGFIRE_TOKEN",
+    "service_name": "env:LOGFIRE_SERVICE_NAME",
+    "service_version": "env:LOGFIRE_SERVICE_VERSION",
+    "environment": "env:LOGFIRE_ENVIRONMENT",
+    "config_dir": "env:LOGFIRE_CONFIG_DIR",
+    "data_dir": "env:LOGFIRE_DATA_DIR",
+    "min_level": "env:LOGFIRE_MIN_LEVEL",
+    "add_baggage_to_attributes": True,
+    "scrubbing_patterns": [".*"],
+}
+
+
 SECRET_NAME = "TEST_SECRET"
 SECRET_VALUE = "DEADBEEF"
 ENV_VAR_NAME = "TEST_ENV_VAR"
@@ -1249,6 +1448,16 @@ W_QUIZZES_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
 quizzes_paths:
     -
+"""
+
+W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "logfire_config": config.LogfireConfig(token=TEST_LOGFIRE_TOKEN),
+}
+W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_YAML = f"""
+id: "{INSTALLATION_ID}"
+logfire_config:
+    token: "{TEST_LOGFIRE_TOKEN}"
 """
 
 TP_DBURI_SYNC = "sqlite+pysqlite:////tmp/tp_testing.sqlite"
@@ -3908,6 +4117,157 @@ def test_aguifeature_json_schema(the_agui_feature):
     assert found == FeatureModel.model_json_schema()
 
 
+@pytest.mark.parametrize(
+    "init_kw, ic_secrets, ic_env, expected",
+    [
+        (
+            W_TOKEN_ONLY_LOGFIRE_CONFIG_INIT_KW,
+            TEST_LOGFIRE_IC_DEFAULT_SECRETS,
+            TEST_LOGFIRE_IC_DEFAULT_ENV,
+            W_TOKEN_ONLY_LOGFIRE_CONFIG_EXP_LC_KWARGS,
+        ),
+        (
+            W_SCALARS_LOGFIRE_CONFIG_INIT_KW,
+            TEST_LOGFIRE_IC_OTHER_SECRETS,
+            TEST_LOGFIRE_IC_OTHER_ENV,
+            W_SCALARS_LOGFIRE_CONFIG_EXP_LC_KWARGS,
+        ),
+        (
+            W_BASE_URL_LOGFIRE_CONFIG_INIT_KW,
+            TEST_LOGFIRE_IC_OTHER_SECRETS,
+            TEST_LOGFIRE_IC_OTHER_ENV,
+            W_BASE_URL_LOGFIRE_CONFIG_EXP_LC_KWARGS,
+        ),
+        (
+            W_SCRUBBING_LOGFIRE_CONFIG_INIT_KW,
+            TEST_LOGFIRE_IC_DEFAULT_SECRETS,
+            TEST_LOGFIRE_IC_DEFAULT_ENV,
+            W_SCRUBBING_LOGFIRE_CONFIG_EXP_LC_KWARGS,
+        ),
+    ],
+)
+def test_logfireconfig_logfire_config_kwargs(
+    installation_config,
+    init_kw,
+    ic_secrets,
+    ic_env,
+    expected,
+):
+    get_secret = installation_config.get_secret
+    get_secret.side_effect = ic_secrets.get
+
+    def _getenv(key):
+        return ic_env.get(key[4:])
+
+    installation_config.get_environment.side_effect = _getenv
+
+    lf_config = config.LogfireConfig(
+        _installation_config=installation_config,
+        **init_kw,
+    )
+
+    found = lf_config.logfire_config_kwargs
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "init_kw, expected",
+    [
+        (
+            W_TOKEN_ONLY_LOGFIRE_CONFIG_INIT_KW,
+            W_TOKEN_ONLY_LOGFIRE_CONFIG_AS_YAML,
+        ),
+        (
+            W_SCALARS_LOGFIRE_CONFIG_INIT_KW,
+            W_SCALARS_LOGFIRE_CONFIG_AS_YAML,
+        ),
+        (
+            W_BASE_URL_LOGFIRE_CONFIG_INIT_KW,
+            W_BASE_URL_LOGFIRE_CONFIG_AS_YAML,
+        ),
+        (
+            W_SCRUBBING_LOGFIRE_CONFIG_INIT_KW,
+            W_SCRUBBING_LOGFIRE_CONFIG_AS_YAML,
+        ),
+    ],
+)
+def test_logfireconfig_logfire_as_yaml(
+    installation_config,
+    init_kw,
+    expected,
+):
+    lf_config = config.LogfireConfig(
+        _installation_config=installation_config,
+        **init_kw,
+    )
+
+    found = lf_config.as_yaml
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "config_yaml, expected_kw",
+    [
+        (EMPTY_LOGFIRE_CONFIG_YAML, None),
+        (
+            W_TOKEN_ONLY_LOGFIRE_CONFIG_YAML,
+            W_TOKEN_ONLY_LOGFIRE_CONFIG_INIT_KW,
+        ),
+        (
+            W_SCALARS_LOGFIRE_CONFIG_YAML,
+            W_SCALARS_LOGFIRE_CONFIG_INIT_KW,
+        ),
+        (
+            W_BASE_URL_LOGFIRE_CONFIG_YAML,
+            W_BASE_URL_LOGFIRE_CONFIG_INIT_KW,
+        ),
+        (
+            W_SCRUBBING_LOGFIRE_CONFIG_YAML,
+            W_SCRUBBING_LOGFIRE_CONFIG_INIT_KW,
+        ),
+    ],
+)
+def test_logfireconfig_from_yaml(
+    installation_config,
+    temp_dir,
+    config_yaml,
+    expected_kw,
+):
+    yaml_file = temp_dir / "test.yaml"
+    yaml_file.write_text(config_yaml)
+
+    with yaml_file.open() as stream:
+        config_dict = yaml.safe_load(stream)
+
+    if expected_kw is None:
+        with pytest.raises(config.FromYamlException) as exc:
+            config.LogfireConfig.from_yaml(
+                installation_config,
+                yaml_file,
+                config_dict,
+            )
+
+        assert exc.value._config_path == yaml_file
+
+    else:
+        expected = config.LogfireConfig(**expected_kw)
+        expected = dataclasses.replace(
+            expected,
+            _installation_config=installation_config,
+            _config_path=yaml_file,
+        )
+
+        found = config.LogfireConfig.from_yaml(
+            installation_config,
+            yaml_file,
+            config_dict,
+        )
+
+        assert found == expected
+
+
 def test__load_config_yaml_w_missing(temp_dir):
     config_path = temp_dir / "oidc"
     config_path.mkdir()
@@ -4872,6 +5232,10 @@ def test_installationconfig_room_authz_dburi_async(w_kw, expected):
             W_QUIZZES_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW.copy(),
         ),
         (
+            W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_YAML,
+            W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_KW.copy(),
+        ),
+        (
             W_TP_DBURI_INSTALLATION_CONFIG_YAML,
             W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(),
         ),
@@ -4973,6 +5337,10 @@ def test_installationconfig_from_yaml(
                 exp_agent_config._installation_config = found
                 exp_agent_config._config_path = config_path
 
+        if "logfire_config" in expected_kw:
+            expected.logfire_config._installation_config = found
+            expected.logfire_config._config_path = config_path
+
         assert found == expected
 
 
@@ -5037,7 +5405,8 @@ def test_installationconfig_from_yaml_environ_wo_value(temp_dir, config_yaml):
     assert found == expected
 
 
-def test_installationconfig_as_yaml():
+@pytest.mark.parametrize("w_logfire_config", [False, True])
+def test_installationconfig_as_yaml(w_logfire_config):
     meta = mock.create_autospec(config.InstallationConfigMeta)
     secret_1 = mock.create_autospec(config.SecretConfig)
     secret_2 = mock.create_autospec(config.SecretConfig)
@@ -5047,6 +5416,13 @@ def test_installationconfig_as_yaml():
         model_name=MODEL_NAME,
         provider_base_url=PROVIDER_BASE_URL,
     )
+
+    kwargs = {}
+
+    if w_logfire_config:
+        kwargs["logfire_config"] = config.LogfireConfig(
+            token="secret:LOGFIRE_TOKEN",
+        )
 
     installation_config = config.InstallationConfig(
         id=INSTALLATION_ID,
@@ -5064,6 +5440,7 @@ def test_installationconfig_as_yaml():
         ],
         completion_paths=[pathlib.Path("/path/to/completions")],
         quizzes_paths=[pathlib.Path("./other/quizzes")],
+        **kwargs,
     )
 
     expected = {
@@ -5085,6 +5462,9 @@ def test_installationconfig_as_yaml():
         "completion_paths": ["/path/to/completions"],
         "quizzes_paths": ["other/quizzes"],
     }
+
+    if w_logfire_config:
+        expected["logfire_config"] = W_TOKEN_ONLY_LOGFIRE_CONFIG_AS_YAML
 
     found = installation_config.as_yaml
 
