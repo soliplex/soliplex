@@ -784,6 +784,13 @@ def installation_haiku_rag_config_file(request):
                 provider_base_url=AGENT_BASE_URL,
             ),
         ],
+        [
+            config.FactoryAgentConfig(
+                id=INSTALLATION_AGENT_ID,
+                factory_name=FACTORY_NAME,
+                with_agent_config=False,
+            ),
+        ],
     ]
 )
 def installation_agents(request):
@@ -907,7 +914,10 @@ def test_installation_from_config(
         strict=True,
     ):
         assert m_agent.id == c_agent.id
-        assert m_agent.model_name == c_agent.model_name
+        if isinstance(c_agent, config.FactoryAgentConfig):
+            assert m_agent.factory_name == c_agent.factory_name
+        else:
+            assert m_agent.model_name == c_agent.model_name
 
     for m_feature, c_feature in zip(
         installation_model.agui_features,

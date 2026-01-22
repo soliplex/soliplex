@@ -323,7 +323,7 @@ class Installation(pydantic.BaseModel):
     secrets: list[Secret] = []
     environment: dict[str, typing.Any] = {}
     haiku_rag_config_file: pathlib.Path | None = None
-    agents: list[DefaultAgent] = []
+    agents: list[Agent] = []
     agui_features: list[AGUI_Feature] = []
     oidc_paths: list[pathlib.Path] = []
     room_paths: list[pathlib.Path] = []
@@ -343,10 +343,16 @@ class Installation(pydantic.BaseModel):
             Secret.from_config(secret_config)
             for secret_config in installation_config.secrets
         ]
-        agents = [
-            DefaultAgent.from_config(agent_config)
-            for agent_config in installation_config.agent_configs
-        ]
+
+        agents = []
+        for agent_config in installation_config.agent_configs:
+            if agent_config.kind == "factory":
+                agent = FactoryAgent.from_config(agent_config)
+            else:
+                agent = DefaultAgent.from_config(agent_config)
+
+            agents.append(agent)
+
         agui_features = [
             AGUI_Feature.from_config(agui_feature)
             for agui_feature in installation_config.agui_features

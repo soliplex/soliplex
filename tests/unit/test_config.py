@@ -1143,6 +1143,31 @@ agent_configs:
       system_prompt: "{SYSTEM_PROMPT}"
 """
 
+W_FACTORY_AGENT_CONFIG_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "meta": {
+        "agent_configs": [
+            config.ConfigMeta(config_klass=config.FactoryAgentConfig),
+        ],
+    },
+    "agent_configs": [
+        config.FactoryAgentConfig(
+            id=AGENT_CONFIG_ID,
+            factory_name="soliplex.haiku_chat.chat_agent_factory",
+        ),
+    ],
+}
+W_FACTORY_AGENT_CONFIG_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+meta:
+    agent_configs:
+        - "soliplex.config.FactoryAgentConfig"
+agent_configs:
+    - id: "{AGENT_CONFIG_ID}"
+      kind: "factory"
+      factory_name: "soliplex.haiku_chat.chat_agent_factory"
+"""
+
 OIDC_PATH_1 = "./oidc"
 OIDC_PATH_2 = "/path/to/other/oidc"
 
@@ -4838,6 +4863,10 @@ def test_installationconfig_room_authz_dburi_async(w_kw, expected):
         (
             W_AGENT_CONFIG_INSTALLATION_CONFIG_YAML,
             W_AGENT_CONFIG_INSTALLATION_CONFIG_KW.copy(),
+        ),
+        (
+            W_FACTORY_AGENT_CONFIG_INSTALLATION_CONFIG_YAML,
+            W_FACTORY_AGENT_CONFIG_INSTALLATION_CONFIG_KW.copy(),
         ),
         (
             W_OIDC_PATHS_INSTALLATION_CONFIG_YAML,

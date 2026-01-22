@@ -1013,7 +1013,9 @@ AGENT_CONFIG_CLASSES_BY_KIND = {
     ]
 }
 
-AgentConfigMap = dict[str, AgentConfig | FactoryAgentConfig]
+AgentConfigTypes = AgentConfig | FactoryAgentConfig
+
+AgentConfigMap = dict[str, AgentConfigTypes]
 
 
 def extract_agent_config(
@@ -2157,7 +2159,7 @@ class InstallationConfig:
     #
     # Agent configurations not bound to a room or completion.
     #
-    agent_configs: list[AgentConfig] = dataclasses.field(
+    agent_configs: list[AgentConfigTypes] = dataclasses.field(
         default_factory=list,
     )
     _agent_configs_map: AgentConfigMap = None
