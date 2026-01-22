@@ -512,18 +512,18 @@ template_id: "{BOGUS_TEMPLATE_AGENT_ID}"
 system_prompt: ./prompt.txt
 """
 
-WO_CONFIG_PYTHON_AGENT_CONFIG_KW = dict(
+WO_CONFIG_FACTORY_AGENT_CONFIG_KW = dict(
     id=AGENT_ID,
     factory_name="soliplex.config.test_factory_wo_config",
     with_agent_config=False,
 )
-WO_CONFIG_PYTHON_AGENT_CONFIG_YAML = f"""
+WO_CONFIG_FACTORY_AGENT_CONFIG_YAML = f"""
 id: "{AGENT_ID}"
 factory_name: "soliplex.config.test_factory_wo_config"
 with_agent_config: false
 """
 
-W_CONFIG_PYTHON_AGENT_CONFIG_KW = dict(
+W_CONFIG_FACTORY_AGENT_CONFIG_KW = dict(
     id=AGENT_ID,
     factory_name="soliplex.config.test_factory_w_config",
     with_agent_config=True,
@@ -531,7 +531,7 @@ W_CONFIG_PYTHON_AGENT_CONFIG_KW = dict(
         "foo": "Bar",
     },
 )
-W_CONFIG_PYTHON_AGENT_CONFIG_YAML = f"""
+W_CONFIG_FACTORY_AGENT_CONFIG_YAML = f"""
 id: "{AGENT_ID}"
 factory_name: "soliplex.config.test_factory_w_config"
 with_agent_config: true
@@ -3277,8 +3277,8 @@ def test_agentconfig_as_yaml(
 @pytest.mark.parametrize(
     "kw",
     [
-        WO_CONFIG_PYTHON_AGENT_CONFIG_KW.copy(),
-        W_CONFIG_PYTHON_AGENT_CONFIG_KW.copy(),
+        WO_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
+        W_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
     ],
 )
 def test_factoryagentconfig_ctor(kw):
@@ -3294,8 +3294,8 @@ def test_factoryagentconfig_ctor(kw):
 @pytest.mark.parametrize(
     "kw",
     [
-        WO_CONFIG_PYTHON_AGENT_CONFIG_KW.copy(),
-        W_CONFIG_PYTHON_AGENT_CONFIG_KW.copy(),
+        WO_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
+        W_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
     ],
 )
 def test_factoryagentconfig_factory(kw, w_existing):
@@ -3335,12 +3335,12 @@ def test_factoryagentconfig_factory(kw, w_existing):
     [
         (BOGUS_AGENT_CONFIG_YAML, None),
         (
-            WO_CONFIG_PYTHON_AGENT_CONFIG_YAML,
-            WO_CONFIG_PYTHON_AGENT_CONFIG_KW.copy(),
+            WO_CONFIG_FACTORY_AGENT_CONFIG_YAML,
+            WO_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
         ),
         (
-            W_CONFIG_PYTHON_AGENT_CONFIG_YAML,
-            W_CONFIG_PYTHON_AGENT_CONFIG_KW.copy(),
+            W_CONFIG_FACTORY_AGENT_CONFIG_YAML,
+            W_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
         ),
     ],
 )
@@ -3382,8 +3382,8 @@ def test_factoryagentconfig_from_yaml(
 @pytest.mark.parametrize(
     "kw",
     [
-        WO_CONFIG_PYTHON_AGENT_CONFIG_KW.copy(),
-        W_CONFIG_PYTHON_AGENT_CONFIG_KW.copy(),
+        WO_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
+        W_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
     ],
 )
 def test_factoryagentconfig_as_yaml(
