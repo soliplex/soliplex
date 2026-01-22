@@ -1649,8 +1649,6 @@ AGUI_FEATURES_BY_NAME = {
 #   Logfire configuration types
 # ============================================================================
 
-FalseToDisable = typing.Literal[False]
-
 
 @dataclasses.dataclass(kw_only=True)
 class LogfireInstrumentPydanticAI:
