@@ -41,16 +41,16 @@ ASYNC_MEMORY_ENGINE_URL = "sqlite+aiosqlite://"
 
 
 class FromYamlException(ValueError):
-    def __init__(self, _config_path, kind: str, config: dict):
+    def __init__(self, _config_path, kind: str, config_dict: dict):
         self._config_path = _config_path
         self.kind = kind
-        self.config = config
+        self.config_dict = config_dict
 
-        if config is not None and "_installation_config" in config:
+        if config_dict is not None and "_installation_config" in config_dict:
             elide_ic = {"_installation_config": "<elided>"}
-            tb_config = config | elide_ic
+            tb_config = config_dict | elide_ic
         else:
-            tb_config = config
+            tb_config = config_dict
 
         super().__init__(
             f"Error in YAML configuration: {_config_path}; "
@@ -212,21 +212,21 @@ class OIDCAuthSystemConfig:
         cls,
         installation_config: InstallationConfig,
         config_path: pathlib.Path,
-        config: dict[str, typing.Any],
+        config_dict: dict[str, typing.Any],
     ):
-        config["_installation_config"] = installation_config
-        config["_config_path"] = config_path
+        config_dict["_installation_config"] = installation_config
+        config_dict["_config_path"] = config_path
 
-        oidc_client_pem_path = config.pop("oidc_client_pem_path", None)
+        oidc_client_pem_path = config_dict.pop("oidc_client_pem_path", None)
         if oidc_client_pem_path is not None:
-            config["oidc_client_pem_path"] = (
+            config_dict["oidc_client_pem_path"] = (
                 config_path.parent / oidc_client_pem_path
             )
 
         try:
-            return cls(**config)
+            return cls(**config_dict)
         except Exception as exc:
-            raise FromYamlException(config_path, "oidc", config) from exc
+            raise FromYamlException(config_path, "oidc", config_dict) from exc
 
     @property
     def server_metadata_url(self):
@@ -298,15 +298,17 @@ class ToolConfig:
         cls,
         installation_config: InstallationConfig,
         config_path: pathlib.Path,
-        config: dict[str, typing.Any],
+        config_dict: dict[str, typing.Any],
     ):
-        config["_installation_config"] = installation_config
-        config["_config_path"] = config_path
+        config_dict["_installation_config"] = installation_config
+        config_dict["_config_path"] = config_path
 
         try:
-            return cls(**config)
+            return cls(**config_dict)
         except Exception as exc:
-            raise FromYamlException(config_path, "toolconfig", config) from exc
+            raise FromYamlException(
+                config_path, "toolconfig", config_dict
+            ) from exc
 
     @property
     def kind(self):
@@ -472,15 +474,15 @@ class SearchDocumentsToolConfig(ToolConfig, _RAGToolBase):
         cls,
         installation_config: InstallationConfig,
         config_path: pathlib.Path,
-        config: dict[str, typing.Any],
+        config_dict: dict[str, typing.Any],
     ):
         try:
-            config["_installation_config"] = installation_config
-            config["_config_path"] = config_path
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
 
-            instance = cls(**config)
+            instance = cls(**config_dict)
         except Exception as exc:
-            raise FromYamlException(config_path, "sdtc", config) from exc
+            raise FromYamlException(config_path, "sdtc", config_dict) from exc
 
         return instance
 
@@ -505,15 +507,15 @@ class RAGResearchToolConfig(ToolConfig, _RAGToolBase):
         cls,
         installation_config: InstallationConfig,
         config_path: pathlib.Path,
-        config: dict[str, typing.Any],
+        config_dict: dict[str, typing.Any],
     ):
         try:
-            config["_installation_config"] = installation_config
-            config["_config_path"] = config_path
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
 
-            instance = cls(**config)
+            instance = cls(**config_dict)
         except Exception as exc:
-            raise FromYamlException(config_path, "rrtc", config) from exc
+            raise FromYamlException(config_path, "rrtc", config_dict) from exc
 
         return instance
 
@@ -538,15 +540,17 @@ class AskWithRichCitationsToolConfig(ToolConfig, _RAGToolBase):
         cls,
         installation_config: InstallationConfig,
         config_path: pathlib.Path,
-        config: dict[str, typing.Any],
+        config_dict: dict[str, typing.Any],
     ):
         try:
-            config["_installation_config"] = installation_config
-            config["_config_path"] = config_path
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
 
-            instance = cls(**config)
+            instance = cls(**config_dict)
         except Exception as exc:
-            raise FromYamlException(config_path, "awrctc", config) from exc
+            raise FromYamlException(
+                config_path, "awrctc", config_dict
+            ) from exc
 
         return instance
 
@@ -573,11 +577,11 @@ ToolConfigMap = dict[str, ToolConfig]
 def extract_tool_configs(
     installation_config: InstallationConfig,
     config_path: pathlib.Path,
-    config: dict,
+    config_dict: dict,
 ) -> ToolConfigMap:
     tool_configs = {}
 
-    for t_config in config.pop("tools", ()):
+    for t_config in config_dict.pop("tools", ()):
         tool_name = t_config.get("tool_name")
         tc_class = TOOL_CONFIG_CLASSES_BY_TOOL_NAME.get(tool_name, ToolConfig)
 
@@ -615,18 +619,18 @@ class Stdio_MCP_ClientToolsetConfig:
         cls,
         installation_config: InstallationConfig,
         config_path: pathlib.Path,
-        config: dict[str, typing.Any],
+        config_dict: dict[str, typing.Any],
     ):
         try:
-            config["_installation_config"] = installation_config
-            config["_config_path"] = config_path
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
 
-            return cls(**config)
+            return cls(**config_dict)
         except Exception as exc:
             raise FromYamlException(
                 config_path,
                 "stdio_mcptc",
-                config,
+                config_dict,
             ) from exc
 
     @property
@@ -676,15 +680,17 @@ class HTTP_MCP_ClientToolsetConfig:
         cls,
         installation_config: InstallationConfig,
         config_path: pathlib.Path,
-        config: dict[str, typing.Any],
+        config_dict: dict[str, typing.Any],
     ):
         try:
-            config["_installation_config"] = installation_config
-            config["_config_path"] = config_path
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
 
-            return cls(**config)
+            return cls(**config_dict)
         except Exception as exc:
-            raise FromYamlException(config_path, "http_mcptc", config) from exc
+            raise FromYamlException(
+                config_path, "http_mcptc", config_dict
+            ) from exc
 
     @property
     def toolset_params(self) -> dict:
@@ -728,11 +734,11 @@ MCP_TOOLSET_CONFIG_CLASSES_BY_KIND = {
 def extract_mcp_client_toolset_configs(
     installation_config: InstallationConfig,
     config_path: pathlib.Path,
-    config: dict,
+    config_dict: dict,
 ):
     mcp_client_toolset_configs = {}
 
-    for mcp_name, mcp_client_toolset_config in config.pop(
+    for mcp_name, mcp_client_toolset_config in config_dict.pop(
         "mcp_client_toolsets", {}
     ).items():
         kind = mcp_client_toolset_config.pop("kind")
@@ -740,7 +746,7 @@ def extract_mcp_client_toolset_configs(
         mcp_client_toolset_configs[mcp_name] = mcp_config_klass.from_yaml(
             installation_config=installation_config,
             config_path=config_path,
-            config=mcp_client_toolset_config,
+            config_dict=mcp_client_toolset_config,
         )
 
     return mcp_client_toolset_configs
@@ -824,14 +830,14 @@ class AgentConfig:
         cls,
         installation_config: InstallationConfig,
         config_path: pathlib.Path,
-        config: dict,
+        config_dict: dict,
     ):
         try:
-            config["_installation_config"] = installation_config
-            config["_config_path"] = config_path
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
 
-            if "template_id" in config:
-                template_id = config.pop("template_id")
+            if "template_id" in config_dict:
+                template_id = config_dict.pop("template_id")
 
                 # Cannot use 'agent_configs_map' because we might still be
                 # initalizing the IC.
@@ -848,29 +854,33 @@ class AgentConfig:
 
                 template_config = ic_agent_configs_map[template_id]
 
-                config = (
+                config_dict = (
                     template_config.as_yaml
-                    | config
+                    | config_dict
                     | {"_template_id": template_id}
                 )
 
-            if "system_prompt" in config:
-                system_prompt = config.pop("system_prompt")
+            if "system_prompt" in config_dict:
+                system_prompt = config_dict.pop("system_prompt")
 
                 if system_prompt.startswith("./"):
-                    config["_system_prompt_path"] = system_prompt
+                    config_dict["_system_prompt_path"] = system_prompt
                 else:
-                    config["system_prompt"] = system_prompt
+                    config_dict["system_prompt"] = system_prompt
 
-            if config.get("model_settings") is not None:
-                pm_settings = config.pop("model_settings")
-                config["model_settings"] = ai_settings.ModelSettings(
+            if config_dict.get("model_settings") is not None:
+                pm_settings = config_dict.pop("model_settings")
+                config_dict["model_settings"] = ai_settings.ModelSettings(
                     **pm_settings
                 )
 
-            return cls(**config)
+            return cls(**config_dict)
         except Exception as exc:
-            raise FromYamlException(config_path, "agent", config) from exc
+            raise FromYamlException(
+                config_path,
+                "agent",
+                config_dict,
+            ) from exc
 
     def get_system_prompt(self) -> str | None:
         if self._system_prompt_text is not None:
@@ -1022,19 +1032,21 @@ AgentConfigMap = dict[str, AgentConfigTypes]
 def extract_agent_config(
     installation_config: InstallationConfig,
     config_path: pathlib.Path,
-    config: dict,
+    config_dict: dict,
 ) -> AgentConfig:  # or subclass
-    agent_kind = config.get("kind")
+    agent_kind = config_dict.get("kind")
 
     if agent_kind is not None:  # kind is a typing.ClassVar
-        config = {key: value for key, value in config.items() if key != "kind"}
+        config_dict = {
+            key: value for key, value in config_dict.items() if key != "kind"
+        }
 
     ac_class = AGENT_CONFIG_CLASSES_BY_KIND.get(agent_kind, AgentConfig)
 
     return ac_class.from_yaml(
         installation_config,
         config_path,
-        config,
+        config_dict,
     )
 
 
@@ -1088,23 +1100,23 @@ class QuizConfig:
         cls,
         installation_config: InstallationConfig,
         config_path: pathlib.Path,
-        config: dict,
+        config_dict: dict,
     ):
         try:
-            config["_installation_config"] = installation_config
-            config["_config_path"] = config_path
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
 
-            ja_config = config.pop("judge_agent", None)
+            ja_config = config_dict.pop("judge_agent", None)
             if ja_config is not None:
-                config["judge_agent"] = extract_agent_config(
+                config_dict["judge_agent"] = extract_agent_config(
                     installation_config,
                     config_path,
                     ja_config,
                 )
 
-            return cls(**config)
+            return cls(**config_dict)
         except Exception as exc:
-            raise FromYamlException(config_path, "quiz", config) from exc
+            raise FromYamlException(config_path, "quiz", config_dict) from exc
 
     def __post_init__(self, question_file):
         if question_file is not None:
@@ -1267,39 +1279,39 @@ class RoomConfig:
         cls,
         installation_config: InstallationConfig,
         config_path: pathlib.Path,
-        config: dict,
+        config_dict: dict,
     ):
         try:
-            config["_installation_config"] = installation_config
-            config["_config_path"] = config_path
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
 
-            room_id = config["id"]
-            agent_config_yaml = config.pop("agent")
+            room_id = config_dict["id"]
+            agent_config_yaml = config_dict.pop("agent")
             agent_config_yaml["id"] = f"room-{room_id}"
 
-            config["agent_config"] = extract_agent_config(
+            config_dict["agent_config"] = extract_agent_config(
                 installation_config,
                 config_path,
                 agent_config_yaml,
             )
 
-            config["tool_configs"] = extract_tool_configs(
+            config_dict["tool_configs"] = extract_tool_configs(
                 installation_config,
                 config_path,
-                config,
+                config_dict,
             )
 
-            config["mcp_client_toolset_configs"] = (
+            config_dict["mcp_client_toolset_configs"] = (
                 extract_mcp_client_toolset_configs(
                     installation_config,
                     config_path,
-                    config,
+                    config_dict,
                 )
             )
 
-            quizzes_config_yaml = config.pop("quizzes", None)
+            quizzes_config_yaml = config_dict.pop("quizzes", None)
             if quizzes_config_yaml is not None:
-                config["quizzes"] = [
+                config_dict["quizzes"] = [
                     QuizConfig.from_yaml(
                         installation_config,
                         config_path,
@@ -1308,13 +1320,13 @@ class RoomConfig:
                     for quiz_config_yaml in quizzes_config_yaml
                 ]
 
-            logo_image = config.pop("logo_image", None)
-            config["_logo_image"] = logo_image
+            logo_image = config_dict.pop("logo_image", None)
+            config_dict["_logo_image"] = logo_image
 
-            return cls(**config)
+            return cls(**config_dict)
 
         except Exception as exc:
-            raise FromYamlException(config_path, "room", config) from exc
+            raise FromYamlException(config_path, "room", config_dict) from exc
 
     @property
     def sort_key(self):
@@ -1382,40 +1394,40 @@ class CompletionConfig:
         cls,
         installation_config: InstallationConfig,
         config_path: pathlib.Path,
-        config: dict,
+        config_dict: dict,
     ):
-        config["_installation_config"] = installation_config
-        config["_config_path"] = config_path
+        config_dict["_installation_config"] = installation_config
+        config_dict["_config_path"] = config_path
 
-        completion_id = config["id"]
+        completion_id = config_dict["id"]
 
-        if "name" not in config:
-            config["name"] = completion_id
+        if "name" not in config_dict:
+            config_dict["name"] = completion_id
 
-        agent_config_yaml = config.pop("agent")
+        agent_config_yaml = config_dict.pop("agent")
         agent_config_yaml["id"] = f"completion-{completion_id}"
 
-        config["agent_config"] = extract_agent_config(
+        config_dict["agent_config"] = extract_agent_config(
             installation_config,
             config_path,
             agent_config_yaml,
         )
 
-        config["tool_configs"] = extract_tool_configs(
+        config_dict["tool_configs"] = extract_tool_configs(
             installation_config,
             config_path,
-            config,
+            config_dict,
         )
 
-        config["mcp_client_toolset_configs"] = (
+        config_dict["mcp_client_toolset_configs"] = (
             extract_mcp_client_toolset_configs(
                 installation_config,
                 config_path,
-                config,
+                config_dict,
             )
         )
 
-        return cls(**config)
+        return cls(**config_dict)
 
 
 # ============================================================================
@@ -1427,9 +1439,9 @@ SECRET_GETTERS_BY_KIND = {}
 
 class _BaseSecretSource:
     @classmethod
-    def from_yaml(cls, config_path: pathlib.Path, config: dict):
-        config["_config_path"] = config_path
-        return cls(**config)
+    def from_yaml(cls, config_path: pathlib.Path, config_dict: dict):
+        config_dict["_config_path"] = config_path
+        return cls(**config_dict)
 
     @property
     def as_yaml(self) -> dict:
@@ -1545,28 +1557,30 @@ class SecretConfig:
     @classmethod
     def from_yaml(cls, config_path: pathlib.Path, config: dict | str):
         if isinstance(config, str):
-            config = {
+            config_dict = {
                 "secret_name": config,
                 "sources": [
                     {"kind": "env_var", "env_var_name": config},
                 ],
             }
+        else:
+            config_dict = config
 
-        config["_config_path"] = config_path
-        source_configs = config.pop("sources", None)
+        config_dict["_config_path"] = config_path
+        source_configs = config_dict.pop("sources", None)
 
         sources = []
 
         for source_config in source_configs:
-            source_config["secret_name"] = config["secret_name"]
+            source_config["secret_name"] = config_dict["secret_name"]
             source_kind = source_config.pop("kind")
             source_klass = SourceClassesByKind[source_kind]
             source_inst = source_klass.from_yaml(config_path, source_config)
             sources.append(source_inst)
 
-        config["sources"] = sources
+        config_dict["sources"] = sources
 
-        return cls(**config)
+        return cls(**config_dict)
 
     @property
     def as_yaml(self) -> dict:
@@ -1664,18 +1678,18 @@ class LogfireInstrumentPydanticAI:
     def from_yaml(
         cls,
         config_path: pathlib.Path,
-        config: dict | None,
+        config_dict: dict | None,
     ):
         try:
             return cls(
                 _config_path=config_path,
-                **config,
+                **config_dict,
             )
         except Exception as exc:
             raise FromYamlException(
                 config_path,
                 "logfire_instrument_pydantic_ai",
-                config,
+                config_dict,
             ) from exc
 
     @property
@@ -1704,18 +1718,18 @@ class LogfireInstrumentFastAPI:
     def from_yaml(
         cls,
         config_path: pathlib.Path,
-        config: dict | None,
+        config_dict: dict | None,
     ):
         try:
             return cls(
                 _config_path=config_path,
-                **config,
+                **config_dict,
             )
         except Exception as exc:
             raise FromYamlException(
                 config_path,
                 "logfire_instrument_fast_api",
-                config,
+                config_dict,
             ) from exc
 
     @property
@@ -1827,37 +1841,37 @@ class LogfireConfig:
         cls,
         installation_config: InstallationConfig,
         config_path: pathlib.Path,
-        config: dict,
+        config_dict: dict,
     ):
         try:
-            ipydai = config.pop("instrument_pydantic_ai", None)
+            ipydai = config_dict.pop("instrument_pydantic_ai", None)
 
             if ipydai is not None:
                 ipydai = LogfireInstrumentPydanticAI.from_yaml(
                     config_path,
                     ipydai,
                 )
-                config["instrument_pydantic_ai"] = ipydai
+                config_dict["instrument_pydantic_ai"] = ipydai
 
-            ifapi = config.pop("instrument_fast_api", None)
+            ifapi = config_dict.pop("instrument_fast_api", None)
 
             if ifapi is not None:
                 ifapi = LogfireInstrumentFastAPI.from_yaml(
                     config_path,
                     ifapi,
                 )
-                config["instrument_fast_api"] = ifapi
+                config_dict["instrument_fast_api"] = ifapi
 
             return cls(
                 _installation_config=installation_config,
                 _config_path=config_path,
-                **config,
+                **config_dict,
             )
         except Exception as exc:
             raise FromYamlException(
                 config_path,
                 "logfire_config",
-                config,
+                config_dict,
             ) from exc
 
 
@@ -2489,23 +2503,23 @@ class InstallationConfig:
     _config_path: pathlib.Path = None
 
     @classmethod
-    def from_yaml(cls, config_path: pathlib.Path, config: dict):
+    def from_yaml(cls, config_path: pathlib.Path, config_dict: dict):
         try:
-            config["_config_path"] = config_path
+            config_dict["_config_path"] = config_path
 
-            meta = config.get("meta")
-            config["meta"] = InstallationConfigMeta.from_yaml(
+            meta = config_dict.get("meta")
+            config_dict["meta"] = InstallationConfigMeta.from_yaml(
                 config_path,
                 meta,
             )
 
             secret_configs = [
                 SecretConfig.from_yaml(config_path, secret_config)
-                for secret_config in config.pop("secrets", ())
+                for secret_config in config_dict.pop("secrets", ())
             ]
-            config["secrets"] = secret_configs
+            config_dict["secrets"] = secret_configs
 
-            environment = config.get("environment", {})
+            environment = config_dict.get("environment", {})
 
             if isinstance(environment, list):
                 environment = [
@@ -2517,13 +2531,13 @@ class InstallationConfig:
                     entry["name"]: entry.get("value") for entry in environment
                 }
 
-            config["environment"] = environment
+            config_dict["environment"] = environment
 
-            hr_config_file = config.pop(
+            hr_config_file = config_dict.pop(
                 "haiku_rag_config_file",
                 "./haiku.rag.yaml",
             )
-            config["_haiku_rag_config_file"] = (
+            config_dict["_haiku_rag_config_file"] = (
                 config_path.parent / hr_config_file
             )
 
@@ -2533,11 +2547,11 @@ class InstallationConfig:
                     config_path,
                     a_config,
                 )
-                for a_config in config.get("agent_configs", ())
+                for a_config in config_dict.get("agent_configs", ())
             ]
-            config["agent_configs"] = agent_configs
+            config_dict["agent_configs"] = agent_configs
 
-            logfire_cfg = config.pop("logfire_config", None)
+            logfire_cfg = config_dict.pop("logfire_config", None)
 
             if logfire_cfg is not None:
                 logfire_cfg = LogfireConfig.from_yaml(
@@ -2546,17 +2560,21 @@ class InstallationConfig:
                     logfire_cfg,
                 )
 
-            config["logfire_config"] = logfire_cfg
+            config_dict["logfire_config"] = logfire_cfg
 
-            tp_dburi = config.pop("thread_persistence_dburi", {})
-            config["_thread_persistence_dburi_sync"] = tp_dburi.get("sync")
-            config["_thread_persistence_dburi_async"] = tp_dburi.get("async")
+            tp_dburi = config_dict.pop("thread_persistence_dburi", {})
+            config_dict["_thread_persistence_dburi_sync"] = tp_dburi.get(
+                "sync"
+            )
+            config_dict["_thread_persistence_dburi_async"] = tp_dburi.get(
+                "async"
+            )
 
-            ra_dburi = config.pop("room_authz_dburi", {})
-            config["_room_authz_dburi_sync"] = ra_dburi.get("sync")
-            config["_room_authz_dburi_async"] = ra_dburi.get("async")
+            ra_dburi = config_dict.pop("room_authz_dburi", {})
+            config_dict["_room_authz_dburi_sync"] = ra_dburi.get("sync")
+            config_dict["_room_authz_dburi_async"] = ra_dburi.get("async")
 
-            return cls(**config)
+            return cls(**config_dict)
 
         except FromYamlException:  # pragma: NO COVER
             raise
@@ -2564,7 +2582,7 @@ class InstallationConfig:
             raise FromYamlException(
                 config_path,
                 "installation",
-                config,
+                config_dict,
             ) from exc
 
     def __post_init__(self):
