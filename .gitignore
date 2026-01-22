@@ -13,9 +13,6 @@ __pycache__/
 /share/
 pyvenv.cfg
 
-# pre-commit
-.pre-commit-config.yaml
-
 # database files
 db/
 
