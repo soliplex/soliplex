@@ -4975,7 +4975,21 @@ def test_installationconfigmeta_from_yaml(
 
         assert ic_meta == expected
 
-        if config_meta and "tool_configs" in config_dict["meta"]:
+        if config_meta and "agui_features" in config_meta:
+            afs_by_feature_name = patched_soliplex_config[
+                "AGUI_FEATURES_BY_NAME"
+            ]
+            for (af_name, af_found), af_expected in zip(
+                afs_by_feature_name.items(),
+                config_meta["agui_features"],
+                strict=True,
+            ):
+                assert af_name == af_expected["name"]
+                assert af_found.name == af_expected["name"]
+                assert af_found.model_klass == af_expected["model_klass"]
+                assert af_found.source == af_expected["source"]
+
+        if config_meta and "tool_configs" in config_meta:
             tcs_by_tool_name = patched_soliplex_config[
                 "TOOL_CONFIG_CLASSES_BY_TOOL_NAME"
             ]
@@ -5027,7 +5041,7 @@ def test_installationconfigmeta_from_yaml(
                     is wcs_by_class_name[wrapper_klass]
                 )
 
-        if config_meta and "agent_configs" in config_dict["meta"]:
+        if config_meta and "agent_configs" in config_meta:
             acs_by_kind = patched_soliplex_config[
                 "AGENT_CONFIG_CLASSES_BY_KIND"
             ]

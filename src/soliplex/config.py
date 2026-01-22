@@ -2202,8 +2202,11 @@ class InstallationConfigMeta:
     def __post_init__(self):
         self.agui_features = list(self.agui_features)
         for af_meta in self.agui_features:
-            klass = af_meta.model_klass
-            AGUI_FEATURES_BY_NAME[af_meta.name] = klass
+            AGUI_FEATURES_BY_NAME[af_meta.name] = AGUI_Feature(
+                name=af_meta.name,
+                model_klass=af_meta.model_klass,
+                source=af_meta.source,
+            )
 
         self.tool_configs = list(self.tool_configs)
         for tc_meta in self.tool_configs:
