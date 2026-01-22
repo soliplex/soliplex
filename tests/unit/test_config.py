@@ -541,6 +541,34 @@ extra_config:
   foo: "Bar"
 """
 
+W_BOGUS_TEMPLATE_ID_FACTORY_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+template_id: "{BOGUS_TEMPLATE_AGENT_ID}"
+"""
+
+W_TEMPLATE_ID_FACTORY_AGENT_CONFIG_KW = dict(
+    id=AGENT_ID,
+    _template_id=TEMPLATE_AGENT_ID,
+)
+W_TEMPLATE_ID_FACTORY_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+template_id: "{TEMPLATE_AGENT_ID}"
+"""
+
+W_TEMPLATE_ID_W_EXTRA_CONFIG_FACTORY_AGENT_CONFIG_KW = dict(
+    id=AGENT_ID,
+    _template_id=W_EXTRA_CONFIG_TEMPLATE_AGENT_ID,
+    extra_config={
+        "foo": "Bar",
+    },
+)
+W_TEMPLATE_ID_W_EXTRA_CONFIG_FACTORY_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+template_id: "{W_EXTRA_CONFIG_TEMPLATE_AGENT_ID}"
+extra_config:
+  foo: "Bar"
+"""
+
 Q_UUID_1 = "DEADBEEF"
 QUESTION_1 = "What color is the sky"
 ANSWER_1 = "blue"
@@ -3344,6 +3372,15 @@ def test_factoryagentconfig_factory(kw, w_existing):
             W_CONFIG_FACTORY_AGENT_CONFIG_YAML,
             W_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
         ),
+        (W_BOGUS_TEMPLATE_ID_FACTORY_AGENT_CONFIG_YAML, None),
+        (
+            W_TEMPLATE_ID_FACTORY_AGENT_CONFIG_YAML,
+            W_TEMPLATE_ID_FACTORY_AGENT_CONFIG_KW.copy(),
+        ),
+        (
+            W_TEMPLATE_ID_W_EXTRA_CONFIG_FACTORY_AGENT_CONFIG_YAML,
+            W_TEMPLATE_ID_W_EXTRA_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
+        ),
     ],
 )
 def test_factoryagentconfig_from_yaml(
@@ -3358,6 +3395,23 @@ def test_factoryagentconfig_from_yaml(
     with yaml_file.open() as stream:
         config_dict = yaml.safe_load(stream)
 
+    if config_dict is not None:
+        template_id = config_dict.get("template_id")
+    else:
+        template_id = None
+
+    if template_id not in (None, BOGUS_TEMPLATE_AGENT_ID):
+        template_kw = {
+            "factory_name": FACTORY_NAME,
+            "with_agent_config": True,
+        }
+        installation_config.agent_configs = [
+            config.FactoryAgentConfig(id=template_id, **template_kw),
+        ]
+    else:
+        template_kw = {}
+        installation_config.agent_configs = []
+
     if expected_kw is None:
         with pytest.raises(config.FromYamlException):
             config.FactoryAgentConfig.from_yaml(
@@ -3369,7 +3423,7 @@ def test_factoryagentconfig_from_yaml(
         expected = config.FactoryAgentConfig(
             _installation_config=installation_config,
             _config_path=yaml_file,
-            **expected_kw,
+            **(template_kw | expected_kw),
         )
 
         found = config.FactoryAgentConfig.from_yaml(
