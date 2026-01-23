@@ -16,7 +16,10 @@ manage httpx client lifecycle and prevent "Event loop is closed" errors.
 See: https://github.com/pydantic/pydantic-ai/blob/main/tests/conftest.py
 """
 
+import json
+import os
 import pathlib
+import uuid
 from unittest import mock
 
 import httpx
@@ -29,9 +32,16 @@ from soliplex import config
 from soliplex import main
 from soliplex import models
 
+HAS_GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
 # =============================================================================
 # Fixtures
 # =============================================================================
+
+pytestmark = pytest.mark.skipif(
+    not HAS_GEMINI_API_KEY,
+    reason="No GEMINI_API_KEY",
+)
 
 
 @pytest.fixture(scope="module")
@@ -434,82 +444,80 @@ def gemini_client():
 
 @pytest.mark.anyio
 @pytest.mark.needs_llm
-async def test_gemini_room_agui_endpoint(gemini_client):
+@mock.patch("soliplex.authn.authenticate")
+async def test_gemini_room_agui_endpoint(auth_fn, gemini_client):
     """Test the gemini_flash room through the AG-UI API endpoint.
 
     This is an end-to-end test that verifies the full stack works:
     room config -> agent creation -> API endpoint -> LLM response.
     """
-    import json
-    import uuid
 
     room_id = "gemini_flash"
 
     # Step 1: Create a new thread in the gemini_flash room
     new_thread_request = {"metadata": {"name": "gemini_test"}}
 
-    with mock.patch("soliplex.authn.authenticate") as auth_fn:
-        auth_fn.return_value = {
-            "name": "Test User",
-            "email": "test@example.com",
-        }
+    auth_fn.return_value = {
+        "name": "Test User",
+        "email": "test@example.com",
+    }
 
-        response = gemini_client.post(
-            f"/api/v1/rooms/{room_id}/agui",
-            json=new_thread_request,
+    response = gemini_client.post(
+        f"/api/v1/rooms/{room_id}/agui",
+        json=new_thread_request,
+    )
+    assert response.status_code == 200, (
+        f"Failed to create thread: {response.text}"
+    )
+
+    new_thread_json = response.json()
+    assert new_thread_json["room_id"] == room_id
+    thread_id = new_thread_json["thread_id"]
+    (run_id,) = new_thread_json["runs"]
+
+    # Step 2: Send a message and get a response
+    run_request = {
+        "thread_id": thread_id,
+        "run_id": run_id,
+        "state": None,
+        "messages": [
+            {
+                "id": str(uuid.uuid4()),
+                "role": "user",
+                "content": "What is 2 + 2? Answer with just the number.",
+            },
+        ],
+        "context": [],
+        "tools": [],
+        "forwarded_props": None,
+    }
+
+    with gemini_client.stream(
+        method="POST",
+        url=f"/api/v1/rooms/{room_id}/agui/{thread_id}/{run_id}",
+        json=run_request,
+    ) as stream_response:
+        assert stream_response.status_code == 200, (
+            f"Failed to run: {stream_response.text}"
         )
-        assert response.status_code == 200, (
-            f"Failed to create thread: {response.text}"
+
+        # Collect SSE events
+        events = []
+        for raw_line in stream_response.iter_lines():
+            if raw_line and raw_line.startswith("data: "):
+                event_json = json.loads(raw_line[6:])
+                events.append(event_json)
+
+        # Verify we got events
+        assert len(events) > 0, "No events received from Gemini room"
+
+        # Look for text content in events
+        text_content = ""
+        for event in events:
+            if event.get("type") == "TEXT_MESSAGE_CONTENT":
+                text_content += event.get("delta", "")
+
+        # Verify response contains "4"
+        assert "4" in text_content, (
+            f"Expected '4' in response, got: {text_content[:200]}"
         )
-
-        new_thread_json = response.json()
-        assert new_thread_json["room_id"] == room_id
-        thread_id = new_thread_json["thread_id"]
-        (run_id,) = new_thread_json["runs"]
-
-        # Step 2: Send a message and get a response
-        run_request = {
-            "thread_id": thread_id,
-            "run_id": run_id,
-            "state": None,
-            "messages": [
-                {
-                    "id": str(uuid.uuid4()),
-                    "role": "user",
-                    "content": "What is 2 + 2? Answer with just the number.",
-                },
-            ],
-            "context": [],
-            "tools": [],
-            "forwarded_props": None,
-        }
-
-        with gemini_client.stream(
-            method="POST",
-            url=f"/api/v1/rooms/{room_id}/agui/{thread_id}/{run_id}",
-            json=run_request,
-        ) as stream_response:
-            assert stream_response.status_code == 200, (
-                f"Failed to run: {stream_response.text}"
-            )
-
-            # Collect SSE events
-            events = []
-            for raw_line in stream_response.iter_lines():
-                if raw_line and raw_line.startswith("data: "):
-                    event_json = json.loads(raw_line[6:])
-                    events.append(event_json)
-
-            # Verify we got events
-            assert len(events) > 0, "No events received from Gemini room"
-
-            # Look for text content in events
-            text_content = ""
-            for event in events:
-                if event.get("type") == "TEXT_MESSAGE_CONTENT":
-                    text_content += event.get("delta", "")
-
-            # Verify response contains "4"
-            assert "4" in text_content, (
-                f"Expected '4' in response, got: {text_content[:200]}"
-            )

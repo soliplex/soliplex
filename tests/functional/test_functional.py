@@ -1,8 +1,5 @@
-from unittest import mock  # s.b. only for the 'auth_module.authenticate' call
-
 import pytest
 
-USER_NAME = "Phreddy Phlyntstone"
 EMAIL = "phreddy@example.com"
 
 
@@ -13,8 +10,7 @@ def test_health_check(client_no_llm):
     assert response.text == "OK"
 
 
-@mock.patch("soliplex.authn.authenticate")
-def test_rooms_endpoints(auth_fn, client_no_llm):
+def test_rooms_endpoints(client_no_llm):
     get_rooms_response = client_no_llm.get("/api/v1/rooms")
     rooms_manifest = get_rooms_response.json()
 
@@ -34,13 +30,7 @@ def test_rooms_endpoints(auth_fn, client_no_llm):
     )
 
 
-@mock.patch("soliplex.authn.authenticate")
-def test_room_authz_endpoints(auth_fn, client_no_llm):
-    auth_fn.return_value = {
-        "name": USER_NAME,
-        "email": EMAIL,
-    }
-
+def test_room_authz_endpoints(client_no_llm):
     get_authz_response = client_no_llm.get("/api/v1/rooms/functest/authz")
     assert get_authz_response.status_code == 200
     room_policy = get_authz_response.json()
@@ -85,14 +75,8 @@ def test_room_authz_endpoints(auth_fn, client_no_llm):
     assert after_delete_room_policy is None
 
 
-@mock.patch("soliplex.authn.authenticate")
 @pytest.mark.needs_llm
-def test_get_quiz_post_quiz_question(auth_fn, client):
-    auth_fn.return_value = {
-        "name": USER_NAME,
-        "email": EMAIL,
-    }
-
+def test_get_quiz_post_quiz_question(client):
     get_room_response = client.get("/api/v1/rooms/quiztest")
     assert get_room_response.status_code == 200
     room_info = get_room_response.json()

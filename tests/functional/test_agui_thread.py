@@ -1,6 +1,5 @@
 import json
 import uuid
-from unittest import mock
 
 import pydantic
 from ag_ui import core as agui_core
@@ -12,14 +11,8 @@ EVENT_DESERIALIZER = pydantic.TypeAdapter(agui_core.Event)
 IDENTITY_QUERY = "Who am I?"
 
 
-@mock.patch("soliplex.authn.authenticate")
-def test_post_rooms_roomid_agui_etc(auth_fn, client_no_llm):
+def test_post_rooms_roomid_agui_etc(client_no_llm):
     new_thread_request = {"metadata": {"name": "functest"}}
-
-    auth_fn.return_value = {
-        "name": "Phreddy Phlyntstone",
-        "email": "phreddy@example.com",
-    }
 
     room_id = "faux"
 
