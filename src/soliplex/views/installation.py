@@ -6,6 +6,7 @@ import fastapi
 from fastapi import security
 
 from soliplex import authn
+from soliplex import authz
 from soliplex import installation
 from soliplex import models
 from soliplex import util
@@ -13,6 +14,7 @@ from soliplex import util
 router = fastapi.APIRouter(tags=["installation"])
 
 depend_the_installation = installation.depend_the_installation
+depend_the_authz = authz.depend_the_authz_policy
 
 
 @util.logfire_span("GET /v1/installation")
@@ -20,10 +22,18 @@ depend_the_installation = installation.depend_the_installation
 async def get_installation(
     request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
+    the_authz_policy: authz.AuthorizationPolicy = depend_the_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.Installation:
     """Return the installation's top-level configuration"""
-    authn.authenticate(the_installation, token)
+    user_token = authn.authenticate(the_installation, token)
+
+    if not await the_authz_policy.check_admin_access(user_token):
+        raise fastapi.HTTPException(
+            status_code=403,
+            detail="Admin access required",
+        ) from None
+
     return models.Installation.from_config(the_installation._config)
 
 
@@ -32,10 +42,17 @@ async def get_installation(
 async def get_installation_versions(
     request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
+    the_authz_policy: authz.AuthorizationPolicy = depend_the_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.InstalledPackages:
     """Return the installation's top-level configuration"""
-    authn.authenticate(the_installation, token)
+    user_token = authn.authenticate(the_installation, token)
+
+    if not await the_authz_policy.check_admin_access(user_token):
+        raise fastapi.HTTPException(
+            status_code=403,
+            detail="Admin access required",
+        ) from None
 
     try:
         found = (
@@ -63,8 +80,16 @@ async def get_installation_versions(
 async def get_installation_providers(
     request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
+    the_authz_policy: authz.AuthorizationPolicy = depend_the_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> installation.ProviderInfoMap:
     """Return the installation's top-level configuration"""
-    authn.authenticate(the_installation, token)
+    user_token = authn.authenticate(the_installation, token)
+
+    if not await the_authz_policy.check_admin_access(user_token):
+        raise fastapi.HTTPException(
+            status_code=403,
+            detail="Admin access required",
+        ) from None
+
     return the_installation.all_provider_info

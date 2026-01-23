@@ -230,6 +230,12 @@ class AdminUserExists(ValueError):
         super().__init__(f"Admin user already exists with email: {email}")
 
 
+class NotAdminUser(ValueError):
+    def __init__(self, email):
+        self.email = email
+        super().__init__(f"Non-admin user, email: {email}")
+
+
 async def _find_admin_user(
     email: str,
     session,
@@ -341,19 +347,20 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
     async def get_room_policy(
         self,
         room_id: str,
-        user_token: authz_package.UserToken | None,
+        user_token: authz_package.UserToken,
     ) -> models.RoomPolicy | None:
         """Return the authorization policy for the room"""
         async with self.session as session:
+            email = user_token["email"]
+            user = await _find_admin_user(email, session)
+
+            if user is None:
+                raise NotAdminUser(email)
+
             policy = await _find_room_policy(room_id, session)
 
         if policy is not None:
             await policy.awaitable_attrs.acl_entries
-            allowed = policy.check_token(user_token)
-
-            if allowed != authz_package.AllowDeny.ALLOW:
-                raise KeyError(room_id)
-
             return policy.as_model
 
         return None
@@ -362,18 +369,20 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
         self,
         room_id: str,
         room_policy: models.RoomPolicy,
-        user_token: authz_package.UserToken | None,
+        user_token: authz_package.UserToken,
     ) -> None:
         """Update the authorization policy for the room"""
         async with self.session as session:
+            email = user_token["email"]
+            user = await _find_admin_user(email, session)
+
+            if user is None:
+                raise NotAdminUser(email)
+
             policy = await _find_room_policy(room_id, session)
 
             if policy is not None:
                 await policy.awaitable_attrs.acl_entries
-                allowed = policy.check_token(user_token)
-
-                if allowed != authz_package.AllowDeny.ALLOW:
-                    raise KeyError(room_id)
 
                 async with session.begin_nested():
                     await session.delete(policy)
@@ -388,19 +397,19 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
     async def delete_room_policy(
         self,
         room_id: str,
-        user_token: authz_package.UserToken | None,
+        user_token: authz_package.UserToken,
     ) -> None:
         """Delete any existing authorization policy for the room"""
         async with self.session as session:
+            email = user_token["email"]
+            user = await _find_admin_user(email, session)
+
+            if user is None:
+                raise NotAdminUser(email)
+
             policy = await _find_room_policy(room_id, session)
 
             if policy is not None:
-                await policy.awaitable_attrs.acl_entries
-                allowed = policy.check_token(user_token)
-
-                if allowed != authz_package.AllowDeny.ALLOW:
-                    raise KeyError(room_id)
-
                 async with session.begin_nested():
                     await session.delete(policy)
 

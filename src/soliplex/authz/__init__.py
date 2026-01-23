@@ -39,7 +39,7 @@ class AuthorizationPolicy(abc.ABC):
         room_id: str,
         user_token: UserToken | None,
     ) -> bool:
-        """Can the user represented by 'user_token' can access a room?"""
+        """Can the user represented by 'user_token' access a room?"""
 
     @abc.abstractmethod
     async def filter_room_ids(
@@ -53,7 +53,7 @@ class AuthorizationPolicy(abc.ABC):
     async def get_room_policy(
         self,
         room_id: str,
-        user_token: UserToken | None,
+        user_token: UserToken,
     ) -> models.RoomPolicy | None:  # noqa: F821
         """Return the authorization policy for the room"""
 
@@ -62,7 +62,7 @@ class AuthorizationPolicy(abc.ABC):
         self,
         room_id: str,
         room_policy: models.RoomPolicy,  # noqa: F821
-        user_token: UserToken | None,
+        user_token: UserToken,
     ) -> None:
         """Update the authorization policy for the room"""
 
@@ -70,7 +70,7 @@ class AuthorizationPolicy(abc.ABC):
     async def delete_room_policy(
         self,
         room_id: str,
-        user_token: UserToken | None,
+        user_token: UserToken,
     ) -> None:
         """Delete the authorization policy for the room"""
 

@@ -27,12 +27,18 @@ async def get_room_authz(
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.RoomPolicy | None:
-    user = authn.authenticate(the_installation, token)
+    user_token = authn.authenticate(the_installation, token)
+
+    if not await the_authz_policy.check_admin_access(user_token):
+        raise fastapi.HTTPException(
+            status_code=403,
+            detail="Admin access required",
+        ) from None
 
     try:
         room_policy = await the_authz_policy.get_room_policy(
             room_id=room_id,
-            user_token=user,
+            user_token=user_token,
         )
     except KeyError:
         raise fastapi.HTTPException(
@@ -56,12 +62,18 @@ async def post_room_authz(
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.RoomPolicy | None:
-    user = authn.authenticate(the_installation, token)
+    user_token = authn.authenticate(the_installation, token)
+
+    if not await the_authz_policy.check_admin_access(user_token):
+        raise fastapi.HTTPException(
+            status_code=403,
+            detail="Admin access required",
+        ) from None
 
     await the_authz_policy.update_room_policy(
         room_id=room_id,
         room_policy=room_policy,
-        user_token=user,
+        user_token=user_token,
     )
 
     return fastapi.Response(status_code=204)
@@ -79,11 +91,17 @@ async def delete_room_authz(
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.RoomPolicy | None:
-    user = authn.authenticate(the_installation, token)
+    user_token = authn.authenticate(the_installation, token)
+
+    if not await the_authz_policy.check_admin_access(user_token):
+        raise fastapi.HTTPException(
+            status_code=403,
+            detail="Admin access required",
+        ) from None
 
     await the_authz_policy.delete_room_policy(
         room_id=room_id,
-        user_token=user,
+        user_token=user_token,
     )
 
     return fastapi.Response(status_code=204)
