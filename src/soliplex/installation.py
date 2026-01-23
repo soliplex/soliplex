@@ -7,6 +7,7 @@ import logfire
 import pydantic_ai
 from ag_ui import core as agui_core
 from haiku.rag import config as hr_config
+from sqlalchemy import sql as sqla_sql
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
@@ -21,6 +22,12 @@ ProviderURL = str | None
 ProviderModelNames = set[str]
 ProviderTypeInfo = dict[ProviderURL, ProviderModelNames]
 ProviderInfoMap = dict[config.LLMProviderType, ProviderTypeInfo]
+
+
+NO_AUTH_MODE_USER_TOKEN = {
+    "name": "Phreddy Phlyntstone",
+    "email": "phreddy@example.com",
+}
 
 
 @dataclasses.dataclass
@@ -332,6 +339,19 @@ def apply_logfire_configuration(
         logfire.instrument_fastapi(app, capture_headers=True)
 
 
+def add_no_auth_user_as_admin(connection):
+    query = sqla_sql.select(authz_schema.AdminUser)
+    result = connection.execute(query)
+    has_admin_users = result.first() is not None
+
+    if not has_admin_users:
+        email = NO_AUTH_MODE_USER_TOKEN["email"]
+        insert_stmt = sqla_sql.insert(authz_schema.AdminUser).values(
+            email=email,
+        )
+        connection.execute(insert_stmt)
+
+
 async def lifespan(
     app: fastapi.FastAPI,
     installation_path: pathlib.Path,
@@ -358,12 +378,16 @@ async def lifespan(
         )
 
     authz_engine = sqla_asyncio.create_async_engine(
-        the_installation.thread_persistence_dburi_async
+        the_installation.authorization_dburi_async
     )
     async with authz_engine.begin() as ra_connection:
         await ra_connection.run_sync(
             authz_schema.Base.metadata.create_all,
         )
+        if no_auth_mode:
+            await ra_connection.run_sync(
+                add_no_auth_user_as_admin,
+            )
 
     context = {
         "the_installation": the_installation,

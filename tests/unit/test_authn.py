@@ -108,16 +108,12 @@ def test_get_oauth_w_initialized():
 
 @pytest.mark.parametrize("w_auth_disabled", [False, True])
 def test_authenticate_w_token_none(w_auth_disabled):
-    DUMMY_USER = {
-        "name": "Phreddy Phlyntstone",
-        "email": "phreddy@example.com",
-    }
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.auth_disabled = w_auth_disabled
 
     if w_auth_disabled:
         found = authn.authenticate(the_installation, None)
-        assert found == DUMMY_USER
+        assert found == installation.NO_AUTH_MODE_USER_TOKEN
 
     else:
         with pytest.raises(fastapi.HTTPException) as exc:
@@ -132,10 +128,6 @@ def test_authenticate_w_token_none(w_auth_disabled):
 def test_authenticate(vat, with_auth_systems, w_hit):
     FIRST_USER = {"test": "pydio"}
     SECOND_USER = {"test": "josce"}
-    DUMMY_USER = {
-        "name": "Phreddy Phlyntstone",
-        "email": "phreddy@example.com",
-    }
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.auth_disabled = len(with_auth_systems) == 0
     the_installation.oidc_auth_system_configs = with_auth_systems
@@ -152,7 +144,7 @@ def test_authenticate(vat, with_auth_systems, w_hit):
 
     if no_auth:
         found = authn.authenticate(the_installation, token)
-        assert found == DUMMY_USER
+        assert found == installation.NO_AUTH_MODE_USER_TOKEN
 
     else:
         if w_hit is None or w_hit == "second" and len(with_auth_systems) < 2:

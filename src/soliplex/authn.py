@@ -62,7 +62,7 @@ def authenticate(
 ):
     # See #316
     if the_installation.auth_disabled:
-        return {"name": "Phreddy Phlyntstone", "email": "phreddy@example.com"}
+        return installation.NO_AUTH_MODE_USER_TOKEN
 
     if token is None:
         raise fastapi.HTTPException(
