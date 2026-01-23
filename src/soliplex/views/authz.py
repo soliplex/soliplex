@@ -12,7 +12,7 @@ from soliplex import util
 router = fastapi.APIRouter(tags=["authorization"])
 
 depend_the_installation = installation.depend_the_installation
-depend_the_room_authz = authz_package.depend_the_room_authz
+depend_the_authz = authz_package.depend_the_authz_policy
 
 
 @util.logfire_span("GET /v1/rooms/{room_id}/authz")
@@ -24,13 +24,13 @@ async def get_room_authz(
     request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    the_room_authz: authz_package.RoomAuthorization = depend_the_room_authz,
+    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.RoomPolicy | None:
     user = authn.authenticate(the_installation, token)
 
     try:
-        room_policy = await the_room_authz.get_room_policy(
+        room_policy = await the_authz_policy.get_room_policy(
             room_id=room_id,
             user_token=user,
         )
@@ -53,12 +53,12 @@ async def post_room_authz(
     room_id: str,
     room_policy: models.RoomPolicy,
     the_installation: installation.Installation = depend_the_installation,
-    the_room_authz: authz_package.RoomAuthorization = depend_the_room_authz,
+    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.RoomPolicy | None:
     user = authn.authenticate(the_installation, token)
 
-    await the_room_authz.update_room_policy(
+    await the_authz_policy.update_room_policy(
         room_id=room_id,
         room_policy=room_policy,
         user_token=user,
@@ -76,12 +76,12 @@ async def delete_room_authz(
     request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    the_room_authz: authz_package.RoomAuthorization = depend_the_room_authz,
+    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.RoomPolicy | None:
     user = authn.authenticate(the_installation, token)
 
-    await the_room_authz.delete_room_policy(
+    await the_authz_policy.delete_room_policy(
         room_id=room_id,
         user_token=user,
     )

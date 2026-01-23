@@ -2513,20 +2513,20 @@ class InstallationConfig:
     #
     # Room authorization DB-URI
     #
-    _room_authz_dburi_sync: str = None
-    _room_authz_dburi_async: str = None
+    _authorization_dburi_sync: str = None
+    _authorization_dburi_async: str = None
 
     @property
-    def room_authz_dburi_sync(self):
+    def authorization_dburi_sync(self):
         return self._dburi_w_secret(
-            self._room_authz_dburi_sync,
+            self._authorization_dburi_sync,
             SYNC_MEMORY_ENGINE_URL,
         )
 
     @property
-    def room_authz_dburi_async(self):
+    def authorization_dburi_async(self):
         return self._dburi_w_secret(
-            self._room_authz_dburi_async,
+            self._authorization_dburi_async,
             ASYNC_MEMORY_ENGINE_URL,
         )
 
@@ -2601,9 +2601,9 @@ class InstallationConfig:
                 "async"
             )
 
-            ra_dburi = config_dict.pop("room_authz_dburi", {})
-            config_dict["_room_authz_dburi_sync"] = ra_dburi.get("sync")
-            config_dict["_room_authz_dburi_async"] = ra_dburi.get("async")
+            ra_dburi = config_dict.pop("authorization_dburi", {})
+            config_dict["_authorization_dburi_sync"] = ra_dburi.get("sync")
+            config_dict["_authorization_dburi_async"] = ra_dburi.get("async")
 
             return cls(**config_dict)
 

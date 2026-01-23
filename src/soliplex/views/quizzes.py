@@ -10,7 +10,7 @@ from soliplex import quizzes
 router = fastapi.APIRouter(tags=["quizzes"])
 
 depend_the_installation = installation.depend_the_installation
-depend_the_room_authz = authz_package.depend_the_room_authz
+depend_the_authz = authz_package.depend_the_authz_policy
 
 
 @router.get("/v1/rooms/{room_id}/quiz/{quiz_id}")
@@ -19,7 +19,7 @@ async def get_quiz(
     room_id: str,
     quiz_id: str,
     the_installation: installation.Installation = depend_the_installation,
-    the_room_authz: authz_package.RoomAuthorization = depend_the_room_authz,
+    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.Quiz:
     """Return a quiz as configured from a room"""
@@ -29,7 +29,7 @@ async def get_quiz(
         room_config = await the_installation.get_room_config(
             room_id=room_id,
             user=user,
-            the_room_authz=the_room_authz,
+            the_authz_policy=the_authz_policy,
         )
     except ValueError as e:
         raise fastapi.HTTPException(
@@ -56,7 +56,7 @@ async def post_quiz_question(
     question_uuid: str,
     answer: models.QuizAnswer,
     the_installation: installation.Installation = depend_the_installation,
-    the_room_authz: authz_package.RoomAuthorization = depend_the_room_authz,
+    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.QuizQuestionResponse:
     """Check a user's response to a quiz question."""
@@ -66,7 +66,7 @@ async def post_quiz_question(
         room_config = await the_installation.get_room_config(
             room_id=room_id,
             user=user,
-            the_room_authz=the_room_authz,
+            the_authz_policy=the_authz_policy,
         )
     except ValueError as e:
         raise fastapi.HTTPException(

@@ -252,9 +252,9 @@ thread_persistence_dburi:
   async: "sqlite+aiosqlite://"
 
 #==========================================================================
-# Room authorization policies:  SQLAlchemy DBURIs
+# Authorization policy:  SQLAlchemy DBURIs
 #==========================================================================
-room_authz_dburi:
+authorization_dburi:
   sync: "sqlite://"
   async: "sqlite+aiosqlite://"
 

@@ -200,7 +200,7 @@ class ACLEntry(Base):
         return None
 
 
-class RoomAuthorization(authz_package.RoomAuthorization):
+class AuthorizationPolicy(authz_package.AuthorizationPolicy):
     def __init__(self, session: sqla_asyncio.AsyncSession):
         self._session = session
 

@@ -73,13 +73,13 @@ async def test_get_rooms(fc, auth_fn, room_configs):
 
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_room_configs.return_value = room_configs
-    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     token = object()
 
     found = await rooms_views.get_rooms(
         request,
         the_installation=the_installation,
-        the_room_authz=the_room_authz,
+        the_authz_policy=the_authz_policy,
         token=token,
     )
 
@@ -95,7 +95,7 @@ async def test_get_rooms(fc, auth_fn, room_configs):
 
     the_installation.get_room_configs.assert_awaited_once_with(
         user=auth_fn.return_value,
-        the_room_authz=the_room_authz,
+        the_authz_policy=the_authz_policy,
     )
     auth_fn.assert_called_once_with(the_installation, token)
 
@@ -115,7 +115,7 @@ async def test_get_room(fc, auth_fn, room_configs):
     else:
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
-    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     token = object()
 
     if ROOM_ID not in room_configs:
@@ -124,7 +124,7 @@ async def test_get_room(fc, auth_fn, room_configs):
                 request,
                 ROOM_ID,
                 the_installation=the_installation,
-                the_room_authz=the_room_authz,
+                the_authz_policy=the_authz_policy,
                 token=token,
             )
 
@@ -136,7 +136,7 @@ async def test_get_room(fc, auth_fn, room_configs):
             request,
             ROOM_ID,
             the_installation=the_installation,
-            the_room_authz=the_room_authz,
+            the_authz_policy=the_authz_policy,
             token=token,
         )
 
@@ -146,7 +146,7 @@ async def test_get_room(fc, auth_fn, room_configs):
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
         user=auth_fn.return_value,
-        the_room_authz=the_room_authz,
+        the_authz_policy=the_authz_policy,
     )
     auth_fn.assert_called_once_with(the_installation, token)
 
@@ -169,7 +169,7 @@ async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
     else:
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
-    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     token = object()
 
     if ROOM_ID in room_configs:
@@ -184,7 +184,7 @@ async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
                 request,
                 room_id=ROOM_ID,
                 the_installation=the_installation,
-                the_room_authz=the_room_authz,
+                the_authz_policy=the_authz_policy,
                 token=token,
             )
 
@@ -196,7 +196,7 @@ async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
                 request,
                 room_id=ROOM_ID,
                 the_installation=the_installation,
-                the_room_authz=the_room_authz,
+                the_authz_policy=the_authz_policy,
                 token=token,
             )
             # Actual image data is marshalled by fastapi framework
@@ -207,7 +207,7 @@ async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
                     request,
                     room_id=ROOM_ID,
                     the_installation=the_installation,
-                    the_room_authz=the_room_authz,
+                    the_authz_policy=the_authz_policy,
                     token=token,
                 )
 
@@ -217,7 +217,7 @@ async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
         user=auth_fn.return_value,
-        the_room_authz=the_room_authz,
+        the_authz_policy=the_authz_policy,
     )
     auth_fn.assert_called_once_with(the_installation, token)
 
@@ -234,7 +234,7 @@ async def test_get_room_mcp_token(auth_fn, gust, w_error):
     request = fastapi.Request(scope={"type": "http"})
 
     the_installation = mock.create_autospec(installation.Installation)
-    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     token = object()
     wylma = auth_fn.return_value = {
         "full_name": "Wylma Phlyntstone",
@@ -252,7 +252,7 @@ async def test_get_room_mcp_token(auth_fn, gust, w_error):
                 request,
                 room_id=ROOM_ID,
                 the_installation=the_installation,
-                the_room_authz=the_room_authz,
+                the_authz_policy=the_authz_policy,
                 token=token,
             )
 
@@ -263,7 +263,7 @@ async def test_get_room_mcp_token(auth_fn, gust, w_error):
             request,
             room_id=ROOM_ID,
             the_installation=the_installation,
-            the_room_authz=the_room_authz,
+            the_authz_policy=the_authz_policy,
             token=token,
         )
 
@@ -285,7 +285,7 @@ async def test_get_room_mcp_token(auth_fn, gust, w_error):
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
         user=auth_fn.return_value,
-        the_room_authz=the_room_authz,
+        the_authz_policy=the_authz_policy,
     )
     auth_fn.assert_called_once_with(the_installation, token)
 
@@ -315,7 +315,7 @@ async def test_get_room_documents(
     else:
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
-    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     token = object()
 
     hr_config = object()
@@ -346,7 +346,7 @@ async def test_get_room_documents(
                 request,
                 room_id=ROOM_ID,
                 the_installation=the_installation,
-                the_room_authz=the_room_authz,
+                the_authz_policy=the_authz_policy,
                 token=token,
             )
 
@@ -357,7 +357,7 @@ async def test_get_room_documents(
             request,
             room_id=ROOM_ID,
             the_installation=the_installation,
-            the_room_authz=the_room_authz,
+            the_authz_policy=the_authz_policy,
             token=token,
         )
 
@@ -380,7 +380,7 @@ async def test_get_room_documents(
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
         user=auth_fn.return_value,
-        the_room_authz=the_room_authz,
+        the_authz_policy=the_authz_policy,
     )
     auth_fn.assert_called_once_with(the_installation, token)
 
@@ -426,7 +426,7 @@ async def test_get_chunk_visualization(
     else:
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
-    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     token = object()
 
     hr_config = object()
@@ -465,7 +465,7 @@ async def test_get_chunk_visualization(
                 room_id=ROOM_ID,
                 chunk_id=CHUNK_ID,
                 the_installation=the_installation,
-                the_room_authz=the_room_authz,
+                the_authz_policy=the_authz_policy,
                 token=token,
             )
 
@@ -479,7 +479,7 @@ async def test_get_chunk_visualization(
                 room_id=ROOM_ID,
                 chunk_id=CHUNK_ID,
                 the_installation=the_installation,
-                the_room_authz=the_room_authz,
+                the_authz_policy=the_authz_policy,
                 token=token,
             )
 
@@ -493,7 +493,7 @@ async def test_get_chunk_visualization(
                 room_id=ROOM_ID,
                 chunk_id=CHUNK_ID,
                 the_installation=the_installation,
-                the_room_authz=the_room_authz,
+                the_authz_policy=the_authz_policy,
                 token=token,
             )
 
@@ -506,7 +506,7 @@ async def test_get_chunk_visualization(
             room_id=ROOM_ID,
             chunk_id=CHUNK_ID,
             the_installation=the_installation,
-            the_room_authz=the_room_authz,
+            the_authz_policy=the_authz_policy,
             token=token,
         )
 
@@ -526,6 +526,6 @@ async def test_get_chunk_visualization(
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
         user=auth_fn.return_value,
-        the_room_authz=the_room_authz,
+        the_authz_policy=the_authz_policy,
     )
     auth_fn.assert_called_once_with(the_installation, token)

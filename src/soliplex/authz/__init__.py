@@ -18,8 +18,8 @@ class AllowDeny(enum.Enum):
     DENY = "deny"
 
 
-class RoomAuthorization(abc.ABC):
-    """Protocol for checking / managing room authorization policies"""
+class AuthorizationPolicy(abc.ABC):
+    """Protocol for checking / managing authorization policies"""
 
     @abc.abstractmethod
     async def check_room_access(
@@ -63,12 +63,14 @@ class RoomAuthorization(abc.ABC):
         """Delete the authorization policy for the room"""
 
 
-async def get_the_room_authz(request: fastapi.Request) -> RoomAuthorization:
+async def get_the_authz_policy(
+    request: fastapi.Request,
+) -> AuthorizationPolicy:
     from . import schema
 
-    engine = request.state.room_authz_engine
+    engine = request.state.authorization_engine
     async with sqla_asyncio.AsyncSession(bind=engine) as session:
-        yield schema.RoomAuthorization(session)
+        yield schema.AuthorizationPolicy(session)
 
 
-depend_the_room_authz = fastapi.Depends(get_the_room_authz)
+depend_the_authz_policy = fastapi.Depends(get_the_authz_policy)

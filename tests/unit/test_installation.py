@@ -497,23 +497,23 @@ def test_installation_thread_persistence_dburi_async():
     )
 
 
-def test_installation_room_authz_dburi_sync():
+def test_installation_authorization_dburi_sync():
     i_config = mock.create_autospec(config.InstallationConfig)
     the_installation = installation.Installation(i_config)
 
     assert (
-        the_installation.room_authz_dburi_sync
-        is i_config.room_authz_dburi_sync
+        the_installation.authorization_dburi_sync
+        is i_config.authorization_dburi_sync
     )
 
 
-def test_installation_room_authz_dburi_async():
+def test_installation_authorization_dburi_async():
     i_config = mock.create_autospec(config.InstallationConfig)
     the_installation = installation.Installation(i_config)
 
     assert (
-        the_installation.room_authz_dburi_async
-        is i_config.room_authz_dburi_async
+        the_installation.authorization_dburi_async
+        is i_config.authorization_dburi_async
     )
 
 
@@ -558,17 +558,17 @@ class FauxRoomAuthz:
 
 
 @pytest.fixture(params=[None, False, True])
-def room_authz(request):
+def authz_kwargs(request):
     kw = {}
     if request.param is not None:
-        kw["the_room_authz"] = FauxRoomAuthz(request.param)
+        kw["the_authz_policy"] = FauxRoomAuthz(request.param)
     return kw
 
 
 @pytest.mark.anyio
 async def test_installation_get_room_configs(
     test_user,
-    room_authz,
+    authz_kwargs,
     r_configs,
 ):
     i_config = mock.create_autospec(config.InstallationConfig)
@@ -578,11 +578,11 @@ async def test_installation_get_room_configs(
 
     found = await the_installation.get_room_configs(
         user=test_user,
-        **room_authz,
+        **authz_kwargs,
     )
 
-    if room_authz:
-        allowed = room_authz["the_room_authz"].allowed
+    if authz_kwargs:
+        allowed = authz_kwargs["the_authz_policy"].allowed
         if allowed:
             assert found == r_configs
         else:
@@ -597,7 +597,7 @@ async def test_installation_get_room_configs(
 )
 async def test_installation_get_room_config(
     test_user,
-    room_authz,
+    authz_kwargs,
     r_configs,
     w_room_id,
     raises,
@@ -607,8 +607,8 @@ async def test_installation_get_room_config(
 
     the_installation = installation.Installation(i_config)
 
-    if room_authz:
-        allowed = room_authz["the_room_authz"].allowed
+    if authz_kwargs:
+        allowed = authz_kwargs["the_authz_policy"].allowed
     else:
         allowed = True
 
@@ -617,7 +617,7 @@ async def test_installation_get_room_config(
             await the_installation.get_room_config(
                 room_id=w_room_id,
                 user=test_user,
-                **room_authz,
+                **authz_kwargs,
             )
     else:
         if not allowed:
@@ -625,13 +625,13 @@ async def test_installation_get_room_config(
                 await the_installation.get_room_config(
                     room_id=w_room_id,
                     user=test_user,
-                    **room_authz,
+                    **authz_kwargs,
                 )
         else:
             found = await the_installation.get_room_config(
                 room_id=w_room_id,
                 user=test_user,
-                **room_authz,
+                **authz_kwargs,
             )
 
             assert found is r_configs[w_room_id]
@@ -711,7 +711,7 @@ def test_installation_get_agent_by_id(gafc, w_agent_id, raises):
 async def test_installation_get_agent_for_room(
     gafc,
     test_user,
-    room_authz,
+    authz_kwargs,
     w_room_id,
     raises,
 ):
@@ -742,8 +742,8 @@ async def test_installation_get_agent_for_room(
     i_config = mock.create_autospec(config.InstallationConfig)
     i_config.room_configs = r_configs
 
-    if room_authz:
-        allowed = room_authz["the_room_authz"].allowed
+    if authz_kwargs:
+        allowed = authz_kwargs["the_authz_policy"].allowed
     else:
         allowed = True
 
@@ -754,7 +754,7 @@ async def test_installation_get_agent_for_room(
             await the_installation.get_agent_for_room(
                 room_id=w_room_id,
                 user=test_user,
-                **room_authz,
+                **authz_kwargs,
             )
     else:
         if not allowed:
@@ -762,7 +762,7 @@ async def test_installation_get_agent_for_room(
                 await the_installation.get_agent_for_room(
                     room_id=w_room_id,
                     user=test_user,
-                    **room_authz,
+                    **authz_kwargs,
                 )
 
             gafc.assert_not_called()
@@ -771,7 +771,7 @@ async def test_installation_get_agent_for_room(
             found = await the_installation.get_agent_for_room(
                 room_id=w_room_id,
                 user=test_user,
-                **room_authz,
+                **authz_kwargs,
             )
 
             assert found is gafc.return_value
@@ -842,7 +842,7 @@ async def test_installation_get_agent_for_completion(
 )
 async def test_installation_get_agent_deps_for_room(
     test_user,
-    room_authz,
+    authz_kwargs,
     w_room_id,
     raises,
     w_run_agent_input,
@@ -860,8 +860,8 @@ async def test_installation_get_agent_deps_for_room(
     i_config = mock.create_autospec(config.InstallationConfig)
     i_config.room_configs = r_configs
 
-    if room_authz:
-        allowed = room_authz["the_room_authz"].allowed
+    if authz_kwargs:
+        allowed = authz_kwargs["the_authz_policy"].allowed
     else:
         allowed = True
 
@@ -876,7 +876,7 @@ async def test_installation_get_agent_deps_for_room(
             await the_installation.get_agent_deps_for_room(
                 room_id=w_room_id,
                 user=test_user,
-                **room_authz,
+                **authz_kwargs,
                 **kw,
             )
     else:
@@ -885,14 +885,14 @@ async def test_installation_get_agent_deps_for_room(
                 await the_installation.get_agent_deps_for_room(
                     room_id=w_room_id,
                     user=test_user,
-                    **room_authz,
+                    **authz_kwargs,
                     **kw,
                 )
         else:
             found = await the_installation.get_agent_deps_for_room(
                 room_id=w_room_id,
                 user=test_user,
-                **room_authz,
+                **authz_kwargs,
                 **kw,
             )
 
@@ -1096,8 +1096,8 @@ async def test_lifespan(
     threads_engine = found[0]["threads_engine"]
     assert isinstance(threads_engine, sqla_asyncio.AsyncEngine)
 
-    room_authz_engine = found[0]["room_authz_engine"]
-    assert isinstance(room_authz_engine, sqla_asyncio.AsyncEngine)
+    authorization_engine = found[0]["authorization_engine"]
+    assert isinstance(authorization_engine, sqla_asyncio.AsyncEngine)
 
     for f_call, (key, mcp_app) in zip(
         app.mount.call_args_list,

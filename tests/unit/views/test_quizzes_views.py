@@ -66,7 +66,7 @@ def test_quiz(qa_question, mc_question):
 async def test_get_quiz(auth_fn, test_quiz, w_miss):
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
-    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     token = object()
 
     if w_miss == "room":
@@ -78,7 +78,7 @@ async def test_get_quiz(auth_fn, test_quiz, w_miss):
                 room_id=TEST_ROOM_ID,
                 quiz_id=TEST_QUIZ_ID,
                 the_installation=the_installation,
-                the_room_authz=the_room_authz,
+                the_authz_policy=the_authz_policy,
                 token=token,
             )
 
@@ -96,7 +96,7 @@ async def test_get_quiz(auth_fn, test_quiz, w_miss):
                     room_id=TEST_ROOM_ID,
                     quiz_id=TEST_QUIZ_ID,
                     the_installation=the_installation,
-                    the_room_authz=the_room_authz,
+                    the_authz_policy=the_authz_policy,
                     token=token,
                 )
 
@@ -110,7 +110,7 @@ async def test_get_quiz(auth_fn, test_quiz, w_miss):
                 room_id=TEST_ROOM_ID,
                 quiz_id=TEST_QUIZ_ID,
                 the_installation=the_installation,
-                the_room_authz=the_room_authz,
+                the_authz_policy=the_authz_policy,
                 token=token,
             )
 
@@ -120,7 +120,7 @@ async def test_get_quiz(auth_fn, test_quiz, w_miss):
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=TEST_ROOM_ID,
         user=auth_fn.return_value,
-        the_room_authz=the_room_authz,
+        the_authz_policy=the_authz_policy,
     )
 
     auth_fn.assert_called_once_with(the_installation, token)
@@ -133,7 +133,7 @@ async def test_get_quiz(auth_fn, test_quiz, w_miss):
 async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
-    the_room_authz = mock.create_autospec(authz_package.RoomAuthorization)
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     answer = models.QuizAnswer(text="Answer")
     token = object()
 
@@ -148,7 +148,7 @@ async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
                 question_uuid=QA_QUESTION_UUID,
                 answer=answer,
                 the_installation=the_installation,
-                the_room_authz=the_room_authz,
+                the_authz_policy=the_authz_policy,
                 token=token,
             )
 
@@ -168,7 +168,7 @@ async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
                     question_uuid=QA_QUESTION_UUID,
                     answer=answer,
                     the_installation=the_installation,
-                    the_room_authz=the_room_authz,
+                    the_authz_policy=the_authz_policy,
                     token=token,
                 )
 
@@ -193,7 +193,7 @@ async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
                         question_uuid=QA_QUESTION_UUID,
                         answer=answer,
                         the_installation=the_installation,
-                        the_room_authz=the_room_authz,
+                        the_authz_policy=the_authz_policy,
                         token=token,
                     )
 
@@ -207,7 +207,7 @@ async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
                     question_uuid=QA_QUESTION_UUID,
                     answer=answer,
                     the_installation=the_installation,
-                    the_room_authz=the_room_authz,
+                    the_authz_policy=the_authz_policy,
                     token=token,
                 )
 
@@ -222,7 +222,7 @@ async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=TEST_ROOM_ID,
         user=auth_fn.return_value,
-        the_room_authz=the_room_authz,
+        the_authz_policy=the_authz_policy,
     )
 
     auth_fn.assert_called_once_with(the_installation, token)

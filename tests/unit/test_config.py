@@ -1665,25 +1665,25 @@ RA_DBURI_ASYNC = "sqlite+aiosqlite:////tmp/ra_testing.sqlite"
 
 W_RA_DBURI_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "_room_authz_dburi_sync": RA_DBURI_SYNC,
-    "_room_authz_dburi_async": RA_DBURI_ASYNC,
+    "_authorization_dburi_sync": RA_DBURI_SYNC,
+    "_authorization_dburi_async": RA_DBURI_ASYNC,
 }
 W_RA_DBURI_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
-room_authz_dburi:
+authorization_dburi:
     sync: {RA_DBURI_SYNC}
     async: {RA_DBURI_ASYNC}
 """
 
 W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "_room_authz_dburi_sync": RA_DBURI_SYNC_W_SECRET,
+    "_authorization_dburi_sync": RA_DBURI_SYNC_W_SECRET,
     # aiosqlite doesn't support secrets
-    "_room_authz_dburi_async": RA_DBURI_ASYNC,
+    "_authorization_dburi_async": RA_DBURI_ASYNC,
 }
 W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
-room_authz_dburi:
+authorization_dburi:
     sync: {RA_DBURI_SYNC_W_SECRET}
     async: {RA_DBURI_ASYNC}
 """
@@ -5511,10 +5511,10 @@ def test_installationconfig_thread_persistence_dburi_async(w_kw, expected):
         ),
     ],
 )
-def test_installationconfig_room_authz_dburi_sync(w_kw, expected):
+def test_installationconfig_authorization_dburi_sync(w_kw, expected):
     installation_config = config.InstallationConfig(**w_kw)
 
-    found = installation_config.room_authz_dburi_sync
+    found = installation_config.authorization_dburi_sync
 
     assert found == expected
 
@@ -5529,10 +5529,10 @@ def test_installationconfig_room_authz_dburi_sync(w_kw, expected):
         (W_RA_DBURI_INSTALLATION_CONFIG_KW.copy(), RA_DBURI_ASYNC),
     ],
 )
-def test_installationconfig_room_authz_dburi_async(w_kw, expected):
+def test_installationconfig_authorization_dburi_async(w_kw, expected):
     installation_config = config.InstallationConfig(**w_kw)
 
-    found = installation_config.room_authz_dburi_async
+    found = installation_config.authorization_dburi_async
 
     assert found == expected
 
