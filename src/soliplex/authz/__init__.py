@@ -22,6 +22,18 @@ class AuthorizationPolicy(abc.ABC):
     """Protocol for checking / managing authorization policies"""
 
     @abc.abstractmethod
+    async def add_admin_user(self, email: str):
+        """Add a user to the admin users table."""
+
+    @abc.abstractmethod
+    async def remove_admin_user(self, email: str):
+        """Remove a user from the admin users table."""
+
+    @abc.abstractmethod
+    async def check_admin_access(self, user_token: UserToken) -> bool:
+        """Is the user represented by 'user_token' an admin user?"""
+
+    @abc.abstractmethod
     async def check_room_access(
         self,
         room_id: str,

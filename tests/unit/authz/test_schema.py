@@ -13,6 +13,12 @@ from soliplex import models
 from soliplex.authz import schema as authz_schema
 
 NOW = datetime.datetime.now(datetime.UTC)
+
+EMAIL = "phreddy@example.com"
+USER_TOKEN = {
+    "email": EMAIL,
+}
+
 ROOM_ID = "test-room"
 
 ACL_ENTRY_DEFAULTS = {
@@ -58,6 +64,13 @@ def the_session(the_engine):
 
     with sqla_orm.Session(bind=the_engine) as session:
         yield session
+
+
+def test_adminuser_ctor(the_session):
+    admin_user = authz_schema.AdminUser(email=EMAIL)
+
+    the_session.add(admin_user)
+    the_session.commit()
 
 
 def test_roompolicy_ctor(the_session):
@@ -410,6 +423,56 @@ async def the_async_session(the_async_engine):  # pragma: NO COVER
     session = sqla_asyncio.AsyncSession(bind=the_async_engine)
     yield session
     await session.close()
+
+
+@pytest.mark.asyncio
+async def test_authorizationpolicy_crud_admin_user(the_async_session):
+    ap = authz_schema.AuthorizationPolicy(the_async_session)
+
+    await ap.add_admin_user(email=EMAIL)
+    user = await authz_schema._find_admin_user(
+        email=EMAIL,
+        session=the_async_session,
+    )
+    assert user is not None
+
+    await the_async_session.commit()
+
+    with pytest.raises(authz_schema.AdminUserExists):
+        await ap.add_admin_user(email=EMAIL)
+
+    no_dupe = await authz_schema._find_admin_user(
+        email=EMAIL,
+        session=the_async_session,
+    )
+    assert no_dupe is user
+    await the_async_session.commit()
+
+    await ap.remove_admin_user(email=EMAIL)
+    gone = await authz_schema._find_admin_user(
+        email=EMAIL,
+        session=the_async_session,
+    )
+    assert gone is None
+    await the_async_session.commit()
+
+    with pytest.raises(authz_schema.NoSuchAdminUser):
+        await ap.remove_admin_user(email=EMAIL)
+
+
+@pytest.mark.asyncio
+async def test_authorizationpolicy_check_admin_access(the_async_session):
+    ap = authz_schema.AuthorizationPolicy(the_async_session)
+
+    assert not await ap.check_admin_access(USER_TOKEN)
+
+    await ap.add_admin_user(email=EMAIL)
+
+    assert await ap.check_admin_access(USER_TOKEN)
+
+    await ap.remove_admin_user(email=EMAIL)
+
+    assert not await ap.check_admin_access(USER_TOKEN)
 
 
 @pytest.mark.asyncio
