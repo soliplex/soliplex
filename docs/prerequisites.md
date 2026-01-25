@@ -171,6 +171,9 @@ If using Option 2, configure `example/haiku.rag.yaml` to use remote processing.
 
 ### Step 7: Configure Environment Variables
 
+See the `Environment Variables` section in the [README](README.md) for
+an explanation of when to configure Soliplex using OS environment variables.
+
 1. **Copy example environment file**
    ```bash
    cp .env.example .env
@@ -190,18 +193,11 @@ If using Option 2, configure `example/haiku.rag.yaml` to use remote processing.
    **For Ollama:**
    ```bash
    OLLAMA_BASE_URL=http://localhost:11434
-   SOLIPLEX_URL_SAFE_TOKEN_SECRET=generate-a-random-secret-here
    ```
 
    **For OpenAI:**
    ```bash
    OPENAI_API_KEY=sk-proj-your-key-here
-   SOLIPLEX_URL_SAFE_TOKEN_SECRET=generate-a-random-secret-here
-   ```
-
-   Generate a secure token secret:
-   ```bash
-   python -c "import secrets; print(secrets.token_urlsafe(32))"
    ```
 
 4. **Load environment variables**
@@ -431,7 +427,7 @@ docker-compose up
 ### RAG database errors
 - Ensure database is initialized before starting server
 - Check file permissions on db/ directory
-- Verify OLLAMA_BASE_URL is accessible
+- Verify `OLLAMA_BASE_URL` is accessible
 
 ### Module not found errors
 - Ensure virtual environment is activated

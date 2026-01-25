@@ -146,8 +146,15 @@ The backend container reads environment variables from:
 See [.env.example](../.env.example) for a complete list.
 
 **For Ollama:**
+
+If you run Ollama as a Docker container:
 ```bash
 OLLAMA_BASE_URL=http://host.docker.internal:11434
+```
+
+Otherwise:
+```bash
+OLLAMA_BASE_URL=http://your-ollama-host:11434
 ```
 
 **For OpenAI:**
