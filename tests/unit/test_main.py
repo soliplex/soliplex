@@ -19,57 +19,20 @@ EXPLICIT_INST_PATH = "/explicit"
 ENVIRON_INST_PATH = "/environ"
 
 
-@pytest.fixture(scope="module", params=[None, EXPLICIT_INST_PATH])
-def inst_path_kwargs(request):
-    kw = {}
-    if request.param is not None:
-        kw["installation_path"] = request.param
-    return kw
-
-
-@pytest.fixture(scope="module", params=[None, False, True])
+@pytest.fixture(scope="module", params=[False, True])
 def no_auth_mode_kwargs(request):
-    kw = {}
-    if request.param is not None:
-        kw["no_auth_mode"] = request.param
+    kw = {"no_auth_mode": request.param}
     return kw
 
 
-@pytest.mark.parametrize(
-    "env_patch, path_from_env, no_auth_from_env",
-    [
-        ({}, "./example", False),
-        (
-            {"SOLIPLEX_INSTALLATION_PATH": ENVIRON_INST_PATH},
-            ENVIRON_INST_PATH,
-            False,
-        ),
-        ({"SOLIPLEX_NO_AUTH_MODE": "Y"}, "./example", True),
-        ({"SOLIPLEX_NO_AUTH_MODE": "N"}, "./example", False),
-    ],
-)
-def test_curry_lifespan(
-    inst_path_kwargs,
-    no_auth_mode_kwargs,
-    env_patch,
-    path_from_env,
-    no_auth_from_env,
-):
-    if inst_path_kwargs:
-        exp_path = EXPLICIT_INST_PATH
-    else:
-        exp_path = path_from_env
+def test_curry_lifespan(no_auth_mode_kwargs):
+    exp_path = EXPLICIT_INST_PATH
+    exp_no_auth_mode = no_auth_mode_kwargs["no_auth_mode"]
 
-    if no_auth_mode_kwargs:
-        exp_no_auth_mode = no_auth_mode_kwargs["no_auth_mode"]
-    else:
-        exp_no_auth_mode = no_auth_from_env
-
-    with mock.patch.dict("os.environ", clear=True, **env_patch):
-        found = main.curry_lifespan(
-            **inst_path_kwargs,
-            **no_auth_mode_kwargs,
-        )
+    found = main.curry_lifespan(
+        installation_path=EXPLICIT_INST_PATH,
+        **no_auth_mode_kwargs,
+    )
 
     assert isinstance(found, functools.partial)
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import functools
-import os
 import pathlib
 import sys
 import typing
@@ -26,19 +25,7 @@ from soliplex.views import rooms as rooms_views
 from soliplex.views import streaming as streaming_views
 
 
-def curry_lifespan(
-    installation_path: pathlib.Path = None,
-    no_auth_mode: bool | None = None,
-):
-    if no_auth_mode is None:
-        no_auth_mode = os.environ.get("SOLIPLEX_NO_AUTH_MODE") == "Y"
-
-    if installation_path is None:
-        installation_path = os.environ.get("SOLIPLEX_INSTALLATION_PATH")
-
-        if installation_path is None:
-            installation_path = "./example"
-
+def curry_lifespan(installation_path: pathlib.Path, no_auth_mode: bool):
     installation_path = pathlib.Path(installation_path)
 
     return functools.partial(
@@ -111,8 +98,8 @@ def app_with_soliplex_routers(app: fastapi.FastAPI) -> fastapi.FastAPI:
 
 
 def create_app(
-    installation_path: pathlib.Path = None,
-    no_auth_mode: bool = None,
+    installation_path: pathlib.Path,
+    no_auth_mode: bool,
     curry_lifespan=curry_lifespan,
     app_with_lifespan=app_with_lifespan,
     app_with_cors=app_with_cors,
@@ -139,11 +126,21 @@ def create_app(
 
 
 if __name__ == "__main__":  # pragma:  NO COVER
-    if sys.argv:
-        installation_path = sys.argv[1]
-    else:
-        installation_path = None
+    args = sys.argv[1:]
 
-    app = create_app(pathlib.Path(installation_path))
+    no_auth_mode = "--no-auth-mode" in args
+
+    if no_auth_mode:
+        args.remove("--no-auth-mode")
+
+    if args:
+        installation_path = args[0]
+    else:
+        installation_path = "example/minimal.yaml"
+
+    app = create_app(
+        installation_path=pathlib.Path(installation_path),
+        no_auth_mode=no_auth_mode,
+    )
 
     uvicorn.run(app, port=8000)
