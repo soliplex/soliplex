@@ -621,6 +621,14 @@ class RoomPolicy(pydantic.BaseModel):
     acl_entries: list[ACLEntry] = pydantic.Field(default_factory=list)
 
 
+RoomPolicyMap = dict[str, RoomPolicy | None]
+
+
+class InstallationAuthorization(pydantic.BaseModel):
+    admin_user_emails: list[str] = pydantic.Field(default_factory=list)
+    room_policies: RoomPolicyMap = pydantic.Field(default_factory=dict)
+
+
 # ----------------------------------------------------------------------------
 #   'ask_with_rich_citations' tool models
 # ----------------------------------------------------------------------------
