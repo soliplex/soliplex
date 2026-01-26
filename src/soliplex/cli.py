@@ -6,6 +6,7 @@ import typing
 from importlib.metadata import version
 
 import requests
+import sqlalchemy
 import typer
 import uvicorn
 import uvicorn.config
@@ -19,6 +20,7 @@ from soliplex import main
 from soliplex import models
 from soliplex import ollama
 from soliplex import secrets
+from soliplex.authz import schema as authz_schema
 
 
 class ReloadOption(str, enum.Enum):
@@ -205,7 +207,7 @@ Incompatible with '--no-auth-mode'.
     if no_auth_mode and (add_admin_user is not None):
         the_console.rule("Incompatible CLI arguments")
         the_console.print(
-            "'--no-auth-mode' and '--add-admin-user- are compatible"
+            "'--no-auth-mode' and '--add-admin-user- are incompatible."
         )
         raise typer.Exit()
 
@@ -500,6 +502,44 @@ def config_as_yaml(
     the_console.print(f"# Source: {installation_path}")
     the_console.print(f"#{'-' * 78}")
     the_console.print(exported_yaml)
+
+
+@the_cli.command(
+    "add-admin-user",
+)
+def add_admin_user(
+    ctx: typer.Context,
+    installation_path: installation_path_type,
+    admin_user_email: str,
+    skip_ram_db_check: bool = typer.Option(
+        False,
+        "-s",
+        "--skip-ram-db-check",
+        help="Skip check for RAM-based DB",
+    ),
+):
+    """Add an admin user to the installation's authorization database."""
+    the_installation = get_installation(installation_path)
+    dburi = the_installation.authorization_dburi_sync
+
+    if dburi == config.SYNC_MEMORY_ENGINE_URL and not skip_ram_db_check:
+        the_console.rule("Authorization DB is RAM-based")
+        the_console.print(
+            "'add-admin-user' is a no-op with a RAM-based database"
+        )
+        raise typer.Exit()
+
+    authz_engine = sqlalchemy.create_engine(
+        the_installation.authorization_dburi_sync,
+    )
+    with authz_engine.begin() as connection:
+        authz_schema.Base.metadata.create_all(connection)
+        installation.add_user_as_admin(
+            connection=connection,
+            email=admin_user_email,
+        )
+        the_console.rule("Admin user added")
+        the_console.print(f"Added {admin_user_email} as an admin user")
 
 
 @the_cli.command(
