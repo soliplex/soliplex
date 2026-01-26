@@ -22,6 +22,10 @@ class AuthorizationPolicy(abc.ABC):
     """Protocol for checking / managing authorization policies"""
 
     @abc.abstractmethod
+    async def list_admin_users(self) -> list[str]:
+        """List user emails in the admin users table."""
+
+    @abc.abstractmethod
     async def add_admin_user(self, email: str):
         """Add a user to the admin users table."""
 

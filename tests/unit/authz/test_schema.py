@@ -429,13 +429,20 @@ async def the_async_session(the_async_engine):  # pragma: NO COVER
 async def test_authorizationpolicy_crud_admin_user(the_async_session):
     ap = authz_schema.AuthorizationPolicy(the_async_session)
 
+    found = await ap.list_admin_users()
+
+    assert found == []
+
     await ap.add_admin_user(email=EMAIL)
     user = await authz_schema._find_admin_user(
         email=EMAIL,
         session=the_async_session,
     )
     assert user is not None
+    await the_async_session.commit()
 
+    found = await ap.list_admin_users()
+    assert found == [EMAIL]
     await the_async_session.commit()
 
     with pytest.raises(authz_schema.AdminUserExists):
@@ -448,12 +455,20 @@ async def test_authorizationpolicy_crud_admin_user(the_async_session):
     assert no_dupe is user
     await the_async_session.commit()
 
+    found = await ap.list_admin_users()
+    assert found == [EMAIL]
+    await the_async_session.commit()
+
     await ap.remove_admin_user(email=EMAIL)
     gone = await authz_schema._find_admin_user(
         email=EMAIL,
         session=the_async_session,
     )
     assert gone is None
+    await the_async_session.commit()
+
+    found = await ap.list_admin_users()
+    assert found == []
     await the_async_session.commit()
 
     with pytest.raises(authz_schema.NoSuchAdminUser):

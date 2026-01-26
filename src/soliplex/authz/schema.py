@@ -266,6 +266,15 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
         async with self._session.begin():
             yield self._session
 
+    async def list_admin_users(self) -> list[str]:
+        """List user emails in the admin users table."""
+        query = sqla_sql.select(AdminUser)
+        async with self.session as session:
+            result = [
+                admin_user.email for admin_user in await session.scalars(query)
+            ]
+            return result
+
     async def add_admin_user(self, email: str):
         """Add a user to the admin users table."""
         async with self.session as session:
