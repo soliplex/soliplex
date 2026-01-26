@@ -418,7 +418,9 @@ def list_rooms(
     the_console.rule("Configured Rooms")
     the_console.line()
 
-    for room_config in the_installation.get_room_configs(None).values():
+    # Deliberately bypass auth check done by 'get_room_configs' here.
+    available_rooms = the_installation._config.room_configs
+    for room_config in available_rooms.values():
         the_console.print(f"- [ {room_config.id} ] {room_config.name}: ")
         the_console.print(f"  {room_config.description}")
         the_console.line()
@@ -438,7 +440,9 @@ def list_completions(
     the_console.rule("Configured Completions")
     the_console.line()
 
-    for compl_config in the_installation.get_completion_configs(None).values():
+    # Deliberately bypass auth check done by 'get_room_configs' here.
+    available_completions = the_installation._config.completion_configs
+    for compl_config in available_completions.values():
         the_console.print(f"- [ {compl_config.id} ] {compl_config.name}: ")
         the_console.line()
 
