@@ -15,8 +15,19 @@ from soliplex.views import installation as installation_views
 from soliplex.views import quizzes as quizzes_views
 from soliplex.views import rooms as rooms_views
 
+ADMIN_USER_EMAIL = "admin@example.com"
 EXPLICIT_INST_PATH = "/explicit"
 ENVIRON_INST_PATH = "/environ"
+
+
+@pytest.fixture(scope="module", params=[None, ADMIN_USER_EMAIL])
+def add_admin_user_kwargs(request):
+    kw = {}
+
+    if request.param is not None:
+        kw["add_admin_user"] = request.param
+
+    return kw
 
 
 @pytest.fixture(scope="module", params=[False, True])
@@ -25,12 +36,19 @@ def no_auth_mode_kwargs(request):
     return kw
 
 
-def test_curry_lifespan(no_auth_mode_kwargs):
+def test_curry_lifespan(add_admin_user_kwargs, no_auth_mode_kwargs):
     exp_path = EXPLICIT_INST_PATH
+
+    if add_admin_user_kwargs:
+        exp_add_admin_user = add_admin_user_kwargs["add_admin_user"]
+    else:
+        exp_add_admin_user = None
+
     exp_no_auth_mode = no_auth_mode_kwargs["no_auth_mode"]
 
     found = main.curry_lifespan(
         installation_path=EXPLICIT_INST_PATH,
+        **add_admin_user_kwargs,
         **no_auth_mode_kwargs,
     )
 
@@ -39,6 +57,7 @@ def test_curry_lifespan(no_auth_mode_kwargs):
     assert found.keywords == {
         "installation_path": pathlib.Path(exp_path),
         "no_auth_mode": exp_no_auth_mode,
+        "add_admin_user": exp_add_admin_user,
     }
 
 
@@ -145,3 +164,63 @@ def test_app_with_soliplex_routers():
     assert mock.call(installation_views.router, prefix="/api") in air_calls
     assert mock.call(quizzes_views.router, prefix="/api") in air_calls
     assert mock.call(rooms_views.router, prefix="/api") in air_calls
+
+
+@pytest.mark.parametrize("w_add_admin_user", [None, ADMIN_USER_EMAIL])
+@pytest.mark.parametrize("w_no_auth_mode", [False, True])
+def test_create_app_with_explicit_overrides(
+    w_no_auth_mode,
+    w_add_admin_user,
+):
+    curry_lifespan = mock.Mock(spec_set=())
+    app_with_lifespan = mock.Mock(spec_set=())
+    app_with_cors = mock.Mock(spec_set=())
+    app_with_session = mock.Mock(spec_set=())
+    app_with_git_hash = mock.Mock(spec_set=())
+    app_with_soliplex_routers = mock.Mock(spec_set=())
+
+    if w_add_admin_user is not None:
+        found = main.create_app(
+            installation_path=EXPLICIT_INST_PATH,
+            no_auth_mode=w_no_auth_mode,
+            add_admin_user=w_add_admin_user,
+            curry_lifespan=curry_lifespan,
+            app_with_lifespan=app_with_lifespan,
+            app_with_cors=app_with_cors,
+            app_with_session=app_with_session,
+            app_with_git_hash=app_with_git_hash,
+            app_with_soliplex_routers=app_with_soliplex_routers,
+        )
+    else:
+        found = main.create_app(
+            installation_path=EXPLICIT_INST_PATH,
+            no_auth_mode=w_no_auth_mode,
+            curry_lifespan=curry_lifespan,
+            app_with_lifespan=app_with_lifespan,
+            app_with_cors=app_with_cors,
+            app_with_session=app_with_session,
+            app_with_git_hash=app_with_git_hash,
+            app_with_soliplex_routers=app_with_soliplex_routers,
+        )
+
+    assert found is app_with_soliplex_routers.return_value
+    app_with_soliplex_routers.assert_called_once_with(
+        app_with_git_hash.return_value,
+    )
+    app_with_git_hash.assert_called_once_with(
+        app_with_session.return_value,
+    )
+    app_with_session.assert_called_once_with(
+        app_with_cors.return_value,
+    )
+    app_with_cors.assert_called_once_with(
+        app_with_lifespan.return_value,
+    )
+    app_with_lifespan.assert_called_once_with(
+        curry_lifespan.return_value,
+    )
+    curry_lifespan.assert_called_once_with(
+        installation_path=EXPLICIT_INST_PATH,
+        no_auth_mode=w_no_auth_mode,
+        add_admin_user=w_add_admin_user,
+    )

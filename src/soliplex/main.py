@@ -25,13 +25,19 @@ from soliplex.views import rooms as rooms_views
 from soliplex.views import streaming as streaming_views
 
 
-def curry_lifespan(installation_path: pathlib.Path, no_auth_mode: bool):
+def curry_lifespan(
+    *,
+    installation_path: pathlib.Path,
+    no_auth_mode: bool,
+    add_admin_user: str = None,
+):
     installation_path = pathlib.Path(installation_path)
 
     return functools.partial(
         installation.lifespan,
         installation_path=installation_path,
         no_auth_mode=no_auth_mode,
+        add_admin_user=add_admin_user,
     )
 
 
@@ -100,6 +106,7 @@ def app_with_soliplex_routers(app: fastapi.FastAPI) -> fastapi.FastAPI:
 def create_app(
     installation_path: pathlib.Path,
     no_auth_mode: bool,
+    add_admin_user: str = None,
     curry_lifespan=curry_lifespan,
     app_with_lifespan=app_with_lifespan,
     app_with_cors=app_with_cors,
@@ -115,6 +122,7 @@ def create_app(
     curried_lifespan = curry_lifespan(
         installation_path=installation_path,
         no_auth_mode=no_auth_mode,
+        add_admin_user=add_admin_user,
     )
     app = app_with_lifespan(curried_lifespan)
     app = app_with_cors(app)

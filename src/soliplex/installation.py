@@ -339,6 +339,13 @@ def apply_logfire_configuration(
         logfire.instrument_fastapi(app, capture_headers=True)
 
 
+def add_user_as_admin(connection, *, email):
+    insert_stmt = sqla_sql.insert(authz_schema.AdminUser).values(
+        email=email,
+    )
+    connection.execute(insert_stmt)
+
+
 def add_no_auth_user_as_admin(connection):
     query = sqla_sql.select(authz_schema.AdminUser)
     result = connection.execute(query)
@@ -346,16 +353,15 @@ def add_no_auth_user_as_admin(connection):
 
     if not has_admin_users:
         email = NO_AUTH_MODE_USER_TOKEN["email"]
-        insert_stmt = sqla_sql.insert(authz_schema.AdminUser).values(
-            email=email,
-        )
-        connection.execute(insert_stmt)
+        add_user_as_admin(connection, email=email)
 
 
 async def lifespan(
     app: fastapi.FastAPI,
+    *,
     installation_path: pathlib.Path,
     no_auth_mode: bool = False,
+    add_admin_user: str = None,
 ):
     i_config = config.load_installation(installation_path)
 
@@ -384,7 +390,12 @@ async def lifespan(
         await ra_connection.run_sync(
             authz_schema.Base.metadata.create_all,
         )
-        if no_auth_mode:
+        if add_admin_user:
+            await ra_connection.run_sync(
+                add_user_as_admin,
+                email=add_admin_user,
+            )
+        elif no_auth_mode:
             await ra_connection.run_sync(
                 add_no_auth_user_as_admin,
             )

@@ -129,7 +129,20 @@ def serve(
     no_auth_mode: bool = typer.Option(
         False,
         "--no-auth-mode",
-        help="Disable OIDC authentication providers",
+        help="""\
+Disable OIDC authentication providers
+
+Incompatible with '--add-admin-user'.
+""",
+    ),
+    add_admin_user: str | None = typer.Option(
+        None,
+        "--add-admin-user",
+        help="""\
+Add an admin user to the authorization database
+
+Incompatible with '--no-auth-mode'.
+""",
     ),
     host: str = typer.Option(
         "127.0.0.1",
@@ -189,6 +202,13 @@ def serve(
     ),
 ):
     """Run the Soliplex server"""
+    if no_auth_mode and (add_admin_user is not None):
+        the_console.rule("Incompatible CLI arguments")
+        the_console.print(
+            "'--no-auth-mode' and '--add-admin-user- are compatible"
+        )
+        raise typer.Exit()
+
     if reload in (ReloadOption.PYTHON, ReloadOption.BOTH):
         reload_dirs.extend(soliplex.__path__)
 
@@ -248,7 +268,11 @@ def serve(
             **uvicorn_kw,
         )
     else:
-        app = main.create_app(installation_path, no_auth_mode=no_auth_mode)
+        app = main.create_app(
+            installation_path=installation_path,
+            no_auth_mode=no_auth_mode,
+            add_admin_user=add_admin_user,
+        )
         uvicorn.run(app, **uvicorn_kw)
 
 

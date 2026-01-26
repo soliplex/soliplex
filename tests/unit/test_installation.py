@@ -18,6 +18,7 @@ KEY = "test-key"
 VALUE = "test-value"
 DEFAULT = "test-default"
 
+ADMIN_USER_EMAIL = "admin@example.com"
 SECRET_NAME_1 = "TEST_SECRET"
 SECRET_NAME_2 = "OTHER_SECRET"
 SECRET_CONFIG_1 = config.SecretConfig(secret_name=SECRET_NAME_1)
@@ -1019,8 +1020,19 @@ def test_apply_logfire_configuration(logfire, w_logfire_config):
         )
 
 
+def test_add_user_as_admin():
+    conn = mock.create_autospec(sqlalchemy.Connection)
+
+    installation.add_user_as_admin(conn, email=ADMIN_USER_EMAIL)
+
+    (insert_call,) = conn.execute.call_args_list
+    (insert,) = insert_call.args
+    assert insert.table.name == "admin_users"
+
+
 @pytest.mark.parametrize("w_admin_user", [False, True])
-def test_add_no_auth_user_as_admin(w_admin_user):
+@mock.patch("soliplex.installation.add_user_as_admin")
+def test_add_no_auth_user_as_admin(auaa, w_admin_user):
     already = object()
     query_result = mock.Mock(spec_set=["first"])
     insert_result = mock.Mock(spec_set=())
@@ -1044,17 +1056,17 @@ def test_add_no_auth_user_as_admin(w_admin_user):
 
     installation.add_no_auth_user_as_admin(conn)
 
-    if w_admin_user:  # no call to insert
-        (query_call,) = conn.execute.call_args_list
-    else:
-        (query_call, insert_call) = conn.execute.call_args_list
-
+    (query_call,) = conn.execute.call_args_list
     (query,) = query_call.args
     assert str(query).startswith("SELECT admin_users")
 
     if not w_admin_user:
-        (insert,) = insert_call.args
-        assert str(insert).startswith("INSERT INTO admin_users")
+        (auaa_called,) = auaa.call_args_list
+        (conn,) = auaa_called.args
+        assert isinstance(conn, sqlalchemy.Connection)
+        assert auaa_called.kwargs == {
+            "email": installation.NO_AUTH_MODE_USER_TOKEN["email"],
+        }
 
 
 def _mock_mcp_app(key):
@@ -1072,6 +1084,7 @@ def mcp_apps():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("w_add_admin_user", [None, ADMIN_USER_EMAIL])
 @pytest.mark.parametrize(
     "w_no_auth_mode, exp_oidc_paths",
     [
@@ -1081,6 +1094,7 @@ def mcp_apps():
     ],
 )
 @mock.patch("soliplex.installation.add_no_auth_user_as_admin")
+@mock.patch("soliplex.installation.add_user_as_admin")
 @mock.patch("soliplex.installation.apply_logfire_configuration")
 @mock.patch("soliplex.secrets.resolve_secrets")
 @mock.patch("soliplex.mcp_server.setup_mcp_for_rooms")
@@ -1090,10 +1104,12 @@ async def test_lifespan(
     smfr,
     srs,
     alc,
+    auaa,
     anauaa,
     mcp_apps,
     w_no_auth_mode,
     exp_oidc_paths,
+    w_add_admin_user,
 ):
     INSTALLATION_PATH = "/path/to/installation"
 
@@ -1110,17 +1126,21 @@ async def test_lifespan(
     load_installation.return_value = i_config
     app = mock.create_autospec(fastapi.FastAPI)
 
-    kwargs = {}
+    kwargs = {
+        "installation_path": INSTALLATION_PATH,
+    }
     if w_no_auth_mode is not None:
         exp_no_auth_mode = kwargs["no_auth_mode"] = w_no_auth_mode
     else:
         exp_no_auth_mode = False
 
+    if w_add_admin_user is not None:
+        kwargs["add_admin_user"] = w_add_admin_user
+
     found = [
         item
         async for item in installation.lifespan(
             app,
-            INSTALLATION_PATH,
             **kwargs,
         )
     ]
@@ -1150,7 +1170,12 @@ async def test_lifespan(
     ):
         assert f_call.args == ("/mcp/" + key, mcp_app)
 
-    if exp_no_auth_mode:
+    if w_add_admin_user:
+        (auaa_called,) = auaa.call_args_list
+        (conn,) = auaa_called.args
+        assert isinstance(conn, sqlalchemy.Connection)
+        assert auaa_called.kwargs == {"email": w_add_admin_user}
+    elif exp_no_auth_mode:
         (anauaa_called,) = anauaa.call_args_list
         (conn,) = anauaa_called.args
         assert isinstance(conn, sqlalchemy.Connection)
