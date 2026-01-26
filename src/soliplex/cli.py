@@ -6,7 +6,6 @@ import typing
 from importlib.metadata import version
 
 import requests
-import sqlalchemy
 import typer
 import uvicorn
 import uvicorn.config
@@ -14,6 +13,7 @@ import yaml
 from rich import console
 
 import soliplex
+from soliplex import authz as authz_package
 from soliplex import config
 from soliplex import installation
 from soliplex import main
@@ -504,6 +504,78 @@ def config_as_yaml(
     the_console.print(exported_yaml)
 
 
+def _check_ram_dburi(dburi: str, command: str):
+    if dburi == config.SYNC_MEMORY_ENGINE_URL:
+        the_console.rule("Authorization DB is RAM-based")
+        the_console.print(f"'{command}' is a no-op with a RAM-based database")
+        raise typer.Exit()
+
+
+def _dump_admin_users(session):
+    with session:
+        admin_users = [
+            admin_user.email
+            for admin_user in session.query(
+                authz_schema.AdminUser,
+            )
+        ]
+    print(json.dumps({"admin_users": admin_users}))
+
+
+@the_cli.command(
+    "list-admin-users",
+)
+def list_admin_users(
+    ctx: typer.Context,
+    installation_path: installation_path_type,
+    skip_ram_db_check: bool = typer.Option(
+        False,
+        "-s",
+        "--skip-ram-db-check",
+        help="Skip check for RAM-based DB",
+    ),
+):
+    """Show admin users defined in the installation's authz database."""
+    the_installation = get_installation(installation_path)
+    dburi = the_installation.authorization_dburi_sync
+
+    if not skip_ram_db_check:
+        _check_ram_dburi(dburi, "list-admin-users")
+
+    session = authz_schema.get_session(dburi, init_schema=True)
+    _dump_admin_users(session)
+
+
+@the_cli.command(
+    "clear-admin-users",
+)
+def clear_admin_users(
+    ctx: typer.Context,
+    installation_path: installation_path_type,
+    skip_ram_db_check: bool = typer.Option(
+        False,
+        "-s",
+        "--skip-ram-db-check",
+        help="Skip check for RAM-based DB",
+    ),
+):
+    """Clear admin user from the installation's authz database."""
+    the_installation = get_installation(installation_path)
+    dburi = the_installation.authorization_dburi_sync
+
+    if not skip_ram_db_check:
+        _check_ram_dburi(dburi, "clear-admin-users")
+
+    session = authz_schema.get_session(dburi, init_schema=True)
+
+    with session:
+        for admin_user in session.query(authz_schema.AdminUser):
+            session.delete(admin_user)
+        session.commit()
+
+        _dump_admin_users(session)
+
+
 @the_cli.command(
     "add-admin-user",
 )
@@ -518,28 +590,191 @@ def add_admin_user(
         help="Skip check for RAM-based DB",
     ),
 ):
-    """Add an admin user to the installation's authorization database."""
+    """Add an admin user to the installation's authz database."""
     the_installation = get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
 
-    if dburi == config.SYNC_MEMORY_ENGINE_URL and not skip_ram_db_check:
-        the_console.rule("Authorization DB is RAM-based")
-        the_console.print(
-            "'add-admin-user' is a no-op with a RAM-based database"
-        )
-        raise typer.Exit()
+    if not skip_ram_db_check:
+        _check_ram_dburi(dburi, "add-admin-user")
 
-    authz_engine = sqlalchemy.create_engine(
-        the_installation.authorization_dburi_sync,
-    )
-    with authz_engine.begin() as connection:
-        authz_schema.Base.metadata.create_all(connection)
-        installation.add_user_as_admin(
-            connection=connection,
-            email=admin_user_email,
+    session = authz_schema.get_session(dburi, init_schema=True)
+
+    with session:
+        admin_user = authz_schema.AdminUser(email=admin_user_email)
+        session.add(admin_user)
+        session.commit()
+
+        _dump_admin_users(session)
+
+
+def _dump_room_policy(session, room_id):
+    with session:
+        policy = (
+            session.query(
+                authz_schema.RoomPolicy,
+            )
+            .where(
+                authz_schema.RoomPolicy.room_id == room_id,
+            )
+            .first()
         )
-        the_console.rule("Admin user added")
-        the_console.print(f"Added {admin_user_email} as an admin user")
+
+        if policy is None:
+            to_dump = policy
+        else:
+            to_dump = policy.as_model.model_dump()
+            to_dump["default_allow_deny"] = str(to_dump["default_allow_deny"])
+
+            for dump_ae in to_dump["acl_entries"]:
+                dump_ae["allow_deny"] = str(dump_ae["allow_deny"])
+
+    print(json.dumps(to_dump))
+
+
+@the_cli.command(
+    "show-room-authz",
+)
+def show_room_authz(
+    ctx: typer.Context,
+    installation_path: installation_path_type,
+    room_id: str,
+    skip_ram_db_check: bool = typer.Option(
+        False,
+        "-s",
+        "--skip-ram-db-check",
+        help="Skip check for RAM-based DB",
+    ),
+):
+    """Show room ACL entries defined in the installation's authz database."""
+    the_installation = get_installation(installation_path)
+    dburi = the_installation.authorization_dburi_sync
+
+    if not skip_ram_db_check:
+        _check_ram_dburi(dburi, "show-room-authz")
+
+    session = authz_schema.get_session(dburi, init_schema=True)
+
+    _dump_room_policy(session, room_id)
+
+
+@the_cli.command(
+    "clear-room-authz",
+)
+def clear_room_authz(
+    ctx: typer.Context,
+    installation_path: installation_path_type,
+    room_id: str,
+    make_room_private: bool = typer.Option(
+        False,
+        "--make-room-private",
+        help="Make room private",
+    ),
+    skip_ram_db_check: bool = typer.Option(
+        False,
+        "-s",
+        "--skip-ram-db-check",
+        help="Skip check for RAM-based DB",
+    ),
+):
+    """Show room ACL entries defined in the installation's authz database."""
+    the_installation = get_installation(installation_path)
+    dburi = the_installation.authorization_dburi_sync
+
+    if not skip_ram_db_check:
+        _check_ram_dburi(dburi, "clear-room-authz")
+
+    session = authz_schema.get_session(dburi, init_schema=True)
+
+    with session:
+        policy = (
+            session.query(
+                authz_schema.RoomPolicy,
+            )
+            .where(
+                authz_schema.RoomPolicy.room_id == room_id,
+            )
+            .first()
+        )
+
+        before_entries = len(session.query(authz_schema.ACLEntry).all())
+
+        if policy is not None:
+            # for acl_entry in policy.acl_entries:
+            #    session.delete(acl_entry)
+            should_remove = len(policy.acl_entries)
+
+            session.delete(policy)
+            session.commit()
+
+        after_entries = len(session.query(authz_schema.ACLEntry).all())
+        assert after_entries == before_entries - should_remove
+
+        if make_room_private:
+            policy = authz_schema.RoomPolicy(room_id=room_id)
+            session.add(policy)
+            session.commit()
+
+    _dump_room_policy(session, room_id)
+
+
+@the_cli.command(
+    "add-room-user",
+)
+def add_room_user(
+    ctx: typer.Context,
+    installation_path: installation_path_type,
+    room_id: str,
+    user_email: str,
+    skip_ram_db_check: bool = typer.Option(
+        False,
+        "-s",
+        "--skip-ram-db-check",
+        help="Skip check for RAM-based DB",
+    ),
+):
+    """Add a user to the ACL for a room."""
+    the_installation = get_installation(installation_path)
+    dburi = the_installation.authorization_dburi_sync
+
+    if not skip_ram_db_check:
+        _check_ram_dburi(dburi, "add-room-user")
+
+    session = authz_schema.get_session(dburi, init_schema=True)
+
+    with session:
+        policy = (
+            session.query(
+                authz_schema.RoomPolicy,
+            )
+            .where(
+                authz_schema.RoomPolicy.room_id == room_id,
+            )
+            .first()
+        )
+
+        if policy is None:
+            policy = authz_schema.RoomPolicy(room_id=room_id)
+            session.add(policy)
+            session.commit()
+
+        existing_acls = [
+            acl_entry
+            for acl_entry in policy.acl_entries
+            if acl_entry.email == user_email
+        ]
+        for to_remove in existing_acls:
+            session.delete(to_remove)
+        session.commit()
+
+        new_acl = authz_schema.ACLEntry(
+            room_policy=policy,
+            allow_deny=authz_package.AllowDeny.ALLOW,
+            email=user_email,
+        )
+        session.add(new_acl)
+        session.commit()
+
+    _dump_room_policy(session, room_id)
 
 
 @the_cli.command(

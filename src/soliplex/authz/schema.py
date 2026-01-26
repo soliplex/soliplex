@@ -414,20 +414,6 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
                     await session.delete(policy)
 
 
-def get_session(
-    engine_url=config.SYNC_MEMORY_ENGINE_URL,
-    init_schema=False,
-    **engine_kwargs,
-):
-    engine = sqlalchemy.create_engine(engine_url, **engine_kwargs)
-
-    if init_schema:
-        with engine.connect() as connection:
-            Base.metadata.create_all(connection)
-
-    return sqla_orm.Session(bind=engine)
-
-
 async def get_async_session(
     engine_url=config.ASYNC_MEMORY_ENGINE_URL,
     init_schema=False,
@@ -440,3 +426,17 @@ async def get_async_session(
             await connection.run_sync(Base.metadata.create_all)
 
     return sqla_asyncio.AsyncSession(bind=engine)
+
+
+def get_session(
+    engine_url=config.SYNC_MEMORY_ENGINE_URL,
+    init_schema=False,
+    **engine_kwargs,
+):
+    engine = sqlalchemy.create_engine(engine_url, **engine_kwargs)
+
+    if init_schema:
+        with engine.connect() as connection:
+            Base.metadata.create_all(connection)
+
+    return sqla_orm.Session(bind=engine)

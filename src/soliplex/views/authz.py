@@ -79,7 +79,7 @@ async def post_room_authz(
     return fastapi.Response(status_code=204)
 
 
-@util.logfire_span("DELTE /v1/rooms/{room_id}/authz")
+@util.logfire_span("DELETE /v1/rooms/{room_id}/authz")
 @router.delete(
     "/v1/rooms/{room_id}/authz",
     summary="Delete authorization policy for a room",
