@@ -64,8 +64,8 @@ class ChatAgentWrapper:
         else:
             session_state = ChatSessionState()
 
-        if self.background_context:
-            session_state.background_context = self.background_context
+        if self.background_context and not session_state.initial_context:
+            session_state.initial_context = self.background_context
 
         async with HaikuRAG(
             db_path=self.db_path,
