@@ -825,7 +825,8 @@ class ThreadStorage(agui_package.ThreadStorage):
             session.add(run)
 
             for event in events:
-                session.add(RunEvent(run=run, data=event.model_dump(mode="json")))
+                data = event.model_dump(mode="json")
+                session.add(RunEvent(run=run, data=data))
 
         return events
 
