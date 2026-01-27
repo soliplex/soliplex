@@ -944,6 +944,39 @@ TEST_LOGFIRE_IC_OTHER_ENV = {
     "LOGFIRE_BASE_URL": TEST_LOGFIRE_OTHER_BASE_URL,
 }
 
+W_SOME_SCALARS_LOGFIRE_CONFIG_INIT_KW = {
+    "token": "secret:LOGFIRE_TOKEN",
+    "service_name": "NOT_ENVVAR_LOGFIRE_SERVICE_NAME",
+    "service_version": "NOT_ENVVAR_LOGFIRE_SERVICE_VERSION",
+    "environment": "NOT_ENVVAR_LOGFIRE_ENVIRONMENT",
+}
+W_SOME_SCALARS_LOGFIRE_CONFIG_YAML = """\
+token: "secret:LOGFIRE_TOKEN"
+service_name: "NOT_ENVVAR_LOGFIRE_SERVICE_NAME"
+service_version: "NOT_ENVVAR_LOGFIRE_SERVICE_VERSION"
+environment: "NOT_ENVVAR_LOGFIRE_ENVIRONMENT"
+"""
+W_SOME_SCALARS_LOGFIRE_CONFIG_EXP_LC_KWARGS = {
+    "token": TEST_LOGFIRE_OTHER_TOKEN,
+    "service_name": "NOT_ENVVAR_LOGFIRE_SERVICE_NAME",
+    "service_version": "NOT_ENVVAR_LOGFIRE_SERVICE_VERSION",
+    "environment": "NOT_ENVVAR_LOGFIRE_ENVIRONMENT",
+    "config_dir": TEST_LOGFIRE_OTHER_CONFIG_DIR,
+    "data_dir": TEST_LOGFIRE_OTHER_DATA_DIR,
+    "min_level": TEST_LOGFIRE_OTHER_MIN_LEVEL,
+    "add_baggage_to_attributes": True,
+}
+W_SOME_SCALARS_LOGFIRE_CONFIG_AS_YAML = {
+    "token": "secret:LOGFIRE_TOKEN",
+    "service_name": "NOT_ENVVAR_LOGFIRE_SERVICE_NAME",
+    "service_version": "NOT_ENVVAR_LOGFIRE_SERVICE_VERSION",
+    "environment": "NOT_ENVVAR_LOGFIRE_ENVIRONMENT",
+    "config_dir": "env:LOGFIRE_CONFIG_DIR",
+    "data_dir": "env:LOGFIRE_DATA_DIR",
+    "min_level": "env:LOGFIRE_MIN_LEVEL",
+    "add_baggage_to_attributes": True,
+}
+
 W_SCALARS_LOGFIRE_CONFIG_INIT_KW = {
     "token": "secret:LOGFIRE_TOKEN",
     "service_name": "env:LOGFIRE_SERVICE_NAME",
@@ -4475,6 +4508,12 @@ def test_lfifapi_from_yaml(
             W_TOKEN_ONLY_LOGFIRE_CONFIG_EXP_LC_KWARGS,
         ),
         (
+            W_SOME_SCALARS_LOGFIRE_CONFIG_INIT_KW,
+            TEST_LOGFIRE_IC_OTHER_SECRETS,
+            TEST_LOGFIRE_IC_OTHER_ENV,
+            W_SOME_SCALARS_LOGFIRE_CONFIG_EXP_LC_KWARGS,
+        ),
+        (
             W_SCALARS_LOGFIRE_CONFIG_INIT_KW,
             TEST_LOGFIRE_IC_OTHER_SECRETS,
             TEST_LOGFIRE_IC_OTHER_ENV,
@@ -4504,10 +4543,7 @@ def test_logfireconfig_logfire_config_kwargs(
     get_secret = installation_config.get_secret
     get_secret.side_effect = ic_secrets.get
 
-    def _getenv(key):
-        return ic_env.get(key[4:])
-
-    installation_config.get_environment.side_effect = _getenv
+    installation_config.get_environment.side_effect = ic_env.get
 
     lf_config = config.LogfireConfig(
         _installation_config=installation_config,
@@ -4525,6 +4561,10 @@ def test_logfireconfig_logfire_config_kwargs(
         (
             W_TOKEN_ONLY_LOGFIRE_CONFIG_INIT_KW,
             W_TOKEN_ONLY_LOGFIRE_CONFIG_AS_YAML,
+        ),
+        (
+            W_SOME_SCALARS_LOGFIRE_CONFIG_INIT_KW,
+            W_SOME_SCALARS_LOGFIRE_CONFIG_AS_YAML,
         ),
         (
             W_SCALARS_LOGFIRE_CONFIG_INIT_KW,
@@ -4570,6 +4610,10 @@ def test_logfireconfig_logfire_as_yaml(
         (
             W_TOKEN_ONLY_LOGFIRE_CONFIG_YAML,
             W_TOKEN_ONLY_LOGFIRE_CONFIG_INIT_KW,
+        ),
+        (
+            W_SOME_SCALARS_LOGFIRE_CONFIG_YAML,
+            W_SOME_SCALARS_LOGFIRE_CONFIG_INIT_KW,
         ),
         (
             W_SCALARS_LOGFIRE_CONFIG_YAML,

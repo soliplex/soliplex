@@ -1804,16 +1804,26 @@ class LogfireConfig:
 
     @property
     def logfire_config_kwargs(self) -> dict[str, typing.Any]:
-        getenv = self._installation_config.get_environment
+        """Return a mapping to be passed as kwargs to 'logfire.config()'
+
+        Resolve values prefixed with 'env:' using the installation
+        configuration environment.
+        """
+
+        def maybe_getenv(key):
+            if key.startswith("env:"):
+                return self._installation_config.get_environment(key[4:])
+            else:
+                return key
 
         kwargs = {
             "token": self._installation_config.get_secret(self.token),
-            "service_name": getenv(self.service_name),
-            "service_version": getenv(self.service_version),
-            "environment": getenv(self.environment),
-            "config_dir": getenv(self.config_dir),
-            "data_dir": getenv(self.data_dir),
-            "min_level": getenv(self.min_level),
+            "service_name": maybe_getenv(self.service_name),
+            "service_version": maybe_getenv(self.service_version),
+            "environment": maybe_getenv(self.environment),
+            "config_dir": maybe_getenv(self.config_dir),
+            "data_dir": maybe_getenv(self.data_dir),
+            "min_level": maybe_getenv(self.min_level),
             "add_baggage_to_attributes": self.add_baggage_to_attributes,
         }
 
@@ -1825,7 +1835,7 @@ class LogfireConfig:
 
         if self.base_url is not None:
             kwargs["advanced"] = {
-                "base_url": getenv(self.base_url),
+                "base_url": maybe_getenv(self.base_url),
             }
 
         if self.scrubbing_patterns is not None:
