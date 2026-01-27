@@ -626,6 +626,7 @@ agent:
     system_prompt: "{SYSTEM_PROMPT}"
 """
 
+EXTRA_AGUI_FEATURE_NAME = "test-agui-feature"
 FULL_ROOM_CONFIG_KW = {
     "id": ROOM_ID,
     "name": ROOM_NAME,
@@ -651,6 +652,9 @@ FULL_ROOM_CONFIG_KW = {
                 provider_base_url=TEST_QUIZ_PROVIDER_BASE_URL,
             ),
         ),
+    ],
+    "_agui_feature_names": [
+        EXTRA_AGUI_FEATURE_NAME,
     ],
     "allow_mcp": True,
     "tool_configs": {
@@ -731,6 +735,8 @@ quizzes:
         id: "test-quiz-judge"
         model_name: {TEST_QUIZ_MODEL_EXPLICIT}
         provider_base_url: {TEST_QUIZ_PROVIDER_BASE_URL}
+agui_feature_names:
+  - {EXTRA_AGUI_FEATURE_NAME}
 allow_mcp: true
 """
 
@@ -3955,7 +3961,14 @@ def test_roomconfig_sort_key(w_order):
     "rc_kwargs, expected",
     [
         (BARE_ROOM_CONFIG_KW.copy(), ()),
-        (FULL_ROOM_CONFIG_KW.copy(), ("filter_documents", "ask_history")),
+        (
+            FULL_ROOM_CONFIG_KW.copy(),
+            [
+                EXTRA_AGUI_FEATURE_NAME,
+                "filter_documents",
+                "ask_history",
+            ],
+        ),
     ],
 )
 def test_roomconfig_agui_feature_names(rc_kwargs, expected):
@@ -3963,7 +3976,7 @@ def test_roomconfig_agui_feature_names(rc_kwargs, expected):
 
     found = room_config.agui_feature_names
 
-    assert found == expected
+    assert set(found) == set(expected)
 
 
 @pytest.mark.parametrize("w_config_path", [False, True])
