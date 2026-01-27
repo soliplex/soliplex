@@ -310,53 +310,16 @@ def test_chat_agent_factory_extracts_background_context(
 
 @pytest.mark.asyncio
 @mock.patch("soliplex.haiku_chat.HaikuRAG")
-async def test_chat_agent_wrapper_uses_configured_background_context(
+async def test_chat_agent_wrapper_seeds_session_context_from_background(
     mock_haiku_rag,
 ):
-    """Test that configured background_context is used when state has none."""
-    mock_agent = mock.MagicMock()
-    mock_config = mock.MagicMock()
-    mock_client = mock.MagicMock()
-
-    mock_haiku_rag.return_value.__aenter__.return_value = mock_client
-
-    async def mock_events():
-        yield "event"
-
-    mock_agent.run_stream_events.return_value = mock_events()
-
-    wrapper = haiku_chat.ChatAgentWrapper(
-        agent=mock_agent,
-        config=mock_config,
-        db_path=Path(RAG_DB_PATH),
-        background_context="Configured context from room.",
-    )
-
-    mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
-    mock_deps.state = {}
-
-    events = []
-    async for event in wrapper.run_stream_events(
-        message_history=[],
-        deps=mock_deps,
-    ):
-        events.append(event)
-
-    call_kwargs = mock_agent.run_stream_events.call_args.kwargs
-    chat_deps = call_kwargs["deps"]
-    assert chat_deps.session_state.background_context == (
-        "Configured context from room."
-    )
-
-
-@pytest.mark.asyncio
-@mock.patch("soliplex.haiku_chat.HaikuRAG")
-async def test_chat_agent_wrapper_configured_context_overrides_frontend(
-    mock_haiku_rag,
-):
-    """Test that configured background_context overrides frontend state."""
+    """Test background_context seeds session_context when session_id exists."""
+    from haiku.rag.agents.chat.context import _session_context_cache
     from haiku.rag.agents.chat.state import ChatSessionState
 
+    # Clear cache before test
+    _session_context_cache.clear()
+
     mock_agent = mock.MagicMock()
     mock_config = mock.MagicMock()
     mock_client = mock.MagicMock()
@@ -375,11 +338,7 @@ async def test_chat_agent_wrapper_configured_context_overrides_frontend(
         background_context="Configured context from room.",
     )
 
-    existing_state = ChatSessionState(
-        session_id="test-session",
-        background_context="Frontend user context.",
-    )
-
+    existing_state = ChatSessionState(session_id="test-session-123")
     mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
     mock_deps.state = {haiku_chat.AGUI_STATE_KEY: existing_state.model_dump()}
 
@@ -392,8 +351,61 @@ async def test_chat_agent_wrapper_configured_context_overrides_frontend(
 
     call_kwargs = mock_agent.run_stream_events.call_args.kwargs
     chat_deps = call_kwargs["deps"]
-    # Configured context should override frontend
-    assert (
-        chat_deps.session_state.background_context
-        == "Configured context from room."
+    assert chat_deps.session_state.session_context is not None
+    assert chat_deps.session_state.session_context.summary == (
+        "Configured context from room."
     )
+    # Also verify it was cached
+    assert "test-session-123" in _session_context_cache
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.HaikuRAG")
+async def test_chat_agent_wrapper_does_not_override_cached_context(
+    mock_haiku_rag,
+):
+    """Test that cached session_context is not overwritten by background."""
+    from haiku.rag.agents.chat.context import _session_context_cache
+    from haiku.rag.agents.chat.context import cache_session_context
+    from haiku.rag.agents.chat.state import ChatSessionState
+    from haiku.rag.agents.chat.state import SessionContext
+
+    # Pre-seed the cache with existing context
+    _session_context_cache.clear()
+    existing_context = SessionContext(summary="Existing cached context.")
+    cache_session_context("test-session-456", existing_context)
+
+    mock_agent = mock.MagicMock()
+    mock_config = mock.MagicMock()
+    mock_client = mock.MagicMock()
+
+    mock_haiku_rag.return_value.__aenter__.return_value = mock_client
+
+    async def mock_events():
+        yield "event"
+
+    mock_agent.run_stream_events.return_value = mock_events()
+
+    wrapper = haiku_chat.ChatAgentWrapper(
+        agent=mock_agent,
+        config=mock_config,
+        db_path=Path(RAG_DB_PATH),
+        background_context="Configured context from room.",
+    )
+
+    existing_state = ChatSessionState(session_id="test-session-456")
+
+    mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
+    mock_deps.state = {haiku_chat.AGUI_STATE_KEY: existing_state.model_dump()}
+
+    events = []
+    async for event in wrapper.run_stream_events(
+        message_history=[],
+        deps=mock_deps,
+    ):
+        events.append(event)
+
+    # Cache should still have the original context, not be overwritten
+    cached = _session_context_cache.get("test-session-456")
+    assert cached is not None
+    assert cached.summary == "Existing cached context."
