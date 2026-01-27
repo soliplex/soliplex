@@ -2,7 +2,7 @@ id: "chat"
 name: "Haiku Chat"
 description: "Conversational RAG with search, ask, and document retrieval"
 suggestions:
-  - "What documents are available?"
+  - "Get the document agents.md and summarize its key points"
   - "Search for information about Soliplex"
   - "Explain how the authentication system works"
 agent:
