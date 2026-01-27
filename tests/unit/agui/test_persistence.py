@@ -11,6 +11,7 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agui as agui_package
 from soliplex import config
+from soliplex import util
 from soliplex.agui import persistence as agui_persistence
 
 NOW = datetime.datetime.now(datetime.UTC)
@@ -1195,7 +1196,10 @@ def test_get_session(
         assert isinstance(session, sqla_orm.Session)
         assert session.bind is ce.return_value
 
-        ce.assert_called_once_with(config.SYNC_MEMORY_ENGINE_URL)
+        ce.assert_called_once_with(
+            config.SYNC_MEMORY_ENGINE_URL,
+            json_serializer=util.serialize_sqla_json,
+        )
 
         if init_schema:
             connection = ce.return_value.connect.return_value
@@ -1226,7 +1230,10 @@ async def test_get_async_session(
         assert isinstance(session, sqla_asyncio.AsyncSession)
         assert session.bind is engine
 
-        cae.assert_called_once_with(config.ASYNC_MEMORY_ENGINE_URL)
+        cae.assert_called_once_with(
+            config.ASYNC_MEMORY_ENGINE_URL,
+            json_serializer=util.serialize_sqla_json,
+        )
 
         if init_schema:
             engine.begin.assert_called_once_with()

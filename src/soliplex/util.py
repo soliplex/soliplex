@@ -1,6 +1,8 @@
 import asyncio
 import contextlib
+import datetime
 import functools
+import json
 import logging
 import pathlib
 import re
@@ -127,3 +129,21 @@ def preprocess_markdown(text: str) -> str:
     parsed = FOUR_OR_MORE_PERIODS.sub("...", text)
     parsed = TWO_OR_MORE_ELLIPSES.sub("…", parsed)
     return parsed
+
+
+class SQLA_JSONSerializationError(TypeError):
+    def __init__(self, obj):
+        self.obj = obj
+        super().__init__(f"Cannot serialize {obj} to JSON")
+
+
+def sqla_json_defaults(obj):
+    """Serialize known types to JSON-compatible form"""
+    if isinstance(obj, datetime.datetime | datetime.date | datetime.time):
+        return obj.isoformat()
+
+    raise SQLA_JSONSerializationError(obj)
+
+
+def serialize_sqla_json(sqla_json_data):
+    return json.dumps(sqla_json_data, default=sqla_json_defaults)

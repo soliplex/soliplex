@@ -14,6 +14,7 @@ from sqlalchemy.sql import sqltypes as sqla_sqltypes
 from soliplex import authz as authz_package
 from soliplex import config
 from soliplex import models
+from soliplex import util
 
 AsyncAttrs = sqla_asyncio.AsyncAttrs
 DeclarativeBase = sqla_orm.DeclarativeBase
@@ -428,7 +429,11 @@ async def get_async_session(
     init_schema=False,
     **engine_kwargs,
 ):
-    engine = sqla_asyncio.create_async_engine(engine_url, **engine_kwargs)
+    engine = sqla_asyncio.create_async_engine(
+        engine_url,
+        json_serializer=util.serialize_sqla_json,
+        **engine_kwargs,
+    )
 
     if init_schema:
         async with engine.begin() as connection:
@@ -442,7 +447,11 @@ def get_session(
     init_schema=False,
     **engine_kwargs,
 ):
-    engine = sqlalchemy.create_engine(engine_url, **engine_kwargs)
+    engine = sqlalchemy.create_engine(
+        engine_url,
+        json_serializer=util.serialize_sqla_json,
+        **engine_kwargs,
+    )
 
     if init_schema:
         with engine.connect() as connection:

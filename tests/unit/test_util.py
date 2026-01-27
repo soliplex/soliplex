@@ -1,3 +1,5 @@
+import contextlib
+import datetime
 from unittest import mock
 
 import logfire
@@ -274,3 +276,45 @@ def test_logfile_span_preserves_function_metadata(mock_span):
 )
 def test_preprocess_markdown(text, expected):
     assert util.preprocess_markdown(text) == expected
+
+
+@pytest.mark.parametrize(
+    "w_object, expectation",
+    [
+        (
+            datetime.date(2026, 1, 27),
+            contextlib.nullcontext("2026-01-27"),
+        ),
+        (
+            datetime.time(9, 49, 27),
+            contextlib.nullcontext("09:49:27"),
+        ),
+        (
+            datetime.datetime(2026, 1, 27, 9, 49, 27, tzinfo=datetime.UTC),
+            contextlib.nullcontext("2026-01-27T09:49:27+00:00"),
+        ),
+        (
+            object(),
+            pytest.raises(util.SQLA_JSONSerializationError),
+        ),
+    ],
+)
+def test_sqla_json_defaults(w_object, expectation):
+    with expectation as expected:
+        found = util.sqla_json_defaults(w_object)
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert found == expected
+
+
+@mock.patch("json.dumps")
+def test_serialize_sqla_json(jd):
+    data = {
+        "timestamp": datetime.datetime.now(datetime.UTC),
+    }
+
+    found = util.serialize_sqla_json(data)
+
+    assert found is jd.return_value
+
+    jd.assert_called_once_with(data, default=util.sqla_json_defaults)
