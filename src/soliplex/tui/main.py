@@ -3,7 +3,6 @@ import json
 import requests
 import textual
 from ag_ui import core as agui_core
-from haiku.rag.agents.chat import AGUI_STATE_KEY as HR_CHAT_STATE_KEY
 from textual import app as t_app
 from textual import binding as t_binding
 from textual import containers as t_containers
@@ -850,7 +849,7 @@ class RoomView(t_screen.Screen):
             self.run_agent_input = agui_core.RunAgentInput(
                 thread_id=thread_id,
                 run_id=run_id,
-                state={HR_CHAT_STATE_KEY: {"session_id": thread_id}},
+                state={},
                 messages=[
                     {"id": "user_001", "role": "user", "content": prompt}
                 ],

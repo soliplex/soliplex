@@ -7,17 +7,13 @@ chat agent, translating Soliplex's AgentDependencies to haiku.rag's ChatDeps.
 import dataclasses
 import typing
 from collections import abc
-from datetime import datetime
 from pathlib import Path
 
 from haiku.rag import client as rag_client
 from haiku.rag.agents.chat import AGUI_STATE_KEY
 from haiku.rag.agents.chat import agent as chat_agent
-from haiku.rag.agents.chat.context import cache_session_context
-from haiku.rag.agents.chat.context import get_cached_session_context
 from haiku.rag.agents.chat.state import ChatDeps
 from haiku.rag.agents.chat.state import ChatSessionState
-from haiku.rag.agents.chat.state import SessionContext
 from haiku.rag.config.models import AppConfig
 from pydantic_ai import Agent
 from pydantic_ai import messages as ai_messages
@@ -68,16 +64,8 @@ class ChatAgentWrapper:
         else:
             session_state = ChatSessionState()
 
-        session_id = session_state.session_id
-        if self.background_context and session_id:
-            cached = get_cached_session_context(session_id)
-            if cached is None:
-                context = SessionContext(
-                    summary=self.background_context,
-                    last_updated=datetime.now(),
-                )
-                cache_session_context(session_id, context)
-                session_state.session_context = context
+        if self.background_context and not session_state.initial_context:
+            session_state.initial_context = self.background_context
 
         async with HaikuRAG(
             db_path=self.db_path,

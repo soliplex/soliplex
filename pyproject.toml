@@ -23,7 +23,7 @@ dependencies = [
 
 
 
-    "haiku.rag-slim >= 0.27.0",
+    "haiku.rag-slim >= 0.27.1",
 
     "itsdangerous",
     "jsonpatch",
