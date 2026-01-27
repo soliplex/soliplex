@@ -18,7 +18,7 @@ dependencies = [
     "aiosqlite",
     "authlib",
     "fastapi",
-    "fastmcp >= 2.14.0",
+    "fastmcp >= 2.14.0, < 2.15",
     "greenlet",
 
 
