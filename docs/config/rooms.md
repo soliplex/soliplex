@@ -82,6 +82,10 @@ A minimal room configuration must include the above elements, e.g.:
   enable_attachments: true
   ```
 
+- `agui_feature_names` (list of strings); if set these values are added
+  to the feature names defined on the individual tools to create an
+  aggregate set for the room.
+
 
 ### Agent configuration
 

@@ -1298,6 +1298,8 @@ class RoomConfig:
     logo_image: dataclasses.InitVar[str] = None
     _logo_image: str = None
 
+    _agui_feature_names: list[str] = dataclasses.field(default_factory=list)
+
     def __post_init__(self, logo_image: str | None):
         if logo_image is not None:
             self._logo_image = logo_image
@@ -1348,6 +1350,10 @@ class RoomConfig:
                     for quiz_config_yaml in quizzes_config_yaml
                 ]
 
+            agui_feature_names = config_dict.pop("agui_feature_names", None)
+            if agui_feature_names is not None:
+                config_dict["_agui_feature_names"] = agui_feature_names
+
             logo_image = config_dict.pop("logo_image", None)
             config_dict["_logo_image"] = logo_image
 
@@ -1368,7 +1374,7 @@ class RoomConfig:
         tool_configs = self.tool_configs.values()
         return sum(
             (tool_config.agui_feature_names for tool_config in tool_configs),
-            start=(),
+            start=tuple(self._agui_feature_names),
         )
 
     @property
