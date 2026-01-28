@@ -27,8 +27,20 @@
     "ask_history": {
       "$defs": {
         "Citation": {
-          "description": "Resolved citation with full metadata for display/visual grounding.",
+          "description": "Resolved citation with full metadata for display/visual grounding.\n\nUsed by both research graph and chat agent. The optional index field\nsupports UI display ordering in chat contexts.",
           "properties": {
+            "index": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Index"
+            },
             "document_id": {
               "title": "Document Id",
               "type": "string"
@@ -129,6 +141,221 @@
         }
       },
       "title": "AskedAndAnswered",
+      "type": "object"
+    },
+    "haiku.rag.chat": {
+      "$defs": {
+        "Citation": {
+          "description": "Resolved citation with full metadata for display/visual grounding.\n\nUsed by both research graph and chat agent. The optional index field\nsupports UI display ordering in chat contexts.",
+          "properties": {
+            "index": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Index"
+            },
+            "document_id": {
+              "title": "Document Id",
+              "type": "string"
+            },
+            "chunk_id": {
+              "title": "Chunk Id",
+              "type": "string"
+            },
+            "document_uri": {
+              "title": "Document Uri",
+              "type": "string"
+            },
+            "document_title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Document Title"
+            },
+            "page_numbers": {
+              "items": {
+                "type": "integer"
+              },
+              "title": "Page Numbers",
+              "type": "array"
+            },
+            "headings": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Headings"
+            },
+            "content": {
+              "title": "Content",
+              "type": "string"
+            }
+          },
+          "required": [
+            "document_id",
+            "chunk_id",
+            "document_uri",
+            "content"
+          ],
+          "title": "Citation",
+          "type": "object"
+        },
+        "QAResponse": {
+          "description": "A Q&A pair from conversation history with citations.",
+          "properties": {
+            "question": {
+              "title": "Question",
+              "type": "string"
+            },
+            "answer": {
+              "title": "Answer",
+              "type": "string"
+            },
+            "confidence": {
+              "default": 0.9,
+              "title": "Confidence",
+              "type": "number"
+            },
+            "citations": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/Citation"
+              },
+              "title": "Citations",
+              "type": "array"
+            },
+            "question_embedding": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Question Embedding"
+            }
+          },
+          "required": [
+            "question",
+            "answer"
+          ],
+          "title": "QAResponse",
+          "type": "object"
+        },
+        "SessionContext": {
+          "description": "Compressed summary of conversation history for research graph.",
+          "properties": {
+            "summary": {
+              "default": "",
+              "title": "Summary",
+              "type": "string"
+            },
+            "last_updated": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Last Updated"
+            }
+          },
+          "title": "SessionContext",
+          "type": "object"
+        }
+      },
+      "description": "State shared between frontend and agent via AG-UI.",
+      "properties": {
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "initial_context": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Initial Context"
+        },
+        "citations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Citation"
+          },
+          "title": "Citations",
+          "type": "array"
+        },
+        "qa_history": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/QAResponse"
+          },
+          "title": "Qa History",
+          "type": "array"
+        },
+        "session_context": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SessionContext"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "document_filter": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Document Filter",
+          "type": "array"
+        },
+        "citation_registry": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "default": {},
+          "title": "Citation Registry",
+          "type": "object"
+        }
+      },
+      "title": "ChatSessionState",
       "type": "object"
     }
   }
