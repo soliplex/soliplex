@@ -12,12 +12,27 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 AGUI_Events = list[agui_core.Event]
 AGUI_EventStream = collections.abc.AsyncIterator[agui_core.Event]
 AGUI_State = dict[str, typing.Any]
+AGUI_BinaryAttachments = list[agui_core.BinaryInputContent]
 
 
 _COMPACTIBLE_TYPES = {
     agui_core.EventType.TEXT_MESSAGE_CONTENT,
     agui_core.EventType.THINKING_TEXT_MESSAGE_CONTENT,
 }
+
+
+def extract_binary_attachments(
+    run_input: agui_core.RunAgentInput,
+) -> AGUI_BinaryAttachments:
+    """Return binary attachments in a given run's user messages"""
+    result = []
+    for message in run_input.messages:
+        if message.role == "user":
+            if isinstance(message.content, list):
+                for input_content in message.content:
+                    if input_content.type == "binary":
+                        result.append(input_content)
+    return result
 
 
 async def compact_event_stream(stream: AGUI_EventStream):

@@ -838,21 +838,33 @@ async def test_installation_get_agent_for_completion(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("w_enable_attachments", [False, True])
 @pytest.mark.parametrize("w_run_agent_input", [False, True])
 @pytest.mark.parametrize(
     "w_room_id, raises", [("room_id", False), ("nonesuch", True)]
 )
+@mock.patch("soliplex.agui.extract_binary_attachments")
 async def test_installation_get_agent_deps_for_room(
+    eba,
     test_user,
     authz_kwargs,
     w_room_id,
     raises,
     w_run_agent_input,
+    w_enable_attachments,
 ):
     tc_config = mock.create_autospec(config.ToolConfig)
     sdtc_config = mock.create_autospec(config.SearchDocumentsToolConfig)
 
-    r_config = mock.create_autospec(config.RoomConfig)
+    if w_enable_attachments and w_run_agent_input:
+        exp_binary_attachments = eba.return_value
+    else:
+        exp_binary_attachments = []
+
+    r_config = mock.create_autospec(
+        config.RoomConfig,
+        enable_attachments=w_enable_attachments,
+    )
     t_configs = r_config.tool_configs = {
         "test_tool": tc_config,
         "test_sdtc": sdtc_config,
@@ -903,6 +915,8 @@ async def test_installation_get_agent_deps_for_room(
             assert found.the_installation is the_installation
             assert found.user == test_user
             assert found.tool_configs == t_configs
+
+            assert found.binary_attachments == exp_binary_attachments
 
 
 @pytest.mark.anyio

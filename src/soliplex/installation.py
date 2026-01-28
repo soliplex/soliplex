@@ -11,6 +11,7 @@ from sqlalchemy import sql as sqla_sql
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
+from soliplex import agui
 from soliplex import authz as authz_package
 from soliplex import config
 from soliplex import mcp_server
@@ -265,6 +266,11 @@ class Installation:
         )
 
         kwargs = {}
+
+        if room_config.enable_attachments and run_agent_input is not None:
+            kwargs["binary_attachments"] = agui.extract_binary_attachments(
+                run_input=run_agent_input,
+            )
 
         return agents.AgentDependencies(
             the_installation=self,

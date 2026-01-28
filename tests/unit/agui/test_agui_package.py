@@ -6,8 +6,44 @@ from ag_ui import core as agui_core
 
 from soliplex import agui as agui_package
 
+TEST_THREAD_ID = "thread-123"
+TEST_RUN_ID = "run-345"
+
+MESSAGE_ID_0 = "message-id-0"
 MESSAGE_ID_1 = "message-id-1"
 MESSAGE_ID_2 = "message-id-2"
+MESSAGE_ID_3 = "message-id-3"
+MESSAGE_ID_4 = "message-id-4"
+
+SYSTEM_MESSAGE_W_STR_CONTENT = agui_core.SystemMessage(
+    id=MESSAGE_ID_0,
+    content="system content",
+)
+TEXT_CONTENT_1 = agui_core.TextInputContent(text="string content")
+BINARY_CONTENT_1 = agui_core.BinaryInputContent(
+    mime_type="application/binary",
+    data="DEADBEEF",
+)
+BINARY_CONTENT_2 = agui_core.BinaryInputContent(
+    mime_type="application/binary",
+    data="FACEDACE",
+)
+USER_MESSAGE_W_STR_CONTENT = agui_core.UserMessage(
+    id=MESSAGE_ID_1,
+    content="string content",
+)
+USER_MESSAGE_W_TEXT_CONTENT = agui_core.UserMessage(
+    id=MESSAGE_ID_2,
+    content=[TEXT_CONTENT_1],
+)
+USER_MESSAGE_W_BINARY_CONTENT = agui_core.UserMessage(
+    id=MESSAGE_ID_3,
+    content=[BINARY_CONTENT_1],
+)
+USER_MESSAGE_W_MIXED_CONTENT = agui_core.UserMessage(
+    id=MESSAGE_ID_4,
+    content=[TEXT_CONTENT_1, BINARY_CONTENT_2],
+)
 
 TEXT_START_1 = agui_core.TextMessageStartEvent(message_id=MESSAGE_ID_1)
 TEXT_CONTENT_1_A = agui_core.TextMessageContentEvent(
@@ -57,6 +93,51 @@ TEXT_CONTENT_2_D = agui_core.TextMessageContentEvent(
 )
 
 OTHER = agui_core.RawEvent(event=None, source="test-raw")
+
+
+@pytest.fixture
+def run_input():
+    return agui_core.RunAgentInput(
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+        state={},
+        messages=[],
+        tools=[],
+        context=[],
+        forwarded_props=None,
+    )
+
+
+@pytest.mark.parametrize(
+    "messages, expected",
+    [
+        ([], []),
+        ([SYSTEM_MESSAGE_W_STR_CONTENT], []),
+        ([USER_MESSAGE_W_STR_CONTENT], []),
+        ([USER_MESSAGE_W_TEXT_CONTENT], []),
+        ([USER_MESSAGE_W_BINARY_CONTENT], [BINARY_CONTENT_1]),
+        ([USER_MESSAGE_W_MIXED_CONTENT], [BINARY_CONTENT_2]),
+        (
+            [
+                USER_MESSAGE_W_STR_CONTENT,
+                USER_MESSAGE_W_TEXT_CONTENT,
+                USER_MESSAGE_W_BINARY_CONTENT,
+                USER_MESSAGE_W_MIXED_CONTENT,
+                SYSTEM_MESSAGE_W_STR_CONTENT,
+            ],
+            [
+                BINARY_CONTENT_1,
+                BINARY_CONTENT_2,
+            ],
+        ),
+    ],
+)
+def test_extract_binary_attachments(run_input, messages, expected):
+    run_input.messages.extend(messages)
+
+    found = agui_package.extract_binary_attachments(run_input)
+
+    assert found == expected
 
 
 @pytest.mark.anyio

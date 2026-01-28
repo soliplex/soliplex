@@ -32,6 +32,9 @@ class AgentDependencies:
     user: models.UserProfile = None  # TBD make required
     tool_configs: ToolConfigMap = None
     state: agui.AGUI_State = dataclasses.field(default_factory=dict)
+    binary_attachments: agui.AGUI_BinaryAttachments = dataclasses.field(
+        default_factory=list
+    )
 
 
 SoliplexAgent = ai_agent.AbstractAgent[AgentDependencies, typing.Any]
