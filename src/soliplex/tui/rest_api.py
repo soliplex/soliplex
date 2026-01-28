@@ -62,9 +62,27 @@ class TUI_REST_API:
 
         return response.json()
 
+    def get_room(self, room_id: str):
+        response = requests.get(
+            f"{self.api_v1_base}/rooms/{room_id}",
+            headers=self.api_v1_headers,
+        )
+        response.raise_for_status()
+
+        return response.json()
+
     def get_room_mcp_token(self, room_id: str):
         response = requests.get(
             f"{self.api_v1_base}/rooms/{room_id}/mcp_token",
+            headers=self.api_v1_headers,
+        )
+        response.raise_for_status()
+
+        return response.json()
+
+    def get_room_documents(self, room_id: str):
+        response = requests.get(
+            f"{self.api_v1_base}/rooms/{room_id}/documents",
             headers=self.api_v1_headers,
         )
         response.raise_for_status()
@@ -224,6 +242,25 @@ class TUI_REST_API:
         response = requests.post(
             meta_url,
             json=meta,
+            headers=self.api_v1_headers,
+        )
+        response.raise_for_status()
+
+    def post_run_feedback(
+        self,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+        feedback: models.AGUI_RunFeedback | dict,
+    ) -> None:
+        meta_url = f"{self.run_url(room_id, thread_id, run_id)}/feedback"
+
+        if isinstance(feedback, models.AGUI_RunFeedback):
+            feedback = feedback.model_dump()
+
+        response = requests.post(
+            meta_url,
+            json=feedback,
             headers=self.api_v1_headers,
         )
         response.raise_for_status()
