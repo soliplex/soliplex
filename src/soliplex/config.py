@@ -2381,6 +2381,8 @@ class InstallationConfig:
         default_factory=dict,
     )
 
+    disable_dotenv: bool = False
+
     def get_environment(self, key, default=None):
         """Find the configured value for a given quasi-envvar"""
         return self.environment.get(key, default)
@@ -2388,7 +2390,7 @@ class InstallationConfig:
     def resolve_environment(self):
         dotenv_file = self._config_path.parent / ".env"
 
-        if dotenv_file.is_file():
+        if not self.disable_dotenv and dotenv_file.is_file():
             with dotenv_file.open() as stream:
                 dotenv_env = dotenv.dotenv_values(stream=stream)
         else:

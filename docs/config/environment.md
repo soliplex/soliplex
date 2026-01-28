@@ -7,19 +7,14 @@ using `os.environ`.
 
 ## Environment Entries
 
-The section consists of a list of mappings, each with keys `name` and
-`value`.
+The `environment` section consists of a list of mappings, each with
+keys `name` and `value`.
 
 ```yaml
 environment:
   - name: "ENV_VAR_NAME"
     value: "ENV_VAR_VALUE"
 ```
-
-## Unconfigured Environment Entries
-
-If the `value` key is missing, the Soliplex application will
-attempt to resolve it using `os.environ` during startup.
 
 ## Bare-String Environment Entries
 
@@ -37,6 +32,23 @@ is exactly equivalent to this one:
 environment:
   - name: "ENV_VAR_NAME"
 ```
+
+## Resolving Environment Entry Values
+
+When resolving environment entry values after an installation configuration,
+Soliplex will use values from the following sources, in order of
+precedence:
+
+- Value explicitly configured in the installation
+- Value from an `.env` file located in the installation directory
+- Value from the OS environment
+
+If the `InstallationConfig.disable_dotenv` flag is set to `True`, then
+Soliplex use these sources, in order of precedence:
+
+- Value explicitly configured in the installation
+- Value from the OS environment
+
 
 # Checking Configured Environment Values
 

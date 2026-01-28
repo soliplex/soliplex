@@ -5350,53 +5350,67 @@ RESOLVED = {"name": "RESOLVED", "value": "resolved"}
 
 
 @pytest.mark.parametrize(
-    "env_entries, dotenv_text, expectation, exp_missing, exp_env",
+    "env_entries, dotenv_opt, expectation, exp_missing, exp_env",
     [
         (
             [],
-            None,
+            (None, False),
             contextlib.nullcontext(None),
             None,
             {},
         ),
         (
             [RESOLVED],
-            None,
+            (None, False),
             contextlib.nullcontext(None),
             None,
             {"RESOLVED": "resolved"},
         ),
         (
             [UNRESOLVED],
-            None,
+            (None, False),
             pytest.raises(config.MissingEnvVars),
             "UNRESOLVED",
             None,
         ),
         (
             [UNRESOLVED, UNRESOLVED_MOAR],
-            None,
+            (None, False),
             pytest.raises(config.MissingEnvVars),
             "UNRESOLVED,UNRESOLVED_MOAR",
             None,
         ),
         (
             [UNRESOLVED, UNRESOLVED_MOAR],
-            "UNRESOLVED=via_dotenv",
+            ("UNRESOLVED=via_dotenv", False),
             pytest.raises(config.MissingEnvVars),
             "UNRESOLVED_MOAR",
             None,
         ),
         (
             [UNRESOLVED],
-            "UNRESOLVED=via_dotenv",
+            ("UNRESOLVED=via_dotenv", False),
             contextlib.nullcontext(None),
             None,
             {"UNRESOLVED": "via_dotenv"},
         ),
         (
+            [UNRESOLVED],
+            ("UNRESOLVED=via_dotenv", True),
+            pytest.raises(config.MissingEnvVars),
+            "UNRESOLVED",
+            None,
+        ),
+        (
             [RESOLVED],
-            "RESOLVED=via_dotenv",
+            ("RESOLVED=via_dotenv", False),
+            contextlib.nullcontext(None),
+            None,
+            {"RESOLVED": "resolved"},
+        ),
+        (
+            [RESOLVED],
+            ("RESOLVED=via_dotenv", True),
             contextlib.nullcontext(None),
             None,
             {"RESOLVED": "resolved"},
@@ -5406,12 +5420,15 @@ RESOLVED = {"name": "RESOLVED", "value": "resolved"}
 def test_installation_resolve_environment(
     temp_dir,
     env_entries,
-    dotenv_text,
+    dotenv_opt,
     expectation,
     exp_missing,
     exp_env,
 ):
     environment = {entry["name"]: entry.get("value") for entry in env_entries}
+
+    dotenv_text, disable_dotenv = dotenv_opt
+
     if dotenv_text is not None:
         dotenv_file = temp_dir / ".env"
         dotenv_file.write_text(dotenv_text)
@@ -5420,6 +5437,7 @@ def test_installation_resolve_environment(
         id="test-ic",
         _config_path=temp_dir / "installation.yaml",
         environment=environment,
+        disable_dotenv=disable_dotenv,
     )
 
     with expectation as expected:
