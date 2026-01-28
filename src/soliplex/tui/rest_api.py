@@ -62,6 +62,15 @@ class TUI_REST_API:
 
         return response.json()
 
+    def get_room_mcp_token(self, room_id: str):
+        response = requests.get(
+            f"{self.api_v1_base}/rooms/{room_id}/mcp_token",
+            headers=self.api_v1_headers,
+        )
+        response.raise_for_status()
+
+        return response.json()
+
     def get_installed_versions(self):
         response = requests.get(
             f"{self.api_v1_base}/installation/versions",

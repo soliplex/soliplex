@@ -661,6 +661,40 @@ class RoomThreadsView(t_screen.Screen):
         self.dismiss(thread_id)
 
 
+class MCPTokenView(t_screen.Screen):
+    BINDINGS = [
+        t_binding.Binding("escape", "dismiss(None)", "Exit"),
+    ]
+    DEFAULT_CSS = """
+    MCPTokenView Static {
+        padding: 1;
+        text-wrap: wrap;
+    }
+    """
+
+    def __init__(self, room_id, *args, **kwargs):
+        self.room_id = room_id
+        super().__init__()
+
+    @property
+    def rest_api(self) -> rest_api.TUI_REST_API:
+        return self.app.rest_api
+
+    @property
+    def mcp_token(self) -> str:
+        response = self.rest_api.get_room_mcp_token(self.room_id)
+        return response["mcp_token"]
+
+    def compose(self) -> t_app.ComposeResult:
+        yield t_widgets.Header()
+        yield t_widgets.Label(f"Room MCP token: {self.room_id}")
+        yield t_widgets.Static(
+            "Copy this string for use in your MCP browser:",
+        )
+        yield t_widgets.Static(self.mcp_token)
+        yield t_widgets.Footer()
+
+
 class Prompt(t_widgets.Markdown):
     """Markdown for the user prompt."""
 
@@ -690,6 +724,7 @@ class RoomView(t_screen.Screen):
         t_binding.Binding("ctrl+r", "list_runs", "Runs"),
         t_binding.Binding("ctrl+s", "view_state", "State"),
         t_binding.Binding("ctrl+z", "edit_metadata", "Metadata"),
+        t_binding.Binding("ctrl+p", "mcp_token", "MCP Token"),
         t_binding.Binding("escape", "app.pop_screen", "Exit"),
     ]
 
@@ -832,6 +867,14 @@ class RoomView(t_screen.Screen):
 
             self.thread_name = payload.get("name")
             self.thread_description = payload.get("description")
+
+    @textual.work
+    async def action_mcp_token(self) -> None:
+        mcp_token_view = MCPTokenView(
+            self.room_id,
+        )
+
+        await self.app.push_screen_wait(mcp_token_view)
 
     def check_action(self, action, parameters):
         if action in ("list_runs", "edit_metadata", "new_thread"):
@@ -1171,6 +1214,7 @@ class SoliplexTUI(t_app.App):
         t_binding.Binding("ctrl+n", "installation_config", "Installation"),
         t_binding.Binding("ctrl+q", "quit", "quit", id="quit"),
     ]
+    COMMAND_PALETTE_BINDING = "ctrl+backslash"
     DEFAULT_CSS = """
     VerticalScroll {
         width: 100%;
