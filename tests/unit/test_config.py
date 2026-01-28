@@ -4844,7 +4844,7 @@ def test_resolve_file_prefix(temp_dir, config_value, expected):
             "baz",
             {"ENVVAR": "dotenv"},
             {},
-            contextlib.nullcontext("dotenv"),  # dotenv wins
+            contextlib.nullcontext("baz"),
         ),
         (
             "ENVVAR",
@@ -4858,7 +4858,7 @@ def test_resolve_file_prefix(temp_dir, config_value, expected):
             "baz",
             {"ENVVAR": "dotenv"},
             {"ENVVAR": "osenv"},
-            contextlib.nullcontext("dotenv"),  # dotenv wins
+            contextlib.nullcontext("baz"),
         ),
     ],
 )
@@ -5399,7 +5399,7 @@ RESOLVED = {"name": "RESOLVED", "value": "resolved"}
             "RESOLVED=via_dotenv",
             contextlib.nullcontext(None),
             None,
-            {"RESOLVED": "via_dotenv"},  # dotenv wins
+            {"RESOLVED": "resolved"},
         ),
     ],
 )

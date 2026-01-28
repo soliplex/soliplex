@@ -2020,16 +2020,16 @@ def resolve_environment_entry(
     env_value: str,
     dotenv_env: dict[str, str],
 ) -> dict:
+    if env_value is not None:
+        return env_value
+
     if env_name in dotenv_env:
         return dotenv_env[env_name]
 
-    if env_value is None:
-        try:
-            return os.environ[env_name]
-        except KeyError:
-            raise MissingEnvVar(env_name) from None
-
-    return env_value
+    try:
+        return os.environ[env_name]
+    except KeyError:
+        raise MissingEnvVar(env_name) from None
 
 
 def _from_dotted_name(dotted_name: str):
