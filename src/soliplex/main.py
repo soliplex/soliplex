@@ -69,17 +69,18 @@ def app_with_session(app: fastapi.FastAPI) -> fastapi.FastAPI:
     return app
 
 
-current_git_hash = None
+the_git_metadata = None
 
 
 async def add_custom_header(request: fastapi.Request, call_next):
-    global current_git_hash
+    global the_git_metadata
 
-    if current_git_hash is None:
-        current_git_hash = util.get_git_hash_for_file(__file__)
+    if the_git_metadata is None:
+        cwd = pathlib.Path.cwd()
+        the_git_metadata = util.GitMetadata(cwd)
 
     response: fastapi.Response = await call_next(request)
-    response.headers["X-Git-Hash"] = current_git_hash
+    response.headers["X-Git-Hash"] = the_git_metadata.git_hash
     return response
 
 

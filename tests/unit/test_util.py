@@ -212,43 +212,6 @@ def test_gitmetadata_git_tag(subp, temp_dir, w_already, w_lines, expected):
         )
 
 
-def test_get_git_hash_for_file_w_override_text_file(temp_dir):
-    HASH = "abc9876543210"
-
-    override_file = temp_dir / "git-hash.txt"
-    override_file.write_text(HASH)
-
-    fake_module = temp_dir / "module.py"
-
-    found = util.get_git_hash_for_file(str(fake_module))
-
-    assert found == HASH
-
-
-@mock.patch("soliplex.util.traceback")
-@mock.patch("soliplex.util.subprocess")
-def test_get_git_hash_for_file_w_subprocess_miss(sp, tb):
-    sp.check_output.side_effect = ValueError("testing")
-
-    found = util.get_git_hash_for_file(__file__)
-
-    assert found == "unknown"
-
-    tb.print_exc.assert_called_once_with()
-
-
-@mock.patch("soliplex.util.subprocess")
-def test_get_git_hash_for_file_w_subprocess_hit(sp):
-    HASH = "abc9876543210"
-    get_rev_parse_head_output = f"{HASH}\n".encode("ascii")
-
-    sp.check_output.side_effect = [get_rev_parse_head_output]
-
-    found = util.get_git_hash_for_file(__file__)
-
-    assert found == HASH
-
-
 @pytest.mark.parametrize(
     "start_url, expected",
     [

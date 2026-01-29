@@ -107,13 +107,17 @@ def test_app_with_session(authn):
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("hash_patch", [{}, {"current_git_hash": "DEADBEEF"}])
-@mock.patch("soliplex.main.util")
-async def test_add_custom_header(util, hash_patch):
-    if hash_patch:
-        exp_hash = "DEADBEEF"
+@pytest.mark.parametrize("w_already_tgm", [None, mock.Mock()])
+@mock.patch("soliplex.util.GitMetadata")
+@mock.patch("pathlib.Path.cwd")
+async def test_add_custom_header(pp_cwd, gm_klass, w_already_tgm):
+    main_patch = {}
+
+    if w_already_tgm is not None:
+        main_patch["the_git_metadata"] = w_already_tgm
+        exp_hash = w_already_tgm.git_hash
     else:
-        exp_hash = util.get_git_hash_for_file.return_value
+        exp_hash = gm_klass.return_value.git_hash
 
     request = object()
     call_next = mock.AsyncMock(spec_set=())
@@ -122,17 +126,17 @@ async def test_add_custom_header(util, hash_patch):
         headers={},
     )
 
-    with mock.patch.dict("soliplex.main.__dict__", **hash_patch):
+    with mock.patch.dict("soliplex.main.__dict__", **main_patch):
         response = await main.add_custom_header(request, call_next)
 
     assert response is exp_response
     assert response.headers["X-Git-Hash"] == exp_hash
     call_next.assert_awaited_once_with(request)
 
-    if hash_patch:
-        util.get_git_hash_for_file.assert_not_called()
+    if w_already_tgm:
+        gm_klass.assert_not_called()
     else:
-        util.get_git_hash_for_file.assert_called_once_with(main.__file__)
+        gm_klass.assert_called_once_with(pp_cwd.return_value)
 
 
 def test_app_with_git_hash():
