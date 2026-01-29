@@ -397,6 +397,15 @@ InstalledPackages = dict[str, InstalledPackage]
 
 
 # ----------------------------------------------------------------------------
+#   Git metadata
+# ----------------------------------------------------------------------------
+class GitMetadata(pydantic.BaseModel):
+    git_hash: str | None
+    git_branch: str | None
+    git_tag: str | None
+
+
+# ----------------------------------------------------------------------------
 #   MCP auth-related models
 # ----------------------------------------------------------------------------
 class MCPToken(pydantic.BaseModel):

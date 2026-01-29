@@ -3,7 +3,7 @@ import json
 import os
 import pathlib
 import typing
-from importlib.metadata import version
+from importlib import metadata as importlib_metadata
 
 import requests
 import typer
@@ -20,6 +20,7 @@ from soliplex import main
 from soliplex import models
 from soliplex import ollama
 from soliplex import secrets
+from soliplex import util
 from soliplex.authz import schema as authz_schema
 
 
@@ -51,8 +52,12 @@ the_console = console.Console()
 
 def version_callback(value: bool):
     if value:
-        v = version("soliplex")
-        the_console.print(f"soliplex version {v}")
+        gitmeta = util.GitMetadata(pathlib.Path.cwd())
+        v = importlib_metadata.version("soliplex")
+        the_console.print(f"Installed soliplex version: {v}")
+        the_console.print(f"Soliplex git tag          : {gitmeta.git_tag}")
+        the_console.print(f"Soliplex git branch       : {gitmeta.git_branch}")
+        the_console.print(f"Soliplex git hash         : {gitmeta.git_hash}")
         raise typer.Exit()
 
 

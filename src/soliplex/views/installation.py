@@ -1,4 +1,5 @@
 import json
+import pathlib
 import subprocess
 import traceback
 
@@ -93,3 +94,22 @@ async def get_installation_providers(
         ) from None
 
     return the_installation.all_provider_info
+
+
+@util.logfire_span("GET /v1/installation/git_metadata")
+@router.get("/v1/installation/git_metadata")
+async def get_installation_git_metadata(
+    request: fastapi.Request,
+    the_installation: installation.Installation = depend_the_installation,
+    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+) -> models.GitMetadata:
+    """Return the installation's top-level configuration"""
+    _user_token = authn.authenticate(the_installation, token)
+
+    git_metadata = util.GitMetadata(pathlib.Path.cwd())
+
+    return models.GitMetadata(
+        git_hash=git_metadata.git_hash,
+        git_branch=git_metadata.git_branch,
+        git_tag=git_metadata.git_tag,
+    )
