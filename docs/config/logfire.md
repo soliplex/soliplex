@@ -5,6 +5,23 @@ allows defining policies for how [Logfire](https://logfire.pydantic.dev) is
 [configured](https://logfire.pydantic.dev/docs/reference/api/logfire/#logfire.configure)
 at server startup.
 
+## Default behavior
+
+If the `logfire_config` attribute is not present in the Soliplex installation
+configuration, Soliplex configures it as follows:
+
+```python
+logfire.configure(send_to_logfire="if-token-present")
+logfire.instrument_pydantic_ai()
+logfire.instrument_fastapi(app, capture_headers=True)
+```
+
+That is, the `logfire` library will only send spans to the default Logfire
+server if the `LOGFIRE_TOKEN` environment variable is set:  all other
+configuration is done via OS environment variables (not in the Soliplex
+configuration).  See the Logfire
+[docs on environment variables](https://logfire.pydantic.dev/docs/reference/configuration/#using-environment-variables).
+
 ## Required attributes
 
 - `token` should name the [secret](secrets.md) which contains the

@@ -360,3 +360,30 @@ authorization_dburi:
 # quizzes_paths:
 #   -
 #==========================================================================
+
+#==========================================================================
+# Logfire configuration
+#==========================================================================
+# See: https://soliplex.github.io/soliplex/config/logfire/
+#==========================================================================
+logfire_config:
+  token: "secret:LOGFIRE_TOKEN"
+  service_name: "env:LOGFIRE_SERVICE_NAME"
+  environment: "env:LOGFIRE_ENVIRONMENT"
+# base_url: "env:LOGFIRE_BASE_URL"
+# service_version: "env:LOGFIRE_SERVICE_VERSION"
+# config_dir: "env:LOGFIRE_CONFIG_DIR"
+# data_dir: "env:LOGFIRE_DATA_DIR"
+# min_level: "env:LOGFIRE_MIN_LEVEL"
+# inspect_arguments: true
+# add_baggage_to_attributes: true
+# distributed_tracing: false
+# scrubbing_patterns:  # list, empty by default
+# instrument_pydantic_ai:
+#   include_binary_content: false
+#   include_content: false
+# instrument_fast_api:
+#   capture_headers: false
+#   excluded_urls:  # list, empty by default
+#   record_send_receive: false
+#   extra_spans: false
