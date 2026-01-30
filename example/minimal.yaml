@@ -10,6 +10,8 @@ id: "soliplex-conf-minimal"
 #==========================================================================
 # Meta-configuration
 #==========================================================================
+# See: https://soliplex.github.io/soliplex/config/meta/
+#==========================================================================
 meta:
 
   #------------------------------------------------------------------------
@@ -103,6 +105,8 @@ meta:
 
 #==========================================================================
 # Secrets
+#==========================================================================
+# See: https://soliplex.github.io/soliplex/config/secrets/
 #
 # NOTE This configuration does not wire up any external APIs / MCP client
 # tools, and therefore requires no secrets beyond the one defined below,
@@ -125,6 +129,8 @@ secrets:
 #==========================================================================
 # Environment Variables
 #==========================================================================
+# See: https://soliplex.github.io/soliplex/config/environment/
+#==========================================================================
 
 environment:
   - "OLLAMA_BASE_URL"
@@ -142,18 +148,21 @@ environment:
   #------------------------------------------------------------------------
   # Expire MCP room server tokens after one hour.
   #------------------------------------------------------------------------
-  #
   - name: "MCP_TOKEN_MAX_AGE"
     value: 3600
 
 #==========================================================================
 # Global 'haiku-rag' configuration
 #==========================================================================
+# See: https://soliplex.github.io/soliplex/config/rag/#global-configuration
+#==========================================================================
 
 haiku_rag_config_file: "./haiku.rag.yaml"
 
 #==========================================================================
 # Agent configurations
+#==========================================================================
+# See: https://soliplex.github.io/soliplex/config/agents/
 #==========================================================================
 
 agent_configs:
@@ -192,9 +201,13 @@ authorization_dburi:
 #==========================================================================
 # OIDC authentication provider configuration
 #==========================================================================
+# See: https://soliplex.github.io/soliplex/config/oidc_providers/
+#==========================================================================
 
 #==========================================================================
 # Rooms configuration
+#==========================================================================
+# See: https://soliplex.github.io/soliplex/config/rooms/
 #
 # We avoid the default here, because the 'mcptest' room uses the SmitheryAI
 # registry, and hence requires additional secrets
@@ -207,12 +220,17 @@ room_paths:
   - "./rooms/faux"
   - "./rooms/quiztest"
   - "./rooms/research"
+#
 #==========================================================================
 # Completions configuration
+#==========================================================================
+# See: https://soliplex.github.io/soliplex/config/completions/
 #==========================================================================
 
 #==========================================================================
 # Quizzes configuration
+#==========================================================================
+# See: https://soliplex.github.io/soliplex/config/quizzes/
 #==========================================================================
 
 #==========================================================================

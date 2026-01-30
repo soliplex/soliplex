@@ -7,6 +7,7 @@ id: "soliplex-conf-default"
 #==========================================================================
 # Meta-configuration
 #==========================================================================
+# See: https://soliplex.github.io/soliplex/config/meta/
 #
 # Register custom "kinds" of entities (tool configurations, MCP client
 # toolset configurations, etc.)
@@ -106,6 +107,7 @@ meta:
 #==========================================================================
 # Secrets
 #==========================================================================
+# See: https://soliplex.github.io/soliplex/config/secrets/
 #
 # Kept in an external store, such as ASW secret store, GitHub secrets,
 # files created by the 'docker compose' 'secrets:' configuration, or
@@ -150,6 +152,7 @@ secrets:
 #==========================================================================
 # Environment Variables
 #==========================================================================
+# See: https://soliplex.github.io/soliplex/config/environment/
 #
 # Unlike secrets, environment variables are configured explicitly as part
 # of an installation.
@@ -171,18 +174,16 @@ environment:
   #
   # You can achieve the same effect by spelling it:
   # - name: "OLLAMA_BASE_URL"
-
+  #
   # This version configures the value explicitly:
   # - name: "OLLAMA_BASE_URL"
   #   value: "http://localhost:11434"
   #------------------------------------------------------------------------
-
   - "OLLAMA_BASE_URL"
 
   #------------------------------------------------------------------------
   # 'soliplex': on-disk configuration locations
   #------------------------------------------------------------------------
-  #
   - name: "INSTALLATION_PATH"
     value: "file:."
 
@@ -192,7 +193,6 @@ environment:
   #------------------------------------------------------------------------
   # Non-secret configuration for Logfire
   #------------------------------------------------------------------------
-  #
   - name: "LOGFIRE_ENVIRONMENT"
     value: "container"
 
@@ -202,18 +202,21 @@ environment:
   #------------------------------------------------------------------------
   # Expire MCP room server tokens after one hour.
   #------------------------------------------------------------------------
-  #
   - name: "MCP_TOKEN_MAX_AGE"
     value: 3600
 
 #==========================================================================
 # Global 'haiku-rag' configuration
 #==========================================================================
+# See: https://soliplex.github.io/soliplex/config/rag/#global-configuration
+#==========================================================================
 
 haiku_rag_config_file: "./haiku.rag.yaml"
 
 #==========================================================================
 # Agent configurations
+#==========================================================================
+# See: https://soliplex.github.io/soliplex/config/agents/
 #
 # Agent configurations which are not bound to rooms / completions, but
 # findable by ID from Python code using 'the_installation.get_agent_by_id'
@@ -255,6 +258,8 @@ authorization_dburi:
 #==========================================================================
 # OIDC authentication provider configuration
 #==========================================================================
+# See: https://soliplex.github.io/soliplex/config/oidc_providers/
+#
 # Specify one or more filesystem paths to search for OIDC provider configs.
 #
 # Non-absolute paths will be evaluated relative to the installation directory.
@@ -276,6 +281,8 @@ authorization_dburi:
 #==========================================================================
 # Rooms configuration
 #==========================================================================
+# See: https://soliplex.github.io/soliplex/config/rooms/
+#
 # Specify one or more filesystem paths to search for room configs.
 #
 # Each path can be either:
@@ -307,6 +314,8 @@ authorization_dburi:
 #==========================================================================
 # Completions configuration
 #==========================================================================
+# See: https://soliplex.github.io/soliplex/config/completions/
+#
 # Specify one or more filesystem paths to search for completion configs.
 #
 # Each path can be either:
@@ -338,6 +347,8 @@ authorization_dburi:
 #==========================================================================
 # Quizzes configuration
 #==========================================================================
+# See: https://soliplex.github.io/soliplex/config/quizzes/
+#
 # Specify one or more filesystem paths to search for quiz question files.
 #
 # Each path should be a directory containing one or more '<quiz_id>.json'
