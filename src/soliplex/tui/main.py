@@ -338,6 +338,49 @@ class RunEventWidget(t_widget.Widget):
         yield t_widgets.Static(self.event_content)
 
 
+class StateViewModal(t_screen.ModalScreen):
+    BINDINGS = [
+        t_binding.Binding("escape", "dismiss(None)", "Close"),
+    ]
+    DEFAULT_CSS = """
+    StateViewModal {
+        align: center middle;
+    }
+    StateViewModal > Container {
+        width: 80%;
+        height: 80%;
+        border: thick $primary;
+        background: $surface;
+        padding: 1 2;
+    }
+    StateViewModal > Container > Label {
+        text-style: bold;
+        margin-bottom: 1;
+    }
+    StateViewModal > Container > VerticalScroll {
+        height: 1fr;
+    }
+    """
+
+    def __init__(self, state: dict, *args, **kwargs):
+        self.state = state
+        super().__init__(*args, **kwargs)
+
+    def compose(self) -> t_app.ComposeResult:
+        from rich import syntax as rich_syntax
+
+        with t_containers.Container():
+            yield t_widgets.Label("AG-UI State")
+            with t_containers.VerticalScroll():
+                state_json = json.dumps(self.state, indent=2)
+                syntax = rich_syntax.Syntax(
+                    state_json,
+                    "json",
+                    line_numbers=True,
+                )
+                yield t_widgets.Static(syntax)
+
+
 class RunView(t_screen.Screen):
     BINDINGS = [
         t_binding.Binding("escape", "dismiss(None)", "Exit"),
@@ -645,6 +688,7 @@ class RoomView(t_screen.Screen):
         t_binding.Binding("ctrl+n", "new_thread", "New thread"),
         t_binding.Binding("ctrl+t", "list_threads", "Threads"),
         t_binding.Binding("ctrl+r", "list_runs", "Runs"),
+        t_binding.Binding("ctrl+s", "view_state", "State"),
         t_binding.Binding("ctrl+z", "edit_metadata", "Metadata"),
         t_binding.Binding("escape", "app.pop_screen", "Exit"),
     ]
@@ -761,6 +805,13 @@ class RoomView(t_screen.Screen):
         )
 
         await self.app.push_screen_wait(thread_runs_view)
+
+    @textual.work
+    async def action_view_state(self) -> None:
+        state = {}
+        if self.run_agent_input is not None:
+            state = self.run_agent_input.state
+        await self.app.push_screen_wait(StateViewModal(state))
 
     @textual.work
     async def action_edit_metadata(self) -> None:
