@@ -1,6 +1,8 @@
 id: "chat"
 name: "Haiku Chat"
 description: "Conversational RAG with search, ask, and document retrieval"
+agui_feature_names:
+  - "haiku.rag.chat"
 suggestions:
   - "Get the document agents.md and summarize its key points"
   - "Search for information about Soliplex"
