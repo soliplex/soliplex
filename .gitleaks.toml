@@ -1,0 +1,11 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist for placeholder tokens in documentation"
+regexTarget = "match"
+regexes = [
+    '''your-api-key''',
+    '''your-token''',
+    '''your-password''',
+]

@@ -12,3 +12,7 @@ repos:
       - id: check-yaml
         args: ['--multi']
         types: [yaml]
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks        

@@ -1,0 +1,55 @@
+name: Gitleaks Secret Scan
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        id: gitleaks
+        uses: docker://ghcr.io/gitleaks/gitleaks:latest
+        continue-on-error: true
+        with:
+          args: detect --source=/github/workspace --config=/github/workspace/.gitleaks.toml --no-git --verbose --redact --report-format json --report-path /github/workspace/gitleaks-report.json
+
+      - name: Parse Gitleaks report
+        id: parse-report
+        if: steps.gitleaks.outcome == 'failure'
+        run: |
+          if [ -f gitleaks-report.json ]; then
+            FILES=$(jq -r '[.[].File] | unique | .[]' gitleaks-report.json | head -10 | tr '\n' ', ' | sed 's/,$//')
+            echo "matched_files=$FILES" >> $GITHUB_OUTPUT
+          else
+            echo "matched_files=unknown" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Fail if secrets found
+        if: steps.gitleaks.outcome == 'failure'
+        run: exit 1
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY_URL }}
+          SLACK_CHANNEL: soliplex
+          SLACK_USERNAME: gitleaks-ci
+          SLACK_ICON_EMOJI: ':rotating_light:'
+          SLACK_COLOR: danger
+          SLACK_TITLE: Gitleaks Secret Scan Failed
+          SLACK_MESSAGE: 'Potential secrets detected on ${{ github.ref_name }} in: ${{ steps.parse-report.outputs.matched_files }}\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n $GITHUB_OUTPUT'

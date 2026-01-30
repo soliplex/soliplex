@@ -1,0 +1,44 @@
+name: TruffleHog Secrets Scan
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trufflehog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: TruffleHog scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --only-verified
+
+  notify-failure:
+    runs-on: ubuntu-latest
+    needs: [trufflehog]
+    if: failure()
+    timeout-minutes: 2
+    steps:
+      - name: Notify Slack on failure
+        uses: slackapi/slack-github-action@v2.1.1
+        with:
+          webhook: ${{ secrets.SLACK_NOTIFY_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "channel": "#soliplex",
+              "username": "soliplex",
+              "text": ":rotating_light: ${{ github.workflow }} failed on ${{ github.head_ref || github.ref_name }}:\n${{ github.event.head_commit.message }}\nhttps://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "icon_emoji": ":ghost:"
+            }
