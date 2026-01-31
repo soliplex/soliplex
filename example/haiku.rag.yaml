@@ -60,7 +60,6 @@ research:
     name: gpt-oss:latest
     provider: ollama
   max_iterations: 2
-  confidence_threshold: 0.7
   max_concurrency: 1
 
 

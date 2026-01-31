@@ -18,5 +18,4 @@
 #    temperature: null
 #    max_tokens: null
 #  max_iterations: 3
-#  confidence_threshold: 0.8
 #  max_concurrency: 1
