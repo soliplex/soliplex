@@ -1,4 +1,4 @@
-# Soliplex Logfire Configuration
+# Logfire Configuration
 
 The `logfire_config` attribute of the Soliplex installation configuration
 allows defining policies for how [Logfire](https://logfire.pydantic.dev) is
