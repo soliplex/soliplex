@@ -2258,7 +2258,7 @@ ok_ovr = contextlib.nullcontext("override")
         (True, None, "./override", ok_ovr, ok_ovr),
     ],
 )
-def test__rtb_ctor(
+def test__rcb_ctor(
     installation_config,
     temp_dir,
     w_config_path,
@@ -2298,7 +2298,7 @@ def test__rtb_ctor(
         kw["rag_lancedb_override_path"] = override
 
     with ctor_expectation as which:
-        rtb_config = config._RAGToolBase(**kw)
+        rcb_config = config._RAGConfigBase(**kw)
 
     if isinstance(which, str):
         if which == "stem":
@@ -2306,10 +2306,10 @@ def test__rtb_ctor(
         else:
             expected = from_override
 
-        assert rtb_config._config_path == exp_config_path
+        assert rcb_config._config_path == exp_config_path
 
         with rlp_expectation as which:
-            found = rtb_config.rag_lancedb_path
+            found = rcb_config.rag_lancedb_path
 
         if isinstance(which, str):
             assert found.resolve() == expected.resolve()
@@ -2318,7 +2318,7 @@ def test__rtb_ctor(
                 "rag_lancedb_path": expected.resolve(),
             }
 
-            assert rtb_config.get_extra_parameters() == expected_ep
+            assert rcb_config.get_extra_parameters() == expected_ep
 
 
 def test_sdtc_ctor(installation_config, temp_dir):

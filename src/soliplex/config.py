@@ -374,7 +374,7 @@ class ToolConfig:
 
 
 @dataclasses.dataclass(kw_only=True)
-class _RAGToolBase:
+class _RAGConfigBase:
     # Set in '__post_init__' below
     _rag_lancedb_path: pathlib.Path = None
 
@@ -461,7 +461,7 @@ class _RAGToolBase:
 
 
 @dataclasses.dataclass(kw_only=True)
-class SearchDocumentsToolConfig(ToolConfig, _RAGToolBase):
+class SearchDocumentsToolConfig(ToolConfig, _RAGConfigBase):
     kind: str = "search_documents"
     tool_name: str = "soliplex.tools.search_documents"
 
@@ -494,13 +494,13 @@ class SearchDocumentsToolConfig(ToolConfig, _RAGToolBase):
         }
         return (
             super().get_extra_parameters()
-            | _RAGToolBase.get_extra_parameters(self)
+            | _RAGConfigBase.get_extra_parameters(self)
             | local
         )
 
 
 @dataclasses.dataclass(kw_only=True)
-class RAGResearchToolConfig(ToolConfig, _RAGToolBase):
+class RAGResearchToolConfig(ToolConfig, _RAGConfigBase):
     kind: str = "research_report"
     tool_name: str = "soliplex.tools.research_report"
 
@@ -524,12 +524,12 @@ class RAGResearchToolConfig(ToolConfig, _RAGToolBase):
     def get_extra_parameters(self) -> dict:
         return (
             super().get_extra_parameters()
-            | _RAGToolBase.get_extra_parameters(self)
+            | _RAGConfigBase.get_extra_parameters(self)
         )
 
 
 @dataclasses.dataclass(kw_only=True)
-class AskWithRichCitationsToolConfig(ToolConfig, _RAGToolBase):
+class AskWithRichCitationsToolConfig(ToolConfig, _RAGConfigBase):
     kind: str = "ask_with_rich_citations"
     tool_name: str = "soliplex.tools.ask_with_rich_citations"
     agui_feature_names: typing.ClassVar[tuple[str]] = (
@@ -559,7 +559,7 @@ class AskWithRichCitationsToolConfig(ToolConfig, _RAGToolBase):
     def get_extra_parameters(self) -> dict:
         return (
             super().get_extra_parameters()
-            | _RAGToolBase.get_extra_parameters(self)
+            | _RAGConfigBase.get_extra_parameters(self)
         )
 
 
