@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "soliplex"
-version = "0.38dev0"
+version = "0.39dev0"
 description = "An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web interface."
 authors = [{ name = "Enfold", email = "info@enfoldsystems.net" }]
 readme = "README.md"
