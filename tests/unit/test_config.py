@@ -277,6 +277,7 @@ OTHER_PROVIDER_BASE_URL = "https://other-provider.example.com/api"
 PROVIDER_KEY_ENVVAR = "TEST_API_KEY"
 PROVIDER_KEY_VALUE = "DEADBEEF"
 OLLAMA_BASE_URL = "https://example.com:12345"
+AGUI_FEATURE_NAME = "test-agui-feature"
 
 BARE_INSTALLATION_CONFIG_ENVIRONMENT = {
     "OLLAMA_BASE_URL": PROVIDER_BASE_URL,
@@ -513,6 +514,20 @@ template_id: "{BOGUS_TEMPLATE_AGENT_ID}"
 system_prompt: ./prompt.txt
 """
 
+W_AGUI_FEATURE_NAMES_AGENT_CONFIG_KW = dict(
+    id=AGENT_ID,
+    model_name=MODEL_NAME,
+    system_prompt=SYSTEM_PROMPT,
+    agui_feature_names=(AGUI_FEATURE_NAME,),
+)
+W_AGUI_FEATURE_NAMES_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+model_name: "{MODEL_NAME}"
+system_prompt: "{SYSTEM_PROMPT}"
+agui_feature_names:
+  - "{AGUI_FEATURE_NAME}"
+"""
+
 FACTORY_NAME = "soliplex.config.test_factory_wo_config"
 WO_CONFIG_FACTORY_AGENT_CONFIG_KW = dict(
     id=AGENT_ID,
@@ -539,6 +554,20 @@ factory_name: "{FACTORY_NAME}"
 with_agent_config: true
 extra_config:
   foo: "Bar"
+"""
+
+W_AGUI_FEATURE_NAMES_FACTORY_AGENT_CONFIG_KW = dict(
+    id=AGENT_ID,
+    factory_name=FACTORY_NAME,
+    with_agent_config=False,
+    agui_feature_names=(AGUI_FEATURE_NAME,),
+)
+W_AGUI_FEATURE_NAMES_FACTORY_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+factory_name: "{FACTORY_NAME}"
+with_agent_config: false
+agui_feature_names:
+  - "{AGUI_FEATURE_NAME}"
 """
 
 W_BOGUS_TEMPLATE_ID_FACTORY_AGENT_CONFIG_YAML = f"""
@@ -626,7 +655,7 @@ agent:
     system_prompt: "{SYSTEM_PROMPT}"
 """
 
-EXTRA_AGUI_FEATURE_NAME = "test-agui-feature"
+EXTRA_AGUI_FEATURE_NAME = "extra-agui-feature"
 FULL_ROOM_CONFIG_KW = {
     "id": ROOM_ID,
     "name": ROOM_NAME,
@@ -641,6 +670,7 @@ FULL_ROOM_CONFIG_KW = {
         id=f"room-{ROOM_ID}",
         model_name=MODEL_NAME,
         system_prompt=SYSTEM_PROMPT,
+        agui_feature_names=(AGUI_FEATURE_NAME,),
     ),
     "quizzes": [
         config.QuizConfig(
@@ -703,6 +733,8 @@ logo_image: "./{IMAGE_FILENAME}"
 agent:
     model_name: "{MODEL_NAME}"
     system_prompt: "{SYSTEM_PROMPT}"
+    agui_feature_names:
+      - "{AGUI_FEATURE_NAME}"
 tools:
     - tool_name: "soliplex.tools.get_current_datetime"
       allow_mcp: true
@@ -1164,7 +1196,6 @@ SECRET_VALUE = "DEADBEEF"
 ENV_VAR_NAME = "TEST_ENV_VAR"
 COMMAND = "cat"
 
-AGUI_FEATURE_NAME = "test_agui_feature"
 AGUI_FEATURE_DESCRIPTION = "This is an AG-UI feature"
 AGUI_FEATURE_DESCRIPTION_EXTRA = "It is a really useful feature"
 AGUI_FEATURE_MODEL_KLASS = "soliplex.agui.features.Testing"
@@ -1972,7 +2003,19 @@ def test_toolconfig_from_yaml_w_error(temp_dir):
     assert exc_info.value._config_path == config_path
 
 
-def test_toolconfig_from_yaml(installation_config, temp_dir):
+@pytest.mark.parametrize(
+    "w_feature_names, exp_feature_names",
+    [
+        (None, ()),
+        (["foo"], ("foo",)),
+    ],
+)
+def test_toolconfig_from_yaml(
+    installation_config,
+    temp_dir,
+    w_feature_names,
+    exp_feature_names,
+):
     tool_name = "soliplex.tools.test_tool"
     config_path = temp_dir / "thing_config.yaml"
 
@@ -1981,15 +2024,21 @@ def test_toolconfig_from_yaml(installation_config, temp_dir):
         _config_path=config_path,
         tool_name=tool_name,
         allow_mcp=True,
+        agui_feature_names=exp_feature_names,
     )
+
+    config_dict = {
+        "tool_name": tool_name,
+        "allow_mcp": True,
+    }
+
+    if w_feature_names is not None:
+        config_dict["agui_feature_names"] = w_feature_names
 
     tool_config = config.ToolConfig.from_yaml(
         installation_config=installation_config,
         config_path=config_path,
-        config_dict={
-            "tool_name": tool_name,
-            "allow_mcp": True,
-        },
+        config_dict=config_dict,
     )
 
     assert tool_config == expected
@@ -2982,6 +3031,12 @@ def test_agentconfig_ctor(installation_config, kw):
             W_PROMPT_FILE_W_BOGUS_TEMPLATE_ID_AGENT_CONFIG_YAML,
             pytest.raises(config.FromYamlException),
         ),
+        (
+            W_AGUI_FEATURE_NAMES_AGENT_CONFIG_YAML,
+            contextlib.nullcontext(
+                W_AGUI_FEATURE_NAMES_AGENT_CONFIG_KW.copy()
+            ),
+        ),
     ],
 )
 def test_agentconfig_from_yaml(
@@ -3410,6 +3465,10 @@ def test_factoryagentconfig_factory(kw, w_existing):
         (
             W_CONFIG_FACTORY_AGENT_CONFIG_YAML,
             W_CONFIG_FACTORY_AGENT_CONFIG_KW.copy(),
+        ),
+        (
+            W_AGUI_FEATURE_NAMES_FACTORY_AGENT_CONFIG_YAML,
+            W_AGUI_FEATURE_NAMES_FACTORY_AGENT_CONFIG_KW.copy(),
         ),
         (W_BOGUS_TEMPLATE_ID_FACTORY_AGENT_CONFIG_YAML, None),
         (
@@ -3997,9 +4056,13 @@ def test_roomconfig_sort_key(w_order):
         (
             FULL_ROOM_CONFIG_KW.copy(),
             [
-                EXTRA_AGUI_FEATURE_NAME,
+                # from 'agent_config'
+                AGUI_FEATURE_NAME,
+                # from 'tool_configs'
                 "filter_documents",
                 "ask_history",
+                # from 'room_config'
+                EXTRA_AGUI_FEATURE_NAME,
             ],
         ),
     ],

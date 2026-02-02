@@ -283,9 +283,8 @@ class ToolRequires(enum.StrEnum):
 @dataclasses.dataclass(kw_only=True)
 class ToolConfig:
     tool_name: str
-    agui_feature_names: tuple[str] = ()
-
     allow_mcp: bool = False
+    agui_feature_names: tuple[str] = ()
 
     _tool: abc.Callable[..., typing.Any] = None
 
@@ -302,6 +301,9 @@ class ToolConfig:
     ):
         config_dict["_installation_config"] = installation_config
         config_dict["_config_path"] = config_path
+
+        agui_feature_names = config_dict.pop("agui_feature_names", ())
+        config_dict["agui_feature_names"] = tuple(agui_feature_names)
 
         try:
             return cls(**config_dict)
@@ -813,6 +815,8 @@ class AgentConfig:
 
     model_settings: ai_settings.ModelSettings = None
 
+    agui_feature_names: tuple[str] = ()
+
     # Set by `from_yaml` factory
     _installation_config: InstallationConfig = _no_repr_none()
     _config_path: pathlib.Path = None
@@ -873,6 +877,9 @@ class AgentConfig:
                 config_dict["model_settings"] = ai_settings.ModelSettings(
                     **pm_settings
                 )
+
+            agui_feature_names = config_dict.pop("agui_feature_names", ())
+            config_dict["agui_feature_names"] = tuple(agui_feature_names)
 
             return cls(**config_dict)
         except Exception as exc:
@@ -963,6 +970,8 @@ class FactoryAgentConfig:
         default_factory=dict,
     )
 
+    agui_feature_names: tuple[str] = ()
+
     _factory: AgentFactory = None
 
     # Set by `from_yaml` factory
@@ -1024,6 +1033,9 @@ class FactoryAgentConfig:
                     | config_dict
                     | {"_template_id": template_id}
                 )
+
+            agui_feature_names = config_dict.pop("agui_feature_names", ())
+            config_dict["agui_feature_names"] = tuple(agui_feature_names)
 
             return cls(**config_dict)
 
@@ -1371,11 +1383,14 @@ class RoomConfig:
 
     @property
     def agui_feature_names(self) -> tuple[str]:
-        tool_configs = self.tool_configs.values()
-        return sum(
-            (tool_config.agui_feature_names for tool_config in tool_configs),
-            start=tuple(self._agui_feature_names),
-        )
+        agent_features = set(self.agent_config.agui_feature_names)
+        room_features = set(self._agui_feature_names)
+        tool_features = set()
+
+        for tool_config in self.tool_configs.values():
+            tool_features |= set(tool_config.agui_feature_names)
+
+        return tuple(agent_features | tool_features | room_features)
 
     @property
     def quiz_map(self) -> dict[str, QuizConfig]:
