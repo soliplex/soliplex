@@ -1,4 +1,4 @@
-name: Python tests/coverage
+name: Python linting
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
       - 'pyproject.toml'
       - 'src/soliplex/**'
       - 'tests/**'
-      - '.github/workflows/python-test.yaml'
+      - '.github/workflows/python-lint.yaml'
       - 'uv.lock'
   pull_request:
     branches:
@@ -17,23 +17,19 @@ on:
       - 'pyproject.toml'
       - 'src/soliplex/**'
       - 'tests/**'
-      - '.github/workflows/python-test.yaml'
+      - '.github/workflows/python-lint.yaml'
       - 'uv.lock'
   workflow_dispatch:
 
 jobs:
-  test-soliplex:
+  lint-soliplex:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: true
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.12", "3.13", "3.14"]
-        include:
-            # Only run coverage on Python >= 3.13.
-            - python-version: "3.12"
-              pytest-args: "--no-cov"
+        python-version: ["3.13"]
     steps:
       - uses: actions/checkout@v4
 
@@ -41,23 +37,17 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-          cache: "pip"
-          cache-dependency-path: "**/pyproject.toml"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools
           pip install -e . --group dev
 
-      - name: Run unit tests with coverage
-        run: |
-          pip list
-          py.test -s ${{ matrix.pytest-args }}
+      - name: Check formatting
+        run: ruff format --check
 
-      - name: Run functional tests
-        run: |
-          pip list
-          py.test -s --no-cov -m "not needs_llm" tests/functional/
+      - name: Run ruff linter
+        run: ruff check
 
       - name: Notify Slack on failure
         if: failure()
@@ -72,3 +62,4 @@ jobs:
               "text": ":x: ${{ github.workflow }} failed on ${{ github.head_ref }}:\n${{ github.event.head_commit.message }}\nhttps://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "icon_emoji": ":ghost:"
             }
+
