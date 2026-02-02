@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 
 import fastapi
+import logfire
 import pydantic_ai
 from ag_ui import core as agui_core
 from fastapi import responses
@@ -22,10 +23,6 @@ router = fastapi.APIRouter(tags=["rooms"])
 depend_the_installation = installation.depend_the_installation
 depend_the_threads = agui_package.depend_the_threads
 depend_the_authz = authz_package.depend_the_authz_policy
-
-
-def _debug_print(msg):  # pragma: NO COVER
-    print(msg)
 
 
 async def _check_user_in_room(
@@ -419,23 +416,40 @@ async def tee_events(
     run_id: str,
 ):
     event_list = []
+    error_message = None
+    status = None
 
-    async for event in event_stream:
-        event_list.append(event)
-        yield event
+    with logfire.span(
+        "AG-UI event stream: {thread_id}/{run_id}",
+        thread_id=thread_id,
+        run_id=run_id,
+    ):
+        async for event in event_stream:
+            event_list.append(event)
+            yield event
 
-    if event_list:
-        last = event_list[-1]
+        if event_list:
+            last = event_list[-1]
 
-        if last.type == agui_core.EventType.RUN_FINISHED:
-            _debug_print(f"Stream {thread_id}/{run_id}: FINISHED")
+            if last.type == agui_core.EventType.RUN_FINISHED:
+                status = "FINISHED"
 
-        if last.type == agui_core.EventType.RUN_ERROR:
-            _debug_print(f"Stream {thread_id}/{run_id}: ERROR")
-            _debug_print(f"  {last.message}")
+            elif last.type == agui_core.EventType.RUN_ERROR:
+                status = "ERROR"
+                error_message = last.message
 
-    else:
-        _debug_print(f"Stream {thread_id}/{run_id}: EMPTY")
+            else:
+                status = "UNKNOWN"
+        else:
+            status = "EMPTY"
+
+        if error_message:
+            logfire.error(
+                "Stream error: {error_message}",
+                error_message=error_message,
+            )
+        else:
+            logfire.info("Stream status: {status}", status=status)
 
     await on_done(events=event_list)
 

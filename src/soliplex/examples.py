@@ -197,7 +197,7 @@ class FauxAgent:
                 if isinstance(part, ai_messages.UserPromptPart)
             ]
             if ups:
-                up = ups[0]
+                up = ups[-1]
                 delta = f"\n\nHmm, you asked {up.content}"
                 think_part.content += delta
                 yield ai_messages.PartDeltaEvent(
@@ -206,6 +206,8 @@ class FauxAgent:
                         content_delta=delta,
                     ),
                 )
+                if up.content == "fail":
+                    raise ValueError("failing on request")  # noqa: TRY003
 
             await asyncio.sleep(random.uniform(0.5, 2.0))
 

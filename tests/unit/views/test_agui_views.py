@@ -832,8 +832,8 @@ async def test_post_room_agui_thread_id_meta(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("w_event_count", [0, 1, 10])
 @pytest.mark.parametrize("w_finished_error", [None, "finished", "error"])
-@mock.patch("soliplex.views.agui._debug_print")
-async def test_tee_events(dprint, w_finished_error, w_event_count):
+@mock.patch("soliplex.views.agui.logfire")
+async def test_tee_events(logfire, w_finished_error, w_event_count):
     on_done = mock.AsyncMock(spec_set=())
 
     finished_event = agui_core.events.RunFinishedEvent(
@@ -864,20 +864,27 @@ async def test_tee_events(dprint, w_finished_error, w_event_count):
 
     on_done.assert_awaited_once_with(events=expected)
 
+    logfire.span.assert_called_once_with(
+        "AG-UI event stream: {thread_id}/{run_id}",
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+    )
+
     if len(expected) == 0:
-        dprint.assert_called_once_with(
-            f"Stream {TEST_THREAD_ID}/{TEST_RUN_ID}: EMPTY"
+        logfire.info.assert_called_once_with(
+            "Stream status: {status}",
+            status="EMPTY",
         )
     elif w_finished_error == "finished":
-        dprint.assert_called_once_with(
-            f"Stream {TEST_THREAD_ID}/{TEST_RUN_ID}: FINISHED"
+        logfire.info.assert_called_once_with(
+            "Stream status: {status}",
+            status="FINISHED",
         )
     elif w_finished_error == "error":
-        stat_call, msg_call = dprint.call_args_list
-        assert stat_call == mock.call(
-            f"Stream {TEST_THREAD_ID}/{TEST_RUN_ID}: ERROR"
+        logfire.error.assert_called_once_with(
+            "Stream error: {error_message}",
+            error_message="test error",
         )
-        assert msg_call == mock.call("  test error")
 
 
 @pytest.mark.asyncio
