@@ -133,6 +133,7 @@ class DefaultAgent(pydantic.BaseModel):
     provider_type: config.LLMProviderType  # enum, not dataclass
     provider_base_url: str | None
     provider_key: str
+    agui_feature_names: list[str] = pydantic.Field(default=())
 
     @classmethod
     def from_config(cls, agent_config: config.AgentConfig):
@@ -153,18 +154,36 @@ class FactoryAgent(pydantic.BaseModel):
     factory_name: str  # dotted name for import
     with_agent_config: bool
     extra_config: dict[str, typing.Any]
+    agui_feature_names: list[str] = pydantic.Field(default=())
 
     @classmethod
     def from_config(cls, agent_config: config.AgentConfig):
+        agui_feature_names = getattr(agent_config, "agui_feature_names", ())
         return cls(
             id=agent_config.id,
             factory_name=agent_config.factory_name,
             with_agent_config=agent_config.with_agent_config,
             extra_config=agent_config.extra_config,
+            agui_feature_names=agui_feature_names,
         )
 
 
-Agent = DefaultAgent | FactoryAgent
+class OtherAgent(pydantic.BaseModel):
+    id: str
+    kind: str
+    agui_feature_names: list[str] = pydantic.Field(default=())
+
+    @classmethod
+    def from_config(cls, agent_config):
+        agui_feature_names = getattr(agent_config, "agui_feature_names", ())
+        return cls(
+            id=agent_config.id,
+            kind=agent_config.kind,
+            agui_feature_names=agui_feature_names,
+        )
+
+
+Agent = DefaultAgent | FactoryAgent | OtherAgent
 
 
 class AGUI_Feature(pydantic.BaseModel):
@@ -203,8 +222,10 @@ class Room(pydantic.BaseModel):
 
         if agent_config.kind == "factory":
             agent = FactoryAgent.from_config(room_config.agent_config)
-        else:
+        elif agent_config.kind == "default":
             agent = DefaultAgent.from_config(room_config.agent_config)
+        else:
+            agent = OtherAgent.from_config(room_config.agent_config)
 
         return cls(
             id=room_config.id,
@@ -250,8 +271,10 @@ class Completion(pydantic.BaseModel):
 
         if agent_config.kind == "factory":
             agent = FactoryAgent.from_config(completion_config.agent_config)
-        else:
+        elif agent_config.kind == "default":
             agent = DefaultAgent.from_config(completion_config.agent_config)
+        else:
+            agent = OtherAgent.from_config(completion_config.agent_config)
 
         return cls(
             id=completion_config.id,

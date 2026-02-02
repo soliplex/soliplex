@@ -47,6 +47,7 @@ AGENT_RETRIES = 7
 AGENT_BASE_URL = "https://provider.example.com/base"
 OLLAMA_BASE_URL = "https://ollama.example.com/base"
 HAIKU_RAG_CONFIG_FILE = "/path/to/haiku.rag.yaml"
+OTHER_AGENT_KIND = "other-agent-kind"
 
 FACTORY_NAME = "some.package.function"
 
@@ -582,6 +583,21 @@ def test_factoryagent_from_config(
     assert agent_model.extra_config == exp_extra
 
 
+def test_otheragent_from_config(
+    installation_config,
+):
+    agent_config = mock.Mock(
+        spec_set=["id", "kind"],
+        id=AGENT_ID,
+        kind=OTHER_AGENT_KIND,
+    )
+
+    agent_model = models.OtherAgent.from_config(agent_config)
+
+    assert agent_model.id == AGENT_ID
+    assert agent_model.kind == OTHER_AGENT_KIND
+
+
 @pytest.fixture(params=[None, ROOM_WELCOME])
 def room_welcome(request):
     return _from_param(request, "welcome_message")
@@ -624,7 +640,7 @@ def room_allow_mcp(request):
     return _from_param(request, "allow_mcp")
 
 
-@pytest.fixture(params=["default", "factory"])
+@pytest.fixture(params=["default", "factory", "other"])
 def room_agent(request, installation_config):
     if request.param == "default":
         return config.AgentConfig(
@@ -633,12 +649,19 @@ def room_agent(request, installation_config):
             system_prompt=AGENT_PROMPT,
             _installation_config=installation_config,
         )
-    else:
+    elif request.param == "factory":
         return config.FactoryAgentConfig(
             id=AGENT_ID,
             factory_name=FACTORY_NAME,
             with_agent_config=False,
             _installation_config=installation_config,
+        )
+    else:
+        return mock.Mock(
+            spec_set=["id", "kind", "agui_feature_names"],
+            id=AGENT_ID,
+            kind=OTHER_AGENT_KIND,
+            agui_feature_names=(AGUI_FEATURE_NAME,),
         )
 
 
@@ -668,15 +691,22 @@ def test_room_from_config(
     assert room_model.name == ROOM_NAME
     assert room_model.description == ROOM_DESCRIPTION
 
-    assert room_model.agent.id == AGENT_ID
+    agent_model = room_model.agent
+
+    assert agent_model.id == AGENT_ID
 
     if room_agent.kind == "default":
-        assert room_model.agent.model_name == AGENT_MODEL
-        assert room_model.agent.system_prompt == AGENT_PROMPT
+        assert agent_model.model_name == AGENT_MODEL
+        assert agent_model.system_prompt == AGENT_PROMPT
+    elif room_agent.kind == "factory":
+        assert agent_model.factory_name == FACTORY_NAME
+        assert agent_model.with_agent_config is False
+        assert agent_model.extra_config == {}
     else:
-        assert room_model.agent.factory_name == FACTORY_NAME
-        assert room_model.agent.with_agent_config is False
-        assert room_model.agent.extra_config == {}
+        assert agent_model.kind == OTHER_AGENT_KIND
+        assert agent_model.agui_feature_names == list(
+            room_agent.agui_feature_names
+        )
 
     if room_welcome:
         assert room_model.welcome_message == room_welcome["welcome_message"]
@@ -688,15 +718,21 @@ def test_room_from_config(
     else:
         assert room_model.suggestions == []
 
+    exp_agui_features = set()
+
     if room_tools:
         assert room_model.tools == {
             key: models.Tool.from_config(tool_config)
             for (key, tool_config) in room_tools["tool_configs"].items()
         }
-        assert room_model.agui_feature_names == [FEATURE_NAME]
+        exp_agui_features.add(FEATURE_NAME)
     else:
         assert room_model.tools == {}
-        assert room_model.agui_feature_names == []
+
+    if getattr(room_agent, "agui_feature_names", None):
+        exp_agui_features |= set(room_agent.agui_feature_names)
+
+    assert set(room_model.agui_feature_names) == exp_agui_features
 
     if room_quizzes:
         assert room_model.quizzes == {
@@ -722,15 +758,21 @@ def test_completion_from_config(room_agent, room_tools):
     assert completion_model.id == ROOM_ID
     assert completion_model.name == ROOM_NAME
 
-    assert completion_model.agent.id == AGENT_ID
+    agent_model = completion_model.agent
+    assert agent_model.id == AGENT_ID
 
     if room_agent.kind == "default":
-        assert completion_model.agent.model_name == AGENT_MODEL
-        assert completion_model.agent.system_prompt == AGENT_PROMPT
+        assert agent_model.model_name == AGENT_MODEL
+        assert agent_model.system_prompt == AGENT_PROMPT
+    elif room_agent.kind == "factory":
+        assert agent_model.factory_name == FACTORY_NAME
+        assert agent_model.with_agent_config is False
+        assert agent_model.extra_config == {}
     else:
-        assert completion_model.agent.factory_name == FACTORY_NAME
-        assert completion_model.agent.with_agent_config is False
-        assert completion_model.agent.extra_config == {}
+        assert agent_model.kind == OTHER_AGENT_KIND
+        assert agent_model.agui_feature_names == list(
+            room_agent.agui_feature_names
+        )
 
     if room_tools:
         assert completion_model.tools == {
