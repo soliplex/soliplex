@@ -73,6 +73,8 @@ installation_path_type = typing.Annotated[
 def get_installation(
     installation_path: pathlib.Path,
 ) -> installation.Installation:
+    main.register_metaconfigs()
+
     if installation_path.is_dir():
         installation_path = installation_path / "installation.yaml"
     i_config = config.load_installation(installation_path)

@@ -2,6 +2,7 @@ import pathlib
 from unittest import mock
 
 import pytest
+import yaml
 from haiku.rag.agents import chat as hr_agents_chat
 from haiku.rag.agents.chat import state as hr_agents_chat_state
 
@@ -13,6 +14,63 @@ ROOM_ID = "test-chat-room"
 RAG_DB_PATH = "/path/to/rag.lancedb"
 RAG_LANCEDB_STEM = "test_rag"
 RAG_BASE_PATH = "/base/path"
+
+BOGUS_CHAT_AGENT_CONFIG_YAML = ""
+BOGUS_TEMPLATE_AGENT_ID = "BOGUS"
+
+AGENT_ID = "test-agent-id"
+TEMPLATE_AGENT_ID = "template-agent-id"
+TEMPLATE_STEM = "template_rag"
+BACKGROUND_CONTEXT = "Test background context"
+OTHER_BACKGROUND_CONTEXT = "Other background context"
+
+W_RAG_STEM_CHAT_AGENT_CONFIG_KW = {
+    "id": AGENT_ID,
+    "rag_lancedb_stem": RAG_LANCEDB_STEM,
+}
+W_RAG_STEM_CHAT_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+rag_lancedb_stem: "{RAG_LANCEDB_STEM}"
+"""
+
+W_RAG_OVR_CHAT_AGENT_CONFIG_KW = {
+    "id": AGENT_ID,
+    "rag_lancedb_override_path": RAG_DB_PATH,
+}
+W_RAG_OVR_CHAT_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+rag_lancedb_override_path: "{RAG_DB_PATH}"
+"""
+
+W_BKG_CONTEXT_AGENT_CONFIG_KW = W_RAG_STEM_CHAT_AGENT_CONFIG_KW | {
+    "background_context": BACKGROUND_CONTEXT,
+}
+W_BKG_CONTEXT_AGENT_CONFIG_YAML = f"""\
+{W_RAG_STEM_CHAT_AGENT_CONFIG_YAML}
+background_context: |
+    {BACKGROUND_CONTEXT}
+"""
+
+W_BOGUS_TEMPLATE_ID_CHAT_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+template_id: "{BOGUS_TEMPLATE_AGENT_ID}"
+"""
+
+W_TEMPLATE_ID_W_STEM_CHAT_AGENT_CONFIG_KW = W_RAG_STEM_CHAT_AGENT_CONFIG_KW | {
+    "_template_id": TEMPLATE_AGENT_ID,
+}
+W_TEMPLATE_ID_W_STEM_CHAT_AGENT_CONFIG_YAML = f"""
+{W_RAG_STEM_CHAT_AGENT_CONFIG_YAML}
+template_id: "{TEMPLATE_AGENT_ID}"
+"""
+
+W_TEMPLATE_ID_W_OVR_CHAT_AGENT_CONFIG_KW = W_RAG_OVR_CHAT_AGENT_CONFIG_KW | {
+    "_template_id": TEMPLATE_AGENT_ID,
+}
+W_TEMPLATE_ID_W_OVR_CHAT_AGENT_CONFIG_YAML = f"""
+{W_RAG_OVR_CHAT_AGENT_CONFIG_YAML}
+template_id: "{TEMPLATE_AGENT_ID}"
+"""
 
 
 @pytest.fixture
@@ -401,3 +459,175 @@ async def test_chat_agent_wrapper_does_not_override_existing_initial_context(
     call_kwargs = mock_agent.run_stream_events.call_args.kwargs
     chat_deps = call_kwargs["deps"]
     assert chat_deps.session_state.initial_context == "Existing context."
+
+
+@pytest.fixture
+def installation_config():
+    return mock.create_autospec(config.InstallationConfig)
+
+
+@pytest.mark.parametrize(
+    "config_yaml, expected_kw",
+    [
+        (BOGUS_CHAT_AGENT_CONFIG_YAML, None),
+        (
+            W_RAG_STEM_CHAT_AGENT_CONFIG_YAML,
+            W_RAG_STEM_CHAT_AGENT_CONFIG_KW.copy(),
+        ),
+        (
+            W_RAG_OVR_CHAT_AGENT_CONFIG_YAML,
+            W_RAG_OVR_CHAT_AGENT_CONFIG_KW.copy(),
+        ),
+        (
+            W_BKG_CONTEXT_AGENT_CONFIG_YAML,
+            W_BKG_CONTEXT_AGENT_CONFIG_KW.copy(),
+        ),
+        (W_BOGUS_TEMPLATE_ID_CHAT_AGENT_CONFIG_YAML, None),
+        (
+            W_TEMPLATE_ID_W_STEM_CHAT_AGENT_CONFIG_YAML,
+            W_TEMPLATE_ID_W_STEM_CHAT_AGENT_CONFIG_KW.copy(),
+        ),
+        (
+            W_TEMPLATE_ID_W_OVR_CHAT_AGENT_CONFIG_YAML,
+            W_TEMPLATE_ID_W_OVR_CHAT_AGENT_CONFIG_KW.copy(),
+        ),
+    ],
+)
+def test_chatagentconfig_from_yaml(
+    installation_config,
+    temp_dir,
+    config_yaml,
+    expected_kw,
+):
+    yaml_file = temp_dir / "test.yaml"
+    yaml_file.write_text(config_yaml)
+
+    with yaml_file.open() as stream:
+        config_dict = yaml.safe_load(stream)
+
+    if config_dict is not None:
+        template_id = config_dict.get("template_id")
+    else:
+        template_id = None
+
+    if template_id not in (None, BOGUS_TEMPLATE_AGENT_ID):
+        template_kw = {
+            "background_context": OTHER_BACKGROUND_CONTEXT,
+            "rag_lancedb_stem": TEMPLATE_STEM,
+        }
+        installation_config.agent_configs = [
+            haiku_chat.ChatAgentConfig(id=template_id, **template_kw),
+        ]
+    else:
+        template_kw = {}
+        installation_config.agent_configs = []
+
+    if expected_kw is None:
+        with pytest.raises(config.FromYamlException):
+            haiku_chat.ChatAgentConfig.from_yaml(
+                installation_config,
+                yaml_file,
+                config_dict,
+            )
+    else:
+        if "rag_lancedb_stem" in expected_kw:
+            template_kw.pop("rag_lancedb_override_path", None)
+
+        if "rag_lancedb_override_path" in expected_kw:
+            template_kw.pop("rag_lancedb_stem", None)
+
+        expected = haiku_chat.ChatAgentConfig(
+            _installation_config=installation_config,
+            _config_path=yaml_file,
+            **(template_kw | expected_kw),
+        )
+
+        found = haiku_chat.ChatAgentConfig.from_yaml(
+            installation_config,
+            yaml_file,
+            config_dict,
+        )
+
+        assert found == expected
+
+
+@pytest.mark.parametrize(
+    "ctor_kw",
+    [
+        W_RAG_STEM_CHAT_AGENT_CONFIG_KW.copy(),
+        W_RAG_OVR_CHAT_AGENT_CONFIG_KW.copy(),
+    ],
+)
+def test_chatagentconfig_agui_feature_names(ctor_kw):
+    cac = haiku_chat.ChatAgentConfig(**ctor_kw)
+
+    assert cac.agui_feature_names == ("haiku.rag.chat",)
+
+
+@pytest.mark.parametrize(
+    "ctor_kw",
+    [
+        W_RAG_STEM_CHAT_AGENT_CONFIG_KW.copy(),
+        W_RAG_OVR_CHAT_AGENT_CONFIG_KW.copy(),
+        W_BKG_CONTEXT_AGENT_CONFIG_KW.copy(),
+        W_TEMPLATE_ID_W_STEM_CHAT_AGENT_CONFIG_KW.copy(),
+        W_TEMPLATE_ID_W_OVR_CHAT_AGENT_CONFIG_KW.copy(),
+    ],
+)
+def test_chatagentconfig_as_yaml(ctor_kw):
+    cac = haiku_chat.ChatAgentConfig(**ctor_kw)
+
+    found = cac.as_yaml
+
+    expected = ctor_kw.copy()
+    expected.pop("_template_id", None)
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "ctor_kw",
+    [
+        W_RAG_STEM_CHAT_AGENT_CONFIG_KW.copy(),
+        W_RAG_OVR_CHAT_AGENT_CONFIG_KW.copy(),
+        W_BKG_CONTEXT_AGENT_CONFIG_KW.copy(),
+    ],
+)
+@mock.patch("soliplex.haiku_chat.hr_agents_chat_agent")
+def test_chatagentconfig_factory(
+    hr_agents_chat_agent,
+    temp_dir,
+    ctor_kw,
+):
+    db_path = temp_dir / "db"
+    db_path.mkdir()
+    ic_enviro = {"RAG_LANCE_DB_PATH": str(db_path)}
+    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config.get_environment = ic_enviro.get
+
+    if "rag_lancedb_override_path" in ctor_kw:
+        rag_path = temp_dir / "override" / "rag.lancedb"
+        ctor_kw["rag_lancedb_override_path"] = rag_path
+    else:
+        rag_path = db_path / f"{ctor_kw['rag_lancedb_stem']}.lancedb"
+
+    rag_path.mkdir(parents=True)
+
+    cac = haiku_chat.ChatAgentConfig(
+        **ctor_kw,
+        _installation_config=i_config,
+        _config_path=temp_dir / "test.yaml",
+    )
+
+    found = cac.factory()
+
+    assert isinstance(found, haiku_chat.ChatAgentWrapper)
+
+    assert found.agent is hr_agents_chat_agent.create_chat_agent.return_value
+    assert found.config is i_config.haiku_rag_config
+    assert found.db_path == rag_path
+    assert found.background_context == cac.background_context
+
+    hr_agents_chat_agent.create_chat_agent.assert_called_once_with(
+        i_config.haiku_rag_config
+    )

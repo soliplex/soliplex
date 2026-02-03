@@ -1,27 +1,22 @@
 id: "chat"
 name: "Haiku Chat"
 description: "Conversational RAG with search, ask, and document retrieval"
-agui_feature_names:
-  - "haiku.rag.chat"
 suggestions:
   - "Get the document agents.md and summarize its key points"
   - "Search for information about Soliplex"
   - "Explain how the authentication system works"
 agent:
-  kind: "factory"
-  factory_name: "soliplex.haiku_chat.chat_agent_factory"
-  with_agent_config: true
-  extra_config:
-    rag_lancedb_stem: "rag"
-    background_context: |
-      **Soliplex** is an AI-powered Retrieval-Augmented Generation (RAG) platform.
-      It lets users:
+  kind: "haiku_chat"
+  rag_lancedb_stem: "rag"
+  background_context: |
+    **Soliplex** is an AI-powered Retrieval-Augmented Generation (RAG) platform.
+    It lets users:
 
-      * **Index** documents (text, PDFs, etc.) in a vector store (via LanceDB).
-      * **Search** that content quickly with a full-text + vector engine.
-      * **Generate** answers that are grounded in the indexed material by calling the OpenAI API or running local Ollama models.
-      * **Interact** through a WebSocket-driven chat interface, with a FastAPI backend managing routing to the vector store and language model.
-      * **Securely authenticate** users with OIDC.
+    * **Index** documents (text, PDFs, etc.) in a vector store (via LanceDB).
+    * **Search** that content quickly with a full-text + vector engine.
+    * **Generate** answers that are grounded in the indexed material by calling the OpenAI API or running local Ollama models.
+    * **Interact** through a WebSocket-driven chat interface, with a FastAPI backend managing routing to the vector store and language model.
+    * **Securely authenticate** users with OIDC.
 
-      Soliplex is built on the haiku-rag library and is ideal for applications such as internal knowledge bases, legal compliance, onboarding, customer support, and research assistance.
+    Soliplex is built on the haiku-rag library and is ideal for applications such as internal knowledge bases, legal compliance, onboarding, customer support, and research assistance.
 allow_mcp: false

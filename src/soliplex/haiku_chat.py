@@ -17,6 +17,7 @@ from haiku.rag.agents.chat import state as hr_agents_chat_state
 from haiku.rag.config import models as hr_config_models
 from pydantic_ai import messages as ai_messages
 from pydantic_ai import run as ai_run
+from pydantic_ai.agent import abstract as ai_ag_abstract
 
 from soliplex import agents
 from soliplex import config
@@ -108,6 +109,8 @@ def chat_agent_factory(
 ) -> ChatAgentWrapper:
     """Factory function that creates a haiku.rag chat agent wrapper.
 
+    DEPRECATED:  use 'ChatAgentConfig' below instead.
+
     This factory is intended to be used with Soliplex's factory agent
     configuration:
 
@@ -140,3 +143,115 @@ def chat_agent_factory(
         db_path=db_path,
         background_context=background_context,
     )
+
+
+@dataclasses.dataclass(kw_only=True)
+class ChatAgentConfig(config._RAGConfigBase):
+    """Custom config type for the 'haiku.rag.chat' agent
+    This config class is intended to be used in a Soliplex room or
+    completion configuration:
+
+        agent:
+          kind: "haiku_chat"
+          rag_lancedb_stem: "rag"
+          background_context: |
+            <your context here>
+
+    or with a path override:
+
+        agent:
+          kind: "haiku_chat"
+          rag_lancedb_override_path: "/path/to/rag.lancedb"
+          background_context: |
+            <your context here>
+    """
+
+    id: str
+    kind: typing.ClassVar[str] = "haiku_chat"
+    background_context: str = None
+
+    # Use a config from the top-level InstallationConfig's 'agent_configs'
+    # as a template.
+    _template_id: str = None
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: config.InstallationConfig,
+        config_path: pathlib.Path,
+        config_dict: dict,
+    ):
+        try:
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
+
+            bkg_context = config_dict.pop("background_context", None)
+            if bkg_context is not None:
+                config_dict["background_context"] = bkg_context.strip()
+
+            had_stem = "rag_lancedb_stem" in config_dict
+            had_override = "rag_lancedb_override_path" in config_dict
+
+            config_dict = config._apply_agent_config_template(
+                config_dict,
+                installation_config,
+                config_path,
+            )
+
+            # Template stem / override must not conflict w/ local.
+            if had_stem:
+                if not had_override:
+                    config_dict.pop("rag_lancedb_override_path", None)
+                else:  # pragma: NO COVER
+                    pass
+            elif had_override:
+                config_dict.pop("rag_lancedb_stem", None)
+            else:  # pragma: NO COVER
+                pass
+
+            instance = cls(**config_dict)
+        except Exception as exc:
+            raise config.FromYamlException(
+                config_path,
+                "chatagent",
+                config_dict,
+            ) from exc
+
+        return instance
+
+    @property
+    def agui_feature_names(self) -> tuple[str]:
+        return (hr_agents_chat.AGUI_STATE_KEY,)
+
+    @property
+    def as_yaml(self):
+        result = {
+            "id": self.id,
+        }
+
+        if self.background_context is not None:
+            result["background_context"] = self.background_context
+
+        if self.rag_lancedb_override_path is not None:
+            result["rag_lancedb_override_path"] = (
+                self.rag_lancedb_override_path
+            )
+        else:
+            result["rag_lancedb_stem"] = self.rag_lancedb_stem
+
+        return result
+
+    def factory(self, **_kwargs) -> ai_ag_abstract.AbstractAgent:
+        agent = hr_agents_chat_agent.create_chat_agent(self.haiku_rag_config)
+
+        return ChatAgentWrapper(
+            agent=agent,
+            config=self.haiku_rag_config,
+            db_path=self.rag_lancedb_path,
+            background_context=self.background_context,
+        )
+
+
+def register_metaconfig():
+    ac_klass_registry = config.AGENT_CONFIG_CLASSES_BY_KIND
+    ac_klass_registry[ChatAgentConfig.kind] = ChatAgentConfig

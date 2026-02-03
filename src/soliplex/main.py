@@ -12,6 +12,7 @@ from fastapi.middleware import cors as fastapi_mw_cors
 from starlette.middleware import sessions as starlette_mw_sessions
 
 from soliplex import authn
+from soliplex import haiku_chat
 from soliplex import installation
 from soliplex import util
 from soliplex import views
@@ -23,6 +24,10 @@ from soliplex.views import installation as installation_views
 from soliplex.views import quizzes as quizzes_views
 from soliplex.views import rooms as rooms_views
 from soliplex.views import streaming as streaming_views
+
+
+def register_metaconfigs():
+    haiku_chat.register_metaconfig()
 
 
 def curry_lifespan(
@@ -108,6 +113,7 @@ def create_app(
     installation_path: pathlib.Path,
     no_auth_mode: bool,
     add_admin_user: str = None,
+    register_metaconfigs=register_metaconfigs,
     curry_lifespan=curry_lifespan,
     app_with_lifespan=app_with_lifespan,
     app_with_cors=app_with_cors,
@@ -120,6 +126,8 @@ def create_app(
     Callers may override any of the component functions in this module
     via parameters.
     """
+    register_metaconfigs()
+
     curried_lifespan = curry_lifespan(
         installation_path=installation_path,
         no_auth_mode=no_auth_mode,
