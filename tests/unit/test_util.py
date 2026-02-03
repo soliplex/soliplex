@@ -93,6 +93,7 @@ def test_gitmetadata_git_hash(subp, temp_dir, w_already):
     else:
         subp.check_output.assert_called_once_with(
             ["git", "-C", str(temp_dir), "rev-parse", "HEAD"],
+            stderr=subp.DEVNULL,
         )
 
 
@@ -146,6 +147,7 @@ def test_gitmetadata_git_branch(subp, temp_dir, w_already, w_lines, expected):
     else:
         subp.check_output.assert_called_once_with(
             ["git", "-C", str(temp_dir), "branch", "--list"],
+            stderr=subp.DEVNULL,
         )
 
 
@@ -209,7 +211,48 @@ def test_gitmetadata_git_tag(subp, temp_dir, w_already, w_lines, expected):
                 "--sort=creatordate",
                 "--format=%(objectname) %(refname:strip=2)",
             ],
+            stderr=subp.DEVNULL,
         )
+
+
+@mock.patch("soliplex.util.subprocess.check_output")
+def test_gitmetadata_git_hash_w_calledprocesserror(check_output, temp_dir):
+    """Test git_hash returns 'unknown' when git command fails."""
+    import subprocess
+
+    gitmeta = util.GitMetadata(temp_dir)
+    check_output.side_effect = subprocess.CalledProcessError(128, "git")
+
+    found = gitmeta.git_hash
+
+    assert found == "unknown"
+
+
+@mock.patch("soliplex.util.subprocess.check_output")
+def test_gitmetadata_git_branch_w_calledprocesserror(check_output, temp_dir):
+    """Test git_branch returns 'unknown' when git command fails."""
+    import subprocess
+
+    gitmeta = util.GitMetadata(temp_dir)
+    check_output.side_effect = subprocess.CalledProcessError(128, "git")
+
+    found = gitmeta.git_branch
+
+    assert found == "unknown"
+
+
+@mock.patch("soliplex.util.subprocess.check_output")
+def test_gitmetadata_git_tag_w_calledprocesserror(check_output, temp_dir):
+    """Test git_tag returns 'unknown' when git command fails."""
+    import subprocess
+
+    gitmeta = util.GitMetadata(temp_dir)
+    gitmeta._git_hash = GIT_HASH  # Set hash so tag lookup proceeds
+    check_output.side_effect = subprocess.CalledProcessError(128, "git")
+
+    found = gitmeta.git_tag
+
+    assert found == "unknown"
 
 
 @pytest.mark.parametrize(
