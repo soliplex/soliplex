@@ -2981,6 +2981,64 @@ def test_withquerymcpwrapper_call():
 
 
 @pytest.mark.parametrize(
+    "config_dict, expected",
+    [
+        ({}, {}),
+        ({"template_id": BOGUS_TEMPLATE_AGENT_ID}, None),
+        ({"other": "OTHER"}, {"other": "OTHER"}),
+        (
+            {"template_id": TEMPLATE_AGENT_ID, "other": "OTHER"},
+            {
+                "other": "OTHER",
+                "key": "from_template",
+                "_template_id": TEMPLATE_AGENT_ID,
+            },
+        ),
+        (
+            {"template_id": TEMPLATE_AGENT_ID, "key": "from_local"},
+            {"key": "from_local", "_template_id": TEMPLATE_AGENT_ID},
+        ),
+        (
+            {
+                "template_id": TEMPLATE_AGENT_ID,
+                "key": "from_local",
+                "other": "OTHER",
+            },
+            {
+                "other": "OTHER",
+                "key": "from_local",
+                "_template_id": TEMPLATE_AGENT_ID,
+            },
+        ),
+    ],
+)
+def test__apply_agent_config_template(temp_dir, config_dict, expected):
+    template_ac = mock.Mock(spec_set=["id", "as_yaml"])
+    template_ac.id = TEMPLATE_AGENT_ID
+    template_ac.as_yaml = {"key": "from_template"}
+    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config.agent_configs = [template_ac]
+    config_path = temp_dir / "test.yaml"
+
+    if expected is None:
+        with pytest.raises(config.InvalidAgentTemplateID):
+            config._apply_agent_config_template(
+                config_dict,
+                i_config,
+                config_path,
+            )
+
+    else:
+        found = config._apply_agent_config_template(
+            config_dict,
+            i_config,
+            config_path,
+        )
+
+        assert found == expected
+
+
+@pytest.mark.parametrize(
     "kw",
     [
         BARE_AGENT_CONFIG_KW.copy(),

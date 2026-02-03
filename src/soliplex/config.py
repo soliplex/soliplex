@@ -795,6 +795,35 @@ class LLMProviderType(enum.StrEnum):
     GOOGLE = "google"
 
 
+def _apply_agent_config_template(
+    config_dict,
+    installation_config,
+    config_path,
+):
+    template_id = config_dict.pop("template_id", None)
+
+    if template_id is not None:
+        # Cannot use 'agent_configs_map' because we might still be
+        # initalizing the IC.
+        ic_agent_configs_map = {
+            agent_config.id: agent_config
+            for agent_config in installation_config.agent_configs
+        }
+
+        if template_id not in ic_agent_configs_map:
+            raise InvalidAgentTemplateID(template_id, config_path)
+
+        template_config = ic_agent_configs_map[template_id]
+
+        config_dict = (
+            template_config.as_yaml
+            | config_dict
+            | {"_template_id": template_id}
+        )
+
+    return config_dict
+
+
 @dataclasses.dataclass(kw_only=True)
 class AgentConfig:
     #
@@ -840,29 +869,11 @@ class AgentConfig:
             config_dict["_installation_config"] = installation_config
             config_dict["_config_path"] = config_path
 
-            if "template_id" in config_dict:
-                template_id = config_dict.pop("template_id")
-
-                # Cannot use 'agent_configs_map' because we might still be
-                # initalizing the IC.
-                ic_agent_configs_map = {
-                    agent_config.id: agent_config
-                    for agent_config in installation_config.agent_configs
-                }
-
-                if template_id not in ic_agent_configs_map:
-                    raise InvalidAgentTemplateID(  # noqa: TRY301
-                        template_id,
-                        config_path,
-                    )
-
-                template_config = ic_agent_configs_map[template_id]
-
-                config_dict = (
-                    template_config.as_yaml
-                    | config_dict
-                    | {"_template_id": template_id}
-                )
+            config_dict = _apply_agent_config_template(
+                config_dict,
+                installation_config,
+                config_path,
+            )
 
             if "system_prompt" in config_dict:
                 system_prompt = config_dict.pop("system_prompt")
@@ -1010,29 +1021,11 @@ class FactoryAgentConfig:
             config_dict["_installation_config"] = installation_config
             config_dict["_config_path"] = config_path
 
-            if "template_id" in config_dict:
-                template_id = config_dict.pop("template_id")
-
-                # Cannot use 'agent_configs_map' because we might still be
-                # initalizing the IC.
-                ic_agent_configs_map = {
-                    agent_config.id: agent_config
-                    for agent_config in installation_config.agent_configs
-                }
-
-                if template_id not in ic_agent_configs_map:
-                    raise InvalidAgentTemplateID(  # noqa: TRY301
-                        template_id,
-                        config_path,
-                    )
-
-                template_config = ic_agent_configs_map[template_id]
-
-                config_dict = (
-                    template_config.as_yaml
-                    | config_dict
-                    | {"_template_id": template_id}
-                )
+            config_dict = _apply_agent_config_template(
+                config_dict,
+                installation_config,
+                config_path,
+            )
 
             agui_feature_names = config_dict.pop("agui_feature_names", ())
             config_dict["agui_feature_names"] = tuple(agui_feature_names)
