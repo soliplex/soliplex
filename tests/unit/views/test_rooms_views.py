@@ -387,7 +387,8 @@ async def test_get_room_documents(
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_chunk", [False, True])
-@pytest.mark.parametrize("w_hr_tool", [False, True])
+@pytest.mark.parametrize("w_hr_via", [None, "agent", "tool"])
+@pytest.mark.parametrize("w_hr_agent", [False, True])
 @mock.patch("haiku.rag.client.HaikuRAG")
 @mock.patch("base64.b64encode")
 @mock.patch("soliplex.authn.authenticate")
@@ -396,7 +397,8 @@ async def test_get_chunk_visualization(
     b64enc,
     hr_klass,
     temp_dir,
-    w_hr_tool,
+    w_hr_agent,
+    w_hr_via,
     w_chunk,
     room_configs,
 ):
@@ -433,12 +435,21 @@ async def test_get_chunk_visualization(
     db_path = pathlib.Path("/tmp/rag.db")
 
     if ROOM_ID in room_configs:
+        room_config = room_configs[ROOM_ID]
+        room_config.agent_config = mock.create_autospec(config.AgentConfig)
         non_hr_tool_config = mock.create_autospec(config.ToolConfig)
-        tool_configs = room_configs[ROOM_ID].tool_configs = {
+        tool_configs = room_config.tool_configs = {
             "non_hr": non_hr_tool_config,
         }
 
-        if w_hr_tool:
+        if w_hr_via == "agent":
+            room_config.agent_config = mock.create_autospec(
+                config._RAGConfigBase,
+                haiku_rag_config=hr_config,
+                rag_lancedb_path=db_path,
+            )
+
+        elif w_hr_via == "tool":
             tool_config = mock.create_autospec(
                 config.ToolConfig,
                 haiku_rag_config=hr_config,
@@ -446,17 +457,17 @@ async def test_get_chunk_visualization(
             )
             tool_configs["testing"] = tool_config
 
-            if w_chunk:
-                chunk = hr_chunk.Chunk(
-                    chunk_id=CHUNK_ID,
-                    document_uri=DOCUMENT_URI,
-                    content="waaa",
-                )
-                chunk_repo.get_by_id.return_value = chunk
+        if w_chunk:
+            chunk = hr_chunk.Chunk(
+                chunk_id=CHUNK_ID,
+                document_uri=DOCUMENT_URI,
+                content="waaa",
+            )
+            chunk_repo.get_by_id.return_value = chunk
 
-                hr_entered.visualize_chunk.return_value = PAGES_PNG
-            else:
-                chunk_repo.get_by_id.return_value = None
+            hr_entered.visualize_chunk.return_value = PAGES_PNG
+        else:
+            chunk_repo.get_by_id.return_value = None
 
     if ROOM_ID not in room_configs:
         with pytest.raises(fastapi.HTTPException) as exc:
@@ -472,7 +483,7 @@ async def test_get_chunk_visualization(
         assert exc.value.status_code == 404
         assert exc.value.detail == "No such room: foo"
 
-    elif not w_hr_tool:
+    elif w_hr_via is None:
         with pytest.raises(fastapi.HTTPException) as exc:
             await rooms_views.get_chunk_visualization(
                 request,
