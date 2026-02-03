@@ -111,7 +111,7 @@ def test_app_with_session(authn):
 @mock.patch("soliplex.util.GitMetadata")
 @mock.patch("pathlib.Path.cwd")
 async def test_add_custom_header(pp_cwd, gm_klass, w_already_tgm):
-    main_patch = {}
+    main_patch = {"the_git_metadata": None}
 
     if w_already_tgm is not None:
         main_patch["the_git_metadata"] = w_already_tgm

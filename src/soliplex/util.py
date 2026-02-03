@@ -83,13 +83,17 @@ class GitMetadata:
     def git_hash(self) -> str:
         if self._git_hash is None:
             repo_dir = str(self.repo_dir)
-            self._git_hash = (
-                subprocess.check_output(
-                    ["git", "-C", repo_dir, "rev-parse", "HEAD"]
+            try:
+                self._git_hash = (
+                    subprocess.check_output(
+                        ["git", "-C", repo_dir, "rev-parse", "HEAD"],
+                        stderr=subprocess.DEVNULL,
+                    )
+                    .decode("utf-8")
+                    .strip()
                 )
-                .decode("utf-8")
-                .strip()
-            )
+            except subprocess.CalledProcessError:
+                self._git_hash = "unknown"
 
         return self._git_hash
 
@@ -97,23 +101,27 @@ class GitMetadata:
     def git_branch(self) -> str:
         if self._git_branch is None:
             repo_dir = str(self.repo_dir)
-            branches_lines = subprocess.check_output(
-                [
-                    "git",
-                    "-C",
-                    repo_dir,
-                    "branch",
-                    "--list",
-                ]
-            ).decode("ascii")
+            try:
+                branches_lines = subprocess.check_output(
+                    [
+                        "git",
+                        "-C",
+                        repo_dir,
+                        "branch",
+                        "--list",
+                    ],
+                    stderr=subprocess.DEVNULL,
+                ).decode("ascii")
 
-            for branch_line in branches_lines.splitlines():
-                flag = branch_line[0]
-                branch_name = branch_line[2:]
+                for branch_line in branches_lines.splitlines():
+                    flag = branch_line[0]
+                    branch_name = branch_line[2:]
 
-                if flag == "*":
-                    self._git_branch = branch_name
-                    break
+                    if flag == "*":
+                        self._git_branch = branch_name
+                        break
+            except subprocess.CalledProcessError:
+                self._git_branch = "unknown"
 
         return self._git_branch
 
@@ -121,25 +129,29 @@ class GitMetadata:
     def git_tag(self) -> str:
         if self._git_tag is None:
             repo_dir = str(self.repo_dir)
-            tags_lines = subprocess.check_output(
-                [
-                    "git",
-                    "-C",
-                    repo_dir,
-                    "tag",
-                    "--list",
-                    "--sort=creatordate",
-                    "--format=%(objectname) %(refname:strip=2)",
-                ]
-            ).decode("ascii")
+            try:
+                tags_lines = subprocess.check_output(
+                    [
+                        "git",
+                        "-C",
+                        repo_dir,
+                        "tag",
+                        "--list",
+                        "--sort=creatordate",
+                        "--format=%(objectname) %(refname:strip=2)",
+                    ],
+                    stderr=subprocess.DEVNULL,
+                ).decode("ascii")
 
-            for tag_line in tags_lines.splitlines():
-                tag_line = tag_line.strip()
-                if tag_line:
-                    long_hash, tag_name = tag_line.split(" ", 1)
-                    if long_hash == self.git_hash:
-                        self._git_tag = tag_name
-                        break
+                for tag_line in tags_lines.splitlines():
+                    tag_line = tag_line.strip()
+                    if tag_line:
+                        long_hash, tag_name = tag_line.split(" ", 1)
+                        if long_hash == self.git_hash:
+                            self._git_tag = tag_name
+                            break
+            except subprocess.CalledProcessError:
+                self._git_tag = "unknown"
 
         return self._git_tag
 
