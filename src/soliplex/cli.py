@@ -128,6 +128,8 @@ log_level_option: LogLevelOption = typer.Option(
     None, "--log-level", help="Log level"
 )
 
+app_factory_name_option = typer.Option(None, hidden=True)
+app_maker_option = typer.Option(None, hidden=True)
 
 @the_cli.command(
     "serve",
@@ -209,6 +211,8 @@ Incompatible with '--no-auth-mode'.
         "variable if available, or '127.0.0.1'. "
         "The literal '*' means trust everything.",
     ),
+    app_factory_name = app_factory_name_option,
+    app_maker = app_maker_option,
 ):
     """Run the Soliplex server"""
     if no_auth_mode and (add_admin_user is not None):
@@ -268,8 +272,11 @@ Incompatible with '--no-auth-mode'.
         if no_auth_mode:
             os.environ["SOLIPLEX_NO_AUTH_MODE"] = "Y"
 
+        if app_factory_name is None:
+            app_factory_name = "soliplex.main:create_app"
+
         uvicorn.run(
-            "soliplex.main:create_app",
+            app_factory_name,
             factory=True,
             reload=reload,
             reload_dirs=reload_dirs,
@@ -277,7 +284,10 @@ Incompatible with '--no-auth-mode'.
             **uvicorn_kw,
         )
     else:
-        app = main.create_app(
+        if app_maker is None:
+            app_maker = main.create_app
+
+        app = app_maker(
             installation_path=installation_path,
             no_auth_mode=no_auth_mode,
             add_admin_user=add_admin_user,
