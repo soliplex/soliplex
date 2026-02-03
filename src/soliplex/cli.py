@@ -131,6 +131,7 @@ log_level_option: LogLevelOption = typer.Option(
 app_factory_name_option = typer.Option(None, hidden=True)
 app_maker_option = typer.Option(None, hidden=True)
 
+
 @the_cli.command(
     "serve",
 )
@@ -211,8 +212,8 @@ Incompatible with '--no-auth-mode'.
         "variable if available, or '127.0.0.1'. "
         "The literal '*' means trust everything.",
     ),
-    app_factory_name = app_factory_name_option,
-    app_maker = app_maker_option,
+    app_factory_name=app_factory_name_option,
+    app_maker=app_maker_option,
 ):
     """Run the Soliplex server"""
     if no_auth_mode and (add_admin_user is not None):
