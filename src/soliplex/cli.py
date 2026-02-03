@@ -24,13 +24,13 @@ from soliplex import util
 from soliplex.authz import schema as authz_schema
 
 
-class ReloadOption(str, enum.Enum):
+class ReloadOption(enum.StrEnum):
     CONFIG = "config"
     PYTHON = "python"
     BOTH = "both"
 
 
-class LogLevelOption(str, enum.Enum):
+class LogLevelOption(enum.StrEnum):
     CRITICAL = "critical"
     ERROR = "error"
     WARNING = "warning"
