@@ -381,6 +381,27 @@ def check_config(
             the_console.print("OK")
         the_console.line()
 
+        if isinstance(room_config.agent_config, config._RAGConfigBase):
+            the_console.print("- Checking agent RAG DB")
+            try:
+                room_config.agent_config.rag_lancedb_path  # noqa B018
+            except Exception as exc:
+                the_console.print(exc)
+            else:
+                the_console.print("  OK")
+            the_console.line()
+
+        for tool_config in room_config.tool_configs:
+            if isinstance(tool_config, config._RAGConfigBase):
+                the_console.print("- Checking tool RAG DB: {tool_config.id}")
+                try:
+                    tool_config.rag_lancedb_path  # noqa B018
+                except Exception as exc:
+                    the_console.print(exc)
+                else:
+                    the_console.print("  OK")
+                the_console.line()
+
     the_console.line()
     the_console.rule("Validating completion models")
     the_console.line()
@@ -399,13 +420,8 @@ def check_config(
     the_console.line()
     the_console.rule("Validating quizzes")
     the_console.line()
-    abs_installation_path = installation_path.absolute()
     for q_path in the_installation._config.quizzes_paths:
-        rel_path = q_path.relative_to(
-            abs_installation_path,
-            walk_up=True,
-        )
-        the_console.print(f"Quizzes path: {rel_path}")
+        the_console.print(f"Quizzes path: {q_path}")
         for q_file in q_path.glob("*.json"):
             the_console.print(f"- Question file stem: {q_file.stem}")
             q_config = config.QuizConfig(
