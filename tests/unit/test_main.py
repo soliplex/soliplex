@@ -228,3 +228,34 @@ def test_create_app_with_explicit_overrides(
         no_auth_mode=w_no_auth_mode,
         add_admin_user=w_add_admin_user,
     )
+
+
+@pytest.mark.parametrize("w_add_admin_user", [None, ADMIN_USER_EMAIL])
+@pytest.mark.parametrize("w_no_auth_mode", [False, True])
+@mock.patch("soliplex.main.create_app")
+def test_create_app_from_environment(
+    create_app,
+    temp_dir,
+    w_no_auth_mode,
+    w_add_admin_user,
+):
+    i_path = temp_dir / "installation.yaml"
+
+    env_patch = {"_SOLIPLEX_INSTALLATION_PATH": str(i_path)}
+
+    if w_no_auth_mode:
+        env_patch["_SOLIPLEX_NO_AUTH_MODE"] = "Y"
+
+    if w_add_admin_user:
+        env_patch["_SOLIPLEX_ADD_ADMIN_USER"] = w_add_admin_user
+
+    with mock.patch.dict("os.environ", clear=True, **env_patch):
+        found = main.create_app_from_environment()
+
+    assert found is create_app.return_value
+
+    create_app.assert_called_once_with(
+        installation_path=i_path,
+        no_auth_mode=w_no_auth_mode,
+        add_admin_user=w_add_admin_user,
+    )

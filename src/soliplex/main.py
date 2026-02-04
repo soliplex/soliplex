@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import os
 import pathlib
 import sys
 import typing
@@ -120,7 +121,7 @@ def create_app(
     app_with_session=app_with_session,
     app_with_git_hash=app_with_git_hash,
     app_with_soliplex_routers=app_with_soliplex_routers,
-):  # pragma: NO COVER
+):
     """Construct the Soliplex FastAPI application
 
     Callers may override any of the component functions in this module
@@ -140,6 +141,25 @@ def create_app(
     app = app_with_soliplex_routers(app)
 
     return app
+
+
+def create_app_from_environment():
+    """Work around uvicorn's aversion to passing arguments to the app factory
+
+    N.B.:  The environment variables set here are a private contract between
+           the 'soliplex-cli serve' command and this function:  do not
+           try setting them yourself, either directly or via a '.env' file.
+    """
+    installation_path_str = os.environ["_SOLIPLEX_INSTALLATION_PATH"]
+    installation_path = pathlib.Path(installation_path_str)
+    no_auth_mode = os.environ.get("_SOLIPLEX_NO_AUTH_MODE") == "Y"
+    add_admin_user = os.environ.get("_SOLIPLEX_ADD_ADMIN_USER")
+
+    return create_app(
+        installation_path=installation_path,
+        no_auth_mode=no_auth_mode,
+        add_admin_user=add_admin_user,
+    )
 
 
 if __name__ == "__main__":  # pragma:  NO COVER

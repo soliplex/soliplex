@@ -268,13 +268,24 @@ Incompatible with '--no-auth-mode'.
     reload_dirs = [str(rd) for rd in reload_dirs]
 
     if reload or workers:
-        os.environ["SOLIPLEX_INSTALLATION_PATH"] = str(installation_path)
+        # Work around uvicorn's aversion to passing arguments to the app
+        # factory.
+        #
+        # N.B.:  The environment variables set here are a private contract
+        #        between this command and the
+        #        'soliplex.main.create_app_from_environment'
+        #        function:  do not try setting them yourself, either
+        #        directly or via a '.env' file.
+        os.environ["_SOLIPLEX_INSTALLATION_PATH"] = str(installation_path)
 
         if no_auth_mode:
-            os.environ["SOLIPLEX_NO_AUTH_MODE"] = "Y"
+            os.environ["_SOLIPLEX_NO_AUTH_MODE"] = "Y"
+
+        if add_admin_user is not None:
+            os.environ["_SOLIPLEX_ADD_ADMIN_USER"] = add_admin_user
 
         if app_factory_name is None:
-            app_factory_name = "soliplex.main:create_app"
+            app_factory_name = "soliplex.main:create_app_from_environment"
 
         uvicorn.run(
             app_factory_name,
