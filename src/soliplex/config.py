@@ -2328,6 +2328,37 @@ class InstallationConfig:
         return [feature for feature in AGUI_FEATURES_BY_NAME.values()]
 
     #
+    # Variables loaded via 'dotenv' library
+    #
+    disable_dotenv: bool = False
+
+    _from_dotenv: dict[str, str] = None
+
+    @staticmethod
+    def _load_dotenv(from_path: pathlib.Path) -> dict[str, str] | None:
+        if from_path.is_file():
+            with from_path.open() as stream:
+                return dotenv.dotenv_values(stream=stream)
+
+    @property
+    def from_dotenv(self) -> dict[str, str]:
+        if self.disable_dotenv:
+            return {}
+
+        if self._from_dotenv is None:
+            for from_path in [
+                self._config_path.parent / ".env",
+                pathlib.Path.cwd() / ".env",
+            ]:
+                values = self._load_dotenv(from_path)
+
+                if values is not None:
+                    self._from_dotenv = values
+                    break
+
+        return self._from_dotenv or {}
+
+    #
     # Secrets name values looked up from env vars or other sources.
     #
     secrets: list[SecretConfig] = dataclasses.field(
@@ -2389,21 +2420,11 @@ class InstallationConfig:
         default_factory=dict,
     )
 
-    disable_dotenv: bool = False
-
     def get_environment(self, key, default=None):
         """Find the configured value for a given quasi-envvar"""
         return self.environment.get(key, default)
 
     def resolve_environment(self):
-        dotenv_file = self._config_path.parent / ".env"
-
-        if not self.disable_dotenv and dotenv_file.is_file():
-            with dotenv_file.open() as stream:
-                dotenv_env = dotenv.dotenv_values(stream=stream)
-        else:
-            dotenv_env = {}
-
         resolved = {}
         failed = []
         excs = []
@@ -2413,7 +2434,7 @@ class InstallationConfig:
                 resolved[key] = resolve_environment_entry(
                     key,
                     value,
-                    dotenv_env,
+                    self.from_dotenv,
                 )
             except MissingEnvVar as exc:
                 excs.append(exc)

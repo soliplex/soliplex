@@ -5322,6 +5322,70 @@ def test_installationconfigmeta_as_yaml(
     assert found == expected_dict
 
 
+@pytest.mark.parametrize("w_disable_dotenv", [False, True])
+def test_installationconfig_from_dotenv_already(w_disable_dotenv):
+    already = {"KEY": "value"}
+
+    i_config = config.InstallationConfig(
+        id="test-ic",
+        disable_dotenv=w_disable_dotenv,
+        _from_dotenv=already,
+    )
+
+    found = i_config.from_dotenv
+
+    if w_disable_dotenv:
+        assert found == {}
+
+    else:
+        assert found == already
+
+
+@pytest.mark.parametrize("w_cwd_dotenv", [None, "KEY=from_cwd_dotenv"])
+@pytest.mark.parametrize("w_inst_dotenv", [None, "KEY=from_inst_dotenv"])
+@pytest.mark.parametrize("w_disable_dotenv", [False, True])
+@mock.patch("pathlib.Path")
+def test_installationconfig_from_dotenv(
+    p_path,
+    temp_dir,
+    w_disable_dotenv,
+    w_inst_dotenv,
+    w_cwd_dotenv,
+):
+    inst_dir = temp_dir / "installation"
+    inst_dir.mkdir()
+    inst_config_file = inst_dir / "test.yaml"
+    inst_dot_env = inst_dir / ".env"
+    expected = {}
+
+    if w_inst_dotenv is not None:
+        inst_dot_env.write_text(w_inst_dotenv)
+        expected["KEY"] = "from_inst_dotenv"
+
+    cwd = temp_dir / "cwd"
+    cwd.mkdir()
+    p_path.cwd.return_value = cwd
+    cwd_dot_env = cwd / ".env"
+
+    if w_cwd_dotenv is not None:
+        cwd_dot_env.write_text(w_cwd_dotenv)
+        if "KEY" not in expected:  # inst dir wins over cwd
+            expected["KEY"] = "from_cwd_dotenv"
+
+    if w_disable_dotenv:
+        expected = {}
+
+    i_config = config.InstallationConfig(
+        id="test-ic",
+        disable_dotenv=w_disable_dotenv,
+        _config_path=inst_config_file,
+    )
+
+    found = i_config.from_dotenv
+
+    assert found == expected
+
+
 def test_installationconfig_secrets_map_wo_existing():
     secrets = [
         mock.create_autospec(
@@ -5503,35 +5567,35 @@ RESOLVED = {"name": "RESOLVED", "value": "resolved"}
         ),
         (
             [UNRESOLVED, UNRESOLVED_MOAR],
-            ("UNRESOLVED=via_dotenv", False),
+            ({"UNRESOLVED": "via_dotenv"}, False),
             pytest.raises(config.MissingEnvVars),
             "UNRESOLVED_MOAR",
             None,
         ),
         (
             [UNRESOLVED],
-            ("UNRESOLVED=via_dotenv", False),
+            ({"UNRESOLVED": "via_dotenv"}, False),
             contextlib.nullcontext(None),
             None,
             {"UNRESOLVED": "via_dotenv"},
         ),
         (
             [UNRESOLVED],
-            ("UNRESOLVED=via_dotenv", True),
+            ({"UNRESOLVED": "via_dotenv"}, True),
             pytest.raises(config.MissingEnvVars),
             "UNRESOLVED",
             None,
         ),
         (
             [RESOLVED],
-            ("RESOLVED=via_dotenv", False),
+            ({"RESOLVED": "via_dotenv"}, False),
             contextlib.nullcontext(None),
             None,
             {"RESOLVED": "resolved"},
         ),
         (
             [RESOLVED],
-            ("RESOLVED=via_dotenv", True),
+            ({"RESOLVED": "via_dotenv"}, True),
             contextlib.nullcontext(None),
             None,
             {"RESOLVED": "resolved"},
@@ -5548,17 +5612,18 @@ def test_installation_resolve_environment(
 ):
     environment = {entry["name"]: entry.get("value") for entry in env_entries}
 
-    dotenv_text, disable_dotenv = dotenv_opt
+    from_dotenv, disable_dotenv = dotenv_opt
 
-    if dotenv_text is not None:
-        dotenv_file = temp_dir / ".env"
-        dotenv_file.write_text(dotenv_text)
+    dotenv_kwargs = {"disable_dotenv": disable_dotenv}
+
+    if from_dotenv is not None:
+        dotenv_kwargs["_from_dotenv"] = from_dotenv
 
     i_config = config.InstallationConfig(
         id="test-ic",
         _config_path=temp_dir / "installation.yaml",
         environment=environment,
-        disable_dotenv=disable_dotenv,
+        **dotenv_kwargs,
     )
 
     with expectation as expected:
