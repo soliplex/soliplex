@@ -354,6 +354,20 @@ def check_config(
         the_console.print("OK")
 
     the_console.line()
+    the_console.rule("Validating OIDC authentication systems")
+    the_console.line()
+    oidc_configs = the_installation._config.oidc_auth_system_configs
+    for oidc_config in oidc_configs:
+        the_console.print(f"OIDC system: {oidc_config.id}")
+        try:
+            models.OIDCAuthSystem.from_config(oidc_config)
+        except Exception as exc:
+            the_console.print(exc)
+        else:
+            the_console.print("OK")
+        the_console.line()
+
+    the_console.line()
     the_console.rule("Validating room models")
     the_console.line()
     room_configs = the_installation._config.room_configs
@@ -381,6 +395,41 @@ def check_config(
         else:
             the_console.print("OK")
         the_console.line()
+
+    the_console.line()
+    the_console.rule("Validating quizzes")
+    the_console.line()
+    abs_installation_path = installation_path.absolute()
+    for q_path in the_installation._config.quizzes_paths:
+        rel_path = q_path.relative_to(
+            abs_installation_path,
+            walk_up=True,
+        )
+        the_console.print(f"Quizzes path: {rel_path}")
+        for q_file in q_path.glob("*.json"):
+            the_console.print(f"- Question file stem: {q_file.stem}")
+            q_config = config.QuizConfig(
+                id="check",
+                question_file=str(q_file),
+            )
+            try:
+                q_config.get_questions()
+            except Exception as exc:
+                the_console.print(f"  Invalid quiz file: {exc}")
+            else:
+                the_console.print("  OK")
+        the_console.line()
+
+    the_console.line()
+    the_console.rule("Validating Logfire config")
+    the_console.line()
+    l_config = the_installation._config.logfire_config
+    if l_config is not None:
+        the_console.print(l_config.as_yaml)
+        the_console.print("OK")
+    else:
+        the_console.print("OK (defaults)")
+    the_console.line()
 
 
 @the_cli.command(
