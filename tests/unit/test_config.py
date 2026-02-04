@@ -5388,10 +5388,7 @@ def test_installationconfig_from_dotenv(
 
 def test_installationconfig_secrets_map_wo_existing():
     secrets = [
-        mock.create_autospec(
-            config.SecretConfig,
-            secret_name=f"secret-{i_secret}",
-        )
+        config.SecretConfig(secret_name=f"secret-{i_secret}")
         for i_secret in range(5)
     ]
 
@@ -5404,7 +5401,8 @@ def test_installationconfig_secrets_map_wo_existing():
         secrets,
         strict=True,
     ):
-        assert f_val is secret
+        assert f_val.secret_name == secret.secret_name
+        assert f_val._installation_config is i_config
 
 
 def test_installationconfig_secrets_map_w_existing():
@@ -5937,22 +5935,6 @@ def test_installationconfig_from_yaml(
             _config_path=config_path,
         )
 
-        if "secrets" in expected_kw:
-            replaced_secrets = []
-            for secret in expected.secrets:
-                replaced_sources = [
-                    dataclasses.replace(source, _config_path=config_path)
-                    for source in secret.sources
-                ]
-                replaced_secrets.append(
-                    dataclasses.replace(
-                        secret,
-                        sources=replaced_sources,
-                        _config_path=config_path,
-                    )
-                )
-            expected = dataclasses.replace(expected, secrets=replaced_secrets)
-
         if "oidc_paths" in expected_kw:
             exp_oidc_paths = [
                 temp_dir / oidc_path for oidc_path in expected_kw["oidc_paths"]
@@ -5972,6 +5954,27 @@ def test_installationconfig_from_yaml(
         expected = dataclasses.replace(expected, room_paths=exp_room_paths)
 
         found = config.InstallationConfig.from_yaml(config_path, config_dict)
+
+        if "secrets" in expected_kw:
+            replaced_secrets = []
+            for secret in expected.secrets:
+                replaced_sources = [
+                    dataclasses.replace(
+                        source,
+                        _config_path=config_path,
+                        _installation_config=found,
+                    )
+                    for source in secret.sources
+                ]
+                replaced_secrets.append(
+                    dataclasses.replace(
+                        secret,
+                        sources=replaced_sources,
+                        _config_path=config_path,
+                        _installation_config=found,
+                    )
+                )
+            expected = dataclasses.replace(expected, secrets=replaced_secrets)
 
         if "agent_configs" in expected_kw:
             # Assign '_installation_config' after found is constructed.
@@ -6050,8 +6053,8 @@ def test_installationconfig_from_yaml_environ_wo_value(temp_dir, config_yaml):
 @pytest.mark.parametrize("w_logfire_config", [False, True])
 def test_installationconfig_as_yaml(w_logfire_config):
     meta = mock.create_autospec(config.InstallationConfigMeta)
-    secret_1 = mock.create_autospec(config.SecretConfig)
-    secret_2 = mock.create_autospec(config.SecretConfig)
+    secret_1 = config.SecretConfig(secret_name="SECRET_ONE")
+    secret_2 = config.SecretConfig(secret_name="SECRET_TWO")
     agent_config = config.AgentConfig(
         id="test-agent",
         system_prompt="You are a test",

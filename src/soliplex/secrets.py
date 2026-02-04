@@ -63,8 +63,15 @@ class SecretsNotFound(ExceptionGroup, SecretError):
 
 
 def get_env_var_secret(source: config.EnvVarSecretSource):
+    if source._installation_config is not None:
+        from_dotenv = source._installation_config.from_dotenv
+    else:
+        from_dotenv = {}
+
+    merged = os.environ | from_dotenv
+
     try:
-        return os.environ[source.env_var_name]
+        return merged[source.env_var_name]
     except KeyError as exc:
         raise SecretEnvVarNotFound(
             source.secret_name,

@@ -9,6 +9,7 @@ from soliplex import secrets
 SECRET_NAME = "TEST_SECRET"
 ENV_VAR_NAME = "TEST_ENV_VAR"
 SECRET_VALUE = "DEADBEEF"
+OTHER_SECRET_VALUE = "FACEDACE"
 ERROR_MISS = object()
 
 SECRET_NAME_1 = "TEST_SECRET"
@@ -24,10 +25,22 @@ ExcGroup = pytest.raises(ExceptionGroup)
 
 
 @pytest.mark.parametrize(
-    "secret_name, env_var_name, env_patch, expectation, expected",
+    "secret_name, ev_name, env_patch, expectation, expected",
     [
-        (SECRET_NAME, None, {}, EnvVarNotFound, ERROR_MISS),
-        (SECRET_NAME, ENV_VAR_NAME, {}, EnvVarNotFound, ERROR_MISS),
+        (
+            SECRET_NAME,
+            None,
+            {},
+            EnvVarNotFound,
+            ERROR_MISS,
+        ),
+        (
+            SECRET_NAME,
+            ENV_VAR_NAME,
+            {},
+            EnvVarNotFound,
+            ERROR_MISS,
+        ),
         (
             SECRET_NAME,
             None,
@@ -51,19 +64,122 @@ ExcGroup = pytest.raises(ExceptionGroup)
         ),
     ],
 )
-def test_get_env_var_secret(
+def test_get_env_var_secret_wo_installation_config(
     secret_name,
-    env_var_name,
+    ev_name,
     env_patch,
     expectation,
     expected,
 ):
-    if env_var_name is None:
-        source = config.EnvVarSecretSource(secret_name=SECRET_NAME)
+    if ev_name is None:
+        source = config.EnvVarSecretSource(
+            secret_name=SECRET_NAME,
+        )
     else:
         source = config.EnvVarSecretSource(
             secret_name=SECRET_NAME,
-            env_var_name=ENV_VAR_NAME,
+            env_var_name=ev_name,
+        )
+
+    with mock.patch.dict("os.environ", clear=True, **env_patch):
+        with expectation:
+            found = secrets.get_env_var_secret(source)
+
+        if expected is not ERROR_MISS:
+            assert found == expected
+
+
+@pytest.mark.parametrize(
+    "secret_name, ev_name, env_patch, from_dotenv, expectation, expected",
+    [
+        (
+            SECRET_NAME,
+            None,
+            {},
+            {},
+            EnvVarNotFound,
+            ERROR_MISS,
+        ),
+        (
+            SECRET_NAME,
+            ENV_VAR_NAME,
+            {},
+            {},
+            EnvVarNotFound,
+            ERROR_MISS,
+        ),
+        (
+            SECRET_NAME,
+            None,
+            {SECRET_NAME: SECRET_VALUE},
+            {},
+            NoRaise,
+            SECRET_VALUE,
+        ),
+        (
+            SECRET_NAME,
+            None,
+            {},
+            {SECRET_NAME: SECRET_VALUE},
+            NoRaise,
+            SECRET_VALUE,
+        ),
+        (
+            SECRET_NAME,
+            ENV_VAR_NAME,
+            {SECRET_NAME: SECRET_VALUE},
+            {},
+            EnvVarNotFound,
+            ERROR_MISS,
+        ),
+        (
+            SECRET_NAME,
+            ENV_VAR_NAME,
+            {ENV_VAR_NAME: SECRET_VALUE},
+            {},
+            NoRaise,
+            SECRET_VALUE,
+        ),
+        (
+            SECRET_NAME,
+            ENV_VAR_NAME,
+            {},
+            {ENV_VAR_NAME: SECRET_VALUE},
+            NoRaise,
+            SECRET_VALUE,
+        ),
+        (
+            SECRET_NAME,
+            ENV_VAR_NAME,
+            {ENV_VAR_NAME: OTHER_SECRET_VALUE},
+            {ENV_VAR_NAME: SECRET_VALUE},
+            NoRaise,
+            SECRET_VALUE,
+        ),
+    ],
+)
+def test_get_env_var_secret_w_installation_config(
+    secret_name,
+    ev_name,
+    env_patch,
+    from_dotenv,
+    expectation,
+    expected,
+):
+    installation_config = mock.create_autospec(
+        config.InstallationConfig,
+        from_dotenv=from_dotenv,
+    )
+    if ev_name is None:
+        source = config.EnvVarSecretSource(
+            secret_name=SECRET_NAME,
+            _installation_config=installation_config,
+        )
+    else:
+        source = config.EnvVarSecretSource(
+            secret_name=SECRET_NAME,
+            env_var_name=ev_name,
+            _installation_config=installation_config,
         )
 
     with mock.patch.dict("os.environ", clear=True, **env_patch):
