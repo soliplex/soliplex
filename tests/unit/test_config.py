@@ -1583,6 +1583,33 @@ logging_claims_map:
     user_id: "{LOGGING_USER_ID_KEY}"
 """
 
+SKILLS_PATH_1 = "./quizzes"
+SKILLS_PATH_2 = "/path/to/other/quizzes"
+
+W_SKILLS_PATHS_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "skills_paths": [
+        SKILLS_PATH_1,
+        SKILLS_PATH_2,
+    ],
+}
+W_SKILLS_PATHS_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+skills_paths:
+    - "{SKILLS_PATH_1}"
+    - "{SKILLS_PATH_2}"
+"""
+
+W_SKILLS_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "skills_paths": [],
+}
+W_SKILLS_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+skills_paths:
+    -
+"""
+
 W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
     "logfire_config": config.LogfireConfig(token=TEST_LOGFIRE_TOKEN),
@@ -5423,6 +5450,14 @@ def test_installationconfig_authorization_dburi_async(w_kw, expected):
             W_LOGGING_CONFIG_FILE_INSTALLATION_CONFIG_KW.copy(),
         ),
         (
+            W_SKILLS_PATHS_INSTALLATION_CONFIG_YAML,
+            W_SKILLS_PATHS_INSTALLATION_CONFIG_KW.copy(),
+        ),
+        (
+            W_SKILLS_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML,
+            W_SKILLS_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW.copy(),
+        ),
+        (
             W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_YAML,
             W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_KW.copy(),
         ),
@@ -5590,6 +5625,7 @@ def test_installationconfig_from_yaml_environ_wo_value(temp_dir, config_yaml):
         room_paths=[temp_dir / "rooms"],
         completion_paths=[temp_dir / "completions"],
         quizzes_paths=[temp_dir / "quizzes"],
+        skills_paths=[temp_dir / "skills"],
     )
 
     with yaml_file.open() as stream:
@@ -5637,6 +5673,7 @@ def test_installationconfig_as_yaml(w_logfire_config):
         ],
         completion_paths=[pathlib.Path("/path/to/completions")],
         quizzes_paths=[pathlib.Path("./other/quizzes")],
+        skills_paths=[pathlib.Path("./other/skills")],
         **kwargs,
     )
 
@@ -5659,6 +5696,7 @@ def test_installationconfig_as_yaml(w_logfire_config):
         "room_paths": ["/path/to/rooms", "other/rooms"],
         "completion_paths": ["/path/to/completions"],
         "quizzes_paths": ["other/quizzes"],
+        "skills_paths": ["other/skills"],
     }
 
     if w_logfire_config:

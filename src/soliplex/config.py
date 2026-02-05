@@ -2488,6 +2488,13 @@ class InstallationConfig:
 
         return result
 
+    # Path(s) to AI skills:  each item must be a single directory containing
+    # matching the spec:  https://agentskills.io/specification
+    #
+    # Defaults to one path: './skills' (set in '__post_init__').
+    #
+    skills_paths: list[pathlib.Path] = None
+
     #
     # Logfire configuration
     #
@@ -2694,6 +2701,9 @@ class InstallationConfig:
         if self.quizzes_paths is None:
             self.quizzes_paths = ["./quizzes"]
 
+        if self.skills_paths is None:
+            self.skills_paths = ["./skills"]
+
         if self._config_path is not None:
             parent_dir = self._config_path.parent
 
@@ -2721,6 +2731,12 @@ class InstallationConfig:
                 if quizzes_path is not None
             ]
 
+            self.skills_paths = [
+                parent_dir / skills_path
+                for skills_path in self.skills_paths
+                if skills_path is not None
+            ]
+
     @property
     def as_yaml(self) -> dict:
         result = {
@@ -2735,6 +2751,7 @@ class InstallationConfig:
             "room_paths": [str(path) for path in self.room_paths],
             "completion_paths": [str(path) for path in self.completion_paths],
             "quizzes_paths": [str(path) for path in self.quizzes_paths],
+            "skills_paths": [str(path) for path in self.skills_paths],
         }
 
         if self.logfire_config is not None:
