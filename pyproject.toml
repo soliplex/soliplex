@@ -26,6 +26,7 @@ dependencies = [
     "jwcrypto",
     "logfire[fastapi]",
     "pydantic-ai-slim[google]",
+    "pydantic-ai-skills",
     "pyjwt",
     "python-keycloak",
     "sqlmodel",
