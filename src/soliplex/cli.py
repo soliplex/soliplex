@@ -605,6 +605,27 @@ def list_completions(
 
 
 @the_cli.command(
+    "list-skills",
+)
+def list_skills(
+    ctx: typer.Context,
+    installation_path: installation_path_type,
+):
+    """List skills defined in the installation"""
+    the_installation = get_installation(installation_path)
+
+    the_console.line()
+    the_console.rule("Configured Skills")
+    the_console.line()
+
+    available_skills = the_installation._config.skill_configs
+    for skill_config in available_skills.values():
+        the_console.print(f"- [ {skill_config.name} ]")
+        the_console.print(f"  {skill_config.description}")
+        the_console.line()
+
+
+@the_cli.command(
     "config",
 )
 def config_as_yaml(
