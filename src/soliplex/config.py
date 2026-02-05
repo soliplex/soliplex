@@ -23,6 +23,8 @@ import yaml
 from haiku.rag import config as hr_config
 from pydantic_ai import settings as ai_settings
 from pydantic_ai.agent import abstract as ai_ag_abstract
+from skills_ref import models as skill_models
+from skills_ref import parser as skill_parser
 
 from soliplex.agui import features
 
@@ -1372,6 +1374,49 @@ class CompletionConfig:
 
 
 # ============================================================================
+#   Skill configuration types
+# ============================================================================
+
+
+@dataclasses.dataclass(kw_only=True)
+class SkillConfig:
+    """Configuration for an agent skill."""
+
+    #
+    # Required metadata
+    #
+    _skill_properties: skill_models.Properties
+
+    # Set by `from_markdown` factory
+    _installation_config: InstallationConfig = _no_repr_no_compare_none()
+    _skill_path: pathlib.Path = None
+
+    @property
+    def name(self) -> str:
+        return self._skill_properties.name
+
+    @property
+    def description(self) -> str:
+        return self._skill_properties.description
+
+    @property
+    def license(self) -> str | None:
+        return self._skill_properties.license
+
+    @property
+    def compatibility(self) -> str | None:
+        return self._skill_properties.compatibility
+
+    @property
+    def allowed_tools(self) -> str | None:
+        return self._skill_properties.allowed_tools
+
+    @property
+    def metadata(self) -> dict:
+        return self._skill_properties.metadata
+
+
+# ============================================================================
 #   Secrets configuration types
 # ============================================================================
 
@@ -1905,6 +1950,38 @@ _find_completion_configs = functools.partial(
     _find_configs_yaml,
     filename_yaml="completion_config.yaml",
 )
+
+
+def _find_skill_paths(to_search: pathlib.Path):
+    """Yield a sequence of skill paths under 'to_search'
+
+    Yielded values are paths, suitable for passing to
+    'skill_parser.read_properties'.
+
+    If 'to_search' has its own copy of 'SKILL.md', just yield the one
+    config parsed from it.
+
+    Otherwise, iterate over immediate subdirectories, yielding configs
+    parsed from any which have copies of 'SKILL.md'
+    """
+    filename = "SKILL.md"
+    config_file = to_search / filename
+
+    if config_file.is_file():
+        yield to_search
+
+    else:
+        for sub in sorted(to_search.glob("*")):
+            # See #233
+            if sub.name.startswith("."):
+                continue
+
+            if sub.is_dir():
+                sub_config = sub / filename
+                if sub_config.is_file():
+                    yield sub
+            else:  # pragma: NO COVER
+                pass
 
 
 def strip_secret_prefix(config_str: str) -> str:
@@ -2495,6 +2572,8 @@ class InstallationConfig:
     #
     skills_paths: list[pathlib.Path] = None
 
+    _skill_configs: dict[str, SkillConfig] = None
+
     #
     # Logfire configuration
     #
@@ -2843,11 +2922,39 @@ class InstallationConfig:
 
         return self._completion_configs.copy()
 
+    def _load_skill_configs(self) -> dict[str, SkillConfig]:
+        skill_configs = {}
+
+        for skills_path in self.skills_paths:
+            for skill_path in _find_skill_paths(skills_path):
+                skill_properties = skill_parser.read_properties(skill_path)
+
+                # XXX  order of 'skill_paths' controls
+                #      first-past-the-post for any conflict on skill ID.
+                skill_name = skill_properties.name
+
+                if skill_name not in skill_configs:
+                    skill_configs[skill_name] = SkillConfig(
+                        _installation_config=self,
+                        _skill_path=skill_path,
+                        _skill_properties=skill_properties,
+                    )
+
+        return skill_configs
+
+    @property
+    def skill_configs(self) -> dict[str, SkillConfig]:
+        if self._skill_configs is None:
+            self._skill_configs = self._load_skill_configs()
+
+        return self._skill_configs.copy()
+
     def reload_configurations(self):
         """Load all dependent configuration sets"""
         self._oidc_auth_system_configs = self._load_oidc_auth_system_configs()
         self._room_configs = self._load_room_configs()
         self._completion_configs = self._load_completion_configs()
+        self._skill_configs = self._load_skill_configs()
 
 
 def load_installation(config_path: pathlib.Path) -> InstallationConfig:

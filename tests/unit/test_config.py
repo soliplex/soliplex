@@ -15,6 +15,7 @@ import pytest
 import yaml
 from haiku.rag import config as hr_config_module
 from pydantic_ai import settings as ai_settings
+from skills_ref import models as skill_models
 
 from soliplex import config
 from soliplex import secrets
@@ -1583,6 +1584,17 @@ logging_claims_map:
     user_id: "{LOGGING_USER_ID_KEY}"
 """
 
+SKILL_NAME = "test-skill"
+SKILL_DESC = "Skill description"
+SKILL_LICENSE = "Skill license"
+SKILL_COMPAT = "Skill compatibility"
+SKILL_ALLOWED_TOOLS = "Skill allowed tools"
+SKILL_AUTHOR = "phreddy@example.com"
+SKILL_VERSION = "0.0.1"
+SKILL_METADATA = {
+    "author": SKILL_AUTHOR,
+    "version": SKILL_VERSION,
+}
 SKILLS_PATH_1 = "./quizzes"
 SKILLS_PATH_2 = "/path/to/other/quizzes"
 
@@ -3722,6 +3734,32 @@ def test_completionconfig_from_yaml(
 
 
 @pytest.mark.parametrize(
+    "w_properties_kw",
+    [
+        {"name": SKILL_NAME, "description": SKILL_DESC},
+        {
+            "name": SKILL_NAME,
+            "description": SKILL_DESC,
+            "license": SKILL_LICENSE,
+            "compatibility": SKILL_COMPAT,
+            "allowed_tools": SKILL_ALLOWED_TOOLS,
+            "metadata": SKILL_METADATA,
+        },
+    ],
+)
+def test_skillconfig_properties(w_properties_kw):
+    skill_config = config.SkillConfig(
+        _skill_properties=skill_models.SkillProperties(**w_properties_kw)
+    )
+    assert skill_config.name == SKILL_NAME
+    assert skill_config.description == SKILL_DESC
+    assert skill_config.license == w_properties_kw.get("license")
+    assert skill_config.compatibility == w_properties_kw.get("compatibility")
+    assert skill_config.allowed_tools == w_properties_kw.get("allowed_tools")
+    assert skill_config.metadata == w_properties_kw.get("metadata", {})
+
+
+@pytest.mark.parametrize(
     "w_params, exp_env_var_name",
     [
         ({}, SECRET_NAME),
@@ -4405,6 +4443,52 @@ def test__find_configs_w_multiple(temp_dir):
     ):
         assert f_key == e_key
         assert f_thing == e_thing
+
+
+def test__find_skill_paths_w_single(temp_dir):
+    CONFIG_FILENAME = "SKILL.md"
+    to_search = temp_dir / "to_search"
+    to_search.mkdir()
+    config_file = to_search / CONFIG_FILENAME
+    config_file.write_text(f"""
+---
+name: {SKILL_NAME}
+description: {SKILL_DESC}
+---
+""")
+
+    found = list(config._find_skill_paths(to_search))
+
+    assert found == [to_search]
+
+
+def test__find_skill_paths_w_multiple(temp_dir):
+    SKILL_NAMES = ["foo", "bar", "baz", "qux", ".skipme"]
+    CONFIG_FILENAME = "SKILL.md"
+
+    expected_paths = []
+
+    for skill_name in sorted(SKILL_NAMES):
+        maybe_path = temp_dir / skill_name
+        if skill_name == "baz":  # file, not dir
+            maybe_path.write_text("DEADBEEF")
+        elif skill_name == "qux":  # empty dir
+            maybe_path.mkdir()
+        else:
+            maybe_path.mkdir()
+            config_file = maybe_path / CONFIG_FILENAME
+            config_file.write_text(f"""
+---
+name: {skill_name}
+description: Describing {skill_name}
+---
+""")
+            if not maybe_path.stem.startswith("."):
+                expected_paths.append(maybe_path)
+
+    found_paths = list(config._find_skill_paths(temp_dir))
+
+    assert found_paths == expected_paths
 
 
 NotASecret = pytest.raises(config.NotASecret)
@@ -5956,6 +6040,81 @@ def test_installationconfig_completion_configs_w_existing():
     assert found["completion_2"] == CC_2
 
 
+def test_installationconfig_skill_configs_wo_existing(temp_dir):
+    SKILL_NAMES = ["foo", "bar"]
+
+    kw = BARE_INSTALLATION_CONFIG_KW.copy()
+    kw["_config_path"] = temp_dir / "installation.yaml"
+    kw["environment"] = BARE_INSTALLATION_CONFIG_ENVIRONMENT
+
+    skills = temp_dir / "skills"
+    skills.mkdir()
+
+    for skill_name in SKILL_NAMES:
+        skill_path = skills / skill_name
+        skill_path.mkdir()
+        skill_config = skill_path / "SKILL.md"
+        skill_config.write_text(f"""\
+---
+name: {skill_name}
+description: Describing {skill_name}
+---
+""")
+
+    i_config = config.InstallationConfig(**kw)
+
+    found = i_config.skill_configs
+
+    assert found["foo"].name == "foo"
+    assert found["bar"].name == "bar"
+
+
+def test_installationconfig_skill_configs_wo_existing_w_conflict(
+    temp_dir,
+):
+    SKILLS_PATHS = ["./foo", "./bar"]
+
+    kw = BARE_INSTALLATION_CONFIG_KW.copy()
+    kw["_config_path"] = temp_dir / "installation.yaml"
+    kw["environment"] = BARE_INSTALLATION_CONFIG_ENVIRONMENT
+    kw["skills_paths"] = SKILLS_PATHS
+
+    for skills_path in SKILLS_PATHS:
+        skill_path = temp_dir / skills_path / SKILL_NAME
+        skill_path.mkdir(parents=True)
+        skill_config = skill_path / "SKILL.md"
+        skill_config.write_text(f"""\
+---
+name: {SKILL_NAME}
+description: Describing {SKILL_NAME} in {skills_path}
+---
+""")
+
+    i_config = config.InstallationConfig(**kw)
+
+    found = i_config.skill_configs
+
+    f_skill = found[SKILL_NAME]
+    assert f_skill.name == SKILL_NAME
+    # order of 'completion_paths' governs who wins
+    assert f_skill.description == f"Describing {SKILL_NAME} in ./foo"
+
+
+def test_installationconfig_skill_configs_w_existing():
+    CC_1, CC_2 = object(), object()
+    existing = {"completion_1": CC_1, "completion_2": CC_2}
+
+    kw = BARE_INSTALLATION_CONFIG_KW.copy()
+    kw["_skill_configs"] = existing
+
+    i_config = config.InstallationConfig(**kw)
+
+    found = i_config.skill_configs
+
+    assert found["completion_1"] == CC_1
+    assert found["completion_2"] == CC_2
+
+
 def test_installationconfig_reload_configurations():
     existing = object()
 
@@ -5963,6 +6122,7 @@ def test_installationconfig_reload_configurations():
     kw["_oidc_auth_system_configs"] = existing
     kw["_room_configs"] = existing
     kw["_completion_configs"] = existing
+    kw["_skill_configs"] = existing
     i_config = config.InstallationConfig(**kw)
 
     with mock.patch.multiple(
@@ -5970,6 +6130,7 @@ def test_installationconfig_reload_configurations():
         _load_oidc_auth_system_configs=mock.DEFAULT,
         _load_room_configs=mock.DEFAULT,
         _load_completion_configs=mock.DEFAULT,
+        _load_skill_configs=mock.DEFAULT,
     ) as patched:
         i_config.reload_configurations()
 
@@ -5983,6 +6144,10 @@ def test_installationconfig_reload_configurations():
     assert (
         i_config._completion_configs
         is patched["_load_completion_configs"].return_value
+    )
+
+    assert (
+        i_config._skill_configs is patched["_load_skill_configs"].return_value
     )
 
 
