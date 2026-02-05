@@ -1860,7 +1860,7 @@ def _load_config_yaml(config_path: pathlib.Path) -> dict:
     return config_yaml
 
 
-def _find_configs(
+def _find_configs_yaml(
     to_search: pathlib.Path,
     filename_yaml: str,
 ) -> typing.Sequence[tuple[pathlib.Path, dict]]:
@@ -1897,12 +1897,12 @@ def _find_configs(
 
 
 _find_room_configs = functools.partial(
-    _find_configs,
+    _find_configs_yaml,
     filename_yaml="room_config.yaml",
 )
 
 _find_completion_configs = functools.partial(
-    _find_configs,
+    _find_configs_yaml,
     filename_yaml="completion_config.yaml",
 )
 

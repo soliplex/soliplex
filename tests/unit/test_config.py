@@ -4363,7 +4363,7 @@ def test__load_config_yaml_w_invalid(temp_dir, invalid):
     assert exc.value._config_path == invalid_cfg
 
 
-def test__find_configs_w_single(temp_dir):
+def test__find_configs_yaml_w_single(temp_dir):
     THING_ID = "testing"
     CONFIG_FILENAME = "config.yaml"
     to_search = temp_dir / "to_search"
@@ -4372,7 +4372,7 @@ def test__find_configs_w_single(temp_dir):
     config_file.write_text(f"id: {THING_ID}")
     expected = {"id": THING_ID}
 
-    found = list(config._find_configs(to_search, CONFIG_FILENAME))
+    found = list(config._find_configs_yaml(to_search, CONFIG_FILENAME))
 
     assert found == [(config_file, expected)]
 
@@ -4396,7 +4396,7 @@ def test__find_configs_w_multiple(temp_dir):
             expected_thing = {"id": thing_id}
             expected_things.append((config_file, expected_thing))
 
-    found_things = list(config._find_configs(temp_dir, CONFIG_FILENAME))
+    found_things = list(config._find_configs_yaml(temp_dir, CONFIG_FILENAME))
 
     for (f_key, f_thing), (e_key, e_thing) in zip(
         sorted(found_things),
