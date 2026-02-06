@@ -1385,7 +1385,7 @@ class SkillConfig:
     #
     # Required metadata
     #
-    _skill_properties: skill_models.Properties
+    _skill_properties: skill_models.SkillProperties
 
     # Set by `from_markdown` factory
     _installation_config: InstallationConfig = _no_repr_no_compare_none()

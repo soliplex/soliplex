@@ -1595,8 +1595,8 @@ SKILL_METADATA = {
     "author": SKILL_AUTHOR,
     "version": SKILL_VERSION,
 }
-SKILLS_PATH_1 = "./quizzes"
-SKILLS_PATH_2 = "/path/to/other/quizzes"
+SKILLS_PATH_1 = "./skills"
+SKILLS_PATH_2 = "/path/to/other/skills"
 
 W_SKILLS_PATHS_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
@@ -6101,8 +6101,8 @@ description: Describing {SKILL_NAME} in {skills_path}
 
 
 def test_installationconfig_skill_configs_w_existing():
-    CC_1, CC_2 = object(), object()
-    existing = {"completion_1": CC_1, "completion_2": CC_2}
+    SC_1, SC_2 = object(), object()
+    existing = {"skill_1": SC_1, "skill_2": SC_2}
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_skill_configs"] = existing
@@ -6111,8 +6111,8 @@ def test_installationconfig_skill_configs_w_existing():
 
     found = i_config.skill_configs
 
-    assert found["completion_1"] == CC_1
-    assert found["completion_2"] == CC_2
+    assert found["skill_1"] == SC_1
+    assert found["skill_2"] == SC_2
 
 
 def test_installationconfig_reload_configurations():
