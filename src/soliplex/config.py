@@ -25,6 +25,7 @@ from pydantic_ai import settings as ai_settings
 from pydantic_ai.agent import abstract as ai_ag_abstract
 from skills_ref import models as skill_models
 from skills_ref import parser as skill_parser
+from skills_ref import validator as skill_validator
 
 from soliplex.agui import features
 
@@ -1382,10 +1383,8 @@ class CompletionConfig:
 class SkillConfig:
     """Configuration for an agent skill."""
 
-    #
-    # Required metadata
-    #
-    _skill_properties: skill_models.SkillProperties
+    _skill_properties: skill_models.SkillProperties | None
+    _validation_errors: list[str] = dataclasses.field(default_factory=list)
 
     # Set by `from_markdown` factory
     _installation_config: InstallationConfig = _no_repr_no_compare_none()
@@ -1393,27 +1392,37 @@ class SkillConfig:
 
     @property
     def name(self) -> str:
-        return self._skill_properties.name
+        if self._skill_properties is not None:
+            return self._skill_properties.name
 
     @property
     def description(self) -> str:
-        return self._skill_properties.description
+        if self._skill_properties is not None:
+            return self._skill_properties.description
 
     @property
     def license(self) -> str | None:
-        return self._skill_properties.license
+        if self._skill_properties is not None:
+            return self._skill_properties.license
 
     @property
     def compatibility(self) -> str | None:
-        return self._skill_properties.compatibility
+        if self._skill_properties is not None:
+            return self._skill_properties.compatibility
 
     @property
     def allowed_tools(self) -> str | None:
-        return self._skill_properties.allowed_tools
+        if self._skill_properties is not None:
+            return self._skill_properties.allowed_tools
 
     @property
     def metadata(self) -> dict:
-        return self._skill_properties.metadata
+        if self._skill_properties is not None:
+            return self._skill_properties.metadata
+
+    @property
+    def errors(self) -> list[str]:
+        return self._validation_errors
 
 
 # ============================================================================
@@ -2927,18 +2936,30 @@ class InstallationConfig:
 
         for skills_path in self.skills_paths:
             for skill_path in _find_skill_paths(skills_path):
-                skill_properties = skill_parser.read_properties(skill_path)
+                errors = skill_validator.validate(skill_path)
+                if errors:
+                    skill_name = skill_path.name
 
-                # XXX  order of 'skill_paths' controls
-                #      first-past-the-post for any conflict on skill ID.
-                skill_name = skill_properties.name
+                    if skill_name not in skill_configs:
+                        skill_configs[skill_name] = SkillConfig(
+                            _installation_config=self,
+                            _skill_path=skill_path,
+                            _skill_properties=None,
+                            _validation_errors=errors,
+                        )
+                else:
+                    skill_properties = skill_parser.read_properties(skill_path)
 
-                if skill_name not in skill_configs:
-                    skill_configs[skill_name] = SkillConfig(
-                        _installation_config=self,
-                        _skill_path=skill_path,
-                        _skill_properties=skill_properties,
-                    )
+                    # XXX  order of 'skill_paths' controls
+                    #      first-past-the-post for any conflict on skill ID.
+                    skill_name = skill_properties.name
+
+                    if skill_name not in skill_configs:
+                        skill_configs[skill_name] = SkillConfig(
+                            _installation_config=self,
+                            _skill_path=skill_path,
+                            _skill_properties=skill_properties,
+                        )
 
         return skill_configs
 

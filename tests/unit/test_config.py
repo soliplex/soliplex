@@ -3751,12 +3751,31 @@ def test_skillconfig_properties(w_properties_kw):
     skill_config = config.SkillConfig(
         _skill_properties=skill_models.SkillProperties(**w_properties_kw)
     )
+
     assert skill_config.name == SKILL_NAME
     assert skill_config.description == SKILL_DESC
     assert skill_config.license == w_properties_kw.get("license")
     assert skill_config.compatibility == w_properties_kw.get("compatibility")
     assert skill_config.allowed_tools == w_properties_kw.get("allowed_tools")
     assert skill_config.metadata == w_properties_kw.get("metadata", {})
+    assert skill_config.errors == []
+
+
+def test_skillconfig_properties_w_errors():
+    TEST_VALIDATION_ERROR = "Test validation error"
+
+    skill_config = config.SkillConfig(
+        _skill_properties=None,
+        _validation_errors=[TEST_VALIDATION_ERROR],
+    )
+
+    assert skill_config.name is None
+    assert skill_config.description is None
+    assert skill_config.license is None
+    assert skill_config.compatibility is None
+    assert skill_config.allowed_tools is None
+    assert skill_config.metadata is None
+    assert skill_config.errors == [TEST_VALIDATION_ERROR]
 
 
 @pytest.mark.parametrize(
@@ -6040,8 +6059,23 @@ def test_installationconfig_completion_configs_w_existing():
     assert found["completion_2"] == CC_2
 
 
-def test_installationconfig_skill_configs_wo_existing(temp_dir):
+@pytest.mark.parametrize("w_error", [False, True])
+def test_installationconfig_skill_configs_wo_existing(temp_dir, w_error):
     SKILL_NAMES = ["foo", "bar"]
+
+    if w_error:
+        FOREMATTER = """\
+---
+name: {skill_name}
+---
+"""
+    else:
+        FOREMATTER = """\
+---
+name: {skill_name}
+description: Describing {skill_name}
+---
+"""
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_config_path"] = temp_dir / "installation.yaml"
@@ -6054,25 +6088,44 @@ def test_installationconfig_skill_configs_wo_existing(temp_dir):
         skill_path = skills / skill_name
         skill_path.mkdir()
         skill_config = skill_path / "SKILL.md"
-        skill_config.write_text(f"""\
----
-name: {skill_name}
-description: Describing {skill_name}
----
-""")
+        skill_config.write_text(FOREMATTER.format(skill_name=skill_name))
 
     i_config = config.InstallationConfig(**kw)
 
     found = i_config.skill_configs
 
-    assert found["foo"].name == "foo"
-    assert found["bar"].name == "bar"
+    if w_error:
+        assert found["foo"].name is None
+        assert found["foo"].errors
+        assert found["bar"].name is None
+        assert found["bar"].errors
+    else:
+        assert found["foo"].name == "foo"
+        assert not found["foo"].errors
+        assert found["bar"].name == "bar"
+        assert not found["bar"].errors
 
 
+@pytest.mark.parametrize("w_error", [False, True])
 def test_installationconfig_skill_configs_wo_existing_w_conflict(
     temp_dir,
+    w_error,
 ):
     SKILLS_PATHS = ["./foo", "./bar"]
+
+    if w_error:
+        FOREMATTER = """\
+---
+name: {skill_name}
+---
+"""
+    else:
+        FOREMATTER = """\
+---
+name: {skill_name}
+description: Describing {skill_name} in {skills_path}
+---
+"""
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_config_path"] = temp_dir / "installation.yaml"
@@ -6083,21 +6136,23 @@ def test_installationconfig_skill_configs_wo_existing_w_conflict(
         skill_path = temp_dir / skills_path / SKILL_NAME
         skill_path.mkdir(parents=True)
         skill_config = skill_path / "SKILL.md"
-        skill_config.write_text(f"""\
----
-name: {SKILL_NAME}
-description: Describing {SKILL_NAME} in {skills_path}
----
-""")
+        skill_config.write_text(
+            FOREMATTER.format(skill_name=SKILL_NAME, skills_path=skills_path)
+        )
 
     i_config = config.InstallationConfig(**kw)
 
     found = i_config.skill_configs
 
     f_skill = found[SKILL_NAME]
-    assert f_skill.name == SKILL_NAME
-    # order of 'completion_paths' governs who wins
-    assert f_skill.description == f"Describing {SKILL_NAME} in ./foo"
+    if w_error:
+        assert f_skill.name is None
+        assert f_skill.errors
+    else:
+        assert f_skill.name == SKILL_NAME
+        # order of 'completion_paths' governs who wins
+        assert f_skill.description == f"Describing {SKILL_NAME} in ./foo"
+        assert not f_skill.errors
 
 
 def test_installationconfig_skill_configs_w_existing():
