@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 
 import fastapi
-from opentelemetry._logs import get_logger_provider
+import logfire
 
 from soliplex import authn
 from soliplex import installation
@@ -40,11 +40,22 @@ async def ingest_logs(
 
     server_received_at = datetime.datetime.now(datetime.UTC)
 
-    logger_provider = get_logger_provider()
-    logger = logger_provider.get_logger("soliplex.log_ingest")
-
-    for entry in payload.logs:
-        kwargs = log_ingest.map_to_otel_kwargs(entry, server_received_at)
-        logger.emit(**kwargs)
+    first = payload.logs[0] if payload.logs else None
+    with logfire.span(
+        "client_log_batch",
+        install_id=first.installId if first else "",
+        session_id=first.sessionId if first else "",
+        count=len(payload.logs),
+    ):
+        for entry in payload.logs:
+            attrs = log_ingest.map_to_logfire_attrs(entry, server_received_at)
+            msg = entry.logger + ": " + entry.message
+            logfire.log(
+                level=entry.level.lower(),
+                msg_template=msg,
+                attributes=attrs,
+                tags=["client"],
+                console_log=False,
+            )
 
     return {"accepted": len(payload.logs)}

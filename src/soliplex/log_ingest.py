@@ -84,3 +84,39 @@ def map_to_otel_kwargs(
         "body": entry.message,
         "attributes": attrs,
     }
+
+
+def map_to_logfire_attrs(
+    entry: LogEntry,
+    server_received_at: datetime.datetime,
+) -> dict[str, Any]:
+    """Map a LogEntry to attributes for logfire.log()."""
+    attrs: dict[str, Any] = {
+        "logger": entry.logger,
+        "message": entry.message,
+        "client_timestamp": entry.timestamp,
+        "install_id": entry.installId,
+        "session_id": entry.sessionId,
+        "server.received_at": server_received_at.isoformat(),
+    }
+
+    if entry.userId is not None:
+        attrs["user_id"] = entry.userId
+
+    if entry.spanId is not None:
+        attrs["span_id"] = entry.spanId
+
+    if entry.traceId is not None:
+        attrs["trace_id"] = entry.traceId
+
+    if entry.error is not None:
+        attrs["exception.message"] = entry.error
+
+    if entry.stackTrace is not None:
+        attrs["exception.stacktrace"] = entry.stackTrace
+
+    if entry.attributes:
+        for key, value in entry.attributes.items():
+            attrs[key] = value
+
+    return attrs
