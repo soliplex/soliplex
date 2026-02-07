@@ -1,5 +1,6 @@
 import contextlib
 import dataclasses
+import os
 import pathlib
 from logging import config as logging_config
 
@@ -342,6 +343,14 @@ def apply_logfire_configuration(
     the_installation: Installation,
     disable_logfire_console=False,
 ):
+    # Exclude the log ingest endpoint from FastAPI auto-instrumentation.
+    # The excluded_urls parameter on instrument_fastapi() is unreliable,
+    # but the OTel env var works consistently.
+    os.environ.setdefault(
+        "OTEL_PYTHON_FASTAPI_EXCLUDED_URLS",
+        "/api/v1/logs",
+    )
+
     logfire_config = the_installation.logfire_config
 
     if logfire_config is not None:

@@ -11,7 +11,6 @@ from soliplex import authn
 from soliplex import installation
 from soliplex import log_ingest
 from soliplex import loggers
-from soliplex import util
 from soliplex import views
 
 router = fastapi.APIRouter(tags=["telemetry"])
@@ -23,7 +22,6 @@ depend_the_logger = views.depend_the_logger
 MAX_PAYLOAD_BYTES = 1_048_576  # 1 MB
 
 
-@util.logfire_span("POST /v1/logs")
 @router.post("/v1/logs", status_code=200)
 async def ingest_logs(
     request: fastapi.Request,
