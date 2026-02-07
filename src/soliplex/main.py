@@ -22,6 +22,7 @@ from soliplex.views import authn as authn_views
 from soliplex.views import authz as authz_views
 from soliplex.views import completions as completions_views
 from soliplex.views import installation as installation_views
+from soliplex.views import log_ingest as log_ingest_views
 from soliplex.views import quizzes as quizzes_views
 from soliplex.views import rooms as rooms_views
 from soliplex.views import streaming as streaming_views
@@ -102,6 +103,7 @@ def app_with_soliplex_routers(app: fastapi.FastAPI) -> fastapi.FastAPI:
     app.include_router(authz_views.router, prefix="/api")
     app.include_router(completions_views.router, prefix="/api")
     app.include_router(installation_views.router, prefix="/api")
+    app.include_router(log_ingest_views.router, prefix="/api")
     app.include_router(quizzes_views.router, prefix="/api")
     app.include_router(rooms_views.router, prefix="/api")
     app.include_router(streaming_views.router, prefix="/api")

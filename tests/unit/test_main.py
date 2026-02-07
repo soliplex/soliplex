@@ -12,6 +12,7 @@ from soliplex.views import authn as authn_views
 from soliplex.views import authz as authz_views
 from soliplex.views import completions as completions_views
 from soliplex.views import installation as installation_views
+from soliplex.views import log_ingest as log_ingest_views
 from soliplex.views import quizzes as quizzes_views
 from soliplex.views import rooms as rooms_views
 
@@ -167,6 +168,7 @@ def test_app_with_soliplex_routers():
     assert mock.call(completions_views.router, prefix="/api") in air_calls
     assert mock.call(installation_views.router, prefix="/api") in air_calls
     assert mock.call(quizzes_views.router, prefix="/api") in air_calls
+    assert mock.call(log_ingest_views.router, prefix="/api") in air_calls
     assert mock.call(rooms_views.router, prefix="/api") in air_calls
 
 
