@@ -29,13 +29,11 @@ POST /api/v1/logs
       "installId": "inst-abc",
       "sessionId": "sess-def",
       "userId": "u-123",
-      "spanId": "span-abc",
-      "traceId": "trace-xyz",
-      "error": null,
-      "stackTrace": null,
       "attributes": {
         "http.method": "GET",
-        "http.status_code": 200
+        "http.status_code": 200,
+        "span_id": "span-abc",
+        "trace_id": "trace-xyz"
       }
     }
   ],
@@ -51,17 +49,27 @@ POST /api/v1/logs
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `timestamp` | string (ISO 8601) | yes | Client-side timestamp |
-| `level` | string | yes | `trace`, `debug`, `info`, `warning`, `error`, or `fatal` |
+| `level` | string | yes | One of: `trace`, `debug`, `info`, `warning`, `error`, `fatal` |
 | `logger` | string | yes | Logger name (e.g., `HttpClient`, `AgentRunner`) |
 | `message` | string | yes | Human-readable log message |
 | `installId` | string | yes | Unique installation identifier |
 | `sessionId` | string | yes | Unique session identifier |
 | `userId` | string | no | User identifier |
-| `spanId` | string | no | Client-side span ID for correlation |
-| `traceId` | string | no | Client-side trace ID for correlation |
-| `error` | string | no | Exception message |
-| `stackTrace` | string | no | Exception stack trace |
-| `attributes` | object | no | Arbitrary key-value metadata |
+| `attributes` | object | no | Arbitrary key-value metadata (see conventions below) |
+
+#### Attribute conventions
+
+Clients can pass any key-value pairs in `attributes`. The following
+keys have conventional meaning in Logfire:
+
+| Key | Description |
+|-----|-------------|
+| `exception.message` | Exception message |
+| `exception.stacktrace` | Exception stack trace |
+| `span_id` | Client-side span ID for correlation |
+| `trace_id` | Client-side trace ID for correlation |
+| `http.method` | HTTP method |
+| `http.status_code` | HTTP status code |
 
 ### `LogPayload` fields
 
@@ -82,11 +90,13 @@ POST /api/v1/logs
 
 **413 Payload Too Large:** Body exceeds 1 MB.
 
+**422 Unprocessable Entity:** Invalid request body (e.g., unknown `level` value).
+
 ## Logfire mapping
 
 Each log entry is emitted via `logfire.log()` with:
 
-- **level** — mapped from `entry.level` (lowercased)
+- **level** — mapped from `entry.level`
 - **msg_template** — `"{logger}: {message}"`
 - **tags** — `["client"]` (use this to filter client logs in the Logfire UI)
 - **console_log** — `False` (suppresses server-side stdout echo)
@@ -104,9 +114,5 @@ The full batch is wrapped in a `client_log_batch` span containing
 | `installId` | `install_id` |
 | `sessionId` | `session_id` |
 | `userId` | `user_id` |
-| `spanId` | `span_id` |
-| `traceId` | `trace_id` |
-| `error` | `exception.message` |
-| `stackTrace` | `exception.stacktrace` |
 | `attributes.*` | flattened into top-level attributes |
 | *(server)* | `server.received_at` (ISO 8601) |
