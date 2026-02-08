@@ -1,7 +1,7 @@
 # Log Ingestion
 
-The log ingestion endpoint accepts structured log batches from Flutter
-clients and forwards them to [Logfire](https://logfire.pydantic.dev/) for
+The log ingestion endpoint accepts structured log batches from clients
+and forwards them to [Logfire](https://logfire.pydantic.dev/) for
 observability.
 
 ## Endpoint
@@ -40,7 +40,7 @@ POST /api/v1/logs
     }
   ],
   "resource": {
-    "service.name": "soliplex-flutter",
+    "service.name": "my-client-app",
     "device.alias": "glad-raven-tundra"
   }
 }
