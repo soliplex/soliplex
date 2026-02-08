@@ -136,6 +136,57 @@ class TestMapToOtelKwargs:
         assert result["attributes"]["trace_id"] == "trace-xyz"
 
 
+class TestMapToLogfireAttrs:
+    def test_basic(self):
+        entry = log_ingest.LogEntry(**ENTRY_KWARGS)
+        result = log_ingest.map_to_logfire_attrs(entry, SERVER_TIME)
+
+        assert result["logger"] == "TestLogger"
+        assert result["message"] == "hello world"
+        assert result["client_timestamp"] == "2026-02-07T12:00:00Z"
+        assert result["install_id"] == "inst-abc"
+        assert result["session_id"] == "sess-def"
+        assert result["server.received_at"] == SERVER_TIME.isoformat()
+
+    def test_with_userId(self):
+        entry = log_ingest.LogEntry(**ENTRY_KWARGS, userId="u-123")
+        result = log_ingest.map_to_logfire_attrs(entry, SERVER_TIME)
+
+        assert result["user_id"] == "u-123"
+
+    def test_with_span_and_trace_ids(self):
+        entry = log_ingest.LogEntry(
+            **ENTRY_KWARGS,
+            spanId="span-abc",
+            traceId="trace-xyz",
+        )
+        result = log_ingest.map_to_logfire_attrs(entry, SERVER_TIME)
+
+        assert result["span_id"] == "span-abc"
+        assert result["trace_id"] == "trace-xyz"
+
+    def test_with_error(self):
+        entry = log_ingest.LogEntry(
+            **ENTRY_KWARGS,
+            error="NullPointerException",
+            stackTrace="at com.example.Main:42",
+        )
+        result = log_ingest.map_to_logfire_attrs(entry, SERVER_TIME)
+
+        assert result["exception.message"] == "NullPointerException"
+        assert result["exception.stacktrace"] == "at com.example.Main:42"
+
+    def test_with_attributes(self):
+        entry = log_ingest.LogEntry(
+            **ENTRY_KWARGS,
+            attributes={"custom.key": "custom_value", "count": 42},
+        )
+        result = log_ingest.map_to_logfire_attrs(entry, SERVER_TIME)
+
+        assert result["custom.key"] == "custom_value"
+        assert result["count"] == 42
+
+
 class TestLogPayloadValidation:
     def test_valid_payload(self):
         payload = log_ingest.LogPayload(
