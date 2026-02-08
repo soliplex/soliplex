@@ -1,22 +1,16 @@
 # Log Ingestion
 
-The log ingestion endpoint accepts structured log batches from clients
-and forwards them to [Logfire](https://logfire.pydantic.dev/) for
-observability.
+Accepts batches of structured logs from clients for observability.
 
 ## Endpoint
 
-```
-POST /api/v1/logs
-```
+- **Method:** `POST`
+- **Path:** `/api/v1/logs`
+- **Authentication:** `Authorization: Bearer <JWT>`
+- **Content-Type:** `application/json`
+- **Body Limit:** 1 MB
 
-**Authentication:** Bearer token (JWT) via `Authorization` header.
-
-**Content-Type:** `application/json`
-
-**Payload limit:** 1 MB (`Content-Length` checked; returns `413` if exceeded).
-
-## Request body
+## Request Body
 
 ```json
 {
@@ -44,75 +38,49 @@ POST /api/v1/logs
 }
 ```
 
-### `LogEntry` fields
+### Top-Level Fields
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `timestamp` | string (ISO 8601) | yes | Client-side timestamp |
-| `level` | string | yes | One of: `trace`, `debug`, `info`, `warning`, `error`, `fatal` |
-| `logger` | string | yes | Logger name (e.g., `HttpClient`, `AgentRunner`) |
-| `message` | string | yes | Human-readable log message |
-| `installId` | string | yes | Unique installation identifier |
-| `sessionId` | string | yes | Unique session identifier |
-| `userId` | string | no | User identifier |
-| `attributes` | object | no | Arbitrary key-value metadata (see conventions below) |
+|---|---|---|---|
+| `logs` | Array of `LogEntry` | Yes | Log entries. May be empty. |
+| `resource` | Object | Yes | Key-value attributes describing the client application. |
 
-#### Attribute conventions
+### `LogEntry` Fields
 
-Clients can pass any key-value pairs in `attributes`. The following
-keys have conventional meaning in Logfire:
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `timestamp` | String (ISO 8601) | Yes | Client-side timestamp. |
+| `level` | String | Yes | One of: `trace`, `debug`, `info`, `warning`, `error`, `fatal`. |
+| `logger` | String | Yes | Logger name (e.g., `HttpClient`, `AgentRunner`). |
+| `message` | String | Yes | The log message. |
+| `installId` | String | Yes | Unique identifier for the client installation. |
+| `sessionId` | String | Yes | Unique identifier for the client session. |
+| `userId` | String | No | Identifier for the authenticated user. |
+| `attributes` | Object | No | Arbitrary key-value pairs for additional context. |
+
+#### Attribute Conventions
+
+The `attributes` object can contain arbitrary data. Use these conventional keys where applicable:
 
 | Key | Description |
-|-----|-------------|
-| `exception.message` | Exception message |
-| `exception.stacktrace` | Exception stack trace |
-| `span_id` | Client-side span ID for correlation |
-| `trace_id` | Client-side trace ID for correlation |
-| `http.method` | HTTP method |
-| `http.status_code` | HTTP status code |
+|---|---|
+| `span_id` | Client-side span ID |
+| `trace_id` | Client-side trace ID |
+| `http.method` | HTTP method (e.g., `GET`) |
+| `http.status_code` | HTTP status code (e.g., `200`) |
+| `exception.message` | Exception message text |
+| `exception.stacktrace` | Full exception stack trace |
 
-### `LogPayload` fields
+## Responses
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `logs` | array of `LogEntry` | yes | Log entries (may be empty) |
-| `resource` | object | yes | Resource attributes (e.g., `service.name`, `device.alias`) |
-
-## Response
-
-**200 OK:**
+### 200 OK
 
 ```json
-{"accepted": 3}
+{"accepted": 1}
 ```
 
-**401 Unauthorized:** Invalid or missing JWT.
+### Errors
 
-**413 Payload Too Large:** Body exceeds 1 MB.
-
-**422 Unprocessable Entity:** Invalid request body (e.g., unknown `level` value).
-
-## Logfire mapping
-
-Each log entry is emitted via `logfire.log()` with:
-
-- **level** — mapped from `entry.level`
-- **msg_template** — `"{logger}: {message}"`
-- **tags** — `["client"]` (use this to filter client logs in the Logfire UI)
-- **console_log** — `False` (suppresses server-side stdout echo)
-
-The full batch is wrapped in a `client_log_batch` span containing
-`install_id`, `session_id`, and `count`.
-
-### Attribute mapping
-
-| LogEntry field | Logfire attribute |
-|----------------|-------------------|
-| `timestamp` | `client_timestamp` |
-| `logger` | `logger` |
-| `message` | `message` |
-| `installId` | `install_id` |
-| `sessionId` | `session_id` |
-| `userId` | `user_id` |
-| `attributes.*` | flattened into top-level attributes |
-| *(server)* | `server.received_at` (ISO 8601) |
+- **401 Unauthorized:** Missing or invalid bearer token.
+- **413 Payload Too Large:** Body exceeds 1 MB.
+- **422 Unprocessable Entity:** Malformed body or invalid field value (e.g., unknown `level`).
