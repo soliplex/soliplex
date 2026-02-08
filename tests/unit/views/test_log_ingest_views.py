@@ -183,3 +183,157 @@ async def test_ingest_logs_no_content_length(mock_logfire):
         loggers.LOG_INGEST_INGEST_LOGS,
     )
     the_logger.error.assert_not_called()
+
+
+def _make_http_entry(http_type, request_id="req-1", **overrides):
+    """Create a LogEntry with HTTP attributes."""
+    kwargs = {
+        **ENTRY_KWARGS,
+        "attributes": {
+            "http.request_id": request_id,
+            "http.type": http_type,
+        },
+    }
+    kwargs.update(overrides)
+    return log_ingest.LogEntry(**kwargs)
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.views.log_ingest.logfire")
+async def test_http_pairing_nests_response_under_request(mock_logfire):
+    """Response log nests under its request span."""
+    req_entry = _make_http_entry("request")
+    resp_entry = _make_http_entry("response")
+    payload = log_ingest.LogPayload(
+        logs=[req_entry, resp_entry],
+        resource={"service.name": "test"},
+    )
+    request = _make_request(content_length=200)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    result = await log_ingest_views.ingest_logs(
+        request,
+        payload=payload,
+        the_installation=the_installation,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    assert result == {"accepted": 2}
+    # Parent span for the HTTP request, plus logfire.log for the child
+    mock_logfire.span.assert_called()
+    mock_logfire.log.assert_called()
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.views.log_ingest.logfire")
+async def test_http_request_without_response_emits_flat(mock_logfire):
+    """Request with no matching response emits as a flat log."""
+    req_entry = _make_http_entry("request")
+    payload = log_ingest.LogPayload(
+        logs=[req_entry],
+        resource={"service.name": "test"},
+    )
+    request = _make_request(content_length=100)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    result = await log_ingest_views.ingest_logs(
+        request,
+        payload=payload,
+        the_installation=the_installation,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    assert result == {"accepted": 1}
+    mock_logfire.log.assert_called_once()
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.views.log_ingest.logfire")
+async def test_orphaned_response_emits_flat(mock_logfire):
+    """Response with no matching request emits as a flat log."""
+    resp_entry = _make_http_entry("response")
+    payload = log_ingest.LogPayload(
+        logs=[resp_entry],
+        resource={"service.name": "test"},
+    )
+    request = _make_request(content_length=100)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    result = await log_ingest_views.ingest_logs(
+        request,
+        payload=payload,
+        the_installation=the_installation,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    assert result == {"accepted": 1}
+    mock_logfire.log.assert_called_once()
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.views.log_ingest.logfire")
+async def test_active_run_bucketing(mock_logfire):
+    """Entries with active_run are grouped under an ActiveRun span."""
+    entry = log_ingest.LogEntry(
+        **ENTRY_KWARGS,
+        active_run={"thread_id": "t-1", "run_id": "r-1"},
+    )
+    payload = log_ingest.LogPayload(
+        logs=[entry],
+        resource={"service.name": "test"},
+    )
+    request = _make_request(content_length=100)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    result = await log_ingest_views.ingest_logs(
+        request,
+        payload=payload,
+        the_installation=the_installation,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    assert result == {"accepted": 1}
+    # Should have span calls for both "client: unknown" and "ActiveRun"
+    span_calls = [
+        c
+        for c in mock_logfire.span.call_args_list
+        if c.args and c.args[0] == "ActiveRun"
+    ]
+    assert len(span_calls) == 1
+    assert span_calls[0].kwargs["thread_id"] == "t-1"
+    assert span_calls[0].kwargs["run_id"] == "r-1"
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.views.log_ingest.logfire")
+async def test_http_error_nests_under_request(mock_logfire):
+    """HTTP error log nests under its request span."""
+    req_entry = _make_http_entry("request")
+    err_entry = _make_http_entry("error")
+    payload = log_ingest.LogPayload(
+        logs=[req_entry, err_entry],
+        resource={"service.name": "test"},
+    )
+    request = _make_request(content_length=200)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    result = await log_ingest_views.ingest_logs(
+        request,
+        payload=payload,
+        the_installation=the_installation,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    assert result == {"accepted": 2}
+    mock_logfire.span.assert_called()
+    mock_logfire.log.assert_called()
