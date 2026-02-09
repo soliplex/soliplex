@@ -133,7 +133,7 @@ class DefaultAgent(pydantic.BaseModel):
     provider_type: config.LLMProviderType  # enum, not dataclass
     provider_base_url: str | None
     provider_key: str
-    agui_feature_names: list[str] = pydantic.Field(default=())
+    agui_feature_names: list[str] = pydantic.Field(default_factory=list)
 
     @classmethod
     def from_config(cls, agent_config: config.AgentConfig):
@@ -154,11 +154,11 @@ class FactoryAgent(pydantic.BaseModel):
     factory_name: str  # dotted name for import
     with_agent_config: bool
     extra_config: dict[str, typing.Any]
-    agui_feature_names: list[str] = pydantic.Field(default=())
+    agui_feature_names: list[str] = pydantic.Field(default_factory=list)
 
     @classmethod
     def from_config(cls, agent_config: config.AgentConfig):
-        agui_feature_names = getattr(agent_config, "agui_feature_names", ())
+        agui_feature_names = getattr(agent_config, "agui_feature_names", [])
         return cls(
             id=agent_config.id,
             factory_name=agent_config.factory_name,
@@ -171,11 +171,11 @@ class FactoryAgent(pydantic.BaseModel):
 class OtherAgent(pydantic.BaseModel):
     id: str
     kind: str
-    agui_feature_names: list[str] = pydantic.Field(default=())
+    agui_feature_names: list[str] = pydantic.Field(default_factory=list)
 
     @classmethod
     def from_config(cls, agent_config):
-        agui_feature_names = getattr(agent_config, "agui_feature_names", ())
+        agui_feature_names = getattr(agent_config, "agui_feature_names", [])
         return cls(
             id=agent_config.id,
             kind=agent_config.kind,
@@ -251,7 +251,7 @@ class Room(pydantic.BaseModel):
                 quiz.id: Quiz.from_config(quiz) for quiz in room_config.quizzes
             },
             allow_mcp=room_config.allow_mcp,
-            agui_feature_names=room_config.agui_feature_names,
+            agui_feature_names=list(room_config.agui_feature_names),
             agent=agent,
         )
 
