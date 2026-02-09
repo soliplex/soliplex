@@ -75,6 +75,7 @@ nav:
       - Quizzes: config/quizzes.md
       - OIDC Authentication: config/oidc_providers.md
       - Logfire: config/logfire.md
+      - Console logging: config/logging.md
       - SQLAlchemy DBURIs: config/dburis.md
   - Usage: usage.md
 markdown_extensions:
