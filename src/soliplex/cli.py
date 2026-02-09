@@ -239,6 +239,7 @@ Incompatible with '--no-auth-mode'.
     uvicorn_kw = {
         "host": host,
         "port": port,
+        "ws": "websockets-sansio",
     }
 
     if uds is not None:
