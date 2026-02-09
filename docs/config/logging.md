@@ -40,4 +40,23 @@ value of the `--log-config` argument, e.g.:
 
 ```bash
 soliplex-cli serve example/minimal.yaml --log-config example/logging.yaml
+2026-02-09T18:16:40|INFO|uvicorn.error|Started server process [112592]
+2026-02-09T18:16:40|INFO|uvicorn.error|Waiting for application startup.
+2026-02-09T18:16:40|INFO|docket.worker|Starting worker 'roan#112592' with the following tasks:
+2026-02-09T18:16:40|INFO|docket.worker|* trace(message: str, ...)
+2026-02-09T18:16:40|INFO|docket.worker|* fail(message: str, ...)
+2026-02-09T18:16:40|INFO|docket.worker|* sleep(seconds: float, ...)
+2026-02-09T18:16:40|INFO|mcp.server.streamable_http_manager|StreamableHTTP session manager started
+2026-02-09T18:16:40|INFO|docket.worker|Starting worker 'roan#112592' with the following tasks:
+2026-02-09T18:16:40|INFO|docket.worker|* trace(message: str, ...)
+2026-02-09T18:16:40|INFO|docket.worker|* fail(message: str, ...)
+2026-02-09T18:16:40|INFO|docket.worker|* sleep(seconds: float, ...)
+2026-02-09T18:16:40|INFO|mcp.server.streamable_http_manager|StreamableHTTP session manager started
+2026-02-09T18:16:40|INFO|docket.worker|Starting worker 'roan#112592' with the following tasks:
+2026-02-09T18:16:40|INFO|docket.worker|* trace(message: str, ...)
+2026-02-09T18:16:40|INFO|docket.worker|* fail(message: str, ...)
+2026-02-09T18:16:40|INFO|docket.worker|* sleep(seconds: float, ...)
+2026-02-09T18:16:40|INFO|mcp.server.streamable_http_manager|StreamableHTTP session manager started
+2026-02-09T18:16:40|INFO|uvicorn.error|Application startup complete.
+2026-02-09T18:16:40|INFO|uvicorn.error|Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 ```
