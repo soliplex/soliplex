@@ -251,7 +251,7 @@ Incompatible with '--no-auth-mode'.
         uvicorn_kw["workers"] = workers
 
     if log_config is not None:
-        uvicorn_kw["log_config"] = log_config
+        uvicorn_kw["log_config"] = str(log_config)
 
     if log_level is not None:
         uvicorn_kw["log_level"] = log_level
