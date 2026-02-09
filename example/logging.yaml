@@ -1,0 +1,37 @@
+# See: https://docs.python.org/3/library/logging.config.html#dictionary-schema-details
+version: 1
+disable_existing_loggers: false
+formatters:
+
+  default:
+    format: "$asctime|$levelname|$name|$message"
+    datefmt: "%Y-%m-%dT%H:%M:%S"
+    style: "$"
+    validate: true
+    defaults:
+        some_key: null
+
+#filters:
+#
+#    default:
+#        (): yourapp.logging.custom_filter
+#        name:  <logger-name>
+#        foo:  "bar"
+
+handlers:
+
+  console:
+    class: "logging.StreamHandler"
+    formatter: "default"
+    #filters: []
+    stream: "ext://sys.stdout"
+
+#loggers:
+#
+# some.logger.name:
+#   level: "DEBUG"
+
+root:
+  level: "INFO"
+  handlers:
+    - "console"
