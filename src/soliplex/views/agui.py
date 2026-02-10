@@ -13,6 +13,7 @@ from pydantic_ai.ui import ag_ui as ai_ag_ui
 from soliplex import agui as agui_package
 from soliplex import authn
 from soliplex import authz as authz_package
+from soliplex import config
 from soliplex import installation
 from soliplex import models
 from soliplex import util
@@ -31,7 +32,7 @@ async def _check_user_in_room(
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
-) -> str:
+) -> tuple[str, config.RoomConfig]:
     """Check that the token's user has access to the given room.
 
     If so, return the user's preferred username.
@@ -41,7 +42,7 @@ async def _check_user_in_room(
     user = authn.authenticate(the_installation, token)
 
     try:
-        await the_installation.get_room_config(
+        room_config = await the_installation.get_room_config(
             room_id=room_id,
             user=user,
             the_authz_policy=the_authz_policy,
@@ -52,7 +53,7 @@ async def _check_user_in_room(
             detail=f"No such room: {room_id}",
         ) from None
 
-    return user.get("preferred_username", "<unknown>")
+    return user.get("preferred_username", "<unknown>"), room_config
 
 
 async def _check_user_room_agent(
@@ -102,7 +103,7 @@ async def get_room_agui(
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.AGUI_Threads:
     """Return user's extant AGUI threads within the given room"""
-    user_name = await _check_user_in_room(
+    user_name, _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
@@ -147,7 +148,7 @@ async def get_room_agui_thread_id(
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.AGUI_Thread:
     """Return metadata about a specific thread and its runs"""
-    user_name = await _check_user_in_room(
+    user_name, _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
@@ -202,7 +203,7 @@ async def get_room_agui_thread_id_run_id(
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> models.AGUI_Run:
     """Return metadata about a specific run"""
-    user_name = await _check_user_in_room(
+    user_name, _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
@@ -251,7 +252,7 @@ async def post_room_agui(
 
     Body of request, if passed, must validate to 'models.AGUI_ThreadMetadata'.
     """
-    user_name = await _check_user_in_room(
+    user_name, room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
@@ -272,16 +273,36 @@ async def post_room_agui(
 
     run_map = {}
 
-    for run in await thread.list_runs():
-        await run.awaitable_attrs.thread
-        run_meta = await run.awaitable_attrs.run_metadata
-        run_map[run.run_id] = models.AGUI_Run.from_run(
-            a_run=run,
-            a_run_input=await _get_run_input(run),
-            a_run_meta=run_meta,
-            a_run_events=[],
-            a_run_usage=None,
-        )
+    (run,) = await thread.list_runs()
+    await run.awaitable_attrs.thread
+    run_meta = await run.awaitable_attrs.run_metadata
+
+    # Synthesize a RunAgentInput with a default AG-UI state based on
+    # the room's 'agui_feature_names'.
+    # See: https://github.com/soliplex/soliplex/issues/586
+    agui_state = {}
+
+    for feature_name in room_config.agui_feature_names:
+        feature_klass = config.AGUI_FEATURES_BY_NAME[feature_name].model_klass
+        agui_state[feature_name] = feature_klass().model_dump(mode="python")
+
+    run_input = agui_core.RunAgentInput(
+        thread_id=thread.thread_id,
+        run_id=run.run_id,
+        state=agui_state,
+        messages=(),
+        tools=(),
+        context=(),
+        forwarded_props=None,
+    )
+
+    run_map[run.run_id] = models.AGUI_Run.from_run(
+        a_run=run,
+        a_run_input=run_input,
+        a_run_meta=run_meta,
+        a_run_events=[],
+        a_run_usage=None,
+    )
 
     return models.AGUI_Thread(
         room_id=room_id,
@@ -310,7 +331,7 @@ async def post_room_agui_thread_id(
 
     Body of request, if passed, must validate to 'models.AGUI_RunMetadata'.
     """
-    user_name = await _check_user_in_room(
+    user_name, _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
@@ -379,7 +400,7 @@ async def post_room_agui_thread_id_meta(
 
     Returns an HTTP 205 (Reset Content) on success.
     """
-    user_name = await _check_user_in_room(
+    user_name, _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
@@ -570,7 +591,7 @@ async def post_room_agui_thread_id_run_id_meta(
 
     Returns an HTTP 205 (Reset Content) on success.
     """
-    user_name = await _check_user_in_room(
+    user_name, _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
@@ -620,7 +641,7 @@ async def post_room_agui_thread_id_run_id_feedback(
 
     Return an HTTP 205 (Reset Content) on success.
     """
-    user_name = await _check_user_in_room(
+    user_name, _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
@@ -658,7 +679,7 @@ async def delete_room_agui_thread_id(
     token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
 ) -> fastapi.Response:
     """Delete an AGUI thread within the given room"""
-    user_name = await _check_user_in_room(
+    user_name, _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,

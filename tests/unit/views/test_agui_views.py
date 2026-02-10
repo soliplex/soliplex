@@ -9,8 +9,10 @@ from ag_ui import core as agui_core
 
 from soliplex import agui as agui_package
 from soliplex import authz as authz_package
+from soliplex import config
 from soliplex import installation
 from soliplex import models
+from soliplex.agui import features as agui_features
 from soliplex.views import agui as agui_views
 
 NOW = datetime.datetime.now(datetime.UTC)
@@ -183,16 +185,17 @@ async def test__check_user_in_room(auth_fn, w_miss, expectation):
     if w_miss:
         the_installation.get_room_config.side_effect = KeyError("testing")
 
-    with expectation as expected:
-        found = await agui_views._check_user_in_room(
+    with expectation as expected_username:
+        found_username, room_config = await agui_views._check_user_in_room(
             room_id=TEST_ROOM_ID,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
             token=token,
         )
 
-    if isinstance(expected, str):
-        assert found == expected
+    if isinstance(expected_username, str):
+        assert found_username == expected_username
+        assert room_config is the_installation.get_room_config.return_value
 
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=TEST_ROOM_ID,
@@ -252,7 +255,8 @@ async def test_get_room_agui_only(
     test_thread,
     w_thread_meta,
 ):
-    cuir.return_value = USER_NAME
+    room_config = mock.create_autospec(config.RoomConfig)
+    cuir.return_value = USER_NAME, room_config
 
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
@@ -332,7 +336,8 @@ async def test_get_room_agui_thread_id_only(
     tsgt_side_effect,
     expectation,
 ):
-    cuir.return_value = USER_NAME
+    room_config = mock.create_autospec(config.RoomConfig)
+    cuir.return_value = USER_NAME, room_config
 
     test_thread.list_runs.return_value = [test_run]
 
@@ -464,7 +469,8 @@ async def test_get_room_agui_thread_id_run_id(
     tsgr_side_effect,
     expectation,
 ):
-    cuir.return_value = USER_NAME
+    room_config = mock.create_autospec(config.RoomConfig)
+    cuir.return_value = USER_NAME, room_config
 
     test_run.list_events.return_value = w_events
 
@@ -564,6 +570,20 @@ async def test_get_room_agui_thread_id_run_id(
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
+    "w_agui_feature_names",
+    [
+        [],
+        [agui_features.FILTER_DOCUMENTS_FEATURE],
+        [agui_features.ASK_HISTORY_FEATURE],
+        [agui_features.HAIKU_CHAT_FEATURE],
+        [
+            agui_features.FILTER_DOCUMENTS_FEATURE,
+            agui_features.ASK_HISTORY_FEATURE,
+            agui_features.HAIKU_CHAT_FEATURE,
+        ],
+    ],
+)
+@pytest.mark.parametrize(
     "w_thread_meta",
     [
         {},
@@ -577,10 +597,14 @@ async def test_post_room_agui_only(
     the_threads,
     test_thread,
     test_run,
-    run_input,
     w_thread_meta,
+    w_agui_feature_names,
 ):
-    cuir.return_value = USER_NAME
+    room_config = mock.create_autospec(config.RoomConfig)
+    room_config.agui_feature_names = w_agui_feature_names
+    cuir.return_value = USER_NAME, room_config
+
+    exp_inital_state_keys = set(w_agui_feature_names)
 
     test_thread.list_runs.return_value = [test_run]
 
@@ -616,13 +640,6 @@ async def test_post_room_agui_only(
     test_run.run_metadata = None
     test_run.awaitable_attrs.run_metadata = _awaitable("run_metadata", None)
 
-    test_run.run_input = run_input
-    run_agent_input = mock.Mock(spec_set=["to_agui_model"])
-    run_agent_input.to_agui_model.return_value = run_input
-    test_run.awaitable_attrs.run_agent_input = _awaitable(
-        "run_agent_input",
-        run_agent_input,
-    )
     test_run.awaitable_attrs.thread = _awaitable(
         "thread",
         test_thread,
@@ -646,6 +663,14 @@ async def test_post_room_agui_only(
     assert m_run.thread_id == TEST_THREAD_ID
     assert m_run.run_id == TEST_RUN_ID
     assert m_run.parent_run_id is None
+
+    m_run_state = m_run.run_input.state
+    assert set(m_run_state) == exp_inital_state_keys
+
+    for state_key in exp_inital_state_keys:
+        exp_klass = config.AGUI_FEATURES_BY_NAME[state_key].model_klass
+        exp_inst = exp_klass()
+        assert m_run_state[state_key] == exp_inst.model_dump(mode="python")
 
     the_threads.new_thread.assert_called_once_with(
         room_id=TEST_ROOM_ID,
@@ -688,7 +713,8 @@ async def test_post_room_agui_thread_id_only(
     missing_parent,
     expectation,
 ):
-    cuir.return_value = USER_NAME
+    room_config = mock.create_autospec(config.RoomConfig)
+    cuir.return_value = USER_NAME, room_config
 
     request = fastapi.Request(scope={"type": "http"})
     nrr = {}
@@ -799,7 +825,8 @@ async def test_post_room_agui_thread_id_meta(
     tsutm_side_effect,
     expectation,
 ):
-    cuir.return_value = USER_NAME
+    room_config = mock.create_autospec(config.RoomConfig)
+    cuir.return_value = USER_NAME, room_config
 
     request = fastapi.Request(scope={"type": "http"})
 
@@ -1091,7 +1118,8 @@ async def test_post_room_agui_thread_id_run_id_meta(
     tsurm_side_effect,
     expectation,
 ):
-    cuir.return_value = USER_NAME
+    room_config = mock.create_autospec(config.RoomConfig)
+    cuir.return_value = USER_NAME, room_config
 
     request = fastapi.Request(scope={"type": "http"})
 
@@ -1157,7 +1185,8 @@ async def test_post_room_agui_thread_id_run_id_feedback(
     tssrf_side_effect,
     expectation,
 ):
-    cuir.return_value = USER_NAME
+    room_config = mock.create_autospec(config.RoomConfig)
+    cuir.return_value = USER_NAME, room_config
 
     request = fastapi.Request(scope={"type": "http"})
 
@@ -1222,7 +1251,8 @@ async def test_delete_room_agui_thread_id(
     tsdr_side_effect,
     expectation,
 ):
-    cuir.return_value = USER_NAME
+    room_config = mock.create_autospec(config.RoomConfig)
+    cuir.return_value = USER_NAME, room_config
 
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
