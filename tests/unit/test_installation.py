@@ -570,11 +570,14 @@ def authz_kwargs(request):
 
 
 @pytest.mark.anyio
+@mock.patch("soliplex.logwrapper.LogWrapper")
 async def test_installation_get_room_configs(
+    lw_klass,
     test_user,
     authz_kwargs,
     r_configs,
 ):
+    lw = lw_klass.return_value
     i_config = mock.create_autospec(config.InstallationConfig)
     i_config.room_configs = r_configs
 
@@ -587,25 +590,37 @@ async def test_installation_get_room_configs(
 
     if authz_kwargs:
         allowed = authz_kwargs["the_authz_policy"].allowed
+        lw.debug.assert_called_once_with(installation.AUTHZ_FILTERING_ROOMS)
         if allowed:
             assert found == r_configs
         else:
             assert found == {}
     else:
         assert found == r_configs
+        lw.debug.assert_called_once_with(
+            installation.AUTHZ_NOT_FILTERING_ROOMS,
+        )
+
+    lw_klass.assert_called_once_with(
+        installation.AUTHZ_LOGGER_NAME,
+        user=test_user,
+    )
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
     "w_room_id, raises", [("room_id", False), ("nonesuch", True)]
 )
+@mock.patch("soliplex.logwrapper.LogWrapper")
 async def test_installation_get_room_config(
+    lw_klass,
     test_user,
     authz_kwargs,
     r_configs,
     w_room_id,
     raises,
 ):
+    lw = lw_klass.return_value
     i_config = mock.create_autospec(config.InstallationConfig)
     i_config.room_configs = r_configs
 
@@ -631,6 +646,9 @@ async def test_installation_get_room_config(
                     user=test_user,
                     **authz_kwargs,
                 )
+            lw.error.assert_called_once_with(
+                installation.AUTHZ_ROOM_NOT_AUTHORIZED,
+            )
         else:
             found = await the_installation.get_room_config(
                 room_id=w_room_id,
@@ -639,6 +657,11 @@ async def test_installation_get_room_config(
             )
 
             assert found is r_configs[w_room_id]
+
+            if authz_kwargs:
+                lw.debug.assert_called_once_with(
+                    installation.AUTHZ_ROOM_AUTHORIZED,
+                )
 
 
 @pytest.mark.anyio

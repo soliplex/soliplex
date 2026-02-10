@@ -108,13 +108,16 @@ async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
 @pytest.mark.parametrize("w_error", [None, "aat", "authenticate"])
 @mock.patch("soliplex.authn.get_oauth")
 @mock.patch("soliplex.authn.authenticate")
+@mock.patch("soliplex.logwrapper.LogWrapper")
 async def test_get_auth_system(
+    lw_klass,
     auth_fn,
     get_oauth,
     w_error,
     w_return_to,
     w_auth_disabled,
 ):
+    lw = lw_klass.return_value
     system = "test_oauth_appname"
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.auth_disabled = w_auth_disabled
@@ -183,9 +186,10 @@ async def test_get_auth_system(
                 system,
                 the_installation,
             )
+        lw.debug.assert_called_once_with(authn_views.AUTHN_NO_AUTH_MODE)
 
         assert exc.value.status_code == 404
-        assert exc.value.detail == "system in no-auth mode"
+        assert exc.value.detail == authn_views.AUTHN_NO_AUTH_MODE
 
         aat.assert_not_awaited()
         auth_fn.assert_not_called()
@@ -200,6 +204,10 @@ async def test_get_auth_system(
                     the_installation,
                 )
 
+            lw.exception.assert_called_once_with(
+                authn_views.AUTHN_JWT_INVALID,
+            )
+
             assert exc.value.status_code == 401
         else:
             response = await authn_views.get_auth_system(
@@ -211,6 +219,8 @@ async def test_get_auth_system(
             assert isinstance(response, responses.RedirectResponse)
             assert response.status_code == 307
             assert response.headers["location"] == exp_path
+
+            lw.debug.assert_called_once_with(authn_views.AUTHN_JWT_VALID)
 
         aat.assert_awaited_once_with(request)
 

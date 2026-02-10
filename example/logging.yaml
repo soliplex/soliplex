@@ -26,10 +26,13 @@ handlers:
     #filters: []
     stream: "ext://sys.stdout"
 
-#loggers:
-#
-# some.logger.name:
-#   level: "DEBUG"
+loggers:
+
+  soliplex.authn:
+    level: "DEBUG"
+
+  soliplex.authz:
+    level: "DEBUG"
 
 root:
   level: "INFO"

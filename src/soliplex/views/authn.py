@@ -10,8 +10,14 @@ from fastapi import security
 
 from soliplex import authn
 from soliplex import installation
+from soliplex import logwrapper
 from soliplex import models
 from soliplex import util
+
+AUTHN_LOGGER_NAME = "soliplex.authn"
+AUTHN_NO_AUTH_MODE = "soliplex server in no-auth mode"
+AUTHN_JWT_INVALID = "JWT validation failed"
+AUTHN_JWT_VALID = "JWT validation succeeded"
 
 router = fastapi.APIRouter(tags=["authentication"])
 
@@ -77,10 +83,12 @@ async def get_auth_system(
 
     On success, redirect to client-specified URL.
     """
+    logger = logwrapper.LogWrapper(AUTHN_LOGGER_NAME, oidc_system=system)
     if the_installation.auth_disabled:
+        logger.debug(AUTHN_NO_AUTH_MODE)
         raise fastapi.HTTPException(
             status_code=404,
-            detail="system in no-auth mode",
+            detail=AUTHN_NO_AUTH_MODE,
         )
 
     oauth = authn.get_oauth(the_installation)
@@ -89,12 +97,20 @@ async def get_auth_system(
     try:
         tokendict = await oauth_app.authorize_access_token(request)
     except starlette_client.OAuthError as e:
+        logger.exception(AUTHN_JWT_INVALID)
         raise fastapi.HTTPException(
-            status_code=401, detail=f"JWT validation failed {e}"
+            status_code=401, detail=f"{AUTHN_JWT_INVALID} {e}"
         ) from None
 
     access_token = tokendict["access_token"]
-    authn.authenticate(the_installation, access_token)
+
+    try:
+        authn.authenticate(the_installation, access_token)
+    except fastapi.HTTPException:
+        logger.exception(AUTHN_JWT_INVALID)
+        raise
+    else:
+        logger.debug(AUTHN_JWT_VALID)
 
     refresh_token = tokendict["refresh_token"]
     expires_in = tokendict["expires_in"]
