@@ -22,7 +22,7 @@ dependencies = [
     "greenlet",
 
 
-    "haiku.rag-slim >= 0.28.0",
+    "haiku.rag-slim >= 0.29.1",
 
     "itsdangerous",
     "jsonpatch",
