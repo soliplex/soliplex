@@ -2533,6 +2533,24 @@ class InstallationConfig:
     quizzes_paths: list[pathlib.Path] = None
 
     #
+    # Console logging configuration
+    #
+    _logging_config_file: pathlib.Path = None
+
+    @property
+    def logging_config(self) -> dict[str, typing.Any] | None:
+        """Return a mapping for use in configuring the 'logging' module
+
+        If no file is configured, return None.
+        """
+        if self._logging_config_file is None:
+            return None
+
+        maybe_local = self._config_path.parent / self._logging_config_file
+
+        return _load_config_yaml(maybe_local)
+
+    #
     # Logfire configuration
     #
     logfire_config: LogfireConfig = None
@@ -2638,6 +2656,13 @@ class InstallationConfig:
             ]
             config_dict["agent_configs"] = agent_configs
 
+            logging_config_file = config_dict.pop("logging_config_file", None)
+
+            if logging_config_file is not None:
+                config_dict["_logging_config_file"] = pathlib.Path(
+                    logging_config_file
+                )
+
             logfire_cfg = config_dict.pop("logfire_config", None)
 
             if logfire_cfg is not None:
@@ -2701,6 +2726,7 @@ class InstallationConfig:
             )
             for agent_config in self.agent_configs
         ]
+
         if self.logfire_config is not None:
             self.logfire_config = dataclasses.replace(
                 self.logfire_config,
@@ -2755,6 +2781,7 @@ class InstallationConfig:
             "environment": self.environment,
             "haiku_rag_config_file": str(self._haiku_rag_config_file),
             "agent_configs": [ac.as_yaml for ac in self.agent_configs],
+            "logging_config_file": str(self._logging_config_file),
             "oidc_paths": [str(path) for path in self.oidc_paths],
             "room_paths": [str(path) for path in self.room_paths],
             "completion_paths": [str(path) for path in self.completion_paths],

@@ -1680,6 +1680,16 @@ quizzes_paths:
     -
 """
 
+LOGGING_CONFIG_FILE = "/path/to/logging.yaml"
+W_LOGGING_CONFIG_FILE_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "_logging_config_file": pathlib.Path(LOGGING_CONFIG_FILE),
+}
+W_LOGGING_CONFIG_FILE_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+logging_config_file: "{LOGGING_CONFIG_FILE}"
+"""
+
 W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
     "logfire_config": config.LogfireConfig(token=TEST_LOGFIRE_TOKEN),
@@ -5697,6 +5707,33 @@ def test_installationconfig_agent_configs_map_w_existing():
     assert found is already
 
 
+@pytest.mark.parametrize("w_filename", [False, True])
+def test_installationconfig_logging_config_file(temp_dir, w_filename):
+    logging_config_file = temp_dir / "logging.yaml"
+    logging_config_file.write_text("""\
+version: 1
+""")
+    kw = {}
+
+    if w_filename:
+        kw["_logging_config_file"] = logging_config_file
+
+    i_config = config.InstallationConfig(
+        id="test-ic",
+        _config_path=temp_dir / "installation.yaml",
+        **kw,
+    )
+
+    with mock.patch.dict("os.environ", clear=True):
+        logging_config = i_config.logging_config
+
+    if w_filename:
+        assert isinstance(logging_config, dict)
+        assert logging_config["version"] == 1
+    else:
+        assert logging_config is None
+
+
 def test_installationconfig_agui_features(the_agui_feature):
     i_config = config.InstallationConfig(id="test-ic")
 
@@ -5870,6 +5907,10 @@ def test_installationconfig_authorization_dburi_async(w_kw, expected):
         (
             W_QUIZZES_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML,
             W_QUIZZES_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW.copy(),
+        ),
+        (
+            W_LOGGING_CONFIG_FILE_INSTALLATION_CONFIG_YAML,
+            W_LOGGING_CONFIG_FILE_INSTALLATION_CONFIG_KW.copy(),
         ),
         (
             W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_YAML,
@@ -6078,6 +6119,7 @@ def test_installationconfig_as_yaml(w_logfire_config):
         },
         _haiku_rag_config_file=pathlib.Path(HAIKU_RAG_CONFIG_FILE),
         agent_configs=[agent_config],
+        _logging_config_file=pathlib.Path(LOGGING_CONFIG_FILE),
         oidc_paths=[pathlib.Path("./oidc-test")],
         room_paths=[
             pathlib.Path("/path/to/rooms"),
@@ -6102,6 +6144,7 @@ def test_installationconfig_as_yaml(w_logfire_config):
         "agent_configs": [
             agent_config.as_yaml,
         ],
+        "logging_config_file": LOGGING_CONFIG_FILE,
         "oidc_paths": ["oidc-test"],
         "room_paths": ["/path/to/rooms", "other/rooms"],
         "completion_paths": ["/path/to/completions"],
