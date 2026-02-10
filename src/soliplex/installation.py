@@ -311,7 +311,11 @@ def apply_logfire_configuration(
     logfire_config = the_installation.logfire_config
 
     if logfire_config is not None:
-        logfire.configure(**logfire_config.logfire_config_kwargs)
+        # Disable Logfire's console output if we are sending data to Logfire
+        logfire_kw = logfire_config.logfire_config_kwargs | {
+            "console": False,
+        }
+        logfire.configure(**logfire_kw)
 
         ipydai = logfire_config.instrument_pydantic_ai
 

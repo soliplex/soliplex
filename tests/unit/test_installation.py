@@ -997,7 +997,10 @@ def test_apply_logfire_configuration(logfire, w_logfire_config):
     installation.apply_logfire_configuration(app, the_installation)
 
     if w_logfire_config is not None:
-        logfire.configure.assert_called_once_with(foo="bar")
+        logfire.configure.assert_called_once_with(
+            foo="bar",
+            console=False,
+        )
 
         if w_logfire_config == "ipydai":
             logfire.instrument_pydantic_ai.assert_called_once_with(
