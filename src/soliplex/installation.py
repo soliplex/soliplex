@@ -1,6 +1,7 @@
 import contextlib
 import dataclasses
 import pathlib
+from logging import config as logging_config
 
 import fastapi
 import logfire
@@ -365,6 +366,7 @@ async def lifespan(
     *,
     installation_path: pathlib.Path,
     no_auth_mode: bool = False,
+    log_config_file: str = None,
     add_admin_user: str = None,
 ):
     i_config = config.load_installation(installation_path)
@@ -376,6 +378,15 @@ async def lifespan(
     the_installation = Installation(i_config)
     the_installation.resolve_secrets()
     the_installation.resolve_environment()
+
+    if log_config_file is not None:
+        log_config_file = pathlib.Path(log_config_file)
+        logging_config_dict = config._load_config_yaml(log_config_file)
+    else:
+        logging_config_dict = i_config.logging_config
+
+    if logging_config_dict is not None:
+        logging_config.dictConfig(logging_config_dict)
 
     apply_logfire_configuration(app, the_installation)
 

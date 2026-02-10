@@ -35,6 +35,7 @@ def curry_lifespan(
     *,
     installation_path: pathlib.Path,
     no_auth_mode: bool,
+    log_config_file: str = None,
     add_admin_user: str = None,
 ):
     installation_path = pathlib.Path(installation_path)
@@ -43,6 +44,7 @@ def curry_lifespan(
         installation.lifespan,
         installation_path=installation_path,
         no_auth_mode=no_auth_mode,
+        log_config_file=log_config_file,
         add_admin_user=add_admin_user,
     )
 
@@ -113,6 +115,7 @@ def app_with_soliplex_routers(app: fastapi.FastAPI) -> fastapi.FastAPI:
 def create_app(
     installation_path: pathlib.Path,
     no_auth_mode: bool,
+    log_config_file: str = None,
     add_admin_user: str = None,
     register_metaconfigs=register_metaconfigs,
     curry_lifespan=curry_lifespan,
@@ -132,6 +135,7 @@ def create_app(
     curried_lifespan = curry_lifespan(
         installation_path=installation_path,
         no_auth_mode=no_auth_mode,
+        log_config_file=log_config_file,
         add_admin_user=add_admin_user,
     )
     app = app_with_lifespan(curried_lifespan)
@@ -153,10 +157,12 @@ def create_app_from_environment():
     installation_path_str = os.environ["_SOLIPLEX_INSTALLATION_PATH"]
     installation_path = pathlib.Path(installation_path_str)
     no_auth_mode = os.environ.get("_SOLIPLEX_NO_AUTH_MODE") == "Y"
+    log_config_file = os.environ.get("_SOLIPLEX_LOG_CONFIG_FILE")
     add_admin_user = os.environ.get("_SOLIPLEX_ADD_ADMIN_USER")
 
     return create_app(
         installation_path=installation_path,
+        log_config_file=log_config_file,
         no_auth_mode=no_auth_mode,
         add_admin_user=add_admin_user,
     )

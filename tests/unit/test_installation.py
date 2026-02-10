@@ -19,6 +19,8 @@ VALUE = "test-value"
 DEFAULT = "test-default"
 
 ADMIN_USER_EMAIL = "admin@example.com"
+LOG_CONFIG_FILE = "logging.yaml"
+
 SECRET_NAME_1 = "TEST_SECRET"
 SECRET_NAME_2 = "OTHER_SECRET"
 SECRET_CONFIG_1 = config.SecretConfig(secret_name=SECRET_NAME_1)
@@ -1089,6 +1091,14 @@ def mcp_apps():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("w_add_admin_user", [None, ADMIN_USER_EMAIL])
 @pytest.mark.parametrize(
+    "w_ic_logging_config",
+    [
+        None,
+        {"version": 1, "root": {"level": "DEBUG"}},
+    ],
+)
+@pytest.mark.parametrize("w_log_config_file", [None, LOG_CONFIG_FILE])
+@pytest.mark.parametrize(
     "w_no_auth_mode, exp_oidc_paths",
     [
         (None, ["oidc"]),
@@ -1102,7 +1112,9 @@ def mcp_apps():
 @mock.patch("soliplex.secrets.resolve_secrets")
 @mock.patch("soliplex.mcp_server.setup_mcp_for_rooms")
 @mock.patch("soliplex.config.load_installation")
+@mock.patch("logging.config.dictConfig")
 async def test_lifespan(
+    lcdc,
     load_installation,
     smfr,
     srs,
@@ -1110,8 +1122,11 @@ async def test_lifespan(
     auaa,
     anauaa,
     mcp_apps,
+    temp_dir,
     w_no_auth_mode,
     exp_oidc_paths,
+    w_log_config_file,
+    w_ic_logging_config,
     w_add_admin_user,
 ):
     INSTALLATION_PATH = "/path/to/installation"
@@ -1123,6 +1138,7 @@ async def test_lifespan(
         secrets=(),
         oidc_paths=["oidc"],
         environment={"OLLAMA_BASE_URL": OLLAMA_BASE_URL},
+        logging_config=w_ic_logging_config,
         thread_persistence_dburi_async=config.ASYNC_MEMORY_ENGINE_URL,
         authorization_dburi_async=config.ASYNC_MEMORY_ENGINE_URL,
     )
@@ -1136,6 +1152,16 @@ async def test_lifespan(
         exp_no_auth_mode = kwargs["no_auth_mode"] = w_no_auth_mode
     else:
         exp_no_auth_mode = False
+
+    if w_log_config_file is not None:
+        w_log_config_file = temp_dir / w_log_config_file
+        w_log_config_file.write_text("""\
+version: 1
+
+root:
+    level: INFO
+""")
+        kwargs["log_config_file"] = str(w_log_config_file)
 
     if w_add_admin_user is not None:
         kwargs["add_admin_user"] = w_add_admin_user
@@ -1172,6 +1198,13 @@ async def test_lifespan(
         strict=True,
     ):
         assert f_call.args == ("/mcp/" + key, mcp_app)
+
+    if w_log_config_file is not None:
+        lcdc.assert_called_once_with({"version": 1, "root": {"level": "INFO"}})
+    elif w_ic_logging_config is not None:
+        lcdc.assert_called_once_with(w_ic_logging_config)
+    else:
+        lcdc.assert_not_called()
 
     if w_add_admin_user:
         (auaa_called,) = auaa.call_args_list

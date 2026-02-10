@@ -251,9 +251,6 @@ Incompatible with '--no-auth-mode'.
     if workers is not None:
         uvicorn_kw["workers"] = workers
 
-    if log_config is not None:
-        uvicorn_kw["log_config"] = str(log_config)
-
     if log_level is not None:
         uvicorn_kw["log_level"] = log_level
 
@@ -282,6 +279,9 @@ Incompatible with '--no-auth-mode'.
         if no_auth_mode:
             os.environ["_SOLIPLEX_NO_AUTH_MODE"] = "Y"
 
+        if log_config is not None:  # pass to the app, disable Uvicorn.
+            os.environ["_SOLIPLEX_LOG_CONFIG_FILE"] = str(log_config)
+
         if add_admin_user is not None:
             os.environ["_SOLIPLEX_ADD_ADMIN_USER"] = add_admin_user
 
@@ -303,6 +303,7 @@ Incompatible with '--no-auth-mode'.
         app = app_maker(
             installation_path=installation_path,
             no_auth_mode=no_auth_mode,
+            log_config_file=log_config,
             add_admin_user=add_admin_user,
         )
         uvicorn.run(app, **uvicorn_kw)

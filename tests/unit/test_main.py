@@ -16,6 +16,7 @@ from soliplex.views import quizzes as quizzes_views
 from soliplex.views import rooms as rooms_views
 
 ADMIN_USER_EMAIL = "admin@example.com"
+LOG_CONFIG_FILE_PATH = "/path/to/logging.yaml"
 EXPLICIT_INST_PATH = "/explicit"
 ENVIRON_INST_PATH = "/environ"
 
@@ -36,7 +37,21 @@ def no_auth_mode_kwargs(request):
     return kw
 
 
-def test_curry_lifespan(add_admin_user_kwargs, no_auth_mode_kwargs):
+@pytest.fixture(scope="module", params=[None, LOG_CONFIG_FILE_PATH])
+def log_config_file_kwargs(request):
+    kw = {}
+
+    if request.param is not None:
+        kw["log_config_file"] = request.param
+
+    return kw
+
+
+def test_curry_lifespan(
+    add_admin_user_kwargs,
+    no_auth_mode_kwargs,
+    log_config_file_kwargs,
+):
     exp_path = EXPLICIT_INST_PATH
 
     if add_admin_user_kwargs:
@@ -46,10 +61,16 @@ def test_curry_lifespan(add_admin_user_kwargs, no_auth_mode_kwargs):
 
     exp_no_auth_mode = no_auth_mode_kwargs["no_auth_mode"]
 
+    if log_config_file_kwargs:
+        exp_log_config_file = log_config_file_kwargs["log_config_file"]
+    else:
+        exp_log_config_file = None
+
     found = main.curry_lifespan(
         installation_path=EXPLICIT_INST_PATH,
         **add_admin_user_kwargs,
         **no_auth_mode_kwargs,
+        **log_config_file_kwargs,
     )
 
     assert isinstance(found, functools.partial)
@@ -58,6 +79,7 @@ def test_curry_lifespan(add_admin_user_kwargs, no_auth_mode_kwargs):
         "installation_path": pathlib.Path(exp_path),
         "no_auth_mode": exp_no_auth_mode,
         "add_admin_user": exp_add_admin_user,
+        "log_config_file": exp_log_config_file,
     }
 
 
@@ -170,12 +192,22 @@ def test_app_with_soliplex_routers():
     assert mock.call(rooms_views.router, prefix="/api") in air_calls
 
 
+@pytest.mark.parametrize("w_log_config_file", [None, LOG_CONFIG_FILE_PATH])
 @pytest.mark.parametrize("w_add_admin_user", [None, ADMIN_USER_EMAIL])
 @pytest.mark.parametrize("w_no_auth_mode", [False, True])
 def test_create_app_with_explicit_overrides(
     w_no_auth_mode,
     w_add_admin_user,
+    w_log_config_file,
 ):
+    kwargs = {}
+
+    if w_add_admin_user is not None:
+        kwargs["add_admin_user"] = w_add_admin_user
+
+    if w_log_config_file is not None:
+        kwargs["log_config_file"] = w_log_config_file
+
     curry_lifespan = mock.Mock(spec_set=())
     app_with_lifespan = mock.Mock(spec_set=())
     app_with_cors = mock.Mock(spec_set=())
@@ -183,29 +215,17 @@ def test_create_app_with_explicit_overrides(
     app_with_git_hash = mock.Mock(spec_set=())
     app_with_soliplex_routers = mock.Mock(spec_set=())
 
-    if w_add_admin_user is not None:
-        found = main.create_app(
-            installation_path=EXPLICIT_INST_PATH,
-            no_auth_mode=w_no_auth_mode,
-            add_admin_user=w_add_admin_user,
-            curry_lifespan=curry_lifespan,
-            app_with_lifespan=app_with_lifespan,
-            app_with_cors=app_with_cors,
-            app_with_session=app_with_session,
-            app_with_git_hash=app_with_git_hash,
-            app_with_soliplex_routers=app_with_soliplex_routers,
-        )
-    else:
-        found = main.create_app(
-            installation_path=EXPLICIT_INST_PATH,
-            no_auth_mode=w_no_auth_mode,
-            curry_lifespan=curry_lifespan,
-            app_with_lifespan=app_with_lifespan,
-            app_with_cors=app_with_cors,
-            app_with_session=app_with_session,
-            app_with_git_hash=app_with_git_hash,
-            app_with_soliplex_routers=app_with_soliplex_routers,
-        )
+    found = main.create_app(
+        installation_path=EXPLICIT_INST_PATH,
+        no_auth_mode=w_no_auth_mode,
+        curry_lifespan=curry_lifespan,
+        app_with_lifespan=app_with_lifespan,
+        app_with_cors=app_with_cors,
+        app_with_session=app_with_session,
+        app_with_git_hash=app_with_git_hash,
+        app_with_soliplex_routers=app_with_soliplex_routers,
+        **kwargs,
+    )
 
     assert found is app_with_soliplex_routers.return_value
     app_with_soliplex_routers.assert_called_once_with(
@@ -227,9 +247,11 @@ def test_create_app_with_explicit_overrides(
         installation_path=EXPLICIT_INST_PATH,
         no_auth_mode=w_no_auth_mode,
         add_admin_user=w_add_admin_user,
+        log_config_file=w_log_config_file,
     )
 
 
+@pytest.mark.parametrize("w_log_config_file", [None, LOG_CONFIG_FILE_PATH])
 @pytest.mark.parametrize("w_add_admin_user", [None, ADMIN_USER_EMAIL])
 @pytest.mark.parametrize("w_no_auth_mode", [False, True])
 @mock.patch("soliplex.main.create_app")
@@ -238,6 +260,7 @@ def test_create_app_from_environment(
     temp_dir,
     w_no_auth_mode,
     w_add_admin_user,
+    w_log_config_file,
 ):
     i_path = temp_dir / "installation.yaml"
 
@@ -249,6 +272,9 @@ def test_create_app_from_environment(
     if w_add_admin_user:
         env_patch["_SOLIPLEX_ADD_ADMIN_USER"] = w_add_admin_user
 
+    if w_log_config_file:
+        env_patch["_SOLIPLEX_LOG_CONFIG_FILE"] = w_log_config_file
+
     with mock.patch.dict("os.environ", clear=True, **env_patch):
         found = main.create_app_from_environment()
 
@@ -258,4 +284,5 @@ def test_create_app_from_environment(
         installation_path=i_path,
         no_auth_mode=w_no_auth_mode,
         add_admin_user=w_add_admin_user,
+        log_config_file=w_log_config_file,
     )
