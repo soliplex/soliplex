@@ -5724,6 +5724,31 @@ version: 1
         **kw,
     )
 
+    found = i_config.logging_config_file
+
+    if w_filename:
+        assert found == logging_config_file
+    else:
+        assert found is None
+
+
+@pytest.mark.parametrize("w_filename", [False, True])
+def test_installationconfig_logging_config(temp_dir, w_filename):
+    logging_config_file = temp_dir / "logging.yaml"
+    logging_config_file.write_text("""\
+version: 1
+""")
+    kw = {}
+
+    if w_filename:
+        kw["_logging_config_file"] = logging_config_file
+
+    i_config = config.InstallationConfig(
+        id="test-ic",
+        _config_path=temp_dir / "installation.yaml",
+        **kw,
+    )
+
     with mock.patch.dict("os.environ", clear=True):
         logging_config = i_config.logging_config
 

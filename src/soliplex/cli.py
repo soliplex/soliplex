@@ -223,6 +223,10 @@ Incompatible with '--no-auth-mode'.
         )
         raise typer.Exit()
 
+    # Temporary, to permit updating logging config if not passed on CLI.
+    the_installation = get_installation(installation_path)
+    i_config = the_installation._config
+
     if reload in (ReloadOption.PYTHON, ReloadOption.BOTH):
         reload_dirs.extend(soliplex.__path__)
 
@@ -253,6 +257,11 @@ Incompatible with '--no-auth-mode'.
 
     if log_level is not None:
         uvicorn_kw["log_level"] = log_level
+
+    if log_config is not None:
+        uvicorn_kw["log_config"] = str(log_config)
+    elif i_config._logging_config_file is not None:
+        uvicorn_kw["log_config"] = str(i_config.logging_config_file)
 
     if access_log is not None:
         uvicorn_kw["access_log"] = access_log

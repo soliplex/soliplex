@@ -2538,17 +2538,23 @@ class InstallationConfig:
     _logging_config_file: pathlib.Path = None
 
     @property
+    def logging_config_file(self) -> pathlib.Path | None:
+        """Return the path to our logging config file"""
+        if self._logging_config_file is None:
+            return None
+
+        return self._config_path.parent / self._logging_config_file
+
+    @property
     def logging_config(self) -> dict[str, typing.Any] | None:
         """Return a mapping for use in configuring the 'logging' module
 
         If no file is configured, return None.
         """
-        if self._logging_config_file is None:
-            return None
+        config_file = self.logging_config_file
 
-        maybe_local = self._config_path.parent / self._logging_config_file
-
-        return _load_config_yaml(maybe_local)
+        if config_file is not None:
+            return _load_config_yaml(config_file)
 
     #
     # Logfire configuration
