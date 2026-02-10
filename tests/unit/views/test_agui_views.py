@@ -246,7 +246,12 @@ async def test__check_user_room_agent(auth_fn, w_miss, expectation):
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_thread_meta", [False, True])
 @mock.patch("soliplex.views.agui._check_user_in_room")
-async def test_get_room_agui(cuir, the_threads, test_thread, w_thread_meta):
+async def test_get_room_agui_only(
+    cuir,
+    the_threads,
+    test_thread,
+    w_thread_meta,
+):
     cuir.return_value = USER_NAME
 
     request = fastapi.Request(scope={"type": "http"})
@@ -314,7 +319,7 @@ async def test_get_room_agui(cuir, the_threads, test_thread, w_thread_meta):
 @pytest.mark.parametrize("w_run_meta", [False, True])
 @pytest.mark.parametrize("w_thread_meta", [False, True])
 @mock.patch("soliplex.views.agui._check_user_in_room")
-async def test_get_room_agui_thread_id(
+async def test_get_room_agui_thread_id_only(
     cuir,
     the_threads,
     test_thread,
@@ -410,6 +415,12 @@ async def test_get_room_agui_thread_id(
             assert found.metadata.name == TEST_THREAD_NAME
         else:
             assert found.metadata is None
+
+    else:  # silence resource warnings
+        await test_thread.awaitable_attrs.thread_metadata
+        await test_run.awaitable_attrs.thread
+        await test_run.awaitable_attrs.run_agent_input
+        await test_run.awaitable_attrs.run_metadata
 
     the_threads.get_thread.assert_called_once_with(
         user_name=USER_NAME,
@@ -531,6 +542,12 @@ async def test_get_room_agui_thread_id_run_id(
         else:
             assert found.metadata is None
 
+    else:  # silence resource warnings
+        await test_run.awaitable_attrs.run_agent_input
+        await test_run.awaitable_attrs.run_metadata
+        await test_run.awaitable_attrs.run_usage
+        await test_run.awaitable_attrs.thread
+
     the_threads.get_run.assert_called_once_with(
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
@@ -555,7 +572,7 @@ async def test_get_room_agui_thread_id_run_id(
     ],
 )
 @mock.patch("soliplex.views.agui._check_user_in_room")
-async def test_post_room_agui(
+async def test_post_room_agui_only(
     cuir,
     the_threads,
     test_thread,
@@ -660,7 +677,7 @@ async def test_post_room_agui(
 )
 @pytest.mark.parametrize("w_run_meta", [False, True])
 @mock.patch("soliplex.views.agui._check_user_in_room")
-async def test_post_room_agui_thread_id(
+async def test_post_room_agui_thread_id_only(
     cuir,
     the_threads,
     test_run,
