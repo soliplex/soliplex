@@ -20,9 +20,9 @@ Accepts batches of structured logs from clients for observability.
       "level": "info",
       "logger": "HttpClient",
       "message": "GET /api/v1/rooms 200",
-      "installId": "inst-abc",
-      "sessionId": "sess-def",
-      "userId": "u-123",
+      "install_id": "inst-abc",
+      "session_id": "sess-def",
+      "user_id": "u-123",
       "attributes": {
         "http.method": "GET",
         "http.status_code": 200,
@@ -53,9 +53,9 @@ Accepts batches of structured logs from clients for observability.
 | `level` | String | Yes | One of: `trace`, `debug`, `info`, `warning`, `error`, `fatal`. |
 | `logger` | String | Yes | Logger name (e.g., `HttpClient`, `AgentRunner`). |
 | `message` | String | Yes | The log message. |
-| `installId` | String | Yes | Unique identifier for the client installation. |
-| `sessionId` | String | Yes | Unique identifier for the client session. |
-| `userId` | String | No | Identifier for the authenticated user. |
+| `install_id` | String | Yes | Unique identifier for the client installation. |
+| `session_id` | String | Yes | Unique identifier for the client session. |
+| `user_id` | String | No | Identifier for the authenticated user. |
 | `attributes` | Object | No | Arbitrary key-value pairs for additional context. |
 
 #### Attribute Conventions

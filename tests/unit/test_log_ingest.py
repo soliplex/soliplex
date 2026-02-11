@@ -10,8 +10,8 @@ ENTRY_KWARGS = {
     "level": "info",
     "logger": "TestLogger",
     "message": "hello world",
-    "installId": "inst-abc",
-    "sessionId": "sess-def",
+    "install_id": "inst-abc",
+    "session_id": "sess-def",
 }
 
 SERVER_TIME = datetime.datetime(2026, 2, 7, 12, 0, 1, tzinfo=datetime.UTC)
@@ -29,14 +29,14 @@ class TestMapToLogfireAttrs:
         assert result["session_id"] == "sess-def"
         assert result["server.received_at"] == SERVER_TIME.isoformat()
 
-    def test_with_userId(self):
-        entry = log_ingest.LogEntry(**ENTRY_KWARGS, userId="u-123")
+    def test_with_user_id(self):
+        entry = log_ingest.LogEntry(**ENTRY_KWARGS, user_id="u-123")
         result = log_ingest.map_to_logfire_attrs(entry, SERVER_TIME)
 
         assert result["user_id"] == "u-123"
 
-    def test_null_userId(self):
-        entry = log_ingest.LogEntry(**ENTRY_KWARGS, userId=None)
+    def test_null_user_id(self):
+        entry = log_ingest.LogEntry(**ENTRY_KWARGS, user_id=None)
         result = log_ingest.map_to_logfire_attrs(entry, SERVER_TIME)
 
         assert "user_id" not in result
@@ -96,7 +96,7 @@ class TestLogEntryValidation:
             log_ingest.LogEntry(
                 timestamp="2026-02-07T12:00:00Z",
                 level="info",
-                # missing logger, message, installId, sessionId
+                # missing logger, message, install_id, session_id
             )
 
 

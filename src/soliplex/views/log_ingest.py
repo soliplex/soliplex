@@ -43,8 +43,8 @@ async def ingest_logs(
     first = payload.logs[0] if payload.logs else None
     with logfire.span(
         "client_log_batch",
-        install_id=first.installId if first else "",
-        session_id=first.sessionId if first else "",
+        install_id=first.install_id if first else "",
+        session_id=first.session_id if first else "",
         count=len(payload.logs),
     ):
         for entry in payload.logs:

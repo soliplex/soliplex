@@ -13,8 +13,8 @@ ENTRY_KWARGS = {
     "level": "info",
     "logger": "TestLogger",
     "message": "hello world",
-    "installId": "inst-abc",
-    "sessionId": "sess-def",
+    "install_id": "inst-abc",
+    "session_id": "sess-def",
 }
 
 

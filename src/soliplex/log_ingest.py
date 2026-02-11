@@ -15,9 +15,9 @@ class LogEntry(pydantic.BaseModel):
     logger: str
     message: str
     attributes: dict[str, Any] | None = None
-    installId: str
-    sessionId: str
-    userId: str | None = None
+    install_id: str
+    session_id: str
+    user_id: str | None = None
 
 
 class LogPayload(pydantic.BaseModel):
@@ -34,13 +34,13 @@ def map_to_logfire_attrs(
         "logger": entry.logger,
         "message": entry.message,
         "client_timestamp": entry.timestamp,
-        "install_id": entry.installId,
-        "session_id": entry.sessionId,
+        "install_id": entry.install_id,
+        "session_id": entry.session_id,
         "server.received_at": server_received_at.isoformat(),
     }
 
-    if entry.userId is not None:
-        attrs["user_id"] = entry.userId
+    if entry.user_id is not None:
+        attrs["user_id"] = entry.user_id
 
     if entry.attributes:
         attrs.update(entry.attributes)
