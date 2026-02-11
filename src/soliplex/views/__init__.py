@@ -6,6 +6,7 @@ from fastapi import security
 
 from soliplex import authn as authn_module
 from soliplex import installation as installation_module
+from soliplex import loggers
 from soliplex import util
 
 router = fastapi.APIRouter()
@@ -26,6 +27,31 @@ async def get_the_user_claims(
 
 
 depend_the_user_claims = fastapi.Depends(get_the_user_claims)
+
+
+async def get_the_unauth_logger(
+    request: fastapi.Request,
+    the_installation: Installation = depend_the_installation,
+) -> loggers.LogWrapper:
+    return loggers.LogWrapper(
+        name="soliplex",
+        headers=request.headers,
+    )
+
+
+depend_the_unauth_logger = fastapi.Depends(get_the_unauth_logger)
+
+
+async def get_the_logger(
+    the_unauth_logger: loggers.LogWrapper = depend_the_unauth_logger,
+    the_user_claims: authn_module.UserClaims = depend_the_user_claims,
+) -> loggers.LogWrapper:
+    return the_unauth_logger.bind(
+        claims=the_user_claims,
+    )
+
+
+depend_the_logger = fastapi.Depends(get_the_logger)
 
 
 #   'process_control' canary

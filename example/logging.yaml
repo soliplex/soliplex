@@ -28,6 +28,9 @@ handlers:
 
 loggers:
 
+  soliplex:
+    level: "DEBUG"
+
   soliplex.authn:
     level: "DEBUG"
 

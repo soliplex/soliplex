@@ -1,9 +1,16 @@
 from unittest import mock
 
+import fastapi
 import pytest
 
 from soliplex import installation
+from soliplex import loggers
 from soliplex import views
+
+EMAIL = "phreddy@example.com"
+THE_USER_CLAIMS = {
+    "email": EMAIL,
+}
 
 
 @pytest.mark.anyio
@@ -22,6 +29,42 @@ async def test_get_the_user_claims(auth_fn):
     auth_fn.assert_called_once_with(
         the_installation=the_installation,
         token=token,
+    )
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.loggers.LogWrapper")
+async def test_get_the_unauth_logger(lw_klass):
+    request = mock.create_autospec(fastapi.Request)
+    the_installation = mock.create_autospec(installation.Installation)
+    lw = lw_klass.return_value = mock.AsyncMock()
+
+    found = await views.get_the_unauth_logger(
+        request=request,
+        the_installation=the_installation,
+    )
+
+    assert found is lw
+
+    lw_klass.assert_called_once_with(
+        name="soliplex",
+        headers=request.headers,
+    )
+
+
+@pytest.mark.anyio
+async def test_get_the_logger():
+    the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
+
+    found = await views.get_the_logger(
+        the_unauth_logger=the_unauth_logger,
+        the_user_claims=THE_USER_CLAIMS,
+    )
+
+    assert found is the_unauth_logger.bind.return_value
+
+    the_unauth_logger.bind.assert_called_once_with(
+        claims=THE_USER_CLAIMS,
     )
 
 
