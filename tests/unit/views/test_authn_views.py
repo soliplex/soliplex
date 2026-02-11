@@ -15,7 +15,7 @@ GIVEN_NAME = "Phred"
 FAMILY_NAME = "Phlyntstone"
 EMAIL = "phreddy@example.com"
 
-AUTH_USER = {
+AUTH_USER_CLAIMS = {
     "preferred_username": USER_NAME,
     "given_name": GIVEN_NAME,
     "family_name": FAMILY_NAME,
@@ -27,8 +27,12 @@ AUTH_USER = {
 async def test_get_login(with_auth_systems):
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.oidc_auth_system_configs = with_auth_systems
+    the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
 
-    found = await authn_views.get_login(the_installation)
+    found = await authn_views.get_login(
+        the_installation=the_installation,
+        the_unauth_logger=the_unauth_logger,
+    )
 
     with_auth_systems_map = {asys.id: asys for asys in with_auth_systems}
 
@@ -41,6 +45,8 @@ async def test_get_login(with_auth_systems):
         assert f_key == e_key
         assert f_val.title == e_val.title
 
+    the_unauth_logger.debug.assert_called_once_with(loggers.AUTHN_GET_LOGIN)
+
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_auth_disabled", [False, True])
@@ -50,6 +56,8 @@ async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
     system = "test_oauth_appname"
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.auth_disabled = w_auth_disabled
+    the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
+    bound_logger = the_unauth_logger.bind.return_value
 
     cc = get_oauth.return_value.create_client
     oidc = cc.return_value
@@ -74,13 +82,15 @@ async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
     if w_auth_disabled:
         with pytest.raises(fastapi.HTTPException) as exc:
             await authn_views.get_login_system(
-                request,
-                system,
-                the_installation,
+                request=request,
+                system=system,
+                the_installation=the_installation,
+                the_unauth_logger=the_unauth_logger,
             )
 
         assert exc.value.status_code == 404
-        assert exc.value.detail == "system in no-auth mode"
+        assert exc.value.detail == loggers.AUTHN_NO_AUTH_MODE
+        bound_logger.error.assert_called_once_with(loggers.AUTHN_NO_AUTH_MODE)
 
         oidc.authorize_redirect.assert_not_called()
         ar.assert_not_awaited()
@@ -90,9 +100,10 @@ async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
 
     else:
         found = await authn_views.get_login_system(
-            request,
-            system,
-            the_installation,
+            request=request,
+            system=system,
+            the_installation=the_installation,
+            the_unauth_logger=the_unauth_logger,
         )
 
         assert found is oidc.authorize_redirect.return_value
@@ -102,6 +113,14 @@ async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
         ruf.assert_called_once_with("get_auth_system", system=system)
         cc.assert_called_once_with(system)
 
+        bound_logger.debug.assert_called_once_with(
+            loggers.AUTHN_GET_LOGIN_SYSTEM
+        )
+
+    the_unauth_logger.bind.assert_called_once_with(
+        oidc_system=system,
+    )
+
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_auth_disabled", [False, True])
@@ -109,19 +128,18 @@ async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
 @pytest.mark.parametrize("w_error", [None, "aat", "authenticate"])
 @mock.patch("soliplex.authn.get_oauth")
 @mock.patch("soliplex.authn.authenticate")
-@mock.patch("soliplex.loggers.LogWrapper")
 async def test_get_auth_system(
-    lw_klass,
     auth_fn,
     get_oauth,
     w_error,
     w_return_to,
     w_auth_disabled,
 ):
-    lw = lw_klass.return_value
     system = "test_oauth_appname"
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.auth_disabled = w_auth_disabled
+    the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
+    bound_logger = the_unauth_logger.bind.return_value
 
     cc = get_oauth.return_value.create_client
     oidc = cc.return_value
@@ -183,11 +201,14 @@ async def test_get_auth_system(
     if w_auth_disabled:
         with pytest.raises(fastapi.HTTPException) as exc:
             await authn_views.get_auth_system(
-                request,
-                system,
-                the_installation,
+                request=request,
+                system=system,
+                the_installation=the_installation,
+                the_unauth_logger=the_unauth_logger,
             )
-        lw.debug.assert_called_once_with(loggers.AUTHN_NO_AUTH_MODE)
+        bound_logger.error.assert_called_once_with(
+            loggers.AUTHN_NO_AUTH_MODE,
+        )
 
         assert exc.value.status_code == 404
         assert exc.value.detail == loggers.AUTHN_NO_AUTH_MODE
@@ -200,28 +221,32 @@ async def test_get_auth_system(
         if w_error is not None:
             with pytest.raises(fastapi.HTTPException) as exc:
                 await authn_views.get_auth_system(
-                    request,
-                    system,
-                    the_installation,
+                    request=request,
+                    system=system,
+                    the_installation=the_installation,
+                    the_unauth_logger=the_unauth_logger,
                 )
 
-            lw.exception.assert_called_once_with(
+            bound_logger.exception.assert_called_once_with(
                 loggers.AUTHN_JWT_INVALID,
             )
 
             assert exc.value.status_code == 401
         else:
             response = await authn_views.get_auth_system(
-                request,
-                system,
-                the_installation,
+                request=request,
+                system=system,
+                the_installation=the_installation,
+                the_unauth_logger=the_unauth_logger,
             )
 
             assert isinstance(response, responses.RedirectResponse)
             assert response.status_code == 307
             assert response.headers["location"] == exp_path
 
-            lw.debug.assert_called_once_with(loggers.AUTHN_JWT_VALID)
+            bound_logger.debug.assert_called_once_with(
+                loggers.AUTHN_JWT_VALID,
+            )
 
         aat.assert_awaited_once_with(request)
 
@@ -231,6 +256,10 @@ async def test_get_auth_system(
             auth_fn.assert_not_called()
 
         cc.assert_called_once_with(system)
+
+    the_unauth_logger.bind.assert_called_once_with(
+        oidc_system=system,
+    )
 
 
 @pytest.mark.anyio
@@ -249,9 +278,10 @@ async def test_get_auth_system_with_hash_routing():
     )
 
     # Mock installation with empty oidc_auth_system_configs
-    installation = mock.Mock()
-    installation.auth_disabled = False
-    installation.oidc_auth_system_configs = []
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.auth_disabled = False
+    the_installation.oidc_auth_system_configs = []
+    the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
 
     # Mock OAuth components
     oauth = mock.Mock()
@@ -273,7 +303,10 @@ async def test_get_auth_system_with_hash_routing():
     ):
         # Call the function
         result = await authn_views.get_auth_system(
-            request, "pydio", installation
+            request=request,
+            system="pydio",
+            the_installation=the_installation,
+            the_unauth_logger=the_unauth_logger,
         )
 
     # Check that the redirect URL has query params before the hash
@@ -310,9 +343,10 @@ async def test_get_authn_system_without_hash():
     )
 
     # Mock installation with empty oidc_auth_system_configs
-    installation = mock.Mock()
-    installation.auth_disabled = False
-    installation.oidc_auth_system_configs = []
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.auth_disabled = False
+    the_installation.oidc_auth_system_configs = []
+    the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
 
     # Mock OAuth components
     oauth = mock.Mock()
@@ -334,7 +368,10 @@ async def test_get_authn_system_without_hash():
     ):
         # Call the function
         result = await authn_views.get_auth_system(
-            request, "pydio", installation
+            request=request,
+            system="pydio",
+            the_installation=the_installation,
+            the_unauth_logger=the_unauth_logger,
         )
 
     # Check that the redirect URL has standard query params
@@ -350,26 +387,31 @@ async def test_get_authn_system_without_hash():
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_auth_disabled", [False, True])
-@mock.patch("soliplex.authn.authenticate")
-async def test_get_user_info(authenticate, w_auth_disabled):
-    authenticate.return_value = AUTH_USER
-
+async def test_get_user_info(w_auth_disabled):
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.auth_disabled = w_auth_disabled
-    token = object()
+    the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if w_auth_disabled:
         with pytest.raises(fastapi.HTTPException) as exc:
-            await authn_views.get_user_info(the_installation, token)
+            await authn_views.get_user_info(
+                the_installation=the_installation,
+                the_user_claims=AUTH_USER_CLAIMS,
+                the_logger=the_logger,
+            )
 
         assert exc.value.status_code == 404
-        assert exc.value.detail == "system in no-auth mode"
+        assert exc.value.detail == loggers.AUTHN_NO_AUTH_MODE
 
-        authenticate.assert_not_called()
+        the_logger.error.assert_called_once_with(loggers.AUTHN_NO_AUTH_MODE)
 
     else:
-        found = await authn_views.get_user_info(the_installation, token)
+        found = await authn_views.get_user_info(
+            the_installation=the_installation,
+            the_user_claims=AUTH_USER_CLAIMS,
+            the_logger=the_logger,
+        )
 
-        assert found == AUTH_USER
+        assert found == models.UserProfile(**AUTH_USER_CLAIMS)
 
-        authenticate.assert_called_once_with(the_installation, token)
+        the_logger.debug.assert_called_once_with(loggers.AUTHN_GET_USER_INFO)

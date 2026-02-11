@@ -47,7 +47,7 @@ async def test_get_the_unauth_logger(lw_klass):
     assert found is lw
 
     lw_klass.assert_called_once_with(
-        name="soliplex",
+        name=loggers.AUTHN_LOGGER_NAME,
         headers=request.headers,
     )
 
@@ -64,6 +64,7 @@ async def test_get_the_logger():
     assert found is the_unauth_logger.bind.return_value
 
     the_unauth_logger.bind.assert_called_once_with(
+        name=loggers.SOLIPLEX_LOGGER_NAME,
         claims=THE_USER_CLAIMS,
     )
 

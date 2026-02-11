@@ -34,7 +34,7 @@ async def get_the_unauth_logger(
     the_installation: Installation = depend_the_installation,
 ) -> loggers.LogWrapper:
     return loggers.LogWrapper(
-        name="soliplex",
+        name=loggers.AUTHN_LOGGER_NAME,
         headers=request.headers,
     )
 
@@ -47,6 +47,7 @@ async def get_the_logger(
     the_user_claims: authn_module.UserClaims = depend_the_user_claims,
 ) -> loggers.LogWrapper:
     return the_unauth_logger.bind(
+        name=loggers.SOLIPLEX_LOGGER_NAME,
         claims=the_user_claims,
     )
 

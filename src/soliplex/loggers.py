@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import logging
 
+SOLIPLEX_LOGGER_NAME = "soliplex"
+
 AUTHN_LOGGER_NAME = "soliplex.authn"
 AUTHN_NO_AUTH_MODE = "soliplex server in no-auth mode"
 AUTHN_JWT_INVALID = "JWT validation failed"
 AUTHN_JWT_VALID = "JWT validation succeeded"
+AUTHN_NO_AUTH_MODE = "system in no-auth mode"
+AUTHN_GET_LOGIN = "get login"
+AUTHN_GET_LOGIN_SYSTEM = "get login system"
+AUTHN_GET_AUTH_SYSTEM = "get auth system"
+AUTHN_GET_USER_INFO = "get user info"
 
 AUTHZ_LOGGER_NAME = "soliplex.authz"
 AUTHZ_FILTERING_ROOMS = "Filtering rooms for user"
