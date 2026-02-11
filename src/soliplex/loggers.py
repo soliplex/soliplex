@@ -15,10 +15,15 @@ AUTHN_GET_AUTH_SYSTEM = "get auth system"
 AUTHN_GET_USER_INFO = "get user info"
 
 AUTHZ_LOGGER_NAME = "soliplex.authz"
-AUTHZ_FILTERING_ROOMS = "Filtering rooms for user"
-AUTHZ_NOT_FILTERING_ROOMS = "No authz policy, not filtering rooms"
-AUTHZ_ROOM_AUTHORIZED = "Room authorized"
-AUTHZ_ROOM_NOT_AUTHORIZED = "Room not authorized"
+AUTHZ_FILTERING_ROOMS = "filtering rooms for user"
+AUTHZ_NOT_FILTERING_ROOMS = "no authz policy, not filtering rooms"
+AUTHZ_ROOM_AUTHORIZED = "room authorized"
+AUTHZ_ROOM_NOT_AUTHORIZED = "room not authorized"
+AUTHZ_ADMIN_ACCESS_REQUIRED = "Admin access required"
+AUTHZ_GET_ROOM_POLICY = "get room policy"
+AUTHZ_POST_ROOM_POLICY = "post room policy"
+AUTHZ_DELETE_ROOM_POLICY = "delete room policy"
+AUTHZ_GET_INSTALLATION_AUTHZ = "get installation authz"
 
 
 class LogWrapper:

@@ -1,10 +1,11 @@
-"""Soliplex authentication views"""
+"""Soliplex authorization views"""
 
 import fastapi
 
 from soliplex import authn
 from soliplex import authz as authz_package
 from soliplex import installation
+from soliplex import loggers
 from soliplex import models
 from soliplex import util
 from soliplex import views
@@ -14,6 +15,16 @@ router = fastapi.APIRouter(tags=["authorization"])
 depend_the_installation = installation.depend_the_installation
 depend_the_authz = authz_package.depend_the_authz_policy
 depend_the_user_claims = views.depend_the_user_claims
+depend_the_logger = views.depend_the_logger
+
+
+def get_the_authz_logger(
+    the_logger: loggers.LogWrapper = depend_the_logger,
+) -> loggers.LogWrapper:
+    return the_logger.bind(name=loggers.AUTHZ_LOGGER_NAME)
+
+
+depend_the_authz_logger = fastapi.Depends(get_the_authz_logger)
 
 
 @util.logfire_span("GET /v1/rooms/{room_id}/authz")
@@ -27,23 +38,21 @@ async def get_room_authz(
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_authz_logger: loggers.LogWrapper = depend_the_authz_logger,
 ) -> models.RoomPolicy | None:
+    the_authz_logger.debug(loggers.AUTHZ_GET_ROOM_POLICY)
+
     if not await the_authz_policy.check_admin_access(the_user_claims):
+        the_authz_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
-            detail="Admin access required",
+            detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
         ) from None
 
-    try:
-        room_policy = await the_authz_policy.get_room_policy(
-            room_id=room_id,
-            user_token=the_user_claims,
-        )
-    except KeyError:
-        raise fastapi.HTTPException(
-            status_code=404,
-            detail=f"No such room: {room_id}",
-        ) from None
+    room_policy = await the_authz_policy.get_room_policy(
+        room_id=room_id,
+        user_token=the_user_claims,
+    )
 
     return room_policy
 
@@ -60,11 +69,15 @@ async def post_room_authz(
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_authz_logger: loggers.LogWrapper = depend_the_authz_logger,
 ) -> models.RoomPolicy | None:
+    the_authz_logger.debug(loggers.AUTHZ_POST_ROOM_POLICY)
+
     if not await the_authz_policy.check_admin_access(the_user_claims):
+        the_authz_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
-            detail="Admin access required",
+            detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
         ) from None
 
     await the_authz_policy.update_room_policy(
@@ -87,11 +100,15 @@ async def delete_room_authz(
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_authz_logger: loggers.LogWrapper = depend_the_authz_logger,
 ) -> models.RoomPolicy | None:
+    the_authz_logger.debug(loggers.AUTHZ_DELETE_ROOM_POLICY)
+
     if not await the_authz_policy.check_admin_access(the_user_claims):
+        the_authz_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
-            detail="Admin access required",
+            detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
         ) from None
 
     await the_authz_policy.delete_room_policy(
@@ -112,11 +129,15 @@ async def get_installation_authz(
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_authz_logger: loggers.LogWrapper = depend_the_authz_logger,
 ) -> models.InstallationAuthorization:
+    the_authz_logger.debug(loggers.AUTHZ_GET_INSTALLATION_AUTHZ)
+
     if not await the_authz_policy.check_admin_access(the_user_claims):
+        the_authz_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
         raise fastapi.HTTPException(
             status_code=403,
-            detail="Admin access required",
+            detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
         ) from None
 
     admin_user_emails = await the_authz_policy.list_admin_users()

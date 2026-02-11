@@ -1,4 +1,3 @@
-import contextlib
 from unittest import mock
 
 import fastapi
@@ -6,6 +5,7 @@ import pytest
 
 from soliplex import authz as authz_package
 from soliplex import installation
+from soliplex import loggers
 from soliplex import models
 from soliplex.views import authz as authz_views
 
@@ -30,39 +30,28 @@ NEW_ROOM_POLICY = models.RoomPolicy(
 )
 
 
-def raises_httpexc(*, match, code) -> pytest.raises:
-    def _check(exc):
-        return exc.status_code == code
+def test_get_the_authz_logger():
+    the_logger = mock.create_autospec(loggers.LogWrapper)
 
-    return pytest.raises(fastapi.HTTPException, match=match, check=_check)
+    found = authz_views.get_the_authz_logger(
+        the_logger=the_logger,
+    )
+
+    assert found is the_logger.bind.return_value
+
+    the_logger.bind.assert_called_once_with(name=loggers.AUTHZ_LOGGER_NAME)
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_admin_access", [False, True])
-@pytest.mark.parametrize(
-    "w_policy, expectation",
-    [
-        (None, contextlib.nullcontext(None)),
-        (
-            ROOM_POLICY,
-            contextlib.nullcontext(ROOM_POLICY),
-        ),
-        (
-            KeyError(ROOM_ID),
-            raises_httpexc(code=404, match="No such room"),
-        ),
-    ],
-)
-async def test_get_room_authz(w_policy, expectation, w_admin_access):
+@pytest.mark.parametrize("w_policy", [None, ROOM_POLICY])
+async def test_get_room_authz(w_policy, w_admin_access):
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_authz_policy.check_admin_access.return_value = w_admin_access
-
-    if isinstance(w_policy, Exception):
-        the_authz_policy.get_room_policy.side_effect = w_policy
-    else:
-        the_authz_policy.get_room_policy.return_value = w_policy
+    the_authz_policy.get_room_policy.return_value = w_policy
+    the_authz_logger = mock.create_autospec(loggers.LogWrapper)
 
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
@@ -72,30 +61,38 @@ async def test_get_room_authz(w_policy, expectation, w_admin_access):
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
+                the_authz_logger=the_authz_logger,
             )
 
         assert exc.value.status_code == 403
-        assert exc.value.detail == "Admin access required"
+        assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
+
+        the_authz_logger.error.assert_called_once_with(
+            loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
+        )
 
         the_authz_policy.get_room_policy.assert_not_awaited()
 
     else:
-        with expectation as expected:
-            found = await authz_views.get_room_authz(
-                request=request,
-                room_id=ROOM_ID,
-                the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
-                the_user_claims=THE_USER_CLAIMS,
-            )
+        found = await authz_views.get_room_authz(
+            request=request,
+            room_id=ROOM_ID,
+            the_installation=the_installation,
+            the_authz_policy=the_authz_policy,
+            the_user_claims=THE_USER_CLAIMS,
+            the_authz_logger=the_authz_logger,
+        )
 
-        if not isinstance(expected, pytest.ExceptionInfo):
-            assert found == expected
+        assert found == w_policy
 
-            the_authz_policy.get_room_policy.assert_awaited_once_with(
-                room_id=ROOM_ID,
-                user_token=THE_USER_CLAIMS,
-            )
+        the_authz_policy.get_room_policy.assert_awaited_once_with(
+            room_id=ROOM_ID,
+            user_token=THE_USER_CLAIMS,
+        )
+
+    the_authz_logger.debug.assert_called_once_with(
+        loggers.AUTHZ_GET_ROOM_POLICY,
+    )
 
     the_authz_policy.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
@@ -114,6 +111,8 @@ async def test_post_room_authz(w_existing, w_admin_access):
     if w_existing:
         the_authz_policy.get_room_policy.return_value = ROOM_POLICY
 
+    the_authz_logger = mock.create_autospec(loggers.LogWrapper)
+
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
             await authz_views.post_room_authz(
@@ -123,10 +122,15 @@ async def test_post_room_authz(w_existing, w_admin_access):
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
+                the_authz_logger=the_authz_logger,
             )
 
         assert exc.value.status_code == 403
-        assert exc.value.detail == "Admin access required"
+        assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
+
+        the_authz_logger.error.assert_called_once_with(
+            loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
+        )
 
         the_authz_policy.update_room_policy.assert_not_awaited()
 
@@ -138,6 +142,7 @@ async def test_post_room_authz(w_existing, w_admin_access):
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
             the_user_claims=THE_USER_CLAIMS,
+            the_authz_logger=the_authz_logger,
         )
 
         assert isinstance(found, fastapi.Response)
@@ -148,6 +153,10 @@ async def test_post_room_authz(w_existing, w_admin_access):
             room_policy=NEW_ROOM_POLICY,
             user_token=THE_USER_CLAIMS,
         )
+
+    the_authz_logger.debug.assert_called_once_with(
+        loggers.AUTHZ_POST_ROOM_POLICY,
+    )
 
     the_authz_policy.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
@@ -166,6 +175,8 @@ async def test_delete_room_authz(w_existing, w_admin_access):
     if w_existing:
         the_authz_policy.get_room_policy.return_value = ROOM_POLICY
 
+    the_authz_logger = mock.create_autospec(loggers.LogWrapper)
+
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
             await authz_views.delete_room_authz(
@@ -174,10 +185,15 @@ async def test_delete_room_authz(w_existing, w_admin_access):
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
+                the_authz_logger=the_authz_logger,
             )
 
         assert exc.value.status_code == 403
-        assert exc.value.detail == "Admin access required"
+        assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
+
+        the_authz_logger.error.assert_called_once_with(
+            loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
+        )
 
         the_authz_policy.delete_room_policy.assert_not_awaited()
 
@@ -188,6 +204,7 @@ async def test_delete_room_authz(w_existing, w_admin_access):
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
             the_user_claims=THE_USER_CLAIMS,
+            the_authz_logger=the_authz_logger,
         )
 
         assert isinstance(found, fastapi.Response)
@@ -197,6 +214,10 @@ async def test_delete_room_authz(w_existing, w_admin_access):
             room_id=ROOM_ID,
             user_token=THE_USER_CLAIMS,
         )
+
+    the_authz_logger.debug.assert_called_once_with(
+        loggers.AUTHZ_DELETE_ROOM_POLICY,
+    )
 
     the_authz_policy.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
@@ -217,6 +238,7 @@ async def test_get_installation_authz(
     the_installation.get_room_configs.return_value = {ROOM_ID: object()}
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_authz_policy.check_admin_access.return_value = w_admin_access
+    the_authz_logger = mock.create_autospec(loggers.LogWrapper)
 
     if w_admin_user is not None:
         exp_admin_emails = [ADMIN_EMAIL]
@@ -234,10 +256,15 @@ async def test_get_installation_authz(
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
+                the_authz_logger=the_authz_logger,
             )
 
         assert exc.value.status_code == 403
-        assert exc.value.detail == "Admin access required"
+        assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
+
+        the_authz_logger.error.assert_called_once_with(
+            loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
+        )
 
         the_authz_policy.get_room_policy.assert_not_awaited()
         the_authz_policy.list_admin_users.assert_not_awaited()
@@ -255,6 +282,7 @@ async def test_get_installation_authz(
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
             the_user_claims=THE_USER_CLAIMS,
+            the_authz_logger=the_authz_logger,
         )
 
         assert found == expected
@@ -268,6 +296,10 @@ async def test_get_installation_authz(
             user=THE_USER_CLAIMS,
             the_authz_policy=the_authz_policy,
         )
+
+    the_authz_logger.debug.assert_called_once_with(
+        loggers.AUTHZ_GET_INSTALLATION_AUTHZ,
+    )
 
     the_authz_policy.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
