@@ -21,6 +21,8 @@ GIVEN_NAME = "Phred"
 FAMILY_NAME = "Phlyntstone"
 EMAIL = "phreddy@example.com"
 
+THE_USER_CLAIMS = {"preferred_username": USER_NAME}
+
 AUTH_USER = {
     "preferred_username": USER_NAME,
     "given_name": GIVEN_NAME,
@@ -174,35 +176,29 @@ def raises_httpexc(*, match, code) -> pytest.raises:
         (True, raises_httpexc(code=404, match="No such room")),
     ],
 )
-@mock.patch("soliplex.authn.authenticate")
-async def test__check_user_in_room(auth_fn, w_miss, expectation):
-    auth_fn.return_value = {"preferred_username": USER_NAME}
-
+async def test__check_user_in_room(w_miss, expectation):
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    token = object()
 
     if w_miss:
         the_installation.get_room_config.side_effect = KeyError("testing")
 
     with expectation as expected_username:
-        found_username, room_config = await agui_views._check_user_in_room(
+        room_config = await agui_views._check_user_in_room(
             room_id=TEST_ROOM_ID,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
     if isinstance(expected_username, str):
-        assert found_username == expected_username
         assert room_config is the_installation.get_room_config.return_value
 
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=TEST_ROOM_ID,
-        user=auth_fn.return_value,
+        user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
     )
-    auth_fn.assert_called_once_with(the_installation, token)
 
 
 @pytest.mark.anyio
@@ -213,13 +209,9 @@ async def test__check_user_in_room(auth_fn, w_miss, expectation):
         (True, raises_httpexc(code=404, match="No such room")),
     ],
 )
-@mock.patch("soliplex.authn.authenticate")
-async def test__check_user_room_agent(auth_fn, w_miss, expectation):
-    auth_fn.return_value = {"preferred_username": USER_NAME}
-
+async def test__check_user_room_agent(w_miss, expectation):
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    token = object()
 
     if w_miss:
         the_installation.get_agent_for_room.side_effect = KeyError("testing")
@@ -229,21 +221,19 @@ async def test__check_user_room_agent(auth_fn, w_miss, expectation):
             room_id=TEST_ROOM_ID,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
     if isinstance(expected, str):
-        user_name, user_profile, agent = found
-        assert user_name == expected
+        user_profile, agent = found
         assert agent is the_installation.get_agent_for_room.return_value
         assert user_profile.preferred_username == expected
 
     the_installation.get_agent_for_room.assert_awaited_once_with(
         room_id=TEST_ROOM_ID,
-        user=auth_fn.return_value,
+        user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
     )
-    auth_fn.assert_called_once_with(the_installation, token)
 
 
 @pytest.mark.anyio
@@ -256,12 +246,11 @@ async def test_get_room_agui_only(
     w_thread_meta,
 ):
     room_config = mock.create_autospec(config.RoomConfig)
-    cuir.return_value = USER_NAME, room_config
+    cuir.return_value = room_config
 
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    token = object()
 
     if w_thread_meta:
         thread_meta = test_thread.thread_metadata = _make_thread_metadata()
@@ -283,7 +272,7 @@ async def test_get_room_agui_only(
         the_installation=the_installation,
         the_threads=the_threads,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=THE_USER_CLAIMS,
     )
 
     (m_thread,) = found.threads
@@ -306,7 +295,7 @@ async def test_get_room_agui_only(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=THE_USER_CLAIMS,
     )
 
 
@@ -337,7 +326,7 @@ async def test_get_room_agui_thread_id_only(
     expectation,
 ):
     room_config = mock.create_autospec(config.RoomConfig)
-    cuir.return_value = USER_NAME, room_config
+    cuir.return_value = room_config
 
     test_thread.list_runs.return_value = [test_run]
 
@@ -386,7 +375,6 @@ async def test_get_room_agui_thread_id_only(
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    token = object()
 
     if tsgt_side_effect is not None:
         the_threads.get_thread.side_effect = tsgt_side_effect
@@ -401,7 +389,7 @@ async def test_get_room_agui_thread_id_only(
             the_installation=the_installation,
             the_threads=the_threads,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
     if expected is None:
@@ -436,7 +424,7 @@ async def test_get_room_agui_thread_id_only(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=THE_USER_CLAIMS,
     )
 
 
@@ -470,7 +458,7 @@ async def test_get_room_agui_thread_id_run_id(
     expectation,
 ):
     room_config = mock.create_autospec(config.RoomConfig)
-    cuir.return_value = USER_NAME, room_config
+    cuir.return_value = room_config
 
     test_run.list_events.return_value = w_events
 
@@ -518,7 +506,6 @@ async def test_get_room_agui_thread_id_run_id(
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    token = object()
 
     if tsgr_side_effect is not None:
         the_threads.get_run.side_effect = tsgr_side_effect
@@ -534,7 +521,7 @@ async def test_get_room_agui_thread_id_run_id(
             the_installation=the_installation,
             the_threads=the_threads,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
     if expected is None:
@@ -564,7 +551,7 @@ async def test_get_room_agui_thread_id_run_id(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=THE_USER_CLAIMS,
     )
 
 
@@ -602,7 +589,7 @@ async def test_post_room_agui_only(
 ):
     room_config = mock.create_autospec(config.RoomConfig)
     room_config.agui_feature_names = w_agui_feature_names
-    cuir.return_value = USER_NAME, room_config
+    cuir.return_value = room_config
 
     exp_inital_state_keys = set(w_agui_feature_names)
 
@@ -627,7 +614,6 @@ async def test_post_room_agui_only(
         exp_meta = None
         new_thread_request = models.AGUI_NewThreadRequest()
 
-    token = object()
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
@@ -652,7 +638,7 @@ async def test_post_room_agui_only(
         the_installation=the_installation,
         the_threads=the_threads,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=THE_USER_CLAIMS,
     )
 
     assert found.room_id == TEST_ROOM_ID
@@ -683,7 +669,7 @@ async def test_post_room_agui_only(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=THE_USER_CLAIMS,
     )
 
 
@@ -714,7 +700,7 @@ async def test_post_room_agui_thread_id_only(
     expectation,
 ):
     room_config = mock.create_autospec(config.RoomConfig)
-    cuir.return_value = USER_NAME, room_config
+    cuir.return_value = room_config
 
     request = fastapi.Request(scope={"type": "http"})
     nrr = {}
@@ -758,7 +744,6 @@ async def test_post_room_agui_thread_id_only(
 
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    token = object()
 
     with expectation as expected:
         found = await agui_views.post_room_agui_thread_id(
@@ -769,7 +754,7 @@ async def test_post_room_agui_thread_id_only(
             the_installation=the_installation,
             the_threads=the_threads,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
     if expected is None:
@@ -796,7 +781,7 @@ async def test_post_room_agui_thread_id_only(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=THE_USER_CLAIMS,
     )
 
 
@@ -826,7 +811,7 @@ async def test_post_room_agui_thread_id_meta(
     expectation,
 ):
     room_config = mock.create_autospec(config.RoomConfig)
-    cuir.return_value = USER_NAME, room_config
+    cuir.return_value = room_config
 
     request = fastapi.Request(scope={"type": "http"})
 
@@ -839,7 +824,6 @@ async def test_post_room_agui_thread_id_meta(
 
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    token = object()
 
     the_threads.update_thread_metadata.side_effect = tsutm_side_effect
 
@@ -852,7 +836,7 @@ async def test_post_room_agui_thread_id_meta(
             the_installation=the_installation,
             the_threads=the_threads,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
     if isinstance(expected, int):
@@ -869,7 +853,7 @@ async def test_post_room_agui_thread_id_meta(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=THE_USER_CLAIMS,
     )
 
 
@@ -963,7 +947,7 @@ async def test_post_room_agui_thread_id_run_id(
 ):
     USER_PROFILE = models.UserProfile(**AUTH_USER)
     agent = object()
-    cura.return_value = (USER_NAME, USER_PROFILE, agent)
+    cura.return_value = (USER_PROFILE, agent)
 
     request = fastapi.Request(scope={"type": "http"})
 
@@ -972,8 +956,6 @@ async def test_post_room_agui_thread_id_run_id(
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
 
     exp_deps = the_installation.get_agent_deps_for_room.return_value
-
-    token = object()
 
     test_run.run_input = None
     the_threads.get_run.return_value = test_run
@@ -1000,7 +982,7 @@ async def test_post_room_agui_thread_id_run_id(
             the_installation=the_installation,
             the_threads=the_threads,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
     if expected is None:
@@ -1089,7 +1071,7 @@ async def test_post_room_agui_thread_id_run_id(
             room_id=TEST_ROOM_ID,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
 
@@ -1119,7 +1101,7 @@ async def test_post_room_agui_thread_id_run_id_meta(
     expectation,
 ):
     room_config = mock.create_autospec(config.RoomConfig)
-    cuir.return_value = USER_NAME, room_config
+    cuir.return_value = room_config
 
     request = fastapi.Request(scope={"type": "http"})
 
@@ -1132,7 +1114,6 @@ async def test_post_room_agui_thread_id_run_id_meta(
 
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    token = object()
 
     the_threads.update_run_metadata.side_effect = tsurm_side_effect
 
@@ -1146,7 +1127,7 @@ async def test_post_room_agui_thread_id_run_id_meta(
             the_installation=the_installation,
             the_threads=the_threads,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
     if isinstance(expected, int):
@@ -1164,7 +1145,7 @@ async def test_post_room_agui_thread_id_run_id_meta(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=THE_USER_CLAIMS,
     )
 
 
@@ -1186,7 +1167,7 @@ async def test_post_room_agui_thread_id_run_id_feedback(
     expectation,
 ):
     room_config = mock.create_autospec(config.RoomConfig)
-    cuir.return_value = USER_NAME, room_config
+    cuir.return_value = room_config
 
     request = fastapi.Request(scope={"type": "http"})
 
@@ -1197,7 +1178,6 @@ async def test_post_room_agui_thread_id_run_id_feedback(
 
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    token = object()
 
     the_threads.save_run_feedback.side_effect = tssrf_side_effect
 
@@ -1211,7 +1191,7 @@ async def test_post_room_agui_thread_id_run_id_feedback(
             the_installation=the_installation,
             the_threads=the_threads,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
     if isinstance(expected, int):
@@ -1230,7 +1210,7 @@ async def test_post_room_agui_thread_id_run_id_feedback(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=THE_USER_CLAIMS,
     )
 
 
@@ -1252,12 +1232,11 @@ async def test_delete_room_agui_thread_id(
     expectation,
 ):
     room_config = mock.create_autospec(config.RoomConfig)
-    cuir.return_value = USER_NAME, room_config
+    cuir.return_value = room_config
 
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    token = object()
 
     the_threads.delete_thread.side_effect = tsdr_side_effect
 
@@ -1269,7 +1248,7 @@ async def test_delete_room_agui_thread_id(
             the_installation=the_installation,
             the_threads=the_threads,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
     if isinstance(expected, int):
@@ -1285,5 +1264,5 @@ async def test_delete_room_agui_thread_id(
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=THE_USER_CLAIMS,
     )

@@ -1,6 +1,7 @@
 """Soliplex authentication support"""
 
 import os
+import typing
 
 import fastapi
 import jwt
@@ -9,6 +10,8 @@ from authlib.integrations import starlette_client
 from fastapi import security
 
 from soliplex import installation
+
+UserClaims = dict[str, typing.Any]
 
 oauth2_scheme = security.OAuth2PasswordBearer(
     tokenUrl="token",
@@ -59,7 +62,7 @@ def get_oauth(
 def authenticate(
     the_installation: installation.Installation,
     token: str,
-):
+) -> UserClaims:
     # See #316
     if the_installation.auth_disabled:
         return installation.NO_AUTH_MODE_USER_TOKEN

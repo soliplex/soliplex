@@ -10,8 +10,9 @@ from soliplex import models
 from soliplex.views import authz as authz_views
 
 ADMIN_EMAIL = "admin@example.com"
-ROOM_ID = "test_room"
+THE_USER_CLAIMS = {"email": ADMIN_EMAIL}
 
+ROOM_ID = "test_room"
 ROOM_POLICY = models.RoomPolicy(
     room_id=ROOM_ID,
     default_allow_deny=authz_package.AllowDeny.ALLOW,
@@ -52,8 +53,7 @@ def raises_httpexc(*, match, code) -> pytest.raises:
         ),
     ],
 )
-@mock.patch("soliplex.authn.authenticate")
-async def test_get_room_authz(auth_fn, w_policy, expectation, w_admin_access):
+async def test_get_room_authz(w_policy, expectation, w_admin_access):
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
@@ -64,8 +64,6 @@ async def test_get_room_authz(auth_fn, w_policy, expectation, w_admin_access):
     else:
         the_authz_policy.get_room_policy.return_value = w_policy
 
-    token = object()
-
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
             await authz_views.get_room_authz(
@@ -73,7 +71,7 @@ async def test_get_room_authz(auth_fn, w_policy, expectation, w_admin_access):
                 room_id=ROOM_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
-                token=token,
+                the_user_claims=THE_USER_CLAIMS,
             )
 
         assert exc.value.status_code == 403
@@ -88,7 +86,7 @@ async def test_get_room_authz(auth_fn, w_policy, expectation, w_admin_access):
                 room_id=ROOM_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
-                token=token,
+                the_user_claims=THE_USER_CLAIMS,
             )
 
         if not isinstance(expected, pytest.ExceptionInfo):
@@ -96,25 +94,22 @@ async def test_get_room_authz(auth_fn, w_policy, expectation, w_admin_access):
 
             the_authz_policy.get_room_policy.assert_awaited_once_with(
                 room_id=ROOM_ID,
-                user_token=auth_fn.return_value,
+                user_token=THE_USER_CLAIMS,
             )
 
     the_authz_policy.check_admin_access.assert_awaited_once_with(
-        auth_fn.return_value,
+        THE_USER_CLAIMS,
     )
-    auth_fn.assert_called_once_with(the_installation, token)
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_admin_access", [False, True])
 @pytest.mark.parametrize("w_existing", [False, True])
-@mock.patch("soliplex.authn.authenticate")
-async def test_post_room_authz(auth_fn, w_existing, w_admin_access):
+async def test_post_room_authz(w_existing, w_admin_access):
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_authz_policy.check_admin_access.return_value = w_admin_access
-    token = object()
 
     if w_existing:
         the_authz_policy.get_room_policy.return_value = ROOM_POLICY
@@ -127,7 +122,7 @@ async def test_post_room_authz(auth_fn, w_existing, w_admin_access):
                 room_policy=NEW_ROOM_POLICY,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
-                token=token,
+                the_user_claims=THE_USER_CLAIMS,
             )
 
         assert exc.value.status_code == 403
@@ -142,7 +137,7 @@ async def test_post_room_authz(auth_fn, w_existing, w_admin_access):
             room_policy=NEW_ROOM_POLICY,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
         assert isinstance(found, fastapi.Response)
@@ -151,25 +146,22 @@ async def test_post_room_authz(auth_fn, w_existing, w_admin_access):
         the_authz_policy.update_room_policy.assert_awaited_once_with(
             room_id=ROOM_ID,
             room_policy=NEW_ROOM_POLICY,
-            user_token=auth_fn.return_value,
+            user_token=THE_USER_CLAIMS,
         )
 
     the_authz_policy.check_admin_access.assert_awaited_once_with(
-        auth_fn.return_value,
+        THE_USER_CLAIMS,
     )
-    auth_fn.assert_called_once_with(the_installation, token)
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_admin_access", [False, True])
 @pytest.mark.parametrize("w_existing", [False, True])
-@mock.patch("soliplex.authn.authenticate")
-async def test_delete_room_authz(auth_fn, w_existing, w_admin_access):
+async def test_delete_room_authz(w_existing, w_admin_access):
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_authz_policy.check_admin_access.return_value = w_admin_access
-    token = object()
 
     if w_existing:
         the_authz_policy.get_room_policy.return_value = ROOM_POLICY
@@ -181,7 +173,7 @@ async def test_delete_room_authz(auth_fn, w_existing, w_admin_access):
                 room_id=ROOM_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
-                token=token,
+                the_user_claims=THE_USER_CLAIMS,
             )
 
         assert exc.value.status_code == 403
@@ -195,7 +187,7 @@ async def test_delete_room_authz(auth_fn, w_existing, w_admin_access):
             room_id=ROOM_ID,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
         assert isinstance(found, fastapi.Response)
@@ -203,22 +195,19 @@ async def test_delete_room_authz(auth_fn, w_existing, w_admin_access):
 
         the_authz_policy.delete_room_policy.assert_awaited_once_with(
             room_id=ROOM_ID,
-            user_token=auth_fn.return_value,
+            user_token=THE_USER_CLAIMS,
         )
 
     the_authz_policy.check_admin_access.assert_awaited_once_with(
-        auth_fn.return_value,
+        THE_USER_CLAIMS,
     )
-    auth_fn.assert_called_once_with(the_installation, token)
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_admin_access", [False, True])
 @pytest.mark.parametrize("w_admin_user", [None, ADMIN_EMAIL])
 @pytest.mark.parametrize("w_room_policy", [None, ROOM_POLICY])
-@mock.patch("soliplex.authn.authenticate")
 async def test_get_installation_authz(
-    auth_fn,
     w_room_policy,
     w_admin_user,
     w_admin_access,
@@ -238,15 +227,13 @@ async def test_get_installation_authz(
 
     the_authz_policy.get_room_policy.return_value = w_room_policy
 
-    token = object()
-
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
             await authz_views.get_installation_authz(
                 request=request,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
-                token=token,
+                the_user_claims=THE_USER_CLAIMS,
             )
 
         assert exc.value.status_code == 403
@@ -267,22 +254,21 @@ async def test_get_installation_authz(
             request=request,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
         assert found == expected
 
         the_authz_policy.get_room_policy.assert_awaited_once_with(
             room_id=ROOM_ID,
-            user_token=auth_fn.return_value,
+            user_token=THE_USER_CLAIMS,
         )
         the_authz_policy.list_admin_users.assert_awaited_once_with()
         the_installation.get_room_configs.assert_awaited_once_with(
-            user=auth_fn.return_value,
+            user=THE_USER_CLAIMS,
             the_authz_policy=the_authz_policy,
         )
 
     the_authz_policy.check_admin_access.assert_awaited_once_with(
-        auth_fn.return_value,
+        THE_USER_CLAIMS,
     )
-    auth_fn.assert_called_once_with(the_installation, token)

@@ -86,6 +86,25 @@ INSTALLATION_OIDC_AUTH_SYSTEM_CONFIG = config.OIDCAuthSystemConfig(
 INSTALLATION_TP_DBURI_SYNC = "sqlite:////tmp/test-models.sqlite"
 INSTALLATION_TP_DBURI_ASYNC = "sqlite+aiosqlite:////tmp/test-models.sqlite"
 
+USER_NAME = "phreddy"
+GIVEN_NAME = "Phred"
+FAMILY_NAME = "Phlyntstone"
+EMAIL = "phreddy@example.com"
+
+AUTH_USER_CLAIMS = {
+    "preferred_username": USER_NAME,
+    "given_name": GIVEN_NAME,
+    "family_name": FAMILY_NAME,
+    "email": EMAIL,
+}
+
+UNKNOWN_USER_PROFILE_KW = {
+    "preferred_username": "<unknown>",
+    "given_name": "<unknown>",
+    "family_name": "<unknown>",
+    "email": "<unknown>",
+}
+
 CONVO_UUID = uuid.uuid4()
 USER_TEXT = "Why is the sky blue?"
 CONVO_NAME = USER_TEXT
@@ -1029,6 +1048,21 @@ def test_installation_from_config(
         strict=True,
     ):
         assert found.id == expected.id
+
+
+@pytest.mark.parametrize(
+    "user_claims, exp_profile_kw",
+    [
+        ({}, UNKNOWN_USER_PROFILE_KW),
+        (AUTH_USER_CLAIMS, AUTH_USER_CLAIMS),
+    ],
+)
+def test_userprofile_from_user_claims(user_claims, exp_profile_kw):
+    expected = models.UserProfile(**exp_profile_kw)
+
+    found = models.UserProfile.from_user_claims(user_claims)
+
+    assert found == expected
 
 
 @pytest.mark.parametrize(

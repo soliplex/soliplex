@@ -1,18 +1,19 @@
 """Soliplex authentication views"""
 
 import fastapi
-from fastapi import security
 
 from soliplex import authn
 from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex import models
 from soliplex import util
+from soliplex import views
 
 router = fastapi.APIRouter(tags=["authorization"])
 
 depend_the_installation = installation.depend_the_installation
 depend_the_authz = authz_package.depend_the_authz_policy
+depend_the_user_claims = views.depend_the_user_claims
 
 
 @util.logfire_span("GET /v1/rooms/{room_id}/authz")
@@ -25,11 +26,9 @@ async def get_room_authz(
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> models.RoomPolicy | None:
-    user_token = authn.authenticate(the_installation, token)
-
-    if not await the_authz_policy.check_admin_access(user_token):
+    if not await the_authz_policy.check_admin_access(the_user_claims):
         raise fastapi.HTTPException(
             status_code=403,
             detail="Admin access required",
@@ -38,7 +37,7 @@ async def get_room_authz(
     try:
         room_policy = await the_authz_policy.get_room_policy(
             room_id=room_id,
-            user_token=user_token,
+            user_token=the_user_claims,
         )
     except KeyError:
         raise fastapi.HTTPException(
@@ -60,11 +59,9 @@ async def post_room_authz(
     room_policy: models.RoomPolicy,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> models.RoomPolicy | None:
-    user_token = authn.authenticate(the_installation, token)
-
-    if not await the_authz_policy.check_admin_access(user_token):
+    if not await the_authz_policy.check_admin_access(the_user_claims):
         raise fastapi.HTTPException(
             status_code=403,
             detail="Admin access required",
@@ -73,7 +70,7 @@ async def post_room_authz(
     await the_authz_policy.update_room_policy(
         room_id=room_id,
         room_policy=room_policy,
-        user_token=user_token,
+        user_token=the_user_claims,
     )
 
     return fastapi.Response(status_code=204)
@@ -89,11 +86,9 @@ async def delete_room_authz(
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> models.RoomPolicy | None:
-    user_token = authn.authenticate(the_installation, token)
-
-    if not await the_authz_policy.check_admin_access(user_token):
+    if not await the_authz_policy.check_admin_access(the_user_claims):
         raise fastapi.HTTPException(
             status_code=403,
             detail="Admin access required",
@@ -101,7 +96,7 @@ async def delete_room_authz(
 
     await the_authz_policy.delete_room_policy(
         room_id=room_id,
-        user_token=user_token,
+        user_token=the_user_claims,
     )
 
     return fastapi.Response(status_code=204)
@@ -116,11 +111,9 @@ async def get_installation_authz(
     request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> models.InstallationAuthorization:
-    user_token = authn.authenticate(the_installation, token)
-
-    if not await the_authz_policy.check_admin_access(user_token):
+    if not await the_authz_policy.check_admin_access(the_user_claims):
         raise fastapi.HTTPException(
             status_code=403,
             detail="Admin access required",
@@ -131,10 +124,10 @@ async def get_installation_authz(
     room_policies = {
         room_id: await the_authz_policy.get_room_policy(
             room_id=room_id,
-            user_token=user_token,
+            user_token=the_user_claims,
         )
         for room_id in await the_installation.get_room_configs(
-            user=user_token,
+            user=the_user_claims,
             the_authz_policy=the_authz_policy,
         )
     }

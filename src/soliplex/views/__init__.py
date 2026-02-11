@@ -1,9 +1,31 @@
+from __future__ import annotations
+
 import fastapi
 from fastapi import responses
+from fastapi import security
 
+from soliplex import authn as authn_module
+from soliplex import installation as installation_module
 from soliplex import util
 
 router = fastapi.APIRouter()
+
+depend_the_installation = installation_module.depend_the_installation
+Installation = installation_module.Installation
+HTTPAuthorizationCredentials = security.HTTPAuthorizationCredentials
+
+
+async def get_the_user_claims(
+    the_installation: Installation = depend_the_installation,
+    token: HTTPAuthorizationCredentials = authn_module.oauth2_predicate,
+) -> authn_module.UserClaims:
+    return authn_module.authenticate(
+        the_installation=the_installation,
+        token=token,
+    )
+
+
+depend_the_user_claims = fastapi.Depends(get_the_user_claims)
 
 
 #   'process_control' canary

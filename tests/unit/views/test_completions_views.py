@@ -16,14 +16,14 @@ GIVEN_NAME = "Phred"
 FAMILY_NAME = "Phlyntstone"
 EMAIL = "phreddy@example.com"
 
-AUTH_USER = {
+AUTH_USER_CLAIMS = {
     "preferred_username": USER_NAME,
     "given_name": GIVEN_NAME,
     "family_name": FAMILY_NAME,
     "email": EMAIL,
 }
 
-UNKNOWN_USER = {
+UNKNOWN_USER_CLAIMS = {
     "preferred_username": "<unknown>",
     "given_name": "<unknown>",
     "family_name": "<unknown>",
@@ -40,19 +40,17 @@ def completion_configs(request):
 
 
 @pytest.mark.anyio
-@mock.patch("soliplex.authn.authenticate")
 @mock.patch("soliplex.models.Completion.from_config")
-async def test_get_chat_completions(fc, auth_fn, completion_configs):
+async def test_get_chat_completions(fc, completion_configs):
     request = mock.create_autospec(fastapi.Request)
 
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_completion_configs.return_value = completion_configs
-    token = object()
 
     found = await completions_views.get_chat_completions(
         request,
         the_installation=the_installation,
-        token=token,
+        the_user_claims=AUTH_USER_CLAIMS,
     )
 
     for (found_key, found_completion), completion_id, fc_call in zip(
@@ -66,15 +64,13 @@ async def test_get_chat_completions(fc, auth_fn, completion_configs):
         assert fc_call == mock.call(completion_configs[completion_id])
 
     the_installation.get_completion_configs.assert_awaited_once_with(
-        user=auth_fn.return_value,
+        user=AUTH_USER_CLAIMS,
     )
-    auth_fn.assert_called_once_with(the_installation, token)
 
 
 @pytest.mark.anyio
-@mock.patch("soliplex.authn.authenticate")
 @mock.patch("soliplex.models.Completion.from_config")
-async def test_get_chat_completion(fc, auth_fn, completion_configs):
+async def test_get_chat_completion(fc, completion_configs):
     COMPLETION_ID = "foo"
 
     request = mock.create_autospec(fastapi.Request)
@@ -90,15 +86,13 @@ async def test_get_chat_completion(fc, auth_fn, completion_configs):
             completion_configs[COMPLETION_ID]
         )
 
-    token = object()
-
     if COMPLETION_ID not in completion_configs:
         with pytest.raises(fastapi.HTTPException) as exc:
             await completions_views.get_chat_completion(
                 request,
                 COMPLETION_ID,
                 the_installation=the_installation,
-                token=token,
+                the_user_claims=AUTH_USER_CLAIMS,
             )
 
         assert exc.value.status_code == 404
@@ -109,7 +103,7 @@ async def test_get_chat_completion(fc, auth_fn, completion_configs):
             request,
             COMPLETION_ID,
             the_installation=the_installation,
-            token=token,
+            the_user_claims=AUTH_USER_CLAIMS,
         )
 
         assert found is fc.return_value
@@ -117,65 +111,54 @@ async def test_get_chat_completion(fc, auth_fn, completion_configs):
 
     the_installation.get_completion_config.assert_awaited_once_with(
         completion_id=COMPLETION_ID,
-        user=auth_fn.return_value,
+        user=AUTH_USER_CLAIMS,
     )
-    auth_fn.assert_called_once_with(the_installation, token)
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
     "w_auth_user, exp_user",
     [
-        ({}, UNKNOWN_USER),
-        (AUTH_USER, AUTH_USER),
+        ({}, UNKNOWN_USER_CLAIMS),
+        (AUTH_USER_CLAIMS, AUTH_USER_CLAIMS),
     ],
 )
-@mock.patch("soliplex.authn.authenticate")
-async def test_post_chat_completion_miss(auth_fn, w_auth_user, exp_user):
-    auth_fn.return_value = w_auth_user
-
+async def test_post_chat_completion_miss(w_auth_user, exp_user):
     request = object()
     chat_request = mock.create_autospec(models.ChatCompletionRequest)
     chat_request.messages = ()
     the_installation = mock.create_autospec(installation.Installation)
-    token = object()
 
     the_installation.get_agent_for_completion.side_effect = KeyError("testing")
 
     with pytest.raises(fastapi.HTTPException) as exc:
         await completions_views.post_chat_completion(
-            request,
-            "nonesuch",
-            chat_request,
-            the_installation,
-            token,
+            request=request,
+            completion_id="nonesuch",
+            chat_request=chat_request,
+            the_installation=the_installation,
+            the_user_claims=w_auth_user,
         )
 
     assert exc.value.status_code == 404
-
-    auth_fn.assert_called_once_with(the_installation, token)
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
     "w_auth_user, exp_user",
     [
-        ({}, UNKNOWN_USER),
-        (AUTH_USER, AUTH_USER),
+        ({}, UNKNOWN_USER_CLAIMS),
+        (AUTH_USER_CLAIMS, AUTH_USER_CLAIMS),
     ],
 )
 @pytest.mark.parametrize("w_msg", [False, True])
 @mock.patch("soliplex.completions.openai_chat_completion")
-@mock.patch("soliplex.authn.authenticate")
 async def test_post_chat_completion_hit(
-    auth_fn,
     occ,
     w_msg,
     w_auth_user,
     exp_user,
 ):
-    auth_fn.return_value = w_auth_user
-
     request = object()
     chat_request = mock.create_autospec(models.ChatCompletionRequest)
 
@@ -188,14 +171,13 @@ async def test_post_chat_completion_hit(
         chat_request.messages = ()
 
     the_installation = mock.create_autospec(installation.Installation)
-    token = object()
 
     response = await completions_views.post_chat_completion(
-        request,
-        COMPLETION_ID,
-        chat_request,
-        the_installation,
-        token,
+        request=request,
+        completion_id=COMPLETION_ID,
+        chat_request=chat_request,
+        the_installation=the_installation,
+        the_user_claims=w_auth_user,
     )
 
     assert response is occ.return_value
@@ -208,12 +190,11 @@ async def test_post_chat_completion_hit(
     )
 
     the_installation.get_agent_for_completion.assert_awaited_once_with(
-        completion_id=COMPLETION_ID, user=auth_fn.return_value
+        completion_id=COMPLETION_ID,
+        user=w_auth_user,
     )
 
     the_installation.get_agent_deps_for_completion.assert_awaited_once_with(
         completion_id=COMPLETION_ID,
         user=exp_user_profile,
     )
-
-    auth_fn.assert_called_once_with(the_installation, token)

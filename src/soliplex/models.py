@@ -447,6 +447,18 @@ class UserProfile(pydantic.BaseModel):
     email: str
     preferred_username: str
 
+    @classmethod
+    def from_user_claims(cls, user_claims: dict[str, typing.Any]):
+        return cls(
+            given_name=user_claims.get("given_name", "<unknown>"),
+            family_name=user_claims.get("family_name", "<unknown>"),
+            email=user_claims.get("email", "<unknown>"),
+            preferred_username=user_claims.get(
+                "preferred_username",
+                "<unknown>",
+            ),
+        )
+
 
 # ----------------------------------------------------------------------------
 #   Room-related models

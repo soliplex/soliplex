@@ -21,14 +21,14 @@ GIVEN_NAME = "Phred"
 FAMILY_NAME = "Phlyntstone"
 EMAIL = "phreddy@example.com"
 
-AUTH_USER = {
+THE_USER_CLAIMS = {
     "preferred_username": USER_NAME,
     "given_name": GIVEN_NAME,
     "family_name": FAMILY_NAME,
     "email": EMAIL,
 }
 
-UNKNOWN_USER = {
+UNKNOWN_USER_CLAIMS = {
     "preferred_username": "<unknown>",
     "given_name": "<unknown>",
     "family_name": "<unknown>",
@@ -66,21 +66,19 @@ def room_configs(request):
 
 
 @pytest.mark.anyio
-@mock.patch("soliplex.authn.authenticate")
 @mock.patch("soliplex.models.Room.from_config")
-async def test_get_rooms(fc, auth_fn, room_configs):
+async def test_get_rooms(fc, room_configs):
     request = mock.create_autospec(fastapi.Request)
 
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_room_configs.return_value = room_configs
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    token = object()
 
     found = await rooms_views.get_rooms(
         request,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=THE_USER_CLAIMS,
     )
 
     for (found_key, found_room), room_id, fc_call in zip(
@@ -94,16 +92,14 @@ async def test_get_rooms(fc, auth_fn, room_configs):
         assert fc_call == mock.call(room_configs[room_id])
 
     the_installation.get_room_configs.assert_awaited_once_with(
-        user=auth_fn.return_value,
+        user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
     )
-    auth_fn.assert_called_once_with(the_installation, token)
 
 
 @pytest.mark.anyio
-@mock.patch("soliplex.authn.authenticate")
 @mock.patch("soliplex.models.Room.from_config")
-async def test_get_room(fc, auth_fn, room_configs):
+async def test_get_room(fc, room_configs):
     ROOM_ID = "foo"
 
     request = mock.create_autospec(fastapi.Request)
@@ -116,7 +112,6 @@ async def test_get_room(fc, auth_fn, room_configs):
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    token = object()
 
     if ROOM_ID not in room_configs:
         with pytest.raises(fastapi.HTTPException) as exc:
@@ -125,7 +120,7 @@ async def test_get_room(fc, auth_fn, room_configs):
                 ROOM_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
-                token=token,
+                the_user_claims=THE_USER_CLAIMS,
             )
 
         assert exc.value.status_code == 404
@@ -137,7 +132,7 @@ async def test_get_room(fc, auth_fn, room_configs):
             ROOM_ID,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
         assert found is fc.return_value
@@ -145,16 +140,14 @@ async def test_get_room(fc, auth_fn, room_configs):
 
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
-        user=auth_fn.return_value,
+        user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
     )
-    auth_fn.assert_called_once_with(the_installation, token)
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_image", [False, True])
-@mock.patch("soliplex.authn.authenticate")
-async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
+async def test_get_room_bg_image(temp_dir, w_image, room_configs):
     ROOM_ID = "foo"
     IMAGE_FILENAME = "logo.svg"
 
@@ -170,7 +163,6 @@ async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    token = object()
 
     if ROOM_ID in room_configs:
         if w_image:
@@ -185,7 +177,7 @@ async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
                 room_id=ROOM_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
-                token=token,
+                the_user_claims=THE_USER_CLAIMS,
             )
 
         assert exc.value.status_code == 404
@@ -197,7 +189,7 @@ async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
                 room_id=ROOM_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
-                token=token,
+                the_user_claims=THE_USER_CLAIMS,
             )
             # Actual image data is marshalled by fastapi framework
             assert found == str(image_path)
@@ -208,7 +200,7 @@ async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
                     room_id=ROOM_ID,
                     the_installation=the_installation,
                     the_authz_policy=the_authz_policy,
-                    token=token,
+                    the_user_claims=THE_USER_CLAIMS,
                 )
 
             assert exc.value.status_code == 404
@@ -216,17 +208,15 @@ async def test_get_room_bg_image(auth_fn, temp_dir, w_image, room_configs):
 
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
-        user=auth_fn.return_value,
+        user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
     )
-    auth_fn.assert_called_once_with(the_installation, token)
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_error", [False, True])
 @mock.patch("soliplex.mcp_auth.generate_url_safe_token")
-@mock.patch("soliplex.authn.authenticate")
-async def test_get_room_mcp_token(auth_fn, gust, w_error):
+async def test_get_room_mcp_token(gust, w_error):
     ROOM_ID = "test-room"
     ROOM_CONFIG = object()
     MCP_TOKEN = gust.return_value = "DEADBEEF"
@@ -235,11 +225,6 @@ async def test_get_room_mcp_token(auth_fn, gust, w_error):
 
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    token = object()
-    wylma = auth_fn.return_value = {
-        "full_name": "Wylma Phlyntstone",
-        "email": "wylma@exmple.com",
-    }
 
     if w_error:
         the_installation.get_room_config.side_effect = ValueError("testing")
@@ -253,7 +238,7 @@ async def test_get_room_mcp_token(auth_fn, gust, w_error):
                 room_id=ROOM_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
-                token=token,
+                the_user_claims=THE_USER_CLAIMS,
             )
 
         assert exc.value.status_code == 404
@@ -264,7 +249,7 @@ async def test_get_room_mcp_token(auth_fn, gust, w_error):
             room_id=ROOM_ID,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
         expected = {
@@ -276,7 +261,7 @@ async def test_get_room_mcp_token(auth_fn, gust, w_error):
         gust.assert_called_once_with(
             the_installation.get_secret.return_value,
             ROOM_ID,
-            **wylma,
+            **THE_USER_CLAIMS,
         )
         the_installation.get_secret.assert_called_once_with(
             "URL_SAFE_TOKEN_SECRET"
@@ -284,18 +269,15 @@ async def test_get_room_mcp_token(auth_fn, gust, w_error):
 
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
-        user=auth_fn.return_value,
+        user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
     )
-    auth_fn.assert_called_once_with(the_installation, token)
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_hr_tool", [False, True])
 @mock.patch("haiku.rag.client.HaikuRAG")
-@mock.patch("soliplex.authn.authenticate")
 async def test_get_room_documents(
-    auth_fn,
     hr_klass,
     temp_dir,
     w_hr_tool,
@@ -316,7 +298,6 @@ async def test_get_room_documents(
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    token = object()
 
     hr_config = object()
     db_path = pathlib.Path("/tmp/rag.db")
@@ -347,7 +328,7 @@ async def test_get_room_documents(
                 room_id=ROOM_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
-                token=token,
+                the_user_claims=THE_USER_CLAIMS,
             )
 
         assert exc.value.status_code == 404
@@ -358,7 +339,7 @@ async def test_get_room_documents(
             room_id=ROOM_ID,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
         assert found == models.RoomDocuments(
@@ -379,10 +360,9 @@ async def test_get_room_documents(
 
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
-        user=auth_fn.return_value,
+        user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
     )
-    auth_fn.assert_called_once_with(the_installation, token)
 
 
 @pytest.mark.anyio
@@ -391,9 +371,7 @@ async def test_get_room_documents(
 @pytest.mark.parametrize("w_hr_agent", [False, True])
 @mock.patch("haiku.rag.client.HaikuRAG")
 @mock.patch("base64.b64encode")
-@mock.patch("soliplex.authn.authenticate")
 async def test_get_chunk_visualization(
-    auth_fn,
     b64enc,
     hr_klass,
     temp_dir,
@@ -429,7 +407,6 @@ async def test_get_chunk_visualization(
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    token = object()
 
     hr_config = object()
     db_path = pathlib.Path("/tmp/rag.db")
@@ -477,7 +454,7 @@ async def test_get_chunk_visualization(
                 chunk_id=CHUNK_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
-                token=token,
+                the_user_claims=THE_USER_CLAIMS,
             )
 
         assert exc.value.status_code == 404
@@ -491,7 +468,7 @@ async def test_get_chunk_visualization(
                 chunk_id=CHUNK_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
-                token=token,
+                the_user_claims=THE_USER_CLAIMS,
             )
 
         assert exc.value.status_code == 404
@@ -505,7 +482,7 @@ async def test_get_chunk_visualization(
                 chunk_id=CHUNK_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
-                token=token,
+                the_user_claims=THE_USER_CLAIMS,
             )
 
         assert exc.value.status_code == 404
@@ -518,7 +495,7 @@ async def test_get_chunk_visualization(
             chunk_id=CHUNK_ID,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
-            token=token,
+            the_user_claims=THE_USER_CLAIMS,
         )
 
         assert found == models.ChunkVisualization(
@@ -536,7 +513,6 @@ async def test_get_chunk_visualization(
 
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
-        user=auth_fn.return_value,
+        user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
     )
-    auth_fn.assert_called_once_with(the_installation, token)

@@ -7,7 +7,6 @@ import logfire
 import pydantic_ai
 from ag_ui import core as agui_core
 from fastapi import responses
-from fastapi import security
 from pydantic_ai.ui import ag_ui as ai_ag_ui
 
 from soliplex import agui as agui_package
@@ -17,6 +16,7 @@ from soliplex import config
 from soliplex import installation
 from soliplex import models
 from soliplex import util
+from soliplex import views
 from soliplex.agui import persistence as agui_persistence
 
 router = fastapi.APIRouter(tags=["rooms"])
@@ -24,27 +24,26 @@ router = fastapi.APIRouter(tags=["rooms"])
 depend_the_installation = installation.depend_the_installation
 depend_the_threads = agui_package.depend_the_threads
 depend_the_authz = authz_package.depend_the_authz_policy
+depend_the_user_claims = views.depend_the_user_claims
 
 
 async def _check_user_in_room(
     *,
     room_id: str,
-    the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
-) -> tuple[str, config.RoomConfig]:
-    """Check that the token's user has access to the given room.
+    the_installation: installation.Installation,
+    the_authz_policy: authz_package.AuthorizationPolicy,
+    the_user_claims: authn.UserClaims,
+) -> config.RoomConfig:
+    """Check that the user has access to the given room.
 
-    If so, return the user's preferred username.
+    If so, return the room configuration.
 
     If not, raise a 404.
     """
-    user = authn.authenticate(the_installation, token)
-
     try:
         room_config = await the_installation.get_room_config(
             room_id=room_id,
-            user=user,
+            user=the_user_claims,
             the_authz_policy=the_authz_policy,
         )
     except KeyError:
@@ -53,34 +52,26 @@ async def _check_user_in_room(
             detail=f"No such room: {room_id}",
         ) from None
 
-    return user.get("preferred_username", "<unknown>"), room_config
+    return room_config
 
 
 async def _check_user_room_agent(
     *,
     room_id: str,
-    the_installation: installation.Installation = depend_the_installation,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
-) -> tuple[str, models.UserProfile, pydantic_ai.Agent]:
-    """Check that the token's user has access to the given room.
+    the_installation: installation.Installation,
+    the_authz_policy: authz_package.AuthorizationPolicy,
+    the_user_claims: authn.UserClaims,
+) -> tuple[models.UserProfile, pydantic_ai.Agent]:
+    """Check that the user has access to the given room.
 
-    If so, return the user name, user profile and the room's agent
+    If so, return the user profile and the room's agent
 
     If not, raise a 404.
     """
-    user = authn.authenticate(the_installation, token)
-    user_name = user.get("preferred_username", "<unknown>")
-    user_profile = models.UserProfile(
-        given_name=user.get("given_name", "<unknown>"),
-        family_name=user.get("family_name", "<unknown>"),
-        email=user.get("email", "<unknown>"),
-        preferred_username=user.get("preferred_username", "<unknown>"),
-    )
     try:
         agent = await the_installation.get_agent_for_room(
             room_id=room_id,
-            user=user,
+            user=the_user_claims,
             the_authz_policy=the_authz_policy,
         )
     except KeyError:
@@ -89,7 +80,8 @@ async def _check_user_room_agent(
             detail=f"No such room: {room_id}",
         ) from None
 
-    return user_name, user_profile, agent
+    user_profile = models.UserProfile.from_user_claims(the_user_claims)
+    return user_profile, agent
 
 
 @util.logfire_span("GET /v1/rooms/{room_id}/agui")
@@ -100,14 +92,15 @@ async def get_room_agui(
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> models.AGUI_Threads:
     """Return user's extant AGUI threads within the given room"""
-    user_name, _room_config = await _check_user_in_room(
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=the_user_claims,
     )
     model_threads = []
     for a_thread in await the_threads.list_user_threads(
@@ -145,14 +138,15 @@ async def get_room_agui_thread_id(
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> models.AGUI_Thread:
     """Return metadata about a specific thread and its runs"""
-    user_name, _room_config = await _check_user_in_room(
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=the_user_claims,
     )
     try:
         thread = await the_threads.get_thread(
@@ -200,14 +194,15 @@ async def get_room_agui_thread_id_run_id(
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> models.AGUI_Run:
     """Return metadata about a specific run"""
-    user_name, _room_config = await _check_user_in_room(
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=the_user_claims,
     )
     try:
         run = await the_threads.get_run(
@@ -244,7 +239,7 @@ async def post_room_agui(
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> models.AGUI_Thread:
     """Create a new AGUI thread within the given room
 
@@ -252,11 +247,12 @@ async def post_room_agui(
 
     Body of request, if passed, must validate to 'models.AGUI_ThreadMetadata'.
     """
-    user_name, room_config = await _check_user_in_room(
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=the_user_claims,
     )
 
     if new_thread_request.metadata is not None:
@@ -325,17 +321,18 @@ async def post_room_agui_thread_id(
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> models.AGUI_Run:
     """Create a new AGUI run for a thread within the given room
 
     Body of request, if passed, must validate to 'models.AGUI_RunMetadata'.
     """
-    user_name, _room_config = await _check_user_in_room(
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=the_user_claims,
     )
 
     parent_run_id = new_run_request.parent_run_id
@@ -390,7 +387,7 @@ async def post_room_agui_thread_id_meta(
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> fastapi.Response:
     """Update metadata for a thread within the given room
 
@@ -400,11 +397,12 @@ async def post_room_agui_thread_id_meta(
 
     Returns an HTTP 205 (Reset Content) on success.
     """
-    user_name, _room_config = await _check_user_in_room(
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=the_user_claims,
     )
 
     new_md_dict = {
@@ -485,17 +483,18 @@ async def post_room_agui_thread_id_run_id(
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> responses.StreamingResponse:
     """Execute an AGUI run
 
     Stream AGUI events in the response.
     """
-    user_name, user, agent = await _check_user_room_agent(
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    user, agent = await _check_user_room_agent(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=the_user_claims,
     )
 
     agui_adapter = await ai_ag_ui.AGUIAdapter.from_request(
@@ -581,7 +580,7 @@ async def post_room_agui_thread_id_run_id_meta(
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> fastapi.Response:
     """Update metadata for a thread within the given room
 
@@ -591,11 +590,12 @@ async def post_room_agui_thread_id_run_id_meta(
 
     Returns an HTTP 205 (Reset Content) on success.
     """
-    user_name, _room_config = await _check_user_in_room(
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=the_user_claims,
     )
 
     new_md_dict = {
@@ -635,17 +635,18 @@ async def post_room_agui_thread_id_run_id_feedback(
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> fastapi.Response:
     """Add / update feedback for a run
 
     Return an HTTP 205 (Reset Content) on success.
     """
-    user_name, _room_config = await _check_user_in_room(
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=the_user_claims,
     )
 
     try:
@@ -676,14 +677,15 @@ async def delete_room_agui_thread_id(
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> fastapi.Response:
     """Delete an AGUI thread within the given room"""
-    user_name, _room_config = await _check_user_in_room(
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
-        token=token,
+        the_user_claims=the_user_claims,
     )
     try:
         await the_threads.delete_thread(

@@ -1,16 +1,17 @@
 import fastapi
-from fastapi import security
 
 from soliplex import authn
 from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex import models
 from soliplex import quizzes
+from soliplex import views
 
 router = fastapi.APIRouter(tags=["quizzes"])
 
 depend_the_installation = installation.depend_the_installation
 depend_the_authz = authz_package.depend_the_authz_policy
+depend_the_user_claims = views.depend_the_user_claims
 
 
 @router.get("/v1/rooms/{room_id}/quiz/{quiz_id}")
@@ -20,15 +21,13 @@ async def get_quiz(
     quiz_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> models.Quiz:
     """Return a quiz as configured from a room"""
-    user = authn.authenticate(the_installation, token)
-
     try:
         room_config = await the_installation.get_room_config(
             room_id=room_id,
-            user=user,
+            user=the_user_claims,
             the_authz_policy=the_authz_policy,
         )
     except ValueError as e:
@@ -57,15 +56,13 @@ async def post_quiz_question(
     answer: models.QuizAnswer,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> models.QuizQuestionResponse:
     """Check a user's response to a quiz question."""
-    user = authn.authenticate(the_installation, token)
-
     try:
         room_config = await the_installation.get_room_config(
             room_id=room_id,
-            user=user,
+            user=the_user_claims,
             the_authz_policy=the_authz_policy,
         )
     except ValueError as e:

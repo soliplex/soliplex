@@ -12,6 +12,8 @@ from soliplex.views import quizzes as quizzes_views
 
 TEST_ROOM_ID = "test_room"
 TEST_QUIZ_ID = "test_quiz"
+ADMIN_EMAIL = "admin@example.com"
+THE_USER_CLAIMS = {"email": ADMIN_EMAIL}
 
 INPUTS = "What color is the sky"
 EXPECTED_ANSWER = "Blue"
@@ -62,12 +64,10 @@ def test_quiz(qa_question, mc_question):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_miss", [None, "room", "quiz"])
-@mock.patch("soliplex.authn.authenticate")
-async def test_get_quiz(auth_fn, test_quiz, w_miss):
+async def test_get_quiz(test_quiz, w_miss):
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    token = object()
 
     if w_miss == "room":
         the_installation.get_room_config.side_effect = ValueError("no room")
@@ -79,7 +79,7 @@ async def test_get_quiz(auth_fn, test_quiz, w_miss):
                 quiz_id=TEST_QUIZ_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
-                token=token,
+                the_user_claims=THE_USER_CLAIMS,
             )
 
         assert exc.value.status_code == 404
@@ -97,7 +97,7 @@ async def test_get_quiz(auth_fn, test_quiz, w_miss):
                     quiz_id=TEST_QUIZ_ID,
                     the_installation=the_installation,
                     the_authz_policy=the_authz_policy,
-                    token=token,
+                    the_user_claims=THE_USER_CLAIMS,
                 )
 
             assert exc.value.status_code == 404
@@ -111,7 +111,7 @@ async def test_get_quiz(auth_fn, test_quiz, w_miss):
                 quiz_id=TEST_QUIZ_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
-                token=token,
+                the_user_claims=THE_USER_CLAIMS,
             )
 
             expected = models.Quiz.from_config(test_quiz)
@@ -119,23 +119,19 @@ async def test_get_quiz(auth_fn, test_quiz, w_miss):
 
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=TEST_ROOM_ID,
-        user=auth_fn.return_value,
+        user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
     )
-
-    auth_fn.assert_called_once_with(the_installation, token)
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_miss", [None, "room", "quiz", "question"])
 @mock.patch("soliplex.quizzes.check_answer")
-@mock.patch("soliplex.authn.authenticate")
-async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
+async def test_post_quiz_question(ca, test_quiz, w_miss):
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     answer = models.QuizAnswer(text="Answer")
-    token = object()
 
     if w_miss == "room":
         the_installation.get_room_config.side_effect = ValueError("no room")
@@ -149,7 +145,7 @@ async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
                 answer=answer,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
-                token=token,
+                the_user_claims=THE_USER_CLAIMS,
             )
 
         assert exc.value.status_code == 404
@@ -169,7 +165,7 @@ async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
                     answer=answer,
                     the_installation=the_installation,
                     the_authz_policy=the_authz_policy,
-                    token=token,
+                    the_user_claims=THE_USER_CLAIMS,
                 )
 
             assert exc.value.status_code == 404
@@ -194,7 +190,7 @@ async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
                         answer=answer,
                         the_installation=the_installation,
                         the_authz_policy=the_authz_policy,
-                        token=token,
+                        the_user_claims=THE_USER_CLAIMS,
                     )
 
                 assert exc.value.status_code == 404
@@ -208,7 +204,7 @@ async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
                     answer=answer,
                     the_installation=the_installation,
                     the_authz_policy=the_authz_policy,
-                    token=token,
+                    the_user_claims=THE_USER_CLAIMS,
                 )
 
                 assert found is ca.return_value
@@ -221,8 +217,6 @@ async def test_post_quiz_question(auth_fn, ca, test_quiz, w_miss):
 
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=TEST_ROOM_ID,
-        user=auth_fn.return_value,
+        user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
     )
-
-    auth_fn.assert_called_once_with(the_installation, token)

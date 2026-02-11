@@ -3,7 +3,6 @@ import io
 
 import fastapi
 from fastapi import responses
-from fastapi import security
 from haiku.rag import client as rag_client
 
 from soliplex import authn
@@ -12,11 +11,13 @@ from soliplex import installation
 from soliplex import mcp_auth
 from soliplex import models
 from soliplex import util
+from soliplex import views
 
 router = fastapi.APIRouter(tags=["rooms"])
 
 depend_the_installation = installation.depend_the_installation
 depend_the_authz = authz_package.depend_the_authz_policy
+depend_the_user_claims = views.depend_the_user_claims
 
 
 @util.logfire_span("GET /v1/rooms")
@@ -25,12 +26,11 @@ async def get_rooms(
     request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> models.ConfiguredRooms:
     """Return a manifest of the rooms available to the user"""
-    user = authn.authenticate(the_installation, token)
     room_configs = await the_installation.get_room_configs(
-        user=user,
+        user=the_user_claims,
         the_authz_policy=the_authz_policy,
     )
 
@@ -52,15 +52,13 @@ async def get_room(
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> models.Room:
     """Return a single room's configuration"""
-    user = authn.authenticate(the_installation, token)
-
     try:
         room_config = await the_installation.get_room_config(
             room_id=room_id,
-            user=user,
+            user=the_user_claims,
             the_authz_policy=the_authz_policy,
         )
     except KeyError:
@@ -82,15 +80,13 @@ async def get_room_bg_image(
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> str:  # file path, converted to file response by FastAPI
     """Return a room's background image"""
-    user = authn.authenticate(the_installation, token)
-
     try:
         room_config = await the_installation.get_room_config(
             room_id=room_id,
-            user=user,
+            user=the_user_claims,
             the_authz_policy=the_authz_policy,
         )
     except KeyError:
@@ -117,15 +113,13 @@ async def get_room_mcp_token(
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> models.MCPToken:
     """Return a token for use in an MCP client addressing the room"""
-    user = authn.authenticate(the_installation, token)
-
     try:
         _room_config = await the_installation.get_room_config(
             room_id=room_id,
-            user=user,
+            user=the_user_claims,
             the_authz_policy=the_authz_policy,
         )
     except ValueError as e:
@@ -135,8 +129,12 @@ async def get_room_mcp_token(
         ) from None
 
     secret = the_installation.get_secret("URL_SAFE_TOKEN_SECRET")
-    token = mcp_auth.generate_url_safe_token(secret, room_id, **user)
-    return models.MCPToken(room_id=room_id, mcp_token=token)
+    mcp_token = mcp_auth.generate_url_safe_token(
+        secret,
+        room_id,
+        **the_user_claims,
+    )
+    return models.MCPToken(room_id=room_id, mcp_token=mcp_token)
 
 
 @util.logfire_span("GET /v1/rooms/{room_id}/documents")
@@ -146,15 +144,13 @@ async def get_room_documents(
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> models.RoomDocuments:
     """Return a list of the documents in the room's RAG database"""
-    user = authn.authenticate(the_installation, token)
-
     try:
         room_config = await the_installation.get_room_config(
             room_id=room_id,
-            user=user,
+            user=the_user_claims,
             the_authz_policy=the_authz_policy,
         )
     except KeyError:
@@ -201,15 +197,13 @@ async def get_chunk_visualization(
     chunk_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    token: security.HTTPAuthorizationCredentials = authn.oauth2_predicate,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> models.ChunkVisualization:
     """Return a set of page images for a chunk, highlighting the chunk text"""
-    user = authn.authenticate(the_installation, token)
-
     try:
         room_config = await the_installation.get_room_config(
             room_id=room_id,
-            user=user,
+            user=the_user_claims,
             the_authz_policy=the_authz_policy,
         )
     except KeyError:
