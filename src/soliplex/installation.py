@@ -14,17 +14,11 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 from soliplex import agents
 from soliplex import authz as authz_package
 from soliplex import config
-from soliplex import logwrapper
+from soliplex import loggers
 from soliplex import mcp_server
 from soliplex import secrets
 from soliplex.agui import persistence as agui_persistence
 from soliplex.authz import schema as authz_schema
-
-AUTHZ_LOGGER_NAME = "soliplex.authz"
-AUTHZ_FILTERING_ROOMS = "Filtering rooms for user"
-AUTHZ_NOT_FILTERING_ROOMS = "No authz policy, not filtering rooms"
-AUTHZ_ROOM_AUTHORIZED = "Room authorized"
-AUTHZ_ROOM_NOT_AUTHORIZED = "Room not authorized"
 
 ProviderURL = str | None
 ProviderModelNames = set[str]
@@ -166,12 +160,12 @@ class Installation:
         the_authz_policy: authz_package.AuthorizationPolicy = None,
     ) -> dict[str, config.RoomConfig]:
         """Return room configs available to the user"""
-        logger = logwrapper.LogWrapper(AUTHZ_LOGGER_NAME, user=user)
+        logger = loggers.LogWrapper(loggers.AUTHZ_LOGGER_NAME, user=user)
 
         configs = self._config.room_configs
 
         if the_authz_policy is not None:
-            logger.debug(AUTHZ_FILTERING_ROOMS)
+            logger.debug(loggers.AUTHZ_FILTERING_ROOMS)
             allowed = await the_authz_policy.filter_room_ids(
                 configs.keys(),
                 user_token=user,
@@ -183,7 +177,7 @@ class Installation:
                 if room_id in allowed
             }
         else:
-            logger.debug(AUTHZ_NOT_FILTERING_ROOMS)
+            logger.debug(loggers.AUTHZ_NOT_FILTERING_ROOMS)
 
         return configs
 
@@ -195,8 +189,8 @@ class Installation:
         the_authz_policy: authz_package.AuthorizationPolicy = None,
     ) -> config.RoomConfig:
         """Return a room configs IFF available to the user"""
-        logger = logwrapper.LogWrapper(
-            AUTHZ_LOGGER_NAME,
+        logger = loggers.LogWrapper(
+            loggers.AUTHZ_LOGGER_NAME,
             user=user,
             room_id=room_id,
         )
@@ -206,10 +200,10 @@ class Installation:
                 room_id=room_id,
                 user_token=user,
             ):
-                logger.error(AUTHZ_ROOM_NOT_AUTHORIZED)
+                logger.error(loggers.AUTHZ_ROOM_NOT_AUTHORIZED)
                 raise KeyError(room_id)
 
-            logger.debug(AUTHZ_ROOM_AUTHORIZED)
+            logger.debug(loggers.AUTHZ_ROOM_AUTHORIZED)
 
         return self._config.room_configs[room_id]
 

@@ -1,5 +1,16 @@
 import logging
 
+AUTHN_LOGGER_NAME = "soliplex.authn"
+AUTHN_NO_AUTH_MODE = "soliplex server in no-auth mode"
+AUTHN_JWT_INVALID = "JWT validation failed"
+AUTHN_JWT_VALID = "JWT validation succeeded"
+
+AUTHZ_LOGGER_NAME = "soliplex.authz"
+AUTHZ_FILTERING_ROOMS = "Filtering rooms for user"
+AUTHZ_NOT_FILTERING_ROOMS = "No authz policy, not filtering rooms"
+AUTHZ_ROOM_AUTHORIZED = "Room authorized"
+AUTHZ_ROOM_NOT_AUTHORIZED = "Room not authorized"
+
 
 class LogWrapper:
     """Context wrapper for capturing extra logging values"""

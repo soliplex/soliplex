@@ -11,6 +11,7 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 from soliplex import agents
 from soliplex import config
 from soliplex import installation
+from soliplex import loggers
 from soliplex import models
 from soliplex import secrets
 
@@ -570,7 +571,7 @@ def authz_kwargs(request):
 
 
 @pytest.mark.anyio
-@mock.patch("soliplex.logwrapper.LogWrapper")
+@mock.patch("soliplex.loggers.LogWrapper")
 async def test_installation_get_room_configs(
     lw_klass,
     test_user,
@@ -590,7 +591,7 @@ async def test_installation_get_room_configs(
 
     if authz_kwargs:
         allowed = authz_kwargs["the_authz_policy"].allowed
-        lw.debug.assert_called_once_with(installation.AUTHZ_FILTERING_ROOMS)
+        lw.debug.assert_called_once_with(loggers.AUTHZ_FILTERING_ROOMS)
         if allowed:
             assert found == r_configs
         else:
@@ -598,11 +599,11 @@ async def test_installation_get_room_configs(
     else:
         assert found == r_configs
         lw.debug.assert_called_once_with(
-            installation.AUTHZ_NOT_FILTERING_ROOMS,
+            loggers.AUTHZ_NOT_FILTERING_ROOMS,
         )
 
     lw_klass.assert_called_once_with(
-        installation.AUTHZ_LOGGER_NAME,
+        loggers.AUTHZ_LOGGER_NAME,
         user=test_user,
     )
 
@@ -611,7 +612,7 @@ async def test_installation_get_room_configs(
 @pytest.mark.parametrize(
     "w_room_id, raises", [("room_id", False), ("nonesuch", True)]
 )
-@mock.patch("soliplex.logwrapper.LogWrapper")
+@mock.patch("soliplex.loggers.LogWrapper")
 async def test_installation_get_room_config(
     lw_klass,
     test_user,
@@ -647,7 +648,7 @@ async def test_installation_get_room_config(
                     **authz_kwargs,
                 )
             lw.error.assert_called_once_with(
-                installation.AUTHZ_ROOM_NOT_AUTHORIZED,
+                loggers.AUTHZ_ROOM_NOT_AUTHORIZED,
             )
         else:
             found = await the_installation.get_room_config(
@@ -660,7 +661,7 @@ async def test_installation_get_room_config(
 
             if authz_kwargs:
                 lw.debug.assert_called_once_with(
-                    installation.AUTHZ_ROOM_AUTHORIZED,
+                    loggers.AUTHZ_ROOM_AUTHORIZED,
                 )
 
 

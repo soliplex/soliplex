@@ -6,6 +6,7 @@ from authlib.integrations import starlette_client
 from fastapi import responses
 
 from soliplex import installation
+from soliplex import loggers
 from soliplex import models
 from soliplex.views import authn as authn_views
 
@@ -108,7 +109,7 @@ async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
 @pytest.mark.parametrize("w_error", [None, "aat", "authenticate"])
 @mock.patch("soliplex.authn.get_oauth")
 @mock.patch("soliplex.authn.authenticate")
-@mock.patch("soliplex.logwrapper.LogWrapper")
+@mock.patch("soliplex.loggers.LogWrapper")
 async def test_get_auth_system(
     lw_klass,
     auth_fn,
@@ -186,10 +187,10 @@ async def test_get_auth_system(
                 system,
                 the_installation,
             )
-        lw.debug.assert_called_once_with(authn_views.AUTHN_NO_AUTH_MODE)
+        lw.debug.assert_called_once_with(loggers.AUTHN_NO_AUTH_MODE)
 
         assert exc.value.status_code == 404
-        assert exc.value.detail == authn_views.AUTHN_NO_AUTH_MODE
+        assert exc.value.detail == loggers.AUTHN_NO_AUTH_MODE
 
         aat.assert_not_awaited()
         auth_fn.assert_not_called()
@@ -205,7 +206,7 @@ async def test_get_auth_system(
                 )
 
             lw.exception.assert_called_once_with(
-                authn_views.AUTHN_JWT_INVALID,
+                loggers.AUTHN_JWT_INVALID,
             )
 
             assert exc.value.status_code == 401
@@ -220,7 +221,7 @@ async def test_get_auth_system(
             assert response.status_code == 307
             assert response.headers["location"] == exp_path
 
-            lw.debug.assert_called_once_with(authn_views.AUTHN_JWT_VALID)
+            lw.debug.assert_called_once_with(loggers.AUTHN_JWT_VALID)
 
         aat.assert_awaited_once_with(request)
 
