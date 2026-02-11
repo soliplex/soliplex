@@ -99,3 +99,24 @@ def test_logwrapper_debug(lgl, w_extra):
     wrapper.debug("Foo: %s", "foo")
 
     logger.debug.assert_called_once_with("Foo: %s", "foo", extra=w_extra)
+
+
+@pytest.mark.parametrize("w_extra", [{}, {"foo": "bar"}])
+@pytest.mark.parametrize("w_new_name", [False, True])
+@mock.patch("logging.getLogger")
+def test_logwrapper_bind(lgl, w_new_name, w_extra):
+    NEW_LOGGER_NAME = "new-name"
+    wrapper = loggers.LogWrapper(LOGGER_NAME, spam="qux")
+    lgl.reset_mock()
+
+    if w_new_name:
+        bound = wrapper.bind(NEW_LOGGER_NAME, **w_extra)
+        exp_name = NEW_LOGGER_NAME
+    else:
+        bound = wrapper.bind(**w_extra)
+        exp_name = LOGGER_NAME
+
+    assert bound.logger_name == exp_name
+    assert bound.extra == wrapper.extra | w_extra
+
+    lgl.assert_called_once_with(exp_name)

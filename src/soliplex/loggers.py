@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 
 AUTHN_LOGGER_NAME = "soliplex.authn"
@@ -16,8 +18,9 @@ class LogWrapper:
     """Context wrapper for capturing extra logging values"""
 
     def __init__(self, logger_name, **extra):
-        self.logger = logging.getLogger(logger_name)
+        self.logger_name = logger_name
         self.extra = extra
+        self.logger = logging.getLogger(logger_name)
 
     def log(self, level, message, *args):
         self.logger.log(level, message, *args, extra=self.extra)
@@ -39,3 +42,11 @@ class LogWrapper:
 
     def debug(self, message, *args):
         self.logger.debug(message, *args, extra=self.extra)
+
+    def bind(self, logger_name=None, **extra) -> LogWrapper:
+        if logger_name is None:
+            logger_name = self.logger_name
+
+        extras = self.extra | extra
+
+        return LogWrapper(logger_name, **extras)
