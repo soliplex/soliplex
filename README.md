@@ -1,4 +1,4 @@
-# Soliplex
+https://pypi.org/project/haiku.rag-slim/# Soliplex
 
 An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web interface.
 
@@ -20,10 +20,13 @@ An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web inte
 **Python 3.12+ / FastAPI**
 
 - **Core**: FastAPI application with async support
-- **RAG Engine**: haiku.rag-slim (0.25.0) with LanceDB vector storage
-- **AI Integration**: Pydantic AI (1.0.11+) for agent management
+- **RAG Engine**: [haiku.rag-slim](https://pypi.org/project/haiku.rag-slim/)
+  with LanceDB vector storage
+- **AI Integration**: [Pydantic AI](https://pypi.org/project/pydantic-ai/)
+  for agent management
 - **Authentication**: Python-Keycloak with OIDC/JWT support
-- **MCP**: FastMCP (2.13.0+) server and client implementations
+- **MCP**: [FastMCP](https://pypi.org/project/fastmcp/) server and client
+  implementations
 - **Configuration**: YAML-based configuration system
 
 Key modules:
