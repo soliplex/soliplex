@@ -11,6 +11,7 @@ EMAIL = "phreddy@example.com"
 THE_USER_CLAIMS = {
     "email": EMAIL,
 }
+ROOM_ID = "test-room"
 
 
 @pytest.mark.anyio
@@ -47,26 +48,42 @@ async def test_get_the_unauth_logger(lw_klass):
     assert found is lw
 
     lw_klass.assert_called_once_with(
-        name=loggers.AUTHN_LOGGER_NAME,
+        loggers.AUTHN_LOGGER_NAME,
         headers=request.headers,
     )
 
 
 @pytest.mark.anyio
-async def test_get_the_logger():
+@pytest.mark.parametrize("w_room_id", [False, True])
+async def test_get_the_logger(w_room_id):
+    request = mock.create_autospec(fastapi.Request)
+
+    if w_room_id:
+        request.path_params = {"room_id": ROOM_ID}
+    else:
+        request.path_params = {}
+
     the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
 
     found = await views.get_the_logger(
+        request=request,
         the_unauth_logger=the_unauth_logger,
         the_user_claims=THE_USER_CLAIMS,
     )
 
     assert found is the_unauth_logger.bind.return_value
 
-    the_unauth_logger.bind.assert_called_once_with(
-        name=loggers.SOLIPLEX_LOGGER_NAME,
-        claims=THE_USER_CLAIMS,
-    )
+    if w_room_id:
+        the_unauth_logger.bind.assert_called_once_with(
+            name=loggers.SOLIPLEX_LOGGER_NAME,
+            claims=THE_USER_CLAIMS,
+            room_id=ROOM_ID,
+        )
+    else:
+        the_unauth_logger.bind.assert_called_once_with(
+            name=loggers.SOLIPLEX_LOGGER_NAME,
+            claims=THE_USER_CLAIMS,
+        )
 
 
 @pytest.mark.anyio
