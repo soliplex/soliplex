@@ -20,7 +20,7 @@ Room (static config)
 | Step | Action | Endpoint | Returns |
 |------|--------|----------|---------|
 | 1 | Create thread | `POST /rooms/{room_id}/agui` | Thread + **first Run UUID** |
-| 2 | Execute run | `POST /rooms/{room_id}/agui/{thread_id}/{run_id}` | SSE event stream |
+| 2 | Execute first run | `POST /rooms/{room_id}/agui/{thread_id}/{run_id}` | SSE event stream |
 | 3 | Create subsequent run | `POST /rooms/{room_id}/agui/{thread_id}` | New Run UUID |
 | 4 | Execute subsequent run | `POST /rooms/{room_id}/agui/{thread_id}/{new_run_id}` | SSE event stream |
 
