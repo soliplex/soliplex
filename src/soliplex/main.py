@@ -155,7 +155,9 @@ def create_app(
 
     # Create a temporary InstallationConfig, to permit us to use
     # its secrets before the lifespan starts.
-    tmp_installation = config.load_installation(installation_path)
+    tmp_installation = config.load_installation(
+        pathlib.Path(installation_path)
+    )
 
     register_metaconfigs()
 
