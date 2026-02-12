@@ -27,6 +27,8 @@ async def get_quiz(
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.Quiz:
     """Return a quiz as configured from a room"""
+    the_logger.debug(loggers.QUIZ_GET_QUIZ)
+
     try:
         room_config = await the_installation.get_room_config(
             room_id=room_id,
@@ -34,7 +36,10 @@ async def get_quiz(
             the_authz_policy=the_authz_policy,
             the_logger=the_logger,
         )
-    except ValueError as e:
+    except KeyError as e:
+        # auth error logged in 'get_room_config'
+        # but this could be just a missing room
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
         raise fastapi.HTTPException(
             status_code=404,
             detail=str(e),
@@ -43,6 +48,7 @@ async def get_quiz(
     try:
         quiz = room_config.quiz_map[quiz_id]
     except KeyError as e:
+        the_logger.exception(loggers.QUIZ_UNKNOWN_QUIZ_ID, quiz_id)
         raise fastapi.HTTPException(
             status_code=404,
             detail=str(e),
@@ -64,6 +70,8 @@ async def post_quiz_question(
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.QuizQuestionResponse:
     """Check a user's response to a quiz question."""
+    the_logger.debug(loggers.QUIZ_POST_QUIZ_QUESTION)
+
     try:
         room_config = await the_installation.get_room_config(
             room_id=room_id,
@@ -71,7 +79,10 @@ async def post_quiz_question(
             the_authz_policy=the_authz_policy,
             the_logger=the_logger,
         )
-    except ValueError as e:
+    except KeyError as e:
+        # auth error logged in 'get_room_config'
+        # but this could be just a missing room
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
         raise fastapi.HTTPException(
             status_code=404,
             detail=str(e),
@@ -80,6 +91,7 @@ async def post_quiz_question(
     try:
         quiz = room_config.quiz_map[quiz_id]
     except KeyError as e:
+        the_logger.exception(loggers.QUIZ_UNKNOWN_QUIZ_ID, quiz_id)
         raise fastapi.HTTPException(
             status_code=404,
             detail=str(e),
@@ -88,6 +100,7 @@ async def post_quiz_question(
     try:
         return await quizzes.check_answer(quiz, question_uuid, answer.text)
     except quizzes.QuestionNotFound as e:
+        the_logger.exception(loggers.QUIZ_UNKNOWN_QUESTION_UUID, question_uuid)
         raise fastapi.HTTPException(
             status_code=404,
             detail=str(e),
