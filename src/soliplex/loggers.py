@@ -25,6 +25,12 @@ AUTHZ_POST_ROOM_POLICY = "post room policy"
 AUTHZ_DELETE_ROOM_POLICY = "delete room policy"
 AUTHZ_GET_INSTALLATION_AUTHZ = "get installation authz"
 
+INST_GET_INSTALLATION = "get installation"
+INST_GET_INSTALLATION_VERSIONS = "get installation versions"
+INST_SUBPROCESS_PIP = "subprocess pip failed"
+INST_GET_INSTALLATION_PROVIDERS = "get installation providers"
+INST_GET_INSTALLATION_GIT_METADATA = "get installation git metadata"
+
 
 class LogWrapper:
     """Context wrapper for capturing extra logging values"""
