@@ -31,6 +31,9 @@ INST_SUBPROCESS_PIP = "subprocess pip failed"
 INST_GET_INSTALLATION_PROVIDERS = "get installation providers"
 INST_GET_INSTALLATION_GIT_METADATA = "get installation git metadata"
 
+LOG_INGEST_INGEST_LOGS = "ingest logs"
+LOG_INGEST_PAYLOAD_TOO_BIG = "payload too big"
+
 
 class LogWrapper:
     """Context wrapper for capturing extra logging values"""
