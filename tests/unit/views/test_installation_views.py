@@ -224,8 +224,9 @@ async def test_get_installation_providers(w_admin_access):
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("w_admin_access", [False, True])
 @mock.patch("soliplex.util.GitMetadata")
-async def test_get_installation_git_metadata(gm_klass):
+async def test_get_installation_git_metadata(gm_klass, w_admin_access):
     gm = gm_klass.return_value
     gm.git_hash = GIT_HASH
     gm.git_branch = GIT_BRANCH
@@ -233,21 +234,41 @@ async def test_get_installation_git_metadata(gm_klass):
 
     request = mock.create_autospec(fastapi.Request)
     the_installation = mock.create_autospec(installation.Installation)
+    the_authz_policy = mock.create_autospec(authz.AuthorizationPolicy)
+    the_authz_policy.check_admin_access.return_value = w_admin_access
     the_logger = mock.create_autospec(loggers.LogWrapper)
     bound_logger = the_logger.bind.return_value
 
-    found = await installation_views.get_installation_git_metadata(
-        request,
-        the_installation=the_installation,
-        the_user_claims=THE_USER_CLAIMS,
-        the_logger=the_logger,
-    )
+    if not w_admin_access:
+        with pytest.raises(fastapi.HTTPException) as exc:
+            await installation_views.get_installation_git_metadata(
+                request,
+                the_installation=the_installation,
+                the_authz_policy=the_authz_policy,
+                the_user_claims=THE_USER_CLAIMS,
+                the_logger=the_logger,
+            )
 
-    assert found == models.GitMetadata(
-        git_hash=GIT_HASH,
-        git_branch=GIT_BRANCH,
-        git_tag=GIT_TAG,
-    )
+        assert exc.value.status_code == 403
+        assert exc.value.detail == loggers.AUTHZ_ADMIN_ACCESS_REQUIRED
+        bound_logger.error.assert_called_once_with(
+            loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
+        )
+
+    else:
+        found = await installation_views.get_installation_git_metadata(
+            request,
+            the_installation=the_installation,
+            the_authz_policy=the_authz_policy,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+        assert found == models.GitMetadata(
+            git_hash=GIT_HASH,
+            git_branch=GIT_BRANCH,
+            git_tag=GIT_TAG,
+        )
 
     bound_logger.debug.assert_called_once_with(
         loggers.INST_GET_INSTALLATION_GIT_METADATA,
