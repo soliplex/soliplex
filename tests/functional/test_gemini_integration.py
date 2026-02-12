@@ -128,6 +128,7 @@ async def reset_gemini_client():
 def gemini_room_config():
     """Load the gemini_flash room configuration directly."""
     installation_path = pathlib.Path("example/installation.yaml")
+    main.register_metaconfigs()  # 'haiku.rag.chat' agent config support
     installation_config = config.load_installation(installation_path)
     return installation_config.room_configs["gemini_flash"]
 
@@ -437,7 +438,7 @@ async def test_gemini_safety_filter(gemini_room_config):
 def gemini_client():
     """Test client with main installation that includes gemini_flash room."""
     with testclient.TestClient(
-        main.create_app("example/installation.yaml")
+        main.create_app("example/installation.yaml", no_auth_mode=True)
     ) as client:
         yield client
 
