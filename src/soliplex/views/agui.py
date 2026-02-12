@@ -51,6 +51,7 @@ async def _check_user_in_room(
             the_logger=the_logger,
         )
     except KeyError:
+        # logged in 'get_room_config'
         raise fastapi.HTTPException(
             status_code=404,
             detail=f"No such room: {room_id}",
@@ -102,6 +103,8 @@ async def get_room_agui(
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.AGUI_Threads:
     """Return user's extant AGUI threads within the given room"""
+    the_logger.debug(loggers.AGUI_GET_ROOM)
+
     user_name = the_user_claims.get("preferred_username", "<unknown>")
     _room_config = await _check_user_in_room(
         room_id=room_id,
@@ -150,6 +153,8 @@ async def get_room_agui_thread_id(
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.AGUI_Thread:
     """Return metadata about a specific thread and its runs"""
+    the_logger.debug(loggers.AGUI_GET_ROOM_THREAD)
+
     user_name = the_user_claims.get("preferred_username", "<unknown>")
     _room_config = await _check_user_in_room(
         room_id=room_id,
@@ -208,6 +213,8 @@ async def get_room_agui_thread_id_run_id(
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.AGUI_Run:
     """Return metadata about a specific run"""
+    the_logger.debug(loggers.AGUI_GET_ROOM_THREAD_RUN)
+
     user_name = the_user_claims.get("preferred_username", "<unknown>")
     _room_config = await _check_user_in_room(
         room_id=room_id,
@@ -260,6 +267,8 @@ async def post_room_agui(
 
     Body of request, if passed, must validate to 'models.AGUI_ThreadMetadata'.
     """
+    the_logger.debug(loggers.AGUI_POST_ROOM)
+
     user_name = the_user_claims.get("preferred_username", "<unknown>")
     room_config = await _check_user_in_room(
         room_id=room_id,
@@ -342,6 +351,8 @@ async def post_room_agui_thread_id(
 
     Body of request, if passed, must validate to 'models.AGUI_RunMetadata'.
     """
+    the_logger.debug(loggers.AGUI_POST_ROOM_THREAD)
+
     user_name = the_user_claims.get("preferred_username", "<unknown>")
     _room_config = await _check_user_in_room(
         room_id=room_id,
@@ -414,6 +425,8 @@ async def post_room_agui_thread_id_meta(
 
     Returns an HTTP 205 (Reset Content) on success.
     """
+    the_logger.debug(loggers.AGUI_POST_ROOM_THREAD_META)
+
     user_name = the_user_claims.get("preferred_username", "<unknown>")
     _room_config = await _check_user_in_room(
         room_id=room_id,
@@ -508,6 +521,8 @@ async def post_room_agui_thread_id_run_id(
 
     Stream AGUI events in the response.
     """
+    the_logger.debug(loggers.AGUI_POST_ROOM_THREAD_RUN)
+
     user_name = the_user_claims.get("preferred_username", "<unknown>")
     user, agent = await _check_user_room_agent(
         room_id=room_id,
@@ -612,6 +627,8 @@ async def post_room_agui_thread_id_run_id_meta(
 
     Returns an HTTP 205 (Reset Content) on success.
     """
+    the_logger.debug(loggers.AGUI_POST_ROOM_THREAD_RUN_META)
+
     user_name = the_user_claims.get("preferred_username", "<unknown>")
     _room_config = await _check_user_in_room(
         room_id=room_id,
@@ -665,6 +682,8 @@ async def post_room_agui_thread_id_run_id_feedback(
 
     Return an HTTP 205 (Reset Content) on success.
     """
+    the_logger.debug(loggers.AGUI_POST_ROOM_THREAD_RUN_FEEDBACK)
+
     user_name = the_user_claims.get("preferred_username", "<unknown>")
     _room_config = await _check_user_in_room(
         room_id=room_id,
@@ -706,6 +725,8 @@ async def delete_room_agui_thread_id(
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> fastapi.Response:
     """Delete an AGUI thread within the given room"""
+    the_logger.debug(loggers.AGUI_DELETE_ROOM_THREAD)
+
     user_name = the_user_claims.get("preferred_username", "<unknown>")
     _room_config = await _check_user_in_room(
         room_id=room_id,

@@ -308,6 +308,8 @@ async def test_get_room_agui_only(
         the_logger=the_logger,
     )
 
+    the_logger.debug.assert_called_once_with(loggers.AGUI_GET_ROOM)
+
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
@@ -440,6 +442,8 @@ async def test_get_room_agui_thread_id_only(
         the_logger=the_logger,
     )
 
+    the_logger.debug.assert_called_once_with(loggers.AGUI_GET_ROOM_THREAD)
+
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
@@ -570,6 +574,8 @@ async def test_get_room_agui_thread_id_run_id(
         the_logger=the_logger,
     )
 
+    the_logger.debug.assert_called_once_with(loggers.AGUI_GET_ROOM_THREAD_RUN)
+
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
@@ -691,6 +697,8 @@ async def test_post_room_agui_only(
         the_logger=the_logger,
     )
 
+    the_logger.debug.assert_called_once_with(loggers.AGUI_POST_ROOM)
+
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
@@ -806,6 +814,8 @@ async def test_post_room_agui_thread_id_only(
         the_logger=the_logger,
     )
 
+    the_logger.debug.assert_called_once_with(loggers.AGUI_POST_ROOM_THREAD)
+
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
@@ -879,6 +889,9 @@ async def test_post_room_agui_thread_id_meta(
         the_authz_policy=the_authz_policy,
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
+    )
+    the_logger.debug.assert_called_once_with(
+        loggers.AGUI_POST_ROOM_THREAD_META,
     )
 
 
@@ -1103,6 +1116,8 @@ async def test_post_room_agui_thread_id_run_id(
             the_logger=the_logger,
         )
 
+    the_logger.debug.assert_called_once_with(loggers.AGUI_POST_ROOM_THREAD_RUN)
+
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
@@ -1179,6 +1194,9 @@ async def test_post_room_agui_thread_id_run_id_meta(
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
+    the_logger.debug.assert_called_once_with(
+        loggers.AGUI_POST_ROOM_THREAD_RUN_META,
+    )
 
 
 @pytest.mark.anyio
@@ -1247,6 +1265,9 @@ async def test_post_room_agui_thread_id_run_id_feedback(
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
+    the_logger.debug.assert_called_once_with(
+        loggers.AGUI_POST_ROOM_THREAD_RUN_FEEDBACK,
+    )
 
 
 @pytest.mark.anyio
@@ -1304,3 +1325,4 @@ async def test_delete_room_agui_thread_id(
         the_user_claims=THE_USER_CLAIMS,
         the_logger=the_logger,
     )
+    the_logger.debug.assert_called_once_with(loggers.AGUI_DELETE_ROOM_THREAD)

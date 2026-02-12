@@ -4,6 +4,17 @@ import logging
 
 SOLIPLEX_LOGGER_NAME = "soliplex"
 
+AGUI_GET_ROOM = "get room agui"
+AGUI_GET_ROOM_THREAD = "get room agui thread"
+AGUI_GET_ROOM_THREAD_RUN = "get room agui thread run"
+AGUI_POST_ROOM = "post room agui"
+AGUI_POST_ROOM_THREAD = "post room agui thread"
+AGUI_POST_ROOM_THREAD_META = "post room agui thread meta"
+AGUI_POST_ROOM_THREAD_RUN = "post room agui thread run"
+AGUI_POST_ROOM_THREAD_RUN_META = "post room agui thread run meta"
+AGUI_POST_ROOM_THREAD_RUN_FEEDBACK = "post room agui thread run feedback"
+AGUI_DELETE_ROOM_THREAD = "delete room agui thread"
+
 AUTHN_LOGGER_NAME = "soliplex.authn"
 AUTHN_NO_AUTH_MODE = "soliplex server in no-auth mode"
 AUTHN_JWT_INVALID = "JWT validation failed"
