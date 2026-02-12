@@ -57,7 +57,7 @@ async def get_the_logger(
         extras["room_id"] = room_id
 
     return the_unauth_logger.bind(
-        name=loggers.SOLIPLEX_LOGGER_NAME,
+        loggers.SOLIPLEX_LOGGER_NAME,
         **extras,
     )
 

@@ -75,13 +75,13 @@ async def test_get_the_logger(w_room_id):
 
     if w_room_id:
         the_unauth_logger.bind.assert_called_once_with(
-            name=loggers.SOLIPLEX_LOGGER_NAME,
+            loggers.SOLIPLEX_LOGGER_NAME,
             claims=THE_USER_CLAIMS,
             room_id=ROOM_ID,
         )
     else:
         the_unauth_logger.bind.assert_called_once_with(
-            name=loggers.SOLIPLEX_LOGGER_NAME,
+            loggers.SOLIPLEX_LOGGER_NAME,
             claims=THE_USER_CLAIMS,
         )
 
