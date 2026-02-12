@@ -1,5 +1,6 @@
 import functools
 import pathlib
+import warnings
 from unittest import mock
 
 import pytest
@@ -165,9 +166,11 @@ async def test_add_custom_header(pp_cwd, gm_klass, w_already_tgm):
 def test_app_with_git_hash():
     app = mock.Mock(spec_set=["middleware"])
 
-    found = main.app_with_git_hash(app)
+    with warnings.catch_warnings(record=True) as logged:
+        found = main.app_with_git_hash(app)
 
     assert found is app
+    assert logged
 
     app.middleware.assert_called_once_with("http")
     (called,) = app.middleware.return_value.call_args_list
@@ -236,6 +239,69 @@ def test_create_app_with_explicit_overrides(
     app_with_git_hash.assert_called_once_with(
         app_with_session.return_value,
     )
+    app_with_session.assert_called_once_with(
+        app_with_cors.return_value,
+    )
+    app_with_cors.assert_called_once_with(
+        app_with_lifespan.return_value,
+    )
+    app_with_lifespan.assert_called_once_with(
+        curry_lifespan.return_value,
+    )
+    curry_lifespan.assert_called_once_with(
+        installation_path=EXPLICIT_INST_PATH,
+        no_auth_mode=w_no_auth_mode,
+        add_admin_user=w_add_admin_user,
+        log_config_file=w_log_config_file,
+    )
+
+
+@pytest.mark.parametrize("w_log_config_file", [None, LOG_CONFIG_FILE_PATH])
+@pytest.mark.parametrize("w_add_admin_user", [None, ADMIN_USER_EMAIL])
+@pytest.mark.parametrize("w_no_auth_mode", [False, True])
+def test_create_app_wo_explicit_overrides(
+    w_no_auth_mode,
+    w_add_admin_user,
+    w_log_config_file,
+):
+    kwargs = {}
+
+    if w_add_admin_user is not None:
+        kwargs["add_admin_user"] = w_add_admin_user
+
+    if w_log_config_file is not None:
+        kwargs["log_config_file"] = w_log_config_file
+
+    curry_lifespan = mock.Mock(spec_set=())
+    app_with_lifespan = mock.Mock(spec_set=())
+    app_with_cors = mock.Mock(spec_set=())
+    app_with_session = mock.Mock(spec_set=())
+    app_with_git_hash = mock.Mock(spec_set=())
+    app_with_soliplex_routers = mock.Mock(spec_set=())
+
+    with mock.patch.multiple(
+        "soliplex.main",
+        curry_lifespan=curry_lifespan,
+        app_with_lifespan=app_with_lifespan,
+        app_with_cors=app_with_cors,
+        app_with_session=app_with_session,
+        app_with_git_hash=app_with_git_hash,
+        app_with_soliplex_routers=app_with_soliplex_routers,
+    ):
+        found = main.create_app(
+            installation_path=EXPLICIT_INST_PATH,
+            no_auth_mode=w_no_auth_mode,
+            **kwargs,
+        )
+
+    assert found is app_with_soliplex_routers.return_value
+
+    app_with_soliplex_routers.assert_called_once_with(
+        app_with_session.return_value,
+    )
+
+    app_with_git_hash.assert_not_called()
+
     app_with_session.assert_called_once_with(
         app_with_cors.return_value,
     )

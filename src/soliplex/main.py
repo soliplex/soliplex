@@ -6,6 +6,7 @@ import os
 import pathlib
 import sys
 import typing
+import warnings
 
 import fastapi
 import uvicorn
@@ -94,6 +95,14 @@ async def add_custom_header(request: fastapi.Request, call_next):
 
 
 def app_with_git_hash(app: fastapi.FastAPI) -> fastapi.FastAPI:
+    # The direct caller is likely 'create_app' below: use 'stacklevel=3'
+    # to get *its* caller.
+    warnings.warn(
+        "'soliplex.main.app_with_git_hash' is deprecated, and will be "
+        "removed after version 0.43.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
     app.middleware("http")(add_custom_header)
 
     return app
@@ -119,19 +128,32 @@ def create_app(
     no_auth_mode: bool,
     log_config_file: str = None,
     add_admin_user: str = None,
-    register_metaconfigs=register_metaconfigs,
-    curry_lifespan=curry_lifespan,
-    app_with_lifespan=app_with_lifespan,
-    app_with_cors=app_with_cors,
-    app_with_session=app_with_session,
-    app_with_git_hash=app_with_git_hash,
-    app_with_soliplex_routers=app_with_soliplex_routers,
+    register_metaconfigs=None,
+    curry_lifespan=None,
+    app_with_lifespan=None,
+    app_with_cors=None,
+    app_with_session=None,
+    app_with_git_hash=None,  # deprecated
+    app_with_soliplex_routers=None,
 ):
     """Construct the Soliplex FastAPI application
 
     Callers may override any of the component functions in this module
     via parameters.
     """
+    globs = globals()
+
+    register_metaconfigs = (
+        register_metaconfigs or globs["register_metaconfigs"]
+    )
+    curry_lifespan = curry_lifespan or globs["curry_lifespan"]
+    app_with_lifespan = app_with_lifespan or globs["app_with_lifespan"]
+    app_with_cors = app_with_cors or globs["app_with_cors"]
+    app_with_session = app_with_session or globs["app_with_session"]
+    app_with_soliplex_routers = (
+        app_with_soliplex_routers or globs["app_with_soliplex_routers"]
+    )
+
     register_metaconfigs()
 
     curried_lifespan = curry_lifespan(
@@ -143,7 +165,10 @@ def create_app(
     app = app_with_lifespan(curried_lifespan)
     app = app_with_cors(app)
     app = app_with_session(app)
-    app = app_with_git_hash(app)
+
+    if app_with_git_hash is not None:
+        app = app_with_git_hash(app)
+
     app = app_with_soliplex_routers(app)
 
     return app
