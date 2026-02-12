@@ -4,7 +4,7 @@ from unittest import mock
 import pytest
 import yaml
 from haiku.rag.agents import chat as hr_agents_chat
-from haiku.rag.agents.chat import state as hr_agents_chat_state
+from haiku.rag.tools import context as hr_tools_context
 
 from soliplex import agents
 from soliplex import config
@@ -51,6 +51,16 @@ background_context: |
     {BACKGROUND_CONTEXT}
 """
 
+W_FEATURES_AGENT_CONFIG_KW = W_RAG_STEM_CHAT_AGENT_CONFIG_KW | {
+    "features": ["search", "qa"],
+}
+W_FEATURES_AGENT_CONFIG_YAML = f"""\
+{W_RAG_STEM_CHAT_AGENT_CONFIG_YAML}
+features:
+    - search
+    - qa
+"""
+
 W_BOGUS_TEMPLATE_ID_CHAT_AGENT_CONFIG_YAML = f"""
 id: "{AGENT_ID}"
 template_id: "{BOGUS_TEMPLATE_AGENT_ID}"
@@ -74,102 +84,70 @@ template_id: "{TEMPLATE_AGENT_ID}"
 
 
 @pytest.fixture
-def mock_installation_config():
-    ic = mock.MagicMock(spec=config.InstallationConfig)
-    ic.haiku_rag_config = mock.MagicMock()
-    ic.get_environment.return_value = RAG_BASE_PATH
-    return ic
+def mock_deps():
+    deps = mock.MagicMock(spec=agents.AgentDependencies)
+    deps.thread_id = "test-thread"
+    deps.state = {}
+    return deps
 
 
 @pytest.fixture
-def factory_agent_config(mock_installation_config):
-    ac = mock.MagicMock(spec=config.FactoryAgentConfig)
-    ac.kind = "factory"
-    ac.id = ROOM_ID
-    ac._installation_config = mock_installation_config
-    ac.extra_config = {"rag_lancedb_stem": RAG_LANCEDB_STEM}
-    return ac
-
-
-@pytest.fixture
-def factory_agent_config_w_override(mock_installation_config):
-    ac = mock.MagicMock(spec=config.FactoryAgentConfig)
-    ac.kind = "factory"
-    ac.id = ROOM_ID
-    ac._installation_config = mock_installation_config
-    ac.extra_config = {"rag_lancedb_override_path": RAG_DB_PATH}
-    return ac
-
-
-@mock.patch("soliplex.haiku_chat.hr_agents_chat_agent")
-def test_chat_agent_factory_w_stem(
-    hr_agents_chat_agent,
-    factory_agent_config,
-    mock_installation_config,
-):
-    mock_agent = mock.MagicMock()
-    hr_agents_chat_agent.create_chat_agent.return_value = mock_agent
-
-    result = haiku_chat.chat_agent_factory(
-        agent_config=factory_agent_config,
-        tool_configs={},
-        mcp_client_toolset_configs={},
-    )
-
-    assert isinstance(result, haiku_chat.ChatAgentWrapper)
-    assert result.agent is mock_agent
-    assert result.config is mock_installation_config.haiku_rag_config
-    assert result.db_path == (
-        pathlib.Path(RAG_BASE_PATH) / f"{RAG_LANCEDB_STEM}.lancedb"
-    )
-
-    hr_agents_chat_agent.create_chat_agent.assert_called_once_with(
-        mock_installation_config.haiku_rag_config
-    )
-
-
-@mock.patch("soliplex.haiku_chat.hr_agents_chat_agent")
-def test_chat_agent_factory_w_override_path(
-    hr_agents_chat_agent,
-    factory_agent_config_w_override,
-    mock_installation_config,
-):
-    mock_agent = mock.MagicMock()
-    hr_agents_chat_agent.create_chat_agent.return_value = mock_agent
-
-    result = haiku_chat.chat_agent_factory(
-        agent_config=factory_agent_config_w_override,
-        tool_configs={},
-        mcp_client_toolset_configs={},
-    )
-
-    assert isinstance(result, haiku_chat.ChatAgentWrapper)
-    assert result.db_path == pathlib.Path(RAG_DB_PATH)
-
-
-@pytest.mark.asyncio
-@mock.patch("soliplex.haiku_chat.hr_client")
-async def test_chat_agent_wrapper_run_stream_events_wo_state(hr_client):
-    mock_agent = mock.MagicMock()
-    mock_config = mock.MagicMock()
-    mock_client = mock.MagicMock()
-
-    hr_client.HaikuRAG.return_value.__aenter__.return_value = mock_client
+def mock_agent():
+    agent = mock.MagicMock()
 
     async def mock_events():
         yield "event1"
         yield "event2"
 
-    mock_agent.run_stream_events.return_value = mock_events()
+    agent.run_stream_events.return_value = mock_events()
+    return agent
+
+
+@pytest.fixture
+def state_capturer():
+    """Creates a ChatDeps stand-in that captures state assignments."""
+    captured = []
+
+    def make(real_cls):
+        class _Capturer:
+            def __init__(self, **kwargs):
+                self._real = real_cls(**kwargs)
+
+            def __getattr__(self, name):  # pragma: NO COVER
+                return getattr(self._real, name)
+
+            @property
+            def state(self):  # pragma: NO COVER
+                return self._real.state
+
+            @state.setter
+            def state(self, value):
+                captured.append(value)
+                self._real.state = value
+
+        return _Capturer
+
+    return make, captured
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.hr_agents_chat_agent")
+@mock.patch("soliplex.haiku_chat.hr_client")
+async def test_wrapper_run_stream_events_wo_state(
+    hr_client,
+    hr_agents_chat_agent,
+    mock_deps,
+    mock_agent,
+):
+    mock_config = mock.MagicMock()
+    mock_client = mock.MagicMock()
+    hr_client.HaikuRAG.return_value.__aenter__.return_value = mock_client
+    hr_agents_chat_agent.create_chat_agent.return_value = mock_agent
 
     wrapper = haiku_chat.ChatAgentWrapper(
-        agent=mock_agent,
         config=mock_config,
         db_path=pathlib.Path(RAG_DB_PATH),
     )
-
-    mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
-    mock_deps.state = {}
 
     events = []
     async for event in wrapper.run_stream_events(
@@ -185,45 +163,47 @@ async def test_chat_agent_wrapper_run_stream_events_wo_state(hr_client):
         config=mock_config,
     )
 
+    hr_agents_chat_agent.create_chat_agent.assert_called_once_with(
+        mock_config,
+        mock_client,
+        mock.ANY,
+        features=None,
+    )
+
     call_kwargs = mock_agent.run_stream_events.call_args.kwargs
     assert call_kwargs["message_history"] == []
-    chat_deps = call_kwargs["deps"]
-    assert chat_deps.client is mock_client
-    assert chat_deps.config is mock_config
-    assert chat_deps.session_state is not None
-    # session_id starts empty, assigned by agent layer
-    assert chat_deps.session_state.session_id == ""
+
+    hr_agents_chat_agent.ChatDeps.assert_called_once_with(
+        config=mock_config,
+        tool_context=mock.ANY,
+        state_key=haiku_chat.AGUI_STATE_KEY,
+    )
 
 
 @pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.hr_agents_chat_agent")
 @mock.patch("soliplex.haiku_chat.hr_client")
-async def test_chat_agent_wrapper_run_stream_events_w_state(hr_client):
-    mock_agent = mock.MagicMock()
+async def test_wrapper_run_stream_events_w_state(
+    hr_client,
+    hr_agents_chat_agent,
+    mock_deps,
+    mock_agent,
+):
     mock_config = mock.MagicMock()
     mock_client = mock.MagicMock()
-
     hr_client.HaikuRAG.return_value.__aenter__.return_value = mock_client
-
-    async def mock_events():
-        yield "event1"
-
-    mock_agent.run_stream_events.return_value = mock_events()
+    hr_agents_chat_agent.create_chat_agent.return_value = mock_agent
 
     wrapper = haiku_chat.ChatAgentWrapper(
-        agent=mock_agent,
         config=mock_config,
         db_path=pathlib.Path(RAG_DB_PATH),
     )
 
-    existing_state = hr_agents_chat_state.ChatSessionState(
-        session_id="test-session",
-        citations=[],
-        qa_history=[],
-    )
-
-    mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
     mock_deps.state = {
-        hr_agents_chat.AGUI_STATE_KEY: existing_state.model_dump(),
+        hr_agents_chat.AGUI_STATE_KEY: {
+            "citations": [],
+            "qa_history": [],
+        },
     }
 
     events = []
@@ -233,33 +213,31 @@ async def test_chat_agent_wrapper_run_stream_events_w_state(hr_client):
     ):
         events.append(event)
 
-    call_kwargs = mock_agent.run_stream_events.call_args.kwargs
-    chat_deps = call_kwargs["deps"]
-    assert chat_deps.session_state.session_id == "test-session"
+    hr_agents_chat_agent.ChatDeps.assert_called_once_with(
+        config=mock_config,
+        tool_context=mock.ANY,
+        state_key=haiku_chat.AGUI_STATE_KEY,
+    )
 
 
 @pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.hr_agents_chat_agent")
 @mock.patch("soliplex.haiku_chat.hr_client")
-async def test_chat_agent_wrapper_passes_kwargs(hr_client):
-    mock_agent = mock.MagicMock()
+async def test_wrapper_passes_kwargs(
+    hr_client,
+    hr_agents_chat_agent,
+    mock_deps,
+    mock_agent,
+):
     mock_config = mock.MagicMock()
     mock_client = mock.MagicMock()
-
     hr_client.HaikuRAG.return_value.__aenter__.return_value = mock_client
-
-    async def mock_events():
-        yield "event"
-
-    mock_agent.run_stream_events.return_value = mock_events()
+    hr_agents_chat_agent.create_chat_agent.return_value = mock_agent
 
     wrapper = haiku_chat.ChatAgentWrapper(
-        agent=mock_agent,
         config=mock_config,
         db_path=pathlib.Path(RAG_DB_PATH),
     )
-
-    mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
-    mock_deps.state = {}
 
     mock_output_type = mock.MagicMock()
     mock_message_history = [mock.MagicMock()]
@@ -283,122 +261,109 @@ async def test_chat_agent_wrapper_passes_kwargs(hr_client):
 
 
 @pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.hr_agents_chat_agent")
 @mock.patch("soliplex.haiku_chat.hr_client")
-async def test_chat_agent_wrapper_passes_state_key(hr_client):
-    """Test that state_key is passed to ChatDeps."""
-    mock_agent = mock.MagicMock()
+async def test_wrapper_passes_features(
+    hr_client,
+    hr_agents_chat_agent,
+    mock_deps,
+    mock_agent,
+):
     mock_config = mock.MagicMock()
     mock_client = mock.MagicMock()
-
     hr_client.HaikuRAG.return_value.__aenter__.return_value = mock_client
-
-    async def mock_events():
-        yield "event"
-
-    mock_agent.run_stream_events.return_value = mock_events()
-
-    wrapper = haiku_chat.ChatAgentWrapper(
-        agent=mock_agent,
-        config=mock_config,
-        db_path=pathlib.Path(RAG_DB_PATH),
-    )
-
-    mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
-    mock_deps.state = {}
-
-    events = []
-    async for event in wrapper.run_stream_events(
-        message_history=[],
-        deps=mock_deps,
-    ):
-        events.append(event)
-
-    call_kwargs = mock_agent.run_stream_events.call_args.kwargs
-    chat_deps = call_kwargs["deps"]
-    assert chat_deps.state_key == hr_agents_chat.AGUI_STATE_KEY
-
-
-def test_resolve_db_path_w_override(mock_installation_config):
-    extra_config = {"rag_lancedb_override_path": RAG_DB_PATH}
-    result = haiku_chat._resolve_db_path(
-        extra_config, mock_installation_config
-    )
-    assert result == pathlib.Path(RAG_DB_PATH)
-
-
-def test_resolve_db_path_w_stem(mock_installation_config):
-    extra_config = {"rag_lancedb_stem": RAG_LANCEDB_STEM}
-    result = haiku_chat._resolve_db_path(
-        extra_config, mock_installation_config
-    )
-    assert result == (
-        pathlib.Path(RAG_BASE_PATH) / f"{RAG_LANCEDB_STEM}.lancedb"
-    )
-
-
-def test_resolve_db_path_w_default_stem(mock_installation_config):
-    extra_config = {}
-    result = haiku_chat._resolve_db_path(
-        extra_config, mock_installation_config
-    )
-    assert result == pathlib.Path(RAG_BASE_PATH) / "rag.lancedb"
-
-
-@mock.patch("soliplex.haiku_chat.hr_agents_chat_agent")
-def test_chat_agent_factory_extracts_background_context(
-    hr_agents_chat_agent,
-    mock_installation_config,
-):
-    """Test that factory extracts background_context from extra_config."""
-    mock_agent = mock.MagicMock()
     hr_agents_chat_agent.create_chat_agent.return_value = mock_agent
 
-    ac = mock.MagicMock(spec=config.FactoryAgentConfig)
-    ac.kind = "factory"
-    ac.id = ROOM_ID
-    ac._installation_config = mock_installation_config
-    ac.extra_config = {
-        "rag_lancedb_stem": RAG_LANCEDB_STEM,
-        "background_context": "Focus on medical regulations.",
-    }
-
-    result = haiku_chat.chat_agent_factory(
-        agent_config=ac,
-        tool_configs={},
-        mcp_client_toolset_configs={},
+    wrapper = haiku_chat.ChatAgentWrapper(
+        config=mock_config,
+        db_path=pathlib.Path(RAG_DB_PATH),
+        features=["search", "qa"],
     )
 
-    assert result.background_context == "Focus on medical regulations."
+    events = []
+    async for event in wrapper.run_stream_events(
+        message_history=[],
+        deps=mock_deps,
+    ):
+        events.append(event)
+
+    hr_agents_chat_agent.create_chat_agent.assert_called_once_with(
+        mock_config,
+        mock_client,
+        mock.ANY,
+        features=["search", "qa"],
+    )
 
 
 @pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.hr_agents_chat_agent")
 @mock.patch("soliplex.haiku_chat.hr_client")
-async def test_chat_agent_wrapper_sets_initial_context_from_background(
+async def test_wrapper_sets_background_context(
     hr_client,
+    hr_agents_chat_agent,
+    mock_deps,
+    mock_agent,
+    state_capturer,
 ):
-    """Test that background_context sets initial_context on session state."""
-    mock_agent = mock.MagicMock()
+    """background_context injects initial_context into state."""
     mock_config = mock.MagicMock()
     mock_client = mock.MagicMock()
-
     hr_client.HaikuRAG.return_value.__aenter__.return_value = mock_client
+    hr_agents_chat_agent.create_chat_agent.return_value = mock_agent
 
-    async def mock_events():
-        yield "event"
-
-    mock_agent.run_stream_events.return_value = mock_events()
+    make_capturer, captured = state_capturer
+    hr_agents_chat_agent.ChatDeps = make_capturer(
+        hr_agents_chat_agent.ChatDeps,
+    )
 
     wrapper = haiku_chat.ChatAgentWrapper(
-        agent=mock_agent,
         config=mock_config,
         db_path=pathlib.Path(RAG_DB_PATH),
         background_context="Configured context from room.",
     )
 
-    existing_state = hr_agents_chat_state.ChatSessionState()
-    mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
+    events = []
+    async for event in wrapper.run_stream_events(
+        message_history=[],
+        deps=mock_deps,
+    ):
+        events.append(event)
+
+    chat_state = captured[0].get(haiku_chat.AGUI_STATE_KEY, {})
+    assert chat_state.get("initial_context") == "Configured context from room."
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.hr_agents_chat_agent")
+@mock.patch("soliplex.haiku_chat.hr_client")
+async def test_wrapper_does_not_override_existing_initial_context(
+    hr_client,
+    hr_agents_chat_agent,
+    mock_deps,
+    mock_agent,
+    state_capturer,
+):
+    """Existing initial_context is preserved over background_context."""
+    mock_config = mock.MagicMock()
+    mock_client = mock.MagicMock()
+    hr_client.HaikuRAG.return_value.__aenter__.return_value = mock_client
+    hr_agents_chat_agent.create_chat_agent.return_value = mock_agent
+
+    make_capturer, captured = state_capturer
+    hr_agents_chat_agent.ChatDeps = make_capturer(
+        hr_agents_chat_agent.ChatDeps,
+    )
+
+    wrapper = haiku_chat.ChatAgentWrapper(
+        config=mock_config,
+        db_path=pathlib.Path(RAG_DB_PATH),
+        background_context="Configured context from room.",
+    )
+
     mock_deps.state = {
-        hr_agents_chat.AGUI_STATE_KEY: existing_state.model_dump(),
+        hr_agents_chat.AGUI_STATE_KEY: {
+            "initial_context": "Existing context.",
+        },
     }
 
     events = []
@@ -408,44 +373,117 @@ async def test_chat_agent_wrapper_sets_initial_context_from_background(
     ):
         events.append(event)
 
-    call_kwargs = mock_agent.run_stream_events.call_args.kwargs
-    chat_deps = call_kwargs["deps"]
-    assert chat_deps.session_state.initial_context == (
-        "Configured context from room."
-    )
+    # background_context used setdefault, so existing initial_context wins
+    chat_state = captured[0].get(haiku_chat.AGUI_STATE_KEY, {})
+    assert chat_state.get("initial_context") == "Existing context."
 
 
 @pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.hr_agents_chat_agent")
 @mock.patch("soliplex.haiku_chat.hr_client")
-async def test_chat_agent_wrapper_does_not_override_existing_initial_context(
+async def test_wrapper_uses_thread_id_for_context_cache(
     hr_client,
+    hr_agents_chat_agent,
+    mock_deps,
+    mock_agent,
 ):
-    """Test that existing initial_context is not overwritten by background."""
-    mock_agent = mock.MagicMock()
+    """ToolContextCache is keyed by thread_id from deps."""
     mock_config = mock.MagicMock()
     mock_client = mock.MagicMock()
-
     hr_client.HaikuRAG.return_value.__aenter__.return_value = mock_client
+    hr_agents_chat_agent.create_chat_agent.return_value = mock_agent
 
-    async def mock_events():
-        yield "event"
-
-    mock_agent.run_stream_events.return_value = mock_events()
+    mock_cache = mock.MagicMock(spec=hr_tools_context.ToolContextCache)
+    mock_context = mock.MagicMock(spec=hr_tools_context.ToolContext)
+    mock_cache.get_or_create.return_value = (mock_context, True)
 
     wrapper = haiku_chat.ChatAgentWrapper(
-        agent=mock_agent,
         config=mock_config,
         db_path=pathlib.Path(RAG_DB_PATH),
-        background_context="Configured context from room.",
+        _context_cache=mock_cache,
     )
 
-    existing_state = hr_agents_chat_state.ChatSessionState(
-        initial_context="Existing context.",
+    mock_deps.thread_id = "my-thread-123"
+
+    events = []
+    async for event in wrapper.run_stream_events(
+        message_history=[],
+        deps=mock_deps,
+    ):
+        events.append(event)
+
+    mock_cache.get_or_create.assert_called_once_with("my-thread-123")
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.hr_agents_chat_agent")
+@mock.patch("soliplex.haiku_chat.hr_client")
+async def test_wrapper_defaults_thread_id_when_none(
+    hr_client,
+    hr_agents_chat_agent,
+    mock_deps,
+    mock_agent,
+):
+    """When thread_id is None, defaults to 'default'."""
+    mock_config = mock.MagicMock()
+    mock_client = mock.MagicMock()
+    hr_client.HaikuRAG.return_value.__aenter__.return_value = mock_client
+    hr_agents_chat_agent.create_chat_agent.return_value = mock_agent
+
+    mock_cache = mock.MagicMock(spec=hr_tools_context.ToolContextCache)
+    mock_context = mock.MagicMock(spec=hr_tools_context.ToolContext)
+    mock_cache.get_or_create.return_value = (mock_context, True)
+
+    wrapper = haiku_chat.ChatAgentWrapper(
+        config=mock_config,
+        db_path=pathlib.Path(RAG_DB_PATH),
+        _context_cache=mock_cache,
     )
 
-    mock_deps = mock.MagicMock(spec=agents.AgentDependencies)
+    mock_deps.thread_id = None
+
+    events = []
+    async for event in wrapper.run_stream_events(
+        message_history=[],
+        deps=mock_deps,
+    ):
+        events.append(event)
+
+    mock_cache.get_or_create.assert_called_once_with("default")
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.hr_agents_chat_agent")
+@mock.patch("soliplex.haiku_chat.hr_client")
+async def test_wrapper_translates_document_filter(
+    hr_client,
+    hr_agents_chat_agent,
+    mock_deps,
+    mock_agent,
+    state_capturer,
+):
+    """Document IDs from filter_documents are translated to names."""
+    mock_config = mock.MagicMock()
+    mock_client = mock.MagicMock()
+    hr_client.HaikuRAG.return_value.__aenter__.return_value = mock_client
+    hr_agents_chat_agent.create_chat_agent.return_value = mock_agent
+
+    mock_doc = mock.MagicMock()
+    mock_doc.title = "My Document"
+    mock_client.get_document_by_id = mock.AsyncMock(return_value=mock_doc)
+
+    make_capturer, captured = state_capturer
+    hr_agents_chat_agent.ChatDeps = make_capturer(
+        hr_agents_chat_agent.ChatDeps,
+    )
+
+    wrapper = haiku_chat.ChatAgentWrapper(
+        config=mock_config,
+        db_path=pathlib.Path(RAG_DB_PATH),
+    )
+
     mock_deps.state = {
-        hr_agents_chat.AGUI_STATE_KEY: existing_state.model_dump(),
+        "filter_documents": {"document_ids": ["doc-id-1"]},
     }
 
     events = []
@@ -455,9 +493,121 @@ async def test_chat_agent_wrapper_does_not_override_existing_initial_context(
     ):
         events.append(event)
 
-    call_kwargs = mock_agent.run_stream_events.call_args.kwargs
-    chat_deps = call_kwargs["deps"]
-    assert chat_deps.session_state.initial_context == "Existing context."
+    mock_client.get_document_by_id.assert_called_once_with("doc-id-1")
+
+    assert len(captured) == 1
+    chat_state = captured[0].get(haiku_chat.AGUI_STATE_KEY, {})
+    assert chat_state.get("document_filter") == ["My Document"]
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.hr_agents_chat_agent")
+@mock.patch("soliplex.haiku_chat.hr_client")
+async def test_wrapper_skips_filter_w_empty_doc_ids(
+    hr_client,
+    hr_agents_chat_agent,
+    mock_deps,
+    mock_agent,
+):
+    """Empty document_ids results in no document_filter."""
+    mock_config = mock.MagicMock()
+    mock_client = mock.MagicMock()
+    hr_client.HaikuRAG.return_value.__aenter__.return_value = mock_client
+    hr_agents_chat_agent.create_chat_agent.return_value = mock_agent
+
+    mock_client.get_document_by_id = mock.AsyncMock()
+
+    wrapper = haiku_chat.ChatAgentWrapper(
+        config=mock_config,
+        db_path=pathlib.Path(RAG_DB_PATH),
+    )
+
+    mock_deps.state = {
+        "filter_documents": {"document_ids": []},
+    }
+
+    events = []
+    async for event in wrapper.run_stream_events(
+        message_history=[],
+        deps=mock_deps,
+    ):
+        events.append(event)
+
+    mock_client.get_document_by_id.assert_not_called()
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.hr_agents_chat_agent")
+@mock.patch("soliplex.haiku_chat.hr_client")
+async def test_wrapper_filter_skips_missing_documents(
+    hr_client,
+    hr_agents_chat_agent,
+    mock_deps,
+    mock_agent,
+    state_capturer,
+):
+    """Documents that return None are skipped in the filter."""
+    mock_config = mock.MagicMock()
+    mock_client = mock.MagicMock()
+    hr_client.HaikuRAG.return_value.__aenter__.return_value = mock_client
+    hr_agents_chat_agent.create_chat_agent.return_value = mock_agent
+
+    mock_client.get_document_by_id = mock.AsyncMock(return_value=None)
+
+    make_capturer, captured = state_capturer
+    hr_agents_chat_agent.ChatDeps = make_capturer(
+        hr_agents_chat_agent.ChatDeps,
+    )
+
+    wrapper = haiku_chat.ChatAgentWrapper(
+        config=mock_config,
+        db_path=pathlib.Path(RAG_DB_PATH),
+    )
+
+    mock_deps.state = {
+        "filter_documents": {"document_ids": ["bad-id"]},
+    }
+
+    events = []
+    async for event in wrapper.run_stream_events(
+        message_history=[],
+        deps=mock_deps,
+    ):
+        events.append(event)
+
+    # Missing doc should result in no document_filter
+    assert len(captured) == 1
+    chat_state = captured[0].get(haiku_chat.AGUI_STATE_KEY, {})
+    assert "document_filter" not in chat_state
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.haiku_chat.hr_agents_chat_agent")
+@mock.patch("soliplex.haiku_chat.hr_client")
+async def test_wrapper_triggers_background_summarization(
+    hr_client,
+    hr_agents_chat_agent,
+    mock_deps,
+    mock_agent,
+):
+    mock_config = mock.MagicMock()
+    mock_client = mock.MagicMock()
+    hr_client.HaikuRAG.return_value.__aenter__.return_value = mock_client
+    hr_agents_chat_agent.create_chat_agent.return_value = mock_agent
+
+    wrapper = haiku_chat.ChatAgentWrapper(
+        config=mock_config,
+        db_path=pathlib.Path(RAG_DB_PATH),
+    )
+
+    events = []
+    async for event in wrapper.run_stream_events(
+        message_history=[],
+        deps=mock_deps,
+    ):
+        events.append(event)
+
+    hr_agents_chat_agent.trigger_background_summarization.assert_called_once()
 
 
 @pytest.fixture
@@ -480,6 +630,10 @@ def installation_config():
         (
             W_BKG_CONTEXT_AGENT_CONFIG_YAML,
             W_BKG_CONTEXT_AGENT_CONFIG_KW.copy(),
+        ),
+        (
+            W_FEATURES_AGENT_CONFIG_YAML,
+            W_FEATURES_AGENT_CONFIG_KW.copy(),
         ),
         (W_BOGUS_TEMPLATE_ID_CHAT_AGENT_CONFIG_YAML, None),
         (
@@ -569,6 +723,7 @@ def test_chatagentconfig_agui_feature_names(ctor_kw):
         W_RAG_STEM_CHAT_AGENT_CONFIG_KW.copy(),
         W_RAG_OVR_CHAT_AGENT_CONFIG_KW.copy(),
         W_BKG_CONTEXT_AGENT_CONFIG_KW.copy(),
+        W_FEATURES_AGENT_CONFIG_KW.copy(),
         W_TEMPLATE_ID_W_STEM_CHAT_AGENT_CONFIG_KW.copy(),
         W_TEMPLATE_ID_W_OVR_CHAT_AGENT_CONFIG_KW.copy(),
     ],
@@ -592,9 +747,7 @@ def test_chatagentconfig_as_yaml(ctor_kw):
         W_BKG_CONTEXT_AGENT_CONFIG_KW.copy(),
     ],
 )
-@mock.patch("soliplex.haiku_chat.hr_agents_chat_agent")
 def test_chatagentconfig_factory(
-    hr_agents_chat_agent,
     temp_dir,
     ctor_kw,
 ):
@@ -622,11 +775,31 @@ def test_chatagentconfig_factory(
 
     assert isinstance(found, haiku_chat.ChatAgentWrapper)
 
-    assert found.agent is hr_agents_chat_agent.create_chat_agent.return_value
     assert found.config is i_config.haiku_rag_config
     assert found.db_path == rag_path.resolve()
     assert found.background_context == cac.background_context
+    assert found.features == cac.features
 
-    hr_agents_chat_agent.create_chat_agent.assert_called_once_with(
-        i_config.haiku_rag_config
+
+def test_chatagentconfig_factory_with_features(temp_dir):
+    db_path = temp_dir / "db"
+    db_path.mkdir()
+    ic_enviro = {"RAG_LANCE_DB_PATH": str(db_path)}
+    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config.get_environment = ic_enviro.get
+
+    rag_path = db_path / f"{RAG_LANCEDB_STEM}.lancedb"
+    rag_path.mkdir(parents=True)
+
+    cac = haiku_chat.ChatAgentConfig(
+        id=AGENT_ID,
+        rag_lancedb_stem=RAG_LANCEDB_STEM,
+        features=["search", "qa"],
+        _installation_config=i_config,
+        _config_path=temp_dir / "test.yaml",
     )
+
+    found = cac.factory()
+
+    assert isinstance(found, haiku_chat.ChatAgentWrapper)
+    assert found.features == ["search", "qa"]

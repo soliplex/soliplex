@@ -289,13 +289,13 @@ class Installation:
             the_logger=the_logger,
         )
 
-        kwargs = {}
+        thread_id = getattr(run_agent_input, "thread_id", None)
 
         return agents.AgentDependencies(
             the_installation=self,
             user=user,
             tool_configs=room_config.tool_configs,
-            **kwargs,
+            thread_id=thread_id,
         )
 
     async def get_agent_deps_for_completion(

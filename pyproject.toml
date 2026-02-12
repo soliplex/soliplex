@@ -22,7 +22,7 @@ dependencies = [
     "greenlet",
 
 
-    "haiku.rag-slim >= 0.29.1",
+    "haiku.rag-slim @ git+https://github.com/ggozad/haiku.rag.git@feat/reusable-toolsets#subdirectory=haiku_rag_slim",
 
     "itsdangerous",
     "jsonpatch",
