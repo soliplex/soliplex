@@ -1087,11 +1087,17 @@ async def test_get_the_installation():
     assert found is the_installation
 
 
+@pytest.mark.parametrize("w_disable_lc", [None, False, True])
 @pytest.mark.parametrize("w_logfire_config", [None, "bare", "ipydai", "ifapi"])
 @mock.patch("soliplex.installation.logfire")
-def test_apply_logfire_configuration(logfire, w_logfire_config):
+def test_apply_logfire_configuration(logfire, w_logfire_config, w_disable_lc):
     app = mock.Mock(spec_set=())
     the_installation = mock.Mock(spec_set=["logfire_config"])
+
+    kwargs = {}
+
+    if w_disable_lc is not None:
+        kwargs["disable_logfire_console"] = w_disable_lc
 
     if w_logfire_config is not None:
         logfire_config = mock.create_autospec(config.LogfireConfig)
@@ -1113,7 +1119,7 @@ def test_apply_logfire_configuration(logfire, w_logfire_config):
     else:
         the_installation.logfire_config = None
 
-    installation.apply_logfire_configuration(app, the_installation)
+    installation.apply_logfire_configuration(app, the_installation, **kwargs)
 
     if w_logfire_config is not None:
         logfire.configure.assert_called_once_with(
@@ -1133,6 +1139,7 @@ def test_apply_logfire_configuration(logfire, w_logfire_config):
     else:
         logfire.configure.assert_called_once_with(
             send_to_logfire="if-token-present",
+            console=not w_disable_lc,
         )
 
         logfire.instrument_pydantic_ai.assert_called_with()
@@ -1318,10 +1325,13 @@ root:
 
     if w_log_config_file is not None:
         lcdc.assert_called_once_with({"version": 1, "root": {"level": "INFO"}})
+        exp_lc_disable = True
     elif w_ic_logging_config is not None:
         lcdc.assert_called_once_with(w_ic_logging_config)
+        exp_lc_disable = True
     else:
         lcdc.assert_not_called()
+        exp_lc_disable = False
 
     if w_add_admin_user:
         (auaa_called,) = auaa.call_args_list
@@ -1336,6 +1346,6 @@ root:
     else:
         anauaa.assert_not_called()
 
-    alc.assert_called_once_with(app, the_installation)
+    alc.assert_called_once_with(app, the_installation, exp_lc_disable)
     srs.assert_called_once_with(the_installation._config.secrets)
     smfr.assert_called_once_with(the_installation)

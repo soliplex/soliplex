@@ -332,6 +332,7 @@ depend_the_installation = fastapi.Depends(get_the_installation)
 def apply_logfire_configuration(
     app: fastapi.FastAPI,
     the_installation: Installation,
+    disable_logfire_console=False,
 ):
     logfire_config = the_installation.logfire_config
 
@@ -363,7 +364,10 @@ def apply_logfire_configuration(
     else:
         # 'if-token-present' means nothing will be sent (and the example
         # will work) if you don't have logfire configured
-        logfire.configure(send_to_logfire="if-token-present")
+        logfire.configure(
+            send_to_logfire="if-token-present",
+            console=not disable_logfire_console,
+        )
         logfire.instrument_pydantic_ai()
         logfire.instrument_fastapi(app, capture_headers=True)
 
@@ -411,8 +415,11 @@ async def lifespan(
 
     if logging_config_dict is not None:
         logging_config.dictConfig(logging_config_dict)
+        disable_logfire_console = True
+    else:
+        disable_logfire_console = False
 
-    apply_logfire_configuration(app, the_installation)
+    apply_logfire_configuration(app, the_installation, disable_logfire_console)
 
     tp_engine = sqla_asyncio.create_async_engine(
         the_installation.thread_persistence_dburi_async
