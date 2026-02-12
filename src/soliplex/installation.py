@@ -364,10 +364,14 @@ def apply_logfire_configuration(
     else:
         # 'if-token-present' means nothing will be sent (and the example
         # will work) if you don't have logfire configured
-        logfire.configure(
-            send_to_logfire="if-token-present",
-            console=not disable_logfire_console,
-        )
+        logfire_kw = {
+            "send_to_logfire": "if-token-present",
+        }
+
+        if disable_logfire_console:
+            logfire_kw["console"] = False
+
+        logfire.configure(**logfire_kw)
         logfire.instrument_pydantic_ai()
         logfire.instrument_fastapi(app, capture_headers=True)
 

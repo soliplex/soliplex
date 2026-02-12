@@ -1137,10 +1137,15 @@ def test_apply_logfire_configuration(logfire, w_logfire_config, w_disable_lc):
                 qux="spam",
             )
     else:
-        logfire.configure.assert_called_once_with(
-            send_to_logfire="if-token-present",
-            console=not w_disable_lc,
-        )
+        if w_disable_lc:
+            logfire.configure.assert_called_once_with(
+                send_to_logfire="if-token-present",
+                console=False,
+            )
+        else:
+            logfire.configure.assert_called_once_with(
+                send_to_logfire="if-token-present",
+            )
 
         logfire.instrument_pydantic_ai.assert_called_with()
         logfire.instrument_fastapi.assert_called_with(
