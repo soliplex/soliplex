@@ -32,6 +32,8 @@ async def get_rooms(
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.ConfiguredRooms:
     """Return a manifest of the rooms available to the user"""
+    the_logger.debug(loggers.ROOM_GET_ROOMS)
+
     room_configs = await the_installation.get_room_configs(
         user=the_user_claims,
         the_authz_policy=the_authz_policy,
@@ -60,6 +62,8 @@ async def get_room(
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.Room:
     """Return a single room's configuration"""
+    the_logger.debug(loggers.ROOM_GET_ROOM)
+
     try:
         room_config = await the_installation.get_room_config(
             room_id=room_id,
@@ -68,9 +72,12 @@ async def get_room(
             the_logger=the_logger,
         )
     except KeyError:
+        # auth error logged in 'get_room_config'
+        # but this could be just a missing room
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=f"No such room: {room_id}",
+            detail=loggers.ROOM_UNKNOWN_ROOM_ID % room_id,
         ) from None
 
     return models.Room.from_config(room_config)
@@ -90,6 +97,8 @@ async def get_room_bg_image(
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> str:  # file path, converted to file response by FastAPI
     """Return a room's background image"""
+    the_logger.debug(loggers.ROOM_GET_ROOM_BG_IMAGE)
+
     try:
         room_config = await the_installation.get_room_config(
             room_id=room_id,
@@ -98,9 +107,12 @@ async def get_room_bg_image(
             the_logger=the_logger,
         )
     except KeyError:
+        # auth error logged in 'get_room_config'
+        # but this could be just a missing room
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=f"No such room: {room_id}",
+            detail=loggers.ROOM_UNKNOWN_ROOM_ID % room_id,
         ) from None
 
     logo_image = room_config.get_logo_image()
@@ -125,6 +137,8 @@ async def get_room_mcp_token(
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.MCPToken:
     """Return a token for use in an MCP client addressing the room"""
+    the_logger.debug(loggers.ROOM_GET_ROOM_MCP_TOKEN)
+
     try:
         _room_config = await the_installation.get_room_config(
             room_id=room_id,
@@ -132,10 +146,13 @@ async def get_room_mcp_token(
             the_authz_policy=the_authz_policy,
             the_logger=the_logger,
         )
-    except ValueError as e:
+    except KeyError:
+        # auth error logged in 'get_room_config'
+        # but this could be just a missing room
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=str(e),
+            detail=loggers.ROOM_UNKNOWN_ROOM_ID % room_id,
         ) from None
 
     secret = the_installation.get_secret("URL_SAFE_TOKEN_SECRET")
@@ -158,6 +175,8 @@ async def get_room_documents(
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.RoomDocuments:
     """Return a list of the documents in the room's RAG database"""
+    the_logger.debug(loggers.ROOM_GET_ROOM_DOCUMENTS)
+
     try:
         room_config = await the_installation.get_room_config(
             room_id=room_id,
@@ -166,9 +185,12 @@ async def get_room_documents(
             the_logger=the_logger,
         )
     except KeyError:
+        # auth error logged in 'get_room_config'
+        # but this could be just a missing room
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=f"No such room: {room_id}",
+            detail=loggers.ROOM_UNKNOWN_ROOM_ID % room_id,
         ) from None
 
     document_set = {}
@@ -213,6 +235,8 @@ async def get_chunk_visualization(
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.ChunkVisualization:
     """Return a set of page images for a chunk, highlighting the chunk text"""
+    the_logger.debug(loggers.ROOM_GET_CHUNK_VISUALIZATION)
+
     try:
         room_config = await the_installation.get_room_config(
             room_id=room_id,
@@ -221,9 +245,12 @@ async def get_chunk_visualization(
             the_logger=the_logger,
         )
     except KeyError:
+        # auth error logged in 'get_room_config'
+        # but this could be just a missing room
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=f"No such room: {room_id}",
+            detail=loggers.ROOM_UNKNOWN_ROOM_ID % room_id,
         ) from None
 
     images = None
@@ -245,8 +272,13 @@ async def get_chunk_visualization(
                 chunk = await rag.chunk_repository.get_by_id(chunk_id)
 
                 if not chunk:
+                    the_logger.error(
+                        loggers.ROOM_UNKNOWN_CHUNK_ID,
+                        chunk_id,
+                    )
                     raise fastapi.HTTPException(
-                        status_code=404, detail=f"Chunk not found: {chunk_id}"
+                        status_code=404,
+                        detail=loggers.ROOM_UNKNOWN_CHUNK_ID % chunk_id,
                     ) from None
 
                 images = await rag.visualize_chunk(chunk)
@@ -257,8 +289,10 @@ async def get_chunk_visualization(
     base64_images = []
 
     if not images:
+        the_logger.error(loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE, chunk_id)
         raise fastapi.HTTPException(
-            status_code=404, detail=f"Chunk images not available: {chunk_id}"
+            status_code=404,
+            detail=loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE % chunk_id,
         ) from None
 
     for img in images:

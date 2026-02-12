@@ -50,7 +50,15 @@ QUIZ_UNKNOWN_QUIZ_ID = "unknown quiz id: %s"
 QUIZ_POST_QUIZ_QUESTION = "post quiz question"
 QUIZ_UNKNOWN_QUESTION_UUID = "unknown question UUID: %s"
 
+ROOM_GET_ROOMS = "get rooms"
+ROOM_GET_ROOM = "get room"
+ROOM_GET_ROOM_BG_IMAGE = "get room bg image"
+ROOM_GET_ROOM_MCP_TOKEN = "get room mcp token"
+ROOM_GET_ROOM_DOCUMENTS = "get room documents"
+ROOM_GET_CHUNK_VISUALIZATION = "get chunk_visualization"
 ROOM_UNKNOWN_ROOM_ID = "unknown room id: %s"
+ROOM_CHUNK_IMAGES_NOT_AVAILALBE = "chunk images not available: %s"
+ROOM_UNKNOWN_CHUNK_ID = "unknown chunk id: %s"
 
 
 class LogWrapper:

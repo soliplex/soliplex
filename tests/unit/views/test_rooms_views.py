@@ -99,6 +99,7 @@ async def test_get_rooms(fc, room_configs):
         the_authz_policy=the_authz_policy,
         the_logger=the_logger,
     )
+    the_logger.debug.assert_called_once_with(loggers.ROOM_GET_ROOMS)
 
 
 @pytest.mark.anyio
@@ -130,7 +131,11 @@ async def test_get_room(fc, room_configs):
             )
 
         assert exc.value.status_code == 404
-        assert exc.value.detail == "No such room: foo"
+        assert exc.value.detail == loggers.ROOM_UNKNOWN_ROOM_ID % ROOM_ID
+        the_logger.exception.assert_called_once_with(
+            loggers.ROOM_UNKNOWN_ROOM_ID,
+            ROOM_ID,
+        )
 
     else:
         found = await rooms_views.get_room(
@@ -151,6 +156,7 @@ async def test_get_room(fc, room_configs):
         the_authz_policy=the_authz_policy,
         the_logger=the_logger,
     )
+    the_logger.debug.assert_called_once_with(loggers.ROOM_GET_ROOM)
 
 
 @pytest.mark.anyio
@@ -191,7 +197,10 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
             )
 
         assert exc.value.status_code == 404
-        assert exc.value.detail == "No such room: foo"
+        assert exc.value.detail == loggers.ROOM_UNKNOWN_ROOM_ID % ROOM_ID
+        the_logger.exception.assert_called_once_with(
+            loggers.ROOM_UNKNOWN_ROOM_ID, ROOM_ID
+        )
     else:
         if w_image:
             found = await rooms_views.get_room_bg_image(
@@ -217,6 +226,9 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
 
             assert exc.value.status_code == 404
             assert exc.value.detail == "No image for room"
+            # Note that we do *not* log this as an exception:  it
+            # is an expected condition for rooms without an image
+            # configured.
 
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
@@ -224,6 +236,7 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
         the_authz_policy=the_authz_policy,
         the_logger=the_logger,
     )
+    the_logger.debug.assert_called_once_with(loggers.ROOM_GET_ROOM_BG_IMAGE)
 
 
 @pytest.mark.anyio
@@ -241,7 +254,7 @@ async def test_get_room_mcp_token(gust, w_error):
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if w_error:
-        the_installation.get_room_config.side_effect = ValueError("testing")
+        the_installation.get_room_config.side_effect = KeyError("testing")
     else:
         the_installation.get_room_config.return_value = ROOM_CONFIG
 
@@ -257,6 +270,11 @@ async def test_get_room_mcp_token(gust, w_error):
             )
 
         assert exc.value.status_code == 404
+        assert exc.value.detail == loggers.ROOM_UNKNOWN_ROOM_ID % ROOM_ID
+        the_logger.exception.assert_called_once_with(
+            loggers.ROOM_UNKNOWN_ROOM_ID,
+            ROOM_ID,
+        )
 
     else:
         found = await rooms_views.get_room_mcp_token(
@@ -289,6 +307,7 @@ async def test_get_room_mcp_token(gust, w_error):
         the_authz_policy=the_authz_policy,
         the_logger=the_logger,
     )
+    the_logger.debug.assert_called_once_with(loggers.ROOM_GET_ROOM_MCP_TOKEN)
 
 
 @pytest.mark.anyio
@@ -351,7 +370,11 @@ async def test_get_room_documents(
             )
 
         assert exc.value.status_code == 404
-        assert exc.value.detail == "No such room: foo"
+        assert exc.value.detail == loggers.ROOM_UNKNOWN_ROOM_ID % ROOM_ID
+        the_logger.exception.assert_called_once_with(
+            loggers.ROOM_UNKNOWN_ROOM_ID,
+            ROOM_ID,
+        )
     else:
         found = await rooms_views.get_room_documents(
             request,
@@ -384,6 +407,7 @@ async def test_get_room_documents(
         the_authz_policy=the_authz_policy,
         the_logger=the_logger,
     )
+    the_logger.debug.assert_called_once_with(loggers.ROOM_GET_ROOM_DOCUMENTS)
 
 
 @pytest.mark.anyio
@@ -481,7 +505,11 @@ async def test_get_chunk_visualization(
             )
 
         assert exc.value.status_code == 404
-        assert exc.value.detail == "No such room: foo"
+        assert exc.value.detail == loggers.ROOM_UNKNOWN_ROOM_ID % ROOM_ID
+        the_logger.exception.assert_called_once_with(
+            loggers.ROOM_UNKNOWN_ROOM_ID,
+            ROOM_ID,
+        )
 
     elif w_hr_via is None:
         with pytest.raises(fastapi.HTTPException) as exc:
@@ -496,7 +524,12 @@ async def test_get_chunk_visualization(
             )
 
         assert exc.value.status_code == 404
-        assert exc.value.detail == f"Chunk images not available: {CHUNK_ID}"
+        assert exc.value.detail == (
+            loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE % CHUNK_ID
+        )
+        the_logger.error.assert_called_once_with(
+            loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE, CHUNK_ID
+        )
 
     elif not w_chunk:
         with pytest.raises(fastapi.HTTPException) as exc:
@@ -511,7 +544,10 @@ async def test_get_chunk_visualization(
             )
 
         assert exc.value.status_code == 404
-        assert exc.value.detail == f"Chunk not found: {CHUNK_ID}"
+        assert exc.value.detail == (loggers.ROOM_UNKNOWN_CHUNK_ID % CHUNK_ID)
+        the_logger.error.assert_called_once_with(
+            loggers.ROOM_UNKNOWN_CHUNK_ID, CHUNK_ID
+        )
 
     else:
         found = await rooms_views.get_chunk_visualization(
@@ -542,4 +578,7 @@ async def test_get_chunk_visualization(
         user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
         the_logger=the_logger,
+    )
+    the_logger.debug.assert_called_once_with(
+        loggers.ROOM_GET_CHUNK_VISUALIZATION,
     )
