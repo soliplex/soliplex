@@ -6,6 +6,7 @@ import pytest
 from soliplex import authz as authz_package
 from soliplex import config
 from soliplex import installation
+from soliplex import loggers
 from soliplex import models
 from soliplex import quizzes
 from soliplex.views import quizzes as quizzes_views
@@ -68,6 +69,7 @@ async def test_get_quiz(test_quiz, w_miss):
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if w_miss == "room":
         the_installation.get_room_config.side_effect = ValueError("no room")
@@ -80,6 +82,7 @@ async def test_get_quiz(test_quiz, w_miss):
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
+                the_logger=the_logger,
             )
 
         assert exc.value.status_code == 404
@@ -98,6 +101,7 @@ async def test_get_quiz(test_quiz, w_miss):
                     the_installation=the_installation,
                     the_authz_policy=the_authz_policy,
                     the_user_claims=THE_USER_CLAIMS,
+                    the_logger=the_logger,
                 )
 
             assert exc.value.status_code == 404
@@ -112,6 +116,7 @@ async def test_get_quiz(test_quiz, w_miss):
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
+                the_logger=the_logger,
             )
 
             expected = models.Quiz.from_config(test_quiz)
@@ -121,6 +126,7 @@ async def test_get_quiz(test_quiz, w_miss):
         room_id=TEST_ROOM_ID,
         user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
+        the_logger=the_logger,
     )
 
 
@@ -131,6 +137,7 @@ async def test_post_quiz_question(ca, test_quiz, w_miss):
     request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
     answer = models.QuizAnswer(text="Answer")
 
     if w_miss == "room":
@@ -146,6 +153,7 @@ async def test_post_quiz_question(ca, test_quiz, w_miss):
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
+                the_logger=the_logger,
             )
 
         assert exc.value.status_code == 404
@@ -166,6 +174,7 @@ async def test_post_quiz_question(ca, test_quiz, w_miss):
                     the_installation=the_installation,
                     the_authz_policy=the_authz_policy,
                     the_user_claims=THE_USER_CLAIMS,
+                    the_logger=the_logger,
                 )
 
             assert exc.value.status_code == 404
@@ -191,6 +200,7 @@ async def test_post_quiz_question(ca, test_quiz, w_miss):
                         the_installation=the_installation,
                         the_authz_policy=the_authz_policy,
                         the_user_claims=THE_USER_CLAIMS,
+                        the_logger=the_logger,
                     )
 
                 assert exc.value.status_code == 404
@@ -205,6 +215,7 @@ async def test_post_quiz_question(ca, test_quiz, w_miss):
                     the_installation=the_installation,
                     the_authz_policy=the_authz_policy,
                     the_user_claims=THE_USER_CLAIMS,
+                    the_logger=the_logger,
                 )
 
                 assert found is ca.return_value
@@ -219,4 +230,5 @@ async def test_post_quiz_question(ca, test_quiz, w_miss):
         room_id=TEST_ROOM_ID,
         user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
+        the_logger=the_logger,
     )

@@ -150,6 +150,7 @@ async def get_installation_authz(
         for room_id in await the_installation.get_room_configs(
             user=the_user_claims,
             the_authz_policy=the_authz_policy,
+            the_logger=the_authz_logger,
         )
     }
 

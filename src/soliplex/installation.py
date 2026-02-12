@@ -158,9 +158,13 @@ class Installation:
         *,
         user: dict,
         the_authz_policy: authz_package.AuthorizationPolicy = None,
+        the_logger: loggers.LogWrapper = None,
     ) -> dict[str, config.RoomConfig]:
         """Return room configs available to the user"""
-        logger = loggers.LogWrapper(loggers.AUTHZ_LOGGER_NAME, user=user)
+        if the_logger is None:
+            logger = loggers.LogWrapper(loggers.AUTHZ_LOGGER_NAME, user=user)
+        else:
+            logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME, user=user)
 
         configs = self._config.room_configs
 
@@ -187,13 +191,13 @@ class Installation:
         room_id: str,
         user: dict,
         the_authz_policy: authz_package.AuthorizationPolicy = None,
+        the_logger: loggers.LogWrapper = None,
     ) -> config.RoomConfig:
         """Return a room configs IFF available to the user"""
-        logger = loggers.LogWrapper(
-            loggers.AUTHZ_LOGGER_NAME,
-            user=user,
-            room_id=room_id,
-        )
+        if the_logger is None:
+            logger = loggers.LogWrapper(loggers.AUTHZ_LOGGER_NAME, user=user)
+        else:
+            logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME, user=user)
 
         if the_authz_policy is not None:
             if not await the_authz_policy.check_room_access(
@@ -238,11 +242,13 @@ class Installation:
         room_id: str,
         user: dict,
         the_authz_policy: authz_package.AuthorizationPolicy = None,
+        the_logger: loggers.LogWrapper = None,
     ) -> pydantic_ai.Agent:
         room_config = await self.get_room_config(
             room_id=room_id,
             user=user,
             the_authz_policy=the_authz_policy,
+            the_logger=the_logger,
         )
 
         return agents.get_agent_from_configs(
@@ -274,11 +280,13 @@ class Installation:
         user: dict,
         the_authz_policy: authz_package.AuthorizationPolicy = None,
         run_agent_input: agui_core.RunAgentInput = None,
+        the_logger: loggers.LogWrapper = None,
     ) -> pydantic_ai.Agent:
         room_config = await self.get_room_config(
             room_id=room_id,
             user=user,
             the_authz_policy=the_authz_policy,
+            the_logger=the_logger,
         )
 
         kwargs = {}

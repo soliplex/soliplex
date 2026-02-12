@@ -14,6 +14,7 @@ from soliplex import authn
 from soliplex import authz as authz_package
 from soliplex import config
 from soliplex import installation
+from soliplex import loggers
 from soliplex import models
 from soliplex import util
 from soliplex import views
@@ -25,6 +26,7 @@ depend_the_installation = installation.depend_the_installation
 depend_the_threads = agui_package.depend_the_threads
 depend_the_authz = authz_package.depend_the_authz_policy
 depend_the_user_claims = views.depend_the_user_claims
+depend_the_logger = views.depend_the_logger
 
 
 async def _check_user_in_room(
@@ -33,6 +35,7 @@ async def _check_user_in_room(
     the_installation: installation.Installation,
     the_authz_policy: authz_package.AuthorizationPolicy,
     the_user_claims: authn.UserClaims,
+    the_logger: loggers.LogWrapper,
 ) -> config.RoomConfig:
     """Check that the user has access to the given room.
 
@@ -45,6 +48,7 @@ async def _check_user_in_room(
             room_id=room_id,
             user=the_user_claims,
             the_authz_policy=the_authz_policy,
+            the_logger=the_logger,
         )
     except KeyError:
         raise fastapi.HTTPException(
@@ -61,6 +65,7 @@ async def _check_user_room_agent(
     the_installation: installation.Installation,
     the_authz_policy: authz_package.AuthorizationPolicy,
     the_user_claims: authn.UserClaims,
+    the_logger: loggers.LogWrapper,
 ) -> tuple[models.UserProfile, pydantic_ai.Agent]:
     """Check that the user has access to the given room.
 
@@ -73,6 +78,7 @@ async def _check_user_room_agent(
             room_id=room_id,
             user=the_user_claims,
             the_authz_policy=the_authz_policy,
+            the_logger=the_logger,
         )
     except KeyError:
         raise fastapi.HTTPException(
@@ -93,6 +99,7 @@ async def get_room_agui(
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.AGUI_Threads:
     """Return user's extant AGUI threads within the given room"""
     user_name = the_user_claims.get("preferred_username", "<unknown>")
@@ -101,6 +108,7 @@ async def get_room_agui(
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
         the_user_claims=the_user_claims,
+        the_logger=the_logger,
     )
     model_threads = []
     for a_thread in await the_threads.list_user_threads(
@@ -139,6 +147,7 @@ async def get_room_agui_thread_id(
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.AGUI_Thread:
     """Return metadata about a specific thread and its runs"""
     user_name = the_user_claims.get("preferred_username", "<unknown>")
@@ -147,6 +156,7 @@ async def get_room_agui_thread_id(
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
         the_user_claims=the_user_claims,
+        the_logger=the_logger,
     )
     try:
         thread = await the_threads.get_thread(
@@ -195,6 +205,7 @@ async def get_room_agui_thread_id_run_id(
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.AGUI_Run:
     """Return metadata about a specific run"""
     user_name = the_user_claims.get("preferred_username", "<unknown>")
@@ -203,6 +214,7 @@ async def get_room_agui_thread_id_run_id(
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
         the_user_claims=the_user_claims,
+        the_logger=the_logger,
     )
     try:
         run = await the_threads.get_run(
@@ -240,6 +252,7 @@ async def post_room_agui(
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.AGUI_Thread:
     """Create a new AGUI thread within the given room
 
@@ -253,6 +266,7 @@ async def post_room_agui(
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
         the_user_claims=the_user_claims,
+        the_logger=the_logger,
     )
 
     if new_thread_request.metadata is not None:
@@ -322,6 +336,7 @@ async def post_room_agui_thread_id(
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.AGUI_Run:
     """Create a new AGUI run for a thread within the given room
 
@@ -333,6 +348,7 @@ async def post_room_agui_thread_id(
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
         the_user_claims=the_user_claims,
+        the_logger=the_logger,
     )
 
     parent_run_id = new_run_request.parent_run_id
@@ -388,6 +404,7 @@ async def post_room_agui_thread_id_meta(
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> fastapi.Response:
     """Update metadata for a thread within the given room
 
@@ -403,6 +420,7 @@ async def post_room_agui_thread_id_meta(
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
         the_user_claims=the_user_claims,
+        the_logger=the_logger,
     )
 
     new_md_dict = {
@@ -484,6 +502,7 @@ async def post_room_agui_thread_id_run_id(
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> responses.StreamingResponse:
     """Execute an AGUI run
 
@@ -495,6 +514,7 @@ async def post_room_agui_thread_id_run_id(
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
         the_user_claims=the_user_claims,
+        the_logger=the_logger,
     )
 
     agui_adapter = await ai_ag_ui.AGUIAdapter.from_request(
@@ -521,6 +541,7 @@ async def post_room_agui_thread_id_run_id(
         room_id=room_id,
         user=user,
         run_agent_input=agui_adapter.run_input,
+        the_logger=the_logger,
     )
 
     async def finish_stream(result):
@@ -581,6 +602,7 @@ async def post_room_agui_thread_id_run_id_meta(
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> fastapi.Response:
     """Update metadata for a thread within the given room
 
@@ -596,6 +618,7 @@ async def post_room_agui_thread_id_run_id_meta(
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
         the_user_claims=the_user_claims,
+        the_logger=the_logger,
     )
 
     new_md_dict = {
@@ -636,6 +659,7 @@ async def post_room_agui_thread_id_run_id_feedback(
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> fastapi.Response:
     """Add / update feedback for a run
 
@@ -647,6 +671,7 @@ async def post_room_agui_thread_id_run_id_feedback(
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
         the_user_claims=the_user_claims,
+        the_logger=the_logger,
     )
 
     try:
@@ -678,6 +703,7 @@ async def delete_room_agui_thread_id(
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> fastapi.Response:
     """Delete an AGUI thread within the given room"""
     user_name = the_user_claims.get("preferred_username", "<unknown>")
@@ -686,6 +712,7 @@ async def delete_room_agui_thread_id(
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
         the_user_claims=the_user_claims,
+        the_logger=the_logger,
     )
     try:
         await the_threads.delete_thread(

@@ -8,6 +8,7 @@ from haiku.rag import client as rag_client
 from soliplex import authn
 from soliplex import authz as authz_package
 from soliplex import installation
+from soliplex import loggers
 from soliplex import mcp_auth
 from soliplex import models
 from soliplex import util
@@ -18,6 +19,7 @@ router = fastapi.APIRouter(tags=["rooms"])
 depend_the_installation = installation.depend_the_installation
 depend_the_authz = authz_package.depend_the_authz_policy
 depend_the_user_claims = views.depend_the_user_claims
+depend_the_logger = views.depend_the_logger
 
 
 @util.logfire_span("GET /v1/rooms")
@@ -27,11 +29,13 @@ async def get_rooms(
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.ConfiguredRooms:
     """Return a manifest of the rooms available to the user"""
     room_configs = await the_installation.get_room_configs(
         user=the_user_claims,
         the_authz_policy=the_authz_policy,
+        the_logger=the_logger,
     )
 
     def _key(item):
@@ -53,6 +57,7 @@ async def get_room(
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.Room:
     """Return a single room's configuration"""
     try:
@@ -60,6 +65,7 @@ async def get_room(
             room_id=room_id,
             user=the_user_claims,
             the_authz_policy=the_authz_policy,
+            the_logger=the_logger,
         )
     except KeyError:
         raise fastapi.HTTPException(
@@ -81,6 +87,7 @@ async def get_room_bg_image(
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> str:  # file path, converted to file response by FastAPI
     """Return a room's background image"""
     try:
@@ -88,6 +95,7 @@ async def get_room_bg_image(
             room_id=room_id,
             user=the_user_claims,
             the_authz_policy=the_authz_policy,
+            the_logger=the_logger,
         )
     except KeyError:
         raise fastapi.HTTPException(
@@ -114,6 +122,7 @@ async def get_room_mcp_token(
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.MCPToken:
     """Return a token for use in an MCP client addressing the room"""
     try:
@@ -121,6 +130,7 @@ async def get_room_mcp_token(
             room_id=room_id,
             user=the_user_claims,
             the_authz_policy=the_authz_policy,
+            the_logger=the_logger,
         )
     except ValueError as e:
         raise fastapi.HTTPException(
@@ -145,6 +155,7 @@ async def get_room_documents(
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.RoomDocuments:
     """Return a list of the documents in the room's RAG database"""
     try:
@@ -152,6 +163,7 @@ async def get_room_documents(
             room_id=room_id,
             user=the_user_claims,
             the_authz_policy=the_authz_policy,
+            the_logger=the_logger,
         )
     except KeyError:
         raise fastapi.HTTPException(
@@ -198,6 +210,7 @@ async def get_chunk_visualization(
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.ChunkVisualization:
     """Return a set of page images for a chunk, highlighting the chunk text"""
     try:
@@ -205,6 +218,7 @@ async def get_chunk_visualization(
             room_id=room_id,
             user=the_user_claims,
             the_authz_policy=the_authz_policy,
+            the_logger=the_logger,
         )
     except KeyError:
         raise fastapi.HTTPException(

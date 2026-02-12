@@ -570,45 +570,72 @@ def authz_kwargs(request):
     return kw
 
 
+@pytest.fixture
+def the_logger():
+    return mock.create_autospec(loggers.LogWrapper)
+
+
 @pytest.mark.anyio
+@pytest.mark.parametrize("w_the_logger", [False, True])
 @mock.patch("soliplex.loggers.LogWrapper")
 async def test_installation_get_room_configs(
     lw_klass,
     test_user,
     authz_kwargs,
     r_configs,
+    the_logger,
+    w_the_logger,
 ):
-    lw = lw_klass.return_value
     i_config = mock.create_autospec(config.InstallationConfig)
     i_config.room_configs = r_configs
 
     the_installation = installation.Installation(i_config)
 
-    found = await the_installation.get_room_configs(
-        user=test_user,
-        **authz_kwargs,
-    )
+    if w_the_logger:
+        exp_logger = the_logger.bind.return_value
+
+        found = await the_installation.get_room_configs(
+            user=test_user,
+            **authz_kwargs,
+            the_logger=the_logger,
+        )
+
+        the_logger.bind.assert_called_once_with(
+            loggers.AUTHZ_LOGGER_NAME,
+            user=test_user,
+        )
+
+    else:
+        exp_logger = lw_klass.return_value
+
+        found = await the_installation.get_room_configs(
+            user=test_user,
+            **authz_kwargs,
+        )
+
+        lw_klass.assert_called_once_with(
+            loggers.AUTHZ_LOGGER_NAME,
+            user=test_user,
+        )
 
     if authz_kwargs:
         allowed = authz_kwargs["the_authz_policy"].allowed
-        lw.debug.assert_called_once_with(loggers.AUTHZ_FILTERING_ROOMS)
+        exp_logger.debug.assert_called_once_with(
+            loggers.AUTHZ_FILTERING_ROOMS,
+        )
         if allowed:
             assert found == r_configs
         else:
             assert found == {}
     else:
         assert found == r_configs
-        lw.debug.assert_called_once_with(
+        exp_logger.debug.assert_called_once_with(
             loggers.AUTHZ_NOT_FILTERING_ROOMS,
         )
 
-    lw_klass.assert_called_once_with(
-        loggers.AUTHZ_LOGGER_NAME,
-        user=test_user,
-    )
-
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("w_the_logger", [False, True])
 @pytest.mark.parametrize(
     "w_room_id, raises", [("room_id", False), ("nonesuch", True)]
 )
@@ -618,10 +645,11 @@ async def test_installation_get_room_config(
     test_user,
     authz_kwargs,
     r_configs,
+    the_logger,
     w_room_id,
     raises,
+    w_the_logger,
 ):
-    lw = lw_klass.return_value
     i_config = mock.create_autospec(config.InstallationConfig)
     i_config.room_configs = r_configs
 
@@ -632,12 +660,21 @@ async def test_installation_get_room_config(
     else:
         allowed = True
 
+    logger_kw = {}
+
+    if w_the_logger:
+        logger_kw["the_logger"] = the_logger
+        exp_logger = the_logger.bind.return_value
+    else:
+        exp_logger = lw_klass.return_value
+
     if raises:
         with pytest.raises(KeyError):
             await the_installation.get_room_config(
                 room_id=w_room_id,
                 user=test_user,
                 **authz_kwargs,
+                **logger_kw,
             )
     else:
         if not allowed:
@@ -646,8 +683,9 @@ async def test_installation_get_room_config(
                     room_id=w_room_id,
                     user=test_user,
                     **authz_kwargs,
+                    **logger_kw,
                 )
-            lw.error.assert_called_once_with(
+            exp_logger.error.assert_called_once_with(
                 loggers.AUTHZ_ROOM_NOT_AUTHORIZED,
             )
         else:
@@ -655,14 +693,26 @@ async def test_installation_get_room_config(
                 room_id=w_room_id,
                 user=test_user,
                 **authz_kwargs,
+                **logger_kw,
             )
 
             assert found is r_configs[w_room_id]
 
             if authz_kwargs:
-                lw.debug.assert_called_once_with(
+                exp_logger.debug.assert_called_once_with(
                     loggers.AUTHZ_ROOM_AUTHORIZED,
                 )
+
+    if w_the_logger:
+        the_logger.bind.assert_called_once_with(
+            loggers.AUTHZ_LOGGER_NAME,
+            user=test_user,
+        )
+    else:
+        lw_klass.assert_called_once_with(
+            loggers.AUTHZ_LOGGER_NAME,
+            user=test_user,
+        )
 
 
 @pytest.mark.anyio
@@ -732,16 +782,21 @@ def test_installation_get_agent_by_id(gafc, w_agent_id, raises):
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("w_the_logger", [False, True])
 @pytest.mark.parametrize(
     "w_room_id, raises", [("room_id", False), ("nonesuch", True)]
 )
 @mock.patch("soliplex.agents.get_agent_from_configs")
+@mock.patch("soliplex.loggers.LogWrapper")
 async def test_installation_get_agent_for_room(
+    lw_klass,
     gafc,
     test_user,
     authz_kwargs,
+    the_logger,
     w_room_id,
     raises,
+    w_the_logger,
 ):
     a_config = mock.create_autospec(config.AgentConfig)
 
@@ -777,12 +832,18 @@ async def test_installation_get_agent_for_room(
 
     the_installation = installation.Installation(i_config)
 
+    logger_kw = {}
+
+    if w_the_logger:
+        logger_kw["the_logger"] = the_logger
+
     if raises:
         with pytest.raises(KeyError):
             await the_installation.get_agent_for_room(
                 room_id=w_room_id,
                 user=test_user,
                 **authz_kwargs,
+                **logger_kw,
             )
     else:
         if not allowed:
@@ -791,6 +852,7 @@ async def test_installation_get_agent_for_room(
                     room_id=w_room_id,
                     user=test_user,
                     **authz_kwargs,
+                    **logger_kw,
                 )
 
             gafc.assert_not_called()
@@ -800,11 +862,23 @@ async def test_installation_get_agent_for_room(
                 room_id=w_room_id,
                 user=test_user,
                 **authz_kwargs,
+                **logger_kw,
             )
 
             assert found is gafc.return_value
 
             gafc.assert_called_once_with(a_config, t_configs, mcp_configs)
+
+    if w_the_logger:
+        the_logger.bind.assert_called_once_with(
+            loggers.AUTHZ_LOGGER_NAME,
+            user=test_user,
+        )
+    else:
+        lw_klass.assert_called_once_with(
+            loggers.AUTHZ_LOGGER_NAME,
+            user=test_user,
+        )
 
 
 @pytest.mark.anyio
@@ -864,16 +938,21 @@ async def test_installation_get_agent_for_completion(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("w_the_logger", [False, True])
 @pytest.mark.parametrize("w_run_agent_input", [False, True])
 @pytest.mark.parametrize(
     "w_room_id, raises", [("room_id", False), ("nonesuch", True)]
 )
+@mock.patch("soliplex.loggers.LogWrapper")
 async def test_installation_get_agent_deps_for_room(
+    lw_klass,
     test_user,
     authz_kwargs,
+    the_logger,
     w_room_id,
     raises,
     w_run_agent_input,
+    w_the_logger,
 ):
     tc_config = mock.create_autospec(config.ToolConfig)
     sdtc_config = mock.create_autospec(config.SearchDocumentsToolConfig)
@@ -898,6 +977,9 @@ async def test_installation_get_agent_deps_for_room(
     kw = {}
     if w_run_agent_input:
         kw["run_agent_input"] = RUN_AGENT_INPUT
+
+    if w_the_logger:
+        kw["the_logger"] = the_logger
 
     if raises:
         with pytest.raises(KeyError):
@@ -929,6 +1011,17 @@ async def test_installation_get_agent_deps_for_room(
             assert found.the_installation is the_installation
             assert found.user == test_user
             assert found.tool_configs == t_configs
+
+    if w_the_logger:
+        the_logger.bind.assert_called_once_with(
+            loggers.AUTHZ_LOGGER_NAME,
+            user=test_user,
+        )
+    else:
+        lw_klass.assert_called_once_with(
+            loggers.AUTHZ_LOGGER_NAME,
+            user=test_user,
+        )
 
 
 @pytest.mark.anyio

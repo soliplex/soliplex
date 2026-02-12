@@ -9,6 +9,7 @@ from haiku.rag.store.models import chunk as hr_chunk
 from soliplex import authz as authz_package
 from soliplex import config
 from soliplex import installation
+from soliplex import loggers
 from soliplex import models
 from soliplex.views import rooms as rooms_views
 
@@ -73,12 +74,14 @@ async def test_get_rooms(fc, room_configs):
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_room_configs.return_value = room_configs
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
 
     found = await rooms_views.get_rooms(
         request,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
         the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
     )
 
     for (found_key, found_room), room_id, fc_call in zip(
@@ -94,6 +97,7 @@ async def test_get_rooms(fc, room_configs):
     the_installation.get_room_configs.assert_awaited_once_with(
         user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
+        the_logger=the_logger,
     )
 
 
@@ -112,6 +116,7 @@ async def test_get_room(fc, room_configs):
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if ROOM_ID not in room_configs:
         with pytest.raises(fastapi.HTTPException) as exc:
@@ -121,6 +126,7 @@ async def test_get_room(fc, room_configs):
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
+                the_logger=the_logger,
             )
 
         assert exc.value.status_code == 404
@@ -133,6 +139,7 @@ async def test_get_room(fc, room_configs):
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
             the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
         )
 
         assert found is fc.return_value
@@ -142,6 +149,7 @@ async def test_get_room(fc, room_configs):
         room_id=ROOM_ID,
         user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
+        the_logger=the_logger,
     )
 
 
@@ -163,6 +171,7 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if ROOM_ID in room_configs:
         if w_image:
@@ -178,6 +187,7 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
+                the_logger=the_logger,
             )
 
         assert exc.value.status_code == 404
@@ -190,6 +200,7 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
+                the_logger=the_logger,
             )
             # Actual image data is marshalled by fastapi framework
             assert found == str(image_path)
@@ -201,6 +212,7 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
                     the_installation=the_installation,
                     the_authz_policy=the_authz_policy,
                     the_user_claims=THE_USER_CLAIMS,
+                    the_logger=the_logger,
                 )
 
             assert exc.value.status_code == 404
@@ -210,6 +222,7 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
         room_id=ROOM_ID,
         user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
+        the_logger=the_logger,
     )
 
 
@@ -225,6 +238,7 @@ async def test_get_room_mcp_token(gust, w_error):
 
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if w_error:
         the_installation.get_room_config.side_effect = ValueError("testing")
@@ -239,6 +253,7 @@ async def test_get_room_mcp_token(gust, w_error):
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
+                the_logger=the_logger,
             )
 
         assert exc.value.status_code == 404
@@ -250,6 +265,7 @@ async def test_get_room_mcp_token(gust, w_error):
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
             the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
         )
 
         expected = {
@@ -271,6 +287,7 @@ async def test_get_room_mcp_token(gust, w_error):
         room_id=ROOM_ID,
         user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
+        the_logger=the_logger,
     )
 
 
@@ -298,6 +315,7 @@ async def test_get_room_documents(
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
 
     hr_config = object()
     db_path = pathlib.Path("/tmp/rag.db")
@@ -329,6 +347,7 @@ async def test_get_room_documents(
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
+                the_logger=the_logger,
             )
 
         assert exc.value.status_code == 404
@@ -340,6 +359,7 @@ async def test_get_room_documents(
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
             the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
         )
 
         assert found == models.RoomDocuments(
@@ -362,6 +382,7 @@ async def test_get_room_documents(
         room_id=ROOM_ID,
         user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
+        the_logger=the_logger,
     )
 
 
@@ -407,6 +428,7 @@ async def test_get_chunk_visualization(
         the_installation.get_room_config.return_value = room_configs[ROOM_ID]
 
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
 
     hr_config = object()
     db_path = pathlib.Path("/tmp/rag.db")
@@ -455,6 +477,7 @@ async def test_get_chunk_visualization(
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
+                the_logger=the_logger,
             )
 
         assert exc.value.status_code == 404
@@ -469,6 +492,7 @@ async def test_get_chunk_visualization(
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
+                the_logger=the_logger,
             )
 
         assert exc.value.status_code == 404
@@ -483,6 +507,7 @@ async def test_get_chunk_visualization(
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
+                the_logger=the_logger,
             )
 
         assert exc.value.status_code == 404
@@ -496,6 +521,7 @@ async def test_get_chunk_visualization(
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
             the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
         )
 
         assert found == models.ChunkVisualization(
@@ -515,4 +541,5 @@ async def test_get_chunk_visualization(
         room_id=ROOM_ID,
         user=THE_USER_CLAIMS,
         the_authz_policy=the_authz_policy,
+        the_logger=the_logger,
     )

@@ -295,6 +295,7 @@ async def test_get_installation_authz(
         the_installation.get_room_configs.assert_awaited_once_with(
             user=THE_USER_CLAIMS,
             the_authz_policy=the_authz_policy,
+            the_logger=the_authz_logger,
         )
 
     the_authz_logger.debug.assert_called_once_with(
