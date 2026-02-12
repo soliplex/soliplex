@@ -1152,6 +1152,10 @@ class QuizConfig:
                 )
 
             return cls(**config_dict)
+
+        except FromYamlException:  # pragma: NO COVER
+            raise
+
         except Exception as exc:
             raise FromYamlException(config_path, "quiz", config_dict) from exc
 
@@ -1367,6 +1371,9 @@ class RoomConfig:
             config_dict["_logo_image"] = logo_image
 
             return cls(**config_dict)
+
+        except FromYamlException:  # pragma: NO COVER
+            raise
 
         except Exception as exc:
             raise FromYamlException(config_path, "room", config_dict) from exc
@@ -1928,6 +1935,10 @@ class LogfireConfig:
                 _config_path=config_path,
                 **config_dict,
             )
+
+        except FromYamlException:  # pragma: NO COVER
+            raise
+
         except Exception as exc:
             raise FromYamlException(
                 config_path,
@@ -2224,6 +2235,9 @@ class InstallationConfigMeta:
             ]
 
             return cls(**config_dict)
+
+        except FromYamlException:  # pragma: NO COVER
+            raise
 
         except Exception as exc:
             raise FromYamlException(
@@ -2696,6 +2710,7 @@ class InstallationConfig:
 
         except FromYamlException:  # pragma: NO COVER
             raise
+
         except Exception as exc:
             raise FromYamlException(
                 config_path,
