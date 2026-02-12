@@ -20,7 +20,13 @@ from soliplex.views import rooms as rooms_views
 ADMIN_USER_EMAIL = "admin@example.com"
 LOG_CONFIG_FILE_PATH = "/path/to/logging.yaml"
 EXPLICIT_INST_PATH = "/explicit"
-ENVIRON_INST_PATH = "/environ"
+
+
+@pytest.fixture
+def explicit_inst_dir(temp_dir):
+    result = temp_dir / "explicit"
+    result.mkdir()
+    return result
 
 
 @pytest.fixture(scope="module", params=[None, ADMIN_USER_EMAIL])
@@ -114,20 +120,18 @@ def test_app_with_cors():
     )
 
 
-@mock.patch("soliplex.main.authn")
-def test_app_with_session(authn):
+def test_app_with_session():
+    TOKEN = "DEADBEEF"
     app = mock.Mock(spec_set=["add_middleware"])
 
-    found = main.app_with_session(app)
+    found = main.app_with_session(app, TOKEN)
 
     assert found is app
 
     app.add_middleware.assert_called_once_with(
         starlette_mw_sessions.SessionMiddleware,
-        secret_key=authn._get_session_secret_key.return_value,
+        secret_key=TOKEN.encode("ascii"),
     )
-
-    authn._get_session_secret_key.assert_called_once_with()
 
 
 @pytest.mark.anyio
@@ -197,10 +201,27 @@ def test_app_with_soliplex_routers():
     assert mock.call(rooms_views.router, prefix="/api") in air_calls
 
 
+@pytest.fixture
+def installation_w_session_token(explicit_inst_dir):
+    secret_file = explicit_inst_dir / "session_secret.txt"
+    secret_file.write_text("DEADBEEF")
+    i_yaml = explicit_inst_dir / "installation.yaml"
+    i_yaml.write_text("""\
+id: test-create-main
+secrets:
+  - secret_name: "SESSION_MIDDLEWARE_TOKEN"
+    sources:
+      - kind: "file_path"
+        file_path: "./session_secret.txt"
+""")
+    return explicit_inst_dir
+
+
 @pytest.mark.parametrize("w_log_config_file", [None, LOG_CONFIG_FILE_PATH])
 @pytest.mark.parametrize("w_add_admin_user", [None, ADMIN_USER_EMAIL])
 @pytest.mark.parametrize("w_no_auth_mode", [False, True])
 def test_create_app_with_explicit_overrides(
+    installation_w_session_token,
     w_no_auth_mode,
     w_add_admin_user,
     w_log_config_file,
@@ -221,7 +242,7 @@ def test_create_app_with_explicit_overrides(
     app_with_soliplex_routers = mock.Mock(spec_set=())
 
     found = main.create_app(
-        installation_path=EXPLICIT_INST_PATH,
+        installation_path=installation_w_session_token,
         no_auth_mode=w_no_auth_mode,
         curry_lifespan=curry_lifespan,
         app_with_lifespan=app_with_lifespan,
@@ -241,6 +262,7 @@ def test_create_app_with_explicit_overrides(
     )
     app_with_session.assert_called_once_with(
         app_with_cors.return_value,
+        "DEADBEEF",
     )
     app_with_cors.assert_called_once_with(
         app_with_lifespan.return_value,
@@ -249,7 +271,7 @@ def test_create_app_with_explicit_overrides(
         curry_lifespan.return_value,
     )
     curry_lifespan.assert_called_once_with(
-        installation_path=EXPLICIT_INST_PATH,
+        installation_path=installation_w_session_token,
         no_auth_mode=w_no_auth_mode,
         add_admin_user=w_add_admin_user,
         log_config_file=w_log_config_file,
@@ -260,6 +282,7 @@ def test_create_app_with_explicit_overrides(
 @pytest.mark.parametrize("w_add_admin_user", [None, ADMIN_USER_EMAIL])
 @pytest.mark.parametrize("w_no_auth_mode", [False, True])
 def test_create_app_wo_explicit_overrides(
+    installation_w_session_token,
     w_no_auth_mode,
     w_add_admin_user,
     w_log_config_file,
@@ -289,7 +312,7 @@ def test_create_app_wo_explicit_overrides(
         app_with_soliplex_routers=app_with_soliplex_routers,
     ):
         found = main.create_app(
-            installation_path=EXPLICIT_INST_PATH,
+            installation_path=installation_w_session_token,
             no_auth_mode=w_no_auth_mode,
             **kwargs,
         )
@@ -304,6 +327,7 @@ def test_create_app_wo_explicit_overrides(
 
     app_with_session.assert_called_once_with(
         app_with_cors.return_value,
+        "DEADBEEF",
     )
     app_with_cors.assert_called_once_with(
         app_with_lifespan.return_value,
@@ -312,7 +336,7 @@ def test_create_app_wo_explicit_overrides(
         curry_lifespan.return_value,
     )
     curry_lifespan.assert_called_once_with(
-        installation_path=EXPLICIT_INST_PATH,
+        installation_path=installation_w_session_token,
         no_auth_mode=w_no_auth_mode,
         add_admin_user=w_add_admin_user,
         log_config_file=w_log_config_file,

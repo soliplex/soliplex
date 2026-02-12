@@ -1,6 +1,5 @@
 """Soliplex authentication support"""
 
-import os
 import typing
 
 import fastapi
@@ -20,18 +19,6 @@ oauth2_scheme = security.OAuth2PasswordBearer(
 oauth2_predicate = fastapi.Depends(oauth2_scheme)
 
 
-_session_secret_key: bytes = None
-
-
-def _get_session_secret_key() -> bytes:
-    global _session_secret_key
-
-    if _session_secret_key is None:
-        _session_secret_key = os.urandom(16).hex()
-
-    return _session_secret_key
-
-
 _oauth = None
 
 
@@ -41,19 +28,12 @@ def get_oauth(
     global _oauth
 
     if _oauth is None:
-        config_data = {
-            "SESSION_SECRET_KEY": _get_session_secret_key(),
-        }
-
-        config = starlette.config.Config(environ=config_data)  # Or use .env
-
+        config_data = {}  # Or use .env
+        config = starlette.config.Config(environ=config_data)
         _oauth = starlette_client.OAuth(config)
 
-        session_secret_key = _get_session_secret_key()
         for auth_system in the_installation.oidc_auth_system_configs:
             auth_system_kwargs = auth_system.oauth_client_kwargs
-            auth_system_kwargs["authorize_state"] = session_secret_key
-
             _oauth.register(**auth_system_kwargs)
 
     return _oauth

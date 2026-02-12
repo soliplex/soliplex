@@ -126,11 +126,31 @@ secrets:
   #
   # If not set in the environment, we generate a random value at startup,
   # which will invalidate any previously-generated MCP room tokens.
+  #
+  # To generate:
+  #
+  # $ python3 -c "import secrets; print(secrets.token_hex(32))"
   # ----------------------------------------------------------------------
   - secret_name: "URL_SAFE_TOKEN_SECRET"
     sources:
       - kind: "env_var"
         env_var_name: "SOLIPLEX_URL_SAFE_TOKEN_SECRET"
+      - kind: "random_chars"
+
+  # ----------------------------------------------------------------------
+  # Session middleware token
+  #
+  # If not set in the environment, we generate a random value at startup,
+  # which will invalidate any existing sessions.
+  #
+  # To generate:
+  #
+  # $ python3 -c "import secrets; print(secrets.token_hex(32))"
+  # ----------------------------------------------------------------------
+  - secret_name: "SESSION_MIDDLEWARE_TOKEN"
+    sources:
+      - kind: "env_var"
+        env_var_name: "SOLIPLEX_SESSION_MIDDLEWARE_TOKEN"
       - kind: "random_chars"
 
 #==========================================================================

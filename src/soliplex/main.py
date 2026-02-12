@@ -13,7 +13,7 @@ import uvicorn
 from fastapi.middleware import cors as fastapi_mw_cors
 from starlette.middleware import sessions as starlette_mw_sessions
 
-from soliplex import authn
+from soliplex import config
 from soliplex import haiku_chat
 from soliplex import installation
 from soliplex import util
@@ -70,11 +70,10 @@ def app_with_cors(app: fastapi.FastAPI) -> fastapi.FastAPI:
     return app
 
 
-def app_with_session(app: fastapi.FastAPI) -> fastapi.FastAPI:
+def app_with_session(app: fastapi.FastAPI, token: str) -> fastapi.FastAPI:
     app.add_middleware(
         starlette_mw_sessions.SessionMiddleware,
-        # Deliberately not an envvar
-        secret_key=authn._get_session_secret_key(),
+        secret_key=token.encode("ascii"),
     )
     return app
 
@@ -154,6 +153,10 @@ def create_app(
         app_with_soliplex_routers or globs["app_with_soliplex_routers"]
     )
 
+    # Create a temporary InstallationConfig, to permit us to use
+    # its secrets before the lifespan starts.
+    tmp_installation = config.load_installation(installation_path)
+
     register_metaconfigs()
 
     curried_lifespan = curry_lifespan(
@@ -164,7 +167,11 @@ def create_app(
     )
     app = app_with_lifespan(curried_lifespan)
     app = app_with_cors(app)
-    app = app_with_session(app)
+
+    session_token = tmp_installation.get_secret(
+        "secret:SESSION_MIDDLEWARE_TOKEN"
+    )
+    app = app_with_session(app, session_token)
 
     if app_with_git_hash is not None:
         app = app_with_git_hash(app)

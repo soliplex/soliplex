@@ -126,5 +126,6 @@ $ soliplex-cli list-secrets example/installation.yaml
 - SMITHERY_AI_API_KEY       MISSING
 - SMITHERY_AI_PROFILE       MISSING
 - URL_SAFE_TOKEN_SECRET     OK
+- SESSION_MIDDLEWARE_TOKEN  OK
 
 ```

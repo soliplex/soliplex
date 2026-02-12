@@ -45,27 +45,11 @@ oidc_client_pem_path: "{OIDC_CLIENT_PEM_PATH}"
 EXISTING = object()
 
 
-@pytest.mark.parametrize("w_before", [None, EXISTING])
-@mock.patch("os.urandom")
-def test__get_session_secret_key(urandom, w_before):
-    with mock.patch.multiple(authn, _session_secret_key=w_before):
-        found = authn._get_session_secret_key()
-
-    if w_before is None:
-        assert found is urandom.return_value.hex.return_value
-        urandom.assert_called_once_with(16)
-    else:
-        assert found is EXISTING
-        urandom.assert_not_called()
-
-
-@mock.patch("soliplex.authn._get_session_secret_key")
 @mock.patch("starlette.config.Config")
 @mock.patch("authlib.integrations.starlette_client.OAuth")
 def test_get_oauth_wo_initialized(
     oauth_klass,
     config_klass,
-    gssk,
     temp_dir,
     with_auth_systems,
 ):
@@ -81,7 +65,7 @@ def test_get_oauth_wo_initialized(
 
     oauth_klass.assert_called_once_with(config_klass.return_value)
 
-    expected_config = {"SESSION_SECRET_KEY": gssk.return_value}
+    expected_config = {}
 
     config_klass.assert_called_once_with(environ=expected_config)
 
