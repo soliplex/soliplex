@@ -61,34 +61,14 @@ ROOM_CHUNK_IMAGES_NOT_AVAILALBE = "chunk images not available: %s"
 ROOM_UNKNOWN_CHUNK_ID = "unknown chunk id: %s"
 
 
-class LogWrapper:
+class LogWrapper(logging.LoggerAdapter):
     """Context wrapper for capturing extra logging values"""
 
-    def __init__(self, logger_name, **extra):
+    def __init__(self, logger_name, the_installation, **extra):
         self.logger_name = logger_name
-        self.extra = extra
-        self.logger = logging.getLogger(logger_name)
-
-    def log(self, level, message, *args):
-        self.logger.log(level, message, *args, extra=self.extra)
-
-    def critical(self, message, *args):
-        self.logger.critical(message, *args, extra=self.extra)
-
-    def exception(self, message, *args):
-        self.logger.exception(message, *args, extra=self.extra)
-
-    def error(self, message, *args):
-        self.logger.error(message, *args, extra=self.extra)
-
-    def warning(self, message, *args):
-        self.logger.warning(message, *args, extra=self.extra)
-
-    def info(self, message, *args):
-        self.logger.info(message, *args, extra=self.extra)
-
-    def debug(self, message, *args):
-        self.logger.debug(message, *args, extra=self.extra)
+        self.installation = the_installation
+        logger = logging.getLogger(logger_name)
+        super().__init__(logger, extra=extra, merge_extra=True)
 
     def bind(self, logger_name=None, **extra) -> LogWrapper:
         if logger_name is None:
@@ -96,4 +76,4 @@ class LogWrapper:
 
         extras = self.extra | extra
 
-        return LogWrapper(logger_name, **extras)
+        return LogWrapper(logger_name, self.installation, **extras)

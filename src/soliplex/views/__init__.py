@@ -35,6 +35,7 @@ async def get_the_unauth_logger(
 ) -> loggers.LogWrapper:
     return loggers.LogWrapper(
         loggers.AUTHN_LOGGER_NAME,
+        the_installation=the_installation,
         headers=request.headers,
     )
 

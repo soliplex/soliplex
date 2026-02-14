@@ -162,7 +162,11 @@ class Installation:
     ) -> dict[str, config.RoomConfig]:
         """Return room configs available to the user"""
         if the_logger is None:
-            logger = loggers.LogWrapper(loggers.AUTHZ_LOGGER_NAME, user=user)
+            logger = loggers.LogWrapper(
+                loggers.AUTHZ_LOGGER_NAME,
+                the_installation=self,
+                user=user,
+            )
         else:
             logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME, user=user)
 
@@ -195,7 +199,11 @@ class Installation:
     ) -> config.RoomConfig:
         """Return a room configs IFF available to the user"""
         if the_logger is None:
-            logger = loggers.LogWrapper(loggers.AUTHZ_LOGGER_NAME, user=user)
+            logger = loggers.LogWrapper(
+                loggers.AUTHZ_LOGGER_NAME,
+                the_installation=self,
+                user=user,
+            )
         else:
             logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME, user=user)
 

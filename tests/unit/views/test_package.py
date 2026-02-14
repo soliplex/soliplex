@@ -49,6 +49,7 @@ async def test_get_the_unauth_logger(lw_klass):
 
     lw_klass.assert_called_once_with(
         loggers.AUTHN_LOGGER_NAME,
+        the_installation=the_installation,
         headers=request.headers,
     )
 

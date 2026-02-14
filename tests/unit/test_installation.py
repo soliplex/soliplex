@@ -615,6 +615,7 @@ async def test_installation_get_room_configs(
 
         lw_klass.assert_called_once_with(
             loggers.AUTHZ_LOGGER_NAME,
+            the_installation=the_installation,
             user=test_user,
         )
 
@@ -711,6 +712,7 @@ async def test_installation_get_room_config(
     else:
         lw_klass.assert_called_once_with(
             loggers.AUTHZ_LOGGER_NAME,
+            the_installation=the_installation,
             user=test_user,
         )
 
@@ -877,6 +879,7 @@ async def test_installation_get_agent_for_room(
     else:
         lw_klass.assert_called_once_with(
             loggers.AUTHZ_LOGGER_NAME,
+            the_installation=the_installation,
             user=test_user,
         )
 
@@ -1020,6 +1023,7 @@ async def test_installation_get_agent_deps_for_room(
     else:
         lw_klass.assert_called_once_with(
             loggers.AUTHZ_LOGGER_NAME,
+            the_installation=the_installation,
             user=test_user,
         )
 
