@@ -355,6 +355,9 @@ class Installation(pydantic.BaseModel):
     oidc_auth_systems: list[OIDCAuthSystem] = []
     thread_persistence_dburi_sync: str | None = None
     thread_persistence_dburi_async: str | None = None
+    logging_config_file: pathlib.Path | None = None
+    logging_headers_map: dict[str, str] | None = {}
+    logging_claims_map: dict[str, str] | None = {}
 
     @classmethod
     def from_config(cls, installation_config: config.InstallationConfig):
@@ -402,6 +405,10 @@ class Installation(pydantic.BaseModel):
                 installation_config._thread_persistence_dburi_async
                 or config.ASYNC_MEMORY_ENGINE_URL
             ),
+            # Don't resolve path to logging config
+            logging_config_file=installation_config._logging_config_file,
+            logging_headers_map=installation_config.logging_headers_map,
+            logging_claims_map=installation_config.logging_claims_map,
         )
 
 

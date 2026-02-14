@@ -2570,6 +2570,40 @@ class InstallationConfig:
         if config_file is not None:
             return _load_config_yaml(config_file)
 
+    # Map logging extra keys to request header keys.  E.g., if there is
+    # a request header, 'X-Request-ID', we can make it availalable as a
+    # logging extra, 'request_id', via:
+    #
+    # logging_headers_map:
+    #   request_id: "X-Request-ID'
+    _logging_headers_map: dict[str, str] = None
+
+    @property
+    def logging_headers_map(self) -> dict[str, str]:
+        result = {}
+
+        if self._logging_headers_map is not None:
+            result |= self._logging_headers_map
+
+        return result
+
+    # Map logging extra keys to OIDC claims.  E.g., if there is
+    # an OIDC clam, 'foo_user_id', we can make it availalable as a
+    # logging extra, 'user_id', via:
+    #
+    # logging_claims_map:
+    #   user_id: "foo_user_id'
+    _logging_claims_map: dict[str, str] = None
+
+    @property
+    def logging_claims_map(self) -> dict[str, str]:
+        result = {}
+
+        if self._logging_claims_map is not None:
+            result |= self._logging_claims_map
+
+        return result
+
     #
     # Logfire configuration
     #
@@ -2682,6 +2716,16 @@ class InstallationConfig:
                 config_dict["_logging_config_file"] = pathlib.Path(
                     logging_config_file
                 )
+
+            logging_headers_map = config_dict.pop("logging_headers_map", None)
+
+            if logging_headers_map is not None:
+                config_dict["_logging_headers_map"] = logging_headers_map
+
+            logging_claims_map = config_dict.pop("logging_claims_map", None)
+
+            if logging_claims_map is not None:
+                config_dict["_logging_claims_map"] = logging_claims_map
 
             logfire_cfg = config_dict.pop("logfire_config", None)
 

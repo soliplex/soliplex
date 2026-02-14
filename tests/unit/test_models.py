@@ -86,6 +86,10 @@ INSTALLATION_OIDC_AUTH_SYSTEM_CONFIG = config.OIDCAuthSystemConfig(
 INSTALLATION_TP_DBURI_SYNC = "sqlite:////tmp/test-models.sqlite"
 INSTALLATION_TP_DBURI_ASYNC = "sqlite+aiosqlite:////tmp/test-models.sqlite"
 
+LOGGING_CONFIG_FILE = "./logging.yaml"
+LOGGING_HEADERS_MAP = {"request_id": "X-Request-ID"}
+LOGGING_CLAIMS_MAP = {"user_id": "email"}
+
 USER_NAME = "phreddy"
 GIVEN_NAME = "Phred"
 FAMILY_NAME = "Phlyntstone"
@@ -907,7 +911,25 @@ def installation_tp_dburi(request):
     return kw
 
 
+@pytest.fixture(
+    params=[
+        None,
+        {
+            "_logging_config_file": LOGGING_CONFIG_FILE,
+            "_logging_headers_map": LOGGING_HEADERS_MAP,
+            "_logging_claims_map": LOGGING_CLAIMS_MAP,
+        },
+    ]
+)
+def installation_logging_config(request):
+    kw = {}
+    if request.param is not None:
+        kw |= request.param
+    return kw
+
+
 def test_installation_from_config(
+    temp_dir,
     the_agui_feature,
     installation_secrets,
     installation_environment,
@@ -919,6 +941,7 @@ def test_installation_from_config(
     installation_quizzes_paths,
     installation_oidc_auth_system_configs,
     installation_tp_dburi,
+    installation_logging_config,
 ):
     installation_config = config.InstallationConfig(
         id=INSTALLATION_ID,
@@ -932,6 +955,7 @@ def test_installation_from_config(
         **installation_quizzes_paths,
         **installation_oidc_auth_system_configs,
         **installation_tp_dburi,
+        **installation_logging_config,
     )
 
     # Ensure that the registry has only a  single, known feature.
@@ -1041,6 +1065,17 @@ def test_installation_from_config(
             installation_model.thread_persistence_dburi_async
             == config.ASYNC_MEMORY_ENGINE_URL
         )
+
+    if installation_logging_config:
+        assert installation_model.logging_config_file == pathlib.Path(
+            LOGGING_CONFIG_FILE,
+        )
+        assert installation_model.logging_headers_map == LOGGING_HEADERS_MAP
+        assert installation_model.logging_claims_map == LOGGING_CLAIMS_MAP
+    else:
+        assert installation_model.logging_config_file is None
+        assert installation_model.logging_headers_map == {}
+        assert installation_model.logging_claims_map == {}
 
     for found, expected in zip(
         installation_model.oidc_auth_systems,

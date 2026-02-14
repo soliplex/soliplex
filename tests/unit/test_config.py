@@ -1681,13 +1681,25 @@ quizzes_paths:
 """
 
 LOGGING_CONFIG_FILE = "/path/to/logging.yaml"
+LOGGING_HEADER_ID_KEY = "test-header"
+LOGGING_USER_ID_KEY = "test-claim-key"
 W_LOGGING_CONFIG_FILE_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
     "_logging_config_file": pathlib.Path(LOGGING_CONFIG_FILE),
+    "_logging_headers_map": {
+        "request_id": LOGGING_HEADER_ID_KEY,
+    },
+    "_logging_claims_map": {
+        "user_id": LOGGING_USER_ID_KEY,
+    },
 }
 W_LOGGING_CONFIG_FILE_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
 logging_config_file: "{LOGGING_CONFIG_FILE}"
+logging_headers_map:
+    request_id: "{LOGGING_HEADER_ID_KEY}"
+logging_claims_map:
+    user_id: "{LOGGING_USER_ID_KEY}"
 """
 
 W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_KW = {
@@ -5757,6 +5769,48 @@ version: 1
         assert logging_config["version"] == 1
     else:
         assert logging_config is None
+
+
+@pytest.mark.parametrize("w_map", [False, True])
+def test_installationconfig_logging_headers_map(temp_dir, w_map):
+    kw = {}
+
+    if w_map:
+        kw["_logging_headers_map"] = {"foo": "bar"}
+
+    i_config = config.InstallationConfig(
+        id="test-ic",
+        _config_path=temp_dir / "installation.yaml",
+        **kw,
+    )
+
+    logging_headers_map = i_config.logging_headers_map
+
+    if w_map:
+        assert logging_headers_map == {"foo": "bar"}
+    else:
+        assert logging_headers_map == {}
+
+
+@pytest.mark.parametrize("w_map", [False, True])
+def test_installationconfig_logging_claims_map(temp_dir, w_map):
+    kw = {}
+
+    if w_map:
+        kw["_logging_claims_map"] = {"foo": "bar"}
+
+    i_config = config.InstallationConfig(
+        id="test-ic",
+        _config_path=temp_dir / "installation.yaml",
+        **kw,
+    )
+
+    logging_claims_map = i_config.logging_claims_map
+
+    if w_map:
+        assert logging_claims_map == {"foo": "bar"}
+    else:
+        assert logging_claims_map == {}
 
 
 def test_installationconfig_agui_features(the_agui_feature):
