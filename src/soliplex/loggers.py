@@ -68,7 +68,10 @@ class LogWrapper(logging.LoggerAdapter):
         self.logger_name = logger_name
         self.installation = the_installation
         logger = logging.getLogger(logger_name)
-        super().__init__(logger, extra=extra, merge_extra=True)
+        try:
+            super().__init__(logger, extra=extra, merge_extra=True)
+        except TypeError:  # pragma: NO COVER Python < 3.13
+            super().__init__(logger, extra=extra)
 
     def bind(self, logger_name=None, **extra) -> LogWrapper:
         if logger_name is None:
