@@ -33,10 +33,18 @@ async def get_the_unauth_logger(
     request: fastapi.Request,
     the_installation: Installation = depend_the_installation,
 ) -> loggers.LogWrapper:
+    headers_extras = {}
+
+    ic = the_installation._config
+    for extra_id, header_id in ic.logging_headers_map.items():
+        header_value = request.headers.get(header_id)
+        if header_value is not None:
+            headers_extras[extra_id] = header_value
+
     return loggers.LogWrapper(
         loggers.AUTHN_LOGGER_NAME,
         the_installation=the_installation,
-        headers=request.headers,
+        **headers_extras,
     )
 
 
@@ -48,18 +56,18 @@ async def get_the_logger(
     the_unauth_logger: loggers.LogWrapper = depend_the_unauth_logger,
     the_user_claims: authn_module.UserClaims = depend_the_user_claims,
 ) -> loggers.LogWrapper:
-    extras = {
-        "claims": the_user_claims,
-    }
+    claims_extras = {}
 
-    room_id = request.path_params.get("room_id")
+    ic = the_unauth_logger.installation._config
 
-    if room_id is not None:
-        extras["room_id"] = room_id
+    for extra_id, claim_id in ic.logging_claims_map.items():
+        claim_value = the_user_claims.get(claim_id)
+        if claim_value is not None:
+            claims_extras[extra_id] = claim_value
 
     return the_unauth_logger.bind(
         loggers.SOLIPLEX_LOGGER_NAME,
-        **extras,
+        **claims_extras,
     )
 
 

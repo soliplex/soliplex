@@ -409,6 +409,12 @@ authorization_dburi:
 #==========================================================================
 logging_config_file: "./logging.yaml"
 
+logging_headers_map:
+  request_id: "X-Request-ID"
+
+logging_claims_map:
+  user_id: "email"
+
 #==========================================================================
 # Logfire configuration
 #==========================================================================
