@@ -299,10 +299,15 @@ class Installation:
 
         kwargs = {}
 
+        thread_id = None
+        if run_agent_input is not None:
+            thread_id = run_agent_input.thread_id
+
         return agents.AgentDependencies(
             the_installation=self,
             user=user,
             tool_configs=room_config.tool_configs,
+            thread_id=thread_id,
             **kwargs,
         )
 

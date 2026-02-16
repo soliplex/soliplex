@@ -109,11 +109,12 @@ agent_configs:
 # registry, and hence requires additional secrets
 #==========================================================================
 room_paths:
-  - "./rooms/haiku"
+  - "./rooms/chat"
   - "./rooms/joker"
   - "./rooms/faux"
   - "./rooms/quiztest"
-  - "./rooms/research"
+  - "./rooms/search"
+  - "./rooms/analysis"
 #==========================================================================
 # Completions configuration
 #==========================================================================

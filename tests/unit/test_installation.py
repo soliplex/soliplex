@@ -803,7 +803,7 @@ async def test_installation_get_agent_for_room(
     a_config = mock.create_autospec(config.AgentConfig)
 
     tc_config = mock.create_autospec(config.ToolConfig)
-    sdtc_config = mock.create_autospec(config.SearchDocumentsToolConfig)
+    sdtc_config = mock.create_autospec(config.ToolConfig)
 
     mcp_stdio_config = mock.create_autospec(
         config.Stdio_MCP_ClientToolsetConfig
@@ -898,7 +898,7 @@ async def test_installation_get_agent_for_completion(
     a_config = mock.create_autospec(config.AgentConfig)
 
     tc_config = mock.create_autospec(config.ToolConfig)
-    sdtc_config = mock.create_autospec(config.SearchDocumentsToolConfig)
+    sdtc_config = mock.create_autospec(config.ToolConfig)
 
     mcp_stdio_config = mock.create_autospec(
         config.Stdio_MCP_ClientToolsetConfig
@@ -958,7 +958,7 @@ async def test_installation_get_agent_deps_for_room(
     w_the_logger,
 ):
     tc_config = mock.create_autospec(config.ToolConfig)
-    sdtc_config = mock.create_autospec(config.SearchDocumentsToolConfig)
+    sdtc_config = mock.create_autospec(config.ToolConfig)
 
     r_config = mock.create_autospec(config.RoomConfig)
     t_configs = r_config.tool_configs = {
@@ -1040,7 +1040,7 @@ async def test_installation_get_agent_deps_for_completion(
     w_run_agent_input,
 ):
     tc_config = mock.create_autospec(config.ToolConfig)
-    sdtc_config = mock.create_autospec(config.SearchDocumentsToolConfig)
+    sdtc_config = mock.create_autospec(config.ToolConfig)
 
     c_config = mock.create_autospec(config.CompletionConfig)
     t_configs = c_config.tool_configs = {

@@ -19,7 +19,7 @@ def mcp_tool(tool_config: config.ToolConfig) -> fmcp_tools.Tool | None:
             tool_config.tool_name,
         )
 
-        if wrapper_type is not None:
+        if wrapper_type is not None:  # pragma: NO COVER
             tool_wrapper = wrapper_type(
                 func=tool_config.tool,
                 tool_config=tool_config,

@@ -582,14 +582,7 @@ async def test_get_room_agui_thread_id_run_id(
     "w_agui_feature_names",
     [
         [],
-        [agui_features.FILTER_DOCUMENTS_FEATURE],
-        [agui_features.ASK_HISTORY_FEATURE],
         [agui_features.HAIKU_CHAT_FEATURE],
-        [
-            agui_features.FILTER_DOCUMENTS_FEATURE,
-            agui_features.ASK_HISTORY_FEATURE,
-            agui_features.HAIKU_CHAT_FEATURE,
-        ],
     ],
 )
 @pytest.mark.parametrize(

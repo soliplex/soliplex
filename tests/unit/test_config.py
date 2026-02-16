@@ -130,79 +130,6 @@ W_ERROR_AUTHSYSTM_CONFIG_YAML = f"""
 
 
 # This one raises
-BOGUS_SDTC_CONFIG_YAML = """
-    #rag_lancedb_stem: "rag"
-    #rag_lancedb_override_path: "/path/to/rag.lancedb"
-"""
-
-W_STEM_SDTC_CONFIG_KW = {
-    "rag_lancedb_stem": "rag",
-    "search_documents_limit": 7,
-    "allow_mcp": True,
-}
-W_STEM_SDTC_CONFIG_YAML = """
-    rag_lancedb_stem: "rag"
-    search_documents_limit: 7
-    allow_mcp: true
-"""
-
-
-W_OVERRIDE_SDTC_CONFIG_KW = {
-    "rag_lancedb_override_path": "/path/to/rag.lancedb",
-}
-W_OVERRIDE_SDTC_CONFIG_YAML = """
-    rag_lancedb_override_path: "/path/to/rag.lancedb"
-"""
-
-
-# This one raises
-BOGUS_RRTC_CONFIG_YAML = """
-    #rag_lancedb_stem: "rag"
-    #rag_lancedb_override_path: "/path/to/rag.lancedb"
-"""
-
-W_STEM_RRTC_CONFIG_KW = {
-    "rag_lancedb_stem": "rag",
-    "allow_mcp": True,
-}
-W_STEM_RRTC_CONFIG_YAML = """
-    rag_lancedb_stem: "rag"
-    allow_mcp: true
-"""
-
-
-W_OVERRIDE_RRTC_CONFIG_KW = {
-    "rag_lancedb_override_path": "/path/to/rag.lancedb",
-}
-W_OVERRIDE_RRTC_CONFIG_YAML = """
-    rag_lancedb_override_path: "/path/to/rag.lancedb"
-"""
-
-
-# This one raises
-BOGUS_AWRCTC_CONFIG_YAML = """
-    #rag_lancedb_stem: "rag"
-    #rag_lancedb_override_path: "/path/to/rag.lancedb"
-"""
-
-W_STEM_AWRCTC_CONFIG_KW = {
-    "rag_lancedb_stem": "rag",
-    "allow_mcp": True,
-}
-W_STEM_AWRCTC_CONFIG_YAML = """
-    rag_lancedb_stem: "rag"
-    allow_mcp: true
-"""
-
-
-W_OVERRIDE_AWRCTC_CONFIG_KW = {
-    "rag_lancedb_override_path": "/path/to/rag.lancedb",
-}
-W_OVERRIDE_AWRCTC_CONFIG_YAML = """
-    rag_lancedb_override_path: "/path/to/rag.lancedb"
-"""
-
-# This one raises
 BOGUS_STDIO_MCTC_CONFIG_YAML = ""
 
 BARE_STDIO_MCTC_CONFIG_KW = {
@@ -692,15 +619,6 @@ FULL_ROOM_CONFIG_KW = {
             tool_name="soliplex.tools.get_current_datetime",
             allow_mcp=True,
         ),
-        "search_documents": config.SearchDocumentsToolConfig(
-            search_documents_limit=1,
-            rag_lancedb_override_path="/dev/null",
-            allow_mcp=True,
-        ),
-        "ask_with_rich_citations": config.AskWithRichCitationsToolConfig(
-            rag_lancedb_override_path="/dev/null",
-            allow_mcp=False,
-        ),
     },
     "mcp_client_toolset_configs": {
         "stdio_test": config.Stdio_MCP_ClientToolsetConfig(
@@ -738,13 +656,6 @@ agent:
 tools:
     - tool_name: "soliplex.tools.get_current_datetime"
       allow_mcp: true
-    - tool_name: "soliplex.tools.search_documents"
-      rag_lancedb_override_path: /dev/null
-      search_documents_limit: 1
-      allow_mcp: true
-    - tool_name: "soliplex.tools.ask_with_rich_citations"
-      rag_lancedb_override_path: /dev/null
-      allow_mcp: false
 mcp_client_toolsets:
     stdio_test:
       kind: "stdio"
@@ -802,10 +713,6 @@ FULL_COMPLETION_CONFIG_KW = {
         "get_current_datetime": config.ToolConfig(
             tool_name="soliplex.tools.get_current_datetime",
         ),
-        "search_documents": config.SearchDocumentsToolConfig(
-            search_documents_limit=1,
-            rag_lancedb_override_path="/dev/null",
-        ),
     },
     "mcp_client_toolset_configs": {
         "stdio_test": config.Stdio_MCP_ClientToolsetConfig(
@@ -834,9 +741,6 @@ agent:
     system_prompt: "{SYSTEM_PROMPT}"
 tools:
     - tool_name: "soliplex.tools.get_current_datetime"
-    - tool_name: "soliplex.tools.search_documents"
-      rag_lancedb_override_path: /dev/null
-      search_documents_limit: 1
 mcp_client_toolsets:
     stdio_test:
       kind: "stdio"
@@ -1219,9 +1123,9 @@ meta:
 W_AGUI_FEATURES_ICMETA_KW = {
     "agui_features": [
         config.AGUI_FeatureConfigMeta(
-            name="filter_documents",
-            model_klass=features.FilterDocuments,
-            source="client",
+            name=features.HAIKU_CHAT_FEATURE,
+            model_klass=features.hr_chat_state.ChatSessionState,
+            source="server",
         ),
     ],
     "tool_configs": [],
@@ -1233,26 +1137,11 @@ W_AGUI_FEATURES_ICMETA_KW = {
 W_AGUI_FEATURES_ICMETA_YAML = """\
 meta:
   agui_features:
-      - name: "filter_documents"
-        model_klass: "soliplex.agui.features.FilterDocuments"
-        source: "client"
+      - name: "haiku.rag.chat"
+        model_klass: "haiku.rag.agents.chat.state.ChatSessionState"
+        source: "server"
 """
 
-W_TOOL_CONFIGS_ICMETA_KW = {
-    "agui_features": [],
-    "tool_configs": [
-        config.ConfigMeta(config_klass=config.SearchDocumentsToolConfig),
-    ],
-    "mcp_toolset_configs": [],
-    "mcp_server_tool_wrappers": [],
-    "agent_configs": [],
-    "secret_sources": [],
-}
-W_TOOL_CONFIGS_ICMETA_YAML = """\
-meta:
-  tool_configs:
-      - "soliplex.config.SearchDocumentsToolConfig"
-"""
 
 W_MCP_TOOLSET_CONFIGS_ICMETA_KW = {
     "agui_features": [],
@@ -1270,25 +1159,6 @@ meta:
     - "soliplex.config.Stdio_MCP_ClientToolsetConfig"
 """
 
-W_MCP_SERVER_TOOL_WRAPPER_ICMETA_KW = {
-    "agui_features": [],
-    "tool_configs": [],
-    "mcp_toolset_configs": [],
-    "mcp_server_tool_wrappers": [
-        config.ConfigMeta(
-            config_klass=config.SearchDocumentsToolConfig,
-            wrapper_klass=config.WithQueryMCPWrapper,
-        ),
-    ],
-    "agent_configs": [],
-    "secret_sources": [],
-}
-W_MCP_SERVER_TOOL_WRAPPER_ICMETA_YAML = """\
-meta:
-  mcp_server_tool_wrappers:
-    - "config_klass": "soliplex.config.SearchDocumentsToolConfig"
-      "wrapper_klass": "soliplex.config.WithQueryMCPWrapper"
-"""
 
 W_AGENT_CONFIGS_ICMETA_KW = {
     "agui_features": [],
@@ -1333,29 +1203,17 @@ meta:
 FULL_ICMETA_KW = {
     "agui_features": [
         config.AGUI_FeatureConfigMeta(
-            name="filter_documents",
-            model_klass=features.FilterDocuments,
-            source="client",
-        ),
-        config.AGUI_FeatureConfigMeta(
-            name="ask_history",
-            model_klass=features.AskedAndAnswered,
+            name=features.HAIKU_CHAT_FEATURE,
+            model_klass=features.hr_chat_state.ChatSessionState,
             source="server",
         ),
     ],
-    "tool_configs": [
-        config.ConfigMeta(config_klass=config.SearchDocumentsToolConfig),
-    ],
+    "tool_configs": [],
     "mcp_toolset_configs": [
         config.ConfigMeta(config_klass=config.Stdio_MCP_ClientToolsetConfig),
         config.ConfigMeta(config_klass=config.HTTP_MCP_ClientToolsetConfig),
     ],
-    "mcp_server_tool_wrappers": [
-        config.ConfigMeta(
-            config_klass=config.SearchDocumentsToolConfig,
-            wrapper_klass=config.WithQueryMCPWrapper,
-        ),
-    ],
+    "mcp_server_tool_wrappers": [],
     "agent_configs": [
         config.ConfigMeta(config_klass=config.AgentConfig),
         config.ConfigMeta(config_klass=config.FactoryAgentConfig),
@@ -1370,20 +1228,12 @@ FULL_ICMETA_KW = {
 FULL_ICMETA_YAML = """\
 meta:
   agui_features:
-      - name: "filter_documents"
-        model_klass: "soliplex.agui.features.FilterDocuments"
-        source: "client"
-      - name: "ask_history"
-        model_klass: "soliplex.agui.features.AskedAndAnswered"
+      - name: "haiku.rag.chat"
+        model_klass: "haiku.rag.agents.chat.state.ChatSessionState"
         source: "server"
-  tool_configs:
-      - "soliplex.config.SearchDocumentsToolConfig"
   mcp_toolset_configs:
       - "soliplex.config.Stdio_MCP_ClientToolsetConfig"
       - "soliplex.config.HTTP_MCP_ClientToolsetConfig"
-  mcp_server_tool_wrappers:
-    - "config_klass": "soliplex.config.SearchDocumentsToolConfig"
-      "wrapper_klass": "soliplex.config.WithQueryMCPWrapper"
   agent_configs:
       - "soliplex.config.AgentConfig"
       - "soliplex.config.FactoryAgentConfig"
@@ -2341,431 +2191,6 @@ def test__rcb_ctor(
             }
 
             assert rcb_config.get_extra_parameters() == expected_ep
-
-
-def test_sdtc_ctor(installation_config, temp_dir):
-    db_rag_path = temp_dir / "db" / "rag"
-    db_rag_path.mkdir(parents=True)
-
-    from_stem = db_rag_path / "stem.lancedb"
-    from_stem.mkdir()
-
-    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_path)}
-    installation_config.get_environment = ic_environ.get
-
-    config_path = temp_dir / "rooms" / "test" / "room_config.yaml"
-
-    sdt_config = config.SearchDocumentsToolConfig(
-        _installation_config=installation_config,
-        _config_path=config_path,
-        rag_lancedb_stem="stem",
-    )
-
-    assert sdt_config._installation_config is installation_config
-    assert sdt_config._config_path == config_path
-
-    found = sdt_config.rag_lancedb_path
-    assert found.resolve() == from_stem.resolve()
-
-    expected_ep = {
-        "rag_lancedb_path": from_stem.resolve(),
-        "search_documents_limit": 5,
-    }
-
-    assert sdt_config.get_extra_parameters() == expected_ep
-
-
-@pytest.mark.parametrize(
-    "config_yaml, exp_config",
-    [
-        (BOGUS_SDTC_CONFIG_YAML, None),
-        (W_STEM_SDTC_CONFIG_YAML, W_STEM_SDTC_CONFIG_KW),
-        (W_OVERRIDE_SDTC_CONFIG_YAML, W_OVERRIDE_SDTC_CONFIG_KW),
-    ],
-)
-def test_sdtc_from_yaml(
-    installation_config,
-    temp_dir,
-    config_yaml,
-    exp_config,
-):
-    db_rag_dir = temp_dir / "db" / "rag"
-    db_rag_dir.mkdir(parents=True)
-
-    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_dir)}
-    installation_config.get_environment = ic_environ.get
-
-    config_dir = temp_dir / "rooms" / "test_room"
-    config_dir.mkdir(parents=True)
-
-    config_path = config_dir / "room_config.yaml"
-    config_path.write_text(config_yaml)
-
-    with config_path.open() as stream:
-        config_dict = yaml.safe_load(stream)
-
-    if exp_config is None:
-        with pytest.raises(config.FromYamlException) as exc:
-            config.SearchDocumentsToolConfig.from_yaml(
-                installation_config=installation_config,
-                config_path=config_path,
-                config_dict=config_dict,
-            )
-
-        assert exc.value._config_path == config_path
-
-    else:
-        sdt_config = config.SearchDocumentsToolConfig.from_yaml(
-            installation_config=installation_config,
-            config_path=config_path,
-            config_dict=config_dict,
-        )
-        expected = config.SearchDocumentsToolConfig(
-            _installation_config=installation_config,
-            _config_path=config_path,
-            **exp_config,
-        )
-        assert sdt_config == expected
-
-
-@pytest.mark.parametrize(
-    "stem, override, which",
-    [
-        ("testing", None, "stem"),
-        (None, "./override", "override"),
-    ],
-)
-def test_sdtc_get_extra_parameters_w_missing_file(
-    installation_config,
-    temp_dir,
-    stem,
-    override,
-    which,
-):
-    db_rag_path = temp_dir / "db" / "rag"
-    db_rag_path.mkdir(parents=True)
-
-    if which == "stem":
-        exp_filename = db_rag_path / f"{stem}.lancedb"
-    else:
-        exp_filename = temp_dir / override
-
-    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_path)}
-    installation_config.get_environment = ic_environ.get
-
-    kw = {
-        "_installation_config": installation_config,
-        "_config_path": temp_dir / "room_config.yaml",
-    }
-
-    if stem is not None:
-        kw["rag_lancedb_stem"] = stem
-
-    if override is not None:
-        kw["rag_lancedb_override_path"] = override
-
-    sdt_config = config.SearchDocumentsToolConfig(**kw)
-
-    ep = sdt_config.get_extra_parameters()
-
-    assert ep["rag_lancedb_path"] == f"MISSING: {exp_filename.resolve()}"
-
-
-@pytest.mark.parametrize(
-    "hrc_override_yaml, hrc_override_kw",
-    [
-        (None, {}),
-        (HRC_OVERRIDE_YAML, HRC_OVERRIDE_KW),
-    ],
-)
-@pytest.mark.parametrize(
-    "w_config_path, expectation",
-    [
-        (False, pytest.raises(config.NoConfigPath)),
-        (True, NoRaise),
-    ],
-)
-@mock.patch("soliplex.config.hr_config")
-def test_sdt_haiku_rag_config(
-    hrc_module_mock,
-    installation_config,
-    temp_dir,
-    w_config_path,
-    expectation,
-    hrc_override_yaml,
-    hrc_override_kw,
-):
-    app_config_klass = hrc_module_mock.AppConfig
-    hrc_module_mock.load_yaml_config.return_value = HRC_OVERRIDE_KW
-
-    base_hr_config = mock.Mock(spec_set=["model_dump"])
-    base_hrc = base_hr_config.model_dump.return_value = {
-        "testing": "base",
-        "other": "base",
-    }
-    installation_config.haiku_rag_config = base_hr_config
-
-    room_dir = temp_dir / "rooms" / "testroom"
-    room_dir.mkdir(parents=True)
-    override_db = room_dir / "rag.lancedb"
-    config_path = room_dir / "room_config.yaml"
-
-    kw = {}
-
-    if w_config_path:
-        kw["_config_path"] = config_path
-
-    if hrc_override_yaml is not None:
-        hr_config_file = room_dir / "haiku.rag.yaml"
-        hr_config_file.write_text(hrc_override_yaml)
-
-    sdt_config = config.SearchDocumentsToolConfig(
-        _installation_config=installation_config,
-        rag_lancedb_override_path=override_db,
-        **kw,
-    )
-
-    with expectation as expected:
-        found = sdt_config.haiku_rag_config
-
-    if expected is None:
-        if hrc_override_yaml is not None:
-            assert found is app_config_klass.model_validate.return_value
-
-            app_config_klass.model_validate.assert_called_once_with(
-                base_hrc | hrc_override_kw
-            )
-            hrc_module_mock.load_yaml_config.assert_called_once_with(
-                hr_config_file,
-            )
-
-        else:
-            assert found is base_hr_config
-
-
-@pytest.mark.parametrize(
-    "stem, override, which",
-    [
-        ("testing", None, "stem"),
-        ("nonesuch", None, "stem"),
-        (None, "./foo.lancedb", "override"),
-        (None, "./nonesuch", "override"),
-    ],
-)
-def test_sdtc_rag_lance_db_path(
-    installation_config,
-    temp_dir,
-    stem,
-    override,
-    which,
-):
-    db_rag_path = temp_dir / "db" / "rag"
-    db_rag_path.mkdir(parents=True)
-
-    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_path)}
-    installation_config.get_environment = ic_environ.get
-
-    kw = {}
-
-    if stem is not None:
-        kw["rag_lancedb_stem"] = stem
-        from_stem = db_rag_path / f"{stem}.lancedb"
-        if stem != "nonesuch":
-            from_stem.mkdir()
-            expected = from_stem
-            expectation = NoRaise
-        else:
-            expectation = pytest.raises(config.RagDbFileNotFound)
-            expected = None
-
-    if override is not None:
-        override = str(temp_dir / override)
-        kw["rag_lancedb_override_path"] = override
-        from_override = pathlib.Path(override)
-        if "nonesuch" not in override:
-            expectation = NoRaise
-            from_override.mkdir(exist_ok=True)
-            expected = from_override
-        else:
-            expectation = pytest.raises(config.RagDbFileNotFound)
-            expected = None
-
-    room_dir = temp_dir / "rooms" / "testroom"
-    config_path = room_dir / "room_config.yaml"
-
-    sdt_config = config.SearchDocumentsToolConfig(
-        _installation_config=installation_config,
-        _config_path=config_path,
-        **kw,
-    )
-
-    with expectation:
-        found = sdt_config.rag_lancedb_path
-
-    if expected is not None:
-        assert found.resolve() == expected.resolve()
-
-
-def test_rrtc_ctor(installation_config, temp_dir):
-    db_rag_path = temp_dir / "db" / "rag"
-    db_rag_path.mkdir(parents=True)
-
-    from_stem = db_rag_path / "stem.lancedb"
-    from_stem.mkdir()
-
-    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_path)}
-    installation_config.get_environment = ic_environ.get
-
-    kw = {
-        "_installation_config": installation_config,
-        "_config_path": temp_dir / "rooms" / "test" / "room_config.yaml",
-        "rag_lancedb_stem": "stem",
-    }
-
-    rrt_config = config.RAGResearchToolConfig(**kw)
-
-    found = rrt_config.rag_lancedb_path
-    assert found.resolve() == from_stem.resolve()
-
-    expected_ep = {
-        "rag_lancedb_path": from_stem.resolve(),
-    }
-
-    assert rrt_config.get_extra_parameters() == expected_ep
-
-
-@pytest.mark.parametrize(
-    "config_yaml, exp_config",
-    [
-        (BOGUS_RRTC_CONFIG_YAML, None),
-        (W_STEM_RRTC_CONFIG_YAML, W_STEM_RRTC_CONFIG_KW),
-        (W_OVERRIDE_RRTC_CONFIG_YAML, W_OVERRIDE_RRTC_CONFIG_KW),
-    ],
-)
-def test_rrtc_from_yaml(
-    installation_config,
-    temp_dir,
-    config_yaml,
-    exp_config,
-):
-    db_rag_dir = temp_dir / "db" / "rag"
-    db_rag_dir.mkdir(parents=True)
-
-    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_dir)}
-    installation_config.get_environment = ic_environ.get
-
-    config_dir = temp_dir / "rooms" / "test_room"
-    config_dir.mkdir(parents=True)
-
-    config_path = config_dir / "room_config.yaml"
-    config_path.write_text(config_yaml)
-
-    with config_path.open() as stream:
-        config_dict = yaml.safe_load(stream)
-
-    if exp_config is None:
-        with pytest.raises(config.FromYamlException) as exc:
-            config.RAGResearchToolConfig.from_yaml(
-                installation_config=installation_config,
-                config_path=config_path,
-                config_dict=config_dict,
-            )
-
-        assert exc.value._config_path == config_path
-
-    else:
-        rrt_config = config.RAGResearchToolConfig.from_yaml(
-            installation_config=installation_config,
-            config_path=config_path,
-            config_dict=config_dict,
-        )
-        expected = config.RAGResearchToolConfig(
-            _installation_config=installation_config,
-            _config_path=config_path,
-            **exp_config,
-        )
-        assert rrt_config == expected
-
-
-def test_awrctc_ctor(installation_config, temp_dir):
-    db_rag_path = temp_dir / "db" / "rag"
-    db_rag_path.mkdir(parents=True)
-
-    from_stem = db_rag_path / "stem.lancedb"
-    from_stem.mkdir()
-
-    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_path)}
-    installation_config.get_environment = ic_environ.get
-
-    kw = {
-        "_installation_config": installation_config,
-        "_config_path": temp_dir / "rooms" / "test" / "room_config.yaml",
-        "rag_lancedb_stem": "stem",
-    }
-
-    awrct_config = config.AskWithRichCitationsToolConfig(**kw)
-
-    found = awrct_config.rag_lancedb_path
-    assert found.resolve() == from_stem.resolve()
-
-    expected_ep = {
-        "rag_lancedb_path": from_stem.resolve(),
-    }
-
-    assert awrct_config.get_extra_parameters() == expected_ep
-
-
-@pytest.mark.parametrize(
-    "config_yaml, exp_config",
-    [
-        (BOGUS_AWRCTC_CONFIG_YAML, None),
-        (W_STEM_AWRCTC_CONFIG_YAML, W_STEM_AWRCTC_CONFIG_KW),
-        (W_OVERRIDE_AWRCTC_CONFIG_YAML, W_OVERRIDE_AWRCTC_CONFIG_KW),
-    ],
-)
-def test_awrctc_from_yaml(
-    installation_config,
-    temp_dir,
-    config_yaml,
-    exp_config,
-):
-    db_rag_dir = temp_dir / "db" / "rag"
-    db_rag_dir.mkdir(parents=True)
-
-    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_dir)}
-    installation_config.get_environment = ic_environ.get
-
-    config_dir = temp_dir / "rooms" / "test_room"
-    config_dir.mkdir(parents=True)
-
-    config_path = config_dir / "room_config.yaml"
-    config_path.write_text(config_yaml)
-
-    with config_path.open() as stream:
-        config_dict = yaml.safe_load(stream)
-
-    if exp_config is None:
-        with pytest.raises(config.FromYamlException) as exc:
-            config.AskWithRichCitationsToolConfig.from_yaml(
-                installation_config=installation_config,
-                config_path=config_path,
-                config_dict=config_dict,
-            )
-
-        assert exc.value._config_path == config_path
-
-    else:
-        awrct_config = config.AskWithRichCitationsToolConfig.from_yaml(
-            installation_config=installation_config,
-            config_path=config_path,
-            config_dict=config_dict,
-        )
-        expected = config.AskWithRichCitationsToolConfig(
-            _installation_config=installation_config,
-            _config_path=config_path,
-            **exp_config,
-        )
-        assert awrct_config == expected
 
 
 @pytest.mark.parametrize(
@@ -4138,9 +3563,6 @@ def test_roomconfig_sort_key(w_order):
             [
                 # from 'agent_config'
                 AGUI_FEATURE_NAME,
-                # from 'tool_configs'
-                "filter_documents",
-                "ask_history",
                 # from 'room_config'
                 EXTRA_AGUI_FEATURE_NAME,
             ],
@@ -5124,12 +4546,7 @@ def patched_soliplex_config():
         (BOGUS_ICMETA_YAML, None),
         (BARE_ICMETA_YAML, BARE_ICMETA_KW),
         (W_AGUI_FEATURES_ICMETA_YAML, W_AGUI_FEATURES_ICMETA_KW),
-        (W_TOOL_CONFIGS_ICMETA_YAML, W_TOOL_CONFIGS_ICMETA_KW),
         (W_MCP_TOOLSET_CONFIGS_ICMETA_YAML, W_MCP_TOOLSET_CONFIGS_ICMETA_KW),
-        (
-            W_MCP_SERVER_TOOL_WRAPPER_ICMETA_YAML,
-            W_MCP_SERVER_TOOL_WRAPPER_ICMETA_KW,
-        ),
         (W_AGENT_CONFIGS_ICMETA_YAML, W_AGENT_CONFIGS_ICMETA_KW),
         (
             W_SECRET_SOURCE_ICMETA_YAML,
@@ -5189,18 +4606,6 @@ def test_installationconfigmeta_from_yaml(
                 assert af_found.model_klass == af_expected["model_klass"]
                 assert af_found.source == af_expected["source"]
 
-        if config_meta and "tool_configs" in config_meta:
-            tcs_by_tool_name = patched_soliplex_config[
-                "TOOL_CONFIG_CLASSES_BY_TOOL_NAME"
-            ]
-            tcs_by_class_name = {
-                f"{klass.__module__}.{klass.__name__}": klass
-                for klass in tcs_by_tool_name.values()
-            }
-            for klass_name in config_meta["tool_configs"]:
-                tool_name = tcs_by_class_name[klass_name].tool_name
-                assert tool_name in tcs_by_tool_name
-
         if config_meta and "mcp_toolset_configs" in config_meta:
             tcs_by_kind = patched_soliplex_config[
                 "MCP_TOOLSET_CONFIG_CLASSES_BY_KIND"
@@ -5222,24 +4627,6 @@ def test_installationconfigmeta_from_yaml(
             }
             for klass_name in config_meta["mcp_toolset_configs"]:
                 assert tcs_by_class_name[klass_name].kind in tcs_by_kind
-
-        if config_meta and "mcp_server_tool_wrappers" in config_meta:
-            mtcw_by_tool_name = patched_soliplex_config[
-                "MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME"
-            ]
-            SDTC = config.SearchDocumentsToolConfig
-            assert SDTC.tool_name in mtcw_by_tool_name
-
-            wcs_by_class_name = {
-                f"{klass.__module__}.{klass.__name__}": klass
-                for klass in mtcw_by_tool_name.values()
-            }
-            for wrapper_cfg in config_meta["mcp_server_tool_wrappers"]:
-                wrapper_klass = wrapper_cfg["wrapper_klass"]
-                assert (
-                    mtcw_by_tool_name[SDTC.tool_name]
-                    is wcs_by_class_name[wrapper_klass]
-                )
 
         if config_meta and "agent_configs" in config_meta:
             acs_by_kind = patched_soliplex_config[
@@ -5263,12 +4650,8 @@ def test_installationconfigmeta_from_yaml(
 @pytest.mark.parametrize("w_secret_reg", [False, True])
 @pytest.mark.parametrize("w_agent", [False, True])
 @pytest.mark.parametrize("w_mcp_toolsets", [False, True])
-@pytest.mark.parametrize("w_sdtc", [False, True])
-@pytest.mark.parametrize("w_fd", [False, True])
 def test_installationconfigmeta_as_yaml(
     patched_soliplex_config,
-    w_fd,
-    w_sdtc,
     w_mcp_toolsets,
     w_agent,
     w_secret_reg,
@@ -5276,39 +4659,6 @@ def test_installationconfigmeta_as_yaml(
     icmeta_kw = {}
     expected_dict = copy.deepcopy(BARE_ICMETA_KW)
     icmeta_kw = icmeta_kw.copy()
-
-    if w_fd:
-        feature = config.AGUI_Feature(
-            name="filter_documents",
-            model_klass=features.FilterDocuments,
-            source="server",
-        )
-        config.AGUI_FEATURES_BY_NAME["filter_documents"] = feature
-        expected_dict["agui_features"].append(
-            {
-                "name": "filter_documents",
-                "model_klass": "soliplex.agui.features.FilterDocuments",
-                "source": "server",
-            }
-        )
-
-    if w_sdtc:
-        config.TOOL_CONFIG_CLASSES_BY_TOOL_NAME[
-            config.SearchDocumentsToolConfig.tool_name
-        ] = config.SearchDocumentsToolConfig
-        expected_dict["tool_configs"].append(
-            "soliplex.config.SearchDocumentsToolConfig",
-        )
-
-        config.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME[
-            config.SearchDocumentsToolConfig.tool_name
-        ] = config.WithQueryMCPWrapper
-        expected_dict["mcp_server_tool_wrappers"].append(
-            {
-                "config_klass": "soliplex.config.SearchDocumentsToolConfig",
-                "wrapper_klass": "soliplex.config.WithQueryMCPWrapper",
-            }
-        )
 
     if w_mcp_toolsets:
         config.MCP_TOOLSET_CONFIG_CLASSES_BY_KIND[

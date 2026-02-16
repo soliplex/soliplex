@@ -43,7 +43,7 @@ TOOL_CONFIG_W_MCP_W_REQ_CTX = mock.create_autospec(
 )
 
 SDTC_WO_MCP = mock.create_autospec(
-    config.SearchDocumentsToolConfig,
+    config.ToolConfig,
     kind="search_documents",
     tool_name="soliplex.tools.search_documents",
     tool=tool_for_testing,
@@ -52,7 +52,7 @@ SDTC_WO_MCP = mock.create_autospec(
     tool_requires=config.ToolRequires.TOOL_CONFIG,
 )
 SDTC_W_MCP = mock.create_autospec(
-    config.SearchDocumentsToolConfig,
+    config.ToolConfig,
     kind="search_documents",
     tool_name="soliplex.tools.search_documents",
     tool=tool_for_testing,
@@ -65,16 +65,16 @@ MCP_TOOL = object()
 
 
 @pytest.mark.parametrize(
-    "tool_config, hit, wrapper_type",
+    "tool_config, hit",
     [
-        (TOOL_CONFIG_WO_MCP, False, None),
-        (TOOL_CONFIG_W_MCP_W_REQ_CTX, False, None),
-        (TOOL_CONFIG_W_MCP_WO_REQ_CTX, True, None),
-        (SDTC_WO_MCP, False, None),
-        (SDTC_W_MCP, True, config.WithQueryMCPWrapper),
+        (TOOL_CONFIG_WO_MCP, False),
+        (TOOL_CONFIG_W_MCP_W_REQ_CTX, False),
+        (TOOL_CONFIG_W_MCP_WO_REQ_CTX, True),
+        (SDTC_WO_MCP, False),
+        (SDTC_W_MCP, True),
     ],
 )
-def test_mcp_tool(tool_config, hit, wrapper_type):
+def test_mcp_tool(tool_config, hit):
     found = mcp_server.mcp_tool(tool_config)
 
     if not hit:
@@ -82,15 +82,7 @@ def test_mcp_tool(tool_config, hit, wrapper_type):
 
     else:
         assert isinstance(found, fmcp_tools.Tool)
-
-        if wrapper_type is not None:
-            wrapper = found.fn.__self__
-            assert isinstance(wrapper, wrapper_type)
-            assert wrapper.func is tool_config.tool
-            assert wrapper.tool_config is tool_config
-
-        else:
-            assert found.fn is tool_config.tool
+        assert found.fn is tool_config.tool
 
 
 @pytest.mark.parametrize("allow_mcp", [False, True])

@@ -1,4 +1,3 @@
-import functools
 from unittest import mock
 
 import pytest
@@ -38,17 +37,11 @@ def test_tool():
     """This is a test"""
 
 
-SDTC_TOOL_CONFIG = config.SearchDocumentsToolConfig(
-    rag_lancedb_override_path=RAG_LANCEDB_OVERRIDE_PATH
-)
-
-
 @pytest.fixture(
     scope="module",
     params=[
         None,
         TC_TOOL_CONFIG,
-        SDTC_TOOL_CONFIG,
     ],
 )
 def tool_configs_tools(request):
@@ -168,12 +161,7 @@ def test_get_agent_from_configs_wo_hit_w_default_kind(
     assert akc_kw["model_settings"] == w_model_settings
 
     for akc_tool, exp_tool in zip(akc_kw["tools"], exp_tools, strict=True):
-        if isinstance(akc_tool.function, functools.partial):
-            assert akc_tool.function.func is exp_tool.function.func
-            assert akc_tool.function.args == exp_tool.function.args
-            assert akc_tool.function.keywords == exp_tool.function.keywords
-        else:
-            assert akc_tool.function is exp_tool.function
+        assert akc_tool.function is exp_tool.function
 
     for akc_toolset, exp_toolset in zip(
         akc_kw["toolsets"],

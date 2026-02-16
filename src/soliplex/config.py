@@ -464,117 +464,7 @@ class _RAGConfigBase:
         }
 
 
-@dataclasses.dataclass(kw_only=True)
-class SearchDocumentsToolConfig(ToolConfig, _RAGConfigBase):
-    kind: str = "search_documents"
-    tool_name: str = "soliplex.tools.search_documents"
-
-    search_documents_limit: int = 5
-
-    # Set in 'from_yaml' below
-    _installation_config: InstallationConfig = _no_repr_no_compare_none()
-    _config_path: pathlib.Path = None
-
-    @classmethod
-    def from_yaml(
-        cls,
-        installation_config: InstallationConfig,
-        config_path: pathlib.Path,
-        config_dict: dict[str, typing.Any],
-    ):
-        try:
-            config_dict["_installation_config"] = installation_config
-            config_dict["_config_path"] = config_path
-
-            instance = cls(**config_dict)
-        except Exception as exc:
-            raise FromYamlException(config_path, "sdtc", config_dict) from exc
-
-        return instance
-
-    def get_extra_parameters(self) -> dict:
-        local = {
-            "search_documents_limit": self.search_documents_limit,
-        }
-        return (
-            super().get_extra_parameters()
-            | _RAGConfigBase.get_extra_parameters(self)
-            | local
-        )
-
-
-@dataclasses.dataclass(kw_only=True)
-class RAGResearchToolConfig(ToolConfig, _RAGConfigBase):
-    kind: str = "research_report"
-    tool_name: str = "soliplex.tools.research_report"
-
-    @classmethod
-    def from_yaml(
-        cls,
-        installation_config: InstallationConfig,
-        config_path: pathlib.Path,
-        config_dict: dict[str, typing.Any],
-    ):
-        try:
-            config_dict["_installation_config"] = installation_config
-            config_dict["_config_path"] = config_path
-
-            instance = cls(**config_dict)
-        except Exception as exc:
-            raise FromYamlException(config_path, "rrtc", config_dict) from exc
-
-        return instance
-
-    def get_extra_parameters(self) -> dict:
-        return (
-            super().get_extra_parameters()
-            | _RAGConfigBase.get_extra_parameters(self)
-        )
-
-
-@dataclasses.dataclass(kw_only=True)
-class AskWithRichCitationsToolConfig(ToolConfig, _RAGConfigBase):
-    kind: str = "ask_with_rich_citations"
-    tool_name: str = "soliplex.tools.ask_with_rich_citations"
-    agui_feature_names: typing.ClassVar[tuple[str]] = (
-        "filter_documents",
-        "ask_history",
-    )
-
-    @classmethod
-    def from_yaml(
-        cls,
-        installation_config: InstallationConfig,
-        config_path: pathlib.Path,
-        config_dict: dict[str, typing.Any],
-    ):
-        try:
-            config_dict["_installation_config"] = installation_config
-            config_dict["_config_path"] = config_path
-
-            instance = cls(**config_dict)
-        except Exception as exc:
-            raise FromYamlException(
-                config_path, "awrctc", config_dict
-            ) from exc
-
-        return instance
-
-    def get_extra_parameters(self) -> dict:
-        return (
-            super().get_extra_parameters()
-            | _RAGConfigBase.get_extra_parameters(self)
-        )
-
-
-TOOL_CONFIG_CLASSES_BY_TOOL_NAME = {
-    klass.tool_name: klass
-    for klass in [
-        SearchDocumentsToolConfig,
-        RAGResearchToolConfig,
-        AskWithRichCitationsToolConfig,
-    ]
-}
+TOOL_CONFIG_CLASSES_BY_TOOL_NAME = {}
 
 
 ToolConfigMap = dict[str, ToolConfig]
@@ -783,9 +673,7 @@ class WithQueryMCPWrapper:
         return self.func(query, tool_config=self.tool_config)
 
 
-MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME = {
-    SearchDocumentsToolConfig.tool_name: WithQueryMCPWrapper,
-}
+MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME = {}
 
 
 # ============================================================================
@@ -1702,16 +1590,6 @@ AGUI_FEATURES_BY_NAME = {
     agui_feature.name: agui_feature
     for agui_feature in [
         AGUI_Feature(
-            name=features.FILTER_DOCUMENTS_FEATURE,
-            model_klass=features.FilterDocuments,
-            source=AGUI_FeatureSource.CLIENT,
-        ),
-        AGUI_Feature(
-            name=features.ASK_HISTORY_FEATURE,
-            model_klass=features.AskedAndAnswered,
-            source=AGUI_FeatureSource.SERVER,
-        ),
-        AGUI_Feature(
             name=features.HAIKU_CHAT_FEATURE,
             model_klass=features.hr_chat_state.ChatSessionState,
             source=AGUI_FeatureSource.SERVER,
@@ -2256,7 +2134,7 @@ class InstallationConfigMeta:
             )
 
         self.tool_configs = list(self.tool_configs)
-        for tc_meta in self.tool_configs:
+        for tc_meta in self.tool_configs:  # pragma: NO COVER
             klass = tc_meta.config_klass
             TOOL_CONFIG_CLASSES_BY_TOOL_NAME[klass.tool_name] = klass
 
@@ -2266,7 +2144,7 @@ class InstallationConfigMeta:
             MCP_TOOLSET_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
 
         self.mcp_server_tool_wrappers = list(self.mcp_server_tool_wrappers)
-        for mstw_meta in self.mcp_server_tool_wrappers:
+        for mstw_meta in self.mcp_server_tool_wrappers:  # pragma: NO COVER
             config_klass = mstw_meta.config_klass
             tool_name = config_klass.tool_name
             wrapper_klass = mstw_meta.wrapper_klass

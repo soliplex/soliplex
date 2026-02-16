@@ -1026,7 +1026,7 @@ class RoomView(t_screen.Screen):
 
                 elif chunk["type"] == "STATE_SNAPSHOT" and self.verbose:
                     response_content += (
-                        f"\n\n** state snapshot **\n\n{chunk['content']}\n\n"
+                        f"\n\n** state snapshot **\n\n{chunk['snapshot']}\n\n"
                     )
 
                 elif chunk["type"] == "STATE_DELTA" and self.verbose:

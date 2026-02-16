@@ -1,0 +1,11 @@
+id: "analysis"
+name: "Analysis"
+description: "Search and analyze documents with code execution"
+suggestions:
+  - "Analyze the data in the documents"
+  - "Compare metrics across documents"
+agent:
+  kind: "haiku_chat"
+  rag_lancedb_stem: "rag"
+  features: ["search", "analysis"]
+allow_mcp: false

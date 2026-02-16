@@ -38,10 +38,6 @@ W_TOOLS_CONFIG = config.CompletionConfig(
         "get_current_datetime": config.ToolConfig(
             tool_name="soliplex.tools.get_current_datetime",
         ),
-        "search_documents": config.SearchDocumentsToolConfig(
-            search_documents_limit=1,
-            rag_lancedb_override_path="/dev/null/",
-        ),
     },
 )
 W_TOOLS_CONFIG_YAML = f"""\
@@ -51,9 +47,6 @@ agent:
     model_name: "{MODEL_NAME}"
 tools:
     - tool_name: "soliplex.tools.get_current_datetime"
-    - tool_name: "soliplex.tools.search_documents"
-        search_documents_limit: 1
-        rag_lancedb_override_path: "/dev/null/"
 """
 
 

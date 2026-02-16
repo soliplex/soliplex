@@ -8,6 +8,7 @@ suggestions:
 agent:
   kind: "haiku_chat"
   rag_lancedb_stem: "rag"
+  features: ["search", "documents", "qa"]
   background_context: |
     **Soliplex** is an AI-powered Retrieval-Augmented Generation (RAG) platform.
     It lets users:

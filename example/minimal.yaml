@@ -234,13 +234,12 @@ authorization_dburi:
 # registry, and hence requires additional secrets
 #==========================================================================
 room_paths:
-  - "./rooms/ask_soliplex"
   - "./rooms/chat"
-  - "./rooms/haiku"
+  - "./rooms/search"
+  - "./rooms/analysis"
   - "./rooms/joker"
   - "./rooms/faux"
   - "./rooms/quiztest"
-  - "./rooms/research"
 #
 #==========================================================================
 # Completions configuration

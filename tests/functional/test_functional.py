@@ -14,7 +14,7 @@ def test_rooms_endpoints(client_no_llm):
     get_rooms_response = client_no_llm.get("/api/v1/rooms")
     rooms_manifest = get_rooms_response.json()
 
-    room_id = "haiku"
+    room_id = "chat"
     room_info = rooms_manifest[room_id]
 
     get_room_response = client_no_llm.get(f"/api/v1/rooms/{room_id}")

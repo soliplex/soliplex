@@ -1,0 +1,14 @@
+id: "search"
+name: "Search & Answer"
+description: "Search the knowledge base and answer questions"
+suggestions:
+  - "What is a Soliplex installation?"
+  - "Find documents about authentication"
+agent:
+  kind: "haiku_chat"
+  rag_lancedb_stem: "rag"
+  features: ["search"]
+  preamble: |
+    You are a knowledgeable assistant that answers questions using a document knowledge base.
+    Use search to find relevant information, then synthesize a comprehensive answer.
+allow_mcp: false
