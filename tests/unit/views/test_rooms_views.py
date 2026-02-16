@@ -345,6 +345,11 @@ async def test_get_room_documents(
             "non_hr": non_hr_tool_config,
         }
 
+        # Agent config without haiku_rag_config (default agent)
+        agent_config_mock = mock.create_autospec(config.AgentConfig)
+        del agent_config_mock.haiku_rag_config
+        room_configs[ROOM_ID].agent_config = agent_config_mock
+
         if w_hr_tool:
             tool_config = mock.create_autospec(
                 config.ToolConfig,

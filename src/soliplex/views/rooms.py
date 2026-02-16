@@ -195,12 +195,16 @@ async def get_room_documents(
 
     document_set = {}
 
-    for tool_config in room_config.tool_configs.values():
-        hr_config = getattr(tool_config, "haiku_rag_config", None)
+    candidates = [room_config.agent_config] + list(
+        room_config.tool_configs.values()
+    )
+
+    for cfg in candidates:
+        hr_config = getattr(cfg, "haiku_rag_config", None)
 
         if hr_config is not None:
             hr_client_kw = {
-                "db_path": tool_config.rag_lancedb_path,
+                "db_path": cfg.rag_lancedb_path,
                 "config": hr_config,
             }
 
