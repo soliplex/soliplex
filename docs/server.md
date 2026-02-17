@@ -69,7 +69,7 @@ configurations:
   in addition to the `OPENAI_API_KEY` secret, it requires secrets for the
   external Model-Control Protocol (MCP) client toolsets for the room `mcptest`.
 
-Each installation configuration includes a number of rooms that 
+Each installation configuration includes a number of rooms that
 
 1. Configure resources:
 
@@ -238,6 +238,36 @@ To check server health:
 ```bash
 curl http://127.0.0.1:8000/health
 ```
+
+### Running Behind a Load Balancer
+
+Several features of an installation configuration require special handling
+when running multiple Soliplex server instances behind a load balancer:
+
+- The SQLAlchemy DBURI used to store AGUI threads and runs should not
+  be configured to use the `sqlite` engine, using either the RAM-based
+  storage (the default), or a filesystem-based storage (`sqlite` does not
+  support multiple writers to a shared filesystem database).  Instead,
+  configure the SQLAlchemy using a supported relational database
+  server, as described [here](config/dburis.md#thread_persistence_dburi).
+
+- The SQLAlchemy DBURI used to store authorization data should not
+  be configured to use the `sqlite` engine, using either the RAM-based
+  storage (the default), or a filesystem-based storage (`sqlite` does not
+  support multiple writers to a shared filesystem database).  Instead,
+  configure the SQLAlchemy using a supported relational database
+  server, as described [here](config/dburis.md#authorization_dburi).
+
+- The [secret](config/secrets.md#session_middleware_token) used to manage
+  session encryption should not be configured to use a `random_chars` secret
+  source, because that value cannot be shared across Soliplex server
+  instances.
+
+- The [secret](config/secrets.md#url_safe_token_secret) used to generate
+  bearer tokens for MCP clients should not be configured to use the
+  `random_chars` secret source, because that value cannot be shared across
+  Soliplex server instances.
+
 
 ## API Endpoints
 
