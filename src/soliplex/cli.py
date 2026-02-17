@@ -448,6 +448,32 @@ def check_config(
         the_console.line()
 
     the_console.line()
+    the_console.rule("Validating Python logging")
+    the_console.line()
+    pyl_config = the_installation._config.logging_config_file
+    if pyl_config is not None:
+        the_console.print(f"Logging config: {pyl_config}")
+        try:
+            with pyl_config.open() as f:
+                logging_config = yaml.safe_load(f)
+        except yaml.YAMLError:
+            the_console.print_exception()
+        except OSError:
+            the_console.print_exception()
+        else:
+            the_console.print(logging_config)
+            the_console.print(
+                f"Headers map: {the_installation._config.logging_headers_map}",
+            )
+            the_console.print(
+                f"Claims map: {the_installation._config.logging_claims_map}",
+            )
+            the_console.print("OK")
+    else:
+        the_console.print("OK (defaults)")
+    the_console.line()
+
+    the_console.line()
     the_console.rule("Validating Logfire config")
     the_console.line()
     l_config = the_installation._config.logfire_config
