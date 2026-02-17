@@ -9,15 +9,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version-file: "pyproject.toml"
+      - name: Install build and twine
+        run: pip install build twine
       - name: Build soliplex
-        run: uv build --package soliplex
+        run: python -m build --sdist --wheel
       - name: Publish soliplex
-        run: uvx twine upload -u __token__ -p ${{ secrets.PYPI_API_TOKEN }} dist/* --non-interactive
+        run: twine upload -u __token__ -p ${{ secrets.PYPI_API_TOKEN }} dist/* --non-interactive
 
