@@ -52,11 +52,11 @@ background_context: |
 """
 
 W_FEATURES_AGENT_CONFIG_KW = W_RAG_STEM_CHAT_AGENT_CONFIG_KW | {
-    "features": ["search", "documents"],
+    "rag_features": ["search", "documents"],
 }
 W_FEATURES_AGENT_CONFIG_YAML = f"""\
 {W_RAG_STEM_CHAT_AGENT_CONFIG_YAML}
-features:
+rag_features:
     - "search"
     - "documents"
 """
@@ -683,11 +683,11 @@ def test_chatagentconfig_factory(
 
     hr_agents_chat_agent_mod.build_chat_toolkit.assert_called_once_with(
         i_config.haiku_rag_config,
-        features=cac.features,
+        features=cac.rag_features,
     )
     hr_agents_chat_agent_mod.create_chat_agent.assert_called_once_with(
         i_config.haiku_rag_config,
-        features=cac.features,
+        features=cac.rag_features,
         preamble=cac.preamble,
         toolkit=mock_toolkit,
     )

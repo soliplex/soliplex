@@ -122,7 +122,7 @@ class ChatAgentConfig(config._RAGConfigBase):
         agent:
           kind: "haiku_chat"
           rag_lancedb_stem: "rag"
-          features: ["search", "documents", "qa"]
+          rag_features: ["search", "documents", "qa"]
           background_context: |
             <your context here>
 
@@ -138,7 +138,7 @@ class ChatAgentConfig(config._RAGConfigBase):
     id: str
     kind: typing.ClassVar[str] = "haiku_chat"
     background_context: str = None
-    features: list[str] = None
+    rag_features: list[str] = None
     preamble: str = None
 
     # Use a config from the top-level InstallationConfig's 'agent_configs'
@@ -207,8 +207,8 @@ class ChatAgentConfig(config._RAGConfigBase):
         if self.background_context is not None:
             result["background_context"] = self.background_context
 
-        if self.features is not None:
-            result["features"] = self.features
+        if self.rag_features is not None:
+            result["rag_features"] = self.rag_features
 
         if self.preamble is not None:
             result["preamble"] = self.preamble
@@ -225,11 +225,11 @@ class ChatAgentConfig(config._RAGConfigBase):
     def factory(self, **_kwargs) -> ai_ag_abstract.AbstractAgent:
         hr_config = self.haiku_rag_config
         toolkit = hr_agents_chat_agent.build_chat_toolkit(
-            hr_config, features=self.features
+            hr_config, features=self.rag_features
         )
         agent = hr_agents_chat_agent.create_chat_agent(
             hr_config,
-            features=self.features,
+            features=self.rag_features,
             preamble=self.preamble,
             toolkit=toolkit,
         )

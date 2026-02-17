@@ -7,5 +7,5 @@ suggestions:
 agent:
   kind: "haiku_chat"
   rag_lancedb_stem: "rag"
-  features: ["search", "analysis"]
+  rag_features: ["search", "analysis"]
 allow_mcp: false

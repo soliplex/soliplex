@@ -7,7 +7,7 @@ suggestions:
 agent:
   kind: "haiku_chat"
   rag_lancedb_stem: "rag"
-  features: ["search"]
+  rag_features: ["search"]
   preamble: |
     You are a knowledgeable assistant that answers questions using a document knowledge base.
     Use search to find relevant information, then synthesize a comprehensive answer.
