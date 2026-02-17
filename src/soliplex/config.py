@@ -2134,7 +2134,7 @@ class InstallationConfigMeta:
             )
 
         self.tool_configs = list(self.tool_configs)
-        for tc_meta in self.tool_configs:  # pragma: NO COVER
+        for tc_meta in self.tool_configs:
             klass = tc_meta.config_klass
             TOOL_CONFIG_CLASSES_BY_TOOL_NAME[klass.tool_name] = klass
 
@@ -2144,7 +2144,7 @@ class InstallationConfigMeta:
             MCP_TOOLSET_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
 
         self.mcp_server_tool_wrappers = list(self.mcp_server_tool_wrappers)
-        for mstw_meta in self.mcp_server_tool_wrappers:  # pragma: NO COVER
+        for mstw_meta in self.mcp_server_tool_wrappers:
             config_klass = mstw_meta.config_klass
             tool_name = config_klass.tool_name
             wrapper_klass = mstw_meta.wrapper_klass

@@ -1,3 +1,4 @@
+import inspect
 from unittest import mock
 
 import pytest
@@ -83,6 +84,29 @@ def test_mcp_tool(tool_config, hit):
     else:
         assert isinstance(found, fmcp_tools.Tool)
         assert found.fn is tool_config.tool
+
+
+def test_mcp_tool_w_wrapper():
+    tool_name = "soliplex.tools.testing"
+    tc = mock.create_autospec(
+        config.ToolConfig,
+        kind="testing",
+        tool_name=tool_name,
+        tool=tool_for_testing,
+        tool_id="mcp_true_w_wrapper",
+        allow_mcp=True,
+        tool_requires=config.ToolRequires.TOOL_CONFIG,
+    )
+
+    with mock.patch.dict(
+        config.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME,
+        {tool_name: config.WithQueryMCPWrapper},
+    ):
+        found = mcp_server.mcp_tool(tc)
+
+    assert isinstance(found, fmcp_tools.Tool)
+    assert found.name == "mcp_true_w_wrapper"
+    assert found.description == inspect.getdoc(tool_for_testing)
 
 
 @pytest.mark.parametrize("allow_mcp", [False, True])

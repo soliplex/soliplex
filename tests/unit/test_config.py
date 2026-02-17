@@ -4694,6 +4694,42 @@ def test_installationconfigmeta_as_yaml(
     assert found == expected_dict
 
 
+def test_installationconfigmeta_postinit_registers_tool_configs(
+    patched_soliplex_config,
+):
+    @dataclasses.dataclass(kw_only=True)
+    class _DummyToolConfig(config.ToolConfig):
+        tool_name: str = "tests.unit.test_config.dummy_tool"
+
+    tc_meta = config.ConfigMeta(config_klass=_DummyToolConfig)
+    config.InstallationConfigMeta(tool_configs=[tc_meta])
+
+    tcs = patched_soliplex_config["TOOL_CONFIG_CLASSES_BY_TOOL_NAME"]
+    assert tcs[_DummyToolConfig.tool_name] is _DummyToolConfig
+
+
+def test_installationconfigmeta_postinit_registers_mcp_tool_wrappers(
+    patched_soliplex_config,
+):
+    @dataclasses.dataclass(kw_only=True)
+    class _DummyToolConfig(config.ToolConfig):
+        tool_name: str = "tests.unit.test_config.dummy_tool"
+
+    @dataclasses.dataclass(kw_only=True)
+    class _DummyWrapper:
+        func: typing.Any
+        tool_config: config.ToolConfig
+
+    mstw_meta = config.ConfigMeta(
+        config_klass=_DummyToolConfig,
+        wrapper_klass=_DummyWrapper,
+    )
+    config.InstallationConfigMeta(mcp_server_tool_wrappers=[mstw_meta])
+
+    wrappers = patched_soliplex_config["MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME"]
+    assert wrappers[_DummyToolConfig.tool_name] is _DummyWrapper
+
+
 @pytest.mark.parametrize("w_disable_dotenv", [False, True])
 def test_installationconfig_from_dotenv_already(w_disable_dotenv):
     already = {"KEY": "value"}
