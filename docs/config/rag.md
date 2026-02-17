@@ -21,10 +21,10 @@ for the format and semantics of this file.
 
 ## Room-level and Completion-level Configuration
 
-Rooms and completions which use the `soliplex.tools.search_documents`
-tool can also define a `haiku.rag.yaml` file, next to their own
+Rooms and completions which use the `haiku_chat` agent kind
+can also define a `haiku.rag.yaml` file, next to their own
 config files.  Soliplex overlays any configuration defined in such files
-on top of the global configuration when using the tool.
+on top of the global configuration.
 
 E.g., to override only the reranking used by `haiku-rag` in a given room:
 

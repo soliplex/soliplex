@@ -28,19 +28,14 @@ The section contains a list of mappings, each of which include:
   the feature's field in the AG-UI state. Allowed values are "client",
   "server", and "either";  the default is "either".
 
-By default, Soliplex registers its own AG-UI feature classes, just as though
-we configured explicitly:
+Example:
 
 ```yaml
 meta:
   agui_features:
 
-  - name: "filter_documents"
-    model_klass: "soliplex.agui.features.FilterDocuments"
-    source: "client"
-
-  - name: "ask_history"
-    model_klass: "soliplex.agui.features.AskedAndAnswered"
+  - name: "my_feature"
+    model_klass: "my_package.features.MyFeature"
     source: "server"
 ```
 
@@ -52,13 +47,12 @@ they can be referenced by their `tool_name`.
 The section contains a list of Python "dotted names", i.e. strings which
 can be used to import the configuration class.
 
-By default, Soliplex registers its own tool config classes, just as though
-we configured explicitly:
+Example:
 
 ```yaml
 meta:
   tool_configs:
-  - "soliplex.config.SearchDocumentsToolConfig"
+  - "my_package.config.MyToolConfig"
 ```
 
 ## Registering MCP Client Toolset Configuration Classes
@@ -87,15 +81,13 @@ The section contains a list of mappings with keys `config_klass` and
 `wrapper_klass`.  Values for both keys Python "dotted names", i.e. strings
 which can be used to import the corresponding class.
 
-By default, Soliplex configures its 'soliplex.config.WithQueryMCPWrapper'
-as the wrapper for 'soliplex.config.SearchDocumentsToolConfig',
-just as if we configured here:
+Example:
 
 ```yaml
 meta:
   mcp_server_tool_wrappers:
-  - config_klass: "soliplex.config.SearchDocumentsToolConfig"
-    wrapper_klass: "soliplex.config.WithQueryMCPWrapper"
+  - config_klass: "my_package.config.MyToolConfig"
+    wrapper_klass: "my_package.config.MyMCPWrapper"
 ```
 
 ## Registering Agent Configuration Classes

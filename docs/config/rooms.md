@@ -115,65 +115,44 @@ for configuring an agent.
   Each tool mapping can contain additional elements, which are used to 
   configure the tool's behavior.
 
-#### RAG / search-related
+#### The `haiku_chat` agent kind
 
-The `soliplex.tools.search_documents` tool takes a number of configuration
-values.  *Exactly one* of the following two elements is required:
+Rooms can use the `haiku_chat` agent kind to provide conversational RAG
+powered by `haiku.rag`.  This agent kind uses its own configuration
+instead of the standard `tools` list.
 
 - `rag_lancedb_stem` is a string:  it should be the "base name" (without
   path or `.lancedb` suffix) of the LanceDB file containing the RAG document
-  data for the tool. This file must exist in the "standard" location
-  (typically under the `db/rag/` directory;  see below).
+  data.  This file must exist in the "standard" location (typically under
+  the `db/rag/` directory;  see below).
 
-  ```yaml
-  rag_lancedb_stem: "<room_id>"
-  ```
+- `rag_lancedb_override_path` is a string:  as an alternative to
+  `rag_lancedb_stem`, it should be a fully-qualified pathname, including
+  the suffix, of the LanceDB directory.
 
-- `rag_lancedb_override_path` is a string:  it should be a fully-qualified
-  pathname, including the suffix, of the LanceDB directory containing the RAG
-  document data for the tool. 
+- `rag_features` (a list of strings) controls which haiku.rag toolsets
+  are enabled.  Available features: `"search"`, `"documents"`, `"qa"`,
+  `"analysis"`.
 
-  ```yaml
-  rag_lancedb_override_path: "/<path-to-rag-databases>/<room_id>.<extension>"
-  ```
+- `preamble` (a string, optional) overrides the agent's default system
+  prompt section defining its identity and behavioral rules.
 
-Other, optional elements for the `search_documents` tool:
+- `background_context` (a string, optional) seeds the conversation with
+  domain knowledge, injected as the session's initial context.
 
-- `search_documents_limit` is a positive integer (default `5`), used to
-  control the number of results returned by the `search_documents` tool. E.g.:
-
-  ```yaml
-  search_documents_limit: 8
-  ```
-
-Minimal `search_documents` configuration, with RAG database file found
-in the standard location:
+Example:
 
 ```yaml
 agent:
-  tools:
-    - tool_name: "soliplex.tools.search_documents"
-      rag_lancedb_stem: "chat"
-```
-
-Minimal `search_documents` configuration, with RAG database file found
-in an overridden location:
-
-```yaml
-agent:
-  tools:
-    - tool_name: "soliplex.tools.search_documents"
-      rag_lancedb_override_path: "/path/to/rag/db/filename.lancedb"
-```
-
-Maximal `search_documents` configuration
-
-```yaml
-agent:
-  tools:
-    - tool_name: "soliplex.tools.search_documents"
-      rag_lancedb_stem: "chat"
-      search_documents_limit: 8
+  kind: "haiku_chat"
+  rag_lancedb_stem: "rag"
+  rag_features: ["search", "documents", "qa"]
+  preamble: |
+    You are a knowledgeable assistant that answers questions
+    using a document knowledge base.
+  background_context: |
+    This knowledge base contains internal documentation
+    about the Soliplex platform.
 ```
 
 ### Quiz-related elements
@@ -193,7 +172,7 @@ agent:
 
 ## Location of RAG database files
 
-Rooms using the ``search_documents`` tool need to be able to find the
+Rooms using the `haiku_chat` agent kind need to be able to find the
 LanceDB database containing the chunks and embeddings extracted by
 Haiku-RAG.  At present, there should be a single database per room,
 named by convention `<stem>.lancedb`, and stored in the `db/rag/`
