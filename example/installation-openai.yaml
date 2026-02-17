@@ -19,19 +19,10 @@ meta:
   # Register AG-UI feature models so that they can be referenced by
   # their 'name'
   #
-  # 'soliplex.agui.features.FilterDocuments' and
-  # 'soliplex.agui.features.AskedAndAnswered' are registered by default,
-  # just as if we configured here:
+  # 'haiku.rag.agents.chat.state.ChatSessionState' is registered by
+  # default, just as if we configured here:
   #
   # agui_features:
-  #
-  # - name: "filter_documents"
-  #   model_klass: "soliplex.agui.features.FilterDocuments"
-  #   source: "client"
-  #
-  # - name: "ask_history"
-  #   model_klass: "soliplex.agui.features.AskedAndAnswered"
-  #   source: "server"
   #
   # - name: "haiku.rag.chat"
   #   model_klass: "haiku.rag.agents.chat.state.ChatSessionState"
@@ -42,11 +33,10 @@ meta:
   # Register tool configuration types so that they can be referenced by
   # their 'tool_name'
   #
-  # 'soliplex.config.SearchDocumentsToolConfig' is registered by default,
-  # just as if we configured here:
+  # Example (using a hypothetical package):
   #
   # tool_configs:
-  # - "soliplex.config.SearchDocumentsToolConfig"
+  # - "my_package.config.MyToolConfig"
   #------------------------------------------------------------------------
 
   #------------------------------------------------------------------------
@@ -66,13 +56,11 @@ meta:
   # Register MCP server tool wrapper types so that they can be used to
   # wrap tools from a given tool configuration class.
   #
-  # By default, 'soliplex.config.WithQueryMCPWrapper' is configured as
-  # the wrapper for 'soliplex.config.SearchDocumentsToolConfig',
-  # just as if we configured here:
+  # Example (using a hypothetical package):
   #
   # mcp_server_tool_wrappers:
-  # - config_klass: "soliplex.config.SearchDocumentsToolConfig"
-  #   wrapper_klass: "soliplex.config.WithQueryMCPWrapper"
+  # - config_klass: "my_package.config.MyToolConfig"
+  #   wrapper_klass: "my_package.config.MyMCPWrapper"
   #------------------------------------------------------------------------
 
   #------------------------------------------------------------------------

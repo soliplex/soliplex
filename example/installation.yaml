@@ -32,6 +32,11 @@ meta:
   #------------------------------------------------------------------------
   # Register tool configuration types so that they can be referenced by
   # their 'tool_name'
+  #
+  # Example (using a hypothetical package):
+  #
+  # tool_configs:
+  # - "my_package.config.MyToolConfig"
   #------------------------------------------------------------------------
 
   #------------------------------------------------------------------------
@@ -50,6 +55,12 @@ meta:
   #------------------------------------------------------------------------
   # Register MCP server tool wrapper types so that they can be used to
   # wrap tools from a given tool configuration class.
+  #
+  # Example (using a hypothetical package):
+  #
+  # mcp_server_tool_wrappers:
+  # - config_klass: "my_package.config.MyToolConfig"
+  #   wrapper_klass: "my_package.config.MyMCPWrapper"
   #------------------------------------------------------------------------
 
   #------------------------------------------------------------------------
