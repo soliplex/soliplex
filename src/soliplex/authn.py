@@ -21,6 +21,9 @@ oauth2_predicate = fastapi.Depends(oauth2_scheme)
 
 _oauth = None
 
+JWT_VALIDATION_NO_TOKEN = "JWT validation failed (no token)"
+JWT_VALIDATION_INVALID_TOKEN = "JWT validation failed (invalid token)"
+
 
 def get_oauth(
     the_installation: installation.Installation,
@@ -49,7 +52,8 @@ def authenticate(
 
     if token is None:
         raise fastapi.HTTPException(
-            status_code=401, detail="JWT validation failed (no token)"
+            status_code=401,
+            detail=JWT_VALIDATION_NO_TOKEN,
         )
 
     for auth_system in the_installation.oidc_auth_system_configs:
@@ -61,7 +65,8 @@ def authenticate(
             return payload
 
     raise fastapi.HTTPException(
-        status_code=401, detail="JWT validation failed (invalid token)"
+        status_code=401,
+        detail=JWT_VALIDATION_INVALID_TOKEN,
     )
 
 

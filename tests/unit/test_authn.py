@@ -104,7 +104,7 @@ def test_authenticate_w_token_none(w_auth_disabled):
             authn.authenticate(the_installation, None)
 
         assert exc.value.status_code == 401
-        assert exc.value.detail == "JWT validation failed (no token)"
+        assert exc.value.detail == authn.JWT_VALIDATION_NO_TOKEN
 
 
 @pytest.mark.parametrize("w_hit", [None, "first", "second"])
@@ -136,7 +136,7 @@ def test_authenticate(vat, with_auth_systems, w_hit):
                 authn.authenticate(the_installation, token)
 
             assert exc.value.status_code == 401
-            assert exc.value.detail == "JWT validation failed (invalid token)"
+            assert exc.value.detail == authn.JWT_VALIDATION_INVALID_TOKEN
 
         else:
             found = authn.authenticate(the_installation, token)

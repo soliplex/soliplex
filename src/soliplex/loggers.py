@@ -24,6 +24,8 @@ AUTHN_GET_LOGIN = "get login"
 AUTHN_GET_LOGIN_SYSTEM = "get login system"
 AUTHN_GET_AUTH_SYSTEM = "get auth system"
 AUTHN_GET_USER_INFO = "get user info"
+AUTHN_GET_USER_CLAIMS = "get user claims"
+AUTHN_GET_USER_CLAIMS_FAILED = "get user claims failed: %s"
 
 AUTHZ_LOGGER_NAME = "soliplex.authz"
 AUTHZ_FILTERING_ROOMS = "filtering rooms for user"
