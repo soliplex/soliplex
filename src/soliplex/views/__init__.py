@@ -16,19 +16,6 @@ Installation = installation_module.Installation
 HTTPAuthorizationCredentials = security.HTTPAuthorizationCredentials
 
 
-async def get_the_user_claims(
-    the_installation: Installation = depend_the_installation,
-    token: HTTPAuthorizationCredentials = authn_module.oauth2_predicate,
-) -> authn_module.UserClaims:
-    return authn_module.authenticate(
-        the_installation=the_installation,
-        token=token,
-    )
-
-
-depend_the_user_claims = fastapi.Depends(get_the_user_claims)
-
-
 async def get_the_unauth_logger(
     request: fastapi.Request,
     the_installation: Installation = depend_the_installation,
@@ -49,6 +36,29 @@ async def get_the_unauth_logger(
 
 
 depend_the_unauth_logger = fastapi.Depends(get_the_unauth_logger)
+
+
+async def get_the_user_claims(
+    the_installation: Installation = depend_the_installation,
+    the_unauth_logger: loggers.LogWrapper = depend_the_unauth_logger,
+    token: HTTPAuthorizationCredentials = authn_module.oauth2_predicate,
+) -> authn_module.UserClaims:
+    the_unauth_logger.debug(loggers.AUTHN_GET_USER_CLAIMS)
+
+    try:
+        return authn_module.authenticate(
+            the_installation=the_installation,
+            token=token,
+        )
+    except fastapi.HTTPException as exc:
+        the_unauth_logger.error(  # noqa TRY400
+            loggers.AUTHN_GET_USER_CLAIMS_FAILED,
+            exc.detail,
+        )
+        raise
+
+
+depend_the_user_claims = fastapi.Depends(get_the_user_claims)
 
 
 async def get_the_logger(
