@@ -1,8 +1,10 @@
+import contextlib
 from unittest import mock
 
 import fastapi
 import pytest
 
+from soliplex import authn
 from soliplex import config
 from soliplex import installation
 from soliplex import loggers
@@ -20,24 +22,6 @@ def the_installation():
     result = mock.create_autospec(installation.Installation)
     result._config = mock.create_autospec(config.InstallationConfig)
     return result
-
-
-@pytest.mark.anyio
-@mock.patch("soliplex.authn.authenticate")
-async def test_get_the_user_claims(auth_fn, the_installation):
-    token = object()
-
-    found = await views.get_the_user_claims(
-        the_installation=the_installation,
-        token=token,
-    )
-
-    assert found is auth_fn.return_value
-
-    auth_fn.assert_called_once_with(
-        the_installation=the_installation,
-        token=token,
-    )
 
 
 @pytest.mark.anyio
@@ -73,6 +57,57 @@ async def test_get_the_unauth_logger(
         loggers.AUTHN_LOGGER_NAME,
         the_installation=the_installation,
         **exp_extras,
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "code, msg",
+    [
+        (None, None),
+        (401, authn.JWT_VALIDATION_NO_TOKEN),
+        (401, authn.JWT_VALIDATION_INVALID_TOKEN),
+    ],
+)
+@mock.patch("soliplex.authn.authenticate")
+async def test_get_the_user_claims(auth_fn, the_installation, code, msg):
+    token = object()
+    the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
+
+    if code is not None:
+        auth_fn.side_effect = fastapi.HTTPException(
+            status_code=code,
+            detail=msg,
+        )
+        expectation = pytest.raises(fastapi.HTTPException)
+    else:
+        expectation = contextlib.nullcontext(None)
+
+    with expectation as expected:
+        found = await views.get_the_user_claims(
+            the_installation=the_installation,
+            the_unauth_logger=the_unauth_logger,
+            token=token,
+        )
+
+    the_unauth_logger.debug.assert_called_once_with(
+        loggers.AUTHN_GET_USER_CLAIMS,
+    )
+
+    if expected is None:
+        assert found is auth_fn.return_value
+        the_unauth_logger.exception.assert_not_called()
+    else:
+        assert expected.value.status_code == code
+        assert expected.value.detail == msg
+        the_unauth_logger.error.assert_called_once_with(
+            loggers.AUTHN_GET_USER_CLAIMS_FAILED,
+            msg,
+        )
+
+    auth_fn.assert_called_once_with(
+        the_installation=the_installation,
+        token=token,
     )
 
 
