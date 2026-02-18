@@ -9,6 +9,11 @@ from typing import Literal
 import pydantic
 
 
+class ActiveRun(pydantic.BaseModel):
+    thread_id: str
+    run_id: str
+
+
 class LogEntry(pydantic.BaseModel):
     timestamp: str
     level: Literal["trace", "debug", "info", "warning", "error", "fatal"]
@@ -18,6 +23,7 @@ class LogEntry(pydantic.BaseModel):
     install_id: str
     session_id: str
     user_id: str | None = None
+    active_run: ActiveRun | None = None
 
 
 class LogPayload(pydantic.BaseModel):
@@ -41,6 +47,10 @@ def map_to_logfire_attrs(
 
     if entry.user_id is not None:
         attrs["user_id"] = entry.user_id
+
+    if entry.active_run is not None:
+        attrs["thread_id"] = entry.active_run.thread_id
+        attrs["run_id"] = entry.active_run.run_id
 
     if entry.attributes:
         attrs.update(entry.attributes)

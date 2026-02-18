@@ -41,6 +41,16 @@ class TestMapToLogfireAttrs:
 
         assert "user_id" not in result
 
+    def test_with_active_run(self):
+        entry = log_ingest.LogEntry(
+            **ENTRY_KWARGS,
+            active_run={"thread_id": "t-1", "run_id": "r-1"},
+        )
+        result = log_ingest.map_to_logfire_attrs(entry, SERVER_TIME)
+
+        assert result["thread_id"] == "t-1"
+        assert result["run_id"] == "r-1"
+
     def test_with_attributes(self):
         entry = log_ingest.LogEntry(
             **ENTRY_KWARGS,

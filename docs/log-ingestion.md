@@ -23,11 +23,12 @@ Accepts batches of structured logs from clients for observability.
       "install_id": "inst-abc",
       "session_id": "sess-def",
       "user_id": "u-123",
+      "active_run": {"thread_id": "t-1", "run_id": "r-1"},
       "attributes": {
         "http.method": "GET",
         "http.status_code": 200,
-        "span_id": "span-abc",
-        "trace_id": "trace-xyz"
+        "http.request_id": "req-abc",
+        "http.type": "request"
       }
     }
   ],
@@ -43,7 +44,7 @@ Accepts batches of structured logs from clients for observability.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `logs` | Array of `LogEntry` | Yes | Log entries. May be empty. |
-| `resource` | Object | Yes | Key-value attributes describing the client application. |
+| `resource` | Object | Yes | Resource attributes. See below. |
 
 ### `LogEntry` Fields
 
@@ -56,9 +57,26 @@ Accepts batches of structured logs from clients for observability.
 | `install_id` | String | Yes | Unique identifier for the client installation. |
 | `session_id` | String | Yes | Unique identifier for the client session. |
 | `user_id` | String | No | Identifier for the authenticated user. |
+| `active_run` | Object | No | Groups logs under an agent run. See below. |
 | `attributes` | Object | No | Arbitrary key-value pairs for additional context. |
 
-#### Attribute Conventions
+### Resource Keys
+
+| Key | Description |
+|---|---|
+| `service.name` | Application name. |
+| `device.alias` | Human-readable device name (e.g., `glad-raven-tundra`). Used as the top-level span label in Logfire. |
+
+### `active_run`
+
+When present, logs in the batch that share the same `run_id` are grouped under a collapsible **ActiveRun** span in Logfire.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `thread_id` | String | Yes | Thread identifier for the agent run. |
+| `run_id` | String | Yes | Unique run identifier. |
+
+### Attribute Conventions
 
 The `attributes` object can contain arbitrary data. Use these conventional keys where applicable:
 
@@ -66,10 +84,32 @@ The `attributes` object can contain arbitrary data. Use these conventional keys 
 |---|---|
 | `span_id` | Client-side span ID |
 | `trace_id` | Client-side trace ID |
-| `http.method` | HTTP method (e.g., `GET`) |
-| `http.status_code` | HTTP status code (e.g., `200`) |
 | `exception.message` | Exception message text |
 | `exception.stacktrace` | Full exception stack trace |
+
+#### HTTP Pairing
+
+HTTP request/response logs can be paired by setting `http.request_id` and `http.type`. When a batch contains a request and its matching response (or error), the response is nested under the request span in Logfire.
+
+| Key | Description |
+|---|---|
+| `http.request_id` | Shared ID linking a request to its response. |
+| `http.type` | One of: `request`, `response`, `error`. |
+| `http.method` | HTTP method (e.g., `GET`). |
+| `http.status_code` | HTTP status code (e.g., `200`). |
+
+## Logfire
+
+This endpoint creates its own structured spans (ActiveRun bucketing, HTTP
+request/response pairing) so the auto-generated FastAPI span is redundant.
+To suppress it, add the endpoint to `excluded_urls` in your installation YAML:
+
+```yaml
+logfire:
+  instrument_fast_api:
+    excluded_urls:
+      - "/api/v1/logs"
+```
 
 ## Responses
 
