@@ -98,6 +98,19 @@ HTTP request/response logs can be paired by setting `http.request_id` and `http.
 | `http.method` | HTTP method (e.g., `GET`). |
 | `http.status_code` | HTTP status code (e.g., `200`). |
 
+## Logfire
+
+This endpoint creates its own structured spans (ActiveRun bucketing, HTTP
+request/response pairing) so the auto-generated FastAPI span is redundant.
+To suppress it, add the endpoint to `excluded_urls` in your installation YAML:
+
+```yaml
+logfire:
+  instrument_fast_api:
+    excluded_urls:
+      - "/api/v1/logs"
+```
+
 ## Responses
 
 ### 200 OK

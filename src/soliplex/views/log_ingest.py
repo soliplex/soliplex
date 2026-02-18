@@ -100,6 +100,11 @@ def _emit_entries(
             _emit_entry(entry, server_received_at)
 
 
+# No @logfire.span decorator: this endpoint creates its own manual
+# spans below for structured nesting (ActiveRun bucketing, HTTP
+# pairing).  To avoid a redundant auto-generated span, add
+# "/api/v1/logs" to logfire.instrument_fast_api.excluded_urls in
+# your installation YAML.
 @router.post("/v1/logs", status_code=200)
 async def ingest_logs(
     request: fastapi.Request,
