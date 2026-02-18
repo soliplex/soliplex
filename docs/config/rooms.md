@@ -121,39 +121,8 @@ Rooms can use the `haiku_chat` agent kind to provide conversational RAG
 powered by `haiku.rag`.  This agent kind uses its own configuration
 instead of the standard `tools` list.
 
-- `rag_lancedb_stem` is a string:  it should be the "base name" (without
-  path or `.lancedb` suffix) of the LanceDB file containing the RAG document
-  data.  This file must exist in the "standard" location (typically under
-  the `db/rag/` directory;  see below).
-
-- `rag_lancedb_override_path` is a string:  as an alternative to
-  `rag_lancedb_stem`, it should be a fully-qualified pathname, including
-  the suffix, of the LanceDB directory.
-
-- `rag_features` (a list of strings) controls which haiku.rag toolsets
-  are enabled.  Available features: `"search"`, `"documents"`, `"qa"`,
-  `"analysis"`.
-
-- `preamble` (a string, optional) overrides the agent's default system
-  prompt section defining its identity and behavioral rules.
-
-- `background_context` (a string, optional) seeds the conversation with
-  domain knowledge, injected as the session's initial context.
-
-Example:
-
-```yaml
-agent:
-  kind: "haiku_chat"
-  rag_lancedb_stem: "rag"
-  rag_features: ["search", "documents", "qa"]
-  preamble: |
-    You are a knowledgeable assistant that answers questions
-    using a document knowledge base.
-  background_context: |
-    This knowledge base contains internal documentation
-    about the Soliplex platform.
-```
+Please see the [`haiku_chat` section of the agents page](agents.md#haiku_chat-kind)
+for the full list of configuration options and examples.
 
 ### Quiz-related elements
 

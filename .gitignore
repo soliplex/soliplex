@@ -6,6 +6,7 @@ venv/
 .coverage
 *.egg-info
 __pycache__/
+uv.lock
 
 # venv (root level only, not Flutter lib/)
 /lib/
@@ -26,3 +27,7 @@ tmp/
 # python -m "build" artifacts
 build/
 dist/
+
+# mkdocs artifacts
+site/
+
