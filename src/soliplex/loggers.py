@@ -82,3 +82,71 @@ class LogWrapper(logging.LoggerAdapter):
         extras = self.extra | extra
 
         return LogWrapper(logger_name, self.installation, **extras)
+
+
+class UpdateLevelsEmpty(ValueError):
+    def __init__(self):
+        super().__init__("'update_levels' is empty")
+
+
+class UpdateLevelsInvalidKeyTypes(ValueError):
+    def __init__(self, key_types: set[type]):
+        self.key_types = key_types
+        super().__init__(
+            f"Key types: ({key_types}) must be only 'str' or only 'int'"
+        )
+
+
+class UpdateLevelsInvalidValueTypes(ValueError):
+    def __init__(self, key_types: set[type], value_types: set[type]):
+        self.key_types = key_types
+        self.value_types = value_types
+        super().__init__(
+            f"Value types ({value_types}) must match key types ({key_types})"
+        )
+
+
+class UpdateLevels(logging.Filter):
+    """Map log records from a given level a new level
+
+    Args:
+        'update_levels' is a map from integer log levels to new levels
+
+    Returns:
+        Existing log record, mutated in place if level is remapped.
+    """
+
+    def __init__(self, update_levels: dict[int, int] | dict[str, str]):
+        super().__init__()
+
+        if not update_levels:
+            raise UpdateLevelsEmpty()
+
+        key_types = set(type(key) for key in update_levels.keys())
+
+        if key_types not in ({str}, {int}):
+            raise UpdateLevelsInvalidKeyTypes(key_types)
+
+        value_types = set(type(value) for value in update_levels.values())
+
+        if key_types != value_types:
+            raise UpdateLevelsInvalidValueTypes(key_types, value_types)
+
+        if key_types == {int}:
+            self._update_levels = update_levels
+
+        else:  # key_types == {str}:
+            self._update_levels = {
+                logging.getLevelName(key): logging.getLevelName(value)
+                for key, value in update_levels.items()
+            }
+
+    def filter(self, log_record: logging.LogRecord) -> logging.LogRecord:
+        before = log_record.levelno
+        after = self._update_levels.get(before, before)
+
+        if after != before:
+            log_record.levelno = after
+            log_record.levelname = logging.getLevelName(after)
+
+        return log_record

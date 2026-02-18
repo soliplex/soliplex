@@ -1,3 +1,5 @@
+import contextlib
+import logging
 from unittest import mock
 
 import pytest
@@ -44,3 +46,54 @@ def test_logwrapper_bind(lgl, w_new_name, the_installation, w_extra):
     assert bound.extra == wrapper.extra | w_extra
 
     lgl.assert_called_once_with(exp_name)
+
+
+@pytest.mark.parametrize(
+    "w_levels, expectation",
+    [
+        ({}, pytest.raises(loggers.UpdateLevelsEmpty)),
+        (
+            {10: 20, "TRACE": "INFO"},
+            pytest.raises(loggers.UpdateLevelsInvalidKeyTypes),
+        ),
+        ({10: "INFO"}, pytest.raises(loggers.UpdateLevelsInvalidValueTypes)),
+        ({10: 20}, contextlib.nullcontext({10: 20})),
+        ({"DEBUG": "INFO"}, contextlib.nullcontext({10: 20})),
+    ],
+)
+def test_updatelevels_ctor(w_levels, expectation):
+    with expectation as expected:
+        found = loggers.UpdateLevels(w_levels)
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert found._update_levels == expected
+
+
+def _make_record(level):
+    return logging.LogRecord(
+        name="",
+        level=level,
+        pathname="/",
+        lineno=1234,
+        msg="testing",
+        args=(),
+        exc_info=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "w_level, exp_level",
+    [
+        (5, 5),
+        (10, 20),
+        (15, 15),
+        (20, 20),
+    ],
+)
+def test_updatelevels_filter(w_level, exp_level):
+    record = _make_record(w_level)
+    update_levels = loggers.UpdateLevels({10: 20})
+
+    found = update_levels.filter(record)
+
+    assert found.levelno == exp_level

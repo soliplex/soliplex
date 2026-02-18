@@ -11,12 +11,13 @@ formatters:
     defaults:
         some_key: null
 
-#filters:
-#
-#    default:
-#        (): yourapp.logging.custom_filter
-#        name:  <logger-name>
-#        foo:  "bar"
+filters:
+
+  # Add this filter to update log level on a logger from 'DEBUG' to 'INFO'.
+  update_debug_to_info:
+    (): "soliplex.loggers.UpdateLevels"
+    update_levels:
+      "DEBUG": "INFO"
 
 handlers:
 
@@ -33,6 +34,8 @@ loggers:
 
   soliplex.authn:
     level: "DEBUG"
+  # filters:
+  #   - "update_debug_to_info"
 
   soliplex.authz:
     level: "DEBUG"
