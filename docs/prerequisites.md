@@ -279,8 +279,8 @@ soliplex-cli list-rooms example/minimal.yaml
 ```
 
 You should see rooms like:
-- `ask_soliplex` - RAG-powered Soliplex documentation assistant
-- `haiku` - General purpose chat
+- `chat` - Conversational RAG with search and document retrieval
+- `search` - Search the knowledge base and answer questions
 - `joker` - Entertainment/joke generation
 - `faux` - Test room
 

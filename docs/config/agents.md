@@ -51,7 +51,7 @@ agent:
         You are a knowledgeable assistant that helps users find information from a document knowledge base.
 
         Your process:
-        1. When a user asks a question, use the search_documents tool to find relevant information
+        1. When a user asks a question, find relevant information
         ...
 ```
 
