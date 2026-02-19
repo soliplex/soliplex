@@ -1,7 +1,6 @@
 import json
 import pathlib
 import subprocess
-import traceback
 
 import fastapi
 
@@ -74,10 +73,9 @@ async def get_installation_versions(
         )
     except Exception:
         bound_logger.exception(loggers.INST_SUBPROCESS_PIP)
-        error = traceback.format_exc()
         raise fastapi.HTTPException(
             status_code=500,
-            detail=error,
+            detail=loggers.INST_SUBPROCESS_PIP,
         ) from None
 
     installed = json.loads(found)

@@ -87,7 +87,7 @@ async def openai_chat_completion(
             ),
             media_type="text/event-stream",
         )
-    except Exception as e:
+    except Exception:
         raise fastapi.HTTPException(
-            status_code=500, detail=f"An internal server error occurred: {e}"
+            status_code=500, detail="Error streaming chat responses"
         ) from None

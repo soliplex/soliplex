@@ -36,22 +36,22 @@ async def get_quiz(
             the_authz_policy=the_authz_policy,
             the_logger=the_logger,
         )
-    except KeyError as e:
+    except KeyError:
         # auth error logged in 'get_room_config'
         # but this could be just a missing room
         the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=str(e),
+            detail=loggers.ROOM_UNKNOWN_ROOM_ID % room_id,
         ) from None
 
     try:
         quiz = room_config.quiz_map[quiz_id]
-    except KeyError as e:
+    except KeyError:
         the_logger.exception(loggers.QUIZ_UNKNOWN_QUIZ_ID, quiz_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=str(e),
+            detail=loggers.QUIZ_UNKNOWN_QUIZ_ID % quiz_id,
         ) from None
 
     return models.Quiz.from_config(quiz)
@@ -79,29 +79,29 @@ async def post_quiz_question(
             the_authz_policy=the_authz_policy,
             the_logger=the_logger,
         )
-    except KeyError as e:
+    except KeyError:
         # auth error logged in 'get_room_config'
         # but this could be just a missing room
         the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=str(e),
+            detail=loggers.ROOM_UNKNOWN_ROOM_ID % room_id,
         ) from None
 
     try:
         quiz = room_config.quiz_map[quiz_id]
-    except KeyError as e:
+    except KeyError:
         the_logger.exception(loggers.QUIZ_UNKNOWN_QUIZ_ID, quiz_id)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=str(e),
+            detail=loggers.QUIZ_UNKNOWN_QUIZ_ID % quiz_id,
         ) from None
 
     try:
         return await quizzes.check_answer(quiz, question_uuid, answer.text)
-    except quizzes.QuestionNotFound as e:
+    except quizzes.QuestionNotFound:
         the_logger.exception(loggers.QUIZ_UNKNOWN_QUESTION_UUID, question_uuid)
         raise fastapi.HTTPException(
             status_code=404,
-            detail=str(e),
+            detail=loggers.QUIZ_UNKNOWN_QUESTION_UUID % question_uuid,
         ) from None

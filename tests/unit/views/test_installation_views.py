@@ -72,9 +72,8 @@ async def test_get_installation(fc, w_admin_access):
 
 
 @pytest.mark.anyio
-@mock.patch("soliplex.views.installation.traceback")
 @mock.patch("soliplex.views.installation.subprocess")
-async def test_get_installation_versions_w_error(sp, tb):
+async def test_get_installation_versions_w_error(sp):
     sp.check_output.side_effect = ValueError("testing")
 
     request = mock.create_autospec(fastapi.Request)
@@ -96,13 +95,15 @@ async def test_get_installation_versions_w_error(sp, tb):
             the_logger=the_logger,
         )
 
-    assert exc.value.detail is tb.format_exc.return_value
+    assert exc.value.detail == loggers.INST_SUBPROCESS_PIP
 
-    tb.format_exc.assert_called_once_with()
     the_authz_policy.check_admin_access.assert_awaited_once_with(
         THE_USER_CLAIMS,
     )
 
+    bound_logger.exception.assert_called_once_with(
+        loggers.INST_SUBPROCESS_PIP,
+    )
     bound_logger.debug.assert_called_once_with(
         loggers.INST_GET_INSTALLATION_VERSIONS,
     )
