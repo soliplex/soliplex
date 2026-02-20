@@ -1,4 +1,4 @@
-https://pypi.org/project/haiku.rag-slim/# Soliplex
+https://pypi.org/project/soliplex/# Soliplex
 
 An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web interface.
 
