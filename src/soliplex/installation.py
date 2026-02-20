@@ -17,6 +17,7 @@ from soliplex import config
 from soliplex import loggers
 from soliplex import mcp_server
 from soliplex import secrets
+from soliplex import util
 from soliplex.agui import schema as agui_schema
 from soliplex.authz import schema as authz_schema
 
@@ -438,16 +439,18 @@ async def lifespan(
 
     apply_logfire_configuration(app, the_installation, disable_logfire_console)
 
-    tp_engine = sqla_asyncio.create_async_engine(
-        the_installation.thread_persistence_dburi_async
+    agui_engine = sqla_asyncio.create_async_engine(
+        the_installation.thread_persistence_dburi_async,
+        json_serializer=util.serialize_sqla_json,
     )
-    async with tp_engine.begin() as tp_connection:
-        await tp_connection.run_sync(
+    async with agui_engine.begin() as agui_connection:
+        await agui_connection.run_sync(
             agui_schema.Base.metadata.create_all,
         )
 
     authz_engine = sqla_asyncio.create_async_engine(
-        the_installation.authorization_dburi_async
+        the_installation.authorization_dburi_async,
+        json_serializer=util.serialize_sqla_json,
     )
     async with authz_engine.begin() as ra_connection:
         await ra_connection.run_sync(
@@ -465,7 +468,7 @@ async def lifespan(
 
     context = {
         "the_installation": the_installation,
-        "threads_engine": tp_engine,
+        "threads_engine": agui_engine,
         "authorization_engine": authz_engine,
     }
 
@@ -479,5 +482,5 @@ async def lifespan(
 
         yield context
 
-    await tp_engine.dispose()
+    await agui_engine.dispose()
     await authz_engine.dispose()

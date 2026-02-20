@@ -14,6 +14,7 @@ from soliplex import installation
 from soliplex import loggers
 from soliplex import models
 from soliplex import secrets
+from soliplex import util
 
 KEY = "test-key"
 VALUE = "test-value"
@@ -1321,9 +1322,11 @@ root:
 
     threads_engine = found[0]["threads_engine"]
     assert isinstance(threads_engine, sqla_asyncio.AsyncEngine)
+    assert threads_engine.dialect._json_serializer is util.serialize_sqla_json
 
     authorization_engine = found[0]["authorization_engine"]
     assert isinstance(authorization_engine, sqla_asyncio.AsyncEngine)
+    assert threads_engine.dialect._json_serializer is util.serialize_sqla_json
 
     for f_call, (key, mcp_app) in zip(
         app.mount.call_args_list,
