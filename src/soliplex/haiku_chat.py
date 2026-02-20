@@ -80,8 +80,7 @@ class ChatAgentWrapper:
         context = self._get_context(deps.thread_id)
 
         async with hr_client.HaikuRAG(
-            db_path=self.db_path,
-            config=self.config,
+            db_path=self.db_path, config=self.config, read_only=True
         ) as client:
             chat_deps = hr_agents_chat_agent.ChatDeps(
                 config=self.config,

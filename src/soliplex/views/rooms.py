@@ -206,6 +206,7 @@ async def get_room_documents(
             hr_client_kw = {
                 "db_path": cfg.rag_lancedb_path,
                 "config": hr_config,
+                "read_only": True,
             }
 
             async with rag_client.HaikuRAG(**hr_client_kw) as rag:
@@ -270,6 +271,7 @@ async def get_chunk_visualization(
             hr_client_kw = {
                 "db_path": candidate.rag_lancedb_path,
                 "config": hr_config,
+                "read_only": True,
             }
 
             async with rag_client.HaikuRAG(**hr_client_kw) as rag:
