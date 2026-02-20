@@ -82,11 +82,11 @@ class AuthorizationPolicy(abc.ABC):
 async def get_the_authz_policy(
     request: fastapi.Request,
 ) -> AuthorizationPolicy:
-    from . import schema
+    from . import persistence
 
     engine = request.state.authorization_engine
     async with sqla_asyncio.AsyncSession(bind=engine) as session:
-        yield schema.AuthorizationPolicy(session)
+        yield persistence.AuthorizationPolicy(session)
 
 
 depend_the_authz_policy = fastapi.Depends(get_the_authz_policy)
