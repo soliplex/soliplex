@@ -494,11 +494,11 @@ class RunFeedback(Base):
     reason: Mapped[str | None] = mapped_column(default=None)
 
 
-def get_session(
+def get_engine(
     engine_url=config.SYNC_MEMORY_ENGINE_URL,
     init_schema=False,
     **engine_kwargs,
-):
+) -> sqlalchemy.Engine:
     engine = sqlalchemy.create_engine(
         engine_url,
         json_serializer=util.serialize_sqla_json,
@@ -509,14 +509,27 @@ def get_session(
         with engine.connect() as connection:
             Base.metadata.create_all(connection)
 
+    return engine
+
+
+def get_session(
+    engine_url=config.SYNC_MEMORY_ENGINE_URL,
+    init_schema=False,
+    **engine_kwargs,
+) -> sqla_orm.Session:
+    engine = get_engine(
+        engine_url=engine_url,
+        init_schema=init_schema,
+        **engine_kwargs,
+    )
     return sqla_orm.Session(bind=engine)
 
 
-async def get_async_session(
+async def get_async_engine(
     engine_url=config.ASYNC_MEMORY_ENGINE_URL,
     init_schema=False,
     **engine_kwargs,
-):
+) -> sqla_asyncio.AsyncEngine:
     engine = sqla_asyncio.create_async_engine(
         engine_url,
         json_serializer=util.serialize_sqla_json,
@@ -527,4 +540,17 @@ async def get_async_session(
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
 
+    return engine
+
+
+async def get_async_session(
+    engine_url=config.ASYNC_MEMORY_ENGINE_URL,
+    init_schema=False,
+    **engine_kwargs,
+):
+    engine = await get_async_engine(
+        engine_url=engine_url,
+        init_schema=init_schema,
+        **engine_kwargs,
+    )
     return sqla_asyncio.AsyncSession(bind=engine)
