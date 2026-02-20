@@ -401,6 +401,7 @@ async def test_get_room_documents(
             hr_klass.assert_called_once_with(
                 db_path=db_path,
                 config=hr_config,
+                read_only=True,
             )
         else:
             hr_entered.list_documents.assert_not_called()
@@ -576,6 +577,7 @@ async def test_get_chunk_visualization(
         hr_klass.assert_called_once_with(
             db_path=db_path,
             config=hr_config,
+            read_only=True,
         )
 
     the_installation.get_room_config.assert_awaited_once_with(

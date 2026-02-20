@@ -144,6 +144,7 @@ async def test_chat_agent_wrapper_run_stream_events_wo_state(
     hr_client.HaikuRAG.assert_called_once_with(
         db_path=pathlib.Path(RAG_DB_PATH),
         config=mock_config,
+        read_only=True,
     )
 
     hr_agents_chat_agent_mod.ChatDeps.assert_called_once_with(
