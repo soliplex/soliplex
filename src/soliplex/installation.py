@@ -17,7 +17,7 @@ from soliplex import config
 from soliplex import loggers
 from soliplex import mcp_server
 from soliplex import secrets
-from soliplex.agui import persistence as agui_persistence
+from soliplex.agui import schema as agui_schema
 from soliplex.authz import schema as authz_schema
 
 ProviderURL = str | None
@@ -443,7 +443,7 @@ async def lifespan(
     )
     async with tp_engine.begin() as tp_connection:
         await tp_connection.run_sync(
-            agui_persistence.Base.metadata.create_all,
+            agui_schema.Base.metadata.create_all,
         )
 
     authz_engine = sqla_asyncio.create_async_engine(
