@@ -217,7 +217,40 @@ class ACLEntry(Base):
         return None
 
 
-async def get_async_session(
+def get_engine(
+    *,
+    engine_url=config.SYNC_MEMORY_ENGINE_URL,
+    init_schema=False,
+    **engine_kwargs,
+) -> sqlalchemy.Engine:
+    engine = sqlalchemy.create_engine(
+        engine_url,
+        json_serializer=util.serialize_sqla_json,
+        **engine_kwargs,
+    )
+    if init_schema:
+        with engine.connect() as connection:
+            Base.metadata.create_all(connection)
+
+    return engine
+
+
+def get_session(
+    *,
+    engine_url=config.SYNC_MEMORY_ENGINE_URL,
+    init_schema=False,
+    **engine_kwargs,
+) -> sqla_orm.Session:
+    engine = get_engine(
+        engine_url=engine_url,
+        init_schema=init_schema,
+        **engine_kwargs,
+    )
+    return sqla_orm.Session(bind=engine)
+
+
+async def get_async_engine(
+    *,
     engine_url=config.ASYNC_MEMORY_ENGINE_URL,
     init_schema=False,
     **engine_kwargs,
@@ -232,22 +265,18 @@ async def get_async_session(
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
 
-    return sqla_asyncio.AsyncSession(bind=engine)
+    return engine
 
 
-def get_session(
-    engine_url=config.SYNC_MEMORY_ENGINE_URL,
+async def get_async_session(
+    *,
+    engine_url=config.ASYNC_MEMORY_ENGINE_URL,
     init_schema=False,
     **engine_kwargs,
 ):
-    engine = sqlalchemy.create_engine(
-        engine_url,
-        json_serializer=util.serialize_sqla_json,
+    engine = await get_async_engine(
+        engine_url=engine_url,
+        init_schema=init_schema,
         **engine_kwargs,
     )
-
-    if init_schema:
-        with engine.connect() as connection:
-            Base.metadata.create_all(connection)
-
-    return sqla_orm.Session(bind=engine)
+    return sqla_asyncio.AsyncSession(bind=engine)

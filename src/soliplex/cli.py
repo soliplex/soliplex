@@ -673,7 +673,7 @@ def list_admin_users(
     if not skip_ram_db_check:
         _check_ram_dburi(dburi, "list-admin-users")
 
-    session = authz_schema.get_session(dburi, init_schema=True)
+    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
     _dump_admin_users(session)
 
 
@@ -697,7 +697,7 @@ def clear_admin_users(
     if not skip_ram_db_check:
         _check_ram_dburi(dburi, "clear-admin-users")
 
-    session = authz_schema.get_session(dburi, init_schema=True)
+    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
 
     with session:
         for admin_user in session.query(authz_schema.AdminUser):
@@ -728,7 +728,7 @@ def add_admin_user(
     if not skip_ram_db_check:
         _check_ram_dburi(dburi, "add-admin-user")
 
-    session = authz_schema.get_session(dburi, init_schema=True)
+    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
 
     with session:
         admin_user = authz_schema.AdminUser(email=admin_user_email)
@@ -783,7 +783,7 @@ def show_room_authz(
     if not skip_ram_db_check:
         _check_ram_dburi(dburi, "show-room-authz")
 
-    session = authz_schema.get_session(dburi, init_schema=True)
+    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
 
     _dump_room_policy(session, room_id)
 
@@ -814,7 +814,7 @@ def clear_room_authz(
     if not skip_ram_db_check:
         _check_ram_dburi(dburi, "clear-room-authz")
 
-    session = authz_schema.get_session(dburi, init_schema=True)
+    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
 
     with session:
         policy = (
@@ -870,7 +870,7 @@ def add_room_user(
     if not skip_ram_db_check:
         _check_ram_dburi(dburi, "add-room-user")
 
-    session = authz_schema.get_session(dburi, init_schema=True)
+    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
 
     with session:
         policy = (

@@ -359,65 +359,105 @@ def test_aclentry_check_token_w_email(
         assert found is None
 
 
-@pytest.mark.parametrize("init_schema", [False, True])
+@pytest.mark.parametrize("init_schema", [None, False, True])
 @mock.patch("sqlalchemy.create_engine")
 @mock.patch("soliplex.authz.schema.metadata.create_all")
-def test_get_session(
+def test_get_engine(
     ca,
     ce,
     init_schema,
 ):
     kwargs = {}
 
+    if init_schema is not None:
+        kwargs["init_schema"] = init_schema
+
+    found = authz_schema.get_engine(**kwargs)
+
+    assert found is ce.return_value
+
+    ce.assert_called_once_with(
+        config.SYNC_MEMORY_ENGINE_URL,
+        json_serializer=util.serialize_sqla_json,
+    )
+
     if init_schema:
-        kwargs["init_schema"] = True
+        connection = ce.return_value.connect.return_value
+        ca.assert_called_once_with(connection.__enter__.return_value)
+    else:
+        ca.assert_not_called()
+
+
+@pytest.mark.parametrize("init_schema", [None, False, True])
+@mock.patch("soliplex.authz.schema.get_engine")
+def test_get_session(
+    ge,
+    init_schema,
+):
+    kwargs = {}
+
+    if init_schema is not None:
+        kwargs["init_schema"] = init_schema
+        exp_kwargs = kwargs
+    else:
+        exp_kwargs = {"init_schema": False}
 
     with authz_schema.get_session(**kwargs) as session:
         assert isinstance(session, sqla_orm.Session)
-        assert session.bind is ce.return_value
+        assert session.bind is ge.return_value
 
-        ce.assert_called_once_with(
-            config.SYNC_MEMORY_ENGINE_URL,
-            json_serializer=util.serialize_sqla_json,
+        ge.assert_called_once_with(
+            engine_url=config.SYNC_MEMORY_ENGINE_URL,
+            **exp_kwargs,
         )
-
-        if init_schema:
-            connection = ce.return_value.connect.return_value
-            ca.assert_called_once_with(connection.__enter__.return_value)
-        else:
-            ca.assert_not_called()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("init_schema", [False, True])
+@pytest.mark.parametrize("init_schema", [None, False, True])
 @mock.patch("sqlalchemy.ext.asyncio.create_async_engine")
 @mock.patch("soliplex.authz.schema.metadata.create_all")
-async def test_get_async_session(
-    ca,
-    cae,
-    init_schema,
-):
-    engine = cae.return_value
-
+async def test_get_async_engine(ca, cae, init_schema):
     kwargs = {}
 
     if init_schema:
         kwargs["init_schema"] = True
 
+    found = await authz_schema.get_async_engine(**kwargs)
+
+    assert found is cae.return_value
+
+    cae.assert_called_once_with(
+        config.ASYNC_MEMORY_ENGINE_URL,
+        json_serializer=util.serialize_sqla_json,
+    )
+
+    if init_schema:
+        found.begin.assert_called_once_with()
+        connection = found.begin.return_value.__aenter__.return_value
+        connection.run_sync.assert_called_once_with(ca)
+    else:
+        found.begin.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("init_schema", [None, False, True])
+@mock.patch("soliplex.authz.schema.get_async_engine")
+async def test_get_async_session(gae, init_schema):
+    kwargs = {}
+
+    if init_schema is not None:
+        kwargs["init_schema"] = init_schema
+        exp_kwargs = kwargs
+    else:
+        exp_kwargs = {"init_schema": False}
+
     session_maker = await authz_schema.get_async_session(**kwargs)
 
     async with session_maker as session:
         assert isinstance(session, sqla_asyncio.AsyncSession)
-        assert session.bind is engine
+        assert session.bind is gae.return_value
 
-        cae.assert_called_once_with(
-            config.ASYNC_MEMORY_ENGINE_URL,
-            json_serializer=util.serialize_sqla_json,
+        gae.assert_called_once_with(
+            engine_url=config.ASYNC_MEMORY_ENGINE_URL,
+            **exp_kwargs,
         )
-
-        if init_schema:
-            engine.begin.assert_called_once_with()
-            connection = engine.begin.return_value.__aenter__.return_value
-            connection.run_sync.assert_called_once_with(ca)
-        else:
-            engine.begin.assert_not_called()
