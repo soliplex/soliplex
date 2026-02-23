@@ -21,6 +21,10 @@ db/
 # misc
 tmp/
 
+# IDE / tools
+.idea/
+.claude/
+
 # osx
 .DS_Store
 ._*
