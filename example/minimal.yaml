@@ -221,6 +221,19 @@ secrets:
         env_var_name: "SOLIPLEX_SESSION_MIDDLEWARE_TOKEN"
       - kind: "random_chars"
 
+  # ----------------------------------------------------------------------
+  # Moodle Workplace integration
+  # ----------------------------------------------------------------------
+  - secret_name: "MOODLE_BASE_URL"
+    sources:
+      - kind: "env_var"
+        env_var_name: "MOODLE_BASE_URL"
+
+  - secret_name: "MOODLE_API_TOKEN"
+    sources:
+      - kind: "env_var"
+        env_var_name: "MOODLE_API_TOKEN"
+
 #==========================================================================
 # Environment Variables
 #==========================================================================
@@ -358,6 +371,7 @@ room_paths:
   - "./rooms/skillstest"
   - "./rooms/feedback"
   - "./rooms/bwrap_sandbox"
+  - "./rooms/moodle"
 
 #==========================================================================
 # Completions configuration

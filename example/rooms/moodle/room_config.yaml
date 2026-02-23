@@ -1,0 +1,25 @@
+id: "moodle"
+name: "Moodle Workplace"
+description: "Query Moodle Workplace for courses, enrollment, and completion data"
+suggestions:
+  - "What courses are available?"
+  - "Who is enrolled in the test course?"
+  - "Show me completion status for testuser1"
+
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You are a training management assistant with access to Moodle Workplace.
+    You can look up courses, enrolled users, and completion status.
+    Present data in clear tables when appropriate.
+
+mcp_client_toolsets:
+  moodle:
+    kind: "stdio"
+    command: "python"
+    args: ["-m", "moodle_mcp"]
+    env:
+      MOODLE_BASE_URL: "secret:MOODLE_BASE_URL"
+      MOODLE_API_TOKEN: "secret:MOODLE_API_TOKEN"
+
+allow_mcp: false
