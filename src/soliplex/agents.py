@@ -102,7 +102,7 @@ def _get_default_agent_from_configs(
         for mctc in mcp_client_toolset_configs.values()
     ]
 
-    return pydantic_ai.Agent(
+    agent = pydantic_ai.Agent(
         model=model,
         model_settings=agent_config.model_settings,
         tools=tools,
@@ -110,6 +110,14 @@ def _get_default_agent_from_configs(
         instructions=agent_config.get_system_prompt(),
         deps_type=AgentDependencies,
     )
+
+    @agent.system_prompt
+    async def _inject_ace_context(
+        ctx: pydantic_ai.RunContext[AgentDependencies],
+    ) -> str:
+        return ctx.deps.state.get("ace_skillbook_context", "")
+
+    return agent
 
 
 def get_agent_from_configs(

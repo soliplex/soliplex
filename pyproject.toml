@@ -14,6 +14,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
+    "ace-framework >= 0.8.0, < 1.0",
     "ag-ui-protocol >= 0.1.10",
     "aiosqlite",
     "authlib",

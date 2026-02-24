@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import functools
 
 import fastapi
@@ -9,6 +10,7 @@ from ag_ui import core as agui_core
 from fastapi import responses
 from pydantic_ai.ui import ag_ui as ai_ag_ui
 
+from soliplex import ace_integration
 from soliplex import agui as agui_package
 from soliplex import authn
 from soliplex import authz as authz_package
@@ -138,6 +140,51 @@ async def _get_run_input(
 ) -> agui_core.RunAgentInput | None:
     rai = await run.awaitable_attrs.run_agent_input
     return rai.to_agui_model() if rai is not None else None
+
+
+async def _extract_run_qa(
+    the_threads: agui_package.ThreadStorage,
+    user_name: str,
+    room_id: str,
+    thread_id: str,
+    run_id: str,
+) -> tuple[str, str]:
+    """Extract the user question and agent answer from a run.
+
+    Returns ``("", "")`` if the data cannot be retrieved.
+    """
+    try:
+        run = await the_threads.get_run(
+            user_name, room_id, thread_id, run_id,
+        )
+    except agui_package.AGUI_Exception:
+        return "", ""
+
+    # Question: last human message from run input
+    question = ""
+    rai = await run.awaitable_attrs.run_agent_input
+    if rai is not None:
+        for msg_data in reversed(rai.data.get("messages", [])):
+            if msg_data.get("role") == "user":
+                content = msg_data.get("content", "")
+                if isinstance(content, str):
+                    question = content
+                elif isinstance(content, list):
+                    question = " ".join(
+                        p.get("text", "")
+                        for p in content
+                        if isinstance(p, dict)
+                    )
+                break
+
+    # Answer: concatenate TEXT_MESSAGE_CONTENT delta events
+    answer_parts = []
+    for event_obj in await run.awaitable_attrs.events:
+        if event_obj.data.get("type") == "TEXT_MESSAGE_CONTENT":
+            answer_parts.append(event_obj.data.get("delta", ""))
+    answer = "".join(answer_parts)
+
+    return question, answer
 
 
 @util.logfire_span("GET /v1/rooms/{room_id}/agui/{thread_id}")
@@ -708,6 +755,36 @@ async def post_room_agui_thread_id_run_id_feedback(
             status_code=exc.status_code,
             detail=exc.args,
         ) from None
+
+    ace_config = getattr(_room_config, "ace", None)
+    ace_store = getattr(the_installation, "ace_skillbook_store", None)
+    if (
+        isinstance(ace_config, ace_integration.ACERoomConfig)
+        and ace_config.enabled
+        and ace_config.auto_learn_on_feedback
+        and isinstance(ace_store, ace_integration.SkillbookStore)
+    ):
+        question, answer = await _extract_run_qa(
+            the_threads,
+            user_name,
+            room_id,
+            thread_id,
+            run_id,
+        )
+        if question and answer:
+            asyncio.create_task(
+                ace_integration.learn_from_feedback(
+                    room_id=room_id,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    feedback=new_feedback.feedback,
+                    reason=new_feedback.reason,
+                    question=question,
+                    answer=answer,
+                    skillbook_store=ace_store,
+                    ace_config=_room_config.ace,
+                )
+            )
 
     return fastapi.Response(status_code=205)
 
