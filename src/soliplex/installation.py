@@ -11,6 +11,7 @@ from haiku.rag import config as hr_config
 from sqlalchemy import sql as sqla_sql
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
+from soliplex import ace_integration
 from soliplex import agents
 from soliplex import authz as authz_package
 from soliplex import config
@@ -36,6 +37,7 @@ NO_AUTH_MODE_USER_TOKEN = {
 @dataclasses.dataclass
 class Installation:
     _config: config.InstallationConfig
+    ace_skillbook_store: ace_integration.SkillbookStore = None
 
     def get_secret(self, secret_name) -> str:
         secret_config = self._config.secrets_map[secret_name]
@@ -304,11 +306,25 @@ class Installation:
         if run_agent_input is not None:
             thread_id = run_agent_input.thread_id
 
+        state = {}
+        if (
+            self.ace_skillbook_store is not None
+            and room_config.ace is not None
+            and room_config.ace.enabled
+        ):
+            state["ace_skillbook_context"] = (
+                ace_integration.get_skillbook_context(
+                    self.ace_skillbook_store,
+                    room_id,
+                )
+            )
+
         return agents.AgentDependencies(
             the_installation=self,
             user=user,
             tool_configs=room_config.tool_configs,
             thread_id=thread_id,
+            state=state,
             **kwargs,
         )
 
@@ -465,6 +481,10 @@ async def lifespan(
             await ra_connection.run_sync(
                 add_no_auth_user_as_admin,
             )
+
+    the_installation.ace_skillbook_store = ace_integration.SkillbookStore(
+        i_config._config_path.parent,
+    )
 
     context = {
         "the_installation": the_installation,
