@@ -65,34 +65,41 @@ def make_mcp_client_toolset(
     return toolset_klass(**toolset_config.tool_kwargs)
 
 
+def make_model(
+    agent_config: config.AgentConfig,
+) -> google_models.GoogleModel | openai_models.OpenAIChatModel:
+    """Create a pydantic-ai model from an agent config."""
+    provider_kw = agent_config.llm_provider_kw
+
+    if agent_config.provider_type == config.LLMProviderType.GOOGLE:
+        provider = google_providers.GoogleProvider(**provider_kw)
+        return google_models.GoogleModel(
+            model_name=agent_config.model_name,
+            provider=provider,
+        )
+
+    if agent_config.provider_type == config.LLMProviderType.OLLAMA:
+        provider_kw["api_key"] = "dummy"
+        provider = ollama_providers.OllamaProvider(**provider_kw)
+        return openai_models.OpenAIChatModel(
+            model_name=agent_config.model_name,
+            provider=provider,
+        )
+
+    provider = openai_providers.OpenAIProvider(**provider_kw)
+    return openai_models.OpenAIChatModel(
+        model_name=agent_config.model_name,
+        provider=provider,
+    )
+
+
 def _get_default_agent_from_configs(
     agent_config: config.AgentConfig,
     tool_configs: ToolConfigMap,
     mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap,
 ) -> SoliplexAgent:
     """Build a Pydantic AI agent from a config"""
-    provider_kw = agent_config.llm_provider_kw
-
-    if agent_config.provider_type == config.LLMProviderType.GOOGLE:
-        provider = google_providers.GoogleProvider(**provider_kw)
-        model = google_models.GoogleModel(
-            model_name=agent_config.model_name,
-            provider=provider,
-        )
-
-    elif agent_config.provider_type == config.LLMProviderType.OLLAMA:
-        provider_kw["api_key"] = "dummy"
-        provider = ollama_providers.OllamaProvider(**provider_kw)
-        model = openai_models.OpenAIChatModel(
-            model_name=agent_config.model_name,
-            provider=provider,
-        )
-    else:
-        provider = openai_providers.OpenAIProvider(**provider_kw)
-        model = openai_models.OpenAIChatModel(
-            model_name=agent_config.model_name,
-            provider=provider,
-        )
+    model = make_model(agent_config)
 
     tools = [
         make_ai_tool(tool_config) for tool_config in tool_configs.values()
