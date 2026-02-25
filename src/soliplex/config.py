@@ -2372,6 +2372,8 @@ class InstallationConfig:
     )
     _agent_configs_map: AgentConfigMap = None
 
+    title_agent_config_id: str | None = None
+
     @property
     def agent_configs_map(self) -> AgentConfigMap:
         if self._agent_configs_map is None:
@@ -2733,6 +2735,9 @@ class InstallationConfig:
 
         if self.logfire_config is not None:
             result["logfire_config"] = self.logfire_config.as_yaml
+
+        if self.title_agent_config_id is not None:
+            result["title_agent_config_id"] = self.title_agent_config_id
 
         return result
 

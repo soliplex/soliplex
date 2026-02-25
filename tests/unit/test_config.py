@@ -1630,6 +1630,17 @@ authorization_dburi:
     async: {RA_DBURI_ASYNC}
 """
 
+TITLE_AGENT_CONFIG_ID = "title-agent"
+
+W_TITLE_AGENT_CONFIG_ID_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "title_agent_config_id": TITLE_AGENT_CONFIG_ID,
+}
+W_TITLE_AGENT_CONFIG_ID_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+title_agent_config_id: "{TITLE_AGENT_CONFIG_ID}"
+"""
+
 
 @pytest.fixture
 def installation_config():
@@ -5397,6 +5408,10 @@ def test_installationconfig_authorization_dburi_async(w_kw, expected):
             W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML,
             W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_KW.copy(),
         ),
+        (
+            W_TITLE_AGENT_CONFIG_ID_INSTALLATION_CONFIG_YAML,
+            W_TITLE_AGENT_CONFIG_ID_INSTALLATION_CONFIG_KW.copy(),
+        ),
     ],
 )
 def test_installationconfig_from_yaml(
@@ -5556,8 +5571,12 @@ def test_installationconfig_from_yaml_environ_wo_value(temp_dir, config_yaml):
     assert found == expected
 
 
+@pytest.mark.parametrize("w_title_agent_config_id", [False, True])
 @pytest.mark.parametrize("w_logfire_config", [False, True])
-def test_installationconfig_as_yaml(w_logfire_config):
+def test_installationconfig_as_yaml(
+    w_logfire_config,
+    w_title_agent_config_id,
+):
     meta = mock.create_autospec(config.InstallationConfigMeta)
     secret_1 = config.SecretConfig(secret_name="SECRET_ONE")
     secret_2 = config.SecretConfig(secret_name="SECRET_TWO")
@@ -5574,6 +5593,9 @@ def test_installationconfig_as_yaml(w_logfire_config):
         kwargs["logfire_config"] = config.LogfireConfig(
             token="secret:LOGFIRE_TOKEN",
         )
+
+    if w_title_agent_config_id:
+        kwargs["title_agent_config_id"] = TITLE_AGENT_CONFIG_ID
 
     installation_config = config.InstallationConfig(
         id=INSTALLATION_ID,
@@ -5618,6 +5640,9 @@ def test_installationconfig_as_yaml(w_logfire_config):
 
     if w_logfire_config:
         expected["logfire_config"] = W_TOKEN_ONLY_LOGFIRE_CONFIG_AS_YAML
+
+    if w_title_agent_config_id:
+        expected["title_agent_config_id"] = TITLE_AGENT_CONFIG_ID
 
     found = installation_config.as_yaml
 
