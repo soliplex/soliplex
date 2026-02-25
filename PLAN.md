@@ -1,79 +1,80 @@
-# Plan: Soliplex–Moodle Workplace Integration
+# Plan: Soliplex–Moodle Workplace Integration (Revised)
 
 ## Context
 
-Soliplex (AMIA JOSCE) needs to query Moodle Workplace for course, enrollment, and completion data so an AI agent can answer questions about training status. A Docker-based Moodle Workplace 5.0.2 sandbox exists at `/Users/ryan.day/Dev/moodle_sandbox/` with test data (courses, users, completions, two custom report plugins).
+Soliplex needs to query Moodle Workplace for course, enrollment, and completion data so an AI agent can answer questions about training status. A Docker-based Moodle Workplace 5.0.2 sandbox exists at `/Users/ryan.day/Dev/moodle_sandbox/`.
 
-The user plans **multiple system integrations** over time, so we need a repeatable pattern — not one-off code.
+**Two hard constraints** killed the original MCP-tool-calling approach:
 
-## Architectural Decision: FastMCP Server
+1. **The LLMs are bad at tool calling.** Soliplex runs local/offline models ("gpt-oss:latest") that unreliably select and invoke MCP tools.
+2. **No separate deployable service.** A standalone `moodle-mcp-tools` repo requires deploying, hosting, and approving a separate service. Non-starter.
 
-**Approach**: Build a standalone Python FastMCP server (`moodle-mcp-tools`) that wraps Moodle's REST Web Services API. Soliplex consumes it via its existing `mcp_client_toolsets` config.
+## Revised Approach: Dynamic System Prompt with Pre-Fetched Context
 
-**Why this approach**:
-- **Pydantic AI standard** — `FastMCPToolset` is the recommended way to integrate external services
-- **Zero Soliplex code changes** — Soliplex already supports stdio/HTTP MCP client toolsets in room configs
-- **Reusable** — Any MCP client (Claude Desktop, other agents) can use the same server
-- **Repeatable pattern** — Each future integration (ATAAPS, DTS, etc.) follows the same pattern: standalone MCP server + Soliplex room config
-- **Clean separation** — Moodle-specific code lives in its own repo/package, not in Soliplex
+Use Pydantic AI's **`@agent.system_prompt` decorator** — the standard pattern for injecting dynamic context. The factory creates a normal `pydantic_ai.Agent` and registers an async system prompt function that fetches Moodle data before every LLM call.
 
-## Instance-Agnostic Design
+1. **Moodle client code lives in Soliplex** as `src/soliplex/moodle/` — ships with the package, no separate deployment
+2. **Factory** builds a standard `pydantic_ai.Agent` with an `@agent.system_prompt` function that pre-fetches Moodle data
+3. **The LLM just reads and answers** — no tool calling required
 
-The MCP server connects to **any** Moodle Workplace instance — not just the local sandbox. Configuration is purely via environment variables:
+### Runtime Flow
 
-- `MOODLE_BASE_URL` — local sandbox (`http://localhost:9000`), SOF LMS, or any other instance
-- `MOODLE_API_TOKEN` — instance-specific web service token
-
-## Scope: Read-Only (Phase 1)
-
-Initial tools query Moodle — no mutations.
+```
+User asks: "Has testuser1 completed the safety course?"
+    ↓
+Pydantic AI calls @agent.system_prompt function automatically
+    ↓
+Function fetches from Moodle REST API:
+  - Course list
+  - Enrolled users per course
+  - Completion status per user/course
+    ↓
+Returns formatted markdown text → prepended to system prompt
+    ↓
+LLM receives: base system prompt + Moodle data + user question
+    ↓
+LLM answers from context (no tool calling)
+```
 
 ## What Was Built
 
-### 1. New repo: `moodle-mcp-tools/` (`/Users/ryan.day/Dev/moodle-mcp-tools/`)
+### 1. Moodle client module: `src/soliplex/moodle/`
 
-- `pyproject.toml` — FastMCP + httpx deps
-- `src/moodle_mcp/server.py` — FastMCP server with 6 tools
-- `src/moodle_mcp/client.py` — Async httpx Moodle REST API client
-- `src/moodle_mcp/models.py` — Pydantic response models
-- `src/moodle_mcp/__main__.py` — `python -m moodle_mcp` entry point
-- `tests/test_client.py` — 12 unit tests with mocked HTTP (all passing)
+```
+src/soliplex/moodle/
+├── __init__.py
+├── client.py       # Async httpx Moodle REST API client
+├── models.py       # Pydantic response models
+└── agent.py        # Factory agent with dynamic system prompt
+```
 
-### 2. MCP Tools
+### 2. Room config: `example/rooms/moodle/room_config.yaml`
 
-| Tool | Moodle WS Function | Description |
-|------|---------------------|-------------|
-| `list_courses` | `core_course_get_courses` | List all courses with metadata |
-| `search_courses` | `core_course_get_courses_by_field` | Search courses by name/ID/shortname |
-| `get_enrolled_users` | `core_enrol_get_enrolled_users` | List users enrolled in a course |
-| `get_course_completion` | `core_completion_get_course_completion_status` | Course-level completion for a user |
-| `get_activity_completion` | `core_completion_get_activities_completion_status` | Activity-level completion for a user in a course |
-| `get_user_info` | `core_user_get_users_by_field` | Look up user by username/email/ID |
+Uses `kind: factory` with `extra_config` for Moodle secrets.
 
-### 3. Soliplex Changes (feature/moodle branch)
+### 3. Dependencies
 
-- `example/rooms/moodle/room_config.yaml` — New room config
-- `example/minimal.yaml` — Added room path + 2 secrets (MOODLE_BASE_URL, MOODLE_API_TOKEN)
-- `tests/unit/test_moodle_room.py` — Unit test verifying room config loads
+- `httpx` added to `pyproject.toml` (was already transitive)
 
-## Remaining Manual Steps
+### 4. Coverage
 
-### Moodle Admin Setup (one-time, in browser)
+- `src/soliplex/moodle/agent.py` added to `[tool.coverage.run] omit` in `pyproject.toml` — the factory instantiates real Pydantic AI models that require an LLM provider at runtime
 
-1. Change Moodle sandbox port to 9000: `export MOODLE_DOCKER_WEB_PORT=9000`
-2. Enable web services: Site Admin > Advanced features > Enable web services
-3. Enable REST protocol: Site Admin > Plugins > Web services > Manage protocols
-4. Create external service with the 6 core functions
-5. Create a token for the admin user
-6. Set env vars: `MOODLE_BASE_URL=http://localhost:9000` and `MOODLE_API_TOKEN=<token>`
+### 5. Tests
 
-### End-to-End Verification
+- `tests/unit/test_moodle_client.py` — 14 client unit tests with mocked httpx
+- `tests/unit/test_moodle_room.py` — Room config loading test (updated for factory pattern)
 
-1. Start Moodle sandbox (port 9000) + Soliplex (port 8000)
-2. Chat with the Moodle room: "What courses are available?"
-3. Verify completion queries return test data
+## Key Files Created
 
-## Phase 2 Notes (not in scope)
+- `src/soliplex/moodle/__init__.py` — Package init
+- `src/soliplex/moodle/client.py` — Async httpx Moodle REST API client
+- `src/soliplex/moodle/models.py` — Pydantic response models
+- `src/soliplex/moodle/agent.py` — Factory agent with dynamic system prompt
+- `tests/unit/test_moodle_client.py` — Client unit tests
 
-- Custom report plugins (`report_utm`, `report_adv_comp`) web service functions
-- Write-back tools (enroll users, mark completions, reset progress)
+## Key Files Modified
+
+- `pyproject.toml` — Added `httpx` dependency; added `agent.py` to coverage omit
+- `example/rooms/moodle/room_config.yaml` — Changed from `default` + MCP toolsets to `factory` kind
+- `tests/unit/test_moodle_room.py` — Updated assertions for new factory config shape

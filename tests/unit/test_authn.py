@@ -111,7 +111,7 @@ def test_authenticate_w_token_none(w_auth_disabled):
 @mock.patch("soliplex.authn.validate_access_token")
 def test_authenticate(vat, with_auth_systems, w_hit):
     FIRST_USER = {"test": "pydio"}
-    SECOND_USER = {"test": "josce"}
+    SECOND_USER = {"test": "acme"}
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.auth_disabled = len(with_auth_systems) == 0
     the_installation.oidc_auth_system_configs = with_auth_systems
