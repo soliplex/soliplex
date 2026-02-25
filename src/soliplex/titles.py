@@ -4,9 +4,13 @@ import logfire
 import pydantic
 import pydantic_ai
 from ag_ui import core as agui_core
+from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
 from soliplex import config
+from soliplex.agui import persistence as agui_persistence
+
+DEFAULT_THREAD_NAME = "New Thread"
 
 TITLE_PROMPT = """\
 Generate a short, concise title (max 8 words) for this conversation.
@@ -55,7 +59,7 @@ async def generate_title(
 
 async def maybe_generate_title(
     *,
-    the_threads,
+    threads_engine: sqla_asyncio.AsyncEngine,
     the_installation,
     room_id: str,
     thread_id: str,
@@ -63,12 +67,21 @@ async def maybe_generate_title(
     messages: list[agui_core.Message],
 ):
     try:
-        thread = await the_threads.get_thread(
-            user_name=user_name,
-            room_id=room_id,
-            thread_id=thread_id,
-        )
-        if thread.thread_metadata is not None:
+        async with sqla_asyncio.AsyncSession(
+            bind=threads_engine,
+        ) as session:
+            the_threads = agui_persistence.ThreadStorage(session)
+            thread = await the_threads.get_thread(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+            )
+            thread_metadata = await thread.awaitable_attrs.thread_metadata
+
+        if thread_metadata is not None and thread_metadata.name not in (
+            None,
+            DEFAULT_THREAD_NAME,
+        ):
             return
 
         agent_config = the_installation.get_title_agent_config(
@@ -78,11 +91,15 @@ async def maybe_generate_title(
         if title is None:
             return
 
-        await the_threads.update_thread_metadata(
-            user_name=user_name,
-            room_id=room_id,
-            thread_id=thread_id,
-            thread_metadata={"name": title},
-        )
+        async with sqla_asyncio.AsyncSession(
+            bind=threads_engine,
+        ) as session:
+            the_threads = agui_persistence.ThreadStorage(session)
+            await the_threads.update_thread_metadata(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                thread_metadata={"name": title},
+            )
     except Exception:
         logfire.exception("Failed to generate thread title")

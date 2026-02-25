@@ -1061,7 +1061,7 @@ async def test_post_room_agui_thread_id_run_id(
         await title_coro
 
         maybe_gen_title.assert_awaited_once_with(
-            the_threads=mock.ANY,
+            threads_engine=threads_engine,
             the_installation=the_installation,
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID,

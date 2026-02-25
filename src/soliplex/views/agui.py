@@ -9,7 +9,6 @@ import pydantic_ai
 from ag_ui import core as agui_core
 from fastapi import responses
 from pydantic_ai.ui import ag_ui as ai_ag_ui
-from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agui as agui_package
 from soliplex import authn
@@ -24,6 +23,8 @@ from soliplex import views
 from soliplex.agui import persistence as agui_persistence
 
 router = fastapi.APIRouter(tags=["rooms"])
+
+_background_tasks: set[asyncio.Task] = set()
 
 depend_the_installation = installation.depend_the_installation
 depend_the_threads = agui_package.depend_the_threads
@@ -598,22 +599,18 @@ async def post_room_agui_thread_id_run_id(
 
         async def _do_title():
             threads_engine = request.state.threads_engine
-            async with sqla_asyncio.AsyncSession(
-                bind=threads_engine,
-            ) as session:
-                bg_threads = agui_persistence.ThreadStorage(
-                    session,
-                )
-                await titles.maybe_generate_title(
-                    the_threads=bg_threads,
-                    the_installation=the_installation,
-                    room_id=room_id,
-                    thread_id=thread_id,
-                    user_name=user_name,
-                    messages=agui_adapter.run_input.messages,
-                )
+            await titles.maybe_generate_title(
+                threads_engine=threads_engine,
+                the_installation=the_installation,
+                room_id=room_id,
+                thread_id=thread_id,
+                user_name=user_name,
+                messages=agui_adapter.run_input.messages,
+            )
 
-        asyncio.create_task(_do_title())
+        task = asyncio.create_task(_do_title())
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
 
     db_stream = tee_events(
         compacted_stream,

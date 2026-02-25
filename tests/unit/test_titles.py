@@ -3,8 +3,51 @@ from unittest import mock
 import pydantic
 import pytest
 from ag_ui import core as agui_core
+from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import titles
+
+
+def _awaitable(value):
+    async def getter():
+        return value
+
+    return getter()
+
+
+@pytest.fixture
+def threads_engine():
+    return mock.create_autospec(sqla_asyncio.AsyncEngine)
+
+
+@pytest.fixture
+def the_threads():
+    return mock.AsyncMock()
+
+
+@pytest.fixture
+def mock_async_session(the_threads):
+    """Patch AsyncSession to yield our mock ThreadStorage."""
+
+    class FakeSession:
+        async def __aenter__(self):
+            return mock.MagicMock()
+
+        async def __aexit__(self, *args):
+            pass
+
+    return mock.patch(
+        "soliplex.titles.sqla_asyncio.AsyncSession",
+        return_value=FakeSession(),
+    )
+
+
+@pytest.fixture
+def mock_thread_storage(the_threads):
+    return mock.patch(
+        "soliplex.titles.agui_persistence.ThreadStorage",
+        return_value=the_threads,
+    )
 
 
 class TestThreadTitle:
@@ -142,6 +185,10 @@ class TestMaybeGenerateTitle:
     async def test_generates_and_updates(
         self,
         gen_title,
+        threads_engine,
+        the_threads,
+        mock_async_session,
+        mock_thread_storage,
     ):
         gen_title.return_value = "My Chat Title"
 
@@ -150,23 +197,22 @@ class TestMaybeGenerateTitle:
         the_installation.get_title_agent_config.return_value = agent_config
 
         thread = mock.MagicMock()
-        thread.thread_metadata = None
-
-        the_threads = mock.AsyncMock()
+        thread.awaitable_attrs.thread_metadata = _awaitable(None)
         the_threads.get_thread.return_value = thread
 
         messages = [
             agui_core.UserMessage(id="1", content="Hello"),
         ]
 
-        await titles.maybe_generate_title(
-            the_threads=the_threads,
-            the_installation=the_installation,
-            room_id="room1",
-            thread_id="thread1",
-            user_name="user1",
-            messages=messages,
-        )
+        with mock_async_session, mock_thread_storage:
+            await titles.maybe_generate_title(
+                threads_engine=threads_engine,
+                the_installation=the_installation,
+                room_id="room1",
+                thread_id="thread1",
+                user_name="user1",
+                messages=messages,
+            )
 
         the_threads.get_thread.assert_awaited_once_with(
             user_name="user1",
@@ -186,39 +232,89 @@ class TestMaybeGenerateTitle:
 
     @pytest.mark.anyio
     @mock.patch("soliplex.titles.generate_title")
-    async def test_skips_when_metadata_exists(
+    async def test_skips_when_title_already_set(
         self,
         gen_title,
+        threads_engine,
+        the_threads,
+        mock_async_session,
+        mock_thread_storage,
     ):
         the_installation = mock.MagicMock()
 
+        metadata = mock.MagicMock()
+        metadata.name = "Existing Title"
         thread = mock.MagicMock()
-        thread.thread_metadata = mock.MagicMock()
-
-        the_threads = mock.AsyncMock()
+        thread.awaitable_attrs.thread_metadata = _awaitable(metadata)
         the_threads.get_thread.return_value = thread
 
         messages = [
             agui_core.UserMessage(id="1", content="Hello"),
         ]
 
-        await titles.maybe_generate_title(
-            the_threads=the_threads,
-            the_installation=the_installation,
-            room_id="room1",
-            thread_id="thread1",
-            user_name="user1",
-            messages=messages,
-        )
+        with mock_async_session, mock_thread_storage:
+            await titles.maybe_generate_title(
+                threads_engine=threads_engine,
+                the_installation=the_installation,
+                room_id="room1",
+                thread_id="thread1",
+                user_name="user1",
+                messages=messages,
+            )
 
         gen_title.assert_not_awaited()
         the_threads.update_thread_metadata.assert_not_awaited()
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("name", [None, titles.DEFAULT_THREAD_NAME])
+    @mock.patch("soliplex.titles.generate_title")
+    async def test_generates_when_no_title_set(
+        self,
+        gen_title,
+        name,
+        threads_engine,
+        the_threads,
+        mock_async_session,
+        mock_thread_storage,
+    ):
+        gen_title.return_value = "New Title"
+
+        agent_config = mock.MagicMock()
+        the_installation = mock.MagicMock()
+        the_installation.get_title_agent_config.return_value = agent_config
+
+        metadata = mock.MagicMock()
+        metadata.name = name
+        thread = mock.MagicMock()
+        thread.awaitable_attrs.thread_metadata = _awaitable(metadata)
+        the_threads.get_thread.return_value = thread
+
+        messages = [
+            agui_core.UserMessage(id="1", content="Hello"),
+        ]
+
+        with mock_async_session, mock_thread_storage:
+            await titles.maybe_generate_title(
+                threads_engine=threads_engine,
+                the_installation=the_installation,
+                room_id="room1",
+                thread_id="thread1",
+                user_name="user1",
+                messages=messages,
+            )
+
+        gen_title.assert_awaited_once()
+        the_threads.update_thread_metadata.assert_awaited_once()
 
     @pytest.mark.anyio
     @mock.patch("soliplex.titles.generate_title")
     async def test_skips_update_when_title_is_none(
         self,
         gen_title,
+        threads_engine,
+        the_threads,
+        mock_async_session,
+        mock_thread_storage,
     ):
         gen_title.return_value = None
 
@@ -227,23 +323,22 @@ class TestMaybeGenerateTitle:
         the_installation.get_title_agent_config.return_value = agent_config
 
         thread = mock.MagicMock()
-        thread.thread_metadata = None
-
-        the_threads = mock.AsyncMock()
+        thread.awaitable_attrs.thread_metadata = _awaitable(None)
         the_threads.get_thread.return_value = thread
 
         messages = [
             agui_core.UserMessage(id="1", content="Hello"),
         ]
 
-        await titles.maybe_generate_title(
-            the_threads=the_threads,
-            the_installation=the_installation,
-            room_id="room1",
-            thread_id="thread1",
-            user_name="user1",
-            messages=messages,
-        )
+        with mock_async_session, mock_thread_storage:
+            await titles.maybe_generate_title(
+                threads_engine=threads_engine,
+                the_installation=the_installation,
+                room_id="room1",
+                thread_id="thread1",
+                user_name="user1",
+                messages=messages,
+            )
 
         gen_title.assert_awaited_once()
         the_threads.update_thread_metadata.assert_not_awaited()
@@ -255,6 +350,10 @@ class TestMaybeGenerateTitle:
         self,
         gen_title,
         logfire_exception,
+        threads_engine,
+        the_threads,
+        mock_async_session,
+        mock_thread_storage,
     ):
         gen_title.side_effect = RuntimeError("LLM error")
 
@@ -263,22 +362,21 @@ class TestMaybeGenerateTitle:
         the_installation.get_title_agent_config.return_value = agent_config
 
         thread = mock.MagicMock()
-        thread.thread_metadata = None
-
-        the_threads = mock.AsyncMock()
+        thread.awaitable_attrs.thread_metadata = _awaitable(None)
         the_threads.get_thread.return_value = thread
 
         messages = [
             agui_core.UserMessage(id="1", content="Hello"),
         ]
 
-        await titles.maybe_generate_title(
-            the_threads=the_threads,
-            the_installation=the_installation,
-            room_id="room1",
-            thread_id="thread1",
-            user_name="user1",
-            messages=messages,
-        )
+        with mock_async_session, mock_thread_storage:
+            await titles.maybe_generate_title(
+                threads_engine=threads_engine,
+                the_installation=the_installation,
+                room_id="room1",
+                thread_id="thread1",
+                user_name="user1",
+                messages=messages,
+            )
 
         logfire_exception.assert_called_once()
