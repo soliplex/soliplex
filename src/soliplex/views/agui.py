@@ -594,27 +594,34 @@ async def post_room_agui_thread_id_run_id(
         run_id=run_id,
     )
 
-    async def save_events_and_maybe_title(*, events):
-        await save_events(events=events)
+    title_agent_config = the_installation.get_title_agent_config()
 
-        async def _do_title():
-            threads_engine = request.state.threads_engine
-            await titles.maybe_generate_title(
-                threads_engine=threads_engine,
-                the_installation=the_installation,
-                room_id=room_id,
-                thread_id=thread_id,
-                user_name=user_name,
-                messages=agui_adapter.run_input.messages,
-            )
+    if title_agent_config is not None:
 
-        task = asyncio.create_task(_do_title())
-        _background_tasks.add(task)
-        task.add_done_callback(_background_tasks.discard)
+        async def on_done(*, events):
+            await save_events(events=events)
+
+            async def _do_title():
+                threads_engine = request.state.threads_engine
+                await titles.maybe_generate_title(
+                    title_agent_config=title_agent_config,
+                    threads_engine=threads_engine,
+                    room_id=room_id,
+                    thread_id=thread_id,
+                    user_name=user_name,
+                    messages=agui_adapter.run_input.messages,
+                )
+
+            task = asyncio.create_task(_do_title())
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
+
+    else:
+        on_done = save_events
 
     db_stream = tee_events(
         compacted_stream,
-        on_done=save_events_and_maybe_title,
+        on_done=on_done,
         thread_id=thread_id,
         run_id=run_id,
     )

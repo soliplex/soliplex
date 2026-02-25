@@ -958,6 +958,7 @@ async def test_tee_events(logfire, w_finished_error, w_event_count):
     ],
 )
 @pytest.mark.parametrize("w_usage", [False, True])
+@pytest.mark.parametrize("w_title_config", [False, True])
 @mock.patch("fastapi.responses.StreamingResponse")
 @mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.agui.compact_event_stream")
@@ -977,6 +978,7 @@ async def test_post_room_agui_thread_id_run_id(
     the_threads,
     test_run,
     run_input,
+    w_title_config,
     w_usage,
     ari_side_effect,
     expectation,
@@ -993,6 +995,8 @@ async def test_post_room_agui_thread_id_run_id(
 
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_agent_for_room.return_value = agent
+    if not w_title_config:
+        the_installation.get_title_agent_config.return_value = None
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
@@ -1056,18 +1060,25 @@ async def test_post_room_agui_thread_id_run_id(
             run_id=TEST_RUN_ID,
         )
 
-        ct.assert_called_once()
-        title_coro = ct.call_args[0][0]
-        await title_coro
+        if w_title_config:
+            ct.assert_called_once()
+            title_coro = ct.call_args[0][0]
+            await title_coro
 
-        maybe_gen_title.assert_awaited_once_with(
-            threads_engine=threads_engine,
-            the_installation=the_installation,
-            room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
-            user_name=USER_NAME,
-            messages=exp_adapter.run_input.messages,
-        )
+            exp_title_config = (
+                the_installation.get_title_agent_config.return_value
+            )
+            maybe_gen_title.assert_awaited_once_with(
+                title_agent_config=exp_title_config,
+                threads_engine=threads_engine,
+                room_id=TEST_ROOM_ID,
+                thread_id=TEST_THREAD_ID,
+                user_name=USER_NAME,
+                messages=exp_adapter.run_input.messages,
+            )
+        else:
+            ct.assert_not_called()
+            maybe_gen_title.assert_not_awaited()
 
         ces.assert_called_once_with(exp_agent_stream)
 
