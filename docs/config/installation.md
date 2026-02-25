@@ -86,6 +86,28 @@ Please see [this page](agents.md) for details on configuring agents.
 In addition to the values described there, note that the `id` element is
 required here.
 
+## Thread Title Generation
+
+Soliplex can automatically generate a short title for new conversation
+threads using an LLM.  After a run completes, if the thread does not
+already have a title, a background task calls the configured agent to
+produce one.
+
+To enable this feature, define an agent config at the top level and
+reference it via `title_agent_config_id`:
+
+```yaml
+agent_configs:
+  - id: "title"
+    model_name: "gpt-oss:latest"
+
+title_agent_config_id: "title"
+```
+
+The title agent does not need a `system_prompt` — it uses its own
+built-in prompt.  If `title_agent_config_id` is not set, automatic
+title generation is disabled.
+
 ## Thread Persistence DBURI
 
 An installation can define two DBURIs for the database used to store
