@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import functools
 
 import fastapi
@@ -8,6 +9,7 @@ import pydantic_ai
 from ag_ui import core as agui_core
 from fastapi import responses
 from pydantic_ai.ui import ag_ui as ai_ag_ui
+from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agui as agui_package
 from soliplex import authn
@@ -16,6 +18,7 @@ from soliplex import config
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
+from soliplex import titles
 from soliplex import util
 from soliplex import views
 from soliplex.agui import persistence as agui_persistence
@@ -590,9 +593,31 @@ async def post_room_agui_thread_id_run_id(
         run_id=run_id,
     )
 
+    async def save_events_and_maybe_title(*, events):
+        await save_events(events=events)
+
+        async def _do_title():
+            threads_engine = request.state.threads_engine
+            async with sqla_asyncio.AsyncSession(
+                bind=threads_engine,
+            ) as session:
+                bg_threads = agui_persistence.ThreadStorage(
+                    session,
+                )
+                await titles.maybe_generate_title(
+                    the_threads=bg_threads,
+                    the_installation=the_installation,
+                    room_id=room_id,
+                    thread_id=thread_id,
+                    user_name=user_name,
+                    messages=agui_adapter.run_input.messages,
+                )
+
+        asyncio.create_task(_do_title())
+
     db_stream = tee_events(
         compacted_stream,
-        on_done=save_events,
+        on_done=save_events_and_maybe_title,
         thread_id=thread_id,
         run_id=run_id,
     )

@@ -1,11 +1,11 @@
 import contextlib
 import datetime
-import functools
 from unittest import mock
 
 import fastapi
 import pytest
 from ag_ui import core as agui_core
+from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agui as agui_package
 from soliplex import authz as authz_package
@@ -963,7 +963,12 @@ async def test_tee_events(logfire, w_finished_error, w_event_count):
 @mock.patch("soliplex.agui.compact_event_stream")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
 @mock.patch("soliplex.views.agui.tee_events")
+@mock.patch(
+    "soliplex.views.agui.titles.maybe_generate_title",
+    new_callable=mock.AsyncMock,
+)
 async def test_post_room_agui_thread_id_run_id(
+    maybe_gen_title,
     tee,
     cura,
     ces,
@@ -981,6 +986,10 @@ async def test_post_room_agui_thread_id_run_id(
     cura.return_value = (USER_PROFILE, agent)
 
     request = fastapi.Request(scope={"type": "http"})
+    threads_engine = mock.create_autospec(
+        sqla_asyncio.AsyncEngine,
+    )
+    request.state.threads_engine = threads_engine
 
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_agent_for_room.return_value = agent
@@ -1034,14 +1043,31 @@ async def test_post_room_agui_thread_id_run_id(
         assert event_stream is ces.return_value
 
         on_done = tee.call_args_list[0].kwargs["on_done"]
-        assert isinstance(on_done, functools.partial)
-        assert on_done.func is the_threads.save_run_events
-        assert on_done.keywords == {
-            "user_name": USER_NAME,
-            "room_id": TEST_ROOM_ID,
-            "thread_id": TEST_THREAD_ID,
-            "run_id": TEST_RUN_ID,
-        }
+
+        test_events = [object()]
+        with mock.patch("asyncio.create_task") as ct:
+            await on_done(events=test_events)
+
+        the_threads.save_run_events.assert_awaited_once_with(
+            events=test_events,
+            user_name=USER_NAME,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID,
+            run_id=TEST_RUN_ID,
+        )
+
+        ct.assert_called_once()
+        title_coro = ct.call_args[0][0]
+        await title_coro
+
+        maybe_gen_title.assert_awaited_once_with(
+            the_threads=mock.ANY,
+            the_installation=the_installation,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID,
+            user_name=USER_NAME,
+            messages=exp_adapter.run_input.messages,
+        )
 
         ces.assert_called_once_with(exp_agent_stream)
 
