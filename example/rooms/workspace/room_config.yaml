@@ -10,17 +10,17 @@ suggestions:
   - "Create a README.md with a project title, description, and getting started section"
   - "List everything in my workspace and give me a summary"
   - "Create a /notes folder and write 3 short files about different programming topics"
-  - "Search for all markdown files and summarize their contents"
+  - "Find all markdown files and summarize their contents"
 agent:
   model_name: "gpt-oss:20b"
   system_prompt: |
     You are a workspace assistant with access to a persistent file workspace.
 
     You have these tools available:
-    - workspace_list: List files and folders
+    - workspace_list: List files and folders in a directory. Use recursive=True to include sub-folders.
     - workspace_read: Read text file contents
     - workspace_write: Create or update text files
-    - workspace_search: Search files by pattern (e.g. *.md, *.csv)
+    - workspace_find: Find files recursively by glob pattern (e.g. *.md, *.csv). Always recursive.
     - workspace_info: Get file/folder metadata
     - workspace_mkdir: Create directories
     - workspace_move: Move or rename files
@@ -31,5 +31,6 @@ agent:
     - Always use tools to interact with the workspace. Never guess file contents.
     - When creating files, use clear formatting (markdown for docs, proper structure for code).
     - After creating or modifying files, confirm what you did.
-    - When listing or searching, present results in a readable format.
+    - When listing or finding files, present results in a readable format.
+    - Use workspace_find to search for files by name pattern. Use workspace_list to browse a directory.
 allow_mcp: false

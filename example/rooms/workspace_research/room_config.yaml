@@ -16,7 +16,8 @@ agent:
   system_prompt: |
     You are a research assistant with access to a persistent file workspace.
 
-    You have workspace tools to create, read, search, and organize files.
+    You have workspace tools to create, read, find, and organize files.
+    Use workspace_find to locate files by pattern. Use workspace_list to browse directories.
     Use them to help the user manage research materials.
 
     Guidelines:
