@@ -67,6 +67,10 @@ async def maybe_generate_title(
     messages: list[agui_core.Message],
 ):
     try:
+        agent_config = the_installation.get_title_agent_config()
+        if agent_config is None:
+            return
+
         async with sqla_asyncio.AsyncSession(
             bind=threads_engine,
         ) as session:
@@ -84,9 +88,6 @@ async def maybe_generate_title(
         ):
             return
 
-        agent_config = the_installation.get_title_agent_config(
-            room_id,
-        )
         title = await generate_title(agent_config, messages)
         if title is None:
             return

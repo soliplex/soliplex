@@ -219,9 +219,7 @@ class TestMaybeGenerateTitle:
             room_id="room1",
             thread_id="thread1",
         )
-        the_installation.get_title_agent_config.assert_called_once_with(
-            "room1",
-        )
+        the_installation.get_title_agent_config.assert_called_once_with()
         gen_title.assert_awaited_once_with(agent_config, messages)
         the_threads.update_thread_metadata.assert_awaited_once_with(
             user_name="user1",
@@ -229,6 +227,36 @@ class TestMaybeGenerateTitle:
             thread_id="thread1",
             thread_metadata={"name": "My Chat Title"},
         )
+
+    @pytest.mark.anyio
+    @mock.patch("soliplex.titles.generate_title")
+    async def test_skips_when_not_configured(
+        self,
+        gen_title,
+        threads_engine,
+        the_threads,
+        mock_async_session,
+        mock_thread_storage,
+    ):
+        the_installation = mock.MagicMock()
+        the_installation.get_title_agent_config.return_value = None
+
+        messages = [
+            agui_core.UserMessage(id="1", content="Hello"),
+        ]
+
+        with mock_async_session, mock_thread_storage:
+            await titles.maybe_generate_title(
+                threads_engine=threads_engine,
+                the_installation=the_installation,
+                room_id="room1",
+                thread_id="thread1",
+                user_name="user1",
+                messages=messages,
+            )
+
+        the_threads.get_thread.assert_not_awaited()
+        gen_title.assert_not_awaited()
 
     @pytest.mark.anyio
     @mock.patch("soliplex.titles.generate_title")

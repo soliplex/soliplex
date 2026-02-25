@@ -786,38 +786,27 @@ def test_installation_get_agent_by_id(gafc, w_agent_id, raises):
 
 def test_installation_get_title_agent_config_w_config_id():
     title_a_config = mock.create_autospec(config.AgentConfig)
-    room_a_config = mock.create_autospec(config.AgentConfig)
-
-    r_config = mock.create_autospec(config.RoomConfig)
-    r_config.agent_config = room_a_config
 
     i_config = mock.create_autospec(config.InstallationConfig)
     i_config.title_agent_config_id = "title-agent"
     i_config.agent_configs_map = {"title-agent": title_a_config}
-    i_config.room_configs = {"room_id": r_config}
 
     the_installation = installation.Installation(i_config)
 
-    found = the_installation.get_title_agent_config("room_id")
+    found = the_installation.get_title_agent_config()
 
     assert found is title_a_config
 
 
 def test_installation_get_title_agent_config_wo_config_id():
-    room_a_config = mock.create_autospec(config.AgentConfig)
-
-    r_config = mock.create_autospec(config.RoomConfig)
-    r_config.agent_config = room_a_config
-
     i_config = mock.create_autospec(config.InstallationConfig)
     i_config.title_agent_config_id = None
-    i_config.room_configs = {"room_id": r_config}
 
     the_installation = installation.Installation(i_config)
 
-    found = the_installation.get_title_agent_config("room_id")
+    found = the_installation.get_title_agent_config()
 
-    assert found is room_a_config
+    assert found is None
 
 
 @pytest.mark.anyio
