@@ -40,6 +40,9 @@ loggers:
   soliplex.authz:
     level: "DEBUG"
 
+  soliplex_workspace:
+    level: "DEBUG"
+
 root:
   level: "INFO"
   handlers:

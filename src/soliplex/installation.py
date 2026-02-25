@@ -35,6 +35,22 @@ NO_AUTH_MODE_USER_TOKEN = {
 @dataclasses.dataclass
 class Installation:
     _config: config.InstallationConfig
+    _workspace_provider: object = None  # WorkspaceProvider
+
+    @property
+    def workspace_provider(self):
+        if self._workspace_provider is None:
+            from soliplex_workspace.api.integration import (
+                create_workspace_provider,
+            )
+
+            self._workspace_provider = create_workspace_provider(
+                {
+                    "backend": self._config.workspace.backend,
+                    "dufs_url": self._config.workspace.dufs_url,
+                }
+            )
+        return self._workspace_provider
 
     def get_secret(self, secret_name) -> str:
         secret_config = self._config.secrets_map[secret_name]
@@ -259,10 +275,19 @@ class Installation:
             the_logger=the_logger,
         )
 
+        extra_tools = []
+        if room_config.workspace_enabled:
+            from soliplex_workspace.tools.bridge import make_workspace_tools
+
+            extra_tools = make_workspace_tools(
+                self.workspace_provider, room_id
+            )
+
         return agents.get_agent_from_configs(
             room_config.agent_config,
             room_config.tool_configs,
             room_config.mcp_client_toolset_configs,
+            extra_tools=extra_tools,
         )
 
     async def get_agent_for_completion(
@@ -303,11 +328,16 @@ class Installation:
         if run_agent_input is not None:
             thread_id = run_agent_input.thread_id
 
+        workspace_provider = None
+        if room_config.workspace_enabled:
+            workspace_provider = self.workspace_provider
+
         return agents.AgentDependencies(
             the_installation=self,
             user=user,
             tool_configs=room_config.tool_configs,
             thread_id=thread_id,
+            workspace_provider=workspace_provider,
             **kwargs,
         )
 

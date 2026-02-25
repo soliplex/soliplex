@@ -33,6 +33,7 @@ class AgentDependencies:
     tool_configs: ToolConfigMap = None
     thread_id: str | None = None
     state: agui.AGUI_State = dataclasses.field(default_factory=dict)
+    workspace_provider: typing.Any = None  # WorkspaceProvider or None
 
 
 SoliplexAgent = ai_agent.AbstractAgent[AgentDependencies, typing.Any]
@@ -69,6 +70,7 @@ def _get_default_agent_from_configs(
     agent_config: config.AgentConfig,
     tool_configs: ToolConfigMap,
     mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap,
+    extra_tools=(),
 ) -> SoliplexAgent:
     """Build a Pydantic AI agent from a config"""
     provider_kw = agent_config.llm_provider_kw
@@ -97,6 +99,7 @@ def _get_default_agent_from_configs(
     tools = [
         make_ai_tool(tool_config) for tool_config in tool_configs.values()
     ]
+    tools.extend(extra_tools)
     toolsets = [
         make_mcp_client_toolset(mctc)
         for mctc in mcp_client_toolset_configs.values()
@@ -116,6 +119,7 @@ def get_agent_from_configs(
     agent_config: config.AgentConfig,
     tool_configs: ToolConfigMap,
     mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap,
+    extra_tools=(),
 ) -> SoliplexAgent:
     """Get or create an agent from the specified agent and tool configs."""
 
@@ -125,6 +129,7 @@ def get_agent_from_configs(
                 agent_config,
                 tool_configs,
                 mcp_client_toolset_configs,
+                extra_tools=extra_tools,
             )
 
         else:

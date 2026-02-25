@@ -814,6 +814,7 @@ async def test_installation_get_agent_for_room(
 
     r_config = mock.create_autospec(config.RoomConfig)
     r_config.agent_config = a_config
+    r_config.workspace_enabled = False
     t_configs = r_config.tool_configs = {
         "test_tool": tc_config,
         "test_sdtc": sdtc_config,
@@ -869,7 +870,9 @@ async def test_installation_get_agent_for_room(
 
             assert found is gafc.return_value
 
-            gafc.assert_called_once_with(a_config, t_configs, mcp_configs)
+            gafc.assert_called_once_with(
+                a_config, t_configs, mcp_configs, extra_tools=[]
+            )
 
     if w_the_logger:
         the_logger.bind.assert_called_once_with(
@@ -961,6 +964,7 @@ async def test_installation_get_agent_deps_for_room(
     sdtc_config = mock.create_autospec(config.ToolConfig)
 
     r_config = mock.create_autospec(config.RoomConfig)
+    r_config.workspace_enabled = False
     t_configs = r_config.tool_configs = {
         "test_tool": tc_config,
         "test_sdtc": sdtc_config,
@@ -1014,6 +1018,7 @@ async def test_installation_get_agent_deps_for_room(
             assert found.the_installation is the_installation
             assert found.user == test_user
             assert found.tool_configs == t_configs
+            assert found.workspace_provider is None
 
     if w_the_logger:
         the_logger.bind.assert_called_once_with(

@@ -213,6 +213,18 @@ environment:
     value: 3600
 
 #==========================================================================
+# Workspace configuration
+#==========================================================================
+# See: https://soliplex.github.io/soliplex/config/workspace/
+#
+# Configure persistent file workspace for rooms with workspace_enabled: true
+#==========================================================================
+
+workspace:
+  backend: dufs
+  dufs_url: http://localhost:5001
+
+#==========================================================================
 # Global 'haiku-rag' configuration
 #==========================================================================
 # See: https://soliplex.github.io/soliplex/config/rag/#global-configuration

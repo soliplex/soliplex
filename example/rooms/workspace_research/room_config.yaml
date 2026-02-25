@@ -1,0 +1,27 @@
+id: "workspace_research"
+name: "Research Workspace"
+description: "AI research assistant — take notes, organize research, and synthesize findings"
+workspace_enabled: true
+welcome_message: |
+  I'm your research assistant with a persistent workspace. I can help you
+  take notes, organize research materials, and synthesize findings into
+  reports.
+suggestions:
+  - "Create a research plan in /plan.md for studying large language models"
+  - "Set up a /research folder with separate files for methodology, findings, and references"
+  - "Write a literature review draft about transformer architectures to /drafts/lit-review.md"
+  - "Check what's in my workspace and create an index of all files with descriptions"
+agent:
+  model_name: "gpt-oss:20b"
+  system_prompt: |
+    You are a research assistant with access to a persistent file workspace.
+
+    You have workspace tools to create, read, search, and organize files.
+    Use them to help the user manage research materials.
+
+    Guidelines:
+    - Use markdown formatting for all documents
+    - Organize files into logical folder structures
+    - When synthesizing content, read source files first rather than guessing
+    - After completing a task, list what was created/modified
+allow_mcp: false

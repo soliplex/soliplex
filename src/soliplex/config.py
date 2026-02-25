@@ -274,6 +274,25 @@ class AvailableOIDCAuthSystemConfigs:
 
 
 # ============================================================================
+#   Workspace configuration
+# ============================================================================
+
+
+@dataclasses.dataclass(kw_only=True)
+class WorkspaceConfig:
+    """Workspace provider configuration."""
+
+    backend: str = "disabled"  # "disabled" | "mock" | "dufs"
+    dufs_url: str = "http://localhost:5000"
+
+    @classmethod
+    def from_yaml(cls, config_dict: dict | None):
+        if config_dict is None:
+            return cls()
+        return cls(**config_dict)
+
+
+# ============================================================================
 #   Tool configuration types
 # ============================================================================
 
@@ -1183,6 +1202,11 @@ class RoomConfig:
     # MCP options
     #
     allow_mcp: bool = False
+
+    #
+    # Workspace options
+    #
+    workspace_enabled: bool = False
 
     #
     # Quiz-specific options
@@ -2317,6 +2341,13 @@ class InstallationConfig:
     #
     # Map values similar to 'os.environ'.
     #
+    #
+    # Workspace provider configuration
+    #
+    workspace: WorkspaceConfig = dataclasses.field(
+        default_factory=WorkspaceConfig,
+    )
+
     environment: dict[str, typing.Any] = dataclasses.field(
         default_factory=dict,
     )
@@ -2627,6 +2658,11 @@ class InstallationConfig:
             ra_dburi = config_dict.pop("authorization_dburi", {})
             config_dict["_authorization_dburi_sync"] = ra_dburi.get("sync")
             config_dict["_authorization_dburi_async"] = ra_dburi.get("async")
+
+            workspace_cfg = config_dict.pop("workspace", None)
+            config_dict["workspace"] = WorkspaceConfig.from_yaml(
+                workspace_cfg
+            )
 
             return cls(**config_dict)
 
