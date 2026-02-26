@@ -12,6 +12,10 @@ Example of correct tool usage:
 YES: `data = fetch_records("john_doe", 5)`
 NO:  `data = fetch_records(user="john_doe", limit=5)`  # Will fail!
 
+## Navigation
+You can navigate the app:
+- navigate_to_settings: opens the settings screen
+
 ## Supported Python Features
 - Data types: int, float, str, bool, None, list, dict
 - Control flow & Functions: if/else, for, while, def, return, *args, classes
