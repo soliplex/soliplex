@@ -1684,6 +1684,7 @@ class LogfireInstrumentFastAPI:
 
 @dataclasses.dataclass(kw_only=True)
 class LogfireConfig:
+    send_to_logfire: bool | None = None
     token: str  # "secret:LOGFIRE_TOKEN" or similar
     service_name: str = "env:LOGFIRE_SERVICE_NAME"
     service_version: str = "env:LOGFIRE_SERVICE_VERSION"
@@ -1728,6 +1729,8 @@ class LogfireConfig:
             "min_level": maybe_getenv(self.min_level),
             "add_baggage_to_attributes": self.add_baggage_to_attributes,
         }
+        if self.send_to_logfire is not None:
+            kwargs["send_to_logfire"] = self.send_to_logfire
 
         if self.inspect_arguments is not None:
             kwargs["inspect_arguments"] = self.inspect_arguments
@@ -1759,6 +1762,9 @@ class LogfireConfig:
             "min_level": self.min_level,
             "add_baggage_to_attributes": self.add_baggage_to_attributes,
         }
+
+        if self.send_to_logfire is not None:
+            result["send_to_logfire"] = self.send_to_logfire
 
         if self.inspect_arguments is not None:
             result["inspect_arguments"] = self.inspect_arguments
