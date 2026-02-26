@@ -1,0 +1,17 @@
+id: "monty"
+name: "Monty Python"
+description: "Chat with client-side Python execution via MontyBridge"
+suggestions:
+  - "What's 6 × 9 in base 13? (hint: it's the answer to everything)"
+  - "Write a FizzBuzz but make it Monty Python themed"
+  - "What time is it? And what's the airspeed velocity of an unladen swallow?"
+  - "Take me to settings, I need to tweak some knobs"
+agent:
+  model_name: "gemini-2.5-flash"
+  provider_type: "google"
+  provider_key: "secret:GEMINI_API_KEY"
+  system_prompt: "./prompt.txt"
+allow_mcp: false
+tools:
+  - tool_name: "soliplex.tools.get_current_datetime"
+  - tool_name: "soliplex.tools.get_current_user"
