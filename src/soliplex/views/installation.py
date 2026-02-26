@@ -9,6 +9,7 @@ from soliplex import authz
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
+from soliplex import monty_schemas
 from soliplex import util
 from soliplex import views
 
@@ -134,3 +135,38 @@ async def get_installation_git_metadata(
         git_branch=git_metadata.git_branch,
         git_tag=git_metadata.git_tag,
     )
+
+
+@util.logfire_span("GET /v1/installation/schemas/monty")
+@router.get("/v1/installation/schemas/monty")
+async def get_installation_monty_schemas(
+    request: fastapi.Request,
+    the_installation: installation.Installation = depend_the_installation,
+    the_authz_policy: authz.AuthorizationPolicy = depend_the_authz,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
+) -> dict:
+    """Return Monty-compatible Python validator functions for all models.
+
+    Response shape:
+        {
+            "version": "1.0.0",
+            "schemas": {
+                "tool": "def validate_tool(raw): ..."
+            }
+        }
+    """
+    bound_logger = the_logger.bind(loggers.AUTHZ_LOGGER_NAME)
+    bound_logger.debug(loggers.INST_GET_INSTALLATION_MONTY_SCHEMAS)
+
+    if not await the_authz_policy.check_admin_access(the_user_claims):
+        bound_logger.error(loggers.AUTHZ_ADMIN_ACCESS_REQUIRED)
+        raise fastapi.HTTPException(
+            status_code=403,
+            detail=loggers.AUTHZ_ADMIN_ACCESS_REQUIRED,
+        ) from None
+
+    return {
+        "version": "1.0.0",
+        "schemas": monty_schemas.get_all_schemas(),
+    }
