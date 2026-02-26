@@ -1,0 +1,19 @@
+id: "moodle-tools"
+name: "Moodle Workplace (Tool Calling)"
+description: >-
+  Query Moodle via LLM tool calling
+  (research comparison)
+suggestions:
+  - "What courses are available?"
+  - "Who is enrolled in the test course?"
+  - "Show me completion status for testuser1"
+
+agent:
+  kind: "factory"
+  factory_name: "soliplex.moodle.agent.moodle_tools_agent_factory"
+  with_agent_config: true
+  extra_config:
+    moodle_base_url: "secret:MOODLE_BASE_URL"
+    moodle_api_token: "secret:MOODLE_API_TOKEN"
+
+allow_mcp: false

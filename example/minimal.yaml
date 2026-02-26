@@ -372,6 +372,7 @@ room_paths:
   - "./rooms/feedback"
   - "./rooms/bwrap_sandbox"
   - "./rooms/moodle"
+  - "./rooms/moodle-tools"
 
 #==========================================================================
 # Completions configuration
