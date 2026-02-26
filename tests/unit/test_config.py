@@ -827,6 +827,37 @@ TEST_LOGFIRE_IC_DEFAULT_ENV = {
     "LOGFIRE_MIN_LEVEL": TEST_LOGFIRE_MIN_LEVEL,
 }
 
+W_SEND_TO_LOGFIRE_FALSE_LOGFIRE_CONFIG_INIT_KW = {
+    "send_to_logfire": False,
+    "token": "secret:LOGFIRE_TOKEN",
+}
+W_SEND_TO_LOGFIRE_FALSE_LOGFIRE_CONFIG_YAML = """\
+send_to_logfire: false
+token: "secret:LOGFIRE_TOKEN"
+"""
+W_SEND_TO_LOGFIRE_FALSE_LOGFIRE_CONFIG_EXP_LC_KWARGS = {
+    "send_to_logfire": False,
+    "token": TEST_LOGFIRE_TOKEN,
+    "service_name": TEST_LOGFIRE_SERVICE_NAME,
+    "service_version": TEST_LOGFIRE_SERVICE_VERSION,
+    "environment": TEST_LOGFIRE_ENVIRONMENT,
+    "config_dir": TEST_LOGFIRE_CONFIG_DIR,
+    "data_dir": TEST_LOGFIRE_DATA_DIR,
+    "min_level": TEST_LOGFIRE_MIN_LEVEL,
+    "add_baggage_to_attributes": True,
+}
+W_SEND_TO_LOGFIRE_FALSE_LOGFIRE_CONFIG_AS_YAML = {
+    "send_to_logfire": False,
+    "token": "secret:LOGFIRE_TOKEN",
+    "service_name": "env:LOGFIRE_SERVICE_NAME",
+    "service_version": "env:LOGFIRE_SERVICE_VERSION",
+    "environment": "env:LOGFIRE_ENVIRONMENT",
+    "config_dir": "env:LOGFIRE_CONFIG_DIR",
+    "data_dir": "env:LOGFIRE_DATA_DIR",
+    "min_level": "env:LOGFIRE_MIN_LEVEL",
+    "add_baggage_to_attributes": True,
+}
+
 W_TOKEN_ONLY_LOGFIRE_CONFIG_INIT_KW = {
     "token": "secret:LOGFIRE_TOKEN",
 }
@@ -4067,6 +4098,12 @@ def test_lfifapi_from_yaml(
     "init_kw, ic_secrets, ic_env, expected",
     [
         (
+            W_SEND_TO_LOGFIRE_FALSE_LOGFIRE_CONFIG_INIT_KW,
+            TEST_LOGFIRE_IC_DEFAULT_SECRETS,
+            TEST_LOGFIRE_IC_DEFAULT_ENV,
+            W_SEND_TO_LOGFIRE_FALSE_LOGFIRE_CONFIG_EXP_LC_KWARGS,
+        ),
+        (
             W_TOKEN_ONLY_LOGFIRE_CONFIG_INIT_KW,
             TEST_LOGFIRE_IC_DEFAULT_SECRETS,
             TEST_LOGFIRE_IC_DEFAULT_ENV,
@@ -4124,6 +4161,10 @@ def test_logfireconfig_logfire_config_kwargs(
     "init_kw, expected",
     [
         (
+            W_SEND_TO_LOGFIRE_FALSE_LOGFIRE_CONFIG_INIT_KW,
+            W_SEND_TO_LOGFIRE_FALSE_LOGFIRE_CONFIG_AS_YAML,
+        ),
+        (
             W_TOKEN_ONLY_LOGFIRE_CONFIG_INIT_KW,
             W_TOKEN_ONLY_LOGFIRE_CONFIG_AS_YAML,
         ),
@@ -4172,6 +4213,10 @@ def test_logfireconfig_logfire_as_yaml(
     "config_yaml, expected_kw",
     [
         (EMPTY_LOGFIRE_CONFIG_YAML, None),
+        (
+            W_SEND_TO_LOGFIRE_FALSE_LOGFIRE_CONFIG_YAML,
+            W_SEND_TO_LOGFIRE_FALSE_LOGFIRE_CONFIG_INIT_KW,
+        ),
         (
             W_TOKEN_ONLY_LOGFIRE_CONFIG_YAML,
             W_TOKEN_ONLY_LOGFIRE_CONFIG_INIT_KW,
