@@ -1,9 +1,11 @@
-"""Moodle Workplace factory agent with dynamic system prompt.
+"""Moodle Workplace factory agent with dynamic instructions.
 
-The factory creates a standard ``pydantic_ai.Agent`` and registers
-an ``@agent.system_prompt`` function that pre-fetches Moodle data
-before every LLM call.  The LLM receives the data as context and
-answers without needing to call any tools.
+The factory creates a standard ``pydantic_ai.Agent`` whose
+``instructions`` parameter is an async callable.  Pydantic AI
+evaluates instructions on EVERY request (unlike
+``@agent.system_prompt`` which is skipped when AG-UI provides
+``message_history``).  The callable pre-fetches Moodle data so
+the LLM answers from context without tool calling.
 """
 
 from __future__ import annotations
@@ -140,24 +142,22 @@ def moodle_agent_factory(
 
     model = _build_model(agent_config)
 
-    agent = pydantic_ai.Agent(
-        model=model,
-        instructions=MOODLE_BASE_PROMPT,
-        deps_type=agents.AgentDependencies,
-    )
-
-    @agent.system_prompt
-    async def moodle_context(
-        ctx: pydantic_ai.RunContext[agents.AgentDependencies],
-    ) -> str:
-        """Fetch Moodle data and inject as context."""
+    async def _instructions() -> str:
+        """Build instructions with live Moodle data."""
         try:
-            return await _fetch_moodle_context(client)
+            moodle_data = await _fetch_moodle_context(client)
         except Exception:
             log.exception("Failed to fetch Moodle data")
-            return (
+            moodle_data = (
                 "Moodle data is currently unavailable. "
                 "Answer from conversation context only."
             )
+        return f"{MOODLE_BASE_PROMPT}\n{moodle_data}"
+
+    agent = pydantic_ai.Agent(
+        model=model,
+        instructions=_instructions,
+        deps_type=agents.AgentDependencies,
+    )
 
     return agent
