@@ -125,6 +125,29 @@ class MCPClientToolset(pydantic.BaseModel):
 ConfiguredMCPClientToolsets = dict[str, MCPClientToolset]
 
 
+class Skill(pydantic.BaseModel):
+    name: str
+    description: str
+    license: str | None
+    compatibility: str | None
+    allowed_tools: str | None
+    metadata: dict[str, typing.Any] | None = {}
+
+    @classmethod
+    def from_config(cls, skill_config: config.SkillConfig):
+        return cls(
+            name=skill_config.name,
+            description=skill_config.description,
+            license=skill_config.license,
+            compatibility=skill_config.compatibility,
+            allowed_tools=skill_config.allowed_tools,
+            metadata=skill_config.metadata,
+        )
+
+
+ConfiguredSkills = dict[str, Skill]
+
+
 class DefaultAgent(pydantic.BaseModel):
     id: str
     model_name: str
@@ -211,6 +234,7 @@ class Room(pydantic.BaseModel):
     enable_attachments: bool
     tools: ConfiguredTools
     mcp_client_toolsets: ConfiguredMCPClientToolsets
+    skills: ConfiguredSkills
     quizzes: ConfiguredQuizzes
     agent: Agent
     agui_feature_names: list[str]
@@ -246,6 +270,10 @@ class Room(pydantic.BaseModel):
                     key,
                     mcp_ct_config,
                 ) in room_config.mcp_client_toolset_configs.items()
+            },
+            skills={
+                key: Skill.from_config(skill_config)
+                for key, skill_config in room_config.skill_configs.items()
             },
             quizzes={
                 quiz.id: Quiz.from_config(quiz) for quiz in room_config.quizzes

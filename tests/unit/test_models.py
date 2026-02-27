@@ -8,6 +8,7 @@ from unittest import mock
 import pydantic
 import pytest
 from ag_ui import core as agui_core
+from skills_ref import models as skill_models
 
 from soliplex import agui as agui_package
 from soliplex import config
@@ -28,6 +29,12 @@ QUESTION_TYPE_MC = "multiple-choice"
 MC_OPTIONS = ["orange", "blue", "purple"]
 
 FEATURE_NAME = "feature_name"
+SKILL_NAME = "skill_name"
+SKILL_DESC = "This is a skill"
+SKILL_LICENSE = "Foo License v3.14"
+SKILL_COMPAT = "Skill compat"
+SKILL_ALLOWED_TOOLS = "Tools allowed to the skill"
+SKILL_META = {"foo": "bar"}
 
 ROOM_ID = "test_room"
 ROOM_NAME = "Test Room"
@@ -627,12 +634,25 @@ def which_agent(
         return w_agui_features_agent
 
 
-def test_room_from_config_bare(which_agent):
+@pytest.fixture
+def room_ic():
+    return config.InstallationConfig(
+        id=INSTALLATION_ID,
+        oidc_paths=[],
+        room_paths=[],
+        completion_paths=[],
+        quizzes_paths=[],
+        _skill_configs={},
+    )
+
+
+def test_room_from_config_bare(room_ic, which_agent):
     room_config = config.RoomConfig(
         id=ROOM_ID,
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,
         agent_config=which_agent,
+        _installation_config=room_ic,
     )
 
     room_model = models.Room.from_config(room_config)
@@ -642,6 +662,7 @@ def test_room_from_config_bare(which_agent):
     assert room_model.description == ROOM_DESCRIPTION
     assert room_model.suggestions == []
     assert room_model.tools == {}
+    assert room_model.skills == {}
 
     agent_model = room_model.agent
 
@@ -665,13 +686,14 @@ def test_room_from_config_bare(which_agent):
     assert room_model.welcome_message == ROOM_DESCRIPTION
 
 
-def test_room_from_config_w_welcome(default_agent):
+def test_room_from_config_w_welcome(room_ic, default_agent):
     room_config = config.RoomConfig(
         id=ROOM_ID,
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,
         agent_config=default_agent,
         welcome_message=ROOM_WELCOME,
+        _installation_config=room_ic,
     )
 
     room_model = models.Room.from_config(room_config)
@@ -679,13 +701,14 @@ def test_room_from_config_w_welcome(default_agent):
     assert room_model.welcome_message == ROOM_WELCOME
 
 
-def test_room_from_config_w_suggestions(default_agent):
+def test_room_from_config_w_suggestions(room_ic, default_agent):
     room_config = config.RoomConfig(
         id=ROOM_ID,
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,
         agent_config=default_agent,
         suggestions=[ROOM_SUGGESTION],
+        _installation_config=room_ic,
     )
 
     room_model = models.Room.from_config(room_config)
@@ -693,13 +716,14 @@ def test_room_from_config_w_suggestions(default_agent):
     assert room_model.suggestions == [ROOM_SUGGESTION]
 
 
-def test_room_from_config_w_tools(default_agent, gcd_tool_config):
+def test_room_from_config_w_tools(room_ic, default_agent, gcd_tool_config):
     room_config = config.RoomConfig(
         id=ROOM_ID,
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,
         agent_config=default_agent,
         tool_configs={"get_current_datetime": gcd_tool_config},
+        _installation_config=room_ic,
     )
 
     room_model = models.Room.from_config(room_config)
@@ -711,13 +735,60 @@ def test_room_from_config_w_tools(default_agent, gcd_tool_config):
     assert room_model.agui_feature_names == [FEATURE_NAME]
 
 
-def test_room_from_config_w_quizzes(default_agent, a_quiz):
+@pytest.fixture(params=[False, True])
+def has_skill_properties_metadata(request):
+    return request.param
+
+
+@pytest.fixture
+def skill_config(request, temp_dir, has_skill_properties_metadata):
+    if has_skill_properties_metadata:
+        metadata = SKILL_META
+    else:
+        metadata = None
+
+    skill_properties = mock.create_autospec(
+        skill_models.SkillProperties,
+        description=SKILL_DESC,
+        license=SKILL_LICENSE,
+        compatibility=SKILL_COMPAT,
+        allowed_tools=SKILL_ALLOWED_TOOLS,
+        metadata=metadata,
+    )
+    skill_properties.name = SKILL_NAME  # mock quirk
+    return config.SkillConfig(
+        _skill_properties=skill_properties,
+        _skill_path=temp_dir / "skills" / SKILL_NAME,
+    )
+
+
+def test_room_from_config_w_skills(room_ic, default_agent, skill_config):
+    room_ic._skill_configs[SKILL_NAME] = skill_config
+
+    room_config = config.RoomConfig(
+        id=ROOM_ID,
+        name=ROOM_NAME,
+        description=ROOM_DESCRIPTION,
+        agent_config=default_agent,
+        skill_names=[SKILL_NAME],
+        _installation_config=room_ic,
+    )
+
+    room_model = models.Room.from_config(room_config)
+
+    assert room_model.skills == {
+        SKILL_NAME: models.Skill.from_config(skill_config),
+    }
+
+
+def test_room_from_config_w_quizzes(room_ic, default_agent, a_quiz):
     room_config = config.RoomConfig(
         id=ROOM_ID,
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,
         agent_config=default_agent,
         quizzes=[a_quiz],
+        _installation_config=room_ic,
     )
 
     room_model = models.Room.from_config(room_config)
@@ -725,13 +796,14 @@ def test_room_from_config_w_quizzes(default_agent, a_quiz):
     assert room_model.quizzes == {a_quiz.id: models.Quiz.from_config(a_quiz)}
 
 
-def test_room_from_config_w_allow_mcp(default_agent, room_allow_mcp):
+def test_room_from_config_w_allow_mcp(room_ic, default_agent, room_allow_mcp):
     room_config = config.RoomConfig(
         id=ROOM_ID,
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,
         agent_config=default_agent,
         **room_allow_mcp,
+        _installation_config=room_ic,
     )
 
     room_model = models.Room.from_config(room_config)
