@@ -306,6 +306,18 @@ FADTC_CONFIG_KW = {
     "allow_mcp": True,
 }
 
+SKILL_NAME = "test-skill"
+SKILL_DESC = "Skill description"
+SKILL_LICENSE = "Skill license"
+SKILL_COMPAT = "Skill compatibility"
+SKILL_ALLOWED_TOOLS = "Skill allowed tools"
+SKILL_AUTHOR = "phreddy@example.com"
+SKILL_VERSION = "0.0.1"
+SKILL_METADATA = {
+    "author": SKILL_AUTHOR,
+    "version": SKILL_VERSION,
+}
+
 
 BOGUS_AGENT_CONFIG_YAML = ""
 
@@ -639,6 +651,7 @@ FULL_ROOM_CONFIG_KW = {
             query_params=HTTP_MCP_QUERY_PARAMS,
         ),
     },
+    "skill_names": [SKILL_NAME],
 }
 FULL_ROOM_CONFIG_YAML = f"""\
 id: "{ROOM_ID}"
@@ -672,6 +685,8 @@ mcp_client_toolsets:
         Authorization: "Bearer secret:BEARER_TOKEN"
       query_params:
         {HTTP_MCP_QP_KEY}: "{HTTP_MCP_QP_VALUE}"
+skill_names:
+  - "{SKILL_NAME}"
 quizzes:
   - id: "{TEST_QUIZ_ID}"
     question_file: "{TEST_QUIZ_OVR}"
@@ -1584,17 +1599,6 @@ logging_claims_map:
     user_id: "{LOGGING_USER_ID_KEY}"
 """
 
-SKILL_NAME = "test-skill"
-SKILL_DESC = "Skill description"
-SKILL_LICENSE = "Skill license"
-SKILL_COMPAT = "Skill compatibility"
-SKILL_ALLOWED_TOOLS = "Skill allowed tools"
-SKILL_AUTHOR = "phreddy@example.com"
-SKILL_VERSION = "0.0.1"
-SKILL_METADATA = {
-    "author": SKILL_AUTHOR,
-    "version": SKILL_VERSION,
-}
 SKILLS_PATH_1 = "./skills"
 SKILLS_PATH_2 = "/path/to/other/skills"
 
@@ -3616,6 +3620,96 @@ def test_roomconfig_from_yaml(
         assert found == expected
 
 
+@pytest.mark.parametrize("w_order", [False, True])
+def test_roomconfig_sort_key(w_order):
+    _ORDER = "explicitly_ordered"
+
+    room_config_kw = BARE_ROOM_CONFIG_KW.copy()
+
+    if w_order:
+        room_config_kw["_order"] = _ORDER
+
+    room_config = config.RoomConfig(**room_config_kw)
+
+    found = room_config.sort_key
+
+    if w_order:
+        assert found == _ORDER
+    else:
+        assert found == ROOM_ID
+
+
+def test_roomconfig_skill_configs_bare(installation_config):
+    installation_config.skill_configs = {}
+
+    room_config_kw = BARE_ROOM_CONFIG_KW.copy()
+    room_config = config.RoomConfig(
+        **room_config_kw,
+        _installation_config=installation_config,
+    )
+
+    found = room_config.skill_configs
+
+    assert found == {}
+
+
+@pytest.mark.parametrize(
+    "w_missing, expectation",
+    [
+        (False, contextlib.nullcontext()),
+        (True, pytest.raises(config.InvalidSkillNames)),
+    ],
+)
+def test_roomconfig_skill_configs_w_skill(
+    installation_config,
+    w_missing,
+    expectation,
+):
+    if w_missing:
+        installation_config.skill_configs = {}
+    else:
+        skill_config = mock.create_autospec(config.SkillConfig)
+        installation_config.skill_configs = {
+            SKILL_NAME: skill_config,
+            "other_skill": object(),
+        }
+
+    room_config_kw = FULL_ROOM_CONFIG_KW.copy()
+    room_config = config.RoomConfig(
+        **room_config_kw,
+        _installation_config=installation_config,
+    )
+
+    with expectation as expected:
+        found = room_config.skill_configs
+
+    if expected is None:
+        assert found == {SKILL_NAME: skill_config}
+
+
+@pytest.mark.parametrize(
+    "rc_kwargs, expected",
+    [
+        (BARE_ROOM_CONFIG_KW.copy(), ()),
+        (
+            FULL_ROOM_CONFIG_KW.copy(),
+            [
+                # from 'agent_config'
+                AGUI_FEATURE_NAME,
+                # from 'room_config'
+                EXTRA_AGUI_FEATURE_NAME,
+            ],
+        ),
+    ],
+)
+def test_roomconfig_agui_feature_names(rc_kwargs, expected):
+    room_config = config.RoomConfig(**rc_kwargs)
+
+    found = room_config.agui_feature_names
+
+    assert set(found) == set(expected)
+
+
 @pytest.mark.parametrize("w_existing", [False, True])
 def test_roomconfig_quiz_map(w_existing):
     NUM_QUIZZES = 3
@@ -3648,48 +3742,6 @@ def test_roomconfig_quiz_map(w_existing):
             strict=True,
         ):
             assert f_quiz is e_quiz
-
-
-@pytest.mark.parametrize("w_order", [False, True])
-def test_roomconfig_sort_key(w_order):
-    _ORDER = "explicitly_ordered"
-
-    room_config_kw = BARE_ROOM_CONFIG_KW.copy()
-
-    if w_order:
-        room_config_kw["_order"] = _ORDER
-
-    room_config = config.RoomConfig(**room_config_kw)
-
-    found = room_config.sort_key
-
-    if w_order:
-        assert found == _ORDER
-    else:
-        assert found == ROOM_ID
-
-
-@pytest.mark.parametrize(
-    "rc_kwargs, expected",
-    [
-        (BARE_ROOM_CONFIG_KW.copy(), ()),
-        (
-            FULL_ROOM_CONFIG_KW.copy(),
-            [
-                # from 'agent_config'
-                AGUI_FEATURE_NAME,
-                # from 'room_config'
-                EXTRA_AGUI_FEATURE_NAME,
-            ],
-        ),
-    ],
-)
-def test_roomconfig_agui_feature_names(rc_kwargs, expected):
-    room_config = config.RoomConfig(**rc_kwargs)
-
-    found = room_config.agui_feature_names
-
-    assert set(found) == set(expected)
 
 
 @pytest.mark.parametrize("w_config_path", [False, True])

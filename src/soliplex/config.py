@@ -119,6 +119,16 @@ class InvalidAgentTemplateID(KeyError):
         )
 
 
+class InvalidSkillNames(KeyError):
+    def __init__(self, skill_names, _config_path):
+        self.skill_names = skill_names
+        self._config_path = _config_path
+        super().__init__(
+            f"Skills not found: {', '.join(skill_names)} "
+            f"(configured in {_config_path})"
+        )
+
+
 class QCExactlyOneOfStemOrOverride(TypeError):
     def __init__(self, _config_path):
         self._config_path = _config_path
@@ -1229,6 +1239,11 @@ class RoomConfig:
     )
 
     #
+    #   Skills:  names refer to skills defined in the installation
+    #
+    skill_names: list[str] = dataclasses.field(default_factory=list)
+
+    #
     # MCP options
     #
     allow_mcp: bool = False
@@ -1319,6 +1334,21 @@ class RoomConfig:
             return self._order
 
         return self.id
+
+    @property
+    def skill_configs(self) -> SkillConfigMap:
+        ic_map = self._installation_config.skill_configs
+        missing_skills = set(self.skill_names) - set(ic_map)
+
+        if missing_skills:
+            raise InvalidSkillNames(
+                skill_names=missing_skills,
+                _config_path=self._config_path,
+            )
+
+        return {
+            skill_name: ic_map[skill_name] for skill_name in self.skill_names
+        }
 
     @property
     def agui_feature_names(self) -> tuple[str]:
