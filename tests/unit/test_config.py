@@ -2498,6 +2498,51 @@ def test_withquerymcpwrapper_call():
 
 
 @pytest.mark.parametrize(
+    "w_properties_kw",
+    [
+        {"name": SKILL_NAME, "description": SKILL_DESC},
+        {
+            "name": SKILL_NAME,
+            "description": SKILL_DESC,
+            "license": SKILL_LICENSE,
+            "compatibility": SKILL_COMPAT,
+            "allowed_tools": SKILL_ALLOWED_TOOLS,
+            "metadata": SKILL_METADATA,
+        },
+    ],
+)
+def test_skillconfig_properties(w_properties_kw):
+    skill_config = config.SkillConfig(
+        _skill_properties=skill_models.SkillProperties(**w_properties_kw)
+    )
+
+    assert skill_config.name == SKILL_NAME
+    assert skill_config.description == SKILL_DESC
+    assert skill_config.license == w_properties_kw.get("license")
+    assert skill_config.compatibility == w_properties_kw.get("compatibility")
+    assert skill_config.allowed_tools == w_properties_kw.get("allowed_tools")
+    assert skill_config.metadata == w_properties_kw.get("metadata", {})
+    assert skill_config.errors == []
+
+
+def test_skillconfig_properties_w_errors():
+    TEST_VALIDATION_ERROR = "Test validation error"
+
+    skill_config = config.SkillConfig(
+        _skill_properties=None,
+        _validation_errors=[TEST_VALIDATION_ERROR],
+    )
+
+    assert skill_config.name is None
+    assert skill_config.description is None
+    assert skill_config.license is None
+    assert skill_config.compatibility is None
+    assert skill_config.allowed_tools is None
+    assert skill_config.metadata is None
+    assert skill_config.errors == [TEST_VALIDATION_ERROR]
+
+
+@pytest.mark.parametrize(
     "config_dict, expected",
     [
         ({}, {}),
@@ -3731,51 +3776,6 @@ def test_completionconfig_from_yaml(
     )
 
     assert found == expected
-
-
-@pytest.mark.parametrize(
-    "w_properties_kw",
-    [
-        {"name": SKILL_NAME, "description": SKILL_DESC},
-        {
-            "name": SKILL_NAME,
-            "description": SKILL_DESC,
-            "license": SKILL_LICENSE,
-            "compatibility": SKILL_COMPAT,
-            "allowed_tools": SKILL_ALLOWED_TOOLS,
-            "metadata": SKILL_METADATA,
-        },
-    ],
-)
-def test_skillconfig_properties(w_properties_kw):
-    skill_config = config.SkillConfig(
-        _skill_properties=skill_models.SkillProperties(**w_properties_kw)
-    )
-
-    assert skill_config.name == SKILL_NAME
-    assert skill_config.description == SKILL_DESC
-    assert skill_config.license == w_properties_kw.get("license")
-    assert skill_config.compatibility == w_properties_kw.get("compatibility")
-    assert skill_config.allowed_tools == w_properties_kw.get("allowed_tools")
-    assert skill_config.metadata == w_properties_kw.get("metadata", {})
-    assert skill_config.errors == []
-
-
-def test_skillconfig_properties_w_errors():
-    TEST_VALIDATION_ERROR = "Test validation error"
-
-    skill_config = config.SkillConfig(
-        _skill_properties=None,
-        _validation_errors=[TEST_VALIDATION_ERROR],
-    )
-
-    assert skill_config.name is None
-    assert skill_config.description is None
-    assert skill_config.license is None
-    assert skill_config.compatibility is None
-    assert skill_config.allowed_tools is None
-    assert skill_config.metadata is None
-    assert skill_config.errors == [TEST_VALIDATION_ERROR]
 
 
 @pytest.mark.parametrize(

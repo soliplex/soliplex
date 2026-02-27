@@ -678,6 +678,60 @@ MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME = {}
 
 
 # ============================================================================
+#   Skill configuration types
+# ============================================================================
+
+
+@dataclasses.dataclass(kw_only=True)
+class SkillConfig:
+    """Configuration for an agent skill."""
+
+    _skill_properties: skill_models.SkillProperties | None
+    _validation_errors: list[str] = dataclasses.field(default_factory=list)
+
+    # Set by `from_markdown` factory
+    _installation_config: InstallationConfig = _no_repr_no_compare_none()
+    _skill_path: pathlib.Path = None
+
+    @property
+    def name(self) -> str:
+        if self._skill_properties is not None:
+            return self._skill_properties.name
+
+    @property
+    def description(self) -> str:
+        if self._skill_properties is not None:
+            return self._skill_properties.description
+
+    @property
+    def license(self) -> str | None:
+        if self._skill_properties is not None:
+            return self._skill_properties.license
+
+    @property
+    def compatibility(self) -> str | None:
+        if self._skill_properties is not None:
+            return self._skill_properties.compatibility
+
+    @property
+    def allowed_tools(self) -> str | None:
+        if self._skill_properties is not None:
+            return self._skill_properties.allowed_tools
+
+    @property
+    def metadata(self) -> dict:
+        if self._skill_properties is not None:
+            return self._skill_properties.metadata
+
+    @property
+    def errors(self) -> list[str]:
+        return self._validation_errors
+
+
+SkillConfigMap = dict[str, SkillConfig]
+
+
+# ============================================================================
 #   Agent-related configuration types
 # ============================================================================
 
@@ -1360,57 +1414,6 @@ class CompletionConfig:
         )
 
         return cls(**config_dict)
-
-
-# ============================================================================
-#   Skill configuration types
-# ============================================================================
-
-
-@dataclasses.dataclass(kw_only=True)
-class SkillConfig:
-    """Configuration for an agent skill."""
-
-    _skill_properties: skill_models.SkillProperties | None
-    _validation_errors: list[str] = dataclasses.field(default_factory=list)
-
-    # Set by `from_markdown` factory
-    _installation_config: InstallationConfig = _no_repr_no_compare_none()
-    _skill_path: pathlib.Path = None
-
-    @property
-    def name(self) -> str:
-        if self._skill_properties is not None:
-            return self._skill_properties.name
-
-    @property
-    def description(self) -> str:
-        if self._skill_properties is not None:
-            return self._skill_properties.description
-
-    @property
-    def license(self) -> str | None:
-        if self._skill_properties is not None:
-            return self._skill_properties.license
-
-    @property
-    def compatibility(self) -> str | None:
-        if self._skill_properties is not None:
-            return self._skill_properties.compatibility
-
-    @property
-    def allowed_tools(self) -> str | None:
-        if self._skill_properties is not None:
-            return self._skill_properties.allowed_tools
-
-    @property
-    def metadata(self) -> dict:
-        if self._skill_properties is not None:
-            return self._skill_properties.metadata
-
-    @property
-    def errors(self) -> list[str]:
-        return self._validation_errors
 
 
 # ============================================================================
@@ -2563,7 +2566,7 @@ class InstallationConfig:
     #
     skills_paths: list[pathlib.Path] = None
 
-    _skill_configs: dict[str, SkillConfig] = None
+    _skill_configs: SkillConfigMap = None
 
     #
     # Logfire configuration
@@ -2913,7 +2916,7 @@ class InstallationConfig:
 
         return self._completion_configs.copy()
 
-    def _load_skill_configs(self) -> dict[str, SkillConfig]:
+    def _load_skill_configs(self) -> SkillConfigMap:
         skill_configs = {}
 
         for skills_path in self.skills_paths:
@@ -2946,7 +2949,7 @@ class InstallationConfig:
         return skill_configs
 
     @property
-    def skill_configs(self) -> dict[str, SkillConfig]:
+    def skill_configs(self) -> SkillConfigMap:
         if self._skill_configs is None:
             self._skill_configs = self._load_skill_configs()
 
