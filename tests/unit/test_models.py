@@ -560,41 +560,21 @@ def test_otheragent_from_config(
     assert agent_model.kind == OTHER_AGENT_KIND
 
 
-@pytest.fixture(params=[None, ROOM_WELCOME])
-def room_welcome(request):
-    return _from_param(request, "welcome_message")
+@pytest.fixture
+def gcd_tool_config():
+    return config.ToolConfig(
+        tool_name="soliplex.tools.get_current_datetime",
+        agui_feature_names=(FEATURE_NAME,),
+    )
 
 
-@pytest.fixture(params=[None, [ROOM_SUGGESTION]])
-def room_suggestions(request):
-    return _from_param(request, "suggestions")
-
-
-@pytest.fixture(params=[False, True])
-def room_tools(request):
-    kw = {}
-    if request.param:
-        kw["tool_configs"] = {
-            "get_current_datetime": config.ToolConfig(
-                tool_name="soliplex.tools.get_current_datetime",
-                agui_feature_names=(FEATURE_NAME,),
-            ),
-        }
-    return kw
-
-
-@pytest.fixture(params=[False, True])
-def room_quizzes(request, quiz_path):
-    kw = {}
-    if request.param:
-        kw["quizzes"] = [
-            config.QuizConfig(
-                id=QUIZ_ID,
-                title=QUIZ_TITLE,
-                _question_file_path_override=str(quiz_path),
-            )
-        ]
-    return kw
+@pytest.fixture
+def a_quiz(quiz_path):
+    return config.QuizConfig(
+        id=QUIZ_ID,
+        title=QUIZ_TITLE,
+        _question_file_path_override=str(quiz_path),
+    )
 
 
 @pytest.fixture(params=[None, False, True])
@@ -602,49 +582,57 @@ def room_allow_mcp(request):
     return _from_param(request, "allow_mcp")
 
 
+@pytest.fixture
+def default_agent(installation_config):
+    return config.AgentConfig(
+        id=AGENT_ID,
+        model_name=AGENT_MODEL,
+        system_prompt=AGENT_PROMPT,
+        _installation_config=installation_config,
+    )
+
+
+@pytest.fixture
+def factory_agent(installation_config):
+    return config.FactoryAgentConfig(
+        id=AGENT_ID,
+        factory_name=FACTORY_NAME,
+        with_agent_config=False,
+        _installation_config=installation_config,
+    )
+
+
+@pytest.fixture
+def w_agui_features_agent(installation_config):
+    return mock.Mock(
+        spec_set=["id", "kind", "agui_feature_names"],
+        id=AGENT_ID,
+        kind=OTHER_AGENT_KIND,
+        agui_feature_names=(AGUI_FEATURE_NAME,),
+    )
+
+
 @pytest.fixture(params=["default", "factory", "other"])
-def room_agent(request, installation_config):
-    if request.param == "default":
-        return config.AgentConfig(
-            id=AGENT_ID,
-            model_name=AGENT_MODEL,
-            system_prompt=AGENT_PROMPT,
-            _installation_config=installation_config,
-        )
-    elif request.param == "factory":
-        return config.FactoryAgentConfig(
-            id=AGENT_ID,
-            factory_name=FACTORY_NAME,
-            with_agent_config=False,
-            _installation_config=installation_config,
-        )
-    else:
-        return mock.Mock(
-            spec_set=["id", "kind", "agui_feature_names"],
-            id=AGENT_ID,
-            kind=OTHER_AGENT_KIND,
-            agui_feature_names=(AGUI_FEATURE_NAME,),
-        )
-
-
-def test_room_from_config(
-    room_agent,
-    room_welcome,
-    room_suggestions,
-    room_tools,
-    room_quizzes,
-    room_allow_mcp,
+def which_agent(
+    request,
+    default_agent,
+    factory_agent,
+    w_agui_features_agent,
 ):
+    if request.param == "default":
+        return default_agent
+    elif request.param == "factory":
+        return factory_agent
+    else:
+        return w_agui_features_agent
+
+
+def test_room_from_config_bare(which_agent):
     room_config = config.RoomConfig(
         id=ROOM_ID,
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,
-        agent_config=room_agent,
-        **room_welcome,
-        **room_suggestions,
-        **room_tools,
-        **room_quizzes,
-        **room_allow_mcp,
+        agent_config=which_agent,
     )
 
     room_model = models.Room.from_config(room_config)
@@ -652,67 +640,110 @@ def test_room_from_config(
     assert room_model.id == ROOM_ID
     assert room_model.name == ROOM_NAME
     assert room_model.description == ROOM_DESCRIPTION
+    assert room_model.suggestions == []
+    assert room_model.tools == {}
 
     agent_model = room_model.agent
 
     assert agent_model.id == AGENT_ID
 
-    if room_agent.kind == "default":
+    if which_agent.kind == "default":
         assert agent_model.model_name == AGENT_MODEL
         assert agent_model.system_prompt == AGENT_PROMPT
-    elif room_agent.kind == "factory":
+        assert agent_model.agui_feature_names == []
+    elif which_agent.kind == "factory":
         assert agent_model.factory_name == FACTORY_NAME
         assert agent_model.with_agent_config is False
         assert agent_model.extra_config == {}
+        assert agent_model.agui_feature_names == []
     else:
         assert agent_model.kind == OTHER_AGENT_KIND
         assert agent_model.agui_feature_names == list(
-            room_agent.agui_feature_names
+            which_agent.agui_feature_names
         )
 
-    if room_welcome:
-        assert room_model.welcome_message == room_welcome["welcome_message"]
-    else:
-        assert room_model.welcome_message == ROOM_DESCRIPTION
+    assert room_model.welcome_message == ROOM_DESCRIPTION
 
-    if room_suggestions:
-        assert room_model.suggestions == room_suggestions["suggestions"]
-    else:
-        assert room_model.suggestions == []
 
-    exp_agui_features = set()
+def test_room_from_config_w_welcome(default_agent):
+    room_config = config.RoomConfig(
+        id=ROOM_ID,
+        name=ROOM_NAME,
+        description=ROOM_DESCRIPTION,
+        agent_config=default_agent,
+        welcome_message=ROOM_WELCOME,
+    )
 
-    if room_tools:
-        assert room_model.tools == {
-            key: models.Tool.from_config(tool_config)
-            for (key, tool_config) in room_tools["tool_configs"].items()
-        }
-        exp_agui_features.add(FEATURE_NAME)
-    else:
-        assert room_model.tools == {}
+    room_model = models.Room.from_config(room_config)
 
-    if getattr(room_agent, "agui_feature_names", None):
-        exp_agui_features |= set(room_agent.agui_feature_names)
+    assert room_model.welcome_message == ROOM_WELCOME
 
-    assert set(room_model.agui_feature_names) == exp_agui_features
 
-    if room_quizzes:
-        assert room_model.quizzes == {
-            quiz.id: models.Quiz.from_config(quiz)
-            for quiz in room_quizzes["quizzes"]
-        }
-    else:
-        assert room_model.quizzes == {}
+def test_room_from_config_w_suggestions(default_agent):
+    room_config = config.RoomConfig(
+        id=ROOM_ID,
+        name=ROOM_NAME,
+        description=ROOM_DESCRIPTION,
+        agent_config=default_agent,
+        suggestions=[ROOM_SUGGESTION],
+    )
+
+    room_model = models.Room.from_config(room_config)
+
+    assert room_model.suggestions == [ROOM_SUGGESTION]
+
+
+def test_room_from_config_w_tools(default_agent, gcd_tool_config):
+    room_config = config.RoomConfig(
+        id=ROOM_ID,
+        name=ROOM_NAME,
+        description=ROOM_DESCRIPTION,
+        agent_config=default_agent,
+        tool_configs={"get_current_datetime": gcd_tool_config},
+    )
+
+    room_model = models.Room.from_config(room_config)
+
+    assert room_model.tools == {
+        "get_current_datetime": models.Tool.from_config(gcd_tool_config),
+    }
+
+    assert room_model.agui_feature_names == [FEATURE_NAME]
+
+
+def test_room_from_config_w_quizzes(default_agent, a_quiz):
+    room_config = config.RoomConfig(
+        id=ROOM_ID,
+        name=ROOM_NAME,
+        description=ROOM_DESCRIPTION,
+        agent_config=default_agent,
+        quizzes=[a_quiz],
+    )
+
+    room_model = models.Room.from_config(room_config)
+
+    assert room_model.quizzes == {a_quiz.id: models.Quiz.from_config(a_quiz)}
+
+
+def test_room_from_config_w_allow_mcp(default_agent, room_allow_mcp):
+    room_config = config.RoomConfig(
+        id=ROOM_ID,
+        name=ROOM_NAME,
+        description=ROOM_DESCRIPTION,
+        agent_config=default_agent,
+        **room_allow_mcp,
+    )
+
+    room_model = models.Room.from_config(room_config)
 
     assert room_model.allow_mcp == room_config.allow_mcp
 
 
-def test_completion_from_config(room_agent, room_tools):
+def test_completion_from_config_bare(which_agent):
     completion_config = config.CompletionConfig(
         id=COMPLETION_ID,
         name=COMPLETION_NAME,
-        agent_config=room_agent,
-        **room_tools,
+        agent_config=which_agent,
     )
 
     completion_model = models.Completion.from_config(completion_config)
@@ -723,180 +754,284 @@ def test_completion_from_config(room_agent, room_tools):
     agent_model = completion_model.agent
     assert agent_model.id == AGENT_ID
 
-    if room_agent.kind == "default":
+    if which_agent.kind == "default":
         assert agent_model.model_name == AGENT_MODEL
         assert agent_model.system_prompt == AGENT_PROMPT
-    elif room_agent.kind == "factory":
+    elif which_agent.kind == "factory":
         assert agent_model.factory_name == FACTORY_NAME
         assert agent_model.with_agent_config is False
         assert agent_model.extra_config == {}
     else:
         assert agent_model.kind == OTHER_AGENT_KIND
         assert agent_model.agui_feature_names == list(
-            room_agent.agui_feature_names
+            which_agent.agui_feature_names
         )
 
-    if room_tools:
-        assert completion_model.tools == {
-            key: models.Tool.from_config(tool_config)
-            for (key, tool_config) in room_tools["tool_configs"].items()
-        }
-    else:
-        assert completion_model.tools == {}
+    assert completion_model.tools == {}
 
 
-@pytest.fixture(
-    params=[
-        None,
-        [config.SecretConfig(secret_name=INSTALLATION_SECRET)],
-    ]
-)
-def installation_secrets(request):
-    return _from_param(request, "secrets")
-
-
-@pytest.fixture(
-    params=[
-        None,
-        {INSTALLATION_ENVVAR_NAME: INSTALLATION_ENVVAR_STR_VALUE},
-        {INSTALLATION_ENVVAR_NAME: INSTALLATION_ENVVAR_INT_VALUE},
-    ],
-)
-def installation_environment(request):
-    return _from_param(request, "environment")
-
-
-@pytest.fixture(
-    params=[
-        None,
-        pathlib.Path(HAIKU_RAG_CONFIG_FILE),
-    ],
-)
-def installation_haiku_rag_config_file(request):
-    return _from_param(request, "_haiku_rag_config_file")
-
-
-@pytest.fixture(
-    params=[
-        None,
-        [
-            config.AgentConfig(
-                id=INSTALLATION_AGENT_ID,
-                model_name=INSTALLATION_AGENT_MODEL_NAME,
-                system_prompt=INSTALLATION_AGENT_SYSTEM_PROMPT,
-                provider_type=config.LLMProviderType.OLLAMA,
-                provider_base_url=AGENT_BASE_URL,
-            ),
-        ],
-        [
-            config.FactoryAgentConfig(
-                id=INSTALLATION_AGENT_ID,
-                factory_name=FACTORY_NAME,
-                with_agent_config=False,
-            ),
-        ],
-    ]
-)
-def installation_agents(request):
-    return _from_param(request, "agent_configs")
-
-
-@pytest.fixture(params=[None, [INSTALLATION_OIDC_PATH]])
-def installation_oidc_paths(request):
-    return _from_param(request, "oidc_paths")
-
-
-@pytest.fixture(params=[None, [INSTALLATION_ROOM_PATH]])
-def installation_room_paths(request):
-    return _from_param(request, "room_paths")
-
-
-@pytest.fixture(params=[None, [INSTALLATION_COMPLETION_PATH]])
-def installation_completion_paths(request):
-    return _from_param(request, "completion_paths")
-
-
-@pytest.fixture(params=[None, [INSTALLATION_QUIZZES_PATH]])
-def installation_quizzes_paths(request):
-    return _from_param(request, "quizzes_paths")
-
-
-@pytest.fixture(
-    params=[
-        None,
-        [INSTALLATION_OIDC_AUTH_SYSTEM_CONFIG],
-    ],
-)
-def installation_oidc_auth_system_configs(request):
-    kwargs = _from_param(request, "_oidc_auth_system_configs")
-    if not kwargs:
-        kwargs["_oidc_auth_system_configs"] = []
-    return kwargs
-
-
-@pytest.fixture(
-    params=[
-        None,
-        {
-            "_thread_persistence_dburi_sync": INSTALLATION_TP_DBURI_SYNC,
-            "_thread_persistence_dburi_async": INSTALLATION_TP_DBURI_ASYNC,
-        },
-    ]
-)
-def installation_tp_dburi(request):
-    kw = {}
-    if request.param is not None:
-        kw |= request.param
-    return kw
-
-
-@pytest.fixture(
-    params=[
-        None,
-        {
-            "_logging_config_file": LOGGING_CONFIG_FILE,
-            "_logging_headers_map": LOGGING_HEADERS_MAP,
-            "_logging_claims_map": LOGGING_CLAIMS_MAP,
-        },
-    ]
-)
-def installation_logging_config(request):
-    kw = {}
-    if request.param is not None:
-        kw |= request.param
-    return kw
-
-
-def test_installation_from_config(
-    temp_dir,
-    the_agui_feature,
-    installation_secrets,
-    installation_environment,
-    installation_haiku_rag_config_file,
-    installation_agents,
-    installation_oidc_paths,
-    installation_room_paths,
-    installation_completion_paths,
-    installation_quizzes_paths,
-    installation_oidc_auth_system_configs,
-    installation_tp_dburi,
-    installation_logging_config,
-):
-    installation_config = config.InstallationConfig(
-        id=INSTALLATION_ID,
-        **installation_secrets,
-        **installation_environment,
-        **installation_haiku_rag_config_file,
-        **installation_agents,
-        **installation_oidc_paths,
-        **installation_room_paths,
-        **installation_completion_paths,
-        **installation_quizzes_paths,
-        **installation_oidc_auth_system_configs,
-        **installation_tp_dburi,
-        **installation_logging_config,
+def test_completion_from_config_w_tools(default_agent, gcd_tool_config):
+    completion_config = config.CompletionConfig(
+        id=COMPLETION_ID,
+        name=COMPLETION_NAME,
+        agent_config=default_agent,
+        tool_configs={"get_current_datetime": gcd_tool_config},
     )
 
+    completion_model = models.Completion.from_config(completion_config)
+
+    assert completion_model.tools == {
+        "get_current_datetime": models.Tool.from_config(gcd_tool_config)
+    }
+
+
+@pytest.fixture
+def bare_installation_config():
+    return config.InstallationConfig(
+        id=INSTALLATION_ID,
+        oidc_paths=[],
+        room_paths=[],
+        completion_paths=[],
+        quizzes_paths=[],
+    )
+
+
+def test_installation_from_config_bare(bare_installation_config):
+    installation_model = models.Installation.from_config(
+        bare_installation_config,
+    )
+
+    assert installation_model.id == INSTALLATION_ID
+    assert installation_model.secrets == []
+    assert installation_model.environment == {}
+    assert installation_model.haiku_rag_config_file is None
+    assert installation_model.agents == []
+    assert installation_model.oidc_paths == []
+    assert installation_model.room_paths == []
+    assert installation_model.completion_paths == []
+    assert installation_model.quizzes_paths == []
+    assert installation_model.oidc_auth_systems == []
+    assert (
+        installation_model.thread_persistence_dburi_sync
+        == config.SYNC_MEMORY_ENGINE_URL
+    )
+    assert (
+        installation_model.thread_persistence_dburi_async
+        == config.ASYNC_MEMORY_ENGINE_URL
+    )
+    assert installation_model.logging_config_file is None
+    assert installation_model.logging_headers_map == {}
+    assert installation_model.logging_claims_map == {}
+
+
+@pytest.fixture
+def a_secret():
+    return config.SecretConfig(secret_name=INSTALLATION_SECRET)
+
+
+def test_installation_from_config_w_secrets(
+    bare_installation_config,
+    a_secret,
+):
+    installation_config = bare_installation_config
+    installation_config.secrets = [a_secret]
+
+    installation_model = models.Installation.from_config(
+        installation_config,
+    )
+
+    for m_secret, c_secret in zip(
+        installation_model.secrets,
+        installation_config.secrets,
+        strict=True,
+    ):
+        assert m_secret.secret_name == c_secret.secret_name
+
+
+@pytest.fixture
+def an_environment_str():
+    return {INSTALLATION_ENVVAR_NAME: INSTALLATION_ENVVAR_STR_VALUE}
+
+
+@pytest.fixture
+def an_environment_int():
+    return {INSTALLATION_ENVVAR_NAME: INSTALLATION_ENVVAR_INT_VALUE}
+
+
+def test_installation_from_config_w_environment_str(
+    bare_installation_config,
+    an_environment_str,
+):
+    installation_config = bare_installation_config
+    installation_config.environment = an_environment_str
+
+    installation_model = models.Installation.from_config(
+        installation_config,
+    )
+
+    assert installation_model.environment == an_environment_str
+
+
+def test_installation_from_config_w_environment_int(
+    bare_installation_config,
+    an_environment_int,
+):
+    installation_config = bare_installation_config
+    installation_config.environment = an_environment_int
+
+    installation_model = models.Installation.from_config(
+        installation_config,
+    )
+
+    assert installation_model.environment == an_environment_int
+
+
+def test_installation_from_config_w_haiku_rag_config_file(
+    bare_installation_config,
+):
+    hr_config_file = pathlib.Path(HAIKU_RAG_CONFIG_FILE)
+    installation_config = bare_installation_config
+    installation_config._haiku_rag_config_file = hr_config_file
+
+    installation_model = models.Installation.from_config(
+        installation_config,
+    )
+
+    assert installation_model.haiku_rag_config_file == hr_config_file
+
+
+@pytest.fixture(
+    params=[
+        config.AgentConfig(
+            id=INSTALLATION_AGENT_ID,
+            model_name=INSTALLATION_AGENT_MODEL_NAME,
+            system_prompt=INSTALLATION_AGENT_SYSTEM_PROMPT,
+            provider_type=config.LLMProviderType.OLLAMA,
+            provider_base_url=AGENT_BASE_URL,
+        ),
+        config.FactoryAgentConfig(
+            id=INSTALLATION_AGENT_ID,
+            factory_name=FACTORY_NAME,
+            with_agent_config=False,
+        ),
+    ]
+)
+def installation_agent(request):
+    return request.param
+
+
+def test_installation_from_config_w_agent(
+    bare_installation_config,
+    installation_agent,
+):
+    installation_config = bare_installation_config
+    installation_config.agent_configs = [installation_agent]
+
+    installation_model = models.Installation.from_config(
+        installation_config,
+    )
+
+    (m_agent,) = installation_model.agents
+
+    if isinstance(installation_agent, config.FactoryAgentConfig):
+        assert m_agent.factory_name == installation_agent.factory_name
+    else:
+        assert m_agent.model_name == installation_agent.model_name
+
+
+def test_installation_from_config_w_oidc_path_and_system(
+    bare_installation_config,
+):
+    oidc_config = INSTALLATION_OIDC_AUTH_SYSTEM_CONFIG
+    installation_config = bare_installation_config
+    installation_config.oidc_paths = [INSTALLATION_OIDC_PATH]
+    installation_config._oidc_auth_system_configs = [oidc_config]
+
+    installation_model = models.Installation.from_config(
+        installation_config,
+    )
+
+    assert installation_model.oidc_paths == [INSTALLATION_OIDC_PATH]
+    assert installation_model.oidc_auth_systems == [
+        models.OIDCAuthSystem.from_config(oidc_config),
+    ]
+
+
+def test_installation_from_config_w_room_path(bare_installation_config):
+    installation_config = bare_installation_config
+    installation_config.room_paths = [INSTALLATION_ROOM_PATH]
+
+    installation_model = models.Installation.from_config(
+        installation_config,
+    )
+
+    assert installation_model.room_paths == [INSTALLATION_ROOM_PATH]
+
+
+def test_installation_from_config_w_completion_path(bare_installation_config):
+    installation_config = bare_installation_config
+    installation_config.completion_paths = [INSTALLATION_COMPLETION_PATH]
+
+    installation_model = models.Installation.from_config(
+        installation_config,
+    )
+
+    assert installation_model.completion_paths == [
+        INSTALLATION_COMPLETION_PATH,
+    ]
+
+
+def test_installation_from_config_w_quizzes_path(bare_installation_config):
+    installation_config = bare_installation_config
+    installation_config.quizzes_paths = [INSTALLATION_QUIZZES_PATH]
+
+    installation_model = models.Installation.from_config(
+        installation_config,
+    )
+
+    assert installation_model.quizzes_paths == [INSTALLATION_QUIZZES_PATH]
+
+
+def test_installation_from_config_w_tp_dburi(bare_installation_config):
+    installation_config = bare_installation_config
+    installation_config._thread_persistence_dburi_sync = (
+        INSTALLATION_TP_DBURI_SYNC
+    )
+    installation_config._thread_persistence_dburi_async = (
+        INSTALLATION_TP_DBURI_ASYNC
+    )
+
+    installation_model = models.Installation.from_config(
+        installation_config,
+    )
+
+    assert installation_model.thread_persistence_dburi_sync == (
+        INSTALLATION_TP_DBURI_SYNC
+    )
+    assert installation_model.thread_persistence_dburi_async == (
+        INSTALLATION_TP_DBURI_ASYNC
+    )
+
+
+def test_installation_from_config_w_logging_config_file(
+    temp_dir,
+    bare_installation_config,
+):
+    logging_config_file = temp_dir / "logging_config.yaml"
+    installation_config = bare_installation_config
+    installation_config._logging_config_file = logging_config_file
+
+    installation_model = models.Installation.from_config(
+        installation_config,
+    )
+
+    assert installation_model.logging_config_file == logging_config_file
+
+
+def test_installation_from_config_w_agui_feature(
+    bare_installation_config,
+    the_agui_feature,
+):
     # Ensure that the registry has only a  single, known feature.
     with mock.patch.dict(
         "soliplex.config.AGUI_FEATURES_BY_NAME",
@@ -904,44 +1039,8 @@ def test_installation_from_config(
         the_agui_feature=the_agui_feature,
     ):
         installation_model = models.Installation.from_config(
-            installation_config,
+            bare_installation_config,
         )
-
-    assert installation_model.id == INSTALLATION_ID
-
-    for m_secret, c_secret in zip(
-        installation_model.secrets,
-        installation_secrets.get("secrets", ()),
-        strict=True,
-    ):
-        assert m_secret.secret_name == c_secret.secret_name
-
-    if installation_environment:
-        assert (
-            installation_model.environment
-            == installation_environment["environment"]
-        )
-    else:
-        assert installation_model.environment == {}
-
-    if installation_haiku_rag_config_file:
-        assert (
-            installation_model.haiku_rag_config_file
-            == installation_haiku_rag_config_file["_haiku_rag_config_file"]
-        )
-    else:
-        assert installation_model.haiku_rag_config_file is None
-
-    for m_agent, c_agent in zip(
-        installation_model.agents,
-        installation_agents.get("agent_configs", ()),
-        strict=True,
-    ):
-        assert m_agent.id == c_agent.id
-        if isinstance(c_agent, config.FactoryAgentConfig):
-            assert m_agent.factory_name == c_agent.factory_name
-        else:
-            assert m_agent.model_name == c_agent.model_name
 
     for m_feature, c_feature in zip(
         installation_model.agui_features,
@@ -951,77 +1050,6 @@ def test_installation_from_config(
         assert m_feature.name == c_feature.name
         assert m_feature.description == c_feature.description
         assert m_feature.source == c_feature.source
-
-    if installation_oidc_paths:
-        assert (
-            installation_model.oidc_paths
-            == installation_oidc_paths["oidc_paths"]
-        )
-    else:
-        assert installation_model.oidc_paths == [pathlib.Path("oidc")]
-
-    if installation_room_paths:
-        assert (
-            installation_model.room_paths
-            == installation_room_paths["room_paths"]
-        )
-    else:
-        assert installation_model.room_paths == [pathlib.Path("rooms")]
-
-    if installation_completion_paths:
-        assert (
-            installation_model.completion_paths
-            == installation_completion_paths["completion_paths"]
-        )
-    else:
-        assert installation_model.completion_paths == [
-            pathlib.Path("completions")
-        ]
-
-    if installation_quizzes_paths:
-        assert (
-            installation_model.quizzes_paths
-            == installation_quizzes_paths["quizzes_paths"]
-        )
-    else:
-        assert installation_model.quizzes_paths == [pathlib.Path("quizzes")]
-
-    if installation_tp_dburi:
-        assert (
-            installation_model.thread_persistence_dburi_sync
-            == installation_tp_dburi["_thread_persistence_dburi_sync"]
-        )
-        assert (
-            installation_model.thread_persistence_dburi_async
-            == installation_tp_dburi["_thread_persistence_dburi_async"]
-        )
-    else:
-        assert (
-            installation_model.thread_persistence_dburi_sync
-            == config.SYNC_MEMORY_ENGINE_URL
-        )
-        assert (
-            installation_model.thread_persistence_dburi_async
-            == config.ASYNC_MEMORY_ENGINE_URL
-        )
-
-    if installation_logging_config:
-        assert installation_model.logging_config_file == pathlib.Path(
-            LOGGING_CONFIG_FILE,
-        )
-        assert installation_model.logging_headers_map == LOGGING_HEADERS_MAP
-        assert installation_model.logging_claims_map == LOGGING_CLAIMS_MAP
-    else:
-        assert installation_model.logging_config_file is None
-        assert installation_model.logging_headers_map == {}
-        assert installation_model.logging_claims_map == {}
-
-    for found, expected in zip(
-        installation_model.oidc_auth_systems,
-        installation_oidc_auth_system_configs["_oidc_auth_system_configs"],
-        strict=True,
-    ):
-        assert found.id == expected.id
 
 
 @pytest.mark.parametrize(
