@@ -1016,7 +1016,7 @@ async def test_installation_get_agent_deps_for_room(
             assert found.the_installation is the_installation
             assert found.user == test_user
             assert found.tool_configs == t_configs
-            assert "monty_skill_configs" in found.state
+            assert found.monty_skill_configs is not None
 
     if w_the_logger:
         the_logger.bind.assert_called_once_with(
@@ -1417,7 +1417,7 @@ async def test_monty_get_agent_deps_for_room_filters(
         client_version=client_version,
     )
 
-    assert set(found.state["monty_skill_configs"]) == exp_keys
+    assert set(found.monty_skill_configs) == exp_keys
 
 
 @pytest.mark.anyio
@@ -1441,4 +1441,4 @@ async def test_monty_get_agent_deps_no_skills_configured(
         client_version=None,
     )
 
-    assert found.state["monty_skill_configs"] == {}
+    assert found.monty_skill_configs == {}

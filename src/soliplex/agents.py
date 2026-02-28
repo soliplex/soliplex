@@ -33,6 +33,7 @@ class AgentDependencies:
     tool_configs: ToolConfigMap = None
     thread_id: str | None = None
     state: agui.AGUI_State = dataclasses.field(default_factory=dict)
+    monty_skill_configs: dict = dataclasses.field(default_factory=dict)
 
 
 SoliplexAgent = ai_agent.AbstractAgent[AgentDependencies, typing.Any]

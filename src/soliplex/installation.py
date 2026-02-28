@@ -310,7 +310,7 @@ class Installation:
 
         state = {}
 
-        state["monty_skill_configs"] = monty_capabilities.filter_skill_configs(
+        filtered_skills = monty_capabilities.filter_skill_configs(
             self._config.skill_configs,
             client_version,
         )
@@ -321,6 +321,7 @@ class Installation:
             tool_configs=room_config.tool_configs,
             thread_id=thread_id,
             state=state,
+            monty_skill_configs=filtered_skills,
             **kwargs,
         )
 
