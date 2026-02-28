@@ -651,7 +651,7 @@ FULL_ROOM_CONFIG_KW = {
             query_params=HTTP_MCP_QUERY_PARAMS,
         ),
     },
-    "skill_names": [SKILL_NAME],
+    "installation_skills": [SKILL_NAME],
 }
 FULL_ROOM_CONFIG_YAML = f"""\
 id: "{ROOM_ID}"
@@ -685,7 +685,7 @@ mcp_client_toolsets:
         Authorization: "Bearer secret:BEARER_TOKEN"
       query_params:
         {HTTP_MCP_QP_KEY}: "{HTTP_MCP_QP_VALUE}"
-skill_names:
+installation_skills:
   - "{SKILL_NAME}"
 quizzes:
   - id: "{TEST_QUIZ_ID}"
@@ -3657,7 +3657,7 @@ def test_roomconfig_skill_configs_bare(installation_config):
     "w_missing, expectation",
     [
         (False, contextlib.nullcontext()),
-        (True, pytest.raises(config.InvalidSkillNames)),
+        (True, pytest.raises(config.UnknownInstallationSkillNames)),
     ],
 )
 def test_roomconfig_skill_configs_w_skill(

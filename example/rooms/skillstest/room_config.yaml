@@ -14,7 +14,7 @@ agent:
 #
 # Current:  select installation skills by name
 #
-skill_names:
+installation_skills:
   - "bare-bones"
 
 #
