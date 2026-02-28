@@ -687,7 +687,7 @@ class SkillConfig:
     """Configuration for an agent skill."""
 
     _skill_properties: skill_models.SkillProperties | None
-    _validation_errors: list[str] = dataclasses.field(default_factory=list)
+    _validation_errors: list[str] = _default_list_field()
 
     # Set by `from_markdown` factory
     _installation_config: InstallationConfig = _no_repr_no_compare_none()
