@@ -17,6 +17,7 @@ from soliplex import authz as authz_package
 from soliplex import config
 from soliplex import loggers
 from soliplex import mcp_server
+from soliplex import monty_capabilities
 from soliplex import secrets
 from soliplex import util
 from soliplex.agui import schema as agui_schema
@@ -291,6 +292,7 @@ class Installation:
         user: dict,
         the_authz_policy: authz_package.AuthorizationPolicy = None,
         run_agent_input: agui_core.RunAgentInput = None,
+        client_version: int | None = None,
         the_logger: loggers.LogWrapper = None,
     ) -> pydantic_ai.Agent:
         room_config = await self.get_room_config(
@@ -307,17 +309,11 @@ class Installation:
             thread_id = run_agent_input.thread_id
 
         state = {}
-        if (
-            self.ace_skillbook_store is not None
-            and room_config.ace is not None
-            and room_config.ace.enabled
-        ):
-            state["ace_skillbook_context"] = (
-                ace_integration.get_skillbook_context(
-                    self.ace_skillbook_store,
-                    room_id,
-                )
-            )
+
+        state["monty_skill_configs"] = monty_capabilities.filter_skill_configs(
+            self._config.skill_configs,
+            client_version,
+        )
 
         return agents.AgentDependencies(
             the_installation=self,

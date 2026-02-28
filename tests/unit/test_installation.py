@@ -970,6 +970,7 @@ async def test_installation_get_agent_deps_for_room(
     r_configs = {"room_id": r_config}
     i_config = mock.create_autospec(config.InstallationConfig)
     i_config.room_configs = r_configs
+    i_config.skill_configs = {}
 
     if authz_kwargs:
         allowed = authz_kwargs["the_authz_policy"].allowed
@@ -1015,6 +1016,7 @@ async def test_installation_get_agent_deps_for_room(
             assert found.the_installation is the_installation
             assert found.user == test_user
             assert found.tool_configs == t_configs
+            assert "monty_skill_configs" in found.state
 
     if w_the_logger:
         the_logger.bind.assert_called_once_with(
@@ -1361,3 +1363,82 @@ root:
     alc.assert_called_once_with(app, the_installation, exp_lc_disable)
     srs.assert_called_once_with(the_installation._config.secrets)
     smfr.assert_called_once_with(the_installation)
+
+
+# ---- monty skill filtering in get_agent_deps_for_room ---------------------
+
+
+def _make_fake_skill(name, metadata=None):
+    skill = mock.create_autospec(config.SkillConfig)
+    skill.name = name
+    skill.metadata = metadata
+    return skill
+
+
+def _monty_skills():
+    return {
+        "math-solver": _make_fake_skill("math-solver"),
+        "monty-df": _make_fake_skill(
+            "monty-df",
+            {"generated": "true", "category": "df"},
+        ),
+    }
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "client_version, exp_keys",
+    [
+        (1, {"math-solver", "monty-df"}),
+        (None, {"math-solver"}),
+    ],
+)
+@mock.patch("soliplex.loggers.LogWrapper")
+async def test_monty_get_agent_deps_for_room_filters(
+    lw_klass,
+    test_user,
+    client_version,
+    exp_keys,
+):
+    skills = _monty_skills()
+
+    r_config = mock.create_autospec(config.RoomConfig)
+    r_config.tool_configs = {}
+
+    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config.room_configs = {"room_id": r_config}
+    i_config.skill_configs = skills
+
+    the_installation = installation.Installation(i_config)
+
+    found = await the_installation.get_agent_deps_for_room(
+        room_id="room_id",
+        user=test_user,
+        client_version=client_version,
+    )
+
+    assert set(found.state["monty_skill_configs"]) == exp_keys
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.loggers.LogWrapper")
+async def test_monty_get_agent_deps_no_skills_configured(
+    lw_klass,
+    test_user,
+):
+    r_config = mock.create_autospec(config.RoomConfig)
+    r_config.tool_configs = {}
+
+    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config.room_configs = {"room_id": r_config}
+    i_config.skill_configs = {}
+
+    the_installation = installation.Installation(i_config)
+
+    found = await the_installation.get_agent_deps_for_room(
+        room_id="room_id",
+        user=test_user,
+        client_version=None,
+    )
+
+    assert found.state["monty_skill_configs"] == {}

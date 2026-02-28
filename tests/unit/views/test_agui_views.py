@@ -958,6 +958,7 @@ async def test_tee_events(logfire, w_finished_error, w_event_count):
     ],
 )
 @pytest.mark.parametrize("w_usage", [False, True])
+@pytest.mark.parametrize("w_monty_header", [None, "1"])
 @mock.patch("fastapi.responses.StreamingResponse")
 @mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.agui.compact_event_stream")
@@ -972,6 +973,7 @@ async def test_post_room_agui_thread_id_run_id(
     the_threads,
     test_run,
     run_input,
+    w_monty_header,
     w_usage,
     ari_side_effect,
     expectation,
@@ -980,7 +982,14 @@ async def test_post_room_agui_thread_id_run_id(
     agent = object()
     cura.return_value = (USER_PROFILE, agent)
 
-    request = fastapi.Request(scope={"type": "http"})
+    headers = []
+    if w_monty_header is not None:
+        headers.append(
+            (b"x-monty-version", w_monty_header.encode())
+        )
+    request = fastapi.Request(
+        scope={"type": "http", "headers": headers},
+    )
 
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_agent_for_room.return_value = agent
@@ -1081,10 +1090,16 @@ async def test_post_room_agui_thread_id_run_id(
         else:
             the_threads.save_run_usage.assert_not_awaited()
 
+        from soliplex import monty_capabilities
+
+        exp_client_version = monty_capabilities.parse_monty_version(
+            w_monty_header,
+        )
         the_installation.get_agent_deps_for_room.assert_called_once_with(
             room_id=TEST_ROOM_ID,
             user=USER_PROFILE,
             run_agent_input=exp_adapter.run_input,
+            client_version=exp_client_version,
             the_logger=the_logger,
         )
 

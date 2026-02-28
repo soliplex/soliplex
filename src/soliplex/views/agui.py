@@ -18,6 +18,7 @@ from soliplex import config
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
+from soliplex import monty_capabilities
 from soliplex import util
 from soliplex import views
 from soliplex.agui import persistence as agui_persistence
@@ -602,10 +603,15 @@ async def post_room_agui_thread_id_run_id(
             detail=exc.args,
         ) from None
 
+    client_version = monty_capabilities.parse_monty_version(
+        request.headers.get(monty_capabilities.HEADER_NAME),
+    )
+
     agent_deps = await the_installation.get_agent_deps_for_room(
         room_id=room_id,
         user=user,
         run_agent_input=agui_adapter.run_input,
+        client_version=client_version,
         the_logger=the_logger,
     )
 
