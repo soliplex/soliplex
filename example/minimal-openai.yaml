@@ -244,6 +244,7 @@ room_paths:
   - "./rooms/joker"
   - "./rooms/faux"
   - "./rooms/quiztest"
+  - "./rooms/skillstest"
 
 #==========================================================================
 # Completions configuration

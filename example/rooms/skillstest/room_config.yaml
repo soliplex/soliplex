@@ -1,0 +1,42 @@
+id: "skillstest"
+name: "Skills Test"
+description: "Test skills integration."
+suggestions:
+- "What is the weather in <your location>?"
+
+
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You are a friendly agent.  Use the supplied skills as needed when
+    replying to the user's prompts.
+
+#
+# Current:  select installation skills by name
+#
+skill_names:
+  - "bare-bones"
+
+#
+# Science fiction:  use all three types of skills from 'haiku.skills'
+# skills:
+#
+#  installation_skills:
+#
+#    - "bare-bones"
+#
+#  entrypoint_skills:
+#
+#    - "image-generation"  # needs namespace?
+#
+#  mcp_skills:
+#
+#    google_maps:
+#      kind: "stdio"
+#      command: "npx"
+#      args:
+#        - "-y"
+#        - "@modelcontextprotocol/server-google-maps"
+#      env:
+#        GOOGLE_MAPS_API_KEY: secret:GOOGLE_MAPS_API_KEY
+
