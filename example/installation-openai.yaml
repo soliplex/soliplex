@@ -327,6 +327,38 @@ authorization_dburi:
 #   -
 #==========================================================================
 
+#==========================================================================
+# Skills configuration
+#==========================================================================
+#
+# Specify one or more filesystem paths to search for skill configs.
+#
+# Each path can be either:
+#
+# - a directory containing its own 'SKILLS.md' file:  this directory
+#   will be mapped as a single skill.
+#
+# - a directory whose immediate subdirectories will be treated as skills
+#   IFF they contain a `SKILLS.md` file.
+#
+# Non-absolute paths will be evaluated relative to the installation directory.
+#
+# The order of 'skills_paths' in this list controls which skill configuration
+# is used for any conflict on skill name:  skills found earlier in the list
+# "win" over later ones with the same name.
+#
+# By default, load skill configurations found under the path './skills',
+# just as though we had configured here:
+#
+# skills_paths:
+# - "./skills"
+#
+# To disable all skilss, list a single, "null" path, e.g.:
+#
+# skills_paths:
+#   -
+#==========================================================================
+
 
 #==========================================================================
 # Completions configuration
