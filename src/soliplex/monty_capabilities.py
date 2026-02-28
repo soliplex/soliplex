@@ -11,6 +11,11 @@ expected version, all skills whose ``metadata["generated"]`` is
 
 from __future__ import annotations
 
+import typing
+
+if typing.TYPE_CHECKING:
+    from soliplex import config
+
 EXPECTED_BRIDGE_VERSION = 1
 
 HEADER_NAME = "X-Monty-Version"
@@ -32,9 +37,9 @@ def parse_monty_version(header_value: str | None) -> int | None:
 
 
 def filter_skill_configs(
-    skill_configs: dict,
+    skill_configs: dict[str, config.SkillConfig],
     client_version: int | None,
-) -> dict:
+) -> dict[str, config.SkillConfig]:
     """Return skills the client is allowed to see.
 
     If *client_version* is ``None`` or less than
