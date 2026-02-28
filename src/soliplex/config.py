@@ -119,6 +119,13 @@ class InvalidAgentTemplateID(KeyError):
         )
 
 
+class NoSkillsDefined(ValueError):
+    def __init__(self, config_dict, one_of):
+        self.config_dict = config_dict
+        self.one_of = one_of
+        super().__init__(f"Define at least one of: {','.join(one_of)}")
+
+
 class UnknownInstallationSkillNames(KeyError):
     def __init__(self, skill_names, _config_path):
         self.skill_names = skill_names
@@ -1211,8 +1218,69 @@ class QuizConfig:
 
 
 @dataclasses.dataclass(kw_only=True)
+class RoomSkillsConfig:
+    """Configure skills in a room"""
+
+    #
+    # Use skills defined in the installation, identified by name
+    #
+    installation_skills: list[str] = dataclasses.field(default_factory=list)
+
+    # Set by `from_yaml` factory
+    _installation_config: InstallationConfig = _no_repr_no_compare_none()
+    _config_path: pathlib.Path = None
+
+    @staticmethod
+    def _check_defines_skills(config_dict: dict):
+        one_of = set(["installation_skills"])
+        if not set(config_dict).intersection(one_of):
+            raise NoSkillsDefined(config_dict, one_of)
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config_dict: dict,
+    ):
+        try:
+            cls._check_defines_skills(config_dict)
+
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
+
+            return cls(**config_dict)
+
+        except FromYamlException:  # pragma: NO COVER
+            raise
+
+        except Exception as exc:
+            raise FromYamlException(
+                config_path,
+                "room_skills",
+                config_dict,
+            ) from exc
+
+    @property
+    def skill_configs(self) -> SkillConfigMap:
+        ic_map = self._installation_config.skill_configs
+        missing_skills = set(self.installation_skills) - set(ic_map)
+
+        if missing_skills:
+            raise UnknownInstallationSkillNames(
+                skill_names=missing_skills,
+                _config_path=self._config_path,
+            )
+
+        return {
+            skill_name: ic_map[skill_name]
+            for skill_name in self.installation_skills
+        }
+
+
+@dataclasses.dataclass(kw_only=True)
 class RoomConfig:
-    """Configuration for a chat room."""
+    """Configuration for a chat room"""
 
     #
     # Required room metadata
@@ -1239,14 +1307,14 @@ class RoomConfig:
     )
 
     #
-    #   Skills:  names refer to skills defined in the installation
-    #
-    installation_skills: list[str] = dataclasses.field(default_factory=list)
-
-    #
     # MCP options
     #
     allow_mcp: bool = False
+
+    #
+    # Skills options
+    #
+    skills: RoomSkillsConfig = None
 
     #
     # Quiz-specific options
@@ -1302,6 +1370,14 @@ class RoomConfig:
                 )
             )
 
+            skills_config_yaml = config_dict.pop("skills", None)
+            if skills_config_yaml is not None:
+                config_dict["skills"] = RoomSkillsConfig.from_yaml(
+                    installation_config,
+                    config_path,
+                    skills_config_yaml,
+                )
+
             quizzes_config_yaml = config_dict.pop("quizzes", None)
             if quizzes_config_yaml is not None:
                 config_dict["quizzes"] = [
@@ -1337,19 +1413,7 @@ class RoomConfig:
 
     @property
     def skill_configs(self) -> SkillConfigMap:
-        ic_map = self._installation_config.skill_configs
-        missing_skills = set(self.installation_skills) - set(ic_map)
-
-        if missing_skills:
-            raise UnknownInstallationSkillNames(
-                skill_names=missing_skills,
-                _config_path=self._config_path,
-            )
-
-        return {
-            skill_name: ic_map[skill_name]
-            for skill_name in self.installation_skills
-        }
+        return self.skills.skill_configs if self.skills is not None else {}
 
     @property
     def agui_feature_names(self) -> tuple[str]:

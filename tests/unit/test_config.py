@@ -574,6 +574,16 @@ HRC_OVERRIDE_YAML = """\
 testing: "override"
 """
 
+BOGUS_ROOM_SKILLS_CONFIG_YAML = ""
+
+W_INSTALLAION_SKILLS_ROOM_SKILLS_CONFIG_KW = {
+    "installation_skills": [SKILL_NAME],
+}
+W_INSTALLAION_SKILLS_ROOM_SKILLS_CONFIG_YAML = f"""\
+installation_skills:
+    - "{SKILL_NAME}"
+"""
+
 BOGUS_ROOM_CONFIG_YAML = ""
 
 BARE_ROOM_CONFIG_KW = {
@@ -651,7 +661,7 @@ FULL_ROOM_CONFIG_KW = {
             query_params=HTTP_MCP_QUERY_PARAMS,
         ),
     },
-    "installation_skills": [SKILL_NAME],
+    "skills": config.RoomSkillsConfig(installation_skills=[SKILL_NAME]),
 }
 FULL_ROOM_CONFIG_YAML = f"""\
 id: "{ROOM_ID}"
@@ -685,8 +695,9 @@ mcp_client_toolsets:
         Authorization: "Bearer secret:BEARER_TOKEN"
       query_params:
         {HTTP_MCP_QP_KEY}: "{HTTP_MCP_QP_VALUE}"
-installation_skills:
-  - "{SKILL_NAME}"
+skills:
+    installation_skills:
+        - "{SKILL_NAME}"
 quizzes:
   - id: "{TEST_QUIZ_ID}"
     question_file: "{TEST_QUIZ_OVR}"
@@ -3542,6 +3553,88 @@ def test_quizconfig_get_question(w_loaded, w_miss):
 @pytest.mark.parametrize(
     "config_yaml, expected_kw",
     [
+        (BOGUS_ROOM_SKILLS_CONFIG_YAML, None),
+        (
+            W_INSTALLAION_SKILLS_ROOM_SKILLS_CONFIG_YAML,
+            W_INSTALLAION_SKILLS_ROOM_SKILLS_CONFIG_KW,
+        ),
+    ],
+)
+def test_roomskillsconfig_from_yaml(
+    installation_config,
+    temp_dir,
+    config_yaml,
+    expected_kw,
+):
+    yaml_file = temp_dir / "test.yaml"
+    yaml_file.write_text(config_yaml)
+
+    with yaml_file.open() as stream:
+        config_dict = yaml.safe_load(stream)
+
+    if expected_kw is None:
+        with pytest.raises(config.FromYamlException) as exc:
+            config.RoomSkillsConfig.from_yaml(
+                installation_config,
+                yaml_file,
+                {},
+            )
+        assert exc.value._config_path == yaml_file
+
+    else:
+        expected = config.RoomSkillsConfig(**expected_kw)
+        expected = dataclasses.replace(
+            expected,
+            _installation_config=installation_config,
+            _config_path=yaml_file,
+        )
+
+        found = config.RoomSkillsConfig.from_yaml(
+            installation_config,
+            yaml_file,
+            config_dict,
+        )
+
+        assert found == expected
+
+
+@pytest.mark.parametrize(
+    "w_missing, expectation",
+    [
+        (False, contextlib.nullcontext()),
+        (True, pytest.raises(config.UnknownInstallationSkillNames)),
+    ],
+)
+def test_roomskillsconfig_skill_configs_w_skill(
+    installation_config,
+    w_missing,
+    expectation,
+):
+    if w_missing:
+        installation_config.skill_configs = {}
+    else:
+        skill_config = mock.create_autospec(config.SkillConfig)
+        installation_config.skill_configs = {
+            SKILL_NAME: skill_config,
+            "other_skill": object(),
+        }
+
+    room_skill_config_kw = {"installation_skills": [SKILL_NAME]}
+    room_skill_config = config.RoomSkillsConfig(
+        **room_skill_config_kw,
+        _installation_config=installation_config,
+    )
+
+    with expectation as expected:
+        found = room_skill_config.skill_configs
+
+    if expected is None:
+        assert found == {SKILL_NAME: skill_config}
+
+
+@pytest.mark.parametrize(
+    "config_yaml, expected_kw",
+    [
         (BOGUS_ROOM_CONFIG_YAML, None),
         (BARE_ROOM_CONFIG_YAML, BARE_ROOM_CONFIG_KW),
         (FULL_ROOM_CONFIG_YAML, FULL_ROOM_CONFIG_KW),
@@ -3600,6 +3693,13 @@ def test_roomconfig_from_yaml(
             ].values():
                 mcts_config._installation_config = installation_config
                 mcts_config._config_path = yaml_file
+
+        if "skills" in config_yaml:
+            expected.skills = dataclasses.replace(
+                expected.skills,
+                _installation_config=installation_config,
+                _config_path=yaml_file,
+            )
 
         if "quizzes" in config_yaml:
             expected.quizzes = [
@@ -3675,6 +3775,7 @@ def test_roomconfig_skill_configs_w_skill(
         }
 
     room_config_kw = FULL_ROOM_CONFIG_KW.copy()
+    room_config_kw["skills"]._installation_config = installation_config
     room_config = config.RoomConfig(
         **room_config_kw,
         _installation_config=installation_config,

@@ -770,7 +770,10 @@ def test_room_from_config_w_skills(room_ic, default_agent, skill_config):
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,
         agent_config=default_agent,
-        skill_names=[SKILL_NAME],
+        skills=config.RoomSkillsConfig(
+            installation_skills=[SKILL_NAME],
+            _installation_config=room_ic,
+        ),
         _installation_config=room_ic,
     )
 

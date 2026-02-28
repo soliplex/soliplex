@@ -14,8 +14,9 @@ agent:
 #
 # Current:  select installation skills by name
 #
-installation_skills:
-  - "bare-bones"
+skills:
+  installation_skills:
+    - "bare-bones"
 
 #
 # Science fiction:  use all three types of skills from 'haiku.skills'
