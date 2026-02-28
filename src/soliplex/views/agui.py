@@ -155,7 +155,10 @@ async def _extract_run_qa(
     """
     try:
         run = await the_threads.get_run(
-            user_name, room_id, thread_id, run_id,
+            user_name,
+            room_id,
+            thread_id,
+            run_id,
         )
     except agui_package.AGUI_Exception:
         return "", ""
