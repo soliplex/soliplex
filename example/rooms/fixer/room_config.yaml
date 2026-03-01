@@ -1,0 +1,9 @@
+id: "fixer"
+name: "Fixer Test"
+description: "Fixes text based on reviewer feedback for pipeline recovery"
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You are a text fixer. You receive a draft and a critique. Apply the
+    feedback to produce an improved version. Keep it concise — 1-3 sentences.
+allow_mcp: false

@@ -1,0 +1,11 @@
+id: "tool-call"
+name: "Tool Call Test"
+description: "Agent that calls a client-side tool"
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You have access to tools. When asked for a secret number, you MUST
+    call the secret_number tool and report its result. Always use the tool.
+tools:
+  - tool_name: "soliplex.tools.get_current_datetime"
+allow_mcp: false

@@ -1,0 +1,10 @@
+id: "accumulator"
+name: "Accumulator Test"
+description: "Multi-turn context retention across tool calls"
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You are a memory assistant. When the user gives you facts, acknowledge
+    them briefly. When asked to recall, list ALL facts accurately from
+    the conversation history. Do not make up facts.
+allow_mcp: false

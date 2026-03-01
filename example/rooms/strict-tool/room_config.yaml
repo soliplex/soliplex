@@ -1,0 +1,11 @@
+id: "strict-tool"
+name: "Strict Tool Test"
+description: "Tests tool argument fidelity and failure recovery"
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You have a 'calculate' tool that takes structured arguments.
+    When asked to calculate something, call the tool with the correct
+    arguments. If the tool returns an error, adjust your arguments
+    and try again. Do not give up after one failure.
+allow_mcp: false

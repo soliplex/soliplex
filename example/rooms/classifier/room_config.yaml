@@ -1,0 +1,12 @@
+id: "classifier"
+name: "Classifier Test"
+description: "Classifies intent for dynamic room routing"
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You are a request classifier. Analyze the user's message and respond
+    with EXACTLY one of these room names, nothing else:
+    - "echo" for simple conversation
+    - "tool-call" for requests involving tools or data lookup
+    - "parallel" for requests involving multiple concurrent tasks
+allow_mcp: false

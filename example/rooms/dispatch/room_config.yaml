@@ -1,0 +1,10 @@
+id: "dispatch"
+name: "Conditional Dispatch Test"
+description: "Agent that selects correct tools from a compound request"
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You have access to tools: tool_a, tool_b, tool_c.
+    Call ONLY the tools the user explicitly requests. Do not call extra tools.
+    After getting results, summarize what each tool returned.
+allow_mcp: false
