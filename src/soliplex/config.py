@@ -22,6 +22,7 @@ import logfire
 import pydantic
 import yaml
 from haiku.rag import config as hr_config
+from haiku.skills import agent as hs_agent
 from haiku.skills import discovery as hs_discovery
 from haiku.skills import models as hs_models
 from pydantic_ai import settings as ai_settings
@@ -1463,6 +1464,14 @@ class RoomSkillsConfig:
         }
 
         return room_entrypoint_skills | room_installation_skills
+
+    @property
+    def skill_toolset(self) -> hs_agent.SkillToolset:
+        skill_map = self.skills
+        return hs_agent.SkillToolset(
+            skills=skill_map.values(),
+            skill_model=self.model_name,
+        )
 
 
 @dataclasses.dataclass(kw_only=True)

@@ -14,6 +14,7 @@ import pydantic
 import pytest
 import yaml
 from haiku.rag import config as hr_config_module
+from haiku.skills import agent as hs_agent
 from haiku.skills import models as hs_models
 from pydantic_ai import settings as ai_settings
 from skills_ref import models as skill_models
@@ -3915,6 +3916,48 @@ def test_roomskillsconfig_skills_w_installation_skill(
 
     if expected is None:
         assert found == {INSTALLATION_SKILL_NAME: skill_config}
+
+
+@mock.patch("soliplex.config._load_entrypoint_skills")
+def test_roomskillsconfig_skill_toolset(leps, installation_config):
+    ep_skill = mock.create_autospec(hs_models.Skill)
+    ep_skill.metadata = mock.create_autospec(hs_models.SkillMetadata)
+    ep_skill.metadata.name = ENTRYPOINT_SKILL_NAME
+    EP_SKILL_DESC = SKILL_DESC + "(entrypoint)"
+    ep_skill.metadata.description = EP_SKILL_DESC
+    leps.return_value = {ENTRYPOINT_SKILL_NAME: ep_skill}
+
+    inst_skill = mock.create_autospec(hs_models.Skill)
+    inst_skill.metadata = mock.create_autospec(hs_models.SkillMetadata)
+    inst_skill.metadata.name = INSTALLATION_SKILL_NAME
+    INST_SKILL_DESC = SKILL_DESC + "(installation)"
+    inst_skill.metadata.description = INST_SKILL_DESC
+
+    skill_config = mock.create_autospec(config.SkillConfig)
+    skill_config.skill = inst_skill
+
+    installation_config.skill_configs = {
+        INSTALLATION_SKILL_NAME: skill_config,
+        "other_skill": object(),
+    }
+
+    room_skill_config = config.RoomSkillsConfig(
+        model_name=ROOM_SKILLS_MODEL_NAME,
+        installation_skills=[INSTALLATION_SKILL_NAME],
+        entrypoint_skills=[ENTRYPOINT_SKILL_NAME],
+        _installation_config=installation_config,
+    )
+
+    with mock.patch("soliplex.config._entrypoint_skills", []):
+        found = room_skill_config.skill_toolset
+
+    assert isinstance(found, hs_agent.SkillToolset)
+    assert found._skill_model == ROOM_SKILLS_MODEL_NAME
+    catalog_lines = found.skill_catalog.splitlines()
+    assert f"- **{ENTRYPOINT_SKILL_NAME}**: {EP_SKILL_DESC}" in catalog_lines
+    assert (
+        f"- **{INSTALLATION_SKILL_NAME}**: {INST_SKILL_DESC}" in catalog_lines
+    )
 
 
 @pytest.mark.parametrize(
