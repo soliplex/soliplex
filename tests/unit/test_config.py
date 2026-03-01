@@ -14,6 +14,7 @@ import pydantic
 import pytest
 import yaml
 from haiku.rag import config as hr_config_module
+from haiku.skills import models as hs_models
 from pydantic_ai import settings as ai_settings
 from skills_ref import models as skill_models
 
@@ -317,6 +318,8 @@ SKILL_METADATA = {
     "author": SKILL_AUTHOR,
     "version": SKILL_VERSION,
 }
+INSTALLATION_SKILL_NAME = "test-installation-skill"
+ENTRYPOINT_SKILL_NAME = "test-entrypoint-skill"
 
 
 BOGUS_AGENT_CONFIG_YAML = ""
@@ -577,11 +580,19 @@ testing: "override"
 BOGUS_ROOM_SKILLS_CONFIG_YAML = ""
 
 W_INSTALLAION_SKILLS_ROOM_SKILLS_CONFIG_KW = {
-    "installation_skills": [SKILL_NAME],
+    "installation_skills": [INSTALLATION_SKILL_NAME],
 }
 W_INSTALLAION_SKILLS_ROOM_SKILLS_CONFIG_YAML = f"""\
 installation_skills:
-    - "{SKILL_NAME}"
+    - "{INSTALLATION_SKILL_NAME}"
+"""
+
+W_ENTRYPOINT_SKILLS_ROOM_SKILLS_CONFIG_KW = {
+    "entrypoint_skills": [ENTRYPOINT_SKILL_NAME],
+}
+W_ENTRYPOINT_SKILLS_ROOM_SKILLS_CONFIG_YAML = f"""\
+entrypoint_skills:
+    - "{ENTRYPOINT_SKILL_NAME}"
 """
 
 BOGUS_ROOM_CONFIG_YAML = ""
@@ -661,7 +672,10 @@ FULL_ROOM_CONFIG_KW = {
             query_params=HTTP_MCP_QUERY_PARAMS,
         ),
     },
-    "skills": config.RoomSkillsConfig(installation_skills=[SKILL_NAME]),
+    "skills": config.RoomSkillsConfig(
+        installation_skills=[INSTALLATION_SKILL_NAME],
+        entrypoint_skills=[ENTRYPOINT_SKILL_NAME],
+    ),
 }
 FULL_ROOM_CONFIG_YAML = f"""\
 id: "{ROOM_ID}"
@@ -697,7 +711,9 @@ mcp_client_toolsets:
         {HTTP_MCP_QP_KEY}: "{HTTP_MCP_QP_VALUE}"
 skills:
     installation_skills:
-        - "{SKILL_NAME}"
+        - "{INSTALLATION_SKILL_NAME}"
+    entrypoint_skills:
+        - "{ENTRYPOINT_SKILL_NAME}"
 quizzes:
   - id: "{TEST_QUIZ_ID}"
     question_file: "{TEST_QUIZ_OVR}"
@@ -2528,7 +2544,8 @@ def test_withquerymcpwrapper_call():
 )
 def test_skillconfig_properties(w_properties_kw):
     skill_config = config.SkillConfig(
-        _skill_properties=skill_models.SkillProperties(**w_properties_kw)
+        _skill_properties=skill_models.SkillProperties(**w_properties_kw),
+        _skill_source=hs_models.SkillSource.FILESYSTEM,
     )
 
     assert skill_config.name == SKILL_NAME
@@ -2538,6 +2555,7 @@ def test_skillconfig_properties(w_properties_kw):
     assert skill_config.allowed_tools == w_properties_kw.get("allowed_tools")
     assert skill_config.metadata == w_properties_kw.get("metadata", {})
     assert skill_config.errors == []
+    assert skill_config.source == hs_models.SkillSource.FILESYSTEM
 
 
 def test_skillconfig_properties_w_errors():
@@ -2545,6 +2563,7 @@ def test_skillconfig_properties_w_errors():
 
     skill_config = config.SkillConfig(
         _skill_properties=None,
+        _skill_source=hs_models.SkillSource.FILESYSTEM,
         _validation_errors=[TEST_VALIDATION_ERROR],
     )
 
@@ -2555,6 +2574,7 @@ def test_skillconfig_properties_w_errors():
     assert skill_config.allowed_tools is None
     assert skill_config.metadata is None
     assert skill_config.errors == [TEST_VALIDATION_ERROR]
+    assert skill_config.source == hs_models.SkillSource.FILESYSTEM
 
 
 @pytest.mark.parametrize(
@@ -3558,6 +3578,10 @@ def test_quizconfig_get_question(w_loaded, w_miss):
             W_INSTALLAION_SKILLS_ROOM_SKILLS_CONFIG_YAML,
             W_INSTALLAION_SKILLS_ROOM_SKILLS_CONFIG_KW,
         ),
+        (
+            W_ENTRYPOINT_SKILLS_ROOM_SKILLS_CONFIG_YAML,
+            W_ENTRYPOINT_SKILLS_ROOM_SKILLS_CONFIG_KW,
+        ),
     ],
 )
 def test_roomskillsconfig_from_yaml(
@@ -3598,14 +3622,84 @@ def test_roomskillsconfig_from_yaml(
         assert found == expected
 
 
+@pytest.mark.parametrize("w_already", [False, True])
+@mock.patch("haiku.skills.discovery.discover_from_entrypoints")
+def test__load_entrypoint_skills(dfep, w_already):
+    skill = mock.create_autospec(hs_models.Skill)
+    skill.metadata = mock.create_autospec(hs_models.SkillMetadata)
+    skill.metadata.name = ENTRYPOINT_SKILL_NAME
+    if w_already:
+        eps = object()
+    else:
+        eps = None
+        dfep.return_value = [skill]
+
+    with mock.patch("soliplex.config._entrypoint_skills", eps):
+        found = config._load_entrypoint_skills()
+
+    if w_already:
+        assert found is eps
+        dfep.assert_not_called()
+    else:
+        assert found == {ENTRYPOINT_SKILL_NAME: skill}
+        dfep.assert_called_once_with()
+
+
 @pytest.mark.parametrize(
     "w_missing, expectation",
     [
         (False, contextlib.nullcontext()),
-        (True, pytest.raises(config.UnknownInstallationSkillNames)),
+        (True, pytest.raises(config.MissingEntrypointSkillNames)),
     ],
 )
-def test_roomskillsconfig_skill_configs_w_skill(
+@mock.patch("soliplex.config._load_entrypoint_skills")
+def test_roomskillsconfig_skill_configs_w_entrypoint_skill(
+    leps,
+    installation_config,
+    w_missing,
+    expectation,
+):
+    if w_missing:
+        leps.return_value = {}
+    else:
+        skill = mock.create_autospec(hs_models.Skill)
+        skill.metadata = mock.create_autospec(hs_models.SkillMetadata)
+        skill.metadata.name = ENTRYPOINT_SKILL_NAME
+        skill_props = skill.metadata.model_dump.return_value = {
+            "name": ENTRYPOINT_SKILL_NAME,
+            "description": SKILL_DESC,
+        }
+        exp_skill_config = config.SkillConfig(
+            _skill_properties=skill_models.SkillProperties(**skill_props),
+            _skill_source=hs_models.SkillSource.ENTRYPOINT,
+            _installation_config=installation_config,
+        )
+        leps.return_value = {ENTRYPOINT_SKILL_NAME: skill}
+
+    room_skill_config_kw = {"entrypoint_skills": [ENTRYPOINT_SKILL_NAME]}
+    room_skill_config = config.RoomSkillsConfig(
+        **room_skill_config_kw,
+        _installation_config=installation_config,
+    )
+
+    with expectation as expected:
+        with mock.patch("soliplex.config._entrypoint_skills", []):
+            found = room_skill_config.skill_configs
+
+    if expected is None:
+        assert found == {ENTRYPOINT_SKILL_NAME: exp_skill_config}
+
+    leps.assert_called_once_with()
+
+
+@pytest.mark.parametrize(
+    "w_missing, expectation",
+    [
+        (False, contextlib.nullcontext()),
+        (True, pytest.raises(config.MissingInstallationSkillNames)),
+    ],
+)
+def test_roomskillsconfig_skill_configs_w_installation_skill(
     installation_config,
     w_missing,
     expectation,
@@ -3615,11 +3709,11 @@ def test_roomskillsconfig_skill_configs_w_skill(
     else:
         skill_config = mock.create_autospec(config.SkillConfig)
         installation_config.skill_configs = {
-            SKILL_NAME: skill_config,
+            INSTALLATION_SKILL_NAME: skill_config,
             "other_skill": object(),
         }
 
-    room_skill_config_kw = {"installation_skills": [SKILL_NAME]}
+    room_skill_config_kw = {"installation_skills": [INSTALLATION_SKILL_NAME]}
     room_skill_config = config.RoomSkillsConfig(
         **room_skill_config_kw,
         _installation_config=installation_config,
@@ -3629,7 +3723,7 @@ def test_roomskillsconfig_skill_configs_w_skill(
         found = room_skill_config.skill_configs
 
     if expected is None:
-        assert found == {SKILL_NAME: skill_config}
+        assert found == {INSTALLATION_SKILL_NAME: skill_config}
 
 
 @pytest.mark.parametrize(
@@ -3757,10 +3851,10 @@ def test_roomconfig_skill_configs_bare(installation_config):
     "w_missing, expectation",
     [
         (False, contextlib.nullcontext()),
-        (True, pytest.raises(config.UnknownInstallationSkillNames)),
+        (True, pytest.raises(config.MissingInstallationSkillNames)),
     ],
 )
-def test_roomconfig_skill_configs_w_skill(
+def test_roomconfig_skill_configs_w_installation_skill(
     installation_config,
     w_missing,
     expectation,
@@ -3770,11 +3864,12 @@ def test_roomconfig_skill_configs_w_skill(
     else:
         skill_config = mock.create_autospec(config.SkillConfig)
         installation_config.skill_configs = {
-            SKILL_NAME: skill_config,
+            INSTALLATION_SKILL_NAME: skill_config,
             "other_skill": object(),
         }
 
     room_config_kw = FULL_ROOM_CONFIG_KW.copy()
+    room_config_kw["skills"].entrypoint_skills = []
     room_config_kw["skills"]._installation_config = installation_config
     room_config = config.RoomConfig(
         **room_config_kw,
@@ -3785,7 +3880,7 @@ def test_roomconfig_skill_configs_w_skill(
         found = room_config.skill_configs
 
     if expected is None:
-        assert found == {SKILL_NAME: skill_config}
+        assert found == {INSTALLATION_SKILL_NAME: skill_config}
 
 
 @pytest.mark.parametrize(

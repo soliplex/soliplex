@@ -21,6 +21,8 @@ import dotenv
 import logfire
 import yaml
 from haiku.rag import config as hr_config
+from haiku.skills import discovery as hs_discovery
+from haiku.skills import models as hs_models
 from pydantic_ai import settings as ai_settings
 from pydantic_ai.agent import abstract as ai_ag_abstract
 from skills_ref import models as skill_models
@@ -126,13 +128,52 @@ class NoSkillsDefined(ValueError):
         super().__init__(f"Define at least one of: {','.join(one_of)}")
 
 
-class UnknownInstallationSkillNames(KeyError):
-    def __init__(self, skill_names, _config_path):
-        self.skill_names = skill_names
+class MissingSkillNames(KeyError):
+    def __init__(
+        self,
+        kind: str,
+        missing_skill_names: typing.Sequence[str],
+        available_skill_names: typing.Sequence[str],
+        _config_path: pathlib.Path,
+    ):
+        self.kind = kind
+        self.missing_skill_names = missing_skill_names
+        self.available_skill_names = available_skill_names
         self._config_path = _config_path
         super().__init__(
-            f"Skills not found: {', '.join(skill_names)} "
+            f"Required {kind} skills {list(missing_skill_names)} not found "
+            f"in available skills: {list(available_skill_names)} "
             f"(configured in {_config_path})"
+        )
+
+
+class MissingEntrypointSkillNames(MissingSkillNames):
+    def __init__(
+        self,
+        missing_skill_names: typing.Sequence[str],
+        available_skill_names: typing.Sequence[str],
+        _config_path: pathlib.Path,
+    ):
+        super().__init__(
+            kind="entrypoint",
+            missing_skill_names=missing_skill_names,
+            available_skill_names=available_skill_names,
+            _config_path=_config_path,
+        )
+
+
+class MissingInstallationSkillNames(MissingSkillNames):
+    def __init__(
+        self,
+        missing_skill_names: typing.Sequence[str],
+        available_skill_names: typing.Sequence[str],
+        _config_path: pathlib.Path,
+    ):
+        super().__init__(
+            kind="installation",
+            missing_skill_names=missing_skill_names,
+            available_skill_names=available_skill_names,
+            _config_path=_config_path,
         )
 
 
@@ -704,11 +745,36 @@ class SkillConfig:
     """Configuration for an agent skill."""
 
     _skill_properties: skill_models.SkillProperties | None
+    _skill_source: hs_models.SkillSource | None
     _validation_errors: list[str] = _default_list_field()
 
     # Set by `from_markdown` factory
     _installation_config: InstallationConfig = _no_repr_no_compare_none()
     _skill_path: pathlib.Path = None
+
+    @classmethod
+    def from_skill_metadata(
+        cls,
+        *,
+        skill_metadata: hs_models.SkillMetadata,
+        skill_source: hs_models.SkillSource,
+    ):
+        md_as_dict = skill_metadata.model_dump()
+
+        # XXX See: https://github.com/ggozad/haiku.skills/issues/19
+        allowed_tools = md_as_dict.pop("allowed_tools")
+
+        if isinstance(allowed_tools, list):
+            allowed_tools = " ".join(allowed_tools)
+
+        skill_properties = skill_models.SkillProperties(
+            **md_as_dict,
+            allowed_tools=allowed_tools,
+        )
+        return cls(
+            _skill_properties=skill_properties,
+            _skill_source=skill_source,
+        )
 
     @property
     def name(self) -> str:
@@ -744,8 +810,13 @@ class SkillConfig:
     def errors(self) -> list[str]:
         return self._validation_errors
 
+    @property
+    def source(self) -> hs_models.SkillSource | None:
+        return self._skill_source
+
 
 SkillConfigMap = dict[str, SkillConfig]
+SkillMap = dict[str, hs_models.Skill]
 
 
 # ============================================================================
@@ -1216,6 +1287,26 @@ class QuizConfig:
 #   Room-related configuration types
 # ============================================================================
 
+ROOM_SKILL_KINDS = (
+    "installation_skills",
+    "entrypoint_skills",
+)
+
+
+_entrypoint_skills: SkillMap = None
+
+
+def _load_entrypoint_skills() -> SkillMap:
+    global _entrypoint_skills
+
+    if _entrypoint_skills is None:
+        discovered = hs_discovery.discover_from_entrypoints()
+        _entrypoint_skills = {
+            skill.metadata.name: skill for skill in discovered
+        }
+
+    return _entrypoint_skills
+
 
 @dataclasses.dataclass(kw_only=True)
 class RoomSkillsConfig:
@@ -1225,6 +1316,7 @@ class RoomSkillsConfig:
     # Use skills defined in the installation, identified by name
     #
     installation_skills: list[str] = dataclasses.field(default_factory=list)
+    entrypoint_skills: list[str] = dataclasses.field(default_factory=list)
 
     # Set by `from_yaml` factory
     _installation_config: InstallationConfig = _no_repr_no_compare_none()
@@ -1232,9 +1324,8 @@ class RoomSkillsConfig:
 
     @staticmethod
     def _check_defines_skills(config_dict: dict):
-        one_of = set(["installation_skills"])
-        if not set(config_dict).intersection(one_of):
-            raise NoSkillsDefined(config_dict, one_of)
+        if not set(config_dict).intersection(ROOM_SKILL_KINDS):
+            raise NoSkillsDefined(config_dict, ROOM_SKILL_KINDS)
 
     @classmethod
     def from_yaml(
@@ -1263,19 +1354,47 @@ class RoomSkillsConfig:
 
     @property
     def skill_configs(self) -> SkillConfigMap:
-        ic_map = self._installation_config.skill_configs
-        missing_skills = set(self.installation_skills) - set(ic_map)
+        entrypoint_skills = _load_entrypoint_skills()
+        available_entrypoint_skill_names = set(entrypoint_skills)
+        missing_entrypoint_skill_names = (
+            set(self.entrypoint_skills) - available_entrypoint_skill_names
+        )
 
-        if missing_skills:
-            raise UnknownInstallationSkillNames(
-                skill_names=missing_skills,
+        if missing_entrypoint_skill_names:
+            raise MissingEntrypointSkillNames(
+                missing_skill_names=missing_entrypoint_skill_names,
+                available_skill_names=available_entrypoint_skill_names,
                 _config_path=self._config_path,
             )
 
-        return {
-            skill_name: ic_map[skill_name]
+        room_entrypoint_skill_configs = {
+            name: SkillConfig.from_skill_metadata(
+                skill_metadata=skill.metadata,
+                skill_source=hs_models.SkillSource.ENTRYPOINT,
+            )
+            for name, skill in entrypoint_skills.items()
+            if name in self.entrypoint_skills
+        }
+
+        installation_skill_configs = self._installation_config.skill_configs
+        available_installation_skills = set(installation_skill_configs)
+        missing_installation_skills = (
+            set(self.installation_skills) - available_installation_skills
+        )
+
+        if missing_installation_skills:
+            raise MissingInstallationSkillNames(
+                missing_skill_names=missing_installation_skills,
+                available_skill_names=available_installation_skills,
+                _config_path=self._config_path,
+            )
+
+        room_installation_skill_configs = {
+            skill_name: installation_skill_configs[skill_name]
             for skill_name in self.installation_skills
         }
+
+        return room_entrypoint_skill_configs | room_installation_skill_configs
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -3025,6 +3144,7 @@ class InstallationConfig:
                             _installation_config=self,
                             _skill_path=skill_path,
                             _skill_properties=None,
+                            _skill_source=hs_models.SkillSource.FILESYSTEM,
                             _validation_errors=errors,
                         )
                 else:
@@ -3039,6 +3159,7 @@ class InstallationConfig:
                             _installation_config=self,
                             _skill_path=skill_path,
                             _skill_properties=skill_properties,
+                            _skill_source=hs_models.SkillSource.FILESYSTEM,
                         )
 
         return skill_configs

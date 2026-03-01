@@ -389,6 +389,51 @@ def test_mcp_client_toolset_from_config_w_sdtc():
     assert params["query_params"] == mcp_ct_config.query_params
 
 
+@pytest.fixture(params=[None, SKILL_META])
+def w_skill_properties_metadata(request):
+    return request.param
+
+
+@pytest.fixture(params=[None, SKILL_ALLOWED_TOOLS])
+def w_skill_properties_allowed_tools(request):
+    return request.param
+
+
+@pytest.fixture
+def skill_config(
+    temp_dir,
+    w_skill_properties_metadata,
+    w_skill_properties_allowed_tools,
+):
+    skill_properties = mock.create_autospec(
+        skill_models.SkillProperties,
+        description=SKILL_DESC,
+        license=SKILL_LICENSE,
+        compatibility=SKILL_COMPAT,
+        allowed_tools=w_skill_properties_allowed_tools,
+        metadata=w_skill_properties_metadata,
+    )
+    skill_properties.name = SKILL_NAME  # mock quirk
+    return config.SkillConfig(
+        _skill_properties=skill_properties,
+        _skill_source=None,
+        _skill_path=temp_dir / "skills" / SKILL_NAME,
+    )
+
+
+def test_skill_from_config(
+    skill_config,
+):
+    found = models.Skill.from_config(skill_config)
+
+    assert found.name == skill_config.name
+    assert found.description == skill_config.description
+    assert found.license == skill_config.license
+    assert found.compatibility == skill_config.compatibility
+    assert found.allowed_tools == skill_config.allowed_tools
+    assert found.metadata == skill_config.metadata
+
+
 @pytest.fixture(params=[None, AGENT_RETRIES])
 def agent_retries(request):
     return _from_param(request, "retries")
@@ -733,33 +778,6 @@ def test_room_from_config_w_tools(room_ic, default_agent, gcd_tool_config):
     }
 
     assert room_model.agui_feature_names == [FEATURE_NAME]
-
-
-@pytest.fixture(params=[False, True])
-def has_skill_properties_metadata(request):
-    return request.param
-
-
-@pytest.fixture
-def skill_config(request, temp_dir, has_skill_properties_metadata):
-    if has_skill_properties_metadata:
-        metadata = SKILL_META
-    else:
-        metadata = None
-
-    skill_properties = mock.create_autospec(
-        skill_models.SkillProperties,
-        description=SKILL_DESC,
-        license=SKILL_LICENSE,
-        compatibility=SKILL_COMPAT,
-        allowed_tools=SKILL_ALLOWED_TOOLS,
-        metadata=metadata,
-    )
-    skill_properties.name = SKILL_NAME  # mock quirk
-    return config.SkillConfig(
-        _skill_properties=skill_properties,
-        _skill_path=temp_dir / "skills" / SKILL_NAME,
-    )
 
 
 def test_room_from_config_w_skills(room_ic, default_agent, skill_config):

@@ -125,13 +125,22 @@ class MCPClientToolset(pydantic.BaseModel):
 ConfiguredMCPClientToolsets = dict[str, MCPClientToolset]
 
 
+#
+# XXX See: https://github.com/ggozad/haiku.skills/issues/19
+# SkillAllowedTools = list[str] | None
+#
+SkillAllowedTools = str | None
+
+SkillMetadata = dict[str, typing.Any] | None
+
+
 class Skill(pydantic.BaseModel):
     name: str
     description: str
     license: str | None
     compatibility: str | None
-    allowed_tools: str | None
-    metadata: dict[str, typing.Any] | None = {}
+    allowed_tools: SkillAllowedTools = None
+    metadata: SkillMetadata = None
 
     @classmethod
     def from_config(cls, skill_config: config.SkillConfig):

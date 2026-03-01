@@ -15,8 +15,12 @@ agent:
 # Current:  select installation skills by name
 #
 skills:
+
   installation_skills:
     - "bare-bones"
+
+  entrypoint_skills:
+    - "image-generation"  # needs namespace?
 
 #
 # Science fiction:  use all three types of skills from 'haiku.skills'
