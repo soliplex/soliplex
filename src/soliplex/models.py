@@ -7,6 +7,7 @@ import typing
 
 import pydantic
 from ag_ui import core as agui_core
+from haiku.skills import models as hs_models
 
 from soliplex import agui as agui_package
 from soliplex import authz as authz_package
@@ -130,7 +131,6 @@ ConfiguredMCPClientToolsets = dict[str, MCPClientToolset]
 # SkillAllowedTools = list[str] | None
 #
 SkillAllowedTools = str | None
-
 SkillMetadata = dict[str, typing.Any] | None
 
 
@@ -141,6 +141,11 @@ class Skill(pydantic.BaseModel):
     compatibility: str | None
     allowed_tools: SkillAllowedTools = None
     metadata: SkillMetadata = None
+    source: hs_models.SkillSource | None = None
+    path: pathlib.Path | None = None
+    model_name: str | None = None
+    state_type: config.SkillStateType = None
+    state_namespace: str | None = None
 
     @classmethod
     def from_config(cls, skill_config: config.SkillConfig):
@@ -151,6 +156,11 @@ class Skill(pydantic.BaseModel):
             compatibility=skill_config.compatibility,
             allowed_tools=skill_config.allowed_tools,
             metadata=skill_config.metadata,
+            source=skill_config.source,
+            path=skill_config.path,
+            model_name=skill_config.model_name,
+            state_type=skill_config.state_type,
+            state_namespace=skill_config.state_namespace,
         )
 
 

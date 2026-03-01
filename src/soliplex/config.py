@@ -19,6 +19,7 @@ from urllib import parse as url_parse
 
 import dotenv
 import logfire
+import pydantic
 import yaml
 from haiku.rag import config as hr_config
 from haiku.skills import discovery as hs_discovery
@@ -740,6 +741,9 @@ MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME = {}
 # ============================================================================
 
 
+SkillStateType = type[pydantic.BaseModel] | None
+
+
 @dataclasses.dataclass(kw_only=True)
 class SkillConfig:
     """Configuration for an agent skill."""
@@ -747,6 +751,10 @@ class SkillConfig:
     _skill_properties: skill_models.SkillProperties | None
     _skill_source: hs_models.SkillSource | None
     _validation_errors: list[str] = _default_list_field()
+
+    model_name: str | None = None
+    state_type: SkillStateType = None
+    state_namespace: str | None = None
 
     # Set by `from_markdown` factory
     _installation_config: InstallationConfig = _no_repr_no_compare_none()
@@ -758,6 +766,9 @@ class SkillConfig:
         *,
         skill_metadata: hs_models.SkillMetadata,
         skill_source: hs_models.SkillSource,
+        model_name: str | None = None,
+        state_type: type[pydantic.BaseModel] = None,
+        state_namespace: str | None = None,
     ):
         md_as_dict = skill_metadata.model_dump()
 
@@ -777,6 +788,9 @@ class SkillConfig:
         return cls(
             _skill_properties=skill_properties,
             _skill_source=skill_source,
+            model_name=model_name,
+            state_type=state_type,
+            state_namespace=state_namespace,
         )
 
     @property
@@ -812,6 +826,10 @@ class SkillConfig:
     @property
     def errors(self) -> list[str]:
         return self._validation_errors
+
+    @property
+    def path(self) -> pathlib.Path | None:
+        return self._skill_path
 
     @property
     def source(self) -> hs_models.SkillSource | None:
@@ -1339,6 +1357,7 @@ class RoomSkillsConfig:
     #
     # Use skills defined in the installation, identified by name
     #
+    model_name: str | None = None
     installation_skills: list[str] = dataclasses.field(default_factory=list)
     entrypoint_skills: list[str] = dataclasses.field(default_factory=list)
 
@@ -1421,6 +1440,8 @@ class RoomSkillsConfig:
         room_entrypoint_skill_configs = {
             name: SkillConfig.from_skill_metadata(
                 skill_metadata=skill.metadata,
+                state_type=skill.state_type,
+                state_namespace=skill.state_namespace,
                 skill_source=hs_models.SkillSource.ENTRYPOINT,
             )
             for name, skill in entrypoint_skills.items()

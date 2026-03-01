@@ -322,6 +322,8 @@ SKILL_METADATA = {
 }
 INSTALLATION_SKILL_NAME = "test-installation-skill"
 ENTRYPOINT_SKILL_NAME = "test-entrypoint-skill"
+SKILL_MODEL_NAME = "test-skill-model"
+SKILL_STATE_NAMESPACE = "test-skill-namespace"
 
 
 BOGUS_AGENT_CONFIG_YAML = ""
@@ -581,10 +583,13 @@ testing: "override"
 
 BOGUS_ROOM_SKILLS_CONFIG_YAML = ""
 
-W_INSTALLAION_SKILLS_ROOM_SKILLS_CONFIG_KW = {
+ROOM_SKILLS_MODEL_NAME = "test-roomskills-model"
+W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_KW = {
+    "model_name": ROOM_SKILLS_MODEL_NAME,
     "installation_skills": [INSTALLATION_SKILL_NAME],
 }
-W_INSTALLAION_SKILLS_ROOM_SKILLS_CONFIG_YAML = f"""\
+W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_YAML = f"""\
+model_name: "{ROOM_SKILLS_MODEL_NAME}"
 installation_skills:
     - "{INSTALLATION_SKILL_NAME}"
 """
@@ -2547,7 +2552,7 @@ def test_withquerymcpwrapper_call():
         ),
     ],
 )
-def test_skillconfig_from_skill_metadata(
+def test_skillconfig_from_skill_metadata_w_defaults(
     temp_dir,
     w_meta_kw,
     exp_allowed_tools,
@@ -2569,6 +2574,36 @@ def test_skillconfig_from_skill_metadata(
     assert skill_config.metadata == w_meta_kw.get("metadata", {})
     assert skill_config.errors == []
     assert skill_config.source == hs_models.SkillSource.ENTRYPOINT
+    assert skill_config.model_name is None
+    assert skill_config.state_type is None
+    assert skill_config.state_namespace is None
+
+
+def test_skillconfig_from_skill_metadata_w_explicit():
+    metadata = hs_models.SkillMetadata(
+        name=SKILL_NAME,
+        description=SKILL_DESC,
+    )
+
+    skill_config = config.SkillConfig.from_skill_metadata(
+        skill_metadata=metadata,
+        skill_source=hs_models.SkillSource.ENTRYPOINT,
+        model_name=SKILL_MODEL_NAME,
+        state_type=config.SkillStateType,
+        state_namespace=SKILL_STATE_NAMESPACE,
+    )
+
+    assert skill_config.name == SKILL_NAME
+    assert skill_config.description == SKILL_DESC
+    assert skill_config.license is None
+    assert skill_config.compatibility is None
+    assert skill_config.allowed_tools is None
+    assert skill_config.metadata == {}
+    assert skill_config.errors == []
+    assert skill_config.source == hs_models.SkillSource.ENTRYPOINT
+    assert skill_config.model_name == SKILL_MODEL_NAME
+    assert skill_config.state_type is config.SkillStateType
+    assert skill_config.state_namespace == SKILL_STATE_NAMESPACE
 
 
 @pytest.mark.parametrize(
@@ -3657,8 +3692,8 @@ def test_quizconfig_get_question(w_loaded, w_miss):
     [
         (BOGUS_ROOM_SKILLS_CONFIG_YAML, None),
         (
-            W_INSTALLAION_SKILLS_ROOM_SKILLS_CONFIG_YAML,
-            W_INSTALLAION_SKILLS_ROOM_SKILLS_CONFIG_KW,
+            W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_YAML,
+            W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_KW,
         ),
         (
             W_ENTRYPOINT_SKILLS_ROOM_SKILLS_CONFIG_YAML,
@@ -3747,6 +3782,8 @@ def test_roomskillsconfig_skill_configs_w_entrypoint_skill(
         skill = mock.create_autospec(hs_models.Skill)
         skill.metadata = mock.create_autospec(hs_models.SkillMetadata)
         skill.metadata.name = ENTRYPOINT_SKILL_NAME
+        skill.state_type = config.SkillStateType
+        skill.state_namespace = SKILL_STATE_NAMESPACE
         skill_props = skill.metadata.model_dump.return_value = {
             "name": ENTRYPOINT_SKILL_NAME,
             "description": SKILL_DESC,
@@ -3755,6 +3792,8 @@ def test_roomskillsconfig_skill_configs_w_entrypoint_skill(
             _skill_properties=skill_models.SkillProperties(**skill_props),
             _skill_source=hs_models.SkillSource.ENTRYPOINT,
             _installation_config=installation_config,
+            state_type=config.SkillStateType,
+            state_namespace=SKILL_STATE_NAMESPACE,
         )
         leps.return_value = {ENTRYPOINT_SKILL_NAME: skill}
 

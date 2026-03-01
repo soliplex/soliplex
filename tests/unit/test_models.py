@@ -8,6 +8,7 @@ from unittest import mock
 import pydantic
 import pytest
 from ag_ui import core as agui_core
+from haiku.skills import models as hs_models
 from skills_ref import models as skill_models
 
 from soliplex import agui as agui_package
@@ -35,6 +36,8 @@ SKILL_LICENSE = "Foo License v3.14"
 SKILL_COMPAT = "Skill compat"
 SKILL_ALLOWED_TOOLS = "Tools allowed to the skill"
 SKILL_META = {"foo": "bar"}
+SKILL_MODEL_NAME = "test-skill-model"
+SKILL_STATE_NAMESPACE = "test-skill-namespace"
 
 ROOM_ID = "test_room"
 ROOM_NAME = "Test Room"
@@ -399,12 +402,17 @@ def w_skill_properties_allowed_tools(request):
     return request.param
 
 
+class StateModelTest(pydantic.BaseModel):
+    pass
+
+
 @pytest.fixture
 def skill_config(
     temp_dir,
     w_skill_properties_metadata,
     w_skill_properties_allowed_tools,
 ):
+    skill_path = temp_dir / "skills" / SKILL_NAME
     skill_properties = mock.create_autospec(
         skill_models.SkillProperties,
         description=SKILL_DESC,
@@ -416,14 +424,15 @@ def skill_config(
     skill_properties.name = SKILL_NAME  # mock quirk
     return config.SkillConfig(
         _skill_properties=skill_properties,
-        _skill_source=None,
-        _skill_path=temp_dir / "skills" / SKILL_NAME,
+        _skill_source=hs_models.SkillSource.FILESYSTEM,
+        _skill_path=skill_path,
+        model_name=SKILL_MODEL_NAME,
+        state_type=StateModelTest,
+        state_namespace=SKILL_STATE_NAMESPACE,
     )
 
 
-def test_skill_from_config(
-    skill_config,
-):
+def test_skill_from_config(skill_config):
     found = models.Skill.from_config(skill_config)
 
     assert found.name == skill_config.name
@@ -432,6 +441,12 @@ def test_skill_from_config(
     assert found.compatibility == skill_config.compatibility
     assert found.allowed_tools == skill_config.allowed_tools
     assert found.metadata == skill_config.metadata
+    assert found.source == hs_models.SkillSource.FILESYSTEM
+    assert found.path == skill_config.path
+    assert found.model_name == SKILL_MODEL_NAME
+    assert found.model_name == SKILL_MODEL_NAME
+    assert found.state_type is StateModelTest
+    assert found.state_namespace == SKILL_STATE_NAMESPACE
 
 
 @pytest.fixture(params=[None, AGENT_RETRIES])
