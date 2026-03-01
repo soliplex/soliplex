@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import dataclasses
 import typing
 from collections import abc
@@ -5,6 +7,7 @@ from collections import abc
 import pydantic_ai
 from pydantic_ai import agent as ai_agent
 from pydantic_ai import mcp as ai_mcp
+from pydantic_ai import models as ai_models
 from pydantic_ai import tools as ai_tools
 from pydantic_ai.models import google as google_models
 from pydantic_ai.models import openai as openai_models
@@ -65,17 +68,12 @@ def make_mcp_client_toolset(
     return toolset_klass(**toolset_config.tool_kwargs)
 
 
-def _get_default_agent_from_configs(
-    agent_config: config.AgentConfig,
-    tool_configs: ToolConfigMap,
-    mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap,
-) -> SoliplexAgent:
-    """Build a Pydantic AI agent from a config"""
+def get_model_from_config(agent_config: config.AgentConfig) -> ai_models.Model:
     provider_kw = agent_config.llm_provider_kw
 
     if agent_config.provider_type == config.LLMProviderType.GOOGLE:
         provider = google_providers.GoogleProvider(**provider_kw)
-        model = google_models.GoogleModel(
+        return google_models.GoogleModel(
             model_name=agent_config.model_name,
             provider=provider,
         )
@@ -83,16 +81,25 @@ def _get_default_agent_from_configs(
     elif agent_config.provider_type == config.LLMProviderType.OLLAMA:
         provider_kw["api_key"] = "dummy"
         provider = ollama_providers.OllamaProvider(**provider_kw)
-        model = openai_models.OpenAIChatModel(
+        return openai_models.OpenAIChatModel(
             model_name=agent_config.model_name,
             provider=provider,
         )
     else:
         provider = openai_providers.OpenAIProvider(**provider_kw)
-        model = openai_models.OpenAIChatModel(
+        return openai_models.OpenAIChatModel(
             model_name=agent_config.model_name,
             provider=provider,
         )
+
+
+def get_default_agent_from_configs(
+    agent_config: config.AgentConfig,
+    tool_configs: ToolConfigMap,
+    mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap,
+) -> SoliplexAgent:
+    """Build a Pydantic AI agent from a config"""
+    model = get_model_from_config(agent_config)
 
     tools = [
         make_ai_tool(tool_config) for tool_config in tool_configs.values()
@@ -121,10 +128,10 @@ def get_agent_from_configs(
 
     if agent_config.id not in _agent_cache:
         if agent_config.kind == "default":
-            agent = _get_default_agent_from_configs(
-                agent_config,
-                tool_configs,
-                mcp_client_toolset_configs,
+            agent = get_default_agent_from_configs(
+                agent_config=agent_config,
+                tool_configs=tool_configs,
+                mcp_client_toolset_configs=mcp_client_toolset_configs,
             )
 
         else:

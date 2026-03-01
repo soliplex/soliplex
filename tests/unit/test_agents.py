@@ -33,6 +33,75 @@ RAG_LANCEDB_OVERRIDE_PATH = "/path/to/db/rag"
 TC_TOOL_CONFIG = config.ToolConfig(tool_name="soliplex.tools.test_tool")
 
 
+@pytest.mark.parametrize(
+    "provider_type, llm_provider_kw",
+    [
+        (config.LLMProviderType.OLLAMA, OLLAMA_PROVIDER_KW),
+        (config.LLMProviderType.OPENAI, OPENAI_PROVIDER_KW),
+        (config.LLMProviderType.GOOGLE, GOOGLE_PROVIDER_KW),
+    ],
+)
+@mock.patch("pydantic_ai.providers.google.GoogleProvider")
+@mock.patch("pydantic_ai.providers.ollama.OllamaProvider")
+@mock.patch("pydantic_ai.providers.openai.OpenAIProvider")
+@mock.patch("pydantic_ai.models.google.GoogleModel")
+@mock.patch("pydantic_ai.models.openai.OpenAIChatModel")
+def test_get_model_from_config(
+    oai_model_klass,
+    google_model_klass,
+    oai_provider_klass,
+    oll_provider_klass,
+    google_provider_klass,
+    provider_type,
+    llm_provider_kw,
+):
+    agent_config = mock.create_autospec(config.AgentConfig)
+    agent_config.kind = "default"
+    agent_config.id = ROOM_ID
+    agent_config.model_name = MODEL
+    agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
+    agent_config.provider_type = provider_type
+    agent_config.llm_provider_kw = llm_provider_kw
+
+    model = agents.get_model_from_config(agent_config)
+
+    if provider_type == config.LLMProviderType.GOOGLE:
+        assert model is google_model_klass.return_value
+        google_model_klass.assert_called_once_with(
+            model_name=MODEL,
+            provider=google_provider_klass.return_value,
+        )
+        google_provider_klass.assert_called_once_with(**llm_provider_kw)
+
+        oai_model_klass.assert_not_called()
+        oai_provider_klass.assert_not_called()
+        oll_provider_klass.assert_not_called()
+
+    elif provider_type == config.LLMProviderType.OPENAI:
+        assert model is oai_model_klass.return_value
+        oai_model_klass.assert_called_once_with(
+            model_name=MODEL,
+            provider=oai_provider_klass.return_value,
+        )
+        oai_provider_klass.assert_called_once_with(**llm_provider_kw)
+
+        oll_provider_klass.assert_not_called()
+        google_model_klass.assert_not_called()
+        google_provider_klass.assert_not_called()
+
+    else:
+        assert model is oai_model_klass.return_value
+        oai_model_klass.assert_called_once_with(
+            model_name=MODEL,
+            provider=oll_provider_klass.return_value,
+        )
+        oll_provider_klass.assert_called_once_with(**llm_provider_kw)
+
+        oai_provider_klass.assert_not_called()
+        google_model_klass.assert_not_called()
+        google_provider_klass.assert_not_called()
+
+
 def test_tool():
     """This is a test"""
 
@@ -87,41 +156,19 @@ def mcp_ct_configs_tools(request):
 
 
 @pytest.mark.parametrize("w_model_settings", [None, MODEL_SETTINGS])
-@pytest.mark.parametrize(
-    "provider_type, llm_provider_kw",
-    [
-        (config.LLMProviderType.OLLAMA, OLLAMA_PROVIDER_KW),
-        (config.LLMProviderType.OPENAI, OPENAI_PROVIDER_KW),
-        (config.LLMProviderType.GOOGLE, GOOGLE_PROVIDER_KW),
-    ],
-)
-@mock.patch("pydantic_ai.providers.google.GoogleProvider")
-@mock.patch("pydantic_ai.providers.ollama.OllamaProvider")
-@mock.patch("pydantic_ai.providers.openai.OpenAIProvider")
-@mock.patch("pydantic_ai.models.google.GoogleModel")
-@mock.patch("pydantic_ai.models.openai.OpenAIChatModel")
+@mock.patch("soliplex.agents.get_model_from_config")
 @mock.patch("pydantic_ai.Agent")
-def test_get_agent_from_configs_wo_hit_w_default_kind(
+def test_get_default_agent_from_configs(
     agent_klass,
-    oai_model_klass,
-    google_model_klass,
-    oai_provider_klass,
-    oll_provider_klass,
-    google_provider_klass,
+    gmfc,
     tool_configs_tools,
     mcp_ct_configs_tools,
-    provider_type,
-    llm_provider_kw,
     w_model_settings,
 ):
     agent_config = mock.create_autospec(config.AgentConfig)
     agent_config.kind = "default"
-    agent_config.id = ROOM_ID
-    agent_config.model_name = MODEL
     agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
     agent_config.model_settings = w_model_settings
-    agent_config.provider_type = provider_type
-    agent_config.llm_provider_kw = llm_provider_kw
 
     tool_configs = {tc.tool_id: tc for (tc, _) in tool_configs_tools}
     exp_tools = [tool for (_, tool) in tool_configs_tools]
@@ -132,16 +179,11 @@ def test_get_agent_from_configs_wo_hit_w_default_kind(
     }
     exp_toolsets = [tool for (_, tool) in mcp_ct_configs_tools]
 
-    with (
-        mock.patch.dict("soliplex.agents._agent_cache", clear=True) as cache,
-    ):
-        found = agents.get_agent_from_configs(
-            agent_config,
-            tool_configs,
-            mcp_tc_configs,
-        )
-
-        assert cache[ROOM_ID] is found
+    found = agents.get_default_agent_from_configs(
+        agent_config=agent_config,
+        tool_configs=tool_configs,
+        mcp_client_toolset_configs=mcp_tc_configs,
+    )
 
     assert found is agent_klass.return_value
 
@@ -152,10 +194,8 @@ def test_get_agent_from_configs_wo_hit_w_default_kind(
     assert akc.args == ()
     akc_kw = akc.kwargs
 
-    if provider_type == config.LLMProviderType.GOOGLE:
-        assert akc_kw["model"] == google_model_klass.return_value
-    else:
-        assert akc_kw["model"] == oai_model_klass.return_value
+    assert akc_kw["model"] is gmfc.return_value
+    gmfc.assert_called_once_with(agent_config)
 
     assert akc_kw["instructions"] == SYSTEM_PROMPT
     assert akc_kw["model_settings"] == w_model_settings
@@ -172,38 +212,42 @@ def test_get_agent_from_configs_wo_hit_w_default_kind(
 
     assert akc_kw["deps_type"] is agents.AgentDependencies
 
-    if provider_type == config.LLMProviderType.GOOGLE:
-        google_model_klass.assert_called_once_with(
-            model_name=MODEL,
-            provider=google_provider_klass.return_value,
+
+@mock.patch("soliplex.agents.get_default_agent_from_configs")
+def test_get_agent_from_configs_wo_hit_w_default_kind(
+    gdafc,
+    tool_configs_tools,
+    mcp_ct_configs_tools,
+):
+    agent_config = mock.create_autospec(config.AgentConfig)
+    agent_config.id = ROOM_ID
+    agent_config.kind = "default"
+
+    tool_configs = {tc.tool_id: tc for (tc, _) in tool_configs_tools}
+
+    mcp_tc_configs = {
+        f"MCTC_{mctc_id:03}": mctc
+        for mctc_id, (mctc, _) in enumerate(mcp_ct_configs_tools)
+    }
+
+    with (
+        mock.patch.dict("soliplex.agents._agent_cache", clear=True) as cache,
+    ):
+        found = agents.get_agent_from_configs(
+            agent_config,
+            tool_configs,
+            mcp_tc_configs,
         )
-        google_provider_klass.assert_called_once_with(**llm_provider_kw)
 
-        oai_model_klass.assert_not_called()
-        oai_provider_klass.assert_not_called()
-        oll_provider_klass.assert_not_called()
+        assert cache[ROOM_ID] is found
 
-    elif provider_type == config.LLMProviderType.OPENAI:
-        oai_model_klass.assert_called_once_with(
-            model_name=MODEL,
-            provider=oai_provider_klass.return_value,
-        )
-        oai_provider_klass.assert_called_once_with(**llm_provider_kw)
+    assert found is gdafc.return_value
 
-        oll_provider_klass.assert_not_called()
-        google_model_klass.assert_not_called()
-        google_provider_klass.assert_not_called()
-
-    else:
-        oai_model_klass.assert_called_once_with(
-            model_name=MODEL,
-            provider=oll_provider_klass.return_value,
-        )
-        oll_provider_klass.assert_called_once_with(**llm_provider_kw)
-
-        oai_provider_klass.assert_not_called()
-        google_model_klass.assert_not_called()
-        google_provider_klass.assert_not_called()
+    gdafc.assert_called_once_with(
+        agent_config=agent_config,
+        tool_configs=tool_configs,
+        mcp_client_toolset_configs=mcp_tc_configs,
+    )
 
 
 def test_get_agent_from_configs_wo_hit_w_python_kind():
