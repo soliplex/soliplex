@@ -762,10 +762,13 @@ class SkillConfig:
         md_as_dict = skill_metadata.model_dump()
 
         # XXX See: https://github.com/ggozad/haiku.skills/issues/19
-        allowed_tools = md_as_dict.pop("allowed_tools")
+        allowed_tools = md_as_dict.pop("allowed_tools", None)
 
         if isinstance(allowed_tools, list):
             allowed_tools = " ".join(allowed_tools)
+
+        if isinstance(allowed_tools, str) and allowed_tools.strip() == "":
+            allowed_tools = None
 
         skill_properties = skill_models.SkillProperties(
             **md_as_dict,
@@ -813,6 +816,27 @@ class SkillConfig:
     @property
     def source(self) -> hs_models.SkillSource | None:
         return self._skill_source
+
+    @property
+    def skill(self) -> hs_models.Skill:
+        props = self._skill_properties.to_dict()
+        allowed_tools = props.pop("allowed-tools", None)
+
+        # XXX See: https://github.com/ggozad/haiku.skills/issues/19
+        if isinstance(allowed_tools, str):
+            allowed_tools = allowed_tools.split(" ")
+        elif allowed_tools is None:
+            allowed_tools = []
+        else:  # pragma: NO COVER
+            pass
+
+        props["allowed_tools"] = allowed_tools
+
+        return hs_models.Skill(
+            metadata=hs_models.SkillMetadata(**props),
+            source=self._skill_source,
+            path=self._skill_path,
+        )
 
 
 SkillConfigMap = dict[str, SkillConfig]
@@ -1352,8 +1376,7 @@ class RoomSkillsConfig:
                 config_dict,
             ) from exc
 
-    @property
-    def skill_configs(self) -> SkillConfigMap:
+    def _check_entrypoint_skills(self) -> SkillMap:
         entrypoint_skills = _load_entrypoint_skills()
         available_entrypoint_skill_names = set(entrypoint_skills)
         missing_entrypoint_skill_names = (
@@ -1366,18 +1389,15 @@ class RoomSkillsConfig:
                 available_skill_names=available_entrypoint_skill_names,
                 _config_path=self._config_path,
             )
-
-        room_entrypoint_skill_configs = {
-            name: SkillConfig.from_skill_metadata(
-                skill_metadata=skill.metadata,
-                skill_source=hs_models.SkillSource.ENTRYPOINT,
-            )
+        return {
+            name: skill
             for name, skill in entrypoint_skills.items()
             if name in self.entrypoint_skills
         }
 
-        installation_skill_configs = self._installation_config.skill_configs
-        available_installation_skills = set(installation_skill_configs)
+    def _check_installation_skills(self) -> SkillConfigMap:
+        ic_skill_configs = self._installation_config.skill_configs
+        available_installation_skills = set(ic_skill_configs)
         missing_installation_skills = (
             set(self.installation_skills) - available_installation_skills
         )
@@ -1389,12 +1409,39 @@ class RoomSkillsConfig:
                 _config_path=self._config_path,
             )
 
-        room_installation_skill_configs = {
-            skill_name: installation_skill_configs[skill_name]
+        return {
+            skill_name: ic_skill_configs[skill_name]
             for skill_name in self.installation_skills
         }
 
+    @property
+    def skill_configs(self) -> SkillConfigMap:
+        entrypoint_skills = self._check_entrypoint_skills()
+
+        room_entrypoint_skill_configs = {
+            name: SkillConfig.from_skill_metadata(
+                skill_metadata=skill.metadata,
+                skill_source=hs_models.SkillSource.ENTRYPOINT,
+            )
+            for name, skill in entrypoint_skills.items()
+            if name in self.entrypoint_skills
+        }
+
+        room_installation_skill_configs = self._check_installation_skills()
+
         return room_entrypoint_skill_configs | room_installation_skill_configs
+
+    @property
+    def skills(self) -> SkillMap:
+        room_entrypoint_skills = self._check_entrypoint_skills()
+        room_installation_skill_configs = self._check_installation_skills()
+
+        room_installation_skills = {
+            name: skill_config.skill
+            for name, skill_config in room_installation_skill_configs.items()
+        }
+
+        return room_entrypoint_skills | room_installation_skills
 
 
 @dataclasses.dataclass(kw_only=True)

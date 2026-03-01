@@ -311,7 +311,9 @@ SKILL_NAME = "test-skill"
 SKILL_DESC = "Skill description"
 SKILL_LICENSE = "Skill license"
 SKILL_COMPAT = "Skill compatibility"
-SKILL_ALLOWED_TOOLS = "Skill allowed tools"
+TOOL_ONE = "tool-one"
+TOOL_TWO = "tool-two"
+SKILL_ALLOWED_TOOLS = f"{TOOL_ONE} {TOOL_TWO}"
 SKILL_AUTHOR = "phreddy@example.com"
 SKILL_VERSION = "0.0.1"
 SKILL_METADATA = {
@@ -2529,6 +2531,47 @@ def test_withquerymcpwrapper_call():
 
 
 @pytest.mark.parametrize(
+    "w_meta_kw, exp_allowed_tools",
+    [
+        ({"name": SKILL_NAME, "description": SKILL_DESC}, None),
+        (  # XXX See: https://github.com/ggozad/haiku.skills/issues/19
+            {
+                "name": SKILL_NAME,
+                "description": SKILL_DESC,
+                "license": SKILL_LICENSE,
+                "compatibility": SKILL_COMPAT,
+                "allowed_tools": [TOOL_ONE, TOOL_TWO],
+                "metadata": SKILL_METADATA,
+            },
+            SKILL_ALLOWED_TOOLS,
+        ),
+    ],
+)
+def test_skillconfig_from_skill_metadata(
+    temp_dir,
+    w_meta_kw,
+    exp_allowed_tools,
+):
+    metadata = hs_models.SkillMetadata(
+        **w_meta_kw,
+    )
+
+    skill_config = config.SkillConfig.from_skill_metadata(
+        skill_metadata=metadata,
+        skill_source=hs_models.SkillSource.ENTRYPOINT,
+    )
+
+    assert skill_config.name == SKILL_NAME
+    assert skill_config.description == SKILL_DESC
+    assert skill_config.license == w_meta_kw.get("license")
+    assert skill_config.compatibility == w_meta_kw.get("compatibility")
+    assert skill_config.allowed_tools == exp_allowed_tools
+    assert skill_config.metadata == w_meta_kw.get("metadata", {})
+    assert skill_config.errors == []
+    assert skill_config.source == hs_models.SkillSource.ENTRYPOINT
+
+
+@pytest.mark.parametrize(
     "w_properties_kw",
     [
         {"name": SKILL_NAME, "description": SKILL_DESC},
@@ -2575,6 +2618,45 @@ def test_skillconfig_properties_w_errors():
     assert skill_config.metadata is None
     assert skill_config.errors == [TEST_VALIDATION_ERROR]
     assert skill_config.source == hs_models.SkillSource.FILESYSTEM
+
+
+@pytest.mark.parametrize(
+    "w_properties_kw, exp_allowed_tools",
+    [
+        ({"name": SKILL_NAME, "description": SKILL_DESC}, []),
+        (
+            {
+                "name": SKILL_NAME,
+                "description": SKILL_DESC,
+                "license": SKILL_LICENSE,
+                "compatibility": SKILL_COMPAT,
+                "allowed_tools": SKILL_ALLOWED_TOOLS,
+                "metadata": SKILL_METADATA,
+            },
+            # XXX See: https://github.com/ggozad/haiku.skills/issues/19
+            [TOOL_ONE, TOOL_TWO],
+        ),
+    ],
+)
+def test_skillconfig_skill(temp_dir, w_properties_kw, exp_allowed_tools):
+    skill_path = temp_dir / "skills" / SKILL_NAME
+    skill_config = config.SkillConfig(
+        _skill_properties=skill_models.SkillProperties(**w_properties_kw),
+        _skill_source=hs_models.SkillSource.FILESYSTEM,
+        _skill_path=skill_path,
+    )
+
+    found = skill_config.skill
+
+    assert isinstance(found, hs_models.Skill)
+    assert found.path == skill_path
+    assert found.source == hs_models.SkillSource.FILESYSTEM
+    assert found.metadata.name == skill_config.name
+    assert found.metadata.description == skill_config.description
+    assert found.metadata.license == skill_config.license
+    assert found.metadata.compatibility == skill_config.compatibility
+    assert found.metadata.allowed_tools == exp_allowed_tools
+    assert found.metadata.metadata == skill_config.metadata
 
 
 @pytest.mark.parametrize(
@@ -3700,6 +3782,76 @@ def test_roomskillsconfig_skill_configs_w_entrypoint_skill(
     ],
 )
 def test_roomskillsconfig_skill_configs_w_installation_skill(
+    installation_config,
+    w_missing,
+    expectation,
+):
+    if w_missing:
+        installation_config.skill_configs = {}
+    else:
+        skill_config = mock.create_autospec(config.SkillConfig)
+        installation_config.skill_configs = {
+            INSTALLATION_SKILL_NAME: skill_config,
+            "other_skill": object(),
+        }
+
+    room_skill_config_kw = {"installation_skills": [INSTALLATION_SKILL_NAME]}
+    room_skill_config = config.RoomSkillsConfig(
+        **room_skill_config_kw,
+        _installation_config=installation_config,
+    )
+
+    with expectation as expected:
+        found = room_skill_config.skill_configs
+
+    if expected is None:
+        assert found == {INSTALLATION_SKILL_NAME: skill_config}
+
+
+@pytest.mark.parametrize(
+    "w_missing, expectation",
+    [
+        (False, contextlib.nullcontext()),
+        (True, pytest.raises(config.MissingEntrypointSkillNames)),
+    ],
+)
+@mock.patch("soliplex.config._load_entrypoint_skills")
+def test_roomskillsconfig_skills_w_entrypoint_skill(
+    leps,
+    installation_config,
+    w_missing,
+    expectation,
+):
+    if w_missing:
+        leps.return_value = {}
+    else:
+        skill = mock.create_autospec(hs_models.Skill)
+        leps.return_value = {ENTRYPOINT_SKILL_NAME: skill}
+
+    room_skill_config_kw = {"entrypoint_skills": [ENTRYPOINT_SKILL_NAME]}
+    room_skill_config = config.RoomSkillsConfig(
+        **room_skill_config_kw,
+        _installation_config=installation_config,
+    )
+
+    with expectation as expected:
+        with mock.patch("soliplex.config._entrypoint_skills", []):
+            found = room_skill_config.skills
+
+    if expected is None:
+        assert found == {ENTRYPOINT_SKILL_NAME: skill}
+
+    leps.assert_called_once_with()
+
+
+@pytest.mark.parametrize(
+    "w_missing, expectation",
+    [
+        (False, contextlib.nullcontext()),
+        (True, pytest.raises(config.MissingInstallationSkillNames)),
+    ],
+)
+def test_roomskillsconfig_skills_w_installation_skill(
     installation_config,
     w_missing,
     expectation,
