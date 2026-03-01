@@ -2,7 +2,9 @@ id: "advocate"
 name: "Advocate Test"
 description: "Argues in favor of a position for debate tests"
 agent:
-  template_id: "default_chat"
+  model_name: "gpt-oss:20b"
+  provider_type: "ollama"
+  provider_base_url: "http://workshop:11434"
   system_prompt: |
     You are a passionate advocate. Argue strongly IN FAVOR of whatever
     topic the user presents. Give 3 compelling points. Be persuasive

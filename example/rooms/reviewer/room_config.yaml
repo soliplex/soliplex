@@ -2,7 +2,9 @@ id: "reviewer"
 name: "Reviewer Test"
 description: "Reviews and critiques text for pipeline tests"
 agent:
-  template_id: "default_chat"
+  model_name: "gpt-oss:20b"
+  provider_type: "ollama"
+  provider_base_url: "http://workshop:11434"
   system_prompt: |
     You are a strict reviewer. Critique the provided text in one sentence.
     If the text meets all requirements, reply with exactly "PASS".

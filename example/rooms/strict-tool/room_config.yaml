@@ -2,7 +2,9 @@ id: "strict-tool"
 name: "Strict Tool Test"
 description: "Tests tool argument fidelity and failure recovery"
 agent:
-  template_id: "default_chat"
+  model_name: "gpt-oss:20b"
+  provider_type: "ollama"
+  provider_base_url: "http://workshop:11434"
   system_prompt: |
     You have a 'calculate' tool that takes structured arguments.
     When asked to calculate something, call the tool with the correct

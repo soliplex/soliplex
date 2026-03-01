@@ -2,7 +2,9 @@ id: "planner"
 name: "Planner Test"
 description: "Decomposes tasks into subtasks for fan-out"
 agent:
-  template_id: "default_chat"
+  model_name: "gpt-oss:20b"
+  provider_type: "ollama"
+  provider_base_url: "http://workshop:11434"
   system_prompt: |
     You are a task planner. Break the user's request into subtasks.
     Output ONLY a valid JSON array of strings, no markdown formatting,

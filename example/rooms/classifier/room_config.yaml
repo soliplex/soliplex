@@ -2,7 +2,9 @@ id: "classifier"
 name: "Classifier Test"
 description: "Classifies intent for dynamic room routing"
 agent:
-  template_id: "default_chat"
+  model_name: "gpt-oss:20b"
+  provider_type: "ollama"
+  provider_base_url: "http://workshop:11434"
   system_prompt: |
     You are a request classifier. Analyze the user's message and respond
     with EXACTLY one of these room names, nothing else:

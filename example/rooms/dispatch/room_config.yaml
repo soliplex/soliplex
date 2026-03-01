@@ -2,7 +2,9 @@ id: "dispatch"
 name: "Conditional Dispatch Test"
 description: "Agent that selects correct tools from a compound request"
 agent:
-  template_id: "default_chat"
+  model_name: "gpt-oss:20b"
+  provider_type: "ollama"
+  provider_base_url: "http://workshop:11434"
   system_prompt: |
     You have access to tools: tool_a, tool_b, tool_c.
     Call ONLY the tools the user explicitly requests. Do not call extra tools.
