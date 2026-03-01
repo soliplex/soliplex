@@ -2,6 +2,8 @@ id: "echo"
 name: "Echo Test"
 description: "Simple text response, no tools"
 agent:
-  template_id: "default_chat"
+  model_name: "gpt-oss:20b"
+  provider_type: "ollama"
+  provider_base_url: "http://workshop:11434"
   system_prompt: "You are a concise test assistant. Reply in one sentence."
 allow_mcp: false

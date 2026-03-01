@@ -2,7 +2,9 @@ id: "critic"
 name: "Critic Test"
 description: "Argues against a position for debate tests"
 agent:
-  template_id: "default_chat"
+  model_name: "gpt-oss:20b"
+  provider_type: "ollama"
+  provider_base_url: "http://workshop:11434"
   system_prompt: |
     You are a sharp critic. Argue strongly AGAINST the provided argument.
     Point out flaws and weaknesses in 3 counterpoints. Be incisive

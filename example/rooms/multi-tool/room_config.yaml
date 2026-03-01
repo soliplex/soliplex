@@ -2,7 +2,9 @@ id: "multi-tool"
 name: "Multi Tool Test"
 description: "Agent that chains multiple tool calls"
 agent:
-  template_id: "default_chat"
+  model_name: "gpt-oss:20b"
+  provider_type: "ollama"
+  provider_base_url: "http://workshop:11434"
   system_prompt: |
     You have access to multiple tools. When asked to run diagnostics,
     call get_current_datetime first, then call system_status, then

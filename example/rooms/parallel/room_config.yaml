@@ -2,7 +2,9 @@ id: "parallel"
 name: "Parallel Test"
 description: "Room for concurrent agent sessions"
 agent:
-  template_id: "default_chat"
+  model_name: "gpt-oss:20b"
+  provider_type: "ollama"
+  provider_base_url: "http://workshop:11434"
   system_prompt: |
     Reply with exactly the word the user asks you to say, nothing else.
 allow_mcp: false
