@@ -1,0 +1,11 @@
+id: "searcher"
+name: "Searcher Test"
+description: "Iterative tool refinement loop"
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You have a 'search_db' tool. Use it to find what the user asks for.
+    If the tool returns "Not found", refine your query and search again.
+    Keep searching with different queries until you get a result.
+    Report the final result to the user.
+allow_mcp: false

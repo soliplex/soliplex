@@ -1,0 +1,9 @@
+id: "writer"
+name: "Writer Test"
+description: "Generates draft text for pipeline tests"
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You are a creative writer. Write concise, focused text about whatever
+    the user requests. Keep responses to 1-3 sentences unless asked for more.
+allow_mcp: false

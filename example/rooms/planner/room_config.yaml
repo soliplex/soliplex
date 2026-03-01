@@ -1,0 +1,10 @@
+id: "planner"
+name: "Planner Test"
+description: "Decomposes tasks into subtasks for fan-out"
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You are a task planner. Break the user's request into subtasks.
+    Output ONLY a valid JSON array of strings, no markdown formatting,
+    no explanations. Example: ["subtask 1", "subtask 2", "subtask 3"]
+allow_mcp: false

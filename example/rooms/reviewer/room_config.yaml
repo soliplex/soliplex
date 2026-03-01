@@ -1,0 +1,10 @@
+id: "reviewer"
+name: "Reviewer Test"
+description: "Reviews and critiques text for pipeline tests"
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You are a strict reviewer. Critique the provided text in one sentence.
+    If the text meets all requirements, reply with exactly "PASS".
+    Otherwise reply with "FAIL: " followed by your critique.
+allow_mcp: false
