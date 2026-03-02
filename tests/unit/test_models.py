@@ -33,7 +33,8 @@ SKILL_NAME = "skill_name"
 SKILL_DESC = "This is a skill"
 SKILL_LICENSE = "Foo License v3.14"
 SKILL_COMPAT = "Skill compat"
-SKILL_ALLOWED_TOOLS = "Tools allowed to the skill"
+TOOL_ONE = "tool-one"
+TOOL_TWO = "tool-two"
 SKILL_META = {"foo": "bar"}
 SKILL_MODEL_NAME = "test-skill-model"
 SKILL_STATE_NAMESPACE = "test-skill-namespace"
@@ -392,12 +393,12 @@ def test_mcp_client_toolset_from_config_w_sdtc():
 
 
 @pytest.fixture(params=[None, SKILL_META])
-def w_skill_properties_metadata(request):
+def w_metadata(request):
     return request.param
 
 
-@pytest.fixture(params=[None, SKILL_ALLOWED_TOOLS])
-def w_skill_properties_allowed_tools(request):
+@pytest.fixture(params=[[], [TOOL_ONE, TOOL_TWO]])
+def w_allowed_tools(request):
     return request.param
 
 
@@ -421,8 +422,8 @@ def w_state_model_and_ns(request):
 @pytest.fixture
 def filesystem_skill_config(
     temp_dir,
-    w_skill_properties_metadata,
-    w_skill_properties_allowed_tools,
+    w_metadata,
+    w_allowed_tools,
     w_state_model_and_ns,
 ):
     skill_path = temp_dir / "skills" / SKILL_NAME
@@ -431,8 +432,8 @@ def filesystem_skill_config(
         description=SKILL_DESC,
         license=SKILL_LICENSE,
         compatibility=SKILL_COMPAT,
-        allowed_tools=w_skill_properties_allowed_tools,
-        metadata=w_skill_properties_metadata,
+        allowed_tools=w_allowed_tools,
+        metadata=w_metadata,
     )
     skill_metadata.name = SKILL_NAME  # mock quirk
     return config.FilesystemSkillConfig(
@@ -452,7 +453,9 @@ def test_skill_from_config_w_fssc(filesystem_skill_config):
     assert found.description == filesystem_skill_config.description
     assert found.license == filesystem_skill_config.license
     assert found.compatibility == filesystem_skill_config.compatibility
-    assert found.allowed_tools == filesystem_skill_config.allowed_tools
+    assert found.allowed_tools == " ".join(
+        filesystem_skill_config.allowed_tools,
+    )
     assert found.metadata == filesystem_skill_config.metadata
 
     if filesystem_skill_config.state_type is not None:
@@ -465,16 +468,16 @@ def test_skill_from_config_w_fssc(filesystem_skill_config):
 
 @pytest.fixture
 def entrypoint_skill_config(
-    w_skill_properties_metadata,
-    w_skill_properties_allowed_tools,
+    w_metadata,
+    w_allowed_tools,
 ):
     skill_metadata = mock.create_autospec(
         hs_models.SkillMetadata,
         description=SKILL_DESC,
         license=SKILL_LICENSE,
         compatibility=SKILL_COMPAT,
-        allowed_tools=w_skill_properties_allowed_tools,
-        metadata=w_skill_properties_metadata,
+        allowed_tools=w_allowed_tools,
+        metadata=w_metadata,
     )
     skill_metadata.name = SKILL_NAME  # mock quirk
     return config.EntrypointSkillConfig(
@@ -494,7 +497,9 @@ def test_skill_from_config_w_epsc(entrypoint_skill_config):
     assert found.description == entrypoint_skill_config.description
     assert found.license == entrypoint_skill_config.license
     assert found.compatibility == entrypoint_skill_config.compatibility
-    assert found.allowed_tools == entrypoint_skill_config.allowed_tools
+    assert found.allowed_tools == " ".join(
+        entrypoint_skill_config.allowed_tools,
+    )
     assert found.metadata == entrypoint_skill_config.metadata
     assert found.state_type_schema == StateModelTest.model_json_schema()
     assert found.state_namespace == SKILL_STATE_NAMESPACE

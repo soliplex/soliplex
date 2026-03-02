@@ -158,7 +158,7 @@ class Skill(pydantic.BaseModel):
             description=skill_config.description,
             license=skill_config.license,
             compatibility=skill_config.compatibility,
-            allowed_tools=skill_config.allowed_tools,
+            allowed_tools=" ".join(skill_config.allowed_tools),
             metadata=skill_config.metadata,
             state_namespace=skill_config.state_namespace,
             **kwargs,
