@@ -135,32 +135,33 @@ SkillMetadata = dict[str, typing.Any] | None
 
 
 class Skill(pydantic.BaseModel):
-    name: str
+    source: hs_models.SkillSource | None = None
+    skill_name: str
     description: str
     license: str | None
     compatibility: str | None
     allowed_tools: SkillAllowedTools = None
     metadata: SkillMetadata = None
-    source: hs_models.SkillSource | None = None
-    path: pathlib.Path | None = None
-    model_name: str | None = None
-    state_type: config.SkillStateType = None
+    state_type_schema: dict[str, typing.Any] | None = None
     state_namespace: str | None = None
 
     @classmethod
-    def from_config(cls, skill_config: config.SkillConfig):
+    def from_config(cls, skill_config: config.SkillConfigTypes):
+        kwargs = {}
+        if skill_config.state_type is not None:
+            kwargs["state_type_schema"] = (
+                skill_config.state_type.model_json_schema()
+            )
         return cls(
-            name=skill_config.name,
+            source=skill_config.kind,
+            skill_name=skill_config.skill_name,
             description=skill_config.description,
             license=skill_config.license,
             compatibility=skill_config.compatibility,
             allowed_tools=skill_config.allowed_tools,
             metadata=skill_config.metadata,
-            source=skill_config.source,
-            path=skill_config.path,
-            model_name=skill_config.model_name,
-            state_type=skill_config.state_type,
             state_namespace=skill_config.state_namespace,
+            **kwargs,
         )
 
 
@@ -395,10 +396,12 @@ class Installation(pydantic.BaseModel):
     haiku_rag_config_file: pathlib.Path | None = None
     agents: list[Agent] = []
     agui_features: list[AGUI_Feature] = []
+    skills: ConfiguredSkills
     oidc_paths: list[pathlib.Path] = []
     room_paths: list[pathlib.Path] = []
     completion_paths: list[pathlib.Path] = []
     quizzes_paths: list[pathlib.Path] = []
+    filesystem_skills_paths: list[pathlib.Path] = []
     oidc_auth_systems: list[OIDCAuthSystem] = []
     thread_persistence_dburi_sync: str | None = None
     thread_persistence_dburi_async: str | None = None
@@ -430,6 +433,10 @@ class Installation(pydantic.BaseModel):
             AGUI_Feature.from_config(agui_feature)
             for agui_feature in installation_config.agui_features
         ]
+        skills = {
+            key: Skill.from_config(skill_config)
+            for key, skill_config in installation_config.skill_configs.items()
+        }
         return cls(
             id=installation_config.id,
             secrets=secrets,
@@ -437,6 +444,10 @@ class Installation(pydantic.BaseModel):
             haiku_rag_config_file=installation_config._haiku_rag_config_file,
             agents=agents,
             agui_features=agui_features,
+            skills=skills,
+            filesystem_skills_paths=(
+                installation_config.filesystem_skills_paths
+            ),
             oidc_paths=installation_config.oidc_paths,
             room_paths=installation_config.room_paths,
             completion_paths=installation_config.completion_paths,

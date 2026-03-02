@@ -11,15 +11,9 @@ agent:
     You are a friendly agent.  Use the supplied skills as needed when
     replying to the user's prompts.
 
-#
-# Current:  select installation skills by name
-#
 skills:
-
-  installation_skills:
+  skill_names:
     - "bare-bones"
-
-  entrypoint_skills:
     - "image-generation"  # needs namespace?
 
 #

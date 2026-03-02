@@ -477,8 +477,8 @@ def check_config(
     the_console.line()
     the_console.rule("Validating skills")
     the_console.line()
-    for skills_path in the_installation._config.skills_paths:
-        the_console.print(f"Skills path: {skills_path}")
+    for skills_path in the_installation._config.filesystem_skills_paths:
+        the_console.print(f"Filesystem skills path: {skills_path}")
         for skill_path in config._find_skill_paths(skills_path):
             the_console.print(f"- {skill_path.name}")
             errors = skill_validator.validate(skill_path)
@@ -636,10 +636,11 @@ def list_skills(
 
     available_skills = the_installation._config.skill_configs
     for skill_name, skill_config in available_skills.items():
-        the_console.print(f"- [ {skill_name} ]")
-        if skill_config.errors:
+        the_console.print(f"- [ {skill_config.kind}:{skill_name}  ]")
+        errors = getattr(skill_config, "errors", None)
+        if errors:
             the_console.print("  Validation errors:")
-            for error in skill_config.errors:
+            for error in errors:
                 the_console.print(f"  - {error}")
         else:
             the_console.print(f"  {skill_config.description}")

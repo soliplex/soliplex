@@ -280,35 +280,9 @@ BEARER_TOKEN = "FACEDACE"
 HTTP_MCP_AUTH_HEADER = {"Authorization": "Bearer secret:BEARER_TOKEN"}
 QUIZ_ID = "test_quiz"
 
-DADS_BASE_URL = "https://docs.stage.josce.mil/dev/"
-DADS_SSO_SERVER_URL = "https://sso.test.josce.mil/auth/"
-DADS_BEARER_TOKEN = "CAFEBEAD"
-DADS_API_CONFIG_KW = {
-    "base_url": DADS_BASE_URL,
-    "sso_server_url": DADS_SSO_SERVER_URL,
-    "verify_ssl_certs": False,
-    "bearer_token": DADS_BEARER_TOKEN,
-}
-DADS_API_CONFIG_YAML = f"""
-base_url: "{DADS_BASE_URL}"
-sso_server_url: "{DADS_SSO_SERVER_URL}"
-verify_ssl_certs: false
-bearer_token: "{DADS_BEARER_TOKEN}"
-"""
-FADTC_PROJECT = "test-project"
-FADTC_SOURCE_DOC_PATH_1 = "modules/ROOT/pages/test-one.adoc"
-FADTC_SOURCE_DOC_PATH_2 = "modules/ROOT/pages/test-two.adoc"
-FADTC_CONFIG_KW = {
-    "project": FADTC_PROJECT,
-    "source_document_paths": [
-        FADTC_SOURCE_DOC_PATH_1,
-        FADTC_SOURCE_DOC_PATH_2,
-    ],
-    "dads_api_config_path": None,  # to be replaced
-    "allow_mcp": True,
-}
-
 SKILL_NAME = "test-skill"
+FILESYSTEM_SKILL_NAME = "test-fs-skill"
+ENTRYPOINT_SKILL_NAME = "test-ep-skill"
 SKILL_DESC = "Skill description"
 SKILL_LICENSE = "Skill license"
 SKILL_COMPAT = "Skill compatibility"
@@ -321,11 +295,10 @@ SKILL_METADATA = {
     "author": SKILL_AUTHOR,
     "version": SKILL_VERSION,
 }
-INSTALLATION_SKILL_NAME = "test-installation-skill"
-ENTRYPOINT_SKILL_NAME = "test-entrypoint-skill"
 SKILL_MODEL_NAME = "test-skill-model"
+SKILL_PATH = f"/path/to/skills/{SKILL_NAME}"
 SKILL_STATE_NAMESPACE = "test-skill-namespace"
-
+SKILL_VALIDATION_ERROR = "Test skill validation error"
 
 BOGUS_AGENT_CONFIG_YAML = ""
 
@@ -587,20 +560,21 @@ BOGUS_ROOM_SKILLS_CONFIG_YAML = ""
 ROOM_SKILLS_MODEL_NAME = "test-roomskills-model"
 W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_KW = {
     "model_name": ROOM_SKILLS_MODEL_NAME,
-    "installation_skills": [INSTALLATION_SKILL_NAME],
+    "skill_names": [SKILL_NAME],
 }
 W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_YAML = f"""\
 model_name: "{ROOM_SKILLS_MODEL_NAME}"
-installation_skills:
-    - "{INSTALLATION_SKILL_NAME}"
+skill_names:
+    - "{SKILL_NAME}"
 """
-
-W_ENTRYPOINT_SKILLS_ROOM_SKILLS_CONFIG_KW = {
-    "entrypoint_skills": [ENTRYPOINT_SKILL_NAME],
+W_MISSING_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_KW = {
+    "model_name": ROOM_SKILLS_MODEL_NAME,
+    "skill_names": ["bogus"],
 }
-W_ENTRYPOINT_SKILLS_ROOM_SKILLS_CONFIG_YAML = f"""\
-entrypoint_skills:
-    - "{ENTRYPOINT_SKILL_NAME}"
+W_MISSING_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_YAML = f"""\
+model_name: "{ROOM_SKILLS_MODEL_NAME}"
+skill_names:
+    - "bogus"
 """
 
 BOGUS_ROOM_CONFIG_YAML = ""
@@ -681,8 +655,8 @@ FULL_ROOM_CONFIG_KW = {
         ),
     },
     "skills": config.RoomSkillsConfig(
-        installation_skills=[INSTALLATION_SKILL_NAME],
-        entrypoint_skills=[ENTRYPOINT_SKILL_NAME],
+        model_name=SKILL_MODEL_NAME,
+        skill_names=[SKILL_NAME],
     ),
 }
 FULL_ROOM_CONFIG_YAML = f"""\
@@ -718,10 +692,9 @@ mcp_client_toolsets:
       query_params:
         {HTTP_MCP_QP_KEY}: "{HTTP_MCP_QP_VALUE}"
 skills:
-    installation_skills:
-        - "{INSTALLATION_SKILL_NAME}"
-    entrypoint_skills:
-        - "{ENTRYPOINT_SKILL_NAME}"
+    model_name: {SKILL_MODEL_NAME}
+    skill_names:
+        - "{SKILL_NAME}"
 quizzes:
   - id: "{TEST_QUIZ_ID}"
     question_file: "{TEST_QUIZ_OVR}"
@@ -1639,25 +1612,34 @@ SKILLS_PATH_2 = "/path/to/other/skills"
 
 W_SKILLS_PATHS_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "skills_paths": [
+    "filesystem_skills_paths": [
         SKILLS_PATH_1,
         SKILLS_PATH_2,
+    ],
+    "_skill_configs": [
+        {"kind": "filesystem", "skill_name": FILESYSTEM_SKILL_NAME},
+        {"kind": "entrypoint", "skill_name": ENTRYPOINT_SKILL_NAME},
     ],
 }
 W_SKILLS_PATHS_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
-skills_paths:
+filesystem_skills_paths:
     - "{SKILLS_PATH_1}"
     - "{SKILLS_PATH_2}"
+skill_configs:
+    - kind: "filesystem"
+      skill_name: "{FILESYSTEM_SKILL_NAME}"
+    - kind: "entrypoint"
+      skill_name: "{ENTRYPOINT_SKILL_NAME}"
 """
 
 W_SKILLS_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "skills_paths": [],
+    "filesystem_skills_paths": [],
 }
 W_SKILLS_PATHS_ONLY_NULL_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
-skills_paths:
+filesystem_skills_paths:
     -
 """
 
@@ -2594,75 +2576,11 @@ def test_withquerymcpwrapper_call():
     func.assert_called_once_with("text", tool_config=tool_config)
 
 
-@pytest.mark.parametrize(
-    "w_meta_kw, exp_allowed_tools",
-    [
-        ({"name": SKILL_NAME, "description": SKILL_DESC}, None),
-        (  # XXX See: https://github.com/ggozad/haiku.skills/issues/19
-            {
-                "name": SKILL_NAME,
-                "description": SKILL_DESC,
-                "license": SKILL_LICENSE,
-                "compatibility": SKILL_COMPAT,
-                "allowed_tools": [TOOL_ONE, TOOL_TWO],
-                "metadata": SKILL_METADATA,
-            },
-            SKILL_ALLOWED_TOOLS,
-        ),
-    ],
-)
-def test_skillconfig_from_skill_metadata_w_defaults(
-    temp_dir,
-    w_meta_kw,
-    exp_allowed_tools,
-):
-    metadata = hs_models.SkillMetadata(
-        **w_meta_kw,
-    )
-
-    skill_config = config.SkillConfig.from_skill_metadata(
-        skill_metadata=metadata,
-        skill_source=hs_models.SkillSource.ENTRYPOINT,
-    )
-
-    assert skill_config.name == SKILL_NAME
-    assert skill_config.description == SKILL_DESC
-    assert skill_config.license == w_meta_kw.get("license")
-    assert skill_config.compatibility == w_meta_kw.get("compatibility")
-    assert skill_config.allowed_tools == exp_allowed_tools
-    assert skill_config.metadata == w_meta_kw.get("metadata", {})
-    assert skill_config.errors == []
-    assert skill_config.source == hs_models.SkillSource.ENTRYPOINT
-    assert skill_config.model_name is None
-    assert skill_config.state_type is None
-    assert skill_config.state_namespace is None
-
-
-def test_skillconfig_from_skill_metadata_w_explicit():
-    metadata = hs_models.SkillMetadata(
-        name=SKILL_NAME,
-        description=SKILL_DESC,
-    )
-
-    skill_config = config.SkillConfig.from_skill_metadata(
-        skill_metadata=metadata,
-        skill_source=hs_models.SkillSource.ENTRYPOINT,
-        model_name=SKILL_MODEL_NAME,
-        state_type=config.SkillStateType,
-        state_namespace=SKILL_STATE_NAMESPACE,
-    )
-
-    assert skill_config.name == SKILL_NAME
-    assert skill_config.description == SKILL_DESC
-    assert skill_config.license is None
-    assert skill_config.compatibility is None
-    assert skill_config.allowed_tools is None
-    assert skill_config.metadata == {}
-    assert skill_config.errors == []
-    assert skill_config.source == hs_models.SkillSource.ENTRYPOINT
-    assert skill_config.model_name == SKILL_MODEL_NAME
-    assert skill_config.state_type is config.SkillStateType
-    assert skill_config.state_namespace == SKILL_STATE_NAMESPACE
+@pytest.fixture
+def skill_path(temp_dir):
+    path = temp_dir / "skills" / SKILL_NAME
+    path.mkdir(parents=True)
+    return path
 
 
 @pytest.mark.parametrize(
@@ -2679,10 +2597,11 @@ def test_skillconfig_from_skill_metadata_w_explicit():
         },
     ],
 )
-def test_skillconfig_properties(w_properties_kw):
-    skill_config = config.SkillConfig(
+def test_filesystemskillconfig_ctor(skill_path, w_properties_kw):
+    skill_config = config.FilesystemSkillConfig(
+        skill_name=SKILL_NAME,
         _skill_properties=skill_models.SkillProperties(**w_properties_kw),
-        _skill_source=hs_models.SkillSource.FILESYSTEM,
+        _skill_path=skill_path,
     )
 
     assert skill_config.name == SKILL_NAME
@@ -2693,25 +2612,54 @@ def test_skillconfig_properties(w_properties_kw):
     assert skill_config.metadata == w_properties_kw.get("metadata", {})
     assert skill_config.errors == []
     assert skill_config.source == hs_models.SkillSource.FILESYSTEM
+    assert skill_config.path == skill_path
 
 
-def test_skillconfig_properties_w_errors():
-    TEST_VALIDATION_ERROR = "Test validation error"
-
-    skill_config = config.SkillConfig(
-        _skill_properties=None,
-        _skill_source=hs_models.SkillSource.FILESYSTEM,
-        _validation_errors=[TEST_VALIDATION_ERROR],
+def test_filesystemskillconfig_ctor_w_errors(skill_path):
+    skill_properties = skill_models.SkillProperties(
+        name=SKILL_NAME,
+        description=SKILL_VALIDATION_ERROR,
+    )
+    skill_config = config.FilesystemSkillConfig(
+        skill_name=SKILL_NAME,
+        _skill_path=skill_path,
+        _skill_properties=skill_properties,
+        _validation_errors=[SKILL_VALIDATION_ERROR],
     )
 
-    assert skill_config.name is None
-    assert skill_config.description is None
+    assert skill_config.name is SKILL_NAME
+    assert skill_config.description is SKILL_VALIDATION_ERROR
     assert skill_config.license is None
     assert skill_config.compatibility is None
     assert skill_config.allowed_tools is None
-    assert skill_config.metadata is None
-    assert skill_config.errors == [TEST_VALIDATION_ERROR]
-    assert skill_config.source == hs_models.SkillSource.FILESYSTEM
+    assert skill_config.metadata == {}
+    assert skill_config.errors == [SKILL_VALIDATION_ERROR]
+
+
+@pytest.mark.parametrize("w_errors", [[], [SKILL_VALIDATION_ERROR]])
+@mock.patch("skills_ref.parser.read_properties")
+@mock.patch("skills_ref.validator.validate")
+def test_filesystemskillconfig_from_path(
+    sv_validate,
+    sp_read_props,
+    skill_path,
+    w_errors,
+):
+    sv_validate.return_value = w_errors
+    i_config = mock.create_autospec(config.InstallationConfig)
+
+    found = config.FilesystemSkillConfig.from_path(
+        skill_path,
+        i_config,
+    )
+
+    if w_errors:
+        assert found.name == SKILL_NAME
+        assert found.errors == w_errors
+        assert found.description.startswith("Invalid filesystem skill")
+    else:
+        assert found._skill_properties is sp_read_props.return_value
+        assert found.errors == []
 
 
 @pytest.mark.parametrize(
@@ -2732,11 +2680,14 @@ def test_skillconfig_properties_w_errors():
         ),
     ],
 )
-def test_skillconfig_skill(temp_dir, w_properties_kw, exp_allowed_tools):
-    skill_path = temp_dir / "skills" / SKILL_NAME
-    skill_config = config.SkillConfig(
+def test_filesystemskillconfig_skill(
+    skill_path,
+    w_properties_kw,
+    exp_allowed_tools,
+):
+    skill_config = config.FilesystemSkillConfig(
+        skill_name=SKILL_NAME,
         _skill_properties=skill_models.SkillProperties(**w_properties_kw),
-        _skill_source=hs_models.SkillSource.FILESYSTEM,
         _skill_path=skill_path,
     )
 
@@ -2751,6 +2702,48 @@ def test_skillconfig_skill(temp_dir, w_properties_kw, exp_allowed_tools):
     assert found.metadata.compatibility == skill_config.compatibility
     assert found.metadata.allowed_tools == exp_allowed_tools
     assert found.metadata.metadata == skill_config.metadata
+
+
+@pytest.mark.parametrize(
+    "w_metadata_kw, exp_allowed_tools",
+    [
+        ({"name": SKILL_NAME, "description": SKILL_DESC}, None),
+        (
+            {
+                "name": SKILL_NAME,
+                "description": SKILL_DESC,
+                "license": SKILL_LICENSE,
+                "compatibility": SKILL_COMPAT,
+                "allowed_tools": [TOOL_ONE, TOOL_TWO],
+                "metadata": SKILL_METADATA,
+            },
+            SKILL_ALLOWED_TOOLS,
+        ),
+        (
+            {
+                "name": SKILL_NAME,
+                "description": SKILL_DESC,
+                "license": SKILL_LICENSE,
+                "compatibility": SKILL_COMPAT,
+                "allowed_tools": [],
+                "metadata": SKILL_METADATA,
+            },
+            None,
+        ),
+    ],
+)
+def test_entrypointskillconfig_ctor(w_metadata_kw, exp_allowed_tools):
+    skill_config = config.EntrypointSkillConfig(
+        skill_name=SKILL_NAME,
+        _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
+    )
+
+    assert skill_config.name == SKILL_NAME
+    assert skill_config.description == SKILL_DESC
+    assert skill_config.license == w_metadata_kw.get("license")
+    assert skill_config.compatibility == w_metadata_kw.get("compatibility")
+    assert skill_config.allowed_tools == exp_allowed_tools
+    assert skill_config.metadata == w_metadata_kw.get("metadata", {})
 
 
 @pytest.mark.parametrize(
@@ -3747,16 +3740,26 @@ def test_quizconfig_get_question(w_loaded, w_miss):
 
 
 @pytest.mark.parametrize(
-    "config_yaml, expected_kw",
+    "config_yaml, expectation",
     [
-        (BOGUS_ROOM_SKILLS_CONFIG_YAML, None),
         (
-            W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_YAML,
-            W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_KW,
+            BOGUS_ROOM_SKILLS_CONFIG_YAML,
+            pytest.raises(config.FromYamlException),
         ),
         (
-            W_ENTRYPOINT_SKILLS_ROOM_SKILLS_CONFIG_YAML,
-            W_ENTRYPOINT_SKILLS_ROOM_SKILLS_CONFIG_KW,
+            W_MISSING_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_YAML,
+            pytest.raises(
+                config.FromYamlException,
+                check=lambda exc: isinstance(
+                    exc.__cause__, config.MissingSkillNames
+                ),
+            ),
+        ),
+        (
+            W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_YAML,
+            contextlib.nullcontext(
+                W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_KW,
+            ),
         ),
     ],
 )
@@ -3764,291 +3767,140 @@ def test_roomskillsconfig_from_yaml(
     installation_config,
     temp_dir,
     config_yaml,
-    expected_kw,
+    expectation,
 ):
+    installation_config.skill_configs = {SKILL_NAME: object()}
     yaml_file = temp_dir / "test.yaml"
     yaml_file.write_text(config_yaml)
 
     with yaml_file.open() as stream:
         config_dict = yaml.safe_load(stream)
 
-    if expected_kw is None:
-        with pytest.raises(config.FromYamlException) as exc:
-            config.RoomSkillsConfig.from_yaml(
-                installation_config,
-                yaml_file,
-                {},
-            )
-        assert exc.value._config_path == yaml_file
-
-    else:
-        expected = config.RoomSkillsConfig(**expected_kw)
-        expected = dataclasses.replace(
-            expected,
-            _installation_config=installation_config,
-            _config_path=yaml_file,
-        )
-
+    with expectation as expected:
         found = config.RoomSkillsConfig.from_yaml(
             installation_config,
             yaml_file,
             config_dict,
         )
 
+    if isinstance(expected, pytest.ExceptionInfo):
+        assert expected.value._config_path == yaml_file
+
+    else:
+        expected = config.RoomSkillsConfig(**expected)
+        expected = dataclasses.replace(
+            expected,
+            _installation_config=installation_config,
+            _config_path=yaml_file,
+        )
+
         assert found == expected
 
 
-@pytest.mark.parametrize("w_already", [False, True])
-@mock.patch("haiku.skills.discovery.discover_from_entrypoints")
-def test__load_entrypoint_skills(dfep, w_already):
+def test_roomskillsconfig_skill_configs(installation_config):
+    skill_config = mock.create_autospec(config._SkillConfigBase)
+    installation_config.skill_configs = {
+        SKILL_NAME: skill_config,
+        "other_skill": object(),
+    }
+
+    room_skills_config_kw = {"skill_names": [SKILL_NAME]}
+    room_skills_config = config.RoomSkillsConfig(
+        **room_skills_config_kw,
+        _installation_config=installation_config,
+    )
+
+    found = room_skills_config.skill_configs
+
+    assert found == {SKILL_NAME: skill_config}
+
+
+def test_roomskillsconfig_skills(installation_config):
+    skill = mock.create_autospec(hs_models.Skill)
+    skill_config = mock.create_autospec(config._SkillConfigBase, skill=skill)
+    installation_config.skill_configs = {
+        SKILL_NAME: skill_config,
+        "other_skill": object(),
+    }
+
+    room_skill_config_kw = {"skill_names": [SKILL_NAME]}
+    room_skill_config = config.RoomSkillsConfig(
+        **room_skill_config_kw,
+        _installation_config=installation_config,
+    )
+
+    found = room_skill_config.skills
+
+    assert found == {SKILL_NAME: skill_config.skill}
+
+
+def test_roomskillsconfig_skill_toolset(installation_config):
     skill = mock.create_autospec(hs_models.Skill)
     skill.metadata = mock.create_autospec(hs_models.SkillMetadata)
-    skill.metadata.name = ENTRYPOINT_SKILL_NAME
-    if w_already:
-        eps = object()
-    else:
-        eps = None
-        dfep.return_value = [skill]
+    skill.metadata.name = SKILL_NAME
+    skill.metadata.description = SKILL_DESC
 
-    with mock.patch("soliplex.config._entrypoint_skills", eps):
-        found = config._load_entrypoint_skills()
-
-    if w_already:
-        assert found is eps
-        dfep.assert_not_called()
-    else:
-        assert found == {ENTRYPOINT_SKILL_NAME: skill}
-        dfep.assert_called_once_with()
-
-
-@pytest.mark.parametrize(
-    "w_missing, expectation",
-    [
-        (False, contextlib.nullcontext()),
-        (True, pytest.raises(config.MissingEntrypointSkillNames)),
-    ],
-)
-@mock.patch("soliplex.config._load_entrypoint_skills")
-def test_roomskillsconfig_skill_configs_w_entrypoint_skill(
-    leps,
-    installation_config,
-    w_missing,
-    expectation,
-):
-    if w_missing:
-        leps.return_value = {}
-    else:
-        skill = mock.create_autospec(hs_models.Skill)
-        skill.metadata = mock.create_autospec(hs_models.SkillMetadata)
-        skill.metadata.name = ENTRYPOINT_SKILL_NAME
-        skill.state_type = config.SkillStateType
-        skill.state_namespace = SKILL_STATE_NAMESPACE
-        skill_props = skill.metadata.model_dump.return_value = {
-            "name": ENTRYPOINT_SKILL_NAME,
-            "description": SKILL_DESC,
-        }
-        exp_skill_config = config.SkillConfig(
-            _skill_properties=skill_models.SkillProperties(**skill_props),
-            _skill_source=hs_models.SkillSource.ENTRYPOINT,
-            _installation_config=installation_config,
-            state_type=config.SkillStateType,
-            state_namespace=SKILL_STATE_NAMESPACE,
-        )
-        leps.return_value = {ENTRYPOINT_SKILL_NAME: skill}
-
-    room_skill_config_kw = {"entrypoint_skills": [ENTRYPOINT_SKILL_NAME]}
-    room_skill_config = config.RoomSkillsConfig(
-        **room_skill_config_kw,
-        _installation_config=installation_config,
-    )
-
-    with expectation as expected:
-        with mock.patch("soliplex.config._entrypoint_skills", []):
-            found = room_skill_config.skill_configs
-
-    if expected is None:
-        assert found == {ENTRYPOINT_SKILL_NAME: exp_skill_config}
-
-    leps.assert_called_once_with()
-
-
-@pytest.mark.parametrize(
-    "w_missing, expectation",
-    [
-        (False, contextlib.nullcontext()),
-        (True, pytest.raises(config.MissingInstallationSkillNames)),
-    ],
-)
-def test_roomskillsconfig_skill_configs_w_installation_skill(
-    installation_config,
-    w_missing,
-    expectation,
-):
-    if w_missing:
-        installation_config.skill_configs = {}
-    else:
-        skill_config = mock.create_autospec(config.SkillConfig)
-        installation_config.skill_configs = {
-            INSTALLATION_SKILL_NAME: skill_config,
-            "other_skill": object(),
-        }
-
-    room_skill_config_kw = {"installation_skills": [INSTALLATION_SKILL_NAME]}
-    room_skill_config = config.RoomSkillsConfig(
-        **room_skill_config_kw,
-        _installation_config=installation_config,
-    )
-
-    with expectation as expected:
-        found = room_skill_config.skill_configs
-
-    if expected is None:
-        assert found == {INSTALLATION_SKILL_NAME: skill_config}
-
-
-@pytest.mark.parametrize(
-    "w_missing, expectation",
-    [
-        (False, contextlib.nullcontext()),
-        (True, pytest.raises(config.MissingEntrypointSkillNames)),
-    ],
-)
-@mock.patch("soliplex.config._load_entrypoint_skills")
-def test_roomskillsconfig_skills_w_entrypoint_skill(
-    leps,
-    installation_config,
-    w_missing,
-    expectation,
-):
-    if w_missing:
-        leps.return_value = {}
-    else:
-        skill = mock.create_autospec(hs_models.Skill)
-        leps.return_value = {ENTRYPOINT_SKILL_NAME: skill}
-
-    room_skill_config_kw = {"entrypoint_skills": [ENTRYPOINT_SKILL_NAME]}
-    room_skill_config = config.RoomSkillsConfig(
-        **room_skill_config_kw,
-        _installation_config=installation_config,
-    )
-
-    with expectation as expected:
-        with mock.patch("soliplex.config._entrypoint_skills", []):
-            found = room_skill_config.skills
-
-    if expected is None:
-        assert found == {ENTRYPOINT_SKILL_NAME: skill}
-
-    leps.assert_called_once_with()
-
-
-@pytest.mark.parametrize(
-    "w_missing, expectation",
-    [
-        (False, contextlib.nullcontext()),
-        (True, pytest.raises(config.MissingInstallationSkillNames)),
-    ],
-)
-def test_roomskillsconfig_skills_w_installation_skill(
-    installation_config,
-    w_missing,
-    expectation,
-):
-    if w_missing:
-        installation_config.skill_configs = {}
-    else:
-        skill_config = mock.create_autospec(config.SkillConfig)
-        installation_config.skill_configs = {
-            INSTALLATION_SKILL_NAME: skill_config,
-            "other_skill": object(),
-        }
-
-    room_skill_config_kw = {"installation_skills": [INSTALLATION_SKILL_NAME]}
-    room_skill_config = config.RoomSkillsConfig(
-        **room_skill_config_kw,
-        _installation_config=installation_config,
-    )
-
-    with expectation as expected:
-        found = room_skill_config.skill_configs
-
-    if expected is None:
-        assert found == {INSTALLATION_SKILL_NAME: skill_config}
-
-
-@mock.patch("soliplex.config._load_entrypoint_skills")
-def test_roomskillsconfig_skill_toolset(leps, installation_config):
-    ep_skill = mock.create_autospec(hs_models.Skill)
-    ep_skill.metadata = mock.create_autospec(hs_models.SkillMetadata)
-    ep_skill.metadata.name = ENTRYPOINT_SKILL_NAME
-    EP_SKILL_DESC = SKILL_DESC + "(entrypoint)"
-    ep_skill.metadata.description = EP_SKILL_DESC
-    leps.return_value = {ENTRYPOINT_SKILL_NAME: ep_skill}
-
-    inst_skill = mock.create_autospec(hs_models.Skill)
-    inst_skill.metadata = mock.create_autospec(hs_models.SkillMetadata)
-    inst_skill.metadata.name = INSTALLATION_SKILL_NAME
-    INST_SKILL_DESC = SKILL_DESC + "(installation)"
-    inst_skill.metadata.description = INST_SKILL_DESC
-
-    skill_config = mock.create_autospec(config.SkillConfig)
-    skill_config.skill = inst_skill
+    skill_config = mock.create_autospec(config._SkillConfigBase, skill=skill)
 
     installation_config.skill_configs = {
-        INSTALLATION_SKILL_NAME: skill_config,
+        SKILL_NAME: skill_config,
         "other_skill": object(),
     }
 
     room_skill_config = config.RoomSkillsConfig(
         model_name=ROOM_SKILLS_MODEL_NAME,
-        installation_skills=[INSTALLATION_SKILL_NAME],
-        entrypoint_skills=[ENTRYPOINT_SKILL_NAME],
+        skill_names=[SKILL_NAME],
         _installation_config=installation_config,
     )
 
-    with mock.patch("soliplex.config._entrypoint_skills", []):
-        found = room_skill_config.skill_toolset
+    found = room_skill_config.skill_toolset
 
     assert isinstance(found, hs_agent.SkillToolset)
     assert found._skill_model == ROOM_SKILLS_MODEL_NAME
     catalog_lines = found.skill_catalog.splitlines()
-    assert f"- **{ENTRYPOINT_SKILL_NAME}**: {EP_SKILL_DESC}" in catalog_lines
-    assert (
-        f"- **{INSTALLATION_SKILL_NAME}**: {INST_SKILL_DESC}" in catalog_lines
-    )
+    assert f"- **{SKILL_NAME}**: {SKILL_DESC}" in catalog_lines
 
 
 @pytest.mark.parametrize(
-    "config_yaml, expected_kw",
+    "config_yaml, expectation",
     [
-        (BOGUS_ROOM_CONFIG_YAML, None),
-        (BARE_ROOM_CONFIG_YAML, BARE_ROOM_CONFIG_KW),
-        (FULL_ROOM_CONFIG_YAML, FULL_ROOM_CONFIG_KW),
+        (BOGUS_ROOM_CONFIG_YAML, pytest.raises(config.FromYamlException)),
+        (BARE_ROOM_CONFIG_YAML, contextlib.nullcontext(BARE_ROOM_CONFIG_KW)),
+        (FULL_ROOM_CONFIG_YAML, contextlib.nullcontext(FULL_ROOM_CONFIG_KW)),
     ],
 )
 def test_roomconfig_from_yaml(
     installation_config,
     temp_dir,
     config_yaml,
-    expected_kw,
+    expectation,
 ):
+    skill = mock.create_autospec(hs_models.Skill)
+    skill_config = mock.create_autospec(config._SkillConfigBase, skill=skill)
+
+    installation_config.skill_configs = {
+        SKILL_NAME: skill_config,
+        "other_skill": object(),
+    }
+
     yaml_file = temp_dir / "test.yaml"
     yaml_file.write_text(config_yaml)
 
     with yaml_file.open() as stream:
         config_dict = yaml.safe_load(stream)
 
-    if expected_kw is None:
-        with pytest.raises(config.FromYamlException) as exc:
-            config.RoomConfig.from_yaml(
-                installation_config,
-                yaml_file,
-                {},
-            )
-        assert exc.value._config_path == yaml_file
+    with expectation as expected:
+        found = config.RoomConfig.from_yaml(
+            installation_config,
+            yaml_file,
+            config_dict,
+        )
+
+    if isinstance(expected, pytest.ExceptionInfo):
+        assert expected.value._config_path == yaml_file
 
     else:
-        expected = config.RoomConfig(**expected_kw)
+        expected = config.RoomConfig(**expected)
         expected = dataclasses.replace(
             expected,
             _installation_config=installation_config,
@@ -4068,17 +3920,13 @@ def test_roomconfig_from_yaml(
                 _config_path=yaml_file,
             )
 
-        if len(expected_kw.get("tool_configs", {})) > 0:
-            for tool_config in expected_kw["tool_configs"].values():
-                tool_config._installation_config = installation_config
-                tool_config._config_path = yaml_file
+        for tool_config in expected.tool_configs.values():
+            tool_config._installation_config = installation_config
+            tool_config._config_path = yaml_file
 
-        if len(expected_kw.get("mcp_client_toolset_configs", {})) > 0:
-            for mcts_config in expected_kw[
-                "mcp_client_toolset_configs"
-            ].values():
-                mcts_config._installation_config = installation_config
-                mcts_config._config_path = yaml_file
+        for mcts_config in expected.mcp_client_toolset_configs.values():
+            mcts_config._installation_config = installation_config
+            mcts_config._config_path = yaml_file
 
         if "skills" in config_yaml:
             expected.skills = dataclasses.replace(
@@ -4096,12 +3944,6 @@ def test_roomconfig_from_yaml(
                 )
                 for qc in expected.quizzes
             ]
-
-        found = config.RoomConfig.from_yaml(
-            installation_config,
-            yaml_file,
-            config_dict,
-        )
 
         assert found == expected
 
@@ -4139,26 +3981,12 @@ def test_roomconfig_skill_configs_bare(installation_config):
     assert found == {}
 
 
-@pytest.mark.parametrize(
-    "w_missing, expectation",
-    [
-        (False, contextlib.nullcontext()),
-        (True, pytest.raises(config.MissingInstallationSkillNames)),
-    ],
-)
-def test_roomconfig_skill_configs_w_installation_skill(
-    installation_config,
-    w_missing,
-    expectation,
-):
-    if w_missing:
-        installation_config.skill_configs = {}
-    else:
-        skill_config = mock.create_autospec(config.SkillConfig)
-        installation_config.skill_configs = {
-            INSTALLATION_SKILL_NAME: skill_config,
-            "other_skill": object(),
-        }
+def test_roomconfig_skill_configs_w_hit(installation_config):
+    skill_config = mock.create_autospec(config._SkillConfigBase)
+    installation_config.skill_configs = {
+        SKILL_NAME: skill_config,
+        "other_skill": object(),
+    }
 
     room_config_kw = FULL_ROOM_CONFIG_KW.copy()
     room_config_kw["skills"].entrypoint_skills = []
@@ -4168,11 +3996,9 @@ def test_roomconfig_skill_configs_w_installation_skill(
         _installation_config=installation_config,
     )
 
-    with expectation as expected:
-        found = room_config.skill_configs
+    found = room_config.skill_configs
 
-    if expected is None:
-        assert found == {INSTALLATION_SKILL_NAME: skill_config}
+    assert found == {SKILL_NAME: skill_config}
 
 
 @pytest.mark.parametrize(
@@ -5723,7 +5549,7 @@ RESOLVED = {"name": "RESOLVED", "value": "resolved"}
         ),
     ],
 )
-def test_installation_resolve_environment(
+def test_installationconfig_resolve_environment(
     temp_dir,
     env_entries,
     dotenv_opt,
@@ -6143,6 +5969,8 @@ def test_installationconfig_from_yaml(
         assert exc.value._config_path == config_path
 
     else:
+        patched = {"__doc__": "test_installationconfig_from_yaml"}
+
         if "meta" in expected_kw:
             icmeta_kw = expected_kw.pop("meta")
             expected_kw["meta"] = config.InstallationConfigMeta(
@@ -6159,10 +5987,22 @@ def test_installationconfig_from_yaml(
                 config_path.parent / "haiku.rag.yaml"
             )
 
-        expected = config.InstallationConfig(
-            **expected_kw,
-            _config_path=config_path,
-        )
+        lfssc = mock.Mock(spec_set=())
+        fs_skill_config = mock.create_autospec(config.FilesystemSkillConfig)
+        lfssc.return_value = {FILESYSTEM_SKILL_NAME: fs_skill_config}
+        lepsc = mock.Mock(spec_set=())
+        ep_skill_config = mock.create_autospec(config.EntrypointSkillConfig)
+        lepsc.return_value = {ENTRYPOINT_SKILL_NAME: ep_skill_config}
+
+        if "_skill_configs" in expected_kw:
+            patched["_load_filesystem_skill_configs"] = lfssc
+            patched["_load_entrypoint_skill_configs"] = lepsc
+
+        with mock.patch.multiple(config, **patched):
+            expected = config.InstallationConfig(
+                **expected_kw,
+                _config_path=config_path,
+            )
 
         if "oidc_paths" in expected_kw:
             exp_oidc_paths = [
@@ -6182,7 +6022,11 @@ def test_installationconfig_from_yaml(
 
         expected = dataclasses.replace(expected, room_paths=exp_room_paths)
 
-        found = config.InstallationConfig.from_yaml(config_path, config_dict)
+        with mock.patch.multiple(config, **patched):
+            found = config.InstallationConfig.from_yaml(
+                config_path,
+                config_dict,
+            )
 
         if "secrets" in expected_kw:
             replaced_secrets = []
@@ -6268,7 +6112,7 @@ def test_installationconfig_from_yaml_environ_wo_value(temp_dir, config_yaml):
         room_paths=[temp_dir / "rooms"],
         completion_paths=[temp_dir / "completions"],
         quizzes_paths=[temp_dir / "quizzes"],
-        skills_paths=[temp_dir / "skills"],
+        filesystem_skills_paths=[temp_dir / "skills"],
     )
 
     with yaml_file.open() as stream:
@@ -6316,7 +6160,7 @@ def test_installationconfig_as_yaml(w_logfire_config):
         ],
         completion_paths=[pathlib.Path("/path/to/completions")],
         quizzes_paths=[pathlib.Path("./other/quizzes")],
-        skills_paths=[pathlib.Path("./other/skills")],
+        filesystem_skills_paths=[pathlib.Path("./other/skills")],
         **kwargs,
     )
 
@@ -6339,7 +6183,7 @@ def test_installationconfig_as_yaml(w_logfire_config):
         "room_paths": ["/path/to/rooms", "other/rooms"],
         "completion_paths": ["/path/to/completions"],
         "quizzes_paths": ["other/quizzes"],
-        "skills_paths": ["other/skills"],
+        "filesystem_skills_paths": ["other/skills"],
     }
 
     if w_logfire_config:
@@ -6600,7 +6444,10 @@ def test_installationconfig_completion_configs_w_existing():
 
 
 @pytest.mark.parametrize("w_error", [False, True])
-def test_installationconfig_skill_configs_wo_existing(temp_dir, w_error):
+def test_installationconfig_avl_fs_skill_configs_wo_existing(
+    temp_dir,
+    w_error,
+):
     SKILL_NAMES = ["foo", "bar"]
 
     if w_error:
@@ -6619,7 +6466,6 @@ description: Describing {skill_name}
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_config_path"] = temp_dir / "installation.yaml"
-    kw["environment"] = BARE_INSTALLATION_CONFIG_ENVIRONMENT
 
     skills = temp_dir / "skills"
     skills.mkdir()
@@ -6632,12 +6478,12 @@ description: Describing {skill_name}
 
     i_config = config.InstallationConfig(**kw)
 
-    found = i_config.skill_configs
+    found = i_config.available_filesystem_skill_configs
 
     if w_error:
-        assert found["foo"].name is None
+        assert found["foo"].name == "foo"
         assert found["foo"].errors
-        assert found["bar"].name is None
+        assert found["bar"].name == "bar"
         assert found["bar"].errors
     else:
         assert found["foo"].name == "foo"
@@ -6647,7 +6493,7 @@ description: Describing {skill_name}
 
 
 @pytest.mark.parametrize("w_error", [False, True])
-def test_installationconfig_skill_configs_wo_existing_w_conflict(
+def test_installationconfig_avl_fs_skill_configs_wo_existing_w_conflict(
     temp_dir,
     w_error,
 ):
@@ -6669,8 +6515,7 @@ description: Describing {skill_name} in {skills_path}
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_config_path"] = temp_dir / "installation.yaml"
-    kw["environment"] = BARE_INSTALLATION_CONFIG_ENVIRONMENT
-    kw["skills_paths"] = SKILLS_PATHS
+    kw["filesystem_skills_paths"] = SKILLS_PATHS
 
     for skills_path in SKILLS_PATHS:
         skill_path = temp_dir / skills_path / SKILL_NAME
@@ -6682,11 +6527,11 @@ description: Describing {skill_name} in {skills_path}
 
     i_config = config.InstallationConfig(**kw)
 
-    found = i_config.skill_configs
+    found = i_config.available_filesystem_skill_configs
 
     f_skill = found[SKILL_NAME]
     if w_error:
-        assert f_skill.name is None
+        assert f_skill.name == SKILL_NAME
         assert f_skill.errors
     else:
         assert f_skill.name == SKILL_NAME
@@ -6695,54 +6540,155 @@ description: Describing {skill_name} in {skills_path}
         assert not f_skill.errors
 
 
-def test_installationconfig_skill_configs_w_existing():
+def test_installationconfig_avl_fs_skill_configs_w_existing():
     SC_1, SC_2 = object(), object()
     existing = {"skill_1": SC_1, "skill_2": SC_2}
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
-    kw["_skill_configs"] = existing
+    kw["_available_filesystem_skill_configs"] = existing
 
     i_config = config.InstallationConfig(**kw)
 
-    found = i_config.skill_configs
+    found = i_config.available_filesystem_skill_configs
 
     assert found["skill_1"] == SC_1
     assert found["skill_2"] == SC_2
 
 
-def test_installationconfig_reload_configurations():
+@mock.patch("haiku.skills.discovery.discover_from_entrypoints")
+def test_installationconfig_avl_ep_skill_configs_wo_existing(dfe):
+    ep_skill_1 = mock.create_autospec(hs_models.Skill)
+    ep_skill_1.metadata = mock.create_autospec(hs_models.SkillMetadata)
+    ep_skill_1.metadata.name = "foo"
+
+    ep_skill_2 = mock.create_autospec(hs_models.Skill)
+    ep_skill_2.metadata = mock.create_autospec(hs_models.SkillMetadata)
+    ep_skill_2.metadata.name = "bar"
+
+    dfe.return_value = [ep_skill_1, ep_skill_2]
+
+    kw = BARE_INSTALLATION_CONFIG_KW.copy()
+    i_config = config.InstallationConfig(**kw)
+
+    found = i_config.available_entrypoint_skill_configs
+
+    assert found["foo"].skill_name == "foo"
+    assert found["bar"].skill_name == "bar"
+
+
+@mock.patch("haiku.skills.discovery.discover_from_entrypoints")
+def test_installationconfig_avl_ep_skill_configs_wo_existing_w_conflict(dfe):
+    ep_skill_1 = mock.create_autospec(hs_models.Skill)
+    ep_skill_1.metadata = mock.create_autospec(hs_models.SkillMetadata)
+    ep_skill_1.metadata.name = SKILL_NAME
+    skill_desc_1 = f"{SKILL_DESC} (from ep_skill_1)"
+    ep_skill_1.metadata.description = skill_desc_1
+
+    ep_skill_2 = mock.create_autospec(hs_models.Skill)
+    ep_skill_2.metadata = mock.create_autospec(hs_models.SkillMetadata)
+    ep_skill_2.metadata.name = SKILL_NAME
+    skill_desc_2 = f"{SKILL_DESC} (from ep_skill_2)"
+    ep_skill_2.metadata.description = skill_desc_2
+
+    dfe.return_value = [ep_skill_1, ep_skill_2]
+
+    kw = BARE_INSTALLATION_CONFIG_KW.copy()
+    i_config = config.InstallationConfig(**kw)
+
+    found = i_config.available_entrypoint_skill_configs
+
+    assert found[SKILL_NAME].description == skill_desc_1
+
+
+@mock.patch("haiku.skills.discovery.discover_from_entrypoints")
+def test_installationconfig_avl_ep_skill_configs_w_existing(dfe):
+    SC_1, SC_2 = object(), object()
+    existing = {"skill_1": SC_1, "skill_2": SC_2}
+
+    kw = BARE_INSTALLATION_CONFIG_KW.copy()
+    kw["_available_entrypoint_skill_configs"] = existing
+    i_config = config.InstallationConfig(**kw)
+
+    found = i_config.available_entrypoint_skill_configs
+
+    assert found["skill_1"] == SC_1
+    assert found["skill_2"] == SC_2
+
+
+def test_installationconfig_skill_configs_wo_set():
+    kw = BARE_INSTALLATION_CONFIG_KW.copy()
+
+    i_config = config.InstallationConfig(**kw)
+
+    assert i_config.skill_configs == {}
+
+
+def test_installationconfig_skill_configs_w_set():
+    kw = BARE_INSTALLATION_CONFIG_KW.copy()
+    skill_config = mock.create_autospec(config._SkillConfigBase)
+    kw["_skill_configs"] = {
+        SKILL_NAME: skill_config,
+    }
+    kw["_available_filesystem_skill_configs"] = {
+        SKILL_NAME: skill_config,
+        "other-skill": object(),
+    }
+
+    i_config = config.InstallationConfig(**kw)
+
+    assert i_config.skill_configs == {SKILL_NAME: skill_config}
+
+
+def test_installationconfig_reload_configurations(temp_dir):
     existing = object()
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_oidc_auth_system_configs"] = existing
     kw["_room_configs"] = existing
     kw["_completion_configs"] = existing
-    kw["_skill_configs"] = existing
-    i_config = config.InstallationConfig(**kw)
+    kw["_skill_configs"] = ()
+    i_config = config.InstallationConfig(
+        _config_path=temp_dir,
+        **kw,
+    )
 
-    with mock.patch.multiple(
-        i_config,
-        _load_oidc_auth_system_configs=mock.DEFAULT,
-        _load_room_configs=mock.DEFAULT,
-        _load_completion_configs=mock.DEFAULT,
-        _load_skill_configs=mock.DEFAULT,
-    ) as patched:
+    with (
+        mock.patch.multiple(
+            i_config,
+            _load_oidc_auth_system_configs=mock.DEFAULT,
+            _load_room_configs=mock.DEFAULT,
+            _load_completion_configs=mock.DEFAULT,
+        ) as ic_patch,
+        mock.patch.multiple(
+            config,
+            _load_filesystem_skill_configs=mock.DEFAULT,
+            _load_entrypoint_skill_configs=mock.DEFAULT,
+        ) as config_patch,
+    ):
         i_config.reload_configurations()
 
     assert (
         i_config._oidc_auth_system_configs
-        is patched["_load_oidc_auth_system_configs"].return_value
+        is ic_patch["_load_oidc_auth_system_configs"].return_value
     )
 
-    assert i_config._room_configs is patched["_load_room_configs"].return_value
+    assert (
+        i_config._room_configs is ic_patch["_load_room_configs"].return_value
+    )
 
     assert (
         i_config._completion_configs
-        is patched["_load_completion_configs"].return_value
+        is ic_patch["_load_completion_configs"].return_value
     )
 
     assert (
-        i_config._skill_configs is patched["_load_skill_configs"].return_value
+        i_config._available_filesystem_configs
+        is config_patch["_load_filesystem_skill_configs"].return_value
+    )
+
+    assert (
+        i_config._available_entrypoint_configs
+        is config_patch["_load_entrypoint_skill_configs"].return_value
     )
 
 

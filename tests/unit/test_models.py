@@ -407,7 +407,7 @@ class StateModelTest(pydantic.BaseModel):
 
 
 @pytest.fixture
-def skill_config(
+def filesystem_skill_config(
     temp_dir,
     w_skill_properties_metadata,
     w_skill_properties_allowed_tools,
@@ -422,9 +422,9 @@ def skill_config(
         metadata=w_skill_properties_metadata,
     )
     skill_properties.name = SKILL_NAME  # mock quirk
-    return config.SkillConfig(
+    return config.FilesystemSkillConfig(
+        skill_name=SKILL_NAME,
         _skill_properties=skill_properties,
-        _skill_source=hs_models.SkillSource.FILESYSTEM,
         _skill_path=skill_path,
         model_name=SKILL_MODEL_NAME,
         state_type=StateModelTest,
@@ -432,20 +432,54 @@ def skill_config(
     )
 
 
-def test_skill_from_config(skill_config):
-    found = models.Skill.from_config(skill_config)
+def test_skill_from_config_w_fssc(filesystem_skill_config):
+    found = models.Skill.from_config(filesystem_skill_config)
 
-    assert found.name == skill_config.name
-    assert found.description == skill_config.description
-    assert found.license == skill_config.license
-    assert found.compatibility == skill_config.compatibility
-    assert found.allowed_tools == skill_config.allowed_tools
-    assert found.metadata == skill_config.metadata
     assert found.source == hs_models.SkillSource.FILESYSTEM
-    assert found.path == skill_config.path
-    assert found.model_name == SKILL_MODEL_NAME
-    assert found.model_name == SKILL_MODEL_NAME
-    assert found.state_type is StateModelTest
+    assert found.skill_name == filesystem_skill_config.skill_name
+    assert found.description == filesystem_skill_config.description
+    assert found.license == filesystem_skill_config.license
+    assert found.compatibility == filesystem_skill_config.compatibility
+    assert found.allowed_tools == filesystem_skill_config.allowed_tools
+    assert found.metadata == filesystem_skill_config.metadata
+    assert found.state_type_schema == StateModelTest.model_json_schema()
+    assert found.state_namespace == SKILL_STATE_NAMESPACE
+
+
+@pytest.fixture
+def entrypoint_skill_config(
+    w_skill_properties_metadata,
+    w_skill_properties_allowed_tools,
+):
+    skill_metadata = mock.create_autospec(
+        hs_models.SkillMetadata,
+        description=SKILL_DESC,
+        license=SKILL_LICENSE,
+        compatibility=SKILL_COMPAT,
+        allowed_tools=w_skill_properties_allowed_tools,
+        metadata=w_skill_properties_metadata,
+    )
+    skill_metadata.name = SKILL_NAME  # mock quirk
+    return config.EntrypointSkillConfig(
+        skill_name=SKILL_NAME,
+        _skill_metadata=skill_metadata,
+        model_name=SKILL_MODEL_NAME,
+        state_type=StateModelTest,
+        state_namespace=SKILL_STATE_NAMESPACE,
+    )
+
+
+def test_skill_from_config_w_epsc(entrypoint_skill_config):
+    found = models.Skill.from_config(entrypoint_skill_config)
+
+    assert found.source == hs_models.SkillSource.ENTRYPOINT
+    assert found.skill_name == entrypoint_skill_config.skill_name
+    assert found.description == entrypoint_skill_config.description
+    assert found.license == entrypoint_skill_config.license
+    assert found.compatibility == entrypoint_skill_config.compatibility
+    assert found.allowed_tools == entrypoint_skill_config.allowed_tools
+    assert found.metadata == entrypoint_skill_config.metadata
+    assert found.state_type_schema == StateModelTest.model_json_schema()
     assert found.state_namespace == SKILL_STATE_NAMESPACE
 
 
@@ -702,6 +736,8 @@ def room_ic():
         room_paths=[],
         completion_paths=[],
         quizzes_paths=[],
+        _available_filesystem_skill_configs={},
+        _available_entrypoint_skill_configs={},
         _skill_configs={},
     )
 
@@ -795,8 +831,12 @@ def test_room_from_config_w_tools(room_ic, default_agent, gcd_tool_config):
     assert room_model.agui_feature_names == [FEATURE_NAME]
 
 
-def test_room_from_config_w_skills(room_ic, default_agent, skill_config):
-    room_ic._skill_configs[SKILL_NAME] = skill_config
+def test_room_from_config_w_fs_skills(
+    room_ic,
+    default_agent,
+    filesystem_skill_config,
+):
+    room_ic._skill_configs[SKILL_NAME] = filesystem_skill_config
 
     room_config = config.RoomConfig(
         id=ROOM_ID,
@@ -804,7 +844,7 @@ def test_room_from_config_w_skills(room_ic, default_agent, skill_config):
         description=ROOM_DESCRIPTION,
         agent_config=default_agent,
         skills=config.RoomSkillsConfig(
-            installation_skills=[SKILL_NAME],
+            skill_names=[SKILL_NAME],
             _installation_config=room_ic,
         ),
         _installation_config=room_ic,
@@ -813,7 +853,33 @@ def test_room_from_config_w_skills(room_ic, default_agent, skill_config):
     room_model = models.Room.from_config(room_config)
 
     assert room_model.skills == {
-        SKILL_NAME: models.Skill.from_config(skill_config),
+        SKILL_NAME: models.Skill.from_config(filesystem_skill_config),
+    }
+
+
+def test_room_from_config_w_ep_skills(
+    room_ic,
+    default_agent,
+    entrypoint_skill_config,
+):
+    room_ic._skill_configs[SKILL_NAME] = entrypoint_skill_config
+
+    room_config = config.RoomConfig(
+        id=ROOM_ID,
+        name=ROOM_NAME,
+        description=ROOM_DESCRIPTION,
+        agent_config=default_agent,
+        skills=config.RoomSkillsConfig(
+            skill_names=[SKILL_NAME],
+            _installation_config=room_ic,
+        ),
+        _installation_config=room_ic,
+    )
+
+    room_model = models.Room.from_config(room_config)
+
+    assert room_model.skills == {
+        SKILL_NAME: models.Skill.from_config(entrypoint_skill_config),
     }
 
 
