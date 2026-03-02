@@ -27,8 +27,6 @@ from haiku.skills import discovery as hs_discovery
 from haiku.skills import models as hs_models
 from pydantic_ai import settings as ai_settings
 from pydantic_ai.agent import abstract as ai_ag_abstract
-from skills_ref import models as skill_models
-from skills_ref import parser as skill_parser
 from skills_ref import validator as skill_validator
 
 from soliplex.agui import features
@@ -712,121 +710,26 @@ class _SkillConfigBase:
     """Configuration for an agent skill."""
 
     skill_name: str
-    kind: SkillKind  #  XXX abstractproperty?
+    kind: typing.ClassVar[hs_models.SkillSource]  # quasi- @abstractproperty
 
     model_name: str | None = None
     state_type: SkillStateType = None
     state_namespace: str | None = None
 
-    # Set by `from_yaml' factory
-    _installation_config: InstallationConfig = _no_repr_no_compare_none()
-    _config_path: pathlib.Path = None
+    _skill_metadata: hs_models.SkillMetadata
 
     @property
     def source(self) -> hs_models.SkillSource | None:
         return self.kind
 
-
-@dataclasses.dataclass(kw_only=True)
-class FilesystemSkillConfig(_SkillConfigBase):
-    """Configuration for an agent skill loaded from a filesystem directory"""
-
-    kind: typing.ClassVar[hs_models.SkillSource] = SkillKind.FILESYSTEM
-
-    _skill_path: pathlib.Path
-    _skill_properties: skill_models.SkillProperties
-    _validation_errors: list[str] = _default_list_field()
-
     @classmethod
-    def from_path(
-        cls,
-        skill_path: pathlib.Path,
-        _installation_config: InstallationConfig,
-    ):
-        errors = skill_validator.validate(skill_path)
-        if errors:
-            skill_properties = skill_models.SkillProperties(
-                name=skill_path.name,
-                description=f"Invalid filesystem skill: {skill_path}",
-            )
-            return cls(
-                skill_name=skill_path.name,
-                _skill_path=skill_path,
-                _skill_properties=skill_properties,
-                _validation_errors=errors,
-                _installation_config=_installation_config,
-            )
-        else:
-            skill_properties = skill_parser.read_properties(skill_path)
-
-            return cls(
-                skill_name=skill_properties.name,
-                _skill_path=skill_path,
-                _skill_properties=skill_properties,
-                _installation_config=_installation_config,
-            )
-
-    @property
-    def name(self) -> str:
-        return self._skill_properties.name
-
-    @property
-    def description(self) -> str:
-        return self._skill_properties.description
-
-    @property
-    def license(self) -> str | None:
-        return self._skill_properties.license
-
-    @property
-    def compatibility(self) -> str | None:
-        return self._skill_properties.compatibility
-
-    @property
-    def allowed_tools(self) -> str | None:
-        return self._skill_properties.allowed_tools
-
-    @property
-    def metadata(self) -> dict:
-        return self._skill_properties.metadata
-
-    @property
-    def path(self) -> pathlib.Path | None:
-        return self._skill_path
-
-    @property
-    def errors(self) -> list[str]:
-        return self._validation_errors
-
-    @property
-    def skill(self) -> hs_models.Skill:
-        props = self._skill_properties.to_dict()
-        allowed_tools = props.pop("allowed-tools", None)
-
-        # XXX See: https://github.com/ggozad/haiku.skills/issues/19
-        if isinstance(allowed_tools, str):
-            allowed_tools = allowed_tools.split(" ")
-        elif allowed_tools is None:
-            allowed_tools = []
-        else:  # pragma: NO COVER
-            pass
-
-        props["allowed_tools"] = allowed_tools
-
-        return hs_models.Skill(
-            metadata=hs_models.SkillMetadata(**props),
-            source=self.kind,
-            path=self._skill_path,
+    def from_skill(cls, skill: hs_models.Skill):
+        return cls(
+            skill_name=skill.metadata.name,
+            _skill_metadata=skill.metadata,
+            state_type=skill.state_type,
+            state_namespace=skill.state_namespace,
         )
-
-
-@dataclasses.dataclass(kw_only=True)
-class EntrypointSkillConfig(_SkillConfigBase):
-    """Configuration for an agent skill loaded from an entrypoint"""
-
-    kind: typing.ClassVar[hs_models.SkillSource] = SkillKind.ENTRYPOINT
-
-    _skill_metadata: hs_models.SkillMetadata
 
     @property
     def name(self) -> str:
@@ -846,22 +749,90 @@ class EntrypointSkillConfig(_SkillConfigBase):
 
     @property
     def allowed_tools(self) -> str:
-        # XXX See: https://github.com/ggozad/haiku.skills/issues/19
-        result = self._skill_metadata.allowed_tools
-
-        if isinstance(result, list):
-            result = " ".join(result)
-        else:  # pragma: NO COVER haiku.skills < 0.5.2
-            pass
-
-        if isinstance(result, str) and result.strip() == "":
-            result = None
-
-        return result
+        return self._skill_metadata.allowed_tools
 
     @property
     def metadata(self) -> dict:
         return self._skill_metadata.metadata
+
+    @property
+    def skill(self) -> hs_models.Skill:
+        return hs_models.Skill(
+            source=self.kind,
+            metadata=self._skill_metadata,
+            state_type=self.state_type,
+            state_namespace=self.state_namespace,
+        )
+
+
+@dataclasses.dataclass(kw_only=True)
+class FilesystemSkillConfig(_SkillConfigBase):
+    """Configuration for an agent skill loaded from a filesystem directory"""
+
+    kind: typing.ClassVar[hs_models.SkillSource] = SkillKind.FILESYSTEM
+
+    _skill_path: pathlib.Path
+    _validation_errors: list[str] = _default_list_field()
+
+    @classmethod
+    def from_skill(cls, skill: hs_models.Skill):
+        return cls(
+            skill_name=skill.metadata.name,
+            _skill_metadata=skill.metadata,
+            _skill_path=skill.path,
+            state_type=skill.state_type,
+            state_namespace=skill.state_namespace,
+        )
+
+    @classmethod
+    def from_path(cls, skill_path: pathlib.Path):
+        """Parse a skill from its 'SKILLS.md', capturing validation errors
+
+        Used in CLI's '--list-skills', where we want to display those
+        errors.
+        """
+        errors = skill_validator.validate(skill_path)
+        if errors:
+            skill_metadata = hs_models.SkillMetadata(
+                name=skill_path.name,
+                description=f"Invalid filesystem skill: {skill_path}",
+            )
+            return cls(
+                skill_name=skill_path.name,
+                _skill_path=skill_path,
+                _skill_metadata=skill_metadata,
+                _validation_errors=errors,
+            )
+        else:
+            (skill,) = hs_discovery.discover_from_paths([skill_path])
+            result = cls.from_skill(skill)
+            result._skill_path = skill_path
+            return result
+
+    @property
+    def path(self) -> pathlib.Path | None:
+        return self._skill_path
+
+    @property
+    def errors(self) -> list[str]:
+        return self._validation_errors
+
+    @property
+    def skill(self) -> hs_models.Skill:
+        return hs_models.Skill(
+            source=self.kind,
+            metadata=self._skill_metadata,
+            path=self._skill_path,
+            state_type=self.state_type,
+            state_namespace=self.state_namespace,
+        )
+
+
+@dataclasses.dataclass(kw_only=True)
+class EntrypointSkillConfig(_SkillConfigBase):
+    """Configuration for an agent skill loaded from an entrypoint"""
+
+    kind: typing.ClassVar[hs_models.SkillSource] = SkillKind.ENTRYPOINT
 
 
 SKILL_CONFIG_CLASSES_BY_KIND = {
@@ -2199,38 +2170,6 @@ _find_completion_configs = functools.partial(
 )
 
 
-def _find_skill_paths(to_search: pathlib.Path):
-    """Yield a sequence of skill paths under 'to_search'
-
-    Yielded values are paths, suitable for passing to
-    'skill_parser.read_properties'.
-
-    If 'to_search' has its own copy of 'SKILL.md', just yield the one
-    config parsed from it.
-
-    Otherwise, iterate over immediate subdirectories, yielding configs
-    parsed from any which have copies of 'SKILL.md'
-    """
-    filename = "SKILL.md"
-    config_file = to_search / filename
-
-    if config_file.is_file():
-        yield to_search
-
-    else:
-        for sub in sorted(to_search.glob("*")):
-            # See #233
-            if sub.name.startswith("."):
-                continue
-
-            if sub.is_dir():
-                sub_config = sub / filename
-                if sub_config.is_file():
-                    yield sub
-            else:  # pragma: NO COVER
-                pass
-
-
 def strip_secret_prefix(config_str: str) -> str:
     if not config_str.startswith(SECRET_PREFIX):
         raise NotASecret(config_str)
@@ -2543,14 +2482,13 @@ class InstallationConfigMeta:
 def _load_filesystem_skill_configs(i_config) -> SkillConfigMap:
     fs_skill_configs = {}
 
-    for skills_path in i_config.filesystem_skills_paths:
-        for skill_path in _find_skill_paths(skills_path):
-            skill_config = FilesystemSkillConfig.from_path(
-                skill_path,
-                _installation_config=i_config,
-            )
-            if skill_config.name not in fs_skill_configs:
-                fs_skill_configs[skill_config.name] = skill_config
+    for skill in hs_discovery.discover_from_paths(
+        i_config.filesystem_skills_paths,
+    ):
+        skill_config = FilesystemSkillConfig.from_skill(skill)
+
+        if skill_config.name not in fs_skill_configs:
+            fs_skill_configs[skill_config.name] = skill_config
 
     return fs_skill_configs
 
@@ -2559,12 +2497,8 @@ def _load_entrypoint_skill_configs() -> SkillConfigMap:
     ep_skill_configs = {}
 
     for skill in hs_discovery.discover_from_entrypoints():
-        skill_config = EntrypointSkillConfig(
-            skill_name=skill.metadata.name,
-            _skill_metadata=skill.metadata,
-            state_type=skill.state_type,
-            state_namespace=skill.state_namespace,
-        )
+        skill_config = EntrypointSkillConfig.from_skill(skill)
+
         if skill_config.name not in ep_skill_configs:
             ep_skill_configs[skill_config.name] = skill_config
 

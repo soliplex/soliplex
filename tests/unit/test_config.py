@@ -17,7 +17,6 @@ from haiku.rag import config as hr_config_module
 from haiku.skills import agent as hs_agent
 from haiku.skills import models as hs_models
 from pydantic_ai import settings as ai_settings
-from skills_ref import models as skill_models
 
 from soliplex import config
 from soliplex import secrets
@@ -299,6 +298,12 @@ SKILL_MODEL_NAME = "test-skill-model"
 SKILL_PATH = f"/path/to/skills/{SKILL_NAME}"
 SKILL_STATE_NAMESPACE = "test-skill-namespace"
 SKILL_VALIDATION_ERROR = "Test skill validation error"
+SKILL_TYPE_NAMESPACE = "test-skill-namespace"
+
+
+class SkillTypeTest(pydantic.BaseModel):
+    pass
+
 
 BOGUS_AGENT_CONFIG_YAML = ""
 
@@ -2584,130 +2589,9 @@ def skill_path(temp_dir):
 
 
 @pytest.mark.parametrize(
-    "w_properties_kw",
-    [
-        {"name": SKILL_NAME, "description": SKILL_DESC},
-        {
-            "name": SKILL_NAME,
-            "description": SKILL_DESC,
-            "license": SKILL_LICENSE,
-            "compatibility": SKILL_COMPAT,
-            "allowed_tools": SKILL_ALLOWED_TOOLS,
-            "metadata": SKILL_METADATA,
-        },
-    ],
-)
-def test_filesystemskillconfig_ctor(skill_path, w_properties_kw):
-    skill_config = config.FilesystemSkillConfig(
-        skill_name=SKILL_NAME,
-        _skill_properties=skill_models.SkillProperties(**w_properties_kw),
-        _skill_path=skill_path,
-    )
-
-    assert skill_config.name == SKILL_NAME
-    assert skill_config.description == SKILL_DESC
-    assert skill_config.license == w_properties_kw.get("license")
-    assert skill_config.compatibility == w_properties_kw.get("compatibility")
-    assert skill_config.allowed_tools == w_properties_kw.get("allowed_tools")
-    assert skill_config.metadata == w_properties_kw.get("metadata", {})
-    assert skill_config.errors == []
-    assert skill_config.source == hs_models.SkillSource.FILESYSTEM
-    assert skill_config.path == skill_path
-
-
-def test_filesystemskillconfig_ctor_w_errors(skill_path):
-    skill_properties = skill_models.SkillProperties(
-        name=SKILL_NAME,
-        description=SKILL_VALIDATION_ERROR,
-    )
-    skill_config = config.FilesystemSkillConfig(
-        skill_name=SKILL_NAME,
-        _skill_path=skill_path,
-        _skill_properties=skill_properties,
-        _validation_errors=[SKILL_VALIDATION_ERROR],
-    )
-
-    assert skill_config.name is SKILL_NAME
-    assert skill_config.description is SKILL_VALIDATION_ERROR
-    assert skill_config.license is None
-    assert skill_config.compatibility is None
-    assert skill_config.allowed_tools is None
-    assert skill_config.metadata == {}
-    assert skill_config.errors == [SKILL_VALIDATION_ERROR]
-
-
-@pytest.mark.parametrize("w_errors", [[], [SKILL_VALIDATION_ERROR]])
-@mock.patch("skills_ref.parser.read_properties")
-@mock.patch("skills_ref.validator.validate")
-def test_filesystemskillconfig_from_path(
-    sv_validate,
-    sp_read_props,
-    skill_path,
-    w_errors,
-):
-    sv_validate.return_value = w_errors
-    i_config = mock.create_autospec(config.InstallationConfig)
-
-    found = config.FilesystemSkillConfig.from_path(
-        skill_path,
-        i_config,
-    )
-
-    if w_errors:
-        assert found.name == SKILL_NAME
-        assert found.errors == w_errors
-        assert found.description.startswith("Invalid filesystem skill")
-    else:
-        assert found._skill_properties is sp_read_props.return_value
-        assert found.errors == []
-
-
-@pytest.mark.parametrize(
-    "w_properties_kw, exp_allowed_tools",
-    [
-        ({"name": SKILL_NAME, "description": SKILL_DESC}, []),
-        (
-            {
-                "name": SKILL_NAME,
-                "description": SKILL_DESC,
-                "license": SKILL_LICENSE,
-                "compatibility": SKILL_COMPAT,
-                "allowed_tools": SKILL_ALLOWED_TOOLS,
-                "metadata": SKILL_METADATA,
-            },
-            # XXX See: https://github.com/ggozad/haiku.skills/issues/19
-            [TOOL_ONE, TOOL_TWO],
-        ),
-    ],
-)
-def test_filesystemskillconfig_skill(
-    skill_path,
-    w_properties_kw,
-    exp_allowed_tools,
-):
-    skill_config = config.FilesystemSkillConfig(
-        skill_name=SKILL_NAME,
-        _skill_properties=skill_models.SkillProperties(**w_properties_kw),
-        _skill_path=skill_path,
-    )
-
-    found = skill_config.skill
-
-    assert isinstance(found, hs_models.Skill)
-    assert found.path == skill_path
-    assert found.source == hs_models.SkillSource.FILESYSTEM
-    assert found.metadata.name == skill_config.name
-    assert found.metadata.description == skill_config.description
-    assert found.metadata.license == skill_config.license
-    assert found.metadata.compatibility == skill_config.compatibility
-    assert found.metadata.allowed_tools == exp_allowed_tools
-    assert found.metadata.metadata == skill_config.metadata
-
-
-@pytest.mark.parametrize(
     "w_metadata_kw, exp_allowed_tools",
     [
-        ({"name": SKILL_NAME, "description": SKILL_DESC}, None),
+        ({"name": SKILL_NAME, "description": SKILL_DESC}, []),
         (
             {
                 "name": SKILL_NAME,
@@ -2717,7 +2601,109 @@ def test_filesystemskillconfig_skill(
                 "allowed_tools": [TOOL_ONE, TOOL_TWO],
                 "metadata": SKILL_METADATA,
             },
-            SKILL_ALLOWED_TOOLS,
+            [TOOL_ONE, TOOL_TWO],
+        ),
+        (  # XXX See: https://github.com/ggozad/haiku.skills/issues/19
+            {
+                "name": SKILL_NAME,
+                "description": SKILL_DESC,
+                "license": SKILL_LICENSE,
+                "compatibility": SKILL_COMPAT,
+                "allowed_tools": SKILL_ALLOWED_TOOLS,
+                "metadata": SKILL_METADATA,
+            },
+            [TOOL_ONE, TOOL_TWO],
+        ),
+    ],
+)
+def test_filesystemskillconfig_ctor(
+    skill_path,
+    w_metadata_kw,
+    exp_allowed_tools,
+):
+    skill_config = config.FilesystemSkillConfig(
+        skill_name=SKILL_NAME,
+        _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
+        _skill_path=skill_path,
+    )
+
+    assert skill_config.source == hs_models.SkillSource.FILESYSTEM
+    assert skill_config.name == SKILL_NAME
+    assert skill_config.description == SKILL_DESC
+    assert skill_config.license == w_metadata_kw.get("license")
+    assert skill_config.compatibility == w_metadata_kw.get("compatibility")
+    assert skill_config.allowed_tools == exp_allowed_tools
+    assert skill_config.metadata == w_metadata_kw.get("metadata", {})
+    assert skill_config.errors == []
+    assert skill_config.path == skill_path
+
+
+def test_filesystemskillconfig_ctor_w_errors(skill_path):
+    skill_metadata = hs_models.SkillMetadata(
+        name=SKILL_NAME,
+        description=SKILL_VALIDATION_ERROR,
+    )
+    skill_config = config.FilesystemSkillConfig(
+        skill_name=SKILL_NAME,
+        _skill_path=skill_path,
+        _skill_metadata=skill_metadata,
+        _validation_errors=[SKILL_VALIDATION_ERROR],
+    )
+
+    assert skill_config.name is SKILL_NAME
+    assert skill_config.description is SKILL_VALIDATION_ERROR
+    assert skill_config.license is None
+    assert skill_config.compatibility is None
+    assert skill_config.allowed_tools == []
+    assert skill_config.metadata == {}
+    assert skill_config.errors == [SKILL_VALIDATION_ERROR]
+
+
+@pytest.mark.parametrize("w_errors", [[], [SKILL_VALIDATION_ERROR]])
+@mock.patch("haiku.skills.discovery.discover_from_paths")
+@mock.patch("skills_ref.validator.validate")
+def test_filesystemskillconfig_from_path(
+    sv_validate,
+    hsd_dfp,
+    skill_path,
+    w_errors,
+):
+    sv_validate.return_value = w_errors
+
+    if not w_errors:
+        metadata = mock.create_autospec(hs_models.SkillMetadata)
+        metadata.name = SKILL_NAME  # mock quirk
+        skill = mock.create_autospec(hs_models.Skill)
+        skill.metadata = metadata  # mock quirk
+        skill.path = skill_path
+        hsd_dfp.return_value = [skill]
+
+    found = config.FilesystemSkillConfig.from_path(skill_path)
+
+    if w_errors:
+        assert found.name == SKILL_NAME
+        assert found.errors == w_errors
+        assert found.description.startswith("Invalid filesystem skill")
+
+        hsd_dfp.assert_not_called()
+    else:
+        assert found._skill_metadata is metadata
+        assert found.errors == []
+
+        hsd_dfp.assert_called_once_with([skill_path])
+
+    sv_validate.assert_called_once_with(skill_path)
+
+
+@pytest.mark.parametrize(
+    "w_metadata_kw, w_kw",
+    [
+        (
+            {
+                "name": SKILL_NAME,
+                "description": SKILL_DESC,
+            },
+            {},
         ),
         (
             {
@@ -2725,10 +2711,64 @@ def test_filesystemskillconfig_skill(
                 "description": SKILL_DESC,
                 "license": SKILL_LICENSE,
                 "compatibility": SKILL_COMPAT,
-                "allowed_tools": [],
+                "allowed_tools": SKILL_ALLOWED_TOOLS,
                 "metadata": SKILL_METADATA,
             },
-            None,
+            {
+                "state_type": SkillTypeTest,
+                "state_namespace": SKILL_TYPE_NAMESPACE,
+            },
+        ),
+    ],
+)
+def test_filesystemskillconfig_skill(skill_path, w_metadata_kw, w_kw):
+    skill_config = config.FilesystemSkillConfig(
+        skill_name=SKILL_NAME,
+        _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
+        _skill_path=skill_path,
+        **w_kw,
+    )
+
+    found = skill_config.skill
+
+    assert isinstance(found, hs_models.Skill)
+    assert found.source == hs_models.SkillSource.FILESYSTEM
+    assert found.metadata.name == skill_config.name
+    assert found.metadata.description == skill_config.description
+    assert found.metadata.license == skill_config.license
+    assert found.metadata.compatibility == skill_config.compatibility
+    assert found.metadata.allowed_tools == skill_config.allowed_tools
+    assert found.metadata.metadata == skill_config.metadata
+    assert found.path == skill_path
+    assert found.state_type is w_kw.get("state_type")
+    assert found.state_namespace is w_kw.get("state_namespace")
+
+
+@pytest.mark.parametrize(
+    "w_metadata_kw, exp_allowed_tools",
+    [
+        ({"name": SKILL_NAME, "description": SKILL_DESC}, []),
+        (
+            {
+                "name": SKILL_NAME,
+                "description": SKILL_DESC,
+                "license": SKILL_LICENSE,
+                "compatibility": SKILL_COMPAT,
+                "allowed_tools": [TOOL_ONE, TOOL_TWO],
+                "metadata": SKILL_METADATA,
+            },
+            [TOOL_ONE, TOOL_TWO],
+        ),
+        (  # XXX See: https://github.com/ggozad/haiku.skills/issues/19
+            {
+                "name": SKILL_NAME,
+                "description": SKILL_DESC,
+                "license": SKILL_LICENSE,
+                "compatibility": SKILL_COMPAT,
+                "allowed_tools": SKILL_ALLOWED_TOOLS,
+                "metadata": SKILL_METADATA,
+            },
+            [TOOL_ONE, TOOL_TWO],
         ),
     ],
 )
@@ -2744,6 +2784,53 @@ def test_entrypointskillconfig_ctor(w_metadata_kw, exp_allowed_tools):
     assert skill_config.compatibility == w_metadata_kw.get("compatibility")
     assert skill_config.allowed_tools == exp_allowed_tools
     assert skill_config.metadata == w_metadata_kw.get("metadata", {})
+
+
+@pytest.mark.parametrize(
+    "w_metadata_kw, w_kw",
+    [
+        (
+            {
+                "name": SKILL_NAME,
+                "description": SKILL_DESC,
+            },
+            {},
+        ),
+        (
+            {
+                "name": SKILL_NAME,
+                "description": SKILL_DESC,
+                "license": SKILL_LICENSE,
+                "compatibility": SKILL_COMPAT,
+                "allowed_tools": SKILL_ALLOWED_TOOLS,
+                "metadata": SKILL_METADATA,
+            },
+            {
+                "state_type": SkillTypeTest,
+                "state_namespace": SKILL_TYPE_NAMESPACE,
+            },
+        ),
+    ],
+)
+def test_entrypointskillconfig_skill(skill_path, w_metadata_kw, w_kw):
+    skill_config = config.EntrypointSkillConfig(
+        skill_name=SKILL_NAME,
+        _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
+        **w_kw,
+    )
+
+    found = skill_config.skill
+
+    assert isinstance(found, hs_models.Skill)
+    assert found.source == hs_models.SkillSource.ENTRYPOINT
+    assert found.metadata.name == skill_config.name
+    assert found.metadata.description == skill_config.description
+    assert found.metadata.license == skill_config.license
+    assert found.metadata.compatibility == skill_config.compatibility
+    assert found.metadata.allowed_tools == skill_config.allowed_tools
+    assert found.metadata.metadata == skill_config.metadata
+    assert found.state_type is w_kw.get("state_type")
+    assert found.state_namespace is w_kw.get("state_namespace")
 
 
 @pytest.mark.parametrize(
@@ -4830,52 +4917,6 @@ def test__find_configs_w_multiple(temp_dir):
         assert f_thing == e_thing
 
 
-def test__find_skill_paths_w_single(temp_dir):
-    CONFIG_FILENAME = "SKILL.md"
-    to_search = temp_dir / "to_search"
-    to_search.mkdir()
-    config_file = to_search / CONFIG_FILENAME
-    config_file.write_text(f"""
----
-name: {SKILL_NAME}
-description: {SKILL_DESC}
----
-""")
-
-    found = list(config._find_skill_paths(to_search))
-
-    assert found == [to_search]
-
-
-def test__find_skill_paths_w_multiple(temp_dir):
-    SKILL_NAMES = ["foo", "bar", "baz", "qux", ".skipme"]
-    CONFIG_FILENAME = "SKILL.md"
-
-    expected_paths = []
-
-    for skill_name in sorted(SKILL_NAMES):
-        maybe_path = temp_dir / skill_name
-        if skill_name == "baz":  # file, not dir
-            maybe_path.write_text("DEADBEEF")
-        elif skill_name == "qux":  # empty dir
-            maybe_path.mkdir()
-        else:
-            maybe_path.mkdir()
-            config_file = maybe_path / CONFIG_FILENAME
-            config_file.write_text(f"""
----
-name: {skill_name}
-description: Describing {skill_name}
----
-""")
-            if not maybe_path.stem.startswith("."):
-                expected_paths.append(maybe_path)
-
-    found_paths = list(config._find_skill_paths(temp_dir))
-
-    assert found_paths == expected_paths
-
-
 NotASecret = pytest.raises(config.NotASecret)
 
 
@@ -6467,25 +6508,29 @@ description: Describing {skill_name}
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_config_path"] = temp_dir / "installation.yaml"
 
-    skills = temp_dir / "skills"
-    skills.mkdir()
+    skills_dir = temp_dir / "skills"
+    skills_dir.mkdir()
 
     for skill_name in SKILL_NAMES:
-        skill_path = skills / skill_name
+        skill_path = skills_dir / skill_name
         skill_path.mkdir()
         skill_config = skill_path / "SKILL.md"
         skill_config.write_text(FOREMATTER.format(skill_name=skill_name))
 
     i_config = config.InstallationConfig(**kw)
 
-    found = i_config.available_filesystem_skill_configs
+    # See: https://github.com/ggozad/haiku.skills/issues/25
+    # found = i_config.available_filesystem_skill_configs
 
     if w_error:
-        assert found["foo"].name == "foo"
-        assert found["foo"].errors
-        assert found["bar"].name == "bar"
-        assert found["bar"].errors
+        # assert found["foo"].name == "foo"
+        # assert found["foo"].errors
+        # assert found["bar"].name == "bar"
+        # assert found["bar"].errors
+        with pytest.raises(ValueError, match=r"SKILL.md at"):
+            _ = i_config.available_filesystem_skill_configs
     else:
+        found = i_config.available_filesystem_skill_configs
         assert found["foo"].name == "foo"
         assert not found["foo"].errors
         assert found["bar"].name == "bar"
@@ -6527,13 +6572,18 @@ description: Describing {skill_name} in {skills_path}
 
     i_config = config.InstallationConfig(**kw)
 
-    found = i_config.available_filesystem_skill_configs
+    # See: https://github.com/ggozad/haiku.skills/issues/25
+    # found = i_config.available_filesystem_skill_configs
 
-    f_skill = found[SKILL_NAME]
+    # f_skill = found[SKILL_NAME]
     if w_error:
-        assert f_skill.name == SKILL_NAME
-        assert f_skill.errors
+        # assert f_skill.name == SKILL_NAME
+        # assert f_skill.errors
+        with pytest.raises(ValueError, match=r"SKILL.md at"):
+            _ = i_config.available_filesystem_skill_configs
     else:
+        found = i_config.available_filesystem_skill_configs
+        f_skill = found[SKILL_NAME]
         assert f_skill.name == SKILL_NAME
         # order of 'completion_paths' governs who wins
         assert f_skill.description == f"Describing {SKILL_NAME} in ./foo"
@@ -6646,9 +6696,11 @@ def test_installationconfig_reload_configurations(temp_dir):
     kw["_oidc_auth_system_configs"] = existing
     kw["_room_configs"] = existing
     kw["_completion_configs"] = existing
+    kw["_available_filesystem_skill_configs"] = {}
+    kw["_available_entrypoint_skill_configs"] = {}
     kw["_skill_configs"] = ()
     i_config = config.InstallationConfig(
-        _config_path=temp_dir,
+        _config_path=temp_dir / "installation.yaml",
         **kw,
     )
 

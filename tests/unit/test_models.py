@@ -9,7 +9,6 @@ import pydantic
 import pytest
 from ag_ui import core as agui_core
 from haiku.skills import models as hs_models
-from skills_ref import models as skill_models
 
 from soliplex import agui as agui_package
 from soliplex import config
@@ -406,29 +405,42 @@ class StateModelTest(pydantic.BaseModel):
     pass
 
 
+@pytest.fixture(
+    params=[
+        {},
+        {
+            "state_type": StateModelTest,
+            "state_namespace": SKILL_STATE_NAMESPACE,
+        },
+    ]
+)
+def w_state_model_and_ns(request):
+    return request.param
+
+
 @pytest.fixture
 def filesystem_skill_config(
     temp_dir,
     w_skill_properties_metadata,
     w_skill_properties_allowed_tools,
+    w_state_model_and_ns,
 ):
     skill_path = temp_dir / "skills" / SKILL_NAME
-    skill_properties = mock.create_autospec(
-        skill_models.SkillProperties,
+    skill_metadata = mock.create_autospec(
+        hs_models.SkillMetadata,
         description=SKILL_DESC,
         license=SKILL_LICENSE,
         compatibility=SKILL_COMPAT,
         allowed_tools=w_skill_properties_allowed_tools,
         metadata=w_skill_properties_metadata,
     )
-    skill_properties.name = SKILL_NAME  # mock quirk
+    skill_metadata.name = SKILL_NAME  # mock quirk
     return config.FilesystemSkillConfig(
         skill_name=SKILL_NAME,
-        _skill_properties=skill_properties,
+        _skill_metadata=skill_metadata,
         _skill_path=skill_path,
         model_name=SKILL_MODEL_NAME,
-        state_type=StateModelTest,
-        state_namespace=SKILL_STATE_NAMESPACE,
+        **w_state_model_and_ns,
     )
 
 
@@ -442,8 +454,13 @@ def test_skill_from_config_w_fssc(filesystem_skill_config):
     assert found.compatibility == filesystem_skill_config.compatibility
     assert found.allowed_tools == filesystem_skill_config.allowed_tools
     assert found.metadata == filesystem_skill_config.metadata
-    assert found.state_type_schema == StateModelTest.model_json_schema()
-    assert found.state_namespace == SKILL_STATE_NAMESPACE
+
+    if filesystem_skill_config.state_type is not None:
+        assert found.state_type_schema == StateModelTest.model_json_schema()
+    else:
+        assert found.state_type_schema is None
+
+    assert found.state_namespace == filesystem_skill_config.state_namespace
 
 
 @pytest.fixture
@@ -1255,6 +1272,21 @@ def test_aguirunmetadata_from_run_metadata(run_metadata, exp_label):
         assert found is None
     else:
         assert found.label == exp_label
+
+
+def test_aguirunusage_from_tuple():
+    ru_stats = agui_package.RunUsageStats(
+        input_tokens=13,
+        output_tokens=17,
+        requests=23,
+        tool_calls=29,
+    )
+    ru_model = models.AGUI_RunUsage.from_tuple(ru_stats)
+
+    assert ru_model.input_tokens == 13
+    assert ru_model.output_tokens == 17
+    assert ru_model.requests == 23
+    assert ru_model.tool_calls == 29
 
 
 @pytest.mark.parametrize(
