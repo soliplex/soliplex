@@ -2696,6 +2696,35 @@ def test_filesystemskillconfig_from_path(
 
 
 @pytest.mark.parametrize(
+    "w_kw",
+    [
+        {},
+        {
+            "state_type": SkillTypeTest,
+            "state_namespace": SKILL_TYPE_NAMESPACE,
+        },
+    ],
+)
+def test_filesystemskillconfig_agui_feature_names(skill_path, w_kw):
+    skill_config = config.FilesystemSkillConfig(
+        skill_name=SKILL_NAME,
+        _skill_path=skill_path,
+        _skill_metadata=hs_models.SkillMetadata(
+            name=SKILL_NAME,
+            description=SKILL_DESC,
+        ),
+        **w_kw,
+    )
+
+    found = skill_config.agui_feature_names
+
+    if w_kw:
+        assert found == (w_kw["state_namespace"],)
+    else:
+        assert found == ()
+
+
+@pytest.mark.parametrize(
     "w_metadata_kw, w_kw",
     [
         (
@@ -2784,6 +2813,34 @@ def test_entrypointskillconfig_ctor(w_metadata_kw, exp_allowed_tools):
     assert skill_config.compatibility == w_metadata_kw.get("compatibility")
     assert skill_config.allowed_tools == exp_allowed_tools
     assert skill_config.metadata == w_metadata_kw.get("metadata", {})
+
+
+@pytest.mark.parametrize(
+    "w_kw",
+    [
+        {},
+        {
+            "state_type": SkillTypeTest,
+            "state_namespace": SKILL_TYPE_NAMESPACE,
+        },
+    ],
+)
+def test_entrypointskillconfig_agui_feature_names(w_kw):
+    skill_config = config.EntrypointSkillConfig(
+        skill_name=SKILL_NAME,
+        _skill_metadata=hs_models.SkillMetadata(
+            name=SKILL_NAME,
+            description=SKILL_DESC,
+        ),
+        **w_kw,
+    )
+
+    found = skill_config.agui_feature_names
+
+    if w_kw:
+        assert found == (w_kw["state_namespace"],)
+    else:
+        assert found == ()
 
 
 @pytest.mark.parametrize(
@@ -4097,14 +4154,38 @@ def test_roomconfig_skill_configs_w_hit(installation_config):
             [
                 # from 'agent_config'
                 AGUI_FEATURE_NAME,
+                # from 'skills'
+                SKILL_STATE_NAMESPACE,
                 # from 'room_config'
                 EXTRA_AGUI_FEATURE_NAME,
             ],
         ),
     ],
 )
-def test_roomconfig_agui_feature_names(rc_kwargs, expected):
-    room_config = config.RoomConfig(**rc_kwargs)
+def test_roomconfig_agui_feature_names(
+    installation_config,
+    rc_kwargs,
+    expected,
+):
+    skill_config = mock.create_autospec(
+        config._SkillConfigBase,
+        agui_feature_names=[SKILL_STATE_NAMESPACE],
+    )
+    installation_config.skill_configs = {
+        SKILL_NAME: skill_config,
+    }
+
+    skills = rc_kwargs.pop("skills", None)
+    if skills is not None:
+        rc_kwargs["skills"] = dataclasses.replace(
+            skills,
+            _installation_config=installation_config,
+        )
+
+    room_config = config.RoomConfig(
+        _installation_config=installation_config,
+        **rc_kwargs,
+    )
 
     found = room_config.agui_feature_names
 

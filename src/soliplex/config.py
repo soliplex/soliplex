@@ -756,6 +756,13 @@ class _SkillConfigBase:
         return self._skill_metadata.metadata
 
     @property
+    def agui_feature_names(self) -> tuple[str]:
+        if self.state_namespace is not None:
+            return (self.state_namespace,)
+        else:
+            return ()
+
+    @property
     def skill(self) -> hs_models.Skill:
         return hs_models.Skill(
             source=self.kind,
@@ -1547,7 +1554,13 @@ class RoomConfig:
         for tool_config in self.tool_configs.values():
             tool_features |= set(tool_config.agui_feature_names)
 
-        return tuple(agent_features | tool_features | room_features)
+        skill_features = set()
+        for skill_config in self.skill_configs.values():
+            skill_features |= set(skill_config.agui_feature_names)
+
+        return tuple(
+            agent_features | tool_features | skill_features | room_features
+        )
 
     @property
     def quiz_map(self) -> dict[str, QuizConfig]:
