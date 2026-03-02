@@ -63,7 +63,7 @@ def test_get_model_from_config(
     agent_config.provider_type = provider_type
     agent_config.llm_provider_kw = llm_provider_kw
 
-    model = agents.get_model_from_config(agent_config)
+    model = agents.get_model_from_config(agent_config=agent_config)
 
     if provider_type == config.LLMProviderType.GOOGLE:
         assert model is google_model_klass.return_value
@@ -195,7 +195,7 @@ def test_get_default_agent_from_configs(
     akc_kw = akc.kwargs
 
     assert akc_kw["model"] is gmfc.return_value
-    gmfc.assert_called_once_with(agent_config)
+    gmfc.assert_called_once_with(agent_config=agent_config)
 
     assert akc_kw["instructions"] == SYSTEM_PROMPT
     assert akc_kw["model_settings"] == w_model_settings
@@ -234,9 +234,9 @@ def test_get_agent_from_configs_wo_hit_w_default_kind(
         mock.patch.dict("soliplex.agents._agent_cache", clear=True) as cache,
     ):
         found = agents.get_agent_from_configs(
-            agent_config,
-            tool_configs,
-            mcp_tc_configs,
+            agent_config=agent_config,
+            tool_configs=tool_configs,
+            mcp_client_toolset_configs=mcp_tc_configs,
         )
 
         assert cache[ROOM_ID] is found
@@ -265,7 +265,7 @@ def test_get_agent_from_configs_wo_hit_w_python_kind():
         mock.patch.dict("soliplex.agents._agent_cache", clear=True) as cache,
     ):
         found = agents.get_agent_from_configs(
-            agent_config,
+            agent_config=agent_config,
             tool_configs=tool_configs,
             mcp_client_toolset_configs=mcpcts_configs,
         )
@@ -288,6 +288,10 @@ def test_get_agent_from_configs_w_hit():
     with mock.patch.dict("soliplex.agents._agent_cache", clear=True) as ac:
         ac[ROOM_ID] = expected
 
-        found = agents.get_agent_from_configs(a_config, [], {})
+        found = agents.get_agent_from_configs(
+            agent_config=a_config,
+            tool_configs={},
+            mcp_client_toolset_configs={},
+        )
 
     assert found is expected

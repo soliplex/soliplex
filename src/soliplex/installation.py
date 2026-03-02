@@ -240,9 +240,9 @@ class Installation:
         agent_id: str,
     ) -> pydantic_ai.Agent:
         return agents.get_agent_from_configs(
-            self._config.agent_configs_map[agent_id],
-            {},
-            {},
+            agent_config=self._config.agent_configs_map[agent_id],
+            tool_configs={},
+            mcp_client_toolset_configs={},
         )
 
     async def get_agent_for_room(
@@ -259,11 +259,12 @@ class Installation:
             the_authz_policy=the_authz_policy,
             the_logger=the_logger,
         )
+        mcpcts_configs = room_config.mcp_client_toolset_configs
 
         return agents.get_agent_from_configs(
-            room_config.agent_config,
-            room_config.tool_configs,
-            room_config.mcp_client_toolset_configs,
+            agent_config=room_config.agent_config,
+            tool_configs=room_config.tool_configs,
+            mcp_client_toolset_configs=mcpcts_configs,
         )
 
     async def get_agent_for_completion(
@@ -276,10 +277,12 @@ class Installation:
             completion_id=completion_id,
             user=user,
         )
+        mcpcts_configs = completion_config.mcp_client_toolset_configs
+
         return agents.get_agent_from_configs(
-            completion_config.agent_config,
-            completion_config.tool_configs,
-            completion_config.mcp_client_toolset_configs,
+            agent_config=completion_config.agent_config,
+            tool_configs=completion_config.tool_configs,
+            mcp_client_toolset_configs=mcpcts_configs,
         )
 
     async def get_agent_deps_for_room(

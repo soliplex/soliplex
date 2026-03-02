@@ -68,7 +68,10 @@ def make_mcp_client_toolset(
     return toolset_klass(**toolset_config.tool_kwargs)
 
 
-def get_model_from_config(agent_config: config.AgentConfig) -> ai_models.Model:
+def get_model_from_config(
+    *,
+    agent_config: config.AgentConfig,
+) -> ai_models.Model:
     provider_kw = agent_config.llm_provider_kw
 
     if agent_config.provider_type == config.LLMProviderType.GOOGLE:
@@ -94,12 +97,13 @@ def get_model_from_config(agent_config: config.AgentConfig) -> ai_models.Model:
 
 
 def get_default_agent_from_configs(
+    *,
     agent_config: config.AgentConfig,
     tool_configs: ToolConfigMap,
     mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap,
 ) -> SoliplexAgent:
     """Build a Pydantic AI agent from a config"""
-    model = get_model_from_config(agent_config)
+    model = get_model_from_config(agent_config=agent_config)
 
     tools = [
         make_ai_tool(tool_config) for tool_config in tool_configs.values()
@@ -120,6 +124,7 @@ def get_default_agent_from_configs(
 
 
 def get_agent_from_configs(
+    *,
     agent_config: config.AgentConfig,
     tool_configs: ToolConfigMap,
     mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap,

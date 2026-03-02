@@ -781,7 +781,11 @@ def test_installation_get_agent_by_id(gafc, w_agent_id, raises):
     else:
         found = the_installation.get_agent_by_id(w_agent_id)
         assert found is gafc.return_value
-        gafc.assert_called_once_with(a_config, {}, {})
+        gafc.assert_called_once_with(
+            agent_config=a_config,
+            tool_configs={},
+            mcp_client_toolset_configs={},
+        )
 
 
 @pytest.mark.anyio
@@ -870,7 +874,11 @@ async def test_installation_get_agent_for_room(
 
             assert found is gafc.return_value
 
-            gafc.assert_called_once_with(a_config, t_configs, mcp_configs)
+            gafc.assert_called_once_with(
+                agent_config=a_config,
+                tool_configs=t_configs,
+                mcp_client_toolset_configs=mcp_configs,
+            )
 
     if w_the_logger:
         the_logger.bind.assert_called_once_with(
@@ -938,7 +946,11 @@ async def test_installation_get_agent_for_completion(
             user=test_user,
         )
         assert found is gafc.return_value
-        gafc.assert_called_once_with(a_config, t_configs, mcp_configs)
+        gafc.assert_called_once_with(
+            agent_config=a_config,
+            tool_configs=t_configs,
+            mcp_client_toolset_configs=mcp_configs,
+        )
 
 
 @pytest.mark.anyio
