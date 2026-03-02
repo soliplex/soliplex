@@ -140,10 +140,11 @@ def gemini_agent(gemini_room_config):
     Uses function scope to ensure fresh httpx clients per test,
     avoiding "Event loop is closed" errors with pytest-anyio.
     """
+    mcp_client_toolset_configs = gemini_room_config.mcp_client_toolset_configs
     return agents.get_agent_from_configs(
-        gemini_room_config.agent_config,
-        gemini_room_config.tool_configs,
-        gemini_room_config.mcp_client_toolset_configs,
+        agent_config=gemini_room_config.agent_config,
+        tool_configs=gemini_room_config.tool_configs,
+        mcp_client_toolset_configs=mcp_client_toolset_configs,
     )
 
 
@@ -409,10 +410,11 @@ async def test_gemini_safety_filter(gemini_room_config):
     from pydantic_ai import exceptions as pydantic_ai_exceptions
 
     # Create a fresh agent for mocking (don't pollute the shared fixture)
+    mcp_client_toolset_configs = gemini_room_config.mcp_client_toolset_configs
     agent = agents.get_agent_from_configs(
-        gemini_room_config.agent_config,
-        gemini_room_config.tool_configs,
-        gemini_room_config.mcp_client_toolset_configs,
+        agent_config=gemini_room_config.agent_config,
+        tool_configs=gemini_room_config.tool_configs,
+        mcp_client_toolset_configs=mcp_client_toolset_configs,
     )
 
     # Mock the model's request method to raise a safety error

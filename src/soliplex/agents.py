@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import dataclasses
 import typing
-from collections import abc
 
 import pydantic_ai
 from pydantic_ai import agent as ai_agent
@@ -39,14 +38,16 @@ class AgentDependencies:
 
 
 SoliplexAgent = ai_agent.AbstractAgent[AgentDependencies, typing.Any]
-AgentFactory = abc.Callable[
-    [
-        config.AgentConfig,
-        ToolConfigMap,
-        config.MCP_ClientToolsetConfigMap,
-    ],
-    SoliplexAgent,
-]
+
+
+class AgentFactory(typing.Protocol):
+    def __call__(
+        self,
+        *,
+        tool_configs: ToolConfigMap,
+        mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap,
+    ) -> SoliplexAgent: ...
+
 
 # Cache for agents to avoid recreating them
 _agent_cache: dict[str, pydantic_ai.Agent] = {}
@@ -140,6 +141,7 @@ def get_agent_from_configs(
             )
 
         else:
+            # Treat 'agent_config' as an 'AgentFactory'
             agent = agent_config.factory(
                 tool_configs=tool_configs,
                 mcp_client_toolset_configs=mcp_client_toolset_configs,
