@@ -24,6 +24,7 @@ tmp/
 # IDE / tools
 .idea/
 .claude/
+.playwright-cli/
 
 # osx
 .DS_Store
