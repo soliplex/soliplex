@@ -86,7 +86,6 @@ A minimal room configuration must include the above elements, e.g.:
   to the feature names defined on the individual tools to create an
   aggregate set for the room.
 
-
 ### Agent configuration
 
 The `agent` mapping is used to configure the Pydantic AI agent used to
@@ -100,6 +99,15 @@ agent:
 
 Please see [this page](agents.md) for a full description of the options
 for configuring an agent.
+
+#### The `haiku_chat` agent kind
+
+Rooms can use the `haiku_chat` agent kind to provide conversational RAG
+powered by `haiku.rag`.  This agent kind uses its own configuration
+instead of the standard `tools` list.
+
+Please see the [`haiku_chat` section of the agents page](agents.md#haiku_chat-kind)
+for the full list of configuration options and examples.
 
 ### Tool Configurations
 
@@ -115,14 +123,17 @@ for configuring an agent.
   Each tool mapping can contain additional elements, which are used to 
   configure the tool's behavior.
 
-#### The `haiku_chat` agent kind
+### Skill Configuration
 
-Rooms can use the `haiku_chat` agent kind to provide conversational RAG
-powered by `haiku.rag`.  This agent kind uses its own configuration
-instead of the standard `tools` list.
+- `skills` (a list of strings, default empty);  if set, names the
+  installation skills which are enabled for the room.  E.g.:
 
-Please see the [`haiku_chat` section of the agents page](agents.md#haiku_chat-kind)
-for the full list of configuration options and examples.
+  ```yaml
+  skills:
+    skill_names:
+        - "bare-bones"           # a filesytem skill
+        - "image-generation"     # an entrypoint skill
+  ```
 
 ### Quiz-related elements
 

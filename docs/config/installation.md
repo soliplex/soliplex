@@ -177,6 +177,57 @@ oidc_paths:
 ```
 Or else run 'soliplex-cli serve --no-auth-mode'
 
+## Filesystem Skill Paths
+
+The `filesystem_skills_paths` stanza specifies one or more filesystem paths to
+search for AI Skill configurations.
+
+Please see [this page](skills.md) for documentation on AI skills.
+
+Each path can be either:
+
+- a directory containing its own `SKILLS.md` file:  this
+  directory will be mapped as a single skill.
+
+- a directory whose immediate subdirectories will be treated as skills
+  IFF they contain a `SKILLS.md` file.
+
+Non-absolute paths will be evaluated relative to the installation directory.
+
+The order of entries in the `filesystem_skills_paths` list controls which
+skill configuration is used for any conflict on skill name:  filesystem
+skills found earlier in the list "win" over later ones with the same name.
+
+By default, Soliplex loads skill configurations found under the path
+'./skills', just as though we had configured:
+
+```yaml
+filesystem_skills_paths:
+  - "./skillss"
+```
+
+To disable filesystem skill discovery, list a single, "null" path, e.g.:
+```yaml
+filesystem_skills_paths:
+  -
+```
+
+## Enabling Skill Configurations
+
+To enable discovered filesystem or entryponit skills, add them to the
+`skill_configs` stanza of the installation configuration.  E.g.:
+
+```yaml
+skill_configs:
+  - skill_name: "bare-bones"
+    kind: "filesystem"
+  - skill_name: "image-generation"
+    kind: "entrypoint"
+```
+
+Discovered skills which are not mentioned in this stanza cannot be
+referenced by other parts of the configuration, e.g. rooms.
+
 ## Room Configuration Paths
 
 The `room_paths` element specify one or more filesystem paths to
@@ -213,9 +264,10 @@ room_paths:
    -
 ```
 
+
 ## Completion Configuration Paths
 
-The `completion_paths` entry specifies one or more filesystem paths to
+The `completion_paths` stanza specifies one or more filesystem paths to
 search for completion configs.
 
 Please see [this page](completions.md) for details on how to configure
