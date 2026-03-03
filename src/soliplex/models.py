@@ -153,7 +153,7 @@ class Skill(pydantic.BaseModel):
                 skill_config.state_type.model_json_schema()
             )
         return cls(
-            source=skill_config.kind,
+            source=skill_config.source,
             skill_name=skill_config.skill_name,
             description=skill_config.description,
             license=skill_config.license,
