@@ -14,7 +14,8 @@ agent:
 skills:
   skill_names:
     - "bare-bones"
-    - "image-generation"  # needs namespace?
+  # See: https://github.com/ggozad/haiku.skills/issues/27
+  # - "image-generation"  # needs namespace?
 
 #
 # Science fiction:  use all three types of skills from 'haiku.skills'

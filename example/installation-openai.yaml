@@ -365,8 +365,9 @@ filesystem_skills_paths:
 skill_configs:
   - skill_name: "bare-bones"
     kind: "filesystem"
-  - skill_name: "image-generation"
-    kind: "entrypoint"
+# See: https://github.com/ggozad/haiku.skills/issues/27
+# - skill_name: "image-generation"
+#   kind: "entrypoint"
 
 
 #==========================================================================
