@@ -1,8 +1,6 @@
 id: "moodle-tools"
-name: "Moodle Workplace (Tool Calling)"
-description: >-
-  Query Moodle via LLM tool calling
-  (research comparison)
+name: "Moodle Workplace"
+description: "Query Moodle Workplace for courses, enrollment, and completion data"
 suggestions:
   - "What courses are available?"
   - "Who is enrolled in the Safety Fundamentals course?"
