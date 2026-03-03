@@ -265,6 +265,7 @@ class Installation:
             agent_config=room_config.agent_config,
             tool_configs=room_config.tool_configs,
             mcp_client_toolset_configs=mcpcts_configs,
+            skill_toolset_config=room_config.skills,
         )
 
     async def get_agent_for_completion(

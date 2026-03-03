@@ -790,6 +790,7 @@ def test_installation_get_agent_by_id(gafc, w_agent_id, raises):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_the_logger", [False, True])
+@pytest.mark.parametrize("w_room_skills", [False, True])
 @pytest.mark.parametrize(
     "w_room_id, raises", [("room_id", False), ("nonesuch", True)]
 )
@@ -803,6 +804,7 @@ async def test_installation_get_agent_for_room(
     the_logger,
     w_room_id,
     raises,
+    w_room_skills,
     w_the_logger,
 ):
     a_config = mock.create_autospec(config.AgentConfig)
@@ -819,6 +821,16 @@ async def test_installation_get_agent_for_room(
 
     r_config = mock.create_autospec(config.RoomConfig)
     r_config.agent_config = a_config
+
+    exp_gafc_kwargs = {}
+
+    if w_room_skills:
+        r_config.skills = mock.create_autospec(config.RoomSkillsConfig)
+        exp_gafc_kwargs["skill_toolset_config"] = r_config.skills
+    else:
+        r_config.skills = None
+        exp_gafc_kwargs["skill_toolset_config"] = None
+
     t_configs = r_config.tool_configs = {
         "test_tool": tc_config,
         "test_sdtc": sdtc_config,
@@ -878,6 +890,7 @@ async def test_installation_get_agent_for_room(
                 agent_config=a_config,
                 tool_configs=t_configs,
                 mcp_client_toolset_configs=mcp_configs,
+                **exp_gafc_kwargs,
             )
 
     if w_the_logger:

@@ -17,6 +17,7 @@ from pydantic_ai import tools as ai_tools
 from pydantic_ai.models import openai as openai_models
 from pydantic_ai.providers import ollama as ollama_providers
 
+from soliplex import agents
 from soliplex import config
 
 JOKER_AGENT_PROMPT = """\
@@ -30,6 +31,7 @@ def joker_agent_factory(
     agent_config,
     tool_configs: config.ToolConfigMap = None,
     mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap = None,
+    skills_toolset_config: agents.SkillToolsetConfig | None = None,
 ):  # pragma NO COVER
     installation_config = agent_config._installation_config
 
@@ -144,6 +146,7 @@ class FauxAgent:
     agent_config: config.FactoryAgentConfig
     tool_configs: config.ToolConfigMap = None
     mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap = None
+    skill_toolset_config: agents.SkillToolsetConfig | None = None
 
     output_type = None
 
@@ -269,5 +272,11 @@ def faux_agent_factory(
     agent_config: config.FactoryAgentConfig,
     tool_configs: config.ToolConfigMap = None,
     mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap = None,
+    skill_toolset_config: agents.SkillToolsetConfig | None = None,
 ):
-    return FauxAgent(agent_config, tool_configs, mcp_client_toolset_configs)
+    return FauxAgent(
+        agent_config=agent_config,
+        tool_configs=tool_configs,
+        mcp_client_toolset_configs=mcp_client_toolset_configs,
+        skill_toolset_config=skill_toolset_config,
+    )
