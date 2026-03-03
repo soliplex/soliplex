@@ -563,6 +563,13 @@ testing: "override"
 BOGUS_ROOM_SKILLS_CONFIG_YAML = ""
 
 ROOM_SKILLS_MODEL_NAME = "test-roomskills-model"
+BARE_ROOM_SKILLS_CONFIG_KW = {
+    "model_name": ROOM_SKILLS_MODEL_NAME,
+}
+BARE_ROOM_SKILLS_CONFIG_YAML = f"""\
+model_name: "{ROOM_SKILLS_MODEL_NAME}"
+"""
+
 W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_KW = {
     "model_name": ROOM_SKILLS_MODEL_NAME,
     "skill_names": [SKILL_NAME],
@@ -3897,6 +3904,12 @@ def test_quizconfig_get_question(w_loaded, w_miss):
                 check=lambda exc: isinstance(
                     exc.__cause__, config.MissingSkillNames
                 ),
+            ),
+        ),
+        (
+            BARE_ROOM_SKILLS_CONFIG_YAML,
+            contextlib.nullcontext(
+                BARE_ROOM_SKILLS_CONFIG_KW,
             ),
         ),
         (
