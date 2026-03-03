@@ -255,6 +255,15 @@ room_paths:
 #   - "./skills"
 #==========================================================================
 
+filesystem_skills_paths:
+  - "./skills"
+
+skill_configs:
+  - skill_name: "bare-bones"
+    kind: "filesystem"
+  - skill_name: "image-generation"
+    kind: "entrypoint"
+
 #==========================================================================
 # Completions configuration
 #==========================================================================
