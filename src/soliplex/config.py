@@ -710,11 +710,17 @@ class _SkillConfigBase:
     """Configuration for an agent skill."""
 
     skill_name: str
-    kind: typing.ClassVar[hs_models.SkillSource]  # quasi- @abstractproperty
 
     model_name: str | None = None
     state_type: SkillStateType = None
     state_namespace: str | None = None
+
+
+@dataclasses.dataclass(kw_only=True)
+class _DiscoveredSkillConfigBase(_SkillConfigBase):
+    """Configuration for an agent skill discovered by the installation"""
+
+    kind: typing.ClassVar[hs_models.SkillSource]  # quasi- @abstractproperty
 
     _skill_metadata: hs_models.SkillMetadata
 
@@ -773,7 +779,7 @@ class _SkillConfigBase:
 
 
 @dataclasses.dataclass(kw_only=True)
-class FilesystemSkillConfig(_SkillConfigBase):
+class FilesystemSkillConfig(_DiscoveredSkillConfigBase):
     """Configuration for an agent skill loaded from a filesystem directory"""
 
     kind: typing.ClassVar[hs_models.SkillSource] = SkillKind.FILESYSTEM
@@ -836,7 +842,7 @@ class FilesystemSkillConfig(_SkillConfigBase):
 
 
 @dataclasses.dataclass(kw_only=True)
-class EntrypointSkillConfig(_SkillConfigBase):
+class EntrypointSkillConfig(_DiscoveredSkillConfigBase):
     """Configuration for an agent skill loaded from an entrypoint"""
 
     kind: typing.ClassVar[hs_models.SkillSource] = SkillKind.ENTRYPOINT
