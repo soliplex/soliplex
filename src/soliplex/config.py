@@ -2514,6 +2514,18 @@ def _load_entrypoint_skill_configs() -> SkillConfigMap:
     ep_skill_configs = {}
 
     for skill in hs_discovery.discover_from_entrypoints():
+        feature_name = skill.state_namespace
+
+        if (
+            feature_name is not None
+            and feature_name not in AGUI_FEATURES_BY_NAME
+        ):
+            AGUI_FEATURES_BY_NAME[feature_name] = AGUI_Feature(
+                name=feature_name,
+                model_klass=skill.state_type,
+                source=AGUI_FeatureSource.SERVER,
+            )
+
         skill_config = EntrypointSkillConfig.from_skill(skill)
 
         if skill_config.name not in ep_skill_configs:

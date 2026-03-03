@@ -6699,14 +6699,26 @@ def test_installationconfig_avl_fs_skill_configs_w_existing():
 
 
 @mock.patch("haiku.skills.discovery.discover_from_entrypoints")
-def test_installationconfig_avl_ep_skill_configs_wo_existing(dfe):
+def test_installationconfig_avl_ep_skill_configs_wo_existing(
+    dfe,
+    patched_soliplex_config,
+):
+    class DerivedFeatureModel(FeatureModel):
+        pass
+
+    registry = patched_soliplex_config["AGUI_FEATURES_BY_NAME"]
+
     ep_skill_1 = mock.create_autospec(hs_models.Skill)
     ep_skill_1.metadata = mock.create_autospec(hs_models.SkillMetadata)
     ep_skill_1.metadata.name = "foo"
+    ep_skill_1.state_namespace = AGUI_FEATURE_NAME
+    ep_skill_1.state_type = FeatureModel
 
     ep_skill_2 = mock.create_autospec(hs_models.Skill)
     ep_skill_2.metadata = mock.create_autospec(hs_models.SkillMetadata)
     ep_skill_2.metadata.name = "bar"
+    ep_skill_2.state_namespace = AGUI_FEATURE_NAME
+    ep_skill_2.state_type = DerivedFeatureModel
 
     dfe.return_value = [ep_skill_1, ep_skill_2]
 
@@ -6718,9 +6730,17 @@ def test_installationconfig_avl_ep_skill_configs_wo_existing(dfe):
     assert found["foo"].skill_name == "foo"
     assert found["bar"].skill_name == "bar"
 
+    # First registration wins
+    registered = registry[AGUI_FEATURE_NAME]
+    assert registered.name == AGUI_FEATURE_NAME
+    assert registered.model_klass is FeatureModel
+
 
 @mock.patch("haiku.skills.discovery.discover_from_entrypoints")
-def test_installationconfig_avl_ep_skill_configs_wo_existing_w_conflict(dfe):
+def test_installationconfig_avl_ep_skill_configs_wo_existing_w_conflict(
+    dfe,
+    patched_soliplex_config,
+):
     ep_skill_1 = mock.create_autospec(hs_models.Skill)
     ep_skill_1.metadata = mock.create_autospec(hs_models.SkillMetadata)
     ep_skill_1.metadata.name = SKILL_NAME
@@ -6744,7 +6764,10 @@ def test_installationconfig_avl_ep_skill_configs_wo_existing_w_conflict(dfe):
 
 
 @mock.patch("haiku.skills.discovery.discover_from_entrypoints")
-def test_installationconfig_avl_ep_skill_configs_w_existing(dfe):
+def test_installationconfig_avl_ep_skill_configs_w_existing(
+    dfe,
+    patched_soliplex_config,
+):
     SC_1, SC_2 = object(), object()
     existing = {"skill_1": SC_1, "skill_2": SC_2}
 
