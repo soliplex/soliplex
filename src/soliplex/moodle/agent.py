@@ -1,11 +1,8 @@
-"""Moodle Workplace factory agent with dynamic instructions.
+"""Moodle Workplace factory agent with tool calling.
 
-The factory creates a standard ``pydantic_ai.Agent`` whose
-``instructions`` parameter is an async callable.  Pydantic AI
-evaluates instructions on EVERY request (unlike
-``@agent.system_prompt`` which is skipped when AG-UI provides
-``message_history``).  The callable pre-fetches Moodle data so
-the LLM answers from context without tool calling.
+The factory creates a ``pydantic_ai.Agent`` with four tools
+for querying Moodle data (courses, users, enrollment,
+completion).  The LLM decides which tools to call.
 """
 
 from __future__ import annotations
@@ -25,18 +22,6 @@ from soliplex import config
 from soliplex.moodle.client import MoodleClient
 
 log = logging.getLogger(__name__)
-
-MOODLE_BASE_PROMPT = """\
-You are a training management assistant with access to \
-Moodle Workplace data.
-
-You can answer questions about courses, enrolled users, \
-and completion status.
-
-Present data in clear tables when appropriate.  If the \
-Moodle data section below is empty or says unavailable, \
-let the user know that Moodle data could not be loaded.
-"""
 
 
 def _build_model(
@@ -97,79 +82,6 @@ def _build_model(
     )
 
 
-async def _fetch_moodle_context(
-    client: MoodleClient,
-) -> str:
-    """Fetch all courses, enrollments, and completions.
-
-    Returns a markdown-formatted string for injection
-    into the system prompt.
-    """
-    courses = await client.get_courses()
-    lines = ["## Moodle Workplace Data\n"]
-    lines.append("### Courses")
-
-    for c in courses:
-        if c.id == 1:  # skip Moodle site course
-            continue
-        lines.append(f"- [{c.id}] {c.fullname}")
-        enrolled = await client.get_enrolled_users(c.id)
-
-        for u in enrolled:
-            try:
-                status = await client.get_course_completion_status(c.id, u.id)
-                done = "COMPLETED" if status.completed else "incomplete"
-            except Exception:
-                done = "unknown"
-            lines.append(f"  - {u.fullname} ({u.username}): {done}")
-
-    return "\n".join(lines)
-
-
-def moodle_agent_factory(
-    agent_config: config.FactoryAgentConfig,
-    tool_configs: agents.ToolConfigMap = None,
-    mcp_client_toolset_configs: (config.MCP_ClientToolsetConfigMap) = None,
-) -> pydantic_ai.Agent:
-    """Create a Moodle Workplace agent.
-
-    Returns a standard ``pydantic_ai.Agent`` with a dynamic
-    system prompt that fetches Moodle data on every request.
-    """
-    ic = agent_config._installation_config
-    extra = agent_config.extra_config
-
-    base_url = ic.get_secret(extra["moodle_base_url"])
-    token = ic.get_secret(extra["moodle_api_token"])
-    client = MoodleClient(base_url=base_url, token=token)
-
-    model = _build_model(agent_config)
-
-    async def _instructions() -> str:
-        """Build instructions with live Moodle data."""
-        try:
-            moodle_data = await _fetch_moodle_context(client)
-        except Exception:
-            log.exception("Failed to fetch Moodle data")
-            moodle_data = (
-                "Moodle data is currently unavailable. "
-                "Answer from conversation context only."
-            )
-        return f"{MOODLE_BASE_PROMPT}\n{moodle_data}"
-
-    agent = pydantic_ai.Agent(
-        model=model,
-        instructions=_instructions,
-        deps_type=agents.AgentDependencies,
-    )
-
-    return agent
-
-
-# -------------------------------------------------------------------
-# Tool-calling variant
-# -------------------------------------------------------------------
-
 MOODLE_TOOLS_PROMPT = """\
 You are a training management assistant connected to \
 Moodle Workplace.
@@ -203,10 +115,8 @@ def moodle_tools_agent_factory(
 ) -> pydantic_ai.Agent:
     """Create a Moodle Workplace agent with tool calling.
 
-    Unlike ``moodle_agent_factory`` which pre-fetches all
-    data into the system prompt, this variant exposes
-    Moodle API methods as Pydantic AI tools so the LLM
-    decides which to call.
+    Exposes Moodle API methods as Pydantic AI tools so
+    the LLM decides which to call.
     """
     ic = agent_config._installation_config
     extra = agent_config.extra_config
