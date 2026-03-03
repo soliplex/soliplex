@@ -3216,13 +3216,13 @@ class InstallationConfig:
 
     def reload_configurations(self):
         """Load all dependent configuration sets"""
-        self._oidc_auth_system_configs = self._load_oidc_auth_system_configs()
-        self._room_configs = self._load_room_configs()
-        self._completion_configs = self._load_completion_configs()
         self._available_filesystem_configs = _load_filesystem_skill_configs(
             self
         )
         self._available_entrypoint_configs = _load_entrypoint_skill_configs()
+        self._oidc_auth_system_configs = self._load_oidc_auth_system_configs()
+        self._room_configs = self._load_room_configs()
+        self._completion_configs = self._load_completion_configs()
 
 
 def load_installation(config_path: pathlib.Path) -> InstallationConfig:
