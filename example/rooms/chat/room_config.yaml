@@ -6,18 +6,19 @@ suggestions:
   - "Search for information about Soliplex"
   - "Explain how the authentication system works"
 agent:
-  kind: "haiku_chat"
-  rag_lancedb_stem: "rag"
-  rag_features: ["search", "documents", "qa"]
-  background_context: |
-    **Soliplex** is an AI-powered Retrieval-Augmented Generation (RAG) platform.
-    It lets users:
-
-    * **Index** documents (text, PDFs, etc.) in a vector store (via LanceDB).
-    * **Search** that content quickly with a full-text + vector engine.
-    * **Generate** answers that are grounded in the indexed material by calling the OpenAI API or running local Ollama models.
-    * **Interact** through a WebSocket-driven chat interface, with a FastAPI backend managing routing to the vector store and language model.
-    * **Securely authenticate** users with OIDC.
-
-    Soliplex is built on the haiku-rag library and is ideal for applications such as internal knowledge bases, legal compliance, onboarding, customer support, and research assistance.
+  template_id: "default_chat"
+# kind: "haiku_chat"
+# rag_lancedb_stem: "rag"
+# rag_features: ["search", "documents", "qa"]
+# background_context: |
+#   **Soliplex** is an AI-powered Retrieval-Augmented Generation (RAG) platform.
+#   It lets users:
+#
+#   * **Index** documents (text, PDFs, etc.) in a vector store (via LanceDB).
+#   * **Search** that content quickly with a full-text + vector engine.
+#   * **Generate** answers that are grounded in the indexed material by calling the OpenAI API or running local Ollama models.
+#   * **Interact** through a WebSocket-driven chat interface, with a FastAPI backend managing routing to the vector store and language model.
+#   * **Securely authenticate** users with OIDC.
+#
+#   Soliplex is built on the haiku-rag library and is ideal for applications such as internal knowledge bases, legal compliance, onboarding, customer support, and research assistance.
 allow_mcp: false

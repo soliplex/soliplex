@@ -234,6 +234,7 @@ def test_create_app_with_explicit_overrides(
     if w_log_config_file is not None:
         kwargs["log_config_file"] = w_log_config_file
 
+    register_metaconfigs = mock.Mock(spec_set=())
     curry_lifespan = mock.Mock(spec_set=())
     app_with_lifespan = mock.Mock(spec_set=())
     app_with_cors = mock.Mock(spec_set=())
@@ -244,6 +245,7 @@ def test_create_app_with_explicit_overrides(
     found = main.create_app(
         installation_path=installation_w_session_token,
         no_auth_mode=w_no_auth_mode,
+        register_metaconfigs=register_metaconfigs,
         curry_lifespan=curry_lifespan,
         app_with_lifespan=app_with_lifespan,
         app_with_cors=app_with_cors,
@@ -276,6 +278,7 @@ def test_create_app_with_explicit_overrides(
         add_admin_user=w_add_admin_user,
         log_config_file=w_log_config_file,
     )
+    register_metaconfigs.assert_called_once_with()
 
 
 @pytest.mark.parametrize("w_log_config_file", [None, LOG_CONFIG_FILE_PATH])

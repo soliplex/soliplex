@@ -1,5 +1,7 @@
 """Features defined by soliplex"""
 
-from haiku.rag.agents.chat import state as hr_chat_state
+import pydantic
 
-HAIKU_CHAT_FEATURE = hr_chat_state.AGUI_STATE_KEY
+
+class EmptyFeatureModel(pydantic.BaseModel):
+    """Empty feature model for testing"""

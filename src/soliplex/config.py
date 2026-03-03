@@ -29,7 +29,7 @@ from pydantic_ai import settings as ai_settings
 from pydantic_ai.agent import abstract as ai_ag_abstract
 from skills_ref import validator as skill_validator
 
-from soliplex.agui import features
+from soliplex.agui import features as agui_features_module  # noqa F401
 
 FILE_PREFIX = "file:"
 
@@ -1869,11 +1869,7 @@ class AGUI_Feature:
 AGUI_FEATURES_BY_NAME = {
     agui_feature.name: agui_feature
     for agui_feature in [
-        AGUI_Feature(
-            name=features.HAIKU_CHAT_FEATURE,
-            model_klass=features.hr_chat_state.ChatSessionState,
-            source=AGUI_FeatureSource.SERVER,
-        ),
+        # Add features here as needed
     ]
 }
 

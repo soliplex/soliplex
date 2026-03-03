@@ -20,7 +20,7 @@ from pydantic_ai import settings as ai_settings
 
 from soliplex import config
 from soliplex import secrets
-from soliplex.agui import features
+from soliplex.agui import features as agui_features
 
 here = pathlib.Path(__file__).resolve().parent
 
@@ -1183,8 +1183,8 @@ meta:
 W_AGUI_FEATURES_ICMETA_KW = {
     "agui_features": [
         config.AGUI_FeatureConfigMeta(
-            name=features.HAIKU_CHAT_FEATURE,
-            model_klass=features.hr_chat_state.ChatSessionState,
+            name=AGUI_FEATURE_NAME,
+            model_klass=agui_features.EmptyFeatureModel,
             source="server",
         ),
     ],
@@ -1194,11 +1194,11 @@ W_AGUI_FEATURES_ICMETA_KW = {
     "agent_configs": [],
     "secret_sources": [],
 }
-W_AGUI_FEATURES_ICMETA_YAML = """\
+W_AGUI_FEATURES_ICMETA_YAML = f"""\
 meta:
   agui_features:
-      - name: "haiku.rag.chat"
-        model_klass: "haiku.rag.agents.chat.state.ChatSessionState"
+      - name: "{AGUI_FEATURE_NAME}"
+        model_klass: "soliplex.agui.features.EmptyFeatureModel"
         source: "server"
 """
 
@@ -1263,8 +1263,8 @@ meta:
 FULL_ICMETA_KW = {
     "agui_features": [
         config.AGUI_FeatureConfigMeta(
-            name=features.HAIKU_CHAT_FEATURE,
-            model_klass=features.hr_chat_state.ChatSessionState,
+            name=AGUI_FEATURE_NAME,
+            model_klass=agui_features.EmptyFeatureModel,
             source="server",
         ),
     ],
@@ -1285,11 +1285,11 @@ FULL_ICMETA_KW = {
         ),
     ],
 }
-FULL_ICMETA_YAML = """\
+FULL_ICMETA_YAML = f"""\
 meta:
   agui_features:
-      - name: "haiku.rag.chat"
-        model_klass: "haiku.rag.agents.chat.state.ChatSessionState"
+      - name: "{AGUI_FEATURE_NAME}"
+        model_klass: "soliplex.agui.features.EmptyFeatureModel"
         source: "server"
   mcp_toolset_configs:
       - "soliplex.config.Stdio_MCP_ClientToolsetConfig"
@@ -4528,18 +4528,11 @@ def test_secretconfig_resolved():
     assert secret.resolved == SECRET_VALUE
 
 
-class FeatureModel(pydantic.BaseModel):
-    """Feature model for testing"""
-
-    foo: str
-    bar: str | None = None
-
-
 @pytest.fixture
 def the_agui_feature():
     return config.AGUI_Feature(
         name=AGUI_FEATURE_NAME,
-        model_klass=FeatureModel,
+        model_klass=agui_features.EmptyFeatureModel,
         source=config.AGUI_FeatureSource.CLIENT,
     )
 
@@ -4559,7 +4552,7 @@ def test_aguifeature_description(the_agui_feature, wo_schema_desc):
     if wo_schema_desc:
         assert found == "NoDescription"
     else:
-        assert found == "Feature model for testing"
+        assert found == agui_features.EmptyFeatureModel.__doc__
 
 
 def test_aguifeature_as_yaml(the_agui_feature):
@@ -4567,7 +4560,7 @@ def test_aguifeature_as_yaml(the_agui_feature):
 
     assert found == {
         "name": AGUI_FEATURE_NAME,
-        "description": "Feature model for testing",
+        "description": agui_features.EmptyFeatureModel.__doc__,
         "source": "client",
     }
 
@@ -4575,7 +4568,7 @@ def test_aguifeature_as_yaml(the_agui_feature):
 def test_aguifeature_json_schema(the_agui_feature):
     found = the_agui_feature.json_schema
 
-    assert found == FeatureModel.model_json_schema()
+    assert found == agui_features.EmptyFeatureModel.model_json_schema()
 
 
 @pytest.mark.parametrize(
@@ -6703,7 +6696,7 @@ def test_installationconfig_avl_ep_skill_configs_wo_existing(
     dfe,
     patched_soliplex_config,
 ):
-    class DerivedFeatureModel(FeatureModel):
+    class DerivedFeatureModel(agui_features.EmptyFeatureModel):
         pass
 
     registry = patched_soliplex_config["AGUI_FEATURES_BY_NAME"]
@@ -6712,7 +6705,7 @@ def test_installationconfig_avl_ep_skill_configs_wo_existing(
     ep_skill_1.metadata = mock.create_autospec(hs_models.SkillMetadata)
     ep_skill_1.metadata.name = "foo"
     ep_skill_1.state_namespace = AGUI_FEATURE_NAME
-    ep_skill_1.state_type = FeatureModel
+    ep_skill_1.state_type = agui_features.EmptyFeatureModel
 
     ep_skill_2 = mock.create_autospec(hs_models.Skill)
     ep_skill_2.metadata = mock.create_autospec(hs_models.SkillMetadata)
@@ -6733,7 +6726,7 @@ def test_installationconfig_avl_ep_skill_configs_wo_existing(
     # First registration wins
     registered = registry[AGUI_FEATURE_NAME]
     assert registered.name == AGUI_FEATURE_NAME
-    assert registered.model_klass is FeatureModel
+    assert registered.model_klass is agui_features.EmptyFeatureModel
 
 
 @mock.patch("haiku.skills.discovery.discover_from_entrypoints")

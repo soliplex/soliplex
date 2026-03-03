@@ -72,7 +72,6 @@ meta:
   # agent_configs:
   # - "soliplex.config.AgentConfig"
   # - "soliplex.config.FactoryAgentConfig"
-  # - "soliplex.haiku_chat.ChatAgentConfig"
   #------------------------------------------------------------------------
 
   #------------------------------------------------------------------------
@@ -248,6 +247,8 @@ skill_configs:
 # See: https://github.com/ggozad/haiku.skills/issues/27
 # - skill_name: "image-generation"
 #   kind: "entrypoint"
+  - skill_name: "rag"
+    kind: "entrypoint"
 
 #==========================================================================
 # Completions configuration

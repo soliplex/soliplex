@@ -49,6 +49,13 @@ TEST_RUN_LABEL = "My test run #456"
 TEST_RUN_FEEDBACK = "test-feedback"
 TEST_RUN_FEEDBACK_REASON = "Just because"
 
+EMPTY_FEATURE_NAME = "test-empty-feature"
+EMPTY_FEATURE = config.AGUI_Feature(
+    name=EMPTY_FEATURE_NAME,
+    model_klass=agui_features.EmptyFeatureModel,
+    source=config.AGUI_FeatureSource.SERVER,
+)
+
 EMPTY_RUN_INPUT = agui_core.RunAgentInput(
     thread_id=TEST_THREAD_ID,
     run_id=TEST_RUN_ID,
@@ -582,7 +589,7 @@ async def test_get_room_agui_thread_id_run_id(
     "w_agui_feature_names",
     [
         [],
-        [agui_features.HAIKU_CHAT_FEATURE],
+        [EMPTY_FEATURE_NAME],
     ],
 )
 @pytest.mark.parametrize(
@@ -647,16 +654,21 @@ async def test_post_room_agui_only(
         test_thread,
     )
 
-    found = await agui_views.post_room_agui(
-        request,
-        room_id=TEST_ROOM_ID,
-        new_thread_request=new_thread_request,
-        the_installation=the_installation,
-        the_threads=the_threads,
-        the_authz_policy=the_authz_policy,
-        the_user_claims=THE_USER_CLAIMS,
-        the_logger=the_logger,
-    )
+    patch_features = {EMPTY_FEATURE_NAME: EMPTY_FEATURE}
+    with mock.patch.dict(
+        "soliplex.config.AGUI_FEATURES_BY_NAME",
+        **patch_features,
+    ):
+        found = await agui_views.post_room_agui(
+            request,
+            room_id=TEST_ROOM_ID,
+            new_thread_request=new_thread_request,
+            the_installation=the_installation,
+            the_threads=the_threads,
+            the_authz_policy=the_authz_policy,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
 
     assert found.room_id == TEST_ROOM_ID
     assert found.thread_id == TEST_THREAD_ID
@@ -671,7 +683,7 @@ async def test_post_room_agui_only(
     assert set(m_run_state) == exp_inital_state_keys
 
     for state_key in exp_inital_state_keys:
-        exp_klass = config.AGUI_FEATURES_BY_NAME[state_key].model_klass
+        exp_klass = patch_features[state_key].model_klass
         exp_inst = exp_klass()
         assert m_run_state[state_key] == exp_inst.model_dump(mode="python")
 

@@ -14,7 +14,6 @@ from fastapi.middleware import cors as fastapi_mw_cors
 from starlette.middleware import sessions as starlette_mw_sessions
 
 from soliplex import config
-from soliplex import haiku_chat
 from soliplex import installation
 from soliplex import util
 from soliplex import views
@@ -30,7 +29,8 @@ from soliplex.views import streaming as streaming_views
 
 
 def register_metaconfigs():
-    haiku_chat.register_metaconfig()
+    # Register meta configs for modules other than '.config'
+    pass
 
 
 def curry_lifespan(
