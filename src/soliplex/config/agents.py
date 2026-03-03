@@ -443,3 +443,61 @@ def get_model_from_config(
             provider=provider,
             **model_settings_kw,
         )
+
+
+def get_model_from_factory_config(
+    agent_config: FactoryAgentConfig,
+) -> ai_models.Model:
+    """Build a pydantic-ai model from a FactoryAgentConfig.
+
+    Uses ``extra_config`` keys ``provider_type``,
+    ``model_name``, ``provider_base_url``, and
+    ``provider_key`` to construct the model.
+    """
+    ic = agent_config._installation_config
+    extra = agent_config.extra_config
+
+    provider_type = extra.get("provider_type", "ollama")
+    model_name = extra.get("model_name", "gpt-oss:latest")
+
+    if provider_type == "google":
+        provider_kw: dict[str, str] = {}
+        provider_base_url = extra.get("provider_base_url")
+        if provider_base_url:
+            provider_kw["base_url"] = provider_base_url
+        provider_key = extra.get("provider_key")
+        if provider_key:
+            provider_kw["api_key"] = ic.get_secret(provider_key)
+        provider = google_providers.GoogleProvider(**provider_kw)
+        return google_models.GoogleModel(
+            model_name=model_name,
+            provider=provider,
+        )
+
+    if provider_type == "ollama":
+        base_url = extra.get("provider_base_url")
+        if base_url is None:
+            base_url = ic.get_environment("OLLAMA_BASE_URL")
+        ollama_kw: dict[str, str] = {
+            "base_url": f"{base_url}/v1",
+            "api_key": "dummy",
+        }
+        provider = ollama_providers.OllamaProvider(**ollama_kw)
+        return openai_models.OpenAIChatModel(
+            model_name=model_name,
+            provider=provider,
+        )
+
+    # openai
+    oai_kw: dict[str, str] = {}
+    provider_base_url = extra.get("provider_base_url")
+    if provider_base_url:
+        oai_kw["base_url"] = provider_base_url
+    provider_key = extra.get("provider_key")
+    if provider_key:
+        oai_kw["api_key"] = ic.get_secret(provider_key)
+    provider = openai_providers.OpenAIProvider(**oai_kw)
+    return openai_models.OpenAIChatModel(
+        model_name=model_name,
+        provider=provider,
+    )

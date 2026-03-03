@@ -8,79 +8,15 @@ completion).  The LLM decides which tools to call.
 from __future__ import annotations
 
 import json
-import logging
 
+import httpx
 import pydantic_ai
-from pydantic_ai.models import google as google_models
-from pydantic_ai.models import openai as openai_models
-from pydantic_ai.providers import google as google_providers
-from pydantic_ai.providers import ollama as ollama_providers
-from pydantic_ai.providers import openai as openai_providers
 
 from soliplex import agents
 from soliplex import config
+from soliplex.config import agents as config_agents
+from soliplex.moodle.client import MoodleAPIError
 from soliplex.moodle.client import MoodleClient
-
-log = logging.getLogger(__name__)
-
-
-def _build_model(
-    agent_config: config.FactoryAgentConfig,
-):
-    """Build a pydantic-ai model from a factory agent config.
-
-    Reuses the same provider logic as
-    ``agents._get_default_agent_from_configs`` but works
-    with ``FactoryAgentConfig`` (which lacks ``llm_provider_kw``).
-    """
-    ic = agent_config._installation_config
-    extra = agent_config.extra_config
-
-    provider_type = extra.get("provider_type", "ollama")
-    model_name = extra.get("model_name", "gpt-oss:latest")
-
-    if provider_type == "google":
-        provider_kw = {}
-        provider_base_url = extra.get("provider_base_url")
-        if provider_base_url:
-            provider_kw["base_url"] = provider_base_url
-        provider_key = extra.get("provider_key")
-        if provider_key:
-            provider_kw["api_key"] = ic.get_secret(provider_key)
-        provider = google_providers.GoogleProvider(**provider_kw)
-        return google_models.GoogleModel(
-            model_name=model_name,
-            provider=provider,
-        )
-
-    if provider_type == "ollama":
-        base_url = extra.get("provider_base_url")
-        if base_url is None:
-            base_url = ic.get_environment("OLLAMA_BASE_URL")
-        provider_kw = {
-            "base_url": f"{base_url}/v1",
-            "api_key": "dummy",
-        }
-        provider = ollama_providers.OllamaProvider(**provider_kw)
-        return openai_models.OpenAIChatModel(
-            model_name=model_name,
-            provider=provider,
-        )
-
-    # openai
-    provider_kw = {}
-    provider_base_url = extra.get("provider_base_url")
-    if provider_base_url:
-        provider_kw["base_url"] = provider_base_url
-    provider_key = extra.get("provider_key")
-    if provider_key:
-        provider_kw["api_key"] = ic.get_secret(provider_key)
-    provider = openai_providers.OpenAIProvider(**provider_kw)
-    return openai_models.OpenAIChatModel(
-        model_name=model_name,
-        provider=provider,
-    )
-
 
 MOODLE_TOOLS_PROMPT = """\
 You are a training management assistant connected to \
@@ -125,7 +61,7 @@ def moodle_tools_agent_factory(
     token = ic.get_secret(extra["moodle_api_token"])
     client = MoodleClient(base_url=base_url, token=token)
 
-    model = _build_model(agent_config)
+    model = config_agents.get_model_from_factory_config(agent_config)
 
     agent = pydantic_ai.Agent(
         model=model,
@@ -222,7 +158,7 @@ def moodle_tools_agent_factory(
             status = await client.get_course_completion_status(
                 courseid, userid
             )
-        except Exception as exc:
+        except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(
             {

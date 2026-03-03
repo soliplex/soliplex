@@ -70,31 +70,3 @@ class CompletionStatus(BaseModel):
     completions: list[CompletionCriteria] = Field(
         default_factory=list,
     )
-
-
-class CompletionRuleValue(BaseModel):
-    status: int = 0
-    description: str = ""
-
-
-class ActivityCompletionDetail(BaseModel):
-    rulename: str = ""
-    rulevalue: CompletionRuleValue | None = None
-
-
-class ActivityCompletion(BaseModel):
-    cmid: int
-    modname: str = ""
-    instance: int = 0
-    state: int = 0
-    timecompleted: int = 0
-    tracking: int = 0
-    overrideby: int | None = None
-    valueused: bool | None = None
-    hascompletion: bool | None = None
-    isautomatic: bool | None = None
-    istrackeduser: bool | None = None
-    uservisible: bool | None = None
-    details: list[ActivityCompletionDetail] = Field(
-        default_factory=list,
-    )

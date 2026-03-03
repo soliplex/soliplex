@@ -6,7 +6,6 @@ import os
 
 import httpx
 
-from soliplex.moodle.models import ActivityCompletion
 from soliplex.moodle.models import CompletionStatus
 from soliplex.moodle.models import Course
 from soliplex.moodle.models import EnrolledUser
@@ -133,18 +132,3 @@ class MoodleClient:
         return CompletionStatus.model_validate(
             raw.get("completionstatus", raw)
         )
-
-    async def get_activities_completion_status(
-        self,
-        courseid: int,
-        userid: int,
-    ) -> list[ActivityCompletion]:
-        raw = await self._call(
-            "core_completion_get_activities_completion_status",
-            courseid=courseid,
-            userid=userid,
-        )
-        activities = raw.get("statuses", [])
-        return [ActivityCompletion.model_validate(a) for a in activities][
-            :MAX_RESULTS
-        ]

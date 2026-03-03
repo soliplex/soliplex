@@ -1,4 +1,4 @@
-"""Verify the Moodle Workplace (Tool Calling) room config loads."""
+"""Verify the Moodle Workplace room config loads."""
 
 import pathlib
 from unittest import mock
@@ -31,7 +31,7 @@ def test_moodle_tools_room_config_loads():
     )
 
     assert room.id == "moodle-tools"
-    assert room.name == "Moodle Workplace (Tool Calling)"
+    assert room.name == "Moodle Workplace"
     assert room.allow_mcp is False
     assert room.mcp_client_toolset_configs == {}
 

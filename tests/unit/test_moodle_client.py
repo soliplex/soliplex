@@ -245,37 +245,6 @@ async def test_get_course_completion_status(client):
 
 
 # ---------------------------------------------------------------
-# get_activities_completion_status
-# ---------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_get_activities_completion_status(client):
-    resp = _mock_response(
-        {
-            "statuses": [
-                {
-                    "cmid": 1,
-                    "modname": "page",
-                    "instance": 1,
-                    "state": 1,
-                    "timecompleted": 1700000000,
-                    "tracking": 2,
-                }
-            ]
-        }
-    )
-    with _patch_httpx(resp):
-        activities = await client.get_activities_completion_status(
-            courseid=2, userid=3
-        )
-
-    assert len(activities) == 1
-    assert activities[0].state == 1
-    assert activities[0].modname == "page"
-
-
-# ---------------------------------------------------------------
 # Result truncation
 # ---------------------------------------------------------------
 

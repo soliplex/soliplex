@@ -1229,3 +1229,111 @@ def test_get_model_from_config(
         oai_provider_klass.assert_not_called()
         google_model_klass.assert_not_called()
         google_provider_klass.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "provider_type, extra_config",
+    [
+        (
+            "ollama",
+            {"provider_type": "ollama", "model_name": MODEL},
+        ),
+        (
+            "ollama_default",
+            {},
+        ),
+        (
+            "ollama_with_base_url",
+            {
+                "provider_type": "ollama",
+                "model_name": MODEL,
+                "provider_base_url": BASE_URL,
+            },
+        ),
+        (
+            "openai",
+            {
+                "provider_type": "openai",
+                "model_name": MODEL,
+                "provider_base_url": BASE_URL,
+                "provider_key": "secret:OPENAI_KEY",
+            },
+        ),
+        (
+            "openai_minimal",
+            {
+                "provider_type": "openai",
+                "model_name": MODEL,
+            },
+        ),
+        (
+            "google",
+            {
+                "provider_type": "google",
+                "model_name": MODEL,
+                "provider_base_url": BASE_URL,
+                "provider_key": "secret:GOOGLE_KEY",
+            },
+        ),
+        (
+            "google_minimal",
+            {
+                "provider_type": "google",
+                "model_name": MODEL,
+            },
+        ),
+    ],
+)
+@mock.patch("pydantic_ai.providers.google.GoogleProvider")
+@mock.patch("pydantic_ai.providers.ollama.OllamaProvider")
+@mock.patch("pydantic_ai.providers.openai.OpenAIProvider")
+@mock.patch("pydantic_ai.models.google.GoogleModel")
+@mock.patch("pydantic_ai.models.openai.OpenAIChatModel")
+def test_get_model_from_factory_config(
+    oai_model_klass,
+    google_model_klass,
+    oai_provider_klass,
+    oll_provider_klass,
+    google_provider_klass,
+    provider_type,
+    extra_config,
+):
+    agent_config = mock.create_autospec(config_agents.FactoryAgentConfig)
+    agent_config.extra_config = extra_config
+    ic = agent_config._installation_config
+    ic.get_environment.return_value = "http://localhost:11434"
+    ic.get_secret.return_value = API_KEY
+
+    model = config_agents.get_model_from_factory_config(agent_config)
+
+    effective_provider = extra_config.get("provider_type", "ollama")
+    effective_model = extra_config.get("model_name", "gpt-oss:latest")
+
+    if effective_provider == "google":
+        assert model is google_model_klass.return_value
+        google_model_klass.assert_called_once_with(
+            model_name=effective_model,
+            provider=google_provider_klass.return_value,
+        )
+        oai_model_klass.assert_not_called()
+        oll_provider_klass.assert_not_called()
+
+    elif effective_provider == "ollama":
+        assert model is oai_model_klass.return_value
+        oai_model_klass.assert_called_once_with(
+            model_name=effective_model,
+            provider=oll_provider_klass.return_value,
+        )
+        oai_provider_klass.assert_not_called()
+        google_model_klass.assert_not_called()
+        google_provider_klass.assert_not_called()
+
+    else:
+        assert model is oai_model_klass.return_value
+        oai_model_klass.assert_called_once_with(
+            model_name=effective_model,
+            provider=oai_provider_klass.return_value,
+        )
+        oll_provider_klass.assert_not_called()
+        google_model_klass.assert_not_called()
+        google_provider_klass.assert_not_called()
