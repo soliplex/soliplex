@@ -213,6 +213,29 @@ authorization_dburi:
 #==========================================================================
 
 #==========================================================================
+# Skills configuration
+#==========================================================================
+# See: https://soliplex.github.io/soliplex/config/skills/
+#
+# Default is equivalent to::
+#
+# filesystem_skills_paths:
+#   - "./skills"
+#
+# ... but with no discovered skills enabled.
+#==========================================================================
+
+filesystem_skills_paths:
+  - "./skills"
+
+skill_configs:
+  - skill_name: "bare-bones"
+    kind: "filesystem"
+# See: https://github.com/ggozad/haiku.skills/issues/27
+# - skill_name: "image-generation"
+#   kind: "entrypoint"
+
+#==========================================================================
 # Rooms configuration
 #==========================================================================
 # See: https://soliplex.github.io/soliplex/config/rooms/
@@ -228,27 +251,6 @@ room_paths:
   - "./rooms/faux"
   - "./rooms/quiztest"
   - "./rooms/skillstest"
-
-#==========================================================================
-# Skills configuration
-#
-# Default is equivalent to::
-#
-# filesystem_skills_paths:
-#   - "./skills"
-#==========================================================================
-
-filesystem_skills_paths:
-  - "./skills"
-
-skill_configs:
-  - skill_name: "bare-bones"
-    kind: "filesystem"
-# See: https://github.com/ggozad/haiku.skills/issues/27
-# - skill_name: "image-generation"
-#   kind: "entrypoint"
-  - skill_name: "rag"
-    kind: "entrypoint"
 
 #==========================================================================
 # Completions configuration

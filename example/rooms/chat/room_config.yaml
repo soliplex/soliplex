@@ -1,24 +1,32 @@
 id: "chat"
 name: "Haiku Chat"
 description: "Conversational RAG with search, ask, and document retrieval"
+
 suggestions:
   - "Get the document agents.md and summarize its key points"
   - "Search for information about Soliplex"
   - "Explain how the authentication system works"
+
 agent:
   template_id: "default_chat"
-# kind: "haiku_chat"
-# rag_lancedb_stem: "rag"
-# rag_features: ["search", "documents", "qa"]
-# background_context: |
-#   **Soliplex** is an AI-powered Retrieval-Augmented Generation (RAG) platform.
-#   It lets users:
+
+skills:
+  skill_configs:
+    - skill_name: "rag"
+      kind: "haiku.rag.skills.rag"
+      rag_lancedb_stem: "rag"
+#     rag_features: ["search", "documents", "qa"]
 #
-#   * **Index** documents (text, PDFs, etc.) in a vector store (via LanceDB).
-#   * **Search** that content quickly with a full-text + vector engine.
-#   * **Generate** answers that are grounded in the indexed material by calling the OpenAI API or running local Ollama models.
-#   * **Interact** through a WebSocket-driven chat interface, with a FastAPI backend managing routing to the vector store and language model.
-#   * **Securely authenticate** users with OIDC.
+#     background_context: |
+#       **Soliplex** is an AI-powered Retrieval-Augmented Generation (RAG) platform.
+#      It lets users:
 #
-#   Soliplex is built on the haiku-rag library and is ideal for applications such as internal knowledge bases, legal compliance, onboarding, customer support, and research assistance.
+#      * **Index** documents (text, PDFs, etc.) in a vector store (via LanceDB).
+#      * **Search** that content quickly with a full-text + vector engine.
+#      * **Generate** answers that are grounded in the indexed material by calling the OpenAI API or running local Ollama models.
+#      * **Interact** through a WebSocket-driven chat interface, with a FastAPI backend managing routing to the vector store and language model.
+#      * **Securely authenticate** users with OIDC.
+#
+#      Soliplex is built on the haiku-rag library and is ideal for applications such as internal knowledge bases, legal compliance, onboarding, customer support, and research assistance.
+
 allow_mcp: false

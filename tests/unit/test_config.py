@@ -294,6 +294,42 @@ SKILL_METADATA = {
     "author": SKILL_AUTHOR,
     "version": SKILL_VERSION,
 }
+
+BARE_SKILL_MD_KW = {
+    "name": SKILL_NAME,
+    "description": SKILL_DESC,
+}
+BARE_SKILL_MD_YAML = f"""\
+---
+name: {SKILL_NAME}
+description: {SKILL_DESC}
+---
+"""
+
+FULL_SKILL_MD_KW = {
+    "name": SKILL_NAME,
+    "description": SKILL_DESC,
+    "license": SKILL_LICENSE,
+    "compatibility": SKILL_COMPAT,
+    "allowed_tools": SKILL_ALLOWED_TOOLS,
+    "metadata": {
+        "author": SKILL_AUTHOR,
+        "version": SKILL_VERSION,
+    },
+}
+FULL_SKILL_MD_YAML = f"""\
+---
+name: "{SKILL_NAME}"
+description: "{SKILL_DESC}"
+license: "{SKILL_LICENSE}"
+compatibility: "{SKILL_COMPAT}"
+allowed-tools: "{SKILL_ALLOWED_TOOLS}"
+metadata:
+    author: "{SKILL_AUTHOR}"
+    version: "{SKILL_VERSION}"
+---
+"""
+
 SKILL_MODEL_NAME = "test-skill-model"
 SKILL_PATH = f"/path/to/skills/{SKILL_NAME}"
 SKILL_STATE_NAMESPACE = "test-skill-namespace"
@@ -2305,19 +2341,25 @@ def test__rcb_ctor(
 
 
 @pytest.mark.parametrize(
-    "w_config_path, w_hr_yaml",
+    "w_already, w_config_path, w_hr_yaml",
     [
-        (False, None),
-        (True, None),
-        (True, {"environment": "from_room"}),
+        (False, False, None),
+        (False, True, None),
+        (False, True, {"environment": "from_room"}),
+        (True, False, None),
+        (True, True, None),
+        (True, True, {"environment": "from_room"}),
     ],
 )
-def test__rcb_haiku_rag_path(
+def test__rcb_haiku_rag_config(
     installation_config,
     temp_dir,
+    w_already,
     w_config_path,
     w_hr_yaml,
 ):
+    already = object()
+
     installation_config.haiku_rag_config = hr_config_module.AppConfig(
         environment="from_installation",
     )
@@ -2333,6 +2375,8 @@ def test__rcb_haiku_rag_path(
         "rag_lancedb_stem": "stem",
         "_installation_config": installation_config,
     }
+    if w_already:
+        kw["_haiku_rag_config"] = already
 
     if w_config_path:
         exp_room_config_path = room_config_dir / "room_config.yaml"
@@ -2342,16 +2386,20 @@ def test__rcb_haiku_rag_path(
 
     rcb_config = config._RAGConfigBase(**kw)
 
-    if w_config_path:
-        hr_config = rcb_config.haiku_rag_config
+    if w_already:
+        assert rcb_config.haiku_rag_config is already
 
-        if w_hr_yaml:
-            assert hr_config.environment == "from_room"
-        else:
-            assert hr_config.environment == "from_installation"
     else:
-        with no_config_path:
-            _ = rcb_config.haiku_rag_config
+        if w_config_path:
+            hr_config = rcb_config.haiku_rag_config
+
+            if w_hr_yaml:
+                assert hr_config.environment == "from_room"
+            else:
+                assert hr_config.environment == "from_installation"
+        else:
+            with no_config_path:
+                _ = rcb_config.haiku_rag_config
 
 
 @pytest.mark.parametrize(
@@ -2895,6 +2943,227 @@ def test_entrypointskillconfig_skill(skill_path, w_metadata_kw, w_kw):
     assert found.metadata.metadata == skill_config.metadata
     assert found.state_type is w_kw.get("state_type")
     assert found.state_namespace is w_kw.get("state_namespace")
+
+
+@pytest.mark.parametrize(
+    "w_skill_md_yaml, w_skill_md_kwargs",
+    [
+        (BARE_SKILL_MD_YAML, BARE_SKILL_MD_KW),
+        (FULL_SKILL_MD_YAML, FULL_SKILL_MD_KW),
+    ],
+)
+def test__hrskillconfigbase_skill_metadata_w_not_exists(
+    temp_dir,
+    w_skill_md_yaml,
+    w_skill_md_kwargs,
+):
+    skills_dir = temp_dir / "skills"
+    skills_dir.mkdir()
+    skill_path = skills_dir / SKILL_NAME
+    skill_path.mkdir()
+    skill_config = skill_path / "SKILL.md"
+    skill_config.write_text(w_skill_md_yaml)
+
+    expected = hs_models.SkillMetadata(**w_skill_md_kwargs)
+
+    class TestHRSkllConfig(config._HR_SkillConfigBase):
+        _hr_skill_path: pathlib.Path = skill_path
+        state_namespace: typing.ClassVar[str] = SKILL_STATE_NAMESPACE
+
+    inst = TestHRSkllConfig(skill_name=SKILL_NAME, rag_lancedb_stem="test")
+
+    found = inst.skill_metadata
+
+    assert found == expected
+
+    assert inst.description == expected.description
+    assert inst.license == expected.license
+    assert inst.compatibility == expected.compatibility
+    assert inst.allowed_tools == expected.allowed_tools
+    assert inst.metadata == expected.metadata
+
+    assert inst.agui_feature_names == [SKILL_STATE_NAMESPACE]
+
+
+def test__hrskillconfigbase_skill_metadata_w_exists(temp_dir):
+    already = object()
+
+    class TestHRSkllConfig(config._HR_SkillConfigBase):
+        _skill_metadata = already
+
+    inst = TestHRSkllConfig(skill_name=SKILL_NAME, rag_lancedb_stem="test")
+
+    found = inst.skill_metadata
+
+    assert found is already
+
+
+@mock.patch("soliplex.config.hr_skills_rag")
+def test_hrragskillconfig_skill(
+    hr_skills_rag,
+    temp_dir,
+    installation_config,
+):
+    skill_haiku_rag_config = object()
+
+    config_path = temp_dir / "config_file.yaml"
+    lancedb = temp_dir / "rag.lancedb"
+    lancedb.mkdir()
+
+    inst = config.HR_RagSkillConfig(
+        skill_name=SKILL_NAME,
+        rag_lancedb_override_path=lancedb,
+        _haiku_rag_config=skill_haiku_rag_config,
+        _config_path=config_path,
+        _installation_config=installation_config,
+    )
+
+    found = inst.skill
+
+    assert found is hr_skills_rag.create_skill.return_value
+
+    hr_skills_rag.create_skill.assert_called_once_with(
+        db_path=lancedb,
+        config=skill_haiku_rag_config,
+    )
+
+
+@pytest.mark.parametrize(
+    "w_error, expectation",
+    [
+        (False, contextlib.nullcontext()),
+        (True, pytest.raises(config.FromYamlException)),
+    ],
+)
+def test_hrragskillconfig_from_yaml(
+    temp_dir,
+    installation_config,
+    w_error,
+    expectation,
+):
+    config_path = temp_dir / "config_file.yaml"
+    lancedb = temp_dir / "rag.lancedb"
+    lancedb.mkdir()
+
+    config_dict = {
+        "skill_name": SKILL_NAME,
+        "rag_lancedb_override_path": lancedb,
+    }
+    if w_error:
+        config_dict["not_a_valid_key"] = "FAIL"
+
+    with expectation as expected:
+        inst = config.HR_RagSkillConfig.from_yaml(
+            installation_config=installation_config,
+            config_path=config_path,
+            config_dict=config_dict,
+        )
+
+    if expected is None:
+        assert inst.skill_name == SKILL_NAME
+        assert inst.rag_lancedb_path == lancedb
+        assert inst.haiku_rag_config is installation_config.haiku_rag_config
+
+
+@mock.patch("soliplex.config.hr_skills_rlm")
+def test_hrrlmskillconfig_skill(
+    hr_skills_rlm,
+    temp_dir,
+    installation_config,
+):
+    skill_haiku_rag_config = object()
+
+    config_path = temp_dir / "config_file.yaml"
+    lancedb = temp_dir / "rag.lancedb"
+    lancedb.mkdir()
+
+    inst = config.HR_RLM_SkillConfig(
+        skill_name=SKILL_NAME,
+        rag_lancedb_override_path=lancedb,
+        _haiku_rag_config=skill_haiku_rag_config,
+        _config_path=config_path,
+        _installation_config=installation_config,
+    )
+
+    found = inst.skill
+
+    assert found is hr_skills_rlm.create_skill.return_value
+
+    hr_skills_rlm.create_skill.assert_called_once_with(
+        db_path=lancedb,
+        config=skill_haiku_rag_config,
+    )
+
+
+@pytest.mark.parametrize(
+    "w_error, expectation",
+    [
+        (False, contextlib.nullcontext()),
+        (True, pytest.raises(config.FromYamlException)),
+    ],
+)
+def test_hrrlmskillconfig_from_yaml(
+    temp_dir,
+    installation_config,
+    w_error,
+    expectation,
+):
+    config_path = temp_dir / "config_file.yaml"
+    lancedb = temp_dir / "rag.lancedb"
+    lancedb.mkdir()
+
+    config_dict = {
+        "skill_name": SKILL_NAME,
+        "rag_lancedb_override_path": lancedb,
+    }
+    if w_error:
+        config_dict["not_a_valid_key"] = "FAIL"
+
+    with expectation as expected:
+        inst = config.HR_RLM_SkillConfig.from_yaml(
+            installation_config=installation_config,
+            config_path=config_path,
+            config_dict=config_dict,
+        )
+
+    if expected is None:
+        assert inst.skill_name == SKILL_NAME
+        assert inst.rag_lancedb_path == lancedb
+        assert inst.haiku_rag_config is installation_config.haiku_rag_config
+
+
+def test_extractskillconfigs(installation_config, temp_dir):
+    config_path = temp_dir / "rooms" / "test" / "room_config.yaml"
+    config_dict = {
+        "skill_configs": [
+            {
+                "skill_name": "foo",
+                "kind": "haiku.rag.skills.rag",
+                "rag_lancedb_stem": "test-foo",
+            },
+            {
+                "skill_name": "bar",
+                "kind": "haiku.rag.skills.rlm",
+                "rag_lancedb_stem": "test-bar",
+            },
+        ]
+    }
+
+    found = config.extract_skill_configs(
+        installation_config=installation_config,
+        config_path=config_path,
+        config_dict=config_dict,
+    )
+
+    assert isinstance(found["foo"], config.HR_RagSkillConfig)
+    assert found["foo"].skill_name == "foo"
+    assert found["foo"].rag_lancedb_stem == "test-foo"
+
+    assert isinstance(found["bar"], config.HR_RLM_SkillConfig)
+    assert found["bar"].skill_name == "bar"
+    assert found["bar"].rag_lancedb_stem == "test-bar"
+
+    assert "skill_configs" not in config_dict
 
 
 @pytest.mark.parametrize(

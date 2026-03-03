@@ -22,9 +22,12 @@ import logfire
 import pydantic
 import yaml
 from haiku.rag import config as hr_config
+from haiku.rag.skills import rag as hr_skills_rag
+from haiku.rag.skills import rlm as hr_skills_rlm
 from haiku.skills import agent as hs_agent
 from haiku.skills import discovery as hs_discovery
 from haiku.skills import models as hs_models
+from haiku.skills import parser as hs_parser
 from pydantic_ai import settings as ai_settings
 from pydantic_ai.agent import abstract as ai_ag_abstract
 from skills_ref import validator as skill_validator
@@ -417,6 +420,7 @@ class _RAGConfigBase:
     # Normally set via subclass 'from_yaml'
     _installation_config: InstallationConfig = _no_repr_no_compare_none()
     _config_path: pathlib.Path = None
+    _haiku_rag_config: hr_config.AppConfig | None = None
 
     def __post_init__(self):
         exclusive_required = [
@@ -436,22 +440,25 @@ class _RAGConfigBase:
         directory holds a 'haiku.rag.yaml' file, load it's mapping, and
         treat it as overrides.
         """
-        if self._config_path is None:
-            raise NoConfigPath()
+        if self._haiku_rag_config is None:
+            if self._config_path is None:
+                raise NoConfigPath()
 
-        base_config = self._installation_config.haiku_rag_config
+            base_config = self._installation_config.haiku_rag_config
 
-        hr_config_file = self._config_path.parent / "haiku.rag.yaml"
+            hr_config_file = self._config_path.parent / "haiku.rag.yaml"
 
-        if hr_config_file.is_file():
-            base_config_yaml = base_config.model_dump()
-            room_config_yaml = hr_config.load_yaml_config(hr_config_file)
+            if hr_config_file.is_file():
+                base_config_yaml = base_config.model_dump()
+                room_config_yaml = hr_config.load_yaml_config(hr_config_file)
 
-            return hr_config.AppConfig.model_validate(
-                base_config_yaml | room_config_yaml
-            )
-        else:
-            return base_config
+                self._haiku_rag_config = hr_config.AppConfig.model_validate(
+                    base_config_yaml | room_config_yaml
+                )
+            else:
+                self._haiku_rag_config = base_config
+
+        return self._haiku_rag_config
 
     @property
     def rag_lancedb_path(self) -> pathlib.Path:
@@ -707,13 +714,10 @@ SkillStateType = type[pydantic.BaseModel] | None
 
 @dataclasses.dataclass(kw_only=True)
 class _SkillConfigBase:
-    """Configuration for an agent skill."""
+    """Base for configuration for an agent skill."""
 
     skill_name: str
-
     model_name: str | None = None
-    state_type: SkillStateType = None
-    state_namespace: str | None = None
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -723,6 +727,8 @@ class _DiscoveredSkillConfigBase(_SkillConfigBase):
     kind: typing.ClassVar[hs_models.SkillSource]  # quasi- @abstractproperty
 
     _skill_metadata: hs_models.SkillMetadata
+    state_namespace: str | None = None
+    state_type: SkillStateType = None
 
     @property
     def source(self) -> hs_models.SkillSource | None:
@@ -848,17 +854,170 @@ class EntrypointSkillConfig(_DiscoveredSkillConfigBase):
     kind: typing.ClassVar[hs_models.SkillSource] = SkillKind.ENTRYPOINT
 
 
+@dataclasses.dataclass(kw_only=True)
+class _HR_SkillConfigBase(_SkillConfigBase, _RAGConfigBase):
+    """Base class for 'haiku-rag' skll configs"""
+
+    source: typing.ClassVar[hs_models.SkillSource] = SkillKind.ENTRYPOINT
+
+    _skill_metadata: typing.ClassVar[hs_models.SkillMetadata] = None
+    _instructions: typing.ClassVar[str] = None
+
+    _haiku_rag_config: hr_config.AppConfig = None
+
+    @property
+    def skill_metadata(self) -> hs_models.SkillMetadata:
+        if self._skill_metadata is None:
+            (
+                self._skill_metadata,
+                self._instructions,
+            ) = hs_parser.parse_skill_md(self._hr_skill_path / "SKILL.md")
+        return self._skill_metadata
+
+    @property
+    def agui_feature_names(self):
+        return [self.state_namespace]
+
+    @property
+    def description(self) -> str:
+        return self.skill_metadata.description
+
+    @property
+    def license(self) -> str:
+        return self.skill_metadata.license
+
+    @property
+    def compatibility(self) -> str:
+        return self.skill_metadata.compatibility
+
+    @property
+    def allowed_tools(self) -> str:
+        return self.skill_metadata.allowed_tools
+
+    @property
+    def metadata(self) -> dict:
+        return self._skill_metadata.metadata
+
+
+@dataclasses.dataclass(kw_only=True)
+class HR_RagSkillConfig(_HR_SkillConfigBase):
+    """Configuration for an agent skill from 'haiku.rag.skills.rag"""
+
+    kind: typing.ClassVar[hs_models.SkillSource] = "haiku.rag.skills.rag"
+    state_namespace: typing.ClassVar[str] = "rag"
+    state_type: typing.ClassVar[SkillStateType] = hr_skills_rag.RAGState
+
+    @property
+    def _hr_skill_path(self):  # pragma: NO COVER
+        return pathlib.Path(hr_skills_rag.__file__).parent / "rag"
+
+    @property
+    def skill(self) -> hs_models.Skill:
+        return hr_skills_rag.create_skill(
+            db_path=self.rag_lancedb_path,
+            config=self.haiku_rag_config,
+        )
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config_dict: dict,
+    ):
+        try:
+            _kind = config_dict.pop("kind", None)
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
+
+            return cls(**config_dict)
+        except Exception as exc:
+            raise FromYamlException(
+                config_path,
+                "hr_rag_skill",
+                config_dict,
+            ) from exc
+
+
+@dataclasses.dataclass(kw_only=True)
+class HR_RLM_SkillConfig(_HR_SkillConfigBase):
+    """Configuration for an agent skill from 'haiku.rag.skills.rlm"""
+
+    kind: typing.ClassVar[hs_models.SkillSource] = "haiku.rag.skills.rlm"
+    state_namespace: typing.ClassVar[str] = "rlm"
+    state_type: typing.ClassVar[SkillStateType] = hr_skills_rlm.RLMState
+
+    @staticmethod
+    def _hr_skill_path():  # pragma: NO COVER
+        return pathlib.Path(hr_skills_rlm.__file__).parent / "rag-rlm"
+
+    @property
+    def skill(self) -> hs_models.Skill:
+        return hr_skills_rlm.create_skill(
+            db_path=self.rag_lancedb_path,
+            config=self.haiku_rag_config,
+        )
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config_dict: dict,
+    ):
+        try:
+            _kind = config_dict.pop("kind", None)
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
+
+            return cls(**config_dict)
+        except Exception as exc:
+            raise FromYamlException(
+                config_path,
+                "hr_rlm_skill",
+                config_dict,
+            ) from exc
+
+
 SKILL_CONFIG_CLASSES_BY_KIND = {
     klass.kind: klass
     for klass in [
         FilesystemSkillConfig,
         EntrypointSkillConfig,
+        HR_RagSkillConfig,
+        HR_RLM_SkillConfig,
     ]
 }
 
-SkillConfigTypes = FilesystemSkillConfig | EntrypointSkillConfig
+SkillConfigTypes = (
+    FilesystemSkillConfig
+    | EntrypointSkillConfig
+    | HR_RagSkillConfig
+    | HR_RLM_SkillConfig
+)
 SkillConfigMap = dict[str, SkillConfigTypes]
 SkillMap = dict[str, hs_models.Skill]
+
+
+def extract_skill_configs(
+    installation_config: InstallationConfig,
+    config_path: pathlib.Path,
+    config_dict: dict,
+):
+    skill_configs = {}
+
+    for s_config in config_dict.pop("skill_configs", ()):
+        kind = s_config.get("kind")
+        sc_klass = SKILL_CONFIG_CLASSES_BY_KIND[kind]
+
+        skill_config = sc_klass.from_yaml(
+            installation_config,
+            config_path,
+            s_config,
+        )
+        skill_configs[skill_config.skill_name] = skill_config
+
+    return skill_configs
 
 
 # ============================================================================
@@ -1376,6 +1535,12 @@ class RoomSkillsConfig:
                 config_dict,
             )
 
+            config_dict["_skill_configs"] = extract_skill_configs(
+                installation_config=installation_config,
+                config_path=config_path,
+                config_dict=config_dict,
+            )
+
             config_dict["_installation_config"] = installation_config
             config_dict["_config_path"] = config_path
 
@@ -1397,7 +1562,7 @@ class RoomSkillsConfig:
         return {
             skill_name: ic_skill_configs[skill_name]
             for skill_name in self.skill_names
-        }
+        } | (self._skill_configs)
 
     @property
     def skills(self) -> SkillMap:
