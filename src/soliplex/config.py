@@ -1847,7 +1847,11 @@ class AGUI_Feature:
 
     @property
     def description(self) -> str:
-        return self.model_klass.model_json_schema()["description"]
+        schema = self.model_klass.model_json_schema()
+        if "description" not in schema:
+            return self.model_klass.__name__
+        else:
+            return schema["description"]
 
     @property
     def as_yaml(self):
