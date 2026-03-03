@@ -110,6 +110,8 @@ async def _fetch_moodle_context(
     lines.append("### Courses")
 
     for c in courses:
+        if c.id == 1:  # skip Moodle site course
+            continue
         lines.append(f"- [{c.id}] {c.fullname}")
         enrolled = await client.get_enrolled_users(c.id)
 
@@ -172,11 +174,17 @@ MOODLE_TOOLS_PROMPT = """\
 You are a training management assistant connected to \
 Moodle Workplace.
 
-You have four tools for querying Moodle data.  Follow \
-this workflow:
+You have four tools for querying Moodle data.  IMPORTANT: \
+Always call the relevant tool BEFORE answering.  Never \
+claim data is missing without checking first.
 
-1. Start with `list_courses` to discover available \
-courses and their IDs.
+Workflow:
+
+1. ALWAYS start with `list_courses` to discover available \
+courses and their IDs.  If the user mentions a course by \
+name, call `list_courses` first and match the closest \
+result — do NOT say a course does not exist without \
+checking.
 2. Use `find_user` to look up a user by username or \
 email and get their user ID.
 3. Use `list_enrolled_users` with a course ID to see \
@@ -232,6 +240,7 @@ def moodle_tools_agent_factory(
                     "fullname": c.fullname,
                 }
                 for c in courses
+                if c.id != 1  # exclude Moodle site course
             ]
         )
 

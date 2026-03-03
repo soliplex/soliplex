@@ -3,7 +3,7 @@ name: "Moodle Workplace"
 description: "Query Moodle Workplace for courses, enrollment, and completion data"
 suggestions:
   - "What courses are available?"
-  - "Who is enrolled in the test course?"
+  - "Who is enrolled in the Safety Fundamentals course?"
   - "Show me completion status for testuser1"
 
 agent:
