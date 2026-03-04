@@ -2694,6 +2694,10 @@ def test_filesystemskillconfig_ctor(
 
 
 def test_filesystemskillconfig_ctor_w_errors(skill_path):
+    validation_error = hs_models.SkillValidationError(
+        SKILL_VALIDATION_ERROR,
+        skill_path,
+    )
     skill_metadata = hs_models.SkillMetadata(
         name=SKILL_NAME,
         description=SKILL_VALIDATION_ERROR,
@@ -2702,7 +2706,7 @@ def test_filesystemskillconfig_ctor_w_errors(skill_path):
         skill_name=SKILL_NAME,
         _skill_path=skill_path,
         _skill_metadata=skill_metadata,
-        _validation_errors=[SKILL_VALIDATION_ERROR],
+        _validation_errors=[validation_error],
     )
 
     assert skill_config.name is SKILL_NAME
@@ -2711,27 +2715,31 @@ def test_filesystemskillconfig_ctor_w_errors(skill_path):
     assert skill_config.compatibility is None
     assert skill_config.allowed_tools == []
     assert skill_config.metadata == {}
-    assert skill_config.errors == [SKILL_VALIDATION_ERROR]
+    assert skill_config.errors == [validation_error]
 
 
 @pytest.mark.parametrize("w_errors", [[], [SKILL_VALIDATION_ERROR]])
 @mock.patch("haiku.skills.discovery.discover_from_paths")
-@mock.patch("skills_ref.validator.validate")
 def test_filesystemskillconfig_from_path(
-    sv_validate,
     hsd_dfp,
     skill_path,
     w_errors,
 ):
-    sv_validate.return_value = w_errors
-
-    if not w_errors:
+    if w_errors:
+        hsd_dfp.return_value = (
+            [],
+            [
+                hs_models.SkillValidationError(msg, skill_path)
+                for msg in w_errors
+            ],
+        )
+    else:
         metadata = mock.create_autospec(hs_models.SkillMetadata)
         metadata.name = SKILL_NAME  # mock quirk
         skill = mock.create_autospec(hs_models.Skill)
         skill.metadata = metadata  # mock quirk
         skill.path = skill_path
-        hsd_dfp.return_value = [skill]
+        hsd_dfp.return_value = [skill], []
 
     found = config.FilesystemSkillConfig.from_path(skill_path)
 
@@ -2739,15 +2747,11 @@ def test_filesystemskillconfig_from_path(
         assert found.name == SKILL_NAME
         assert found.errors == w_errors
         assert found.description.startswith("Invalid filesystem skill")
-
-        hsd_dfp.assert_not_called()
     else:
         assert found._skill_metadata is metadata
         assert found.errors == []
 
-        hsd_dfp.assert_called_once_with([skill_path])
-
-    sv_validate.assert_called_once_with(skill_path)
+    hsd_dfp.assert_called_once_with([skill_path])
 
 
 @pytest.mark.parametrize(
@@ -6887,18 +6891,14 @@ description: Describing {skill_name}
 
     i_config = config.InstallationConfig(**kw)
 
-    # See: https://github.com/ggozad/haiku.skills/issues/25
-    # found = i_config.available_filesystem_skill_configs
+    found = i_config.available_filesystem_skill_configs
 
     if w_error:
-        # assert found["foo"].name == "foo"
-        # assert found["foo"].errors
-        # assert found["bar"].name == "bar"
-        # assert found["bar"].errors
-        with pytest.raises(ValueError, match=r"SKILL.md at"):
-            _ = i_config.available_filesystem_skill_configs
+        assert found["foo"].name == "foo"
+        assert found["foo"].errors
+        assert found["bar"].name == "bar"
+        assert found["bar"].errors
     else:
-        found = i_config.available_filesystem_skill_configs
         assert found["foo"].name == "foo"
         assert not found["foo"].errors
         assert found["bar"].name == "bar"
@@ -6940,15 +6940,12 @@ description: Describing {skill_name} in {skills_path}
 
     i_config = config.InstallationConfig(**kw)
 
-    # See: https://github.com/ggozad/haiku.skills/issues/25
-    # found = i_config.available_filesystem_skill_configs
+    found = i_config.available_filesystem_skill_configs
 
-    # f_skill = found[SKILL_NAME]
+    f_skill = found[SKILL_NAME]
     if w_error:
-        # assert f_skill.name == SKILL_NAME
-        # assert f_skill.errors
-        with pytest.raises(ValueError, match=r"SKILL.md at"):
-            _ = i_config.available_filesystem_skill_configs
+        assert f_skill.name == SKILL_NAME
+        assert f_skill.errors
     else:
         found = i_config.available_filesystem_skill_configs
         f_skill = found[SKILL_NAME]

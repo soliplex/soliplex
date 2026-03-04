@@ -21,7 +21,7 @@ dependencies = [
     "fastmcp >= 2.14.0, < 2.15",
     "greenlet",
     "haiku.rag-slim >= 0.32.3, < 0.33",
-    "haiku-skills >= 0.5.2",
+    "haiku-skills >= 0.7",
     "itsdangerous",
     "jsonpatch",
     "jwcrypto",

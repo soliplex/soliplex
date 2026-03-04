@@ -30,7 +30,6 @@ from haiku.skills import models as hs_models
 from haiku.skills import parser as hs_parser
 from pydantic_ai import settings as ai_settings
 from pydantic_ai.agent import abstract as ai_ag_abstract
-from skills_ref import validator as skill_validator
 
 from soliplex.agui import features as agui_features_module  # noqa F401
 
@@ -809,9 +808,13 @@ class FilesystemSkillConfig(_DiscoveredSkillConfigBase):
 
         Used in CLI's '--list-skills', where we want to display those
         errors.
+
+        'skill_path' must be the path for a single filesystem skill.
         """
-        errors = skill_validator.validate(skill_path)
-        if errors:
+        skills, validation_errors = hs_discovery.discover_from_paths(
+            [skill_path],
+        )
+        if validation_errors:
             skill_metadata = hs_models.SkillMetadata(
                 name=skill_path.name,
                 description=f"Invalid filesystem skill: {skill_path}",
@@ -820,10 +823,10 @@ class FilesystemSkillConfig(_DiscoveredSkillConfigBase):
                 skill_name=skill_path.name,
                 _skill_path=skill_path,
                 _skill_metadata=skill_metadata,
-                _validation_errors=errors,
+                _validation_errors=[str(ve) for ve in validation_errors],
             )
         else:
-            (skill,) = hs_discovery.discover_from_paths([skill_path])
+            (skill,) = skills
             result = cls.from_skill(skill)
             result._skill_path = skill_path
             return result
@@ -2667,13 +2670,29 @@ class InstallationConfigMeta:
 def _load_filesystem_skill_configs(i_config) -> SkillConfigMap:
     fs_skill_configs = {}
 
-    for skill in hs_discovery.discover_from_paths(
+    skills, validation_errors = hs_discovery.discover_from_paths(
         i_config.filesystem_skills_paths,
-    ):
+    )
+    for skill in skills:
         skill_config = FilesystemSkillConfig.from_skill(skill)
 
         if skill_config.name not in fs_skill_configs:
             fs_skill_configs[skill_config.name] = skill_config
+
+    for validation_error in validation_errors:
+        skill_path = validation_error.path
+        skill_name = skill_path.name
+        message = str(validation_error)
+        skill_metadata = hs_models.SkillMetadata(
+            name=skill_name,
+            description=f"Invalid filesystem skill: {skill_path}",
+        )
+        fs_skill_configs[skill_name] = FilesystemSkillConfig(
+            skill_name=skill_name,
+            _skill_metadata=skill_metadata,
+            _skill_path=skill_path,
+            _validation_errors=[message],
+        )
 
     return fs_skill_configs
 
