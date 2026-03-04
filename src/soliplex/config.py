@@ -122,6 +122,23 @@ class InvalidAgentTemplateID(KeyError):
         )
 
 
+class InvalidSkillKind(KeyError):
+    def __init__(
+        self,
+        _config_path: pathlib.Path,
+        invalid_skill_kind: str,
+        available_skill_kinds: typing.Sequence[str],
+    ):
+        self.invalid_skill_kind = invalid_skill_kind
+        self.available_skill_kinds = available_skill_kinds
+        self._config_path = _config_path
+        super().__init__(
+            f"Skill kind '{invalid_skill_kind}' unknown; "
+            f"available kinds: {list(available_skill_kinds)}; "
+            f"(configured in {_config_path})",
+        )
+
+
 class MissingSkillNames(KeyError):
     def __init__(
         self,
@@ -986,7 +1003,14 @@ def extract_skill_configs(
 
     for s_config in config_dict.pop("skill_configs", ()):
         kind = s_config.get("kind")
-        sc_klass = SKILL_CONFIG_CLASSES_BY_KIND[kind]
+        try:
+            sc_klass = SKILL_CONFIG_CLASSES_BY_KIND[kind]
+        except KeyError:
+            raise InvalidSkillKind(
+                invalid_skill_kind=kind,
+                available_skill_kinds=SKILL_CONFIG_CLASSES_BY_KIND.keys(),
+                _config_path=config_path,
+            ) from None
 
         skill_config = sc_klass.from_yaml(
             installation_config,

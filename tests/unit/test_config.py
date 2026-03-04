@@ -3161,7 +3161,19 @@ def test_hr_rlm_skillconfig_from_yaml(
         assert inst.haiku_rag_config is installation_config.haiku_rag_config
 
 
-def test_extractskillconfigs(installation_config, temp_dir):
+@pytest.mark.parametrize(
+    "w_invalid_kind, expectation",
+    [
+        (False, contextlib.nullcontext()),
+        (True, pytest.raises(config.InvalidSkillKind)),
+    ],
+)
+def test_extractskillconfigs(
+    installation_config,
+    temp_dir,
+    w_invalid_kind,
+    expectation,
+):
     config_path = temp_dir / "rooms" / "test" / "room_config.yaml"
     config_dict = {
         "skill_configs": [
@@ -3175,20 +3187,29 @@ def test_extractskillconfigs(installation_config, temp_dir):
             },
         ]
     }
+    if w_invalid_kind:
+        config_dict["skill_configs"].append(
+            {
+                "kind": "BOGUS",
+                "rag_lancedb_stem": "test-baz",
+            }
+        )
 
-    found = config.extract_skill_configs(
-        installation_config=installation_config,
-        config_path=config_path,
-        config_dict=config_dict,
-    )
+    with expectation as expected:
+        found = config.extract_skill_configs(
+            installation_config=installation_config,
+            config_path=config_path,
+            config_dict=config_dict,
+        )
 
-    assert isinstance(found["rag"], config.HR_RAG_SkillConfig)
-    assert found["rag"].rag_lancedb_stem == "test-foo"
+    if expected is None:
+        assert isinstance(found["rag"], config.HR_RAG_SkillConfig)
+        assert found["rag"].rag_lancedb_stem == "test-foo"
 
-    assert isinstance(found["rag-rlm"], config.HR_RLM_SkillConfig)
-    assert found["rag-rlm"].rag_lancedb_stem == "test-bar"
+        assert isinstance(found["rag-rlm"], config.HR_RLM_SkillConfig)
+        assert found["rag-rlm"].rag_lancedb_stem == "test-bar"
 
-    assert "skill_configs" not in config_dict
+        assert "skill_configs" not in config_dict
 
 
 @pytest.mark.parametrize(
