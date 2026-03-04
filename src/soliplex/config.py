@@ -27,7 +27,6 @@ from haiku.rag.skills import rlm as hr_skills_rlm
 from haiku.skills import agent as hs_agent
 from haiku.skills import discovery as hs_discovery
 from haiku.skills import models as hs_models
-from haiku.skills import parser as hs_parser
 from pydantic_ai import settings as ai_settings
 from pydantic_ai.agent import abstract as ai_ag_abstract
 
@@ -859,19 +858,19 @@ class _HR_SkillConfigBase(_SkillConfigBase, _RAGConfigBase):
 
     source: typing.ClassVar[hs_models.SkillSource] = SkillKind.ENTRYPOINT
 
-    _skill_metadata: typing.ClassVar[hs_models.SkillMetadata] = None
-    _instructions: typing.ClassVar[str] = None
-
     _haiku_rag_config: hr_config.AppConfig = None
 
     @property
     def skill_metadata(self) -> hs_models.SkillMetadata:
-        if self._skill_metadata is None:
-            (
-                self._skill_metadata,
-                self._instructions,
-            ) = hs_parser.parse_skill_md(self._hr_skill_path() / "SKILL.md")
-        return self._skill_metadata
+        return self._hr_skill_module().skill_metadata()
+
+    @property
+    def state_namespace(self) -> str:
+        return self._hr_skill_module().STATE_NAMESPACE
+
+    @property
+    def state_type(self) -> type[pydantic.BaseModel]:
+        return self._hr_skill_module().STATE_TYPE
 
     @property
     def agui_feature_names(self):
@@ -899,7 +898,7 @@ class _HR_SkillConfigBase(_SkillConfigBase, _RAGConfigBase):
 
     @property
     def metadata(self) -> dict:
-        return self._skill_metadata.metadata
+        return self.skill_metadata.metadata
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -907,12 +906,10 @@ class HR_RAG_SkillConfig(_HR_SkillConfigBase):
     """Configuration for an agent skill from 'haiku.rag.skills.rag"""
 
     kind: typing.ClassVar[hs_models.SkillSource] = "haiku.rag.skills.rag"
-    state_namespace: typing.ClassVar[str] = "rag"
-    state_type: typing.ClassVar[SkillStateType] = hr_skills_rag.RAGState
 
     @staticmethod
-    def _hr_skill_path():
-        return pathlib.Path(hr_skills_rag.__file__).parent / "rag"
+    def _hr_skill_module():
+        return hr_skills_rag
 
     @property
     def skill(self) -> hs_models.Skill:
@@ -947,12 +944,10 @@ class HR_RLM_SkillConfig(_HR_SkillConfigBase):
     """Configuration for an agent skill from 'haiku.rag.skills.rlm"""
 
     kind: typing.ClassVar[hs_models.SkillSource] = "haiku.rag.skills.rlm"
-    state_namespace: typing.ClassVar[str] = "rlm"
-    state_type: typing.ClassVar[SkillStateType] = hr_skills_rlm.RLMState
 
     @staticmethod
-    def _hr_skill_path():
-        return pathlib.Path(hr_skills_rlm.__file__).parent / "rag-rlm"
+    def _hr_skill_module():
+        return hr_skills_rlm
 
     @property
     def skill(self) -> hs_models.Skill:

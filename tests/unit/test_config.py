@@ -2942,60 +2942,60 @@ def test_entrypointskillconfig_skill(skill_path, w_metadata_kw, w_kw):
     assert found.state_namespace is w_kw.get("state_namespace")
 
 
-@pytest.mark.parametrize(
-    "w_skill_md_yaml, w_skill_md_kwargs",
-    [
-        (BARE_SKILL_MD_YAML, BARE_SKILL_MD_KW),
-        (FULL_SKILL_MD_YAML, FULL_SKILL_MD_KW),
-    ],
-)
-def test__hrskillconfigbase_skill_metadata_w_not_exists(
-    temp_dir,
-    w_skill_md_yaml,
-    w_skill_md_kwargs,
-):
-    skills_dir = temp_dir / "skills"
-    skills_dir.mkdir()
-    skill_path = skills_dir / SKILL_NAME
-    skill_path.mkdir()
-    skill_config = skill_path / "SKILL.md"
-    skill_config.write_text(w_skill_md_yaml)
-
-    expected = hs_models.SkillMetadata(**w_skill_md_kwargs)
+@pytest.fixture
+def derived_hrskillconfig():
+    skill_module = mock.Mock(
+        spec_set=[
+            "skill_metadata",
+            "STATE_NAMESPACE",
+            "STATE_TYPE",
+        ],
+    )
 
     class TestHRSkllConfig(config._HR_SkillConfigBase):
-        state_namespace: typing.ClassVar[str] = SKILL_STATE_NAMESPACE
-
         @staticmethod
-        def _hr_skill_path():
-            return skill_path
+        def _hr_skill_module():
+            return skill_module
 
-    inst = TestHRSkllConfig(rag_lancedb_stem="test")
-
-    found = inst.skill_metadata
-
-    assert found == expected
-
-    assert inst.description == expected.description
-    assert inst.license == expected.license
-    assert inst.compatibility == expected.compatibility
-    assert inst.allowed_tools == expected.allowed_tools
-    assert inst.metadata == expected.metadata
-
-    assert inst.agui_feature_names == [SKILL_STATE_NAMESPACE]
+    return skill_module, TestHRSkllConfig(rag_lancedb_stem="test")
 
 
-def test__hrskillconfigbase_skill_metadata_w_exists(temp_dir):
-    already = object()
+def test__hrskillconfigbase_skill_metadata(derived_hrskillconfig):
+    skill_module, inst = derived_hrskillconfig
+    skill_metadata = skill_module.skill_metadata.return_value
+
+    assert inst.skill_metadata is skill_metadata
+    assert inst.name is skill_metadata.name
+    assert inst.description is skill_metadata.description
+    assert inst.license is skill_metadata.license
+    assert inst.compatibility is skill_metadata.compatibility
+    assert inst.allowed_tools is skill_metadata.allowed_tools
+    assert inst.metadata is skill_metadata.metadata
+
+
+def test__hrskillconfigbase_agui_skill_namespace(derived_hrskillconfig):
+    skill_module, inst = derived_hrskillconfig
+
+    assert inst.state_namespace is skill_module.STATE_NAMESPACE
+
+
+def test__hrskillconfigbase_agui_skill_type(derived_hrskillconfig):
+    skill_module, inst = derived_hrskillconfig
+
+    assert inst.state_type is skill_module.STATE_TYPE
+
+
+def test__hrskillconfigbase_agui_feature_names(derived_hrskillconfig):
+    skill_module = mock.Mock(spec_set=["STATE_NAMESPACE"])
 
     class TestHRSkllConfig(config._HR_SkillConfigBase):
-        _skill_metadata = already
+        @staticmethod
+        def _hr_skill_module():
+            return skill_module
 
     inst = TestHRSkllConfig(rag_lancedb_stem="test")
 
-    found = inst.skill_metadata
-
-    assert found is already
+    assert inst.agui_feature_names == [skill_module.STATE_NAMESPACE]
 
 
 def test_hr_rag_skillconfig_metadata(
