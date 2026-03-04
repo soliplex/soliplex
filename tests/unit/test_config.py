@@ -14,6 +14,8 @@ import pydantic
 import pytest
 import yaml
 from haiku.rag import config as hr_config_module
+from haiku.rag.skills import rag as hr_skills_rag
+from haiku.rag.skills import rlm as hr_skills_rlm
 from haiku.skills import agent as hs_agent
 from haiku.skills import models as hs_models
 from pydantic_ai import settings as ai_settings
@@ -2949,13 +2951,14 @@ def derived_hrskillconfig():
             "skill_metadata",
             "STATE_NAMESPACE",
             "STATE_TYPE",
+            "create_skill",
         ],
     )
 
     class TestHRSkllConfig(config._HR_SkillConfigBase):
-        @staticmethod
-        def _hr_skill_module():
-            return skill_module
+        _hr_skill_module = skill_module
+        rag_lancedb_path = mock.Mock(spec_set=())
+        haiku_rag_config = mock.Mock(spec_set=())
 
     return skill_module, TestHRSkllConfig(rag_lancedb_stem="test")
 
@@ -2986,16 +2989,22 @@ def test__hrskillconfigbase_agui_skill_type(derived_hrskillconfig):
 
 
 def test__hrskillconfigbase_agui_feature_names(derived_hrskillconfig):
-    skill_module = mock.Mock(spec_set=["STATE_NAMESPACE"])
-
-    class TestHRSkllConfig(config._HR_SkillConfigBase):
-        @staticmethod
-        def _hr_skill_module():
-            return skill_module
-
-    inst = TestHRSkllConfig(rag_lancedb_stem="test")
+    skill_module, inst = derived_hrskillconfig
 
     assert inst.agui_feature_names == [skill_module.STATE_NAMESPACE]
+
+
+def test_hrskillconfigbbase_skill(derived_hrskillconfig):
+    skill_module, inst = derived_hrskillconfig
+
+    found = inst.skill
+
+    assert found is skill_module.create_skill.return_value
+
+    skill_module.create_skill.assert_called_once_with(
+        db_path=inst.rag_lancedb_path,
+        config=inst.haiku_rag_config,
+    )
 
 
 def test_hr_rag_skillconfig_metadata(
@@ -3020,12 +3029,7 @@ def test_hr_rag_skillconfig_metadata(
     assert found.name == "rag"
 
 
-@mock.patch("soliplex.config.hr_skills_rag")
-def test_hr_rag_skillconfig_skill(
-    hr_skills_rag,
-    temp_dir,
-    installation_config,
-):
+def test_hr_rag_skillconfig_skill(temp_dir, installation_config):
     skill_haiku_rag_config = object()
 
     config_path = temp_dir / "config_file.yaml"
@@ -3041,12 +3045,8 @@ def test_hr_rag_skillconfig_skill(
 
     found = inst.skill
 
-    assert found is hr_skills_rag.create_skill.return_value
-
-    hr_skills_rag.create_skill.assert_called_once_with(
-        db_path=lancedb,
-        config=skill_haiku_rag_config,
-    )
+    assert isinstance(found, hs_models.Skill)
+    assert found.metadata == hr_skills_rag.skill_metadata()
 
 
 @pytest.mark.parametrize(
@@ -3106,12 +3106,7 @@ def test_hr_rlm_skillconfig_metadata(
     assert found.name == "rag-rlm"
 
 
-@mock.patch("soliplex.config.hr_skills_rlm")
-def test_hr_rlm_skillconfig_skill(
-    hr_skills_rlm,
-    temp_dir,
-    installation_config,
-):
+def test_hr_rlm_skillconfig_skill(temp_dir, installation_config):
     skill_haiku_rag_config = object()
 
     config_path = temp_dir / "config_file.yaml"
@@ -3127,12 +3122,8 @@ def test_hr_rlm_skillconfig_skill(
 
     found = inst.skill
 
-    assert found is hr_skills_rlm.create_skill.return_value
-
-    hr_skills_rlm.create_skill.assert_called_once_with(
-        db_path=lancedb,
-        config=skill_haiku_rag_config,
-    )
+    assert isinstance(found, hs_models.Skill)
+    assert found.metadata == hr_skills_rlm.skill_metadata()
 
 
 @pytest.mark.parametrize(

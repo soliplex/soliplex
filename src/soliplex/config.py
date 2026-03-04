@@ -717,8 +717,41 @@ class _SkillConfigBase:
     model_name: str | None = None
 
 
+class _SkillPropertiesFromMetadata(typing.Protocol):
+    @property
+    def skill_metadata(self) -> hs_models.SkillMetadata:
+        return self._skill_metadata
+
+    @property
+    def name(self) -> str:
+        return self._skill_metadata.name
+
+    @property
+    def description(self) -> str:
+        return self._skill_metadata.description
+
+    @property
+    def license(self) -> str | None:
+        return self._skill_metadata.license
+
+    @property
+    def compatibility(self) -> str | None:
+        return self._skill_metadata.compatibility
+
+    @property
+    def allowed_tools(self) -> str:
+        return self._skill_metadata.allowed_tools
+
+    @property
+    def metadata(self) -> dict:
+        return self._skill_metadata.metadata
+
+
 @dataclasses.dataclass(kw_only=True)
-class _DiscoveredSkillConfigBase(_SkillConfigBase):
+class _DiscoveredSkillConfigBase(
+    _SkillConfigBase,
+    _SkillPropertiesFromMetadata,
+):
     """Configuration for an agent skill discovered by the installation"""
 
     kind: typing.ClassVar[hs_models.SkillSource]  # quasi- @abstractproperty
@@ -853,7 +886,11 @@ class EntrypointSkillConfig(_DiscoveredSkillConfigBase):
 
 
 @dataclasses.dataclass(kw_only=True)
-class _HR_SkillConfigBase(_SkillConfigBase, _RAGConfigBase):
+class _HR_SkillConfigBase(
+    _SkillConfigBase,
+    _RAGConfigBase,
+    _SkillPropertiesFromMetadata,
+):
     """Base class for 'haiku-rag' skll configs"""
 
     source: typing.ClassVar[hs_models.SkillSource] = SkillKind.ENTRYPOINT
@@ -861,44 +898,47 @@ class _HR_SkillConfigBase(_SkillConfigBase, _RAGConfigBase):
     _haiku_rag_config: hr_config.AppConfig = None
 
     @property
-    def skill_metadata(self) -> hs_models.SkillMetadata:
-        return self._hr_skill_module().skill_metadata()
+    def _skill_metadata(self) -> hs_models.SkillMetadata:
+        return self._hr_skill_module.skill_metadata()
 
     @property
     def state_namespace(self) -> str:
-        return self._hr_skill_module().STATE_NAMESPACE
+        return self._hr_skill_module.STATE_NAMESPACE
 
     @property
     def state_type(self) -> type[pydantic.BaseModel]:
-        return self._hr_skill_module().STATE_TYPE
+        return self._hr_skill_module.STATE_TYPE
 
     @property
     def agui_feature_names(self):
         return [self.state_namespace]
 
-    @property
-    def name(self) -> str:
-        return self.skill_metadata.name
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config_dict: dict,
+    ):
+        try:
+            _kind = config_dict.pop("kind", None)
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
+
+            return cls(**config_dict)
+        except Exception as exc:
+            raise FromYamlException(
+                config_path,
+                cls._hr_skill_module.STATE_NAMESPACE,
+                config_dict,
+            ) from exc
 
     @property
-    def description(self) -> str:
-        return self.skill_metadata.description
-
-    @property
-    def license(self) -> str:
-        return self.skill_metadata.license
-
-    @property
-    def compatibility(self) -> str:
-        return self.skill_metadata.compatibility
-
-    @property
-    def allowed_tools(self) -> str:
-        return self.skill_metadata.allowed_tools
-
-    @property
-    def metadata(self) -> dict:
-        return self.skill_metadata.metadata
+    def skill(self) -> hs_models.Skill:
+        return self._hr_skill_module.create_skill(
+            db_path=self.rag_lancedb_path,
+            config=self.haiku_rag_config,
+        )
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -906,37 +946,7 @@ class HR_RAG_SkillConfig(_HR_SkillConfigBase):
     """Configuration for an agent skill from 'haiku.rag.skills.rag"""
 
     kind: typing.ClassVar[hs_models.SkillSource] = "haiku.rag.skills.rag"
-
-    @staticmethod
-    def _hr_skill_module():
-        return hr_skills_rag
-
-    @property
-    def skill(self) -> hs_models.Skill:
-        return hr_skills_rag.create_skill(
-            db_path=self.rag_lancedb_path,
-            config=self.haiku_rag_config,
-        )
-
-    @classmethod
-    def from_yaml(
-        cls,
-        installation_config: InstallationConfig,
-        config_path: pathlib.Path,
-        config_dict: dict,
-    ):
-        try:
-            _kind = config_dict.pop("kind", None)
-            config_dict["_installation_config"] = installation_config
-            config_dict["_config_path"] = config_path
-
-            return cls(**config_dict)
-        except Exception as exc:
-            raise FromYamlException(
-                config_path,
-                "hr_rag_skill",
-                config_dict,
-            ) from exc
+    _hr_skill_module = hr_skills_rag
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -944,37 +954,7 @@ class HR_RLM_SkillConfig(_HR_SkillConfigBase):
     """Configuration for an agent skill from 'haiku.rag.skills.rlm"""
 
     kind: typing.ClassVar[hs_models.SkillSource] = "haiku.rag.skills.rlm"
-
-    @staticmethod
-    def _hr_skill_module():
-        return hr_skills_rlm
-
-    @property
-    def skill(self) -> hs_models.Skill:
-        return hr_skills_rlm.create_skill(
-            db_path=self.rag_lancedb_path,
-            config=self.haiku_rag_config,
-        )
-
-    @classmethod
-    def from_yaml(
-        cls,
-        installation_config: InstallationConfig,
-        config_path: pathlib.Path,
-        config_dict: dict,
-    ):
-        try:
-            _kind = config_dict.pop("kind", None)
-            config_dict["_installation_config"] = installation_config
-            config_dict["_config_path"] = config_path
-
-            return cls(**config_dict)
-        except Exception as exc:
-            raise FromYamlException(
-                config_path,
-                "hr_rlm_skill",
-                config_dict,
-            ) from exc
+    _hr_skill_module = hr_skills_rlm
 
 
 SKILL_CONFIG_CLASSES_BY_KIND = {
