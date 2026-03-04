@@ -7,6 +7,7 @@ import json
 import pathlib
 import ssl
 import typing
+import warnings
 from unittest import mock
 from urllib import parse as url_parse
 
@@ -3059,37 +3060,26 @@ def test_hr_rag_skillconfig_metadata(
     assert found.name == "rag"
 
 
-def test_hr_rag_skillconfig_skill(temp_dir, installation_config):
-    skill_haiku_rag_config = object()
-
-    config_path = temp_dir / "config_file.yaml"
-    lancedb = temp_dir / "rag.lancedb"
-    lancedb.mkdir()
-
-    inst = config.HR_RAG_SkillConfig(
-        rag_lancedb_override_path=lancedb,
-        _haiku_rag_config=skill_haiku_rag_config,
-        _config_path=config_path,
-        _installation_config=installation_config,
-    )
-
-    found = inst.skill
-
-    assert isinstance(found, hs_models.Skill)
-    assert found.metadata == hr_skills_rag.skill_metadata()
-
-
 @pytest.mark.parametrize(
-    "w_error, expectation",
+    "w_config, expectation",
     [
-        ({}, contextlib.nullcontext()),
+        ({}, contextlib.nullcontext(config.DEFAULT_RAG_TOOLS)),
         (
-            {"not_a_valid_key": "FAIL"},
-            pytest.raises(config.FromYamlException),
+            {"tool_names": ["get_document", "list_documents"]},
+            contextlib.nullcontext(
+                [
+                    config.HR_RAG_Tools.GET_DOCUMENT,
+                    config.HR_RAG_Tools.LIST_DOCUMENTS,
+                ]
+            ),
         ),
         (
             {"rag_features": ["search"]},
-            contextlib.nullcontext(),
+            contextlib.nullcontext([config.HR_RAG_Tools.SEARCH]),
+        ),
+        (
+            {"not_a_valid_key": "FAIL"},
+            pytest.raises(config.FromYamlException),
         ),
         (
             {"rag_features": ["bogus"]},
@@ -3102,12 +3092,16 @@ def test_hr_rag_skillconfig_skill(temp_dir, installation_config):
                 match=config.USE_HR_SKILLS_RLM,
             ),
         ),
+        (
+            {"tool_names": ["ask"], "rag_features": ["search"]},
+            pytest.raises(config.OnlyOneOfToolNamesRagFeatures),
+        ),
     ],
 )
 def test_hr_rag_skillconfig_from_yaml(
     temp_dir,
     installation_config,
-    w_error,
+    w_config,
     expectation,
 ):
     config_path = temp_dir / "config_file.yaml"
@@ -3116,18 +3110,75 @@ def test_hr_rag_skillconfig_from_yaml(
 
     config_dict = {
         "rag_lancedb_override_path": lancedb,
-    } | w_error
+    } | w_config
 
-    with expectation as expected:
+    with (
+        warnings.catch_warnings(record=True) as warned,
+        expectation as expected,
+    ):
         inst = config.HR_RAG_SkillConfig.from_yaml(
             installation_config=installation_config,
             config_path=config_path,
             config_dict=config_dict,
         )
 
-    if expected is None:
+    if not isinstance(expected, pytest.ExceptionInfo):
+        if "rag_features" in w_config:
+            (deprecated,) = warned
+            assert deprecated.category is DeprecationWarning
+            (msg,) = deprecated.message.args
+            assert "'rag_features' is deprecated" in msg
+        else:
+            assert not warned
+
         assert inst.rag_lancedb_path == lancedb
         assert inst.haiku_rag_config is installation_config.haiku_rag_config
+        assert inst.tool_names == expected
+
+
+@pytest.mark.parametrize(
+    "w_tool_names, exp_skill_tools",
+    [
+        (None, config.DEFAULT_RAG_TOOLS),
+        (["search"], ["search"]),
+        (["search", "ask"], ["search", "ask"]),
+        (
+            ["research", "list_documents", "get_document"],
+            ["research", "list_documents", "get_document"],
+        ),
+    ],
+)
+def test_hr_rag_skillconfig_skill(
+    temp_dir,
+    installation_config,
+    w_tool_names,
+    exp_skill_tools,
+):
+    skill_haiku_rag_config = object()
+
+    config_path = temp_dir / "config_file.yaml"
+    lancedb = temp_dir / "rag.lancedb"
+    lancedb.mkdir()
+
+    kwargs = {}
+    if w_tool_names:
+        kwargs["_tool_names"] = w_tool_names
+
+    inst = config.HR_RAG_SkillConfig(
+        rag_lancedb_override_path=lancedb,
+        _haiku_rag_config=skill_haiku_rag_config,
+        _config_path=config_path,
+        _installation_config=installation_config,
+        **kwargs,
+    )
+
+    found = inst.skill
+
+    assert isinstance(found, hs_models.Skill)
+    assert found.metadata == hr_skills_rag.skill_metadata()
+    assert set(tool.__name__ for tool in found.tools) == set(
+        str(est) for est in exp_skill_tools
+    )
 
 
 def test_hr_rlm_skillconfig_metadata(

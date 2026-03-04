@@ -195,64 +195,6 @@ agent:
     max_retries: 5
 ```
 
-
-## `haiku_chat` kind
-
-The `haiku_chat` agent provides conversational RAG powered by
-[haiku.rag](rag.md).  Instead of configuring a model and tools directly,
-this agent kind delegates to haiku.rag's chat agent, which manages its
-own LLM, search, and tool configuration.
-
-```yaml
-agent:
-  kind: "haiku_chat"
-  rag_lancedb_stem: "rag"
-  rag_features: ["search", "documents", "qa"]
-```
-
-### Required Elements
-
-- `kind`: must be set to `"haiku_chat"`.
-
-- One of the following (exactly one must be provided):
-
-    - `rag_lancedb_stem`: a string, the "base name" (without path or
-      `.lancedb` suffix) of the LanceDB file containing the RAG document
-      data.  This file must exist in the standard location (typically
-      under the `db/rag/` directory; see [rooms](rooms.md) for details).
-
-    - `rag_lancedb_override_path`: a string, a fully-qualified pathname,
-      including the suffix, of the LanceDB directory.
-
-### Optional Elements
-
-- `rag_features` (a list of strings) controls which haiku.rag toolsets
-  are enabled.  Defaults to `["search", "documents", "qa"]`.
-
-  Available features:
-
-    - `"search"` — semantic document search with multi-query expansion.
-      Gives the agent a `search` tool that returns ranked passages with
-      citations.
-    - `"documents"` — document browsing and retrieval.  Gives the agent
-      `list_documents`, `get_document`, and `summarize_document` tools.
-    - `"qa"` — question-answering via a research graph.  Gives the agent
-      an `ask` tool that searches, synthesizes an answer with citations,
-      and caches results for similar follow-up questions.
-    - `"analysis"` — computational analysis via the
-      [RLM agent](https://ggozad.github.io/haiku.rag/agents/rlm/).
-      Gives the agent an `analyze` tool that iteratively writes and
-      executes Python code in a Docker sandbox with access to haiku.rag
-      functions (`search`, `list_documents`, `get_document`, `llm`,
-      etc.).  Suited for aggregation, multi-document comparison, and
-      structured data extraction.  Requires Docker.
-
-- `preamble` (a string) overrides the agent's default system prompt
-  section defining its identity and behavioral rules.
-
-- `background_context` (a string) seeds the conversation with domain
-  knowledge, injected as the session's initial context.
-
 ### haiku.rag Configuration
 
 The LLM model, search settings, and other RAG behavior are controlled

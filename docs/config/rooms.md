@@ -100,15 +100,6 @@ agent:
 Please see [this page](agents.md) for a full description of the options
 for configuring an agent.
 
-#### The `haiku_chat` agent kind
-
-Rooms can use the `haiku_chat` agent kind to provide conversational RAG
-powered by `haiku.rag`.  This agent kind uses its own configuration
-instead of the standard `tools` list.
-
-Please see the [`haiku_chat` section of the agents page](agents.md#haiku_chat-kind)
-for the full list of configuration options and examples.
-
 ### Tool Configurations
 
 - `tools` should be a list of mappings, with at least the key
@@ -138,11 +129,97 @@ E.g.:
     installation_skill_names:
         - "bare-bones"           # a filesytem skill
         - "image-generation"     # an entrypoint skill
+
     skill_configs:
+
         - skill_name: "rag"
           kind: "haiku.rag.skill.rag"
           rag_lancedb_stem: "rag"
+          tool_names:
+            - "search"
+            - "ask"
+            - "get_document"
+            - "list_documents"
+            - "research"
+
+        - skill_name: "rlm"
+          kind: "haiku.rag.skill.rag"
+          rag_lancedb_stem: "rag"
   ```
+
+#### Default Skill Configuration Kinds
+
+Soliplex provides two such skill configuration classes by default:
+one of kind `haiku.rag.skill.rag` and one of kind
+`haiku.rag.skill.rlm`.  Both of hese configuraions have options for
+configuring the RAG database and RAG client:
+
+- One of the following (exactly one must be provided):
+
+    - `rag_lancedb_stem`: a string, the "base name" (without path or
+      `.lancedb` suffix) of the LanceDB file containing the RAG document
+      data.  This file must exist in the standard location (typically
+      under the `db/rag/` directory; see [rooms](rooms.md) for details).
+
+    - `rag_lancedb_override_path`: a string, a fully-qualified pathname,
+      including the suffix, of the LanceDB directory.
+
+- `haiku_rag_config`: a path to the `haiku.rag.yaml` file used to configure
+  the RAG client.  If not absolute, this path is resolved relative to
+  the directory containing the room configuration file.  If passed,
+  values from this file are overlaid on the the installation configuration's
+  `haiku_rag_config`.
+
+Skill configurations with the `kind` of `"haiku.rag.skill.rag"` have these
+additional options:
+
+- `tool_names` (a list of strings, from among this list:  `"search"`,
+  `"ask"`, `"list_documents"`, `"get_document"`, and `"research"`.
+  Defaults to `["search", "ask", "list_documents", "get_document"]`.
+
+  Available tools:
+
+    - `"search"` — semantic document search with multi-query expansion.
+      Gives the agent a `search` tool that returns ranked passages with
+      citations.
+
+    - `"list_documents"` — list the documents in the RAG datbase.
+
+    - `"get_document"` — return the content of a single document in the
+      RAG datbase.
+
+    - `"ask"` — question-answering via a research graph.  Gives the agent
+      an `ask` tool that searches, synthesizes an answer with citations,
+      and caches results for similar follow-up questions.
+
+    - `"research"` — deep research via a research graph. Gives the agent
+      a `research` tool that performs a more elaborate search, analysis,
+      and syntheses,. Slower than the `ask` tool, and more expensive in
+      terms of token budget, but potentially produces a higher-quality
+      result.
+
+- `rag_features` (a list of strings) controls which haiku.rag toolsets
+  are enabled.  A deprecated alternative to `tool_names`:  each "features"
+  maps to one or more of the tools enumerated above.
+
+  Available features:
+
+    - `"search"` — equivalent to the `search` tool above.
+
+    - `"documents"` — equivalent to the `list_documents` and `get_document`
+      tools above.
+
+    - `"qa"` — equivalent to the `ask` tool above.
+
+    - `"analysis"` — formerly equivalent to the `haiku.rag.skills.rml`
+      skill below.  This feature is no longer supported.
+
+The `haiku.rag.skils.rlm` skill gives the agent an `analyze` tool that
+iteratively writes and executes Python code in a Docker sandbox with
+access to `haiku.rag` functions (`search`, `list_documents`, `get_document`,
+`llm`, etc.).  Suited for aggregation, multi-document comparison, and
+structured data extraction.  Requires Docker.  This skill does not offer
+any additional options.
 
 ### Quiz-related elements
 

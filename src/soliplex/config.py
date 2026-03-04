@@ -14,6 +14,7 @@ import re
 import ssl
 import sys
 import typing
+import warnings
 from collections import abc
 from urllib import parse as url_parse
 
@@ -118,6 +119,15 @@ class InvalidAgentTemplateID(KeyError):
         self._config_path = _config_path
         super().__init__(
             f"Template agent not found: {template_id} "
+            f"(configured in {_config_path})"
+        )
+
+
+class OnlyOneOfToolNamesRagFeatures(ValueError):
+    def __init__(self, _config_path):
+        self._config_path = _config_path
+        super().__init__(
+            f"Pass only one of 'tool_names' and 'rag_features' "
             f"(configured in {_config_path})"
         )
 
@@ -958,6 +968,7 @@ class HR_RAG_Tools(enum.StrEnum):
     LIST_DOCUMENTS = "list_documents"
     GET_DOCUMENT = "get_document"
     ASK = "ask"
+    RESEARCH = "research"
 
 
 DEFAULT_RAG_TOOLS = [
@@ -1025,6 +1036,10 @@ class HR_RAG_SkillConfig(_HR_SkillConfigBase):
         default_factory=_default_rag_tools,
     )
 
+    @property
+    def tool_names(self):
+        return self._tool_names
+
     @classmethod
     def from_yaml(
         cls,
@@ -1032,16 +1047,32 @@ class HR_RAG_SkillConfig(_HR_SkillConfigBase):
         config_path: pathlib.Path,
         config_dict: dict,
     ):
+        tool_names = config_dict.pop("tool_names", None)
         rag_features = config_dict.pop("rag_features", None)
 
-        if rag_features is None:
-            rag_tools = DEFAULT_RAG_TOOLS
+        if tool_names is not None and rag_features is not None:
+            raise OnlyOneOfToolNamesRagFeatures(
+                _config_path=config_path,
+            )
+
+        if tool_names is not None:
+            rag_tools = [HR_RAG_Tools(tool_name) for tool_name in tool_names]
+
+        elif rag_features is not None:
+            warnings.warn(
+                "'rag_features' is deprecated. Use 'tool_names'",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            rag_tools = sum(
+                (
+                    _rag_feature_to_tools(rag_feature, config_path)
+                    for rag_feature in rag_features
+                ),
+                [],
+            )
         else:
-            rag_tools = []
-            for rag_feature in rag_features:
-                rag_tools.extend(
-                    _rag_feature_to_tools(rag_feature, config_path),
-                )
+            rag_tools = DEFAULT_RAG_TOOLS
 
         config_dict["_tool_names"] = rag_tools
 
@@ -1050,6 +1081,14 @@ class HR_RAG_SkillConfig(_HR_SkillConfigBase):
             config_path=config_path,
             config_dict=config_dict,
         )
+
+    @property
+    def skill(self) -> hs_models.Skill:
+        skill = super().skill
+        skill.tools = [
+            tool for tool in skill.tools if tool.__name__ in self.tool_names
+        ]
+        return skill
 
 
 @dataclasses.dataclass(kw_only=True)
