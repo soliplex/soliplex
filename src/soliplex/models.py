@@ -136,7 +136,7 @@ SkillMetadata = dict[str, typing.Any] | None
 
 class Skill(pydantic.BaseModel):
     source: hs_models.SkillSource | None = None
-    skill_name: str
+    name: str
     description: str
     license: str | None
     compatibility: str | None
@@ -154,7 +154,7 @@ class Skill(pydantic.BaseModel):
             )
         return cls(
             source=skill_config.source,
-            skill_name=skill_config.skill_name,
+            name=skill_config.name,
             description=skill_config.description,
             license=skill_config.license,
             compatibility=skill_config.compatibility,

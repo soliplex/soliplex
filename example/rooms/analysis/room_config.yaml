@@ -11,8 +11,7 @@ agent:
 
 skills:
   skill_configs:
-    - skill_name: "rag"
-      kind: "haiku.rag.skills.rag"
+    - kind: "haiku.rag.skills.rag"
       rag_lancedb_stem: "rag"
 #     rag_features: ["search", "analysis"]
 

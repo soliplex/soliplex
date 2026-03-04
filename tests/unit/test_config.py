@@ -2677,7 +2677,6 @@ def test_filesystemskillconfig_ctor(
     exp_allowed_tools,
 ):
     skill_config = config.FilesystemSkillConfig(
-        skill_name=SKILL_NAME,
         _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
         _skill_path=skill_path,
     )
@@ -2703,7 +2702,6 @@ def test_filesystemskillconfig_ctor_w_errors(skill_path):
         description=SKILL_VALIDATION_ERROR,
     )
     skill_config = config.FilesystemSkillConfig(
-        skill_name=SKILL_NAME,
         _skill_path=skill_path,
         _skill_metadata=skill_metadata,
         _validation_errors=[validation_error],
@@ -2766,7 +2764,6 @@ def test_filesystemskillconfig_from_path(
 )
 def test_filesystemskillconfig_agui_feature_names(skill_path, w_kw):
     skill_config = config.FilesystemSkillConfig(
-        skill_name=SKILL_NAME,
         _skill_path=skill_path,
         _skill_metadata=hs_models.SkillMetadata(
             name=SKILL_NAME,
@@ -2811,7 +2808,6 @@ def test_filesystemskillconfig_agui_feature_names(skill_path, w_kw):
 )
 def test_filesystemskillconfig_skill(skill_path, w_metadata_kw, w_kw):
     skill_config = config.FilesystemSkillConfig(
-        skill_name=SKILL_NAME,
         _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
         _skill_path=skill_path,
         **w_kw,
@@ -2862,7 +2858,6 @@ def test_filesystemskillconfig_skill(skill_path, w_metadata_kw, w_kw):
 )
 def test_entrypointskillconfig_ctor(w_metadata_kw, exp_allowed_tools):
     skill_config = config.EntrypointSkillConfig(
-        skill_name=SKILL_NAME,
         _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
     )
 
@@ -2886,7 +2881,6 @@ def test_entrypointskillconfig_ctor(w_metadata_kw, exp_allowed_tools):
 )
 def test_entrypointskillconfig_agui_feature_names(w_kw):
     skill_config = config.EntrypointSkillConfig(
-        skill_name=SKILL_NAME,
         _skill_metadata=hs_models.SkillMetadata(
             name=SKILL_NAME,
             description=SKILL_DESC,
@@ -2930,7 +2924,6 @@ def test_entrypointskillconfig_agui_feature_names(w_kw):
 )
 def test_entrypointskillconfig_skill(skill_path, w_metadata_kw, w_kw):
     skill_config = config.EntrypointSkillConfig(
-        skill_name=SKILL_NAME,
         _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
         **w_kw,
     )
@@ -2971,10 +2964,13 @@ def test__hrskillconfigbase_skill_metadata_w_not_exists(
     expected = hs_models.SkillMetadata(**w_skill_md_kwargs)
 
     class TestHRSkllConfig(config._HR_SkillConfigBase):
-        _hr_skill_path: pathlib.Path = skill_path
         state_namespace: typing.ClassVar[str] = SKILL_STATE_NAMESPACE
 
-    inst = TestHRSkllConfig(skill_name=SKILL_NAME, rag_lancedb_stem="test")
+        @staticmethod
+        def _hr_skill_path():
+            return skill_path
+
+    inst = TestHRSkllConfig(rag_lancedb_stem="test")
 
     found = inst.skill_metadata
 
@@ -2995,15 +2991,37 @@ def test__hrskillconfigbase_skill_metadata_w_exists(temp_dir):
     class TestHRSkllConfig(config._HR_SkillConfigBase):
         _skill_metadata = already
 
-    inst = TestHRSkllConfig(skill_name=SKILL_NAME, rag_lancedb_stem="test")
+    inst = TestHRSkllConfig(rag_lancedb_stem="test")
 
     found = inst.skill_metadata
 
     assert found is already
 
 
+def test_hr_rag_skillconfig_metadata(
+    temp_dir,
+    installation_config,
+):
+    skill_haiku_rag_config = object()
+
+    config_path = temp_dir / "config_file.yaml"
+    lancedb = temp_dir / "rag.lancedb"
+    lancedb.mkdir()
+
+    inst = config.HR_RAG_SkillConfig(
+        rag_lancedb_override_path=lancedb,
+        _haiku_rag_config=skill_haiku_rag_config,
+        _config_path=config_path,
+        _installation_config=installation_config,
+    )
+
+    found = inst.skill_metadata
+
+    assert found.name == "rag"
+
+
 @mock.patch("soliplex.config.hr_skills_rag")
-def test_hrragskillconfig_skill(
+def test_hr_rag_skillconfig_skill(
     hr_skills_rag,
     temp_dir,
     installation_config,
@@ -3014,8 +3032,7 @@ def test_hrragskillconfig_skill(
     lancedb = temp_dir / "rag.lancedb"
     lancedb.mkdir()
 
-    inst = config.HR_RagSkillConfig(
-        skill_name=SKILL_NAME,
+    inst = config.HR_RAG_SkillConfig(
         rag_lancedb_override_path=lancedb,
         _haiku_rag_config=skill_haiku_rag_config,
         _config_path=config_path,
@@ -3039,7 +3056,7 @@ def test_hrragskillconfig_skill(
         (True, pytest.raises(config.FromYamlException)),
     ],
 )
-def test_hrragskillconfig_from_yaml(
+def test_hr_rag_skillconfig_from_yaml(
     temp_dir,
     installation_config,
     w_error,
@@ -3050,27 +3067,47 @@ def test_hrragskillconfig_from_yaml(
     lancedb.mkdir()
 
     config_dict = {
-        "skill_name": SKILL_NAME,
         "rag_lancedb_override_path": lancedb,
     }
     if w_error:
         config_dict["not_a_valid_key"] = "FAIL"
 
     with expectation as expected:
-        inst = config.HR_RagSkillConfig.from_yaml(
+        inst = config.HR_RAG_SkillConfig.from_yaml(
             installation_config=installation_config,
             config_path=config_path,
             config_dict=config_dict,
         )
 
     if expected is None:
-        assert inst.skill_name == SKILL_NAME
         assert inst.rag_lancedb_path == lancedb
         assert inst.haiku_rag_config is installation_config.haiku_rag_config
 
 
+def test_hr_rlm_skillconfig_metadata(
+    temp_dir,
+    installation_config,
+):
+    skill_haiku_rag_config = object()
+
+    config_path = temp_dir / "config_file.yaml"
+    lancedb = temp_dir / "rag.lancedb"
+    lancedb.mkdir()
+
+    inst = config.HR_RLM_SkillConfig(
+        rag_lancedb_override_path=lancedb,
+        _haiku_rag_config=skill_haiku_rag_config,
+        _config_path=config_path,
+        _installation_config=installation_config,
+    )
+
+    found = inst.skill_metadata
+
+    assert found.name == "rag-rlm"
+
+
 @mock.patch("soliplex.config.hr_skills_rlm")
-def test_hrrlmskillconfig_skill(
+def test_hr_rlm_skillconfig_skill(
     hr_skills_rlm,
     temp_dir,
     installation_config,
@@ -3082,7 +3119,6 @@ def test_hrrlmskillconfig_skill(
     lancedb.mkdir()
 
     inst = config.HR_RLM_SkillConfig(
-        skill_name=SKILL_NAME,
         rag_lancedb_override_path=lancedb,
         _haiku_rag_config=skill_haiku_rag_config,
         _config_path=config_path,
@@ -3106,7 +3142,7 @@ def test_hrrlmskillconfig_skill(
         (True, pytest.raises(config.FromYamlException)),
     ],
 )
-def test_hrrlmskillconfig_from_yaml(
+def test_hr_rlm_skillconfig_from_yaml(
     temp_dir,
     installation_config,
     w_error,
@@ -3117,7 +3153,6 @@ def test_hrrlmskillconfig_from_yaml(
     lancedb.mkdir()
 
     config_dict = {
-        "skill_name": SKILL_NAME,
         "rag_lancedb_override_path": lancedb,
     }
     if w_error:
@@ -3131,7 +3166,6 @@ def test_hrrlmskillconfig_from_yaml(
         )
 
     if expected is None:
-        assert inst.skill_name == SKILL_NAME
         assert inst.rag_lancedb_path == lancedb
         assert inst.haiku_rag_config is installation_config.haiku_rag_config
 
@@ -3141,12 +3175,10 @@ def test_extractskillconfigs(installation_config, temp_dir):
     config_dict = {
         "skill_configs": [
             {
-                "skill_name": "foo",
                 "kind": "haiku.rag.skills.rag",
                 "rag_lancedb_stem": "test-foo",
             },
             {
-                "skill_name": "bar",
                 "kind": "haiku.rag.skills.rlm",
                 "rag_lancedb_stem": "test-bar",
             },
@@ -3159,13 +3191,11 @@ def test_extractskillconfigs(installation_config, temp_dir):
         config_dict=config_dict,
     )
 
-    assert isinstance(found["foo"], config.HR_RagSkillConfig)
-    assert found["foo"].skill_name == "foo"
-    assert found["foo"].rag_lancedb_stem == "test-foo"
+    assert isinstance(found["rag"], config.HR_RAG_SkillConfig)
+    assert found["rag"].rag_lancedb_stem == "test-foo"
 
-    assert isinstance(found["bar"], config.HR_RLM_SkillConfig)
-    assert found["bar"].skill_name == "bar"
-    assert found["bar"].rag_lancedb_stem == "test-bar"
+    assert isinstance(found["rag-rlm"], config.HR_RLM_SkillConfig)
+    assert found["rag-rlm"].rag_lancedb_stem == "test-bar"
 
     assert "skill_configs" not in config_dict
 
@@ -6999,8 +7029,8 @@ def test_installationconfig_avl_ep_skill_configs_wo_existing(
 
     found = i_config.available_entrypoint_skill_configs
 
-    assert found["foo"].skill_name == "foo"
-    assert found["bar"].skill_name == "bar"
+    assert found["foo"].name == "foo"
+    assert found["bar"].name == "bar"
 
     # First registration wins
     registered = registry[AGUI_FEATURE_NAME]

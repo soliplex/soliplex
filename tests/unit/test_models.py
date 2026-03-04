@@ -429,6 +429,7 @@ def filesystem_skill_config(
     skill_path = temp_dir / "skills" / SKILL_NAME
     skill_metadata = mock.create_autospec(
         hs_models.SkillMetadata,
+        name=SKILL_NAME,
         description=SKILL_DESC,
         license=SKILL_LICENSE,
         compatibility=SKILL_COMPAT,
@@ -437,7 +438,6 @@ def filesystem_skill_config(
     )
     skill_metadata.name = SKILL_NAME  # mock quirk
     return config.FilesystemSkillConfig(
-        skill_name=SKILL_NAME,
         _skill_metadata=skill_metadata,
         _skill_path=skill_path,
         model_name=SKILL_MODEL_NAME,
@@ -449,7 +449,7 @@ def test_skill_from_config_w_fssc(filesystem_skill_config):
     found = models.Skill.from_config(filesystem_skill_config)
 
     assert found.source == hs_models.SkillSource.FILESYSTEM
-    assert found.skill_name == filesystem_skill_config.skill_name
+    assert found.name == filesystem_skill_config.name
     assert found.description == filesystem_skill_config.description
     assert found.license == filesystem_skill_config.license
     assert found.compatibility == filesystem_skill_config.compatibility
@@ -473,6 +473,7 @@ def entrypoint_skill_config(
 ):
     skill_metadata = mock.create_autospec(
         hs_models.SkillMetadata,
+        name=SKILL_NAME,
         description=SKILL_DESC,
         license=SKILL_LICENSE,
         compatibility=SKILL_COMPAT,
@@ -481,7 +482,6 @@ def entrypoint_skill_config(
     )
     skill_metadata.name = SKILL_NAME  # mock quirk
     return config.EntrypointSkillConfig(
-        skill_name=SKILL_NAME,
         _skill_metadata=skill_metadata,
         model_name=SKILL_MODEL_NAME,
         state_type=StateModelTest,
@@ -493,7 +493,7 @@ def test_skill_from_config_w_epsc(entrypoint_skill_config):
     found = models.Skill.from_config(entrypoint_skill_config)
 
     assert found.source == hs_models.SkillSource.ENTRYPOINT
-    assert found.skill_name == entrypoint_skill_config.skill_name
+    assert found.name == entrypoint_skill_config.name
     assert found.description == entrypoint_skill_config.description
     assert found.license == entrypoint_skill_config.license
     assert found.compatibility == entrypoint_skill_config.compatibility

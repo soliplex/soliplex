@@ -715,7 +715,6 @@ SkillStateType = type[pydantic.BaseModel] | None
 class _SkillConfigBase:
     """Base for configuration for an agent skill."""
 
-    skill_name: str
     model_name: str | None = None
 
 
@@ -736,7 +735,6 @@ class _DiscoveredSkillConfigBase(_SkillConfigBase):
     @classmethod
     def from_skill(cls, skill: hs_models.Skill):
         return cls(
-            skill_name=skill.metadata.name,
             _skill_metadata=skill.metadata,
             state_type=skill.state_type,
             state_namespace=skill.state_namespace,
@@ -795,7 +793,6 @@ class FilesystemSkillConfig(_DiscoveredSkillConfigBase):
     @classmethod
     def from_skill(cls, skill: hs_models.Skill):
         return cls(
-            skill_name=skill.metadata.name,
             _skill_metadata=skill.metadata,
             _skill_path=skill.path,
             state_type=skill.state_type,
@@ -820,7 +817,6 @@ class FilesystemSkillConfig(_DiscoveredSkillConfigBase):
                 description=f"Invalid filesystem skill: {skill_path}",
             )
             return cls(
-                skill_name=skill_path.name,
                 _skill_path=skill_path,
                 _skill_metadata=skill_metadata,
                 _validation_errors=[str(ve) for ve in validation_errors],
@@ -874,12 +870,16 @@ class _HR_SkillConfigBase(_SkillConfigBase, _RAGConfigBase):
             (
                 self._skill_metadata,
                 self._instructions,
-            ) = hs_parser.parse_skill_md(self._hr_skill_path / "SKILL.md")
+            ) = hs_parser.parse_skill_md(self._hr_skill_path() / "SKILL.md")
         return self._skill_metadata
 
     @property
     def agui_feature_names(self):
         return [self.state_namespace]
+
+    @property
+    def name(self) -> str:
+        return self.skill_metadata.name
 
     @property
     def description(self) -> str:
@@ -903,15 +903,15 @@ class _HR_SkillConfigBase(_SkillConfigBase, _RAGConfigBase):
 
 
 @dataclasses.dataclass(kw_only=True)
-class HR_RagSkillConfig(_HR_SkillConfigBase):
+class HR_RAG_SkillConfig(_HR_SkillConfigBase):
     """Configuration for an agent skill from 'haiku.rag.skills.rag"""
 
     kind: typing.ClassVar[hs_models.SkillSource] = "haiku.rag.skills.rag"
     state_namespace: typing.ClassVar[str] = "rag"
     state_type: typing.ClassVar[SkillStateType] = hr_skills_rag.RAGState
 
-    @property
-    def _hr_skill_path(self):  # pragma: NO COVER
+    @staticmethod
+    def _hr_skill_path():
         return pathlib.Path(hr_skills_rag.__file__).parent / "rag"
 
     @property
@@ -951,7 +951,7 @@ class HR_RLM_SkillConfig(_HR_SkillConfigBase):
     state_type: typing.ClassVar[SkillStateType] = hr_skills_rlm.RLMState
 
     @staticmethod
-    def _hr_skill_path():  # pragma: NO COVER
+    def _hr_skill_path():
         return pathlib.Path(hr_skills_rlm.__file__).parent / "rag-rlm"
 
     @property
@@ -987,7 +987,7 @@ SKILL_CONFIG_CLASSES_BY_KIND = {
     for klass in [
         FilesystemSkillConfig,
         EntrypointSkillConfig,
-        HR_RagSkillConfig,
+        HR_RAG_SkillConfig,
         HR_RLM_SkillConfig,
     ]
 }
@@ -995,7 +995,7 @@ SKILL_CONFIG_CLASSES_BY_KIND = {
 SkillConfigTypes = (
     FilesystemSkillConfig
     | EntrypointSkillConfig
-    | HR_RagSkillConfig
+    | HR_RAG_SkillConfig
     | HR_RLM_SkillConfig
 )
 SkillConfigMap = dict[str, SkillConfigTypes]
@@ -1018,7 +1018,7 @@ def extract_skill_configs(
             config_path,
             s_config,
         )
-        skill_configs[skill_config.skill_name] = skill_config
+        skill_configs[skill_config.name] = skill_config
 
     return skill_configs
 
@@ -2690,7 +2690,6 @@ def _load_filesystem_skill_configs(i_config) -> SkillConfigMap:
             description=f"Invalid filesystem skill: {skill_path}",
         )
         fs_skill_configs[skill_name] = FilesystemSkillConfig(
-            skill_name=skill_name,
             _skill_metadata=skill_metadata,
             _skill_path=skill_path,
             _validation_errors=[message],
