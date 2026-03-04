@@ -3082,8 +3082,26 @@ def test_hr_rag_skillconfig_skill(temp_dir, installation_config):
 @pytest.mark.parametrize(
     "w_error, expectation",
     [
-        (False, contextlib.nullcontext()),
-        (True, pytest.raises(config.FromYamlException)),
+        ({}, contextlib.nullcontext()),
+        (
+            {"not_a_valid_key": "FAIL"},
+            pytest.raises(config.FromYamlException),
+        ),
+        (
+            {"rag_features": ["search"]},
+            contextlib.nullcontext(),
+        ),
+        (
+            {"rag_features": ["bogus"]},
+            pytest.raises(config.Invalid_RAG_Feature),
+        ),
+        (
+            {"rag_features": ["analysis"]},
+            pytest.raises(
+                config.Invalid_RAG_Feature,
+                match=config.USE_HR_SKILLS_RLM,
+            ),
+        ),
     ],
 )
 def test_hr_rag_skillconfig_from_yaml(
@@ -3098,9 +3116,7 @@ def test_hr_rag_skillconfig_from_yaml(
 
     config_dict = {
         "rag_lancedb_override_path": lancedb,
-    }
-    if w_error:
-        config_dict["not_a_valid_key"] = "FAIL"
+    } | w_error
 
     with expectation as expected:
         inst = config.HR_RAG_SkillConfig.from_yaml(

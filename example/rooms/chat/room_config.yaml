@@ -14,7 +14,10 @@ skills:
   skill_configs:
     - kind: "haiku.rag.skills.rag"
       rag_lancedb_stem: "rag"
-#     rag_features: ["search", "documents", "qa"]
+      rag_features:
+        - "search"
+        - "documents"
+        - "qa"
 #
 #     background_context: |
 #       **Soliplex** is an AI-powered Retrieval-Augmented Generation (RAG) platform.

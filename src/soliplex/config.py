@@ -122,12 +122,31 @@ class InvalidAgentTemplateID(KeyError):
         )
 
 
+class Invalid_RAG_Feature(ValueError):
+    def __init__(
+        self,
+        *,
+        rag_feature: str,
+        suggestion: str,
+        _config_path: pathlib.Path,
+    ):
+        self.rag_feature = rag_feature
+        self.suggestion = suggestion
+        self._config_path = _config_path
+        super().__init__(
+            f"Invalid RAG feature '{rag_feature}'; "
+            f"{suggestion}; "
+            f"(configured in {_config_path})"
+        )
+
+
 class InvalidSkillKind(KeyError):
     def __init__(
         self,
-        _config_path: pathlib.Path,
+        *,
         invalid_skill_kind: str,
         available_skill_kinds: typing.Sequence[str],
+        _config_path: pathlib.Path,
     ):
         self.invalid_skill_kind = invalid_skill_kind
         self.available_skill_kinds = available_skill_kinds
@@ -934,12 +953,103 @@ class _HR_SkillConfigBase(
         )
 
 
+class HR_RAG_Tools(enum.StrEnum):
+    SEARCH = "search"
+    LIST_DOCUMENTS = "list_documents"
+    GET_DOCUMENT = "get_document"
+    ASK = "ask"
+
+
+DEFAULT_RAG_TOOLS = [
+    HR_RAG_Tools.SEARCH,
+    HR_RAG_Tools.LIST_DOCUMENTS,
+    HR_RAG_Tools.GET_DOCUMENT,
+    HR_RAG_Tools.ASK,
+]
+
+
+RAG_FEATURE_NAMES_TO_TOOLS: dict[str | None, list[HR_RAG_Tools]] = {
+    "search": [HR_RAG_Tools.SEARCH],
+    "documents": [
+        HR_RAG_Tools.LIST_DOCUMENTS,
+        HR_RAG_Tools.GET_DOCUMENT,
+    ],
+    "qa": [HR_RAG_Tools.ASK],
+}
+
+USE_HR_SKILLS_RLM = "Use 'haiku.rag.skills.rlm' skill instead"
+
+REMOVED_HR_RAG_FEATURES = {
+    "analysis": USE_HR_SKILLS_RLM,
+}
+
+
+def _rag_feature_to_tools(
+    rag_feature: str | None,
+    _config_path: pathlib.Path,
+) -> list[HR_RAG_Tools]:
+    """Map legacy 'rag_features' entry to tools names"""
+    suggestion = REMOVED_HR_RAG_FEATURES.get(rag_feature)
+
+    if suggestion is not None:
+        raise Invalid_RAG_Feature(
+            rag_feature=rag_feature,
+            _config_path=_config_path,
+            suggestion=suggestion,
+        )
+
+    try:
+        return RAG_FEATURE_NAMES_TO_TOOLS[rag_feature]
+    except KeyError:
+        raise Invalid_RAG_Feature(
+            rag_feature=rag_feature,
+            _config_path=_config_path,
+            suggestion=(
+                f"Available features: {list(RAG_FEATURE_NAMES_TO_TOOLS)}"
+            ),
+        ) from None
+
+
+def _default_rag_tools() -> list[HR_RAG_Tools]:
+    return DEFAULT_RAG_TOOLS[:]
+
+
 @dataclasses.dataclass(kw_only=True)
 class HR_RAG_SkillConfig(_HR_SkillConfigBase):
     """Configuration for an agent skill from 'haiku.rag.skills.rag"""
 
     kind: typing.ClassVar[hs_models.SkillSource] = "haiku.rag.skills.rag"
     _hr_skill_module = hr_skills_rag
+
+    _tool_names: list[HR_RAG_Tools] = dataclasses.field(
+        default_factory=_default_rag_tools,
+    )
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,
+        config_path: pathlib.Path,
+        config_dict: dict,
+    ):
+        rag_features = config_dict.pop("rag_features", None)
+
+        if rag_features is None:
+            rag_tools = DEFAULT_RAG_TOOLS
+        else:
+            rag_tools = []
+            for rag_feature in rag_features:
+                rag_tools.extend(
+                    _rag_feature_to_tools(rag_feature, config_path),
+                )
+
+        config_dict["_tool_names"] = rag_tools
+
+        return super().from_yaml(
+            installation_config=installation_config,
+            config_path=config_path,
+            config_dict=config_dict,
+        )
 
 
 @dataclasses.dataclass(kw_only=True)

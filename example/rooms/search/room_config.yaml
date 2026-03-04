@@ -16,6 +16,7 @@ skills:
   skill_configs:
     - kind: "haiku.rag.skills.rag"
       rag_lancedb_stem: "rag"
-#     rag_features: ["search"]
+      rag_features: 
+        - "search"
 
 allow_mcp: false
