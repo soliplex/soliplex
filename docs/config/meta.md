@@ -71,6 +71,24 @@ meta:
   - "soliplex.config.Stdio_MCP_ClientToolsetConfig"
   - "soliplex.config.HTTP_MCP_ClientToolsetConfig"
 ```
+
+## Registering Skill Configuration Classes
+The `meta.skill_configs` section enumerates skill
+configuration types so that they can be referenced by their 'kind'.
+
+The section contains a list of Python "dotted names", i.e. strings which
+can be used to import the configuration class.
+
+By default, Soliplex registers its own tool config classes, just as though
+we configured explicitly:
+ 
+```yaml
+meta:
+  skill_configs:
+  - "soliplex.config.HR_RAG_SkillConfig"
+  - "soliplex.config.HR_RLM_SkillConfig"
+```
+
 ## Registering MCP Server Tool Wrapper Types
 
 The `meta.mcp_server_tool_wrappers` section maps tool configuration classes to

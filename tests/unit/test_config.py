@@ -1217,6 +1217,7 @@ BARE_ICMETA_KW = {
     "agui_features": [],
     "tool_configs": [],
     "mcp_toolset_configs": [],
+    "skill_configs": [],
     "mcp_server_tool_wrappers": [],
     "agent_configs": [],
     "secret_sources": [],
@@ -1235,6 +1236,7 @@ W_AGUI_FEATURES_ICMETA_KW = {
     ],
     "tool_configs": [],
     "mcp_toolset_configs": [],
+    "skill_configs": [],
     "mcp_server_tool_wrappers": [],
     "agent_configs": [],
     "secret_sources": [],
@@ -1255,6 +1257,7 @@ W_MCP_TOOLSET_CONFIGS_ICMETA_KW = {
         config.ConfigMeta(config_klass=config.Stdio_MCP_ClientToolsetConfig),
     ],
     "mcp_server_tool_wrappers": [],
+    "skill_configs": [],
     "agent_configs": [],
     "secret_sources": [],
 }
@@ -1265,11 +1268,30 @@ meta:
 """
 
 
+W_SKILL_CONFIGS_ICMETA_KW = {
+    "agui_features": [],
+    "tool_configs": [],
+    "mcp_toolset_configs": [],
+    "skill_configs": [
+        config.ConfigMeta(config_klass=config.HR_RAG_SkillConfig),
+    ],
+    "mcp_server_tool_wrappers": [],
+    "agent_configs": [],
+    "secret_sources": [],
+}
+W_SKILL_CONFIGS_ICMETA_YAML = """\
+meta:
+  skill_configs:
+    - "soliplex.config.HR_RAG_SkillConfig"
+"""
+
+
 W_AGENT_CONFIGS_ICMETA_KW = {
     "agui_features": [],
     "tool_configs": [],
     "mcp_toolset_configs": [],
     "mcp_server_tool_wrappers": [],
+    "skill_configs": [],
     "agent_configs": [
         config.ConfigMeta(config_klass=config.AgentConfig),
         config.ConfigMeta(config_klass=config.FactoryAgentConfig),
@@ -1289,6 +1311,7 @@ W_SECRET_SOURCE_ICMETA_KW = {
     "tool_configs": [],
     "mcp_toolset_configs": [],
     "mcp_server_tool_wrappers": [],
+    "skill_configs": [],
     "agent_configs": [],
     "secret_sources": [
         config.ConfigMeta(
@@ -1319,6 +1342,10 @@ FULL_ICMETA_KW = {
         config.ConfigMeta(config_klass=config.HTTP_MCP_ClientToolsetConfig),
     ],
     "mcp_server_tool_wrappers": [],
+    "skill_configs": [
+        config.ConfigMeta(config_klass=config.HR_RAG_SkillConfig),
+        config.ConfigMeta(config_klass=config.HR_RLM_SkillConfig),
+    ],
     "agent_configs": [
         config.ConfigMeta(config_klass=config.AgentConfig),
         config.ConfigMeta(config_klass=config.FactoryAgentConfig),
@@ -1339,6 +1366,9 @@ meta:
   mcp_toolset_configs:
       - "soliplex.config.Stdio_MCP_ClientToolsetConfig"
       - "soliplex.config.HTTP_MCP_ClientToolsetConfig"
+  skill_configs:
+      - "soliplex.config.HR_RAG_SkillConfig"
+      - "soliplex.config.HR_RLM_SkillConfig"
   agent_configs:
       - "soliplex.config.AgentConfig"
       - "soliplex.config.FactoryAgentConfig"
@@ -5530,6 +5560,7 @@ def patched_soliplex_config():
         patched["TOOL_CONFIG_CLASSES_BY_TOOL_NAME"] = {}
         patched["MCP_TOOLSET_CONFIG_CLASSES_BY_KIND"] = {}
         patched["MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME"] = {}
+        patched["SKILL_CONFIG_CLASSES_BY_KIND"] = {}
         patched["AGENT_CONFIG_CLASSES_BY_KIND"] = {}
         patched["SECRET_GETTERS_BY_KIND"] = {}
 
@@ -5543,6 +5574,7 @@ def patched_soliplex_config():
         (BARE_ICMETA_YAML, BARE_ICMETA_KW),
         (W_AGUI_FEATURES_ICMETA_YAML, W_AGUI_FEATURES_ICMETA_KW),
         (W_MCP_TOOLSET_CONFIGS_ICMETA_YAML, W_MCP_TOOLSET_CONFIGS_ICMETA_KW),
+        (W_SKILL_CONFIGS_ICMETA_YAML, W_SKILL_CONFIGS_ICMETA_KW),
         (W_AGENT_CONFIGS_ICMETA_YAML, W_AGENT_CONFIGS_ICMETA_KW),
         (
             W_SECRET_SOURCE_ICMETA_YAML,
@@ -5645,10 +5677,12 @@ def test_installationconfigmeta_from_yaml(
 
 @pytest.mark.parametrize("w_secret_reg", [False, True])
 @pytest.mark.parametrize("w_agent", [False, True])
+@pytest.mark.parametrize("w_skills", [False, True])
 @pytest.mark.parametrize("w_mcp_toolsets", [False, True])
 def test_installationconfigmeta_as_yaml(
     patched_soliplex_config,
     w_mcp_toolsets,
+    w_skills,
     w_agent,
     w_secret_reg,
 ):
@@ -5657,25 +5691,30 @@ def test_installationconfigmeta_as_yaml(
     icmeta_kw = icmeta_kw.copy()
 
     if w_mcp_toolsets:
-        config.MCP_TOOLSET_CONFIG_CLASSES_BY_KIND[
-            config.Stdio_MCP_ClientToolsetConfig.kind
-        ] = config.Stdio_MCP_ClientToolsetConfig
+        klass = config.Stdio_MCP_ClientToolsetConfig
+        config.MCP_TOOLSET_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
         expected_dict["mcp_toolset_configs"].append(
             "soliplex.config.Stdio_MCP_ClientToolsetConfig",
         )
 
-    if w_agent:
-        config.AGENT_CONFIG_CLASSES_BY_KIND[config.AgentConfig.kind] = (
-            config.AgentConfig
+    if w_skills:
+        klass = config.HR_RAG_SkillConfig
+        config.SKILL_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
+        expected_dict["skill_configs"].append(
+            "soliplex.config.HR_RAG_SkillConfig",
         )
+
+    if w_agent:
+        klass = config.AgentConfig
+        config.AGENT_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
         expected_dict["agent_configs"].append(
             "soliplex.config.AgentConfig",
         )
 
     if w_secret_reg:
-        config.SECRET_GETTERS_BY_KIND[config.EnvVarSecretSource.kind] = (
-            secrets.get_env_var_secret
-        )
+        klass = config.EnvVarSecretSource
+        registered_func = secrets.get_env_var_secret
+        config.SECRET_GETTERS_BY_KIND[klass.kind] = registered_func
         expected_dict["secret_sources"].append(
             {
                 "config_klass": "soliplex.config.EnvVarSecretSource",

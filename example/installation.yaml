@@ -53,6 +53,19 @@ meta:
   #------------------------------------------------------------------------
 
   #------------------------------------------------------------------------
+  # Register skill configuration types so that they can be referenced by
+  # their 'kind'
+  #
+  # 'soliplex.config.HR_RAG_SkillConfig' and
+  # 'soliplex.config.HR_RLM_SkillConfig' are registered by default,
+  # just as if we configured here:
+  #
+  # skill_configs:
+  # - "soliplex.config.HR_RAG_SkillConfig"
+  # - "soliplex.config.HR_RLM_SkillConfig"
+  #------------------------------------------------------------------------
+
+  #------------------------------------------------------------------------
   # Register MCP server tool wrapper types so that they can be used to
   # wrap tools from a given tool configuration class.
   #

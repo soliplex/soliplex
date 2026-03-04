@@ -2480,6 +2480,11 @@ class InstallationConfigMeta:
         server tool wrapper classes) or `ConfigMeta' mappings, defining
         the types of MCP server tool wrappers which can be configured.
 
+    'skill_configs'
+        a list consisting of strings (importable dotted names of skill
+        config classes) or `ConfigMeta' mappings, defining the types
+        of skills which can be configured.
+
     'agent_configs'
         a list consisting of strings (importable dotted names of agent
         config classes) or `ConfigMeta' mappings, defining the
@@ -2499,6 +2504,7 @@ class InstallationConfigMeta:
     tool_configs: list[str | ConfigMeta] = ()
     mcp_toolset_configs: list[str | ConfigMeta] = ()
     mcp_server_tool_wrappers: list[ConfigMeta] = ()
+    skill_configs: list[str | ConfigMeta] = ()
     agent_configs: list[str | ConfigMeta] = ()
     secret_sources: list[str | ConfigMeta] = ()
 
@@ -2534,6 +2540,11 @@ class InstallationConfigMeta:
                     "mcp_server_tool_wrappers",
                     (),
                 )
+            ]
+
+            config_dict["skill_configs"] = [
+                ConfigMeta.from_yaml(sc_yaml)
+                for sc_yaml in config_dict.get("skill_configs", ())
             ]
 
             config_dict["agent_configs"] = [
@@ -2584,6 +2595,11 @@ class InstallationConfigMeta:
             wrapper_klass = mstw_meta.wrapper_klass
             MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME[tool_name] = wrapper_klass
 
+        self.skill_configs = list(self.skill_configs)
+        for sc_meta in self.skill_configs:
+            klass = sc_meta.config_klass
+            SKILL_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
+
         self.agent_configs = list(self.agent_configs)
         for ac_meta in self.agent_configs:
             klass = ac_meta.config_klass
@@ -2623,6 +2639,10 @@ class InstallationConfigMeta:
             }
             for tool_name, wrapper_klass in mcptcw_items
         ]
+        skill_config_entries = [
+            _dotted_name(klass)
+            for klass in SKILL_CONFIG_CLASSES_BY_KIND.values()
+        ]
         agent_config_entries = [
             _dotted_name(klass)
             for klass in AGENT_CONFIG_CLASSES_BY_KIND.values()
@@ -2639,6 +2659,7 @@ class InstallationConfigMeta:
             "tool_configs": tool_config_entries,
             "mcp_toolset_configs": mcp_toolset_config_entries,
             "mcp_server_tool_wrappers": mcp_server_tool_wrapper_entries,
+            "skill_configs": skill_config_entries,
             "agent_configs": agent_config_entries,
             "secret_sources": secret_source_entries,
         }
