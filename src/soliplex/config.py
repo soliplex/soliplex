@@ -790,30 +790,6 @@ class _DiscoveredSkillConfigBase(
         )
 
     @property
-    def name(self) -> str:
-        return self._skill_metadata.name
-
-    @property
-    def description(self) -> str:
-        return self._skill_metadata.description
-
-    @property
-    def license(self) -> str | None:
-        return self._skill_metadata.license
-
-    @property
-    def compatibility(self) -> str | None:
-        return self._skill_metadata.compatibility
-
-    @property
-    def allowed_tools(self) -> str:
-        return self._skill_metadata.allowed_tools
-
-    @property
-    def metadata(self) -> dict:
-        return self._skill_metadata.metadata
-
-    @property
     def agui_feature_names(self) -> tuple[str]:
         if self.state_namespace is not None:
             return (self.state_namespace,)
