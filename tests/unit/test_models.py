@@ -866,7 +866,7 @@ def test_room_from_config_w_fs_skills(
         description=ROOM_DESCRIPTION,
         agent_config=default_agent,
         skills=config.RoomSkillsConfig(
-            skill_names=[SKILL_NAME],
+            installation_skill_names=[SKILL_NAME],
             _installation_config=room_ic,
         ),
         _installation_config=room_ic,
@@ -892,7 +892,7 @@ def test_room_from_config_w_ep_skills(
         description=ROOM_DESCRIPTION,
         agent_config=default_agent,
         skills=config.RoomSkillsConfig(
-            skill_names=[SKILL_NAME],
+            installation_skill_names=[SKILL_NAME],
             _installation_config=room_ic,
         ),
         _installation_config=room_ic,

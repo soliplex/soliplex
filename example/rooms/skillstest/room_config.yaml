@@ -12,7 +12,7 @@ agent:
     replying to the user's prompts.
 
 skills:
-  skill_names:
+  installation_skill_names:
     - "bare-bones"
   # See: https://github.com/ggozad/haiku.skills/issues/27
   # - "image-generation"  # needs namespace?

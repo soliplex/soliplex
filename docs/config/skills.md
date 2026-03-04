@@ -38,5 +38,14 @@ Discovered entrypoint skills can be queried using the
 
 Skills discovered using either of these mechanisms are "available",
 but not enabled by default.  To enable one or more skills, use the
-[`skill_configs` entry](installation.md#enabling-skill-configurations)
+[`skill_configs` stanza](installation.md#enabling-skill-configurations)
 in the installation configuration file.
+
+## Configuring Room-Specific Skills
+
+Soliplex provides two custom skill configuration types, based on the
+skills defined in `haiku.rag.skills.rag` and `haiku.rag.skills.rlm`.
+Because these skills require additional parameters available in
+a room configuration, they are defined using the
+[`skill_configs` stanza](rooms.md#skill-configuration)
+of the room configuration's `skills` entry.

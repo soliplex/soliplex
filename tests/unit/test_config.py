@@ -608,20 +608,20 @@ model_name: "{ROOM_SKILLS_MODEL_NAME}"
 
 W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_KW = {
     "model_name": ROOM_SKILLS_MODEL_NAME,
-    "skill_names": [SKILL_NAME],
+    "installation_skill_names": [SKILL_NAME],
 }
 W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_YAML = f"""\
 model_name: "{ROOM_SKILLS_MODEL_NAME}"
-skill_names:
+installation_skill_names:
     - "{SKILL_NAME}"
 """
 W_MISSING_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_KW = {
     "model_name": ROOM_SKILLS_MODEL_NAME,
-    "skill_names": ["bogus"],
+    "installation_skill_names": ["bogus"],
 }
 W_MISSING_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_YAML = f"""\
 model_name: "{ROOM_SKILLS_MODEL_NAME}"
-skill_names:
+installation_skill_names:
     - "bogus"
 """
 
@@ -704,7 +704,7 @@ FULL_ROOM_CONFIG_KW = {
     },
     "skills": config.RoomSkillsConfig(
         model_name=SKILL_MODEL_NAME,
-        skill_names=[SKILL_NAME],
+        installation_skill_names=[SKILL_NAME],
     ),
 }
 FULL_ROOM_CONFIG_YAML = f"""\
@@ -741,7 +741,7 @@ mcp_client_toolsets:
         {HTTP_MCP_QP_KEY}: "{HTTP_MCP_QP_VALUE}"
 skills:
     model_name: {SKILL_MODEL_NAME}
-    skill_names:
+    installation_skill_names:
         - "{SKILL_NAME}"
 quizzes:
   - id: "{TEST_QUIZ_ID}"
@@ -4234,7 +4234,7 @@ def test_roomskillsconfig_skill_configs(installation_config):
         "other_skill": object(),
     }
 
-    room_skills_config_kw = {"skill_names": [SKILL_NAME]}
+    room_skills_config_kw = {"installation_skill_names": [SKILL_NAME]}
     room_skills_config = config.RoomSkillsConfig(
         **room_skills_config_kw,
         _installation_config=installation_config,
@@ -4253,7 +4253,7 @@ def test_roomskillsconfig_skills(installation_config):
         "other_skill": object(),
     }
 
-    room_skill_config_kw = {"skill_names": [SKILL_NAME]}
+    room_skill_config_kw = {"installation_skill_names": [SKILL_NAME]}
     room_skill_config = config.RoomSkillsConfig(
         **room_skill_config_kw,
         _installation_config=installation_config,
@@ -4279,7 +4279,7 @@ def test_roomskillsconfig_skill_toolset(installation_config):
 
     room_skill_config = config.RoomSkillsConfig(
         model_name=ROOM_SKILLS_MODEL_NAME,
-        skill_names=[SKILL_NAME],
+        installation_skill_names=[SKILL_NAME],
         _installation_config=installation_config,
     )
 

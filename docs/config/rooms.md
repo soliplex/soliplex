@@ -125,14 +125,23 @@ for the full list of configuration options and examples.
 
 ### Skill Configuration
 
-- `skills` (a list of strings, default empty);  if set, names the
-  installation skills which are enabled for the room.  E.g.:
+- `installation_skill_names` (a list of strings, default empty);  if set,
+  names the installation skills which are enabled for the room.
+
+- `skill_configs` (a list of mappings, default empty); if set, configue
+  skills locally to the room.
+
+E.g.:
 
   ```yaml
   skills:
-    skill_names:
+    installation_skill_names:
         - "bare-bones"           # a filesytem skill
         - "image-generation"     # an entrypoint skill
+    skill_configs:
+        - skill_name: "rag"
+          kind: "haiku.rag.skill.rag"
+          rag_lancedb_stem: "rag"
   ```
 
 ### Quiz-related elements

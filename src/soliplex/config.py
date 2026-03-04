@@ -1499,7 +1499,7 @@ class RoomSkillsConfig:
     #
     # Use skills defined in the installation, identified by name
     #
-    skill_names: list[str] = _default_list_field()
+    installation_skill_names: list[str] = _default_list_field()
     model_name: str | None = None
 
     # Set by `from_yaml` factory
@@ -1513,7 +1513,9 @@ class RoomSkillsConfig:
         config_path: pathlib.Path,
         config_dict: dict,
     ):
-        config_skill_names = set(config_dict.get("skill_names", ()))
+        config_skill_names = set(
+            config_dict.get("installation_skill_names", ())
+        )
         installation_skill_names = set(installation_config.skill_configs)
         missing_skill_names = config_skill_names - installation_skill_names
 
@@ -1564,7 +1566,7 @@ class RoomSkillsConfig:
         ic_skill_configs = self._installation_config.skill_configs
         return {
             skill_name: ic_skill_configs[skill_name]
-            for skill_name in self.skill_names
+            for skill_name in self.installation_skill_names
         } | (self._skill_configs)
 
     @property
