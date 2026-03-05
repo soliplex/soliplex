@@ -11,6 +11,8 @@ from soliplex.moodle.models import Course
 from soliplex.moodle.models import EnrolledUser
 from soliplex.moodle.models import UserProfile
 
+# Upper bound on results returned by list endpoints.
+# Keeps LLM context bounded; acts as a client-side safeguard.
 MAX_RESULTS = 100
 
 
@@ -77,6 +79,10 @@ class MoodleClient:
     # ---------------------------------------------------------------
 
     async def get_courses(self) -> list[Course]:
+        """Return all courses via ``core_course_get_courses``.
+
+        Results are truncated to ``MAX_RESULTS``.
+        """
         raw = await self._call("core_course_get_courses")
         courses = [Course.model_validate(c) for c in raw]
         return courses[:MAX_RESULTS]
@@ -86,6 +92,10 @@ class MoodleClient:
         field: str = "",
         value: str = "",
     ) -> list[Course]:
+        """Filter courses via ``core_course_get_courses_by_field``.
+
+        Results are truncated to ``MAX_RESULTS``.
+        """
         params: dict[str, str] = {}
         if field:
             params["field"] = field
@@ -103,6 +113,10 @@ class MoodleClient:
         field: str,
         values: list[str],
     ) -> list[UserProfile]:
+        """Look up users via ``core_user_get_users_by_field``.
+
+        Results are truncated to ``MAX_RESULTS``.
+        """
         params: dict[str, str] = {"field": field}
         for i, v in enumerate(values):
             params[f"values[{i}]"] = v
@@ -114,6 +128,10 @@ class MoodleClient:
     # ---------------------------------------------------------------
 
     async def get_enrolled_users(self, courseid: int) -> list[EnrolledUser]:
+        """List enrolled users via ``core_enrol_get_enrolled_users``.
+
+        Results are truncated to ``MAX_RESULTS``.
+        """
         raw = await self._call(
             "core_enrol_get_enrolled_users",
             courseid=courseid,
@@ -129,6 +147,7 @@ class MoodleClient:
         courseid: int,
         userid: int,
     ) -> CompletionStatus:
+        """Get completion status via ``core_completion_get_course_completion_status``."""
         raw = await self._call(
             "core_completion_get_course_completion_status",
             courseid=courseid,

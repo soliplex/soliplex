@@ -7,6 +7,8 @@ from pydantic import Field
 
 
 class Course(BaseModel):
+    """Course record from ``core_course_get_courses``."""
+
     id: int
     shortname: str
     fullname: str
@@ -20,6 +22,8 @@ class Course(BaseModel):
 
 
 class UserProfile(BaseModel):
+    """User profile from ``core_user_get_users_by_field``."""
+
     id: int
     username: str = ""
     firstname: str = ""
@@ -32,12 +36,16 @@ class UserProfile(BaseModel):
 
 
 class Role(BaseModel):
+    """Role assignment embedded in enrolled-user records."""
+
     roleid: int
     name: str = ""
     shortname: str = ""
 
 
 class EnrolledUser(BaseModel):
+    """Enrolled user from ``core_enrol_get_enrolled_users``."""
+
     id: int
     username: str = ""
     firstname: str = ""
@@ -49,6 +57,8 @@ class EnrolledUser(BaseModel):
 
 
 class CompletionDetails(BaseModel):
+    """Nested detail block within a completion criterion."""
+
     type: str = ""
     criteria: str = ""
     requirement: str = ""
@@ -56,6 +66,8 @@ class CompletionDetails(BaseModel):
 
 
 class CompletionCriteria(BaseModel):
+    """Single completion criterion within a course completion status."""
+
     type: int = 0
     title: str = ""
     status: str = ""
@@ -65,6 +77,8 @@ class CompletionCriteria(BaseModel):
 
 
 class CompletionStatus(BaseModel):
+    """Course completion status from ``core_completion_get_course_completion_status``."""
+
     completed: bool
     aggregation: int = 0
     completions: list[CompletionCriteria] = Field(
