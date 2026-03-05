@@ -125,6 +125,17 @@ def test_installation_get_environment(w_default):
         i_config.get_environment.assert_called_once_with(KEY, None)
 
 
+def test_installation_get_environment_sources():
+    i_config = mock.create_autospec(config.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    found = the_installation.get_environment_sources(KEY)
+
+    assert found is i_config.get_environment_sources.return_value
+
+    i_config.get_environment_sources.assert_called_once_with(KEY)
+
+
 @pytest.mark.parametrize("w_raise", [False, True])
 def test_installation_resolve_environment(w_raise):
     i_config = mock.create_autospec(config.InstallationConfig)

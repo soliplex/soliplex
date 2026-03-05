@@ -44,6 +44,9 @@ class Installation:
     def resolve_secrets(self):
         secrets.resolve_secrets(self._config.secrets)
 
+    def get_environment_sources(self, key) -> list[config.EnvironmentSource]:
+        return self._config.get_environment_sources(key)
+
     def get_environment(self, key, default=None) -> str:
         return self._config.get_environment(key, default)
 

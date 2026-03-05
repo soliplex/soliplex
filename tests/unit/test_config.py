@@ -6010,6 +6010,57 @@ def test_installationconfig_interpolate_secret(
         gs.assert_not_called()
 
 
+EST = config.EnvironmentSourceType
+
+
+@pytest.mark.parametrize(
+    "w_yaml, w_dotenv, w_osenv, exp_first",
+    [
+        (None, None, None, None),
+        ("YAML", None, None, EST.CONFIG_YAML),
+        ("YAML", "DOTENV", None, EST.CONFIG_YAML),
+        ("YAML", None, "OSENV", EST.CONFIG_YAML),
+        (None, "DOTENV", None, EST.DOT_ENV),
+        (None, "DOTENV", "OSENV", EST.DOT_ENV),
+        (None, None, "OSENV", EST.OS_ENV),
+    ],
+)
+@mock.patch("os.getenv")
+def test_installationconfig_get_environment_sources(
+    os_getenv,
+    w_yaml,
+    w_dotenv,
+    w_osenv,
+    exp_first,
+):
+    KEY = "TEST_KEY"
+    kwargs = {"id": "test-ic"}
+    candidates = []
+
+    if w_yaml is not None:
+        kwargs["_environment_from_config"] = {KEY: w_yaml}
+        candidates.append(EST.CONFIG_YAML)
+    else:
+        kwargs["_environment_from_config"] = {}
+
+    if w_dotenv is not None:
+        kwargs["_from_dotenv"] = {KEY: w_dotenv}
+        candidates.append(EST.DOT_ENV)
+
+    if w_osenv is not None:
+        os_getenv.return_value = "OSENV"
+        candidates.append(EST.OS_ENV)
+    else:
+        os_getenv.return_value = None
+
+    i_config = config.InstallationConfig(**kwargs)
+
+    found = i_config.get_environment_sources(KEY)
+
+    for f_item, candidate in zip(found, candidates, strict=True):
+        assert f_item.source_type == candidate
+
+
 @pytest.mark.parametrize("w_default", [False, True])
 @pytest.mark.parametrize("w_hit", [False, True])
 def test_installationconfig_get_environment(w_hit, w_default):
@@ -6609,6 +6660,11 @@ def test_installationconfig_from_yaml(
                     )
                 )
             expected = dataclasses.replace(expected, secrets=replaced_secrets)
+
+        if "environment" in expected_kw:
+            expected = dataclasses.replace(
+                expected, _environment_from_config=expected_kw["environment"]
+            )
 
         if "agent_configs" in expected_kw:
             # Assign '_installation_config' after found is constructed.

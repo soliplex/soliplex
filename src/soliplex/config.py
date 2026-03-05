@@ -257,6 +257,10 @@ def _no_repr_no_compare_none(**kw):
     return _no_repr_no_compare(default=None, **kw)
 
 
+def _no_repr_no_compare_dict(**kw):
+    return _no_repr_no_compare(default_factory=dict, **kw)
+
+
 def _default_list_field() -> dataclasses.field:
     return dataclasses.field(default_factory=list)
 
@@ -2867,6 +2871,18 @@ def _load_entrypoint_skill_configs() -> SkillConfigMap:
     return ep_skill_configs
 
 
+class EnvironmentSourceType(enum.StrEnum):
+    CONFIG_YAML = "config-yaml"
+    DOT_ENV = "dot-env"
+    OS_ENV = "os-environment"
+
+
+@dataclasses.dataclass
+class EnvironmentSource:
+    source_type: EnvironmentSourceType
+    value: str | None
+
+
 @dataclasses.dataclass(kw_only=True)
 class InstallationConfig:
     """Configuration for a set of rooms, completion, etc."""
@@ -2972,7 +2988,41 @@ class InstallationConfig:
     #
     # Map values similar to 'os.environ'.
     #
+
+    # Values from installation config file.
+    _environment_from_config: dict[str, str] = _no_repr_no_compare_dict()
+
     environment: dict[str, typing.Any] = _default_dict_field()
+
+    def get_environment_sources(self, key) -> list[EnvironmentSource]:
+        """Return sources available for an environment key
+
+        First in the list will be the source whose value is used.
+        """
+        EST = EnvironmentSourceType
+        ES = EnvironmentSource
+
+        result = []
+
+        from_config = self._environment_from_config.get(key)
+
+        if from_config is not None:
+            result.append(ES(EST.CONFIG_YAML, from_config))
+
+        if self._from_dotenv is not None:
+            from_dotenv = self._from_dotenv.get(key)
+
+            if from_dotenv is not None:
+                result.append(ES(EST.DOT_ENV, from_dotenv))
+            else:  # pragma: NO COVER
+                pass
+
+        from_osenv = os.getenv(key)
+
+        if from_osenv is not None:
+            result.append(ES(EST.OS_ENV, from_osenv))
+
+        return result
 
     def get_environment(self, key, default=None):
         """Find the configured value for a given quasi-envvar"""
@@ -3258,6 +3308,8 @@ class InstallationConfig:
                     entry["name"]: entry.get("value") for entry in environment
                 }
 
+            # Preserve values as read for later introspection.
+            config_dict["_environment_from_config"] = environment
             config_dict["environment"] = environment
 
             hr_config_file = config_dict.pop(
@@ -3445,6 +3497,7 @@ class InstallationConfig:
             "id": self.id,
             "meta": self.meta.as_yaml,
             "secrets": [secret.as_yaml for secret in self.secrets],
+            # Dump the resolved version, not the original config
             "environment": self.environment,
             "haiku_rag_config_file": str(self._haiku_rag_config_file),
             "agent_configs": [ac.as_yaml for ac in self.agent_configs],

@@ -566,6 +566,14 @@ def list_secrets(
 def list_environment(
     ctx: typer.Context,
     installation_path: installation_path_type,
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="""\
+Show available sources, and which is selected.
+""",
+    ),
 ):
     """List environment variables defined in the installation"""
     the_installation = get_installation(installation_path)
@@ -585,6 +593,17 @@ def list_environment(
             value = "MISSING"
 
         the_console.print(f"- {key:25}: {value}")
+
+        if verbose:
+            for i_source, source in enumerate(
+                the_installation.get_environment_sources(key)
+            ):
+                mark = " " if i_source else "*"
+                the_console.print(
+                    f"  {mark}{str(source.source_type):24}: {source.value}"
+                )
+
+        the_console.print()
 
     the_console.print()
 
