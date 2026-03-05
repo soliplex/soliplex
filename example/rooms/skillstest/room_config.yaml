@@ -14,8 +14,8 @@ agent:
 skills:
   installation_skill_names:
     - "bare-bones"
-  # See: https://github.com/ggozad/haiku.skills/issues/27
-  # - "image-generation"  # needs namespace?
+# Requires installing 'haiku-skills-image-generation'
+#   - "image-generation"
 
 #
 # Science fiction:  use all three types of skills from 'haiku.skills'
