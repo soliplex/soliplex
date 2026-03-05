@@ -147,7 +147,10 @@ class MoodleClient:
         courseid: int,
         userid: int,
     ) -> CompletionStatus:
-        """Get completion status via ``core_completion_get_course_completion_status``."""
+        """Get completion status.
+
+        Calls ``core_completion_get_course_completion_status``.
+        """
         raw = await self._call(
             "core_completion_get_course_completion_status",
             courseid=courseid,

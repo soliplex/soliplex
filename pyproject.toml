@@ -91,7 +91,6 @@ omit = [
     "src/soliplex/cli/serve.py",
 
     "src/soliplex/examples.py",
-    "src/soliplex/moodle/agent.py",
     "src/soliplex/tui.py",
 ]
 

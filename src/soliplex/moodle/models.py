@@ -77,7 +77,10 @@ class CompletionCriteria(BaseModel):
 
 
 class CompletionStatus(BaseModel):
-    """Course completion status from ``core_completion_get_course_completion_status``."""
+    """Course completion status.
+
+    Returned by ``core_completion_get_course_completion_status``.
+    """
 
     completed: bool
     aggregation: int = 0
