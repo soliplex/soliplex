@@ -11,6 +11,11 @@ agent:
   template_id: "default_chat"
 
 skills:
+
+# Requires installing 'haiku-skills-image-generation'
+# installation_skill_names:
+#   - "image-generation"
+
   skill_configs:
     - kind: "haiku.rag.skills.rag"
       rag_lancedb_stem: "rag"

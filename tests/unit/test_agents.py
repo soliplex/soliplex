@@ -158,9 +158,11 @@ def mcp_ct_configs_tools(request):
 @pytest.mark.parametrize("w_room_skills", [False, True])
 @pytest.mark.parametrize("w_model_settings", [None, MODEL_SETTINGS])
 @mock.patch("soliplex.agents.get_model_from_config")
+@mock.patch("haiku.skills.prompts.build_system_prompt")
 @mock.patch("pydantic_ai.Agent")
 def test_get_default_agent_from_configs(
     agent_klass,
+    build_system_prompt,
     gmfc,
     tool_configs_tools,
     mcp_ct_configs_tools,
@@ -184,9 +186,14 @@ def test_get_default_agent_from_configs(
     room_skills = mock.create_autospec(agents.SkillToolsetConfig)
     kwargs = {}
 
+    exp_instructions = SYSTEM_PROMPT
+
     if w_room_skills:
         kwargs["skill_toolset_config"] = room_skills
         exp_toolsets.append(room_skills.skill_toolset)
+        exp_instructions = build_system_prompt.return_value
+    else:
+        exp_instructions = SYSTEM_PROMPT
 
     found = agents.get_default_agent_from_configs(
         agent_config=agent_config,
@@ -207,7 +214,16 @@ def test_get_default_agent_from_configs(
     assert akc_kw["model"] is gmfc.return_value
     gmfc.assert_called_once_with(agent_config=agent_config)
 
-    assert akc_kw["instructions"] == SYSTEM_PROMPT
+    assert akc_kw["instructions"] == exp_instructions
+
+    if w_room_skills:
+        build_system_prompt.assert_called_once_with(
+            preamble=SYSTEM_PROMPT,
+            skill_catalog=room_skills.skill_toolset.skill_catalog,
+        )
+    else:
+        build_system_prompt.assert_not_called()
+
     assert akc_kw["model_settings"] == w_model_settings
 
     for akc_tool, exp_tool in zip(akc_kw["tools"], exp_tools, strict=True):

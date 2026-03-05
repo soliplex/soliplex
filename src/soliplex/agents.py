@@ -6,6 +6,7 @@ import typing
 
 import pydantic_ai
 from haiku.skills import agent as hs_agent
+from haiku.skills import prompts as hs_prompts
 from pydantic_ai import agent as ai_agent
 from pydantic_ai import mcp as ai_mcp
 from pydantic_ai import models as ai_models
@@ -125,14 +126,21 @@ def get_default_agent_from_configs(
     ]
 
     if skill_toolset_config is not None:
-        toolsets.append(skill_toolset_config.skill_toolset)
+        toolset = skill_toolset_config.skill_toolset
+        toolsets.append(toolset)
+        instructions = hs_prompts.build_system_prompt(
+            preamble=agent_config.get_system_prompt(),
+            skill_catalog=toolset.skill_catalog,
+        )
+    else:
+        instructions = agent_config.get_system_prompt()
 
     return pydantic_ai.Agent(
         model=model,
         model_settings=agent_config.model_settings,
         tools=tools,
         toolsets=toolsets,
-        instructions=agent_config.get_system_prompt(),
+        instructions=instructions,
         deps_type=AgentDependencies,
     )
 
