@@ -35,10 +35,12 @@ class MoodleClient:
         self,
         base_url: str | None = None,
         token: str | None = None,
+        verify: str | bool | None = None,
     ):
         self.base_url = (base_url or os.environ["MOODLE_BASE_URL"]).rstrip("/")
         self.token = token or os.environ["MOODLE_API_TOKEN"]
         self._endpoint = f"{self.base_url}/webservice/rest/server.php"
+        self._verify = verify
 
     async def _call(
         self,
@@ -52,7 +54,10 @@ class MoodleClient:
             "moodlewsrestformat": "json",
             **params,
         }
-        async with httpx.AsyncClient() as http:
+        client_kw = {}
+        if self._verify is not None:
+            client_kw["verify"] = self._verify
+        async with httpx.AsyncClient(**client_kw) as http:
             resp = await http.post(self._endpoint, data=data)
             resp.raise_for_status()
 

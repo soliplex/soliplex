@@ -48,18 +48,43 @@ def moodle_tools_agent_factory(
     agent_config: config.FactoryAgentConfig,
     tool_configs: agents.ToolConfigMap = None,
     mcp_client_toolset_configs: (config.MCP_ClientToolsetConfigMap) = None,
+    skill_toolset_config: agents.SkillToolsetConfig | None = None,
 ) -> pydantic_ai.Agent:
     """Create a Moodle Workplace agent with tool calling.
 
     Exposes Moodle API methods as Pydantic AI tools so
     the LLM decides which to call.
+
+    Required ``extra_config`` keys on *agent_config*:
+
+    * ``moodle_base_url`` — secret reference for the Moodle
+      instance URL.
+    * ``moodle_api_token`` — secret reference for the web
+      service token.
+
+    Optional ``extra_config`` keys:
+
+    * ``moodle_verify_ssl`` — path to a CA bundle or ``False``
+      to disable TLS verification (passed through to
+      ``MoodleClient``).
+    * ``provider_type``, ``model_name``, etc. — forwarded to
+      ``get_model_from_factory_config``.
+
+    The Moodle web service account must have these functions
+    enabled: ``core_course_get_courses``,
+    ``core_user_get_users_by_field``,
+    ``core_enrol_get_enrolled_users``, and
+    ``core_completion_get_course_completion_status``.
     """
     ic = agent_config._installation_config
     extra = agent_config.extra_config
 
     base_url = ic.get_secret(extra["moodle_base_url"])
     token = ic.get_secret(extra["moodle_api_token"])
-    client = MoodleClient(base_url=base_url, token=token)
+    verify = extra.get("moodle_verify_ssl")
+    client = MoodleClient(
+        base_url=base_url, token=token, verify=verify
+    )
 
     model = config_agents.get_model_from_factory_config(agent_config)
 
@@ -77,7 +102,10 @@ def moodle_tools_agent_factory(
         for each course.  Use the course id in other
         tools.
         """
-        courses = await client.get_courses()
+        try:
+            courses = await client.get_courses()
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
         return json.dumps(
             [
                 {
@@ -102,7 +130,10 @@ def moodle_tools_agent_factory(
         Returns JSON with id, username, fullname, and
         email for each matching user.
         """
-        users = await client.get_users_by_field(field, [value])
+        try:
+            users = await client.get_users_by_field(field, [value])
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
         return json.dumps(
             [
                 {
@@ -126,7 +157,10 @@ def moodle_tools_agent_factory(
         Returns JSON with id, username, fullname, and
         roles for each enrolled user.
         """
-        enrolled = await client.get_enrolled_users(courseid)
+        try:
+            enrolled = await client.get_enrolled_users(courseid)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
         return json.dumps(
             [
                 {
