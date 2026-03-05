@@ -371,7 +371,6 @@ room_paths:
   - "./rooms/skillstest"
   - "./rooms/feedback"
   - "./rooms/bwrap_sandbox"
-  - "./rooms/moodle"
   - "./rooms/moodle-tools"
 
 #==========================================================================
