@@ -1,0 +1,9 @@
+id: "kernel-120b"
+name: "SoliplexKernel (120B)"
+description: "Full kernel: agent supervision, blackboard, fetch, logging"
+agent:
+  model_name: "gpt-oss:120b"
+  provider_type: "ollama"
+  provider_base_url: "http://bizon:11435"
+  system_prompt: "./prompt.txt"
+allow_mcp: false

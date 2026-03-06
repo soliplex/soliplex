@@ -143,7 +143,7 @@ secrets:
 
 environment:
   - "OLLAMA_BASE_URL"
-
+  - "LOGFIRE_TOKEN"
   #------------------------------------------------------------------------
   # 'soliplex': on-disk configuration locations
   #------------------------------------------------------------------------
@@ -197,15 +197,15 @@ agent_configs:
 # Thread peristence:  SQLAlchemy DBURIs
 #==========================================================================
 thread_persistence_dburi:
-  sync: "sqlite://"
-  async: "sqlite+aiosqlite://"
+  sync: "postgresql+psycopg://soliplex:soliplex@localhost:5432/soliplex"
+  async: "postgresql+asyncpg://soliplex:soliplex@localhost:5432/soliplex"
 
 #==========================================================================
 # Authorization policy:  SQLAlchemy DBURIs
 #==========================================================================
 authorization_dburi:
-  sync: "sqlite://"
-  async: "sqlite+aiosqlite://"
+  sync: "postgresql+psycopg://soliplex:soliplex@localhost:5432/soliplex"
+  async: "postgresql+asyncpg://soliplex:soliplex@localhost:5432/soliplex"
 
 #==========================================================================
 # OIDC authentication provider configuration
@@ -228,6 +228,17 @@ room_paths:
   - "./rooms/joker"
   - "./rooms/faux"
   - "./rooms/quiztest"
+  - "./rooms/monty"
+  - "./rooms/monty-chart"
+  - "./rooms/monty-chart-web"
+  - "./rooms/plain"
+  - "./rooms/letter-drawing"
+  - "./rooms/tic-tac-toe"
+  - "./rooms/echo"
+  - "./rooms/spike-20b"
+  - "./rooms/spike-120b"
+  - "./rooms/kernel-20b"
+  - "./rooms/kernel-120b"
 #
 #==========================================================================
 # Completions configuration
