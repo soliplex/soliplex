@@ -754,8 +754,16 @@ async def test_get_upcoming_events_tool_no_filter():
     agent = _build_agent()
     fn = _get_tool_fn(agent, "get_upcoming_events")
 
-    resp = _mock_response({"events": []})
-    with _patch_httpx(resp):
+    # When no courseids provided, the tool fetches all courses first,
+    # then calls get_calendar_events with those course IDs.
+    courses_resp = _mock_response(
+        [
+            {"id": 1, "shortname": "site", "fullname": "Site"},
+            {"id": 2, "shortname": "c1", "fullname": "C1"},
+        ]
+    )
+    events_resp = _mock_response({"events": []})
+    with mock.patch("httpx.AsyncClient.post", side_effect=[courses_resp, events_resp]):
         result = json.loads(await fn("", 7))
 
     assert result == []

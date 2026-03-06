@@ -204,7 +204,7 @@ class CalendarEvent(BaseModel):
     name: str = ""
     description: str = ""
     courseid: int = 0
-    modulename: str = ""
+    modulename: str | None = ""
     eventtype: str = ""
     timestart: int = 0
     timeduration: int = 0

@@ -533,7 +533,7 @@ def moodle_tools_agent_factory(
             days_ahead: Number of days to look ahead
                         (default 30).
         """
-        cids = None
+        cids: list[int] | None = None
         if courseids:
             cids = [
                 int(c.strip())
@@ -543,6 +543,12 @@ def moodle_tools_agent_factory(
         now = int(time.time())
         end = now + days_ahead * 86400
         try:
+            # The calendar API only returns course events when
+            # course IDs are explicitly provided.  When the caller
+            # doesn't specify any, fetch all courses first.
+            if cids is None:
+                all_courses = await client.get_courses()
+                cids = [c.id for c in all_courses if c.id != 1]
             events = await client.get_calendar_events(
                 courseids=cids, timestart=now, timeend=end
             )
