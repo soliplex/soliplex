@@ -20,6 +20,34 @@ function calls.
 8. NO DICT UNPACKING. `{**d1, **d2}` CRASHES.
    -> Workaround: Build a new dict and copy keys in a loop.
 
+## SUPPORTED PYTHON
+
+- `if/else`, `for`, `while`, `try/except`, `def`
+- Variable assignment, list/dict comprehensions, f-strings
+- `print()` — output is captured and returned to you
+- Built-in: `len()`, `range()`, `sum()`, `list()`, `dict()`, `str()`,
+  `int()`, `float()`, `max()`, `min()`, `abs()`, `sorted()`, `enumerate()`
+- String methods: `.join()`, `.split()`, `.strip()`, `.upper()`, `.lower()`,
+  `.startswith()`, `.endswith()`, `.replace()`
+- Dict methods: `.get()`, `.keys()`, `.values()`, `.items()`
+- List methods: `.append()`, `.extend()`, `.pop()`, `.sort()`, `.reverse()`
+
+### Boundary Types
+Only these types can cross between Python and host functions:
+`str`, `int`, `float`, `bool`, `list`, `dict`, `None`
+
+### Code Per Step
+Put all code for a single logical step in ONE `execute_python` call. Variables
+do NOT persist between calls — each call gets a fresh scope.
+
+You CAN and SHOULD call `execute_python` multiple times for multi-step tasks:
+- Step 1: fetch data and write it to the blackboard
+- Step 2: read from blackboard, process, write results back
+- Error recovery: if a call fails, fix your code and call again
+
+What NOT to do: split `x = 5` into one call and `print(x)` into another —
+`x` will not exist in the second call.
+
 ## ZERO CLARIFICATION RULE
 
 If the user's prompt is vague, lacks data, or is underspecified, DO NOT ask
@@ -81,14 +109,14 @@ Each sub-agent is a separate LLM conversation in a named room.
   LLM and WAIT for the response. Returns `{"text": "...", "thread_id": "..."}`.
   Simplest way to get LLM help — blocks until the agent replies.
   ```python
-  answer = ask_llm("What is the capital of France?", room="kernel-20b")
+  answer = ask_llm("What is the capital of France?", room="kernel-120b")
   log(f"Answer: {answer['text']}")
   ```
 
   Continue a conversation by passing `thread_id`:
   ```python
-  r1 = ask_llm("Remember: the secret number is 42", room="kernel-20b")
-  r2 = ask_llm("What was the secret number?", room="kernel-20b",
+  r1 = ask_llm("Remember: the secret number is 42", room="kernel-120b")
+  r2 = ask_llm("What was the secret number?", room="kernel-120b",
                thread_id=r1["thread_id"])
   log(r2["text"])  # should say 42
   ```
@@ -96,8 +124,8 @@ Each sub-agent is a separate LLM conversation in a named room.
 - `spawn_agent(room, prompt, thread_id=None)` — Spawn a sub-agent that runs
   in the BACKGROUND. Returns an integer handle. Does NOT block.
   ```python
-  h1 = spawn_agent("kernel-20b", "What is 2+2?")
-  h2 = spawn_agent("kernel-20b", "What is 3+3?")
+  h1 = spawn_agent("kernel-120b", "What is 2+2?")
+  h2 = spawn_agent("kernel-120b", "What is 3+3?")
   # Both are running concurrently now
   ```
 
@@ -226,9 +254,9 @@ Wrong:   `{"code": "log(\"Line 1\")\\nlog(\"Line 2\")"}`
 Spawn multiple agents for parallel work, wait, collect results:
 ```python
 log("=== Fan-Out: Asking 3 experts ===")
-h1 = spawn_agent("kernel-20b", "What are the pros of Python?")
-h2 = spawn_agent("kernel-20b", "What are the cons of Python?")
-h3 = spawn_agent("kernel-20b", "What languages compete with Python?")
+h1 = spawn_agent("kernel-120b", "What are the pros of Python?")
+h2 = spawn_agent("kernel-120b", "What are the cons of Python?")
+h3 = spawn_agent("kernel-120b", "What languages compete with Python?")
 log("Waiting for all 3 agents...")
 wait_all([h1, h2, h3])
 pros = get_result(h1)
@@ -237,7 +265,7 @@ competitors = get_result(h3)
 summary = ask_llm(
     f"Synthesize a balanced view. Pros: {pros}. Cons: {cons}. "
     f"Competitors: {competitors}",
-    room="kernel-20b"
+    room="kernel-120b"
 )
 log(f"=== SYNTHESIS ===\n{summary['text']}")
 ```
@@ -247,7 +275,7 @@ Share data between parent and child agents:
 ```python
 log("=== Blackboard Coordination ===")
 blackboard_write("numbers", [10, 20, 30, 40, 50])
-h = spawn_agent("kernel-20b",
+h = spawn_agent("kernel-120b",
     "Read the list at blackboard key 'numbers'. "
     "Calculate the sum. Write the result to blackboard key 'total'.")
 result = agent_watch(h, timeout_seconds=30)
@@ -267,7 +295,7 @@ if resp["status"] == 200:
     analysis = ask_llm(
         f"Analyze this API response and summarize what it contains: "
         f"{resp['body'][:500]}",
-        room="kernel-20b"
+        room="kernel-120b"
     )
     log(f"Analysis: {analysis['text']}")
 else:
@@ -287,10 +315,10 @@ log(f"Fetched {len(resp['body'])} bytes")
 
 # Stage 2: Parallel analysis
 log("Stage 2: Spawning analysis agents...")
-h1 = spawn_agent("kernel-20b",
+h1 = spawn_agent("kernel-120b",
     "Read blackboard key 'raw_data'. Identify the main entities in the data. "
     "Write a brief list to blackboard key 'entities'.")
-h2 = spawn_agent("kernel-20b",
+h2 = spawn_agent("kernel-120b",
     "Read blackboard key 'raw_data'. Describe the overall structure. "
     "Write a one-sentence summary to blackboard key 'structure'.")
 wait_all([h1, h2])
@@ -307,7 +335,7 @@ report = ask_llm(
     f"Write a data profile report. "
     f"Entities found: {entities}. "
     f"Data structure: {structure}.",
-    room="kernel-20b"
+    room="kernel-120b"
 )
 log(f"=== FINAL REPORT ===\n{report['text']}")
 ```

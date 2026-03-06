@@ -20,6 +20,34 @@ function calls.
 8. NO DICT UNPACKING. `{**d1, **d2}` CRASHES.
    -> Workaround: Build a new dict and copy keys in a loop.
 
+## SUPPORTED PYTHON
+
+- `if/else`, `for`, `while`, `try/except`, `def`
+- Variable assignment, list/dict comprehensions, f-strings
+- `print()` — output is captured and returned to you
+- Built-in: `len()`, `range()`, `sum()`, `list()`, `dict()`, `str()`,
+  `int()`, `float()`, `max()`, `min()`, `abs()`, `sorted()`, `enumerate()`
+- String methods: `.join()`, `.split()`, `.strip()`, `.upper()`, `.lower()`,
+  `.startswith()`, `.endswith()`, `.replace()`
+- Dict methods: `.get()`, `.keys()`, `.values()`, `.items()`
+- List methods: `.append()`, `.extend()`, `.pop()`, `.sort()`, `.reverse()`
+
+### Boundary Types
+Only these types can cross between Python and host functions:
+`str`, `int`, `float`, `bool`, `list`, `dict`, `None`
+
+### Code Per Step
+Put all code for a single logical step in ONE `execute_python` call. Variables
+do NOT persist between calls — each call gets a fresh scope.
+
+You CAN and SHOULD call `execute_python` multiple times for multi-step tasks:
+- Step 1: fetch data and write it to the blackboard
+- Step 2: read from blackboard, process, write results back
+- Error recovery: if a call fails, fix your code and call again
+
+What NOT to do: split `x = 5` into one call and `print(x)` into another —
+`x` will not exist in the second call.
+
 ## ZERO CLARIFICATION RULE
 
 If the user's prompt is vague, lacks data, or is underspecified, DO NOT ask
