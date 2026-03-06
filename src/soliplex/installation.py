@@ -449,6 +449,7 @@ async def lifespan(
     agui_engine = sqla_asyncio.create_async_engine(
         the_installation.thread_persistence_dburi_async,
         json_serializer=util.serialize_sqla_json,
+        pool_pre_ping=True,
     )
     async with agui_engine.begin() as agui_connection:
         await agui_connection.run_sync(
@@ -458,6 +459,7 @@ async def lifespan(
     authz_engine = sqla_asyncio.create_async_engine(
         the_installation.authorization_dburi_async,
         json_serializer=util.serialize_sqla_json,
+        pool_pre_ping=True,
     )
     async with authz_engine.begin() as ra_connection:
         await ra_connection.run_sync(
