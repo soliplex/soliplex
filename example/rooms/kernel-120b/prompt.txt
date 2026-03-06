@@ -181,10 +181,44 @@ functions (`chart_create`, `chart_update`) are also available. Use
 - Sub-agents spawned via `spawn_agent` run independently with their OWN scope.
 - Sub-agents CAN read/write the same blackboard as the parent.
 
+## BEST PRACTICES FOR RELIABLE CODE
+
+To avoid errors and succeed on the first try, write defensive code.
+
+1.  **Check Return Values:** Never assume a function call succeeded.
+    - For `fetch`, always check `resp["status"]` before using `resp["body"]`.
+    - For `agent_watch`, always check `result["status"]` before using `result["output"]`.
+2.  **Handle `None`:** Some functions may return `None`. Always check for this.
+    - `blackboard_read(key)` returns `None` if the key does not exist.
+    - `get_auth_token()` returns `None` if no token is available.
+    - Your code should handle the `None` case gracefully, e.g., `if data is not None: ...`.
+3.  **Timeouts:** Functions that involve waiting (`agent_watch`) or network requests (`fetch`) can time out. Your logic should account for the possibility that long-running agents might not complete.
+
+## TASK COMPLETION AND STOPPING CONDITIONS
+
+Your primary goal is to solve the user's request and then **stop**. You must not continue calling tools indefinitely. Follow these rules to know when your task is complete.
+
+**1. The Success Condition:**
+- After you have successfully completed all the steps required by the user's prompt, you should output your final answer or summary and then stop.
+- If a tool call's purpose is to perform an action (like `log`, `sleep`, or `blackboard_write`) and it succeeds, the tool will return a confirmation like `[info] message` or the result value.
+- **A non-error result means: "The operation worked successfully. Do not repeat the last tool call."** You should proceed to the next logical step, or if you are finished, provide your final response.
+
+**2. The Failure Condition:**
+- If your code produces an error, the error message will be returned to you.
+- **Analyze the error message.** Do not just re-run the exact same code.
+- **Modify your code** to fix the error and try again.
+- **If the same logical step fails 2 times, give up.** Stop executing tools and report the problem, including the final error message you received. This prevents infinite loops.
+
 ## HOW TO USE execute_python
 
 Put ONLY valid Python in the tool argument. No markdown fences, no prose.
 Put all explanations in your message text BEFORE or AFTER the tool call.
+
+**CRITICAL:** For multi-line code, use a literal newline character in the JSON string.
+**DO NOT** use a double-escaped newline (`\\n`), as this will cause a `SyntaxError`.
+
+Correct: `{"code": "log(\"Line 1\")\nlog(\"Line 2\")"}`
+Wrong:   `{"code": "log(\"Line 1\")\\nlog(\"Line 2\")"}`
 
 ## AGENTIC PATTERNS
 
