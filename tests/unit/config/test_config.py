@@ -5,16 +5,11 @@ import functools
 import json
 import pathlib
 import typing
-import warnings
 from unittest import mock
 
-import pydantic
 import pytest
 import yaml
 from haiku.rag import config as hr_config_module
-from haiku.rag.skills import rag as hr_skills_rag
-from haiku.rag.skills import rlm as hr_skills_rlm
-from haiku.skills import agent as hs_agent
 from haiku.skills import models as hs_models
 from pydantic_ai import settings as ai_settings
 
@@ -22,6 +17,7 @@ from soliplex import config
 from soliplex import secrets
 from soliplex.agui import features as agui_features
 from tests.unit.config import test_authsystem
+from tests.unit.config import test_skills
 from tests.unit.config import test_tools
 
 NoRaise = contextlib.nullcontext()
@@ -105,67 +101,6 @@ SUGGESTION = "Try us out for a spin!"
 IMAGE_FILENAME = "test_image.jpg"
 
 QUIZ_ID = "test_quiz"
-
-SKILL_NAME = "test-skill"
-FILESYSTEM_SKILL_NAME = "test-fs-skill"
-ENTRYPOINT_SKILL_NAME = "test-ep-skill"
-SKILL_DESC = "Skill description"
-SKILL_LICENSE = "Skill license"
-SKILL_COMPAT = "Skill compatibility"
-TOOL_ONE = "tool-one"
-TOOL_TWO = "tool-two"
-SKILL_ALLOWED_TOOLS = f"{TOOL_ONE} {TOOL_TWO}"
-SKILL_AUTHOR = "phreddy@example.com"
-SKILL_VERSION = "0.0.1"
-SKILL_METADATA = {
-    "author": SKILL_AUTHOR,
-    "version": SKILL_VERSION,
-}
-
-BARE_SKILL_MD_KW = {
-    "name": SKILL_NAME,
-    "description": SKILL_DESC,
-}
-BARE_SKILL_MD_YAML = f"""\
----
-name: {SKILL_NAME}
-description: {SKILL_DESC}
----
-"""
-
-FULL_SKILL_MD_KW = {
-    "name": SKILL_NAME,
-    "description": SKILL_DESC,
-    "license": SKILL_LICENSE,
-    "compatibility": SKILL_COMPAT,
-    "allowed_tools": SKILL_ALLOWED_TOOLS,
-    "metadata": {
-        "author": SKILL_AUTHOR,
-        "version": SKILL_VERSION,
-    },
-}
-FULL_SKILL_MD_YAML = f"""\
----
-name: "{SKILL_NAME}"
-description: "{SKILL_DESC}"
-license: "{SKILL_LICENSE}"
-compatibility: "{SKILL_COMPAT}"
-allowed-tools: "{SKILL_ALLOWED_TOOLS}"
-metadata:
-    author: "{SKILL_AUTHOR}"
-    version: "{SKILL_VERSION}"
----
-"""
-
-SKILL_MODEL_NAME = "test-skill-model"
-SKILL_PATH = f"/path/to/skills/{SKILL_NAME}"
-SKILL_STATE_NAMESPACE = "test-skill-namespace"
-SKILL_VALIDATION_ERROR = "Test skill validation error"
-SKILL_TYPE_NAMESPACE = "test-skill-namespace"
-
-
-class SkillTypeTest(pydantic.BaseModel):
-    pass
 
 
 BOGUS_AGENT_CONFIG_YAML = ""
@@ -423,35 +358,6 @@ HRC_OVERRIDE_YAML = """\
 testing: "override"
 """
 
-BOGUS_ROOM_SKILLS_CONFIG_YAML = ""
-
-ROOM_SKILLS_MODEL_NAME = "test-roomskills-model"
-BARE_ROOM_SKILLS_CONFIG_KW = {
-    "model_name": ROOM_SKILLS_MODEL_NAME,
-}
-BARE_ROOM_SKILLS_CONFIG_YAML = f"""\
-model_name: "{ROOM_SKILLS_MODEL_NAME}"
-"""
-
-W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_KW = {
-    "model_name": ROOM_SKILLS_MODEL_NAME,
-    "installation_skill_names": [SKILL_NAME],
-}
-W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_YAML = f"""\
-model_name: "{ROOM_SKILLS_MODEL_NAME}"
-installation_skill_names:
-    - "{SKILL_NAME}"
-"""
-W_MISSING_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_KW = {
-    "model_name": ROOM_SKILLS_MODEL_NAME,
-    "installation_skill_names": ["bogus"],
-}
-W_MISSING_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_YAML = f"""\
-model_name: "{ROOM_SKILLS_MODEL_NAME}"
-installation_skill_names:
-    - "bogus"
-"""
-
 BOGUS_ROOM_CONFIG_YAML = ""
 
 BARE_ROOM_CONFIG_KW = {
@@ -530,8 +436,8 @@ FULL_ROOM_CONFIG_KW = {
         ),
     },
     "skills": config.RoomSkillsConfig(
-        model_name=SKILL_MODEL_NAME,
-        installation_skill_names=[SKILL_NAME],
+        model_name=test_skills.SKILL_MODEL_NAME,
+        installation_skill_names=[test_skills.SKILL_NAME],
     ),
 }
 FULL_ROOM_CONFIG_YAML = f"""\
@@ -567,9 +473,9 @@ mcp_client_toolsets:
       query_params:
         {test_tools.HTTP_MCP_QP_KEY}: "{test_tools.HTTP_MCP_QP_VALUE}"
 skills:
-    model_name: {SKILL_MODEL_NAME}
+    model_name: {test_skills.SKILL_MODEL_NAME}
     installation_skill_names:
-        - "{SKILL_NAME}"
+        - "{test_skills.SKILL_NAME}"
 quizzes:
   - id: "{TEST_QUIZ_ID}"
     question_file: "{TEST_QUIZ_OVR}"
@@ -1522,8 +1428,14 @@ W_SKILLS_PATHS_INSTALLATION_CONFIG_KW = {
         SKILLS_PATH_2,
     ],
     "_skill_configs": [
-        {"kind": "filesystem", "skill_name": FILESYSTEM_SKILL_NAME},
-        {"kind": "entrypoint", "skill_name": ENTRYPOINT_SKILL_NAME},
+        {
+            "kind": "filesystem",
+            "skill_name": test_skills.FILESYSTEM_SKILL_NAME,
+        },
+        {
+            "kind": "entrypoint",
+            "skill_name": test_skills.ENTRYPOINT_SKILL_NAME,
+        },
     ],
 }
 W_SKILLS_PATHS_INSTALLATION_CONFIG_YAML = f"""\
@@ -1533,9 +1445,9 @@ filesystem_skills_paths:
     - "{SKILLS_PATH_2}"
 skill_configs:
     - kind: "filesystem"
-      skill_name: "{FILESYSTEM_SKILL_NAME}"
+      skill_name: "{test_skills.FILESYSTEM_SKILL_NAME}"
     - kind: "entrypoint"
-      skill_name: "{ENTRYPOINT_SKILL_NAME}"
+      skill_name: "{test_skills.ENTRYPOINT_SKILL_NAME}"
 """
 
 W_SKILLS_PATHS_ONLY_NULL_INSTALLATION_CONFIG_KW = {
@@ -1625,646 +1537,6 @@ authorization_dburi:
     sync: {RA_DBURI_SYNC_W_SECRET}
     async: {RA_DBURI_ASYNC}
 """
-
-
-@pytest.fixture
-def skill_path(temp_dir):
-    path = temp_dir / "skills" / SKILL_NAME
-    path.mkdir(parents=True)
-    return path
-
-
-@pytest.mark.parametrize(
-    "w_metadata_kw, exp_allowed_tools",
-    [
-        ({"name": SKILL_NAME, "description": SKILL_DESC}, []),
-        (
-            {
-                "name": SKILL_NAME,
-                "description": SKILL_DESC,
-                "license": SKILL_LICENSE,
-                "compatibility": SKILL_COMPAT,
-                "allowed_tools": [TOOL_ONE, TOOL_TWO],
-                "metadata": SKILL_METADATA,
-            },
-            [TOOL_ONE, TOOL_TWO],
-        ),
-        (  # XXX See: https://github.com/ggozad/haiku.skills/issues/19
-            {
-                "name": SKILL_NAME,
-                "description": SKILL_DESC,
-                "license": SKILL_LICENSE,
-                "compatibility": SKILL_COMPAT,
-                "allowed_tools": SKILL_ALLOWED_TOOLS,
-                "metadata": SKILL_METADATA,
-            },
-            [TOOL_ONE, TOOL_TWO],
-        ),
-    ],
-)
-def test_filesystemskillconfig_ctor(
-    skill_path,
-    w_metadata_kw,
-    exp_allowed_tools,
-):
-    skill_config = config.FilesystemSkillConfig(
-        _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
-        _skill_path=skill_path,
-    )
-
-    assert skill_config.source == hs_models.SkillSource.FILESYSTEM
-    assert skill_config.name == SKILL_NAME
-    assert skill_config.description == SKILL_DESC
-    assert skill_config.license == w_metadata_kw.get("license")
-    assert skill_config.compatibility == w_metadata_kw.get("compatibility")
-    assert skill_config.allowed_tools == exp_allowed_tools
-    assert skill_config.metadata == w_metadata_kw.get("metadata", {})
-    assert skill_config.errors == []
-    assert skill_config.path == skill_path
-
-
-def test_filesystemskillconfig_ctor_w_errors(skill_path):
-    validation_error = hs_models.SkillValidationError(
-        SKILL_VALIDATION_ERROR,
-        skill_path,
-    )
-    skill_metadata = hs_models.SkillMetadata(
-        name=SKILL_NAME,
-        description=SKILL_VALIDATION_ERROR,
-    )
-    skill_config = config.FilesystemSkillConfig(
-        _skill_path=skill_path,
-        _skill_metadata=skill_metadata,
-        _validation_errors=[validation_error],
-    )
-
-    assert skill_config.name is SKILL_NAME
-    assert skill_config.description is SKILL_VALIDATION_ERROR
-    assert skill_config.license is None
-    assert skill_config.compatibility is None
-    assert skill_config.allowed_tools == []
-    assert skill_config.metadata == {}
-    assert skill_config.errors == [validation_error]
-
-
-@pytest.mark.parametrize("w_errors", [[], [SKILL_VALIDATION_ERROR]])
-@mock.patch("haiku.skills.discovery.discover_from_paths")
-def test_filesystemskillconfig_from_path(
-    hsd_dfp,
-    skill_path,
-    w_errors,
-):
-    if w_errors:
-        hsd_dfp.return_value = (
-            [],
-            [
-                hs_models.SkillValidationError(msg, skill_path)
-                for msg in w_errors
-            ],
-        )
-    else:
-        metadata = mock.create_autospec(hs_models.SkillMetadata)
-        metadata.name = SKILL_NAME  # mock quirk
-        skill = mock.create_autospec(hs_models.Skill)
-        skill.metadata = metadata  # mock quirk
-        skill.path = skill_path
-        hsd_dfp.return_value = [skill], []
-
-    found = config.FilesystemSkillConfig.from_path(skill_path)
-
-    if w_errors:
-        assert found.name == SKILL_NAME
-        assert found.errors == w_errors
-        assert found.description.startswith("Invalid filesystem skill")
-    else:
-        assert found._skill_metadata is metadata
-        assert found.errors == []
-
-    hsd_dfp.assert_called_once_with([skill_path])
-
-
-@pytest.mark.parametrize(
-    "w_kw",
-    [
-        {},
-        {
-            "state_type": SkillTypeTest,
-            "state_namespace": SKILL_TYPE_NAMESPACE,
-        },
-    ],
-)
-def test_filesystemskillconfig_agui_feature_names(skill_path, w_kw):
-    skill_config = config.FilesystemSkillConfig(
-        _skill_path=skill_path,
-        _skill_metadata=hs_models.SkillMetadata(
-            name=SKILL_NAME,
-            description=SKILL_DESC,
-        ),
-        **w_kw,
-    )
-
-    found = skill_config.agui_feature_names
-
-    if w_kw:
-        assert found == (w_kw["state_namespace"],)
-    else:
-        assert found == ()
-
-
-@pytest.mark.parametrize(
-    "w_metadata_kw, w_kw",
-    [
-        (
-            {
-                "name": SKILL_NAME,
-                "description": SKILL_DESC,
-            },
-            {},
-        ),
-        (
-            {
-                "name": SKILL_NAME,
-                "description": SKILL_DESC,
-                "license": SKILL_LICENSE,
-                "compatibility": SKILL_COMPAT,
-                "allowed_tools": SKILL_ALLOWED_TOOLS,
-                "metadata": SKILL_METADATA,
-            },
-            {
-                "state_type": SkillTypeTest,
-                "state_namespace": SKILL_TYPE_NAMESPACE,
-            },
-        ),
-    ],
-)
-def test_filesystemskillconfig_skill(skill_path, w_metadata_kw, w_kw):
-    skill_config = config.FilesystemSkillConfig(
-        _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
-        _skill_path=skill_path,
-        **w_kw,
-    )
-
-    found = skill_config.skill
-
-    assert isinstance(found, hs_models.Skill)
-    assert found.source == hs_models.SkillSource.FILESYSTEM
-    assert found.metadata.name == skill_config.name
-    assert found.metadata.description == skill_config.description
-    assert found.metadata.license == skill_config.license
-    assert found.metadata.compatibility == skill_config.compatibility
-    assert found.metadata.allowed_tools == skill_config.allowed_tools
-    assert found.metadata.metadata == skill_config.metadata
-    assert found.path == skill_path
-    assert found.state_type is w_kw.get("state_type")
-    assert found.state_namespace is w_kw.get("state_namespace")
-
-
-@pytest.mark.parametrize(
-    "w_metadata_kw, exp_allowed_tools",
-    [
-        ({"name": SKILL_NAME, "description": SKILL_DESC}, []),
-        (
-            {
-                "name": SKILL_NAME,
-                "description": SKILL_DESC,
-                "license": SKILL_LICENSE,
-                "compatibility": SKILL_COMPAT,
-                "allowed_tools": [TOOL_ONE, TOOL_TWO],
-                "metadata": SKILL_METADATA,
-            },
-            [TOOL_ONE, TOOL_TWO],
-        ),
-        (  # XXX See: https://github.com/ggozad/haiku.skills/issues/19
-            {
-                "name": SKILL_NAME,
-                "description": SKILL_DESC,
-                "license": SKILL_LICENSE,
-                "compatibility": SKILL_COMPAT,
-                "allowed_tools": SKILL_ALLOWED_TOOLS,
-                "metadata": SKILL_METADATA,
-            },
-            [TOOL_ONE, TOOL_TWO],
-        ),
-    ],
-)
-def test_entrypointskillconfig_ctor(w_metadata_kw, exp_allowed_tools):
-    skill_config = config.EntrypointSkillConfig(
-        _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
-    )
-
-    assert skill_config.name == SKILL_NAME
-    assert skill_config.description == SKILL_DESC
-    assert skill_config.license == w_metadata_kw.get("license")
-    assert skill_config.compatibility == w_metadata_kw.get("compatibility")
-    assert skill_config.allowed_tools == exp_allowed_tools
-    assert skill_config.metadata == w_metadata_kw.get("metadata", {})
-
-
-@pytest.mark.parametrize(
-    "w_kw",
-    [
-        {},
-        {
-            "state_type": SkillTypeTest,
-            "state_namespace": SKILL_TYPE_NAMESPACE,
-        },
-    ],
-)
-def test_entrypointskillconfig_agui_feature_names(w_kw):
-    skill_config = config.EntrypointSkillConfig(
-        _skill_metadata=hs_models.SkillMetadata(
-            name=SKILL_NAME,
-            description=SKILL_DESC,
-        ),
-        **w_kw,
-    )
-
-    found = skill_config.agui_feature_names
-
-    if w_kw:
-        assert found == (w_kw["state_namespace"],)
-    else:
-        assert found == ()
-
-
-@pytest.mark.parametrize(
-    "w_metadata_kw, w_kw",
-    [
-        (
-            {
-                "name": SKILL_NAME,
-                "description": SKILL_DESC,
-            },
-            {},
-        ),
-        (
-            {
-                "name": SKILL_NAME,
-                "description": SKILL_DESC,
-                "license": SKILL_LICENSE,
-                "compatibility": SKILL_COMPAT,
-                "allowed_tools": SKILL_ALLOWED_TOOLS,
-                "metadata": SKILL_METADATA,
-            },
-            {
-                "state_type": SkillTypeTest,
-                "state_namespace": SKILL_TYPE_NAMESPACE,
-            },
-        ),
-    ],
-)
-def test_entrypointskillconfig_skill(skill_path, w_metadata_kw, w_kw):
-    skill_config = config.EntrypointSkillConfig(
-        _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
-        **w_kw,
-    )
-
-    found = skill_config.skill
-
-    assert isinstance(found, hs_models.Skill)
-    assert found.source == hs_models.SkillSource.ENTRYPOINT
-    assert found.metadata.name == skill_config.name
-    assert found.metadata.description == skill_config.description
-    assert found.metadata.license == skill_config.license
-    assert found.metadata.compatibility == skill_config.compatibility
-    assert found.metadata.allowed_tools == skill_config.allowed_tools
-    assert found.metadata.metadata == skill_config.metadata
-    assert found.state_type is w_kw.get("state_type")
-    assert found.state_namespace is w_kw.get("state_namespace")
-
-
-@pytest.fixture
-def derived_hrskillconfig():
-    skill_module = mock.Mock(
-        spec_set=[
-            "skill_metadata",
-            "STATE_NAMESPACE",
-            "STATE_TYPE",
-            "create_skill",
-        ],
-    )
-
-    class TestHRSkllConfig(config._HR_SkillConfigBase):
-        _hr_skill_module = skill_module
-        rag_lancedb_path = mock.Mock(spec_set=())
-        haiku_rag_config = mock.Mock(spec_set=())
-
-    return skill_module, TestHRSkllConfig(rag_lancedb_stem="test")
-
-
-def test__hrskillconfigbase_skill_metadata(derived_hrskillconfig):
-    skill_module, inst = derived_hrskillconfig
-    skill_metadata = skill_module.skill_metadata.return_value
-
-    assert inst.skill_metadata is skill_metadata
-    assert inst.name is skill_metadata.name
-    assert inst.description is skill_metadata.description
-    assert inst.license is skill_metadata.license
-    assert inst.compatibility is skill_metadata.compatibility
-    assert inst.allowed_tools is skill_metadata.allowed_tools
-    assert inst.metadata is skill_metadata.metadata
-
-
-def test__hrskillconfigbase_agui_skill_namespace(derived_hrskillconfig):
-    skill_module, inst = derived_hrskillconfig
-
-    assert inst.state_namespace is skill_module.STATE_NAMESPACE
-
-
-def test__hrskillconfigbase_agui_skill_type(derived_hrskillconfig):
-    skill_module, inst = derived_hrskillconfig
-
-    assert inst.state_type is skill_module.STATE_TYPE
-
-
-def test__hrskillconfigbase_agui_feature_names(derived_hrskillconfig):
-    skill_module, inst = derived_hrskillconfig
-
-    assert inst.agui_feature_names == [skill_module.STATE_NAMESPACE]
-
-
-def test_hrskillconfigbbase_skill(derived_hrskillconfig):
-    skill_module, inst = derived_hrskillconfig
-
-    found = inst.skill
-
-    assert found is skill_module.create_skill.return_value
-
-    skill_module.create_skill.assert_called_once_with(
-        db_path=inst.rag_lancedb_path,
-        config=inst.haiku_rag_config,
-    )
-
-
-def test_hr_rag_skillconfig_metadata(
-    temp_dir,
-    installation_config,
-):
-    skill_haiku_rag_config = object()
-
-    config_path = temp_dir / "config_file.yaml"
-    lancedb = temp_dir / "rag.lancedb"
-    lancedb.mkdir()
-
-    inst = config.HR_RAG_SkillConfig(
-        rag_lancedb_override_path=lancedb,
-        _haiku_rag_config=skill_haiku_rag_config,
-        _config_path=config_path,
-        _installation_config=installation_config,
-    )
-
-    found = inst.skill_metadata
-
-    assert found.name == "rag"
-
-
-@pytest.mark.parametrize(
-    "w_config, expectation",
-    [
-        ({}, contextlib.nullcontext(config.DEFAULT_RAG_TOOLS)),
-        (
-            {"tool_names": ["get_document", "list_documents"]},
-            contextlib.nullcontext(
-                [
-                    config.HR_RAG_Tools.GET_DOCUMENT,
-                    config.HR_RAG_Tools.LIST_DOCUMENTS,
-                ]
-            ),
-        ),
-        (
-            {"rag_features": ["search"]},
-            contextlib.nullcontext([config.HR_RAG_Tools.SEARCH]),
-        ),
-        (
-            {"not_a_valid_key": "FAIL"},
-            pytest.raises(config.FromYamlException),
-        ),
-        (
-            {"rag_features": ["bogus"]},
-            pytest.raises(config.Invalid_RAG_Feature),
-        ),
-        (
-            {"rag_features": ["analysis"]},
-            pytest.raises(
-                config.Invalid_RAG_Feature,
-                match=config.USE_HR_SKILLS_RLM,
-            ),
-        ),
-        (
-            {"tool_names": ["ask"], "rag_features": ["search"]},
-            pytest.raises(config.OnlyOneOfToolNamesRagFeatures),
-        ),
-    ],
-)
-def test_hr_rag_skillconfig_from_yaml(
-    temp_dir,
-    installation_config,
-    w_config,
-    expectation,
-):
-    config_path = temp_dir / "config_file.yaml"
-    lancedb = temp_dir / "rag.lancedb"
-    lancedb.mkdir()
-
-    config_dict = {
-        "rag_lancedb_override_path": lancedb,
-    } | w_config
-
-    with (
-        warnings.catch_warnings(record=True) as warned,
-        expectation as expected,
-    ):
-        inst = config.HR_RAG_SkillConfig.from_yaml(
-            installation_config=installation_config,
-            config_path=config_path,
-            config_dict=config_dict,
-        )
-
-    if not isinstance(expected, pytest.ExceptionInfo):
-        if "rag_features" in w_config:
-            (deprecated,) = warned
-            assert deprecated.category is DeprecationWarning
-            (msg,) = deprecated.message.args
-            assert "'rag_features' is deprecated" in msg
-        else:
-            assert not warned
-
-        assert inst.rag_lancedb_path == lancedb
-        assert inst.haiku_rag_config is installation_config.haiku_rag_config
-        assert inst.tool_names == expected
-
-
-@pytest.mark.parametrize(
-    "w_tool_names, exp_skill_tools",
-    [
-        (None, config.DEFAULT_RAG_TOOLS),
-        (["search"], ["search"]),
-        (["search", "ask"], ["search", "ask"]),
-        (
-            ["research", "list_documents", "get_document"],
-            ["research", "list_documents", "get_document"],
-        ),
-    ],
-)
-def test_hr_rag_skillconfig_skill(
-    temp_dir,
-    installation_config,
-    w_tool_names,
-    exp_skill_tools,
-):
-    skill_haiku_rag_config = object()
-
-    config_path = temp_dir / "config_file.yaml"
-    lancedb = temp_dir / "rag.lancedb"
-    lancedb.mkdir()
-
-    kwargs = {}
-    if w_tool_names:
-        kwargs["_tool_names"] = w_tool_names
-
-    inst = config.HR_RAG_SkillConfig(
-        rag_lancedb_override_path=lancedb,
-        _haiku_rag_config=skill_haiku_rag_config,
-        _config_path=config_path,
-        _installation_config=installation_config,
-        **kwargs,
-    )
-
-    found = inst.skill
-
-    assert isinstance(found, hs_models.Skill)
-    assert found.metadata == hr_skills_rag.skill_metadata()
-    assert set(tool.__name__ for tool in found.tools) == set(
-        str(est) for est in exp_skill_tools
-    )
-
-
-def test_hr_rlm_skillconfig_metadata(
-    temp_dir,
-    installation_config,
-):
-    skill_haiku_rag_config = object()
-
-    config_path = temp_dir / "config_file.yaml"
-    lancedb = temp_dir / "rag.lancedb"
-    lancedb.mkdir()
-
-    inst = config.HR_RLM_SkillConfig(
-        rag_lancedb_override_path=lancedb,
-        _haiku_rag_config=skill_haiku_rag_config,
-        _config_path=config_path,
-        _installation_config=installation_config,
-    )
-
-    found = inst.skill_metadata
-
-    assert found.name == "rag-rlm"
-
-
-def test_hr_rlm_skillconfig_skill(temp_dir, installation_config):
-    skill_haiku_rag_config = object()
-
-    config_path = temp_dir / "config_file.yaml"
-    lancedb = temp_dir / "rag.lancedb"
-    lancedb.mkdir()
-
-    inst = config.HR_RLM_SkillConfig(
-        rag_lancedb_override_path=lancedb,
-        _haiku_rag_config=skill_haiku_rag_config,
-        _config_path=config_path,
-        _installation_config=installation_config,
-    )
-
-    found = inst.skill
-
-    assert isinstance(found, hs_models.Skill)
-    assert found.metadata == hr_skills_rlm.skill_metadata()
-
-
-@pytest.mark.parametrize(
-    "w_error, expectation",
-    [
-        (False, contextlib.nullcontext()),
-        (True, pytest.raises(config.FromYamlException)),
-    ],
-)
-def test_hr_rlm_skillconfig_from_yaml(
-    temp_dir,
-    installation_config,
-    w_error,
-    expectation,
-):
-    config_path = temp_dir / "config_file.yaml"
-    lancedb = temp_dir / "rag.lancedb"
-    lancedb.mkdir()
-
-    config_dict = {
-        "rag_lancedb_override_path": lancedb,
-    }
-    if w_error:
-        config_dict["not_a_valid_key"] = "FAIL"
-
-    with expectation as expected:
-        inst = config.HR_RLM_SkillConfig.from_yaml(
-            installation_config=installation_config,
-            config_path=config_path,
-            config_dict=config_dict,
-        )
-
-    if expected is None:
-        assert inst.rag_lancedb_path == lancedb
-        assert inst.haiku_rag_config is installation_config.haiku_rag_config
-
-
-@pytest.mark.parametrize(
-    "w_invalid_kind, expectation",
-    [
-        (False, contextlib.nullcontext()),
-        (True, pytest.raises(config.InvalidSkillKind)),
-    ],
-)
-def test_extractskillconfigs(
-    installation_config,
-    temp_dir,
-    w_invalid_kind,
-    expectation,
-):
-    config_path = temp_dir / "rooms" / "test" / "room_config.yaml"
-    config_dict = {
-        "skill_configs": [
-            {
-                "kind": "haiku.rag.skills.rag",
-                "rag_lancedb_stem": "test-foo",
-            },
-            {
-                "kind": "haiku.rag.skills.rlm",
-                "rag_lancedb_stem": "test-bar",
-            },
-        ]
-    }
-    if w_invalid_kind:
-        config_dict["skill_configs"].append(
-            {
-                "kind": "BOGUS",
-                "rag_lancedb_stem": "test-baz",
-            }
-        )
-
-    with expectation as expected:
-        found = config.extract_skill_configs(
-            installation_config=installation_config,
-            config_path=config_path,
-            config_dict=config_dict,
-        )
-
-    if expected is None:
-        assert isinstance(found["rag"], config.HR_RAG_SkillConfig)
-        assert found["rag"].rag_lancedb_stem == "test-foo"
-
-        assert isinstance(found["rag-rlm"], config.HR_RLM_SkillConfig)
-        assert found["rag-rlm"].rag_lancedb_stem == "test-bar"
-
-        assert "skill_configs" not in config_dict
 
 
 @pytest.mark.parametrize(
@@ -3263,134 +2535,6 @@ def test_quizconfig_get_question(w_loaded, w_miss):
 @pytest.mark.parametrize(
     "config_yaml, expectation",
     [
-        (
-            BOGUS_ROOM_SKILLS_CONFIG_YAML,
-            pytest.raises(config.FromYamlException),
-        ),
-        (
-            W_MISSING_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_YAML,
-            pytest.raises(
-                config.FromYamlException,
-                check=lambda exc: isinstance(
-                    exc.__cause__, config.MissingSkillNames
-                ),
-            ),
-        ),
-        (
-            BARE_ROOM_SKILLS_CONFIG_YAML,
-            contextlib.nullcontext(
-                BARE_ROOM_SKILLS_CONFIG_KW,
-            ),
-        ),
-        (
-            W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_YAML,
-            contextlib.nullcontext(
-                W_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_KW,
-            ),
-        ),
-    ],
-)
-def test_roomskillsconfig_from_yaml(
-    installation_config,
-    temp_dir,
-    config_yaml,
-    expectation,
-):
-    installation_config.skill_configs = {SKILL_NAME: object()}
-    yaml_file = temp_dir / "test.yaml"
-    yaml_file.write_text(config_yaml)
-
-    with yaml_file.open() as stream:
-        config_dict = yaml.safe_load(stream)
-
-    with expectation as expected:
-        found = config.RoomSkillsConfig.from_yaml(
-            installation_config,
-            yaml_file,
-            config_dict,
-        )
-
-    if isinstance(expected, pytest.ExceptionInfo):
-        assert expected.value._config_path == yaml_file
-
-    else:
-        expected = config.RoomSkillsConfig(**expected)
-        expected = dataclasses.replace(
-            expected,
-            _installation_config=installation_config,
-            _config_path=yaml_file,
-        )
-
-        assert found == expected
-
-
-def test_roomskillsconfig_skill_configs(installation_config):
-    skill_config = mock.create_autospec(config._SkillConfigBase)
-    installation_config.skill_configs = {
-        SKILL_NAME: skill_config,
-        "other_skill": object(),
-    }
-
-    room_skills_config_kw = {"installation_skill_names": [SKILL_NAME]}
-    room_skills_config = config.RoomSkillsConfig(
-        **room_skills_config_kw,
-        _installation_config=installation_config,
-    )
-
-    found = room_skills_config.skill_configs
-
-    assert found == {SKILL_NAME: skill_config}
-
-
-def test_roomskillsconfig_skills(installation_config):
-    skill = mock.create_autospec(hs_models.Skill)
-    skill_config = mock.create_autospec(config._SkillConfigBase, skill=skill)
-    installation_config.skill_configs = {
-        SKILL_NAME: skill_config,
-        "other_skill": object(),
-    }
-
-    room_skill_config_kw = {"installation_skill_names": [SKILL_NAME]}
-    room_skill_config = config.RoomSkillsConfig(
-        **room_skill_config_kw,
-        _installation_config=installation_config,
-    )
-
-    found = room_skill_config.skills
-
-    assert found == {SKILL_NAME: skill_config.skill}
-
-
-def test_roomskillsconfig_skill_toolset(installation_config):
-    skill = mock.create_autospec(hs_models.Skill)
-    skill.metadata = mock.create_autospec(hs_models.SkillMetadata)
-    skill.metadata.name = SKILL_NAME
-    skill.metadata.description = SKILL_DESC
-
-    skill_config = mock.create_autospec(config._SkillConfigBase, skill=skill)
-
-    installation_config.skill_configs = {
-        SKILL_NAME: skill_config,
-        "other_skill": object(),
-    }
-
-    room_skill_config = config.RoomSkillsConfig(
-        model_name=ROOM_SKILLS_MODEL_NAME,
-        installation_skill_names=[SKILL_NAME],
-        _installation_config=installation_config,
-    )
-
-    found = room_skill_config.skill_toolset
-
-    assert isinstance(found, hs_agent.SkillToolset)
-    assert found._skill_model == ROOM_SKILLS_MODEL_NAME
-    catalog_lines = found.skill_catalog.splitlines()
-    assert f"- **{SKILL_NAME}**: {SKILL_DESC}" in catalog_lines
-
-
-@pytest.mark.parametrize(
-    "config_yaml, expectation",
-    [
         (BOGUS_ROOM_CONFIG_YAML, pytest.raises(config.FromYamlException)),
         (BARE_ROOM_CONFIG_YAML, contextlib.nullcontext(BARE_ROOM_CONFIG_KW)),
         (FULL_ROOM_CONFIG_YAML, contextlib.nullcontext(FULL_ROOM_CONFIG_KW)),
@@ -3406,7 +2550,7 @@ def test_roomconfig_from_yaml(
     skill_config = mock.create_autospec(config._SkillConfigBase, skill=skill)
 
     installation_config.skill_configs = {
-        SKILL_NAME: skill_config,
+        test_skills.SKILL_NAME: skill_config,
         "other_skill": object(),
     }
 
@@ -3511,7 +2655,7 @@ def test_roomconfig_skill_configs_bare(installation_config):
 def test_roomconfig_skill_configs_w_hit(installation_config):
     skill_config = mock.create_autospec(config._SkillConfigBase)
     installation_config.skill_configs = {
-        SKILL_NAME: skill_config,
+        test_skills.SKILL_NAME: skill_config,
         "other_skill": object(),
     }
 
@@ -3525,7 +2669,7 @@ def test_roomconfig_skill_configs_w_hit(installation_config):
 
     found = room_config.skill_configs
 
-    assert found == {SKILL_NAME: skill_config}
+    assert found == {test_skills.SKILL_NAME: skill_config}
 
 
 @pytest.mark.parametrize(
@@ -3538,7 +2682,7 @@ def test_roomconfig_skill_configs_w_hit(installation_config):
                 # from 'agent_config'
                 AGUI_FEATURE_NAME,
                 # from 'skills'
-                SKILL_STATE_NAMESPACE,
+                test_skills.SKILL_STATE_NAMESPACE,
                 # from 'room_config'
                 EXTRA_AGUI_FEATURE_NAME,
             ],
@@ -3552,10 +2696,10 @@ def test_roomconfig_agui_feature_names(
 ):
     skill_config = mock.create_autospec(
         config._SkillConfigBase,
-        agui_feature_names=[SKILL_STATE_NAMESPACE],
+        agui_feature_names=[test_skills.SKILL_STATE_NAMESPACE],
     )
     installation_config.skill_configs = {
-        SKILL_NAME: skill_config,
+        test_skills.SKILL_NAME: skill_config,
     }
 
     skills = rc_kwargs.pop("skills", None)
@@ -5558,10 +4702,14 @@ def test_installationconfig_from_yaml(
 
         lfssc = mock.Mock(spec_set=())
         fs_skill_config = mock.create_autospec(config.FilesystemSkillConfig)
-        lfssc.return_value = {FILESYSTEM_SKILL_NAME: fs_skill_config}
+        lfssc.return_value = {
+            test_skills.FILESYSTEM_SKILL_NAME: fs_skill_config,
+        }
         lepsc = mock.Mock(spec_set=())
         ep_skill_config = mock.create_autospec(config.EntrypointSkillConfig)
-        lepsc.return_value = {ENTRYPOINT_SKILL_NAME: ep_skill_config}
+        lepsc.return_value = {
+            test_skills.ENTRYPOINT_SKILL_NAME: ep_skill_config,
+        }
 
         if "_skill_configs" in expected_kw:
             patched["_load_filesystem_skill_configs"] = lfssc
@@ -6092,27 +5240,32 @@ description: Describing {skill_name} in {skills_path}
     kw["filesystem_skills_paths"] = SKILLS_PATHS
 
     for skills_path in SKILLS_PATHS:
-        skill_path = temp_dir / skills_path / SKILL_NAME
+        skill_path = temp_dir / skills_path / test_skills.SKILL_NAME
         skill_path.mkdir(parents=True)
         skill_config = skill_path / "SKILL.md"
         skill_config.write_text(
-            FOREMATTER.format(skill_name=SKILL_NAME, skills_path=skills_path)
+            FOREMATTER.format(
+                skill_name=test_skills.SKILL_NAME, skills_path=skills_path
+            )
         )
 
     i_config = config.InstallationConfig(**kw)
 
     found = i_config.available_filesystem_skill_configs
 
-    f_skill = found[SKILL_NAME]
+    f_skill = found[test_skills.SKILL_NAME]
     if w_error:
-        assert f_skill.name == SKILL_NAME
+        assert f_skill.name == test_skills.SKILL_NAME
         assert f_skill.errors
     else:
         found = i_config.available_filesystem_skill_configs
-        f_skill = found[SKILL_NAME]
-        assert f_skill.name == SKILL_NAME
+        f_skill = found[test_skills.SKILL_NAME]
+        assert f_skill.name == test_skills.SKILL_NAME
         # order of 'completion_paths' governs who wins
-        assert f_skill.description == f"Describing {SKILL_NAME} in ./foo"
+        assert (
+            f_skill.description
+            == f"Describing {test_skills.SKILL_NAME} in ./foo"
+        )
         assert not f_skill.errors
 
 
@@ -6176,14 +5329,14 @@ def test_installationconfig_avl_ep_skill_configs_wo_existing_w_conflict(
 ):
     ep_skill_1 = mock.create_autospec(hs_models.Skill)
     ep_skill_1.metadata = mock.create_autospec(hs_models.SkillMetadata)
-    ep_skill_1.metadata.name = SKILL_NAME
-    skill_desc_1 = f"{SKILL_DESC} (from ep_skill_1)"
+    ep_skill_1.metadata.name = test_skills.SKILL_NAME
+    skill_desc_1 = f"{test_skills.SKILL_DESC} (from ep_skill_1)"
     ep_skill_1.metadata.description = skill_desc_1
 
     ep_skill_2 = mock.create_autospec(hs_models.Skill)
     ep_skill_2.metadata = mock.create_autospec(hs_models.SkillMetadata)
-    ep_skill_2.metadata.name = SKILL_NAME
-    skill_desc_2 = f"{SKILL_DESC} (from ep_skill_2)"
+    ep_skill_2.metadata.name = test_skills.SKILL_NAME
+    skill_desc_2 = f"{test_skills.SKILL_DESC} (from ep_skill_2)"
     ep_skill_2.metadata.description = skill_desc_2
 
     dfe.return_value = [ep_skill_1, ep_skill_2]
@@ -6193,7 +5346,7 @@ def test_installationconfig_avl_ep_skill_configs_wo_existing_w_conflict(
 
     found = i_config.available_entrypoint_skill_configs
 
-    assert found[SKILL_NAME].description == skill_desc_1
+    assert found[test_skills.SKILL_NAME].description == skill_desc_1
 
 
 @mock.patch("haiku.skills.discovery.discover_from_entrypoints")
@@ -6226,16 +5379,16 @@ def test_installationconfig_skill_configs_w_set():
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     skill_config = mock.create_autospec(config._SkillConfigBase)
     kw["_skill_configs"] = {
-        SKILL_NAME: skill_config,
+        test_skills.SKILL_NAME: skill_config,
     }
     kw["_available_filesystem_skill_configs"] = {
-        SKILL_NAME: skill_config,
+        test_skills.SKILL_NAME: skill_config,
         "other-skill": object(),
     }
 
     i_config = config.InstallationConfig(**kw)
 
-    assert i_config.skill_configs == {SKILL_NAME: skill_config}
+    assert i_config.skill_configs == {test_skills.SKILL_NAME: skill_config}
 
 
 def test_installationconfig_reload_configurations(temp_dir):
