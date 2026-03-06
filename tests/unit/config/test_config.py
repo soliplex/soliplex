@@ -1803,11 +1803,6 @@ authorization_dburi:
 """
 
 
-@pytest.fixture
-def installation_config():
-    return mock.create_autospec(config.InstallationConfig)
-
-
 def test_authsystem_from_yaml_w_error(
     installation_config,
     temp_dir,
@@ -2029,7 +2024,7 @@ def test_authsystem_oauth_client_args(
     icgs.assert_called_once_with(exp_secret)
 
 
-def test_toolconfig_from_yaml_w_error(temp_dir):
+def test_toolconfig_from_yaml_w_error(temp_dir, installation_config):
     tool_name = "soliplex.tools.test_tool"
     config_path = temp_dir / "thing_config.yaml"
 
