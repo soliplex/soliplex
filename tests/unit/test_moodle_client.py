@@ -297,3 +297,304 @@ def test_moodle_api_error_attributes():
     assert str(err) == "bad request"
     assert err.errorcode == "invalidparam"
     assert err.exception == "moodle_exception"
+
+
+# ---------------------------------------------------------------
+# Feature 1: get_course_contents
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_course_contents(client):
+    resp = _mock_response(
+        [
+            {
+                "id": 1,
+                "name": "General",
+                "visible": 1,
+                "summary": "",
+                "modules": [
+                    {
+                        "id": 10,
+                        "name": "Welcome Forum",
+                        "modname": "forum",
+                        "visible": 1,
+                        "completion": 0,
+                    },
+                    {
+                        "id": 11,
+                        "name": "Quiz 1",
+                        "modname": "quiz",
+                        "visible": 1,
+                        "completion": 2,
+                    },
+                ],
+            },
+            {
+                "id": 2,
+                "name": "Week 1",
+                "visible": 1,
+                "summary": "",
+                "modules": [],
+            },
+        ]
+    )
+    with _patch_httpx(resp):
+        sections = await client.get_course_contents(courseid=2)
+
+    assert len(sections) == 2
+    assert sections[0].name == "General"
+    assert len(sections[0].modules) == 2
+    assert sections[0].modules[1].modname == "quiz"
+    assert sections[0].modules[1].completion == 2
+
+
+@pytest.mark.asyncio
+async def test_get_course_contents_empty(client):
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        sections = await client.get_course_contents(courseid=999)
+    assert sections == []
+
+
+# ---------------------------------------------------------------
+# Feature 2: get_activities_completion_status
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_activities_completion_status(client):
+    resp = _mock_response(
+        {
+            "statuses": [
+                {
+                    "cmid": 10,
+                    "modname": "forum",
+                    "instance": 1,
+                    "state": 1,
+                    "timecompleted": 1700000000,
+                    "tracking": 2,
+                },
+                {
+                    "cmid": 11,
+                    "modname": "quiz",
+                    "instance": 2,
+                    "state": 0,
+                    "timecompleted": 0,
+                    "tracking": 2,
+                },
+            ]
+        }
+    )
+    with _patch_httpx(resp):
+        statuses = await client.get_activities_completion_status(
+            courseid=2, userid=3
+        )
+
+    assert len(statuses) == 2
+    assert statuses[0].cmid == 10
+    assert statuses[0].state == 1
+    assert statuses[1].state == 0
+
+
+@pytest.mark.asyncio
+async def test_get_activities_completion_status_empty(client):
+    resp = _mock_response({"statuses": []})
+    with _patch_httpx(resp):
+        statuses = await client.get_activities_completion_status(
+            courseid=2, userid=3
+        )
+    assert statuses == []
+
+
+# ---------------------------------------------------------------
+# Feature 3: Groups & cohorts
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_course_groups(client):
+    resp = _mock_response(
+        [
+            {"id": 1, "courseid": 2, "name": "Group A", "description": ""},
+            {"id": 2, "courseid": 2, "name": "Group B", "description": ""},
+        ]
+    )
+    with _patch_httpx(resp):
+        groups = await client.get_course_groups(courseid=2)
+
+    assert len(groups) == 2
+    assert groups[0].name == "Group A"
+
+
+@pytest.mark.asyncio
+async def test_get_group_members(client):
+    resp = _mock_response(
+        [{"groupid": 1, "userids": [3, 4, 5]}]
+    )
+    with _patch_httpx(resp):
+        results = await client.get_group_members([1])
+
+    assert len(results) == 1
+    assert results[0].groupid == 1
+    assert results[0].userids == [3, 4, 5]
+
+
+@pytest.mark.asyncio
+async def test_get_cohorts(client):
+    resp = _mock_response(
+        [
+            {"id": 1, "name": "Engineering", "idnumber": "ENG", "visible": 1},
+            {"id": 2, "name": "Sales", "idnumber": "SAL", "visible": 1},
+        ]
+    )
+    with _patch_httpx(resp):
+        cohorts = await client.get_cohorts()
+
+    assert len(cohorts) == 2
+    assert cohorts[0].name == "Engineering"
+
+
+@pytest.mark.asyncio
+async def test_get_cohort_members(client):
+    resp = _mock_response(
+        [{"cohortid": 1, "userids": [3, 4]}]
+    )
+    with _patch_httpx(resp):
+        results = await client.get_cohort_members([1])
+
+    assert len(results) == 1
+    assert results[0].cohortid == 1
+    assert results[0].userids == [3, 4]
+
+
+# ---------------------------------------------------------------
+# Feature 4: Grading & assessments
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_assignment_grades(client):
+    resp = _mock_response(
+        {
+            "assignments": [
+                {
+                    "assignmentid": 1,
+                    "grades": [
+                        {
+                            "id": 1,
+                            "userid": 3,
+                            "grade": "85.00",
+                            "grader": 2,
+                            "timemodified": 1700000000,
+                        }
+                    ],
+                }
+            ],
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(resp):
+        result = await client.get_assignment_grades([1])
+
+    assert "assignments" in result
+    assert len(result["assignments"]) == 1
+    assert result["assignments"][0]["grades"][0]["grade"] == "85.00"
+
+
+@pytest.mark.asyncio
+async def test_get_user_grades(client):
+    resp = _mock_response(
+        {
+            "tables": [
+                {
+                    "courseid": 2,
+                    "userid": 3,
+                    "tabledata": [
+                        {
+                            "itemname": {"content": "Quiz 1"},
+                            "grade": {"content": "90"},
+                            "percentage": {"content": "90%"},
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    with _patch_httpx(resp):
+        result = await client.get_user_grades(courseid=2, userid=3)
+
+    assert "tables" in result
+    assert len(result["tables"]) == 1
+
+
+# ---------------------------------------------------------------
+# Feature 5: Calendar & deadlines
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_calendar_events(client):
+    resp = _mock_response(
+        {
+            "events": [
+                {
+                    "id": 1,
+                    "name": "Quiz Deadline",
+                    "description": "",
+                    "courseid": 2,
+                    "modulename": "quiz",
+                    "eventtype": "course",
+                    "timestart": 1700000000,
+                    "timeduration": 0,
+                },
+            ]
+        }
+    )
+    with _patch_httpx(resp):
+        events = await client.get_calendar_events(
+            courseids=[2], timestart=1699000000, timeend=1701000000
+        )
+
+    assert len(events) == 1
+    assert events[0].name == "Quiz Deadline"
+    assert events[0].courseid == 2
+
+
+@pytest.mark.asyncio
+async def test_get_calendar_events_no_filter(client):
+    resp = _mock_response({"events": []})
+    with _patch_httpx(resp):
+        events = await client.get_calendar_events()
+    assert events == []
+
+
+# ---------------------------------------------------------------
+# Feature 7: Write operations
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_enrol_users(client):
+    # enrol_manual_enrol_users returns null on success
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.enrol_users(
+            [{"userid": 3, "courseid": 2, "roleid": 5}]
+        )
+
+    assert result == {"warnings": []}
+
+
+@pytest.mark.asyncio
+async def test_send_messages(client):
+    resp = _mock_response(
+        [{"msgid": 1, "text": "Hello"}]
+    )
+    with _patch_httpx(resp):
+        result = await client.send_messages(
+            [{"touserid": 3, "text": "Hello", "textformat": 0}]
+        )
+
+    assert len(result) == 1
+    assert result[0]["msgid"] == 1

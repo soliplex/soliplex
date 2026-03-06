@@ -1,10 +1,13 @@
 id: "moodle-tools"
 name: "Moodle Workplace"
-description: "Query Moodle Workplace for courses, enrollment, and completion data"
+description: "Query and manage Moodle Workplace for courses, enrollment, completion, groups, grades, calendar, and messaging"
 suggestions:
   - "What courses are available?"
-  - "Who is enrolled in the Safety Fundamentals course?"
-  - "Show me completion status for testuser1"
+  - "Who hasn't completed the Safety Fundamentals course?"
+  - "What's in the Cyber Awareness course?"
+  - "Show me upcoming training deadlines"
+  - "What groups are in Course X?"
+  - "What grades does testuser1 have?"
 
 agent:
   kind: "factory"

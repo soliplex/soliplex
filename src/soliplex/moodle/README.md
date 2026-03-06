@@ -5,7 +5,26 @@
 The `soliplex.moodle` package provides:
 
 - **`MoodleClient`** — an async HTTP client for the Moodle REST Web Services API.
-- **`moodle_tools_agent_factory`** — a pydantic-ai agent factory that exposes Moodle data as four LLM tools: courses, users, enrollment, and completion.
+- **`moodle_tools_agent_factory`** — a pydantic-ai agent factory that exposes Moodle data as LLM tools for comprehensive training management.
+
+### Available Tools
+
+**Query Tools:**
+- `list_courses` — discover courses and IDs
+- `find_user` — look up user by username or email
+- `get_course_contents` — see sections, activities, and modules in a course
+- `list_enrolled_users` — who is in a course
+- `get_completion_status` — check one user's completion
+- `get_course_completion_overview` — bulk completion rates for a whole course
+- `get_user_grades` — grade report for a user in a course
+- `get_assignment_grades` — all grades for assignments in a course
+- `get_upcoming_events` — calendar events and deadlines
+- `list_course_groups` / `get_group_members` — course groups
+- `list_cohorts` / `get_cohort_members` — organizational cohorts
+
+**Write Tools (require user confirmation):**
+- `enrol_users` — enrol users into a course
+- `send_message` — send messages to users
 
 ## Prerequisites
 
@@ -18,9 +37,20 @@ The `soliplex.moodle` package provides:
 1. In Moodle, go to **Site administration > Server > Web services > External services** and create (or edit) a service.
 2. Add the following functions to the service:
    - `core_course_get_courses`
+   - `core_course_get_contents`
    - `core_user_get_users_by_field`
    - `core_enrol_get_enrolled_users`
    - `core_completion_get_course_completion_status`
+   - `core_completion_get_activities_completion_status`
+   - `core_group_get_course_groups`
+   - `core_group_get_group_members`
+   - `core_cohort_get_cohorts`
+   - `core_cohort_get_cohort_members`
+   - `mod_assign_get_grades`
+   - `gradereport_user_get_grades_table`
+   - `core_calendar_get_calendar_events`
+   - `enrol_manual_enrol_users`
+   - `core_message_send_instant_messages`
 3. Under **Site administration > Server > Web services > Manage tokens**, create a token for the service account.
 4. Copy the token value — you will need it for Soliplex configuration.
 
@@ -74,7 +104,12 @@ extra_config:
 
 Set `moodle_verify_ssl` to `false` (boolean) to disable TLS verification entirely — **not recommended for production**.
 
+## Write Operations Safety Model
+
+Write tools (`enrol_users`, `send_message`) use a confirm-before-execute pattern. The LLM must first call the tool without `confirmed=True` to generate a preview, present it to the user, and only execute after explicit user approval.
+
 ## Limitations
 
 - **Result truncation** — List endpoints return at most 100 records (`MAX_RESULTS`). This is a client-side safeguard to keep LLM context bounded.
-- **Read-only** — The integration only queries Moodle data. No write operations (enrollment changes, grade updates, etc.) are exposed.
+- **Completion overview** — The `get_course_completion_overview` tool loops through enrolled users individually (no bulk API exists). It is capped at `MAX_RESULTS` users.
+- **Certifications & Programs** — Moodle Workplace certification (`tool_certify_*`) and program (`tool_program_*`) APIs are not available on standard Moodle. These will be added when a Workplace instance is available.

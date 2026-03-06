@@ -6,9 +6,16 @@ import os
 
 import httpx
 
+from soliplex.moodle.models import ActivityCompletionStatus
+from soliplex.moodle.models import CalendarEvent
+from soliplex.moodle.models import Cohort
+from soliplex.moodle.models import CohortMembers
 from soliplex.moodle.models import CompletionStatus
 from soliplex.moodle.models import Course
+from soliplex.moodle.models import CourseSection
 from soliplex.moodle.models import EnrolledUser
+from soliplex.moodle.models import Group
+from soliplex.moodle.models import GroupMembers
 from soliplex.moodle.models import UserProfile
 
 # Upper bound on results returned by list endpoints.
@@ -159,3 +166,144 @@ class MoodleClient:
         return CompletionStatus.model_validate(
             raw.get("completionstatus", raw)
         )
+
+    # ---------------------------------------------------------------
+    # Course content (Feature 1)
+    # ---------------------------------------------------------------
+
+    async def get_course_contents(self, courseid: int) -> list[CourseSection]:
+        """Return sections and modules via ``core_course_get_contents``."""
+        raw = await self._call("core_course_get_contents", courseid=courseid)
+        return [CourseSection.model_validate(s) for s in raw][:MAX_RESULTS]
+
+    # ---------------------------------------------------------------
+    # Activity completion (Feature 2)
+    # ---------------------------------------------------------------
+
+    async def get_activities_completion_status(
+        self,
+        courseid: int,
+        userid: int,
+    ) -> list[ActivityCompletionStatus]:
+        """Per-activity completion via ``core_completion_get_activities_completion_status``."""
+        raw = await self._call(
+            "core_completion_get_activities_completion_status",
+            courseid=courseid,
+            userid=userid,
+        )
+        statuses = raw.get("statuses", [])
+        return [
+            ActivityCompletionStatus.model_validate(s) for s in statuses
+        ][:MAX_RESULTS]
+
+    # ---------------------------------------------------------------
+    # Groups & cohorts (Feature 3)
+    # ---------------------------------------------------------------
+
+    async def get_course_groups(self, courseid: int) -> list[Group]:
+        """List groups via ``core_group_get_course_groups``."""
+        raw = await self._call(
+            "core_group_get_course_groups", courseid=courseid
+        )
+        return [Group.model_validate(g) for g in raw][:MAX_RESULTS]
+
+    async def get_group_members(
+        self, groupids: list[int]
+    ) -> list[GroupMembers]:
+        """Get group members via ``core_group_get_group_members``."""
+        params: dict[str, str | int] = {}
+        for i, gid in enumerate(groupids):
+            params[f"groupids[{i}]"] = gid
+        raw = await self._call("core_group_get_group_members", **params)
+        return [GroupMembers.model_validate(g) for g in raw][:MAX_RESULTS]
+
+    async def get_cohorts(self) -> list[Cohort]:
+        """List system cohorts via ``core_cohort_get_cohorts``."""
+        raw = await self._call("core_cohort_get_cohorts")
+        return [Cohort.model_validate(c) for c in raw][:MAX_RESULTS]
+
+    async def get_cohort_members(
+        self, cohortids: list[int]
+    ) -> list[CohortMembers]:
+        """Get cohort members via ``core_cohort_get_cohort_members``."""
+        params: dict[str, str | int] = {}
+        for i, cid in enumerate(cohortids):
+            params[f"cohortids[{i}]"] = cid
+        raw = await self._call("core_cohort_get_cohort_members", **params)
+        return [CohortMembers.model_validate(c) for c in raw][:MAX_RESULTS]
+
+    # ---------------------------------------------------------------
+    # Grading & assessments (Feature 4)
+    # ---------------------------------------------------------------
+
+    async def get_assignment_grades(
+        self, assignmentids: list[int]
+    ) -> dict:
+        """Get assignment grades via ``mod_assign_get_grades``."""
+        params: dict[str, str | int] = {}
+        for i, aid in enumerate(assignmentids):
+            params[f"assignmentids[{i}]"] = aid
+        raw = await self._call("mod_assign_get_grades", **params)
+        return raw
+
+    async def get_user_grades(self, courseid: int, userid: int) -> dict:
+        """Get grade report via ``gradereport_user_get_grades_table``."""
+        raw = await self._call(
+            "gradereport_user_get_grades_table",
+            courseid=courseid,
+            userid=userid,
+        )
+        return raw
+
+    # ---------------------------------------------------------------
+    # Calendar & deadlines (Feature 5)
+    # ---------------------------------------------------------------
+
+    async def get_calendar_events(
+        self,
+        courseids: list[int] | None = None,
+        timestart: int | None = None,
+        timeend: int | None = None,
+    ) -> list[CalendarEvent]:
+        """Get calendar events via ``core_calendar_get_calendar_events``."""
+        params: dict[str, str | int] = {}
+        if courseids:
+            for i, cid in enumerate(courseids):
+                params[f"events[courseids][{i}]"] = cid
+        if timestart is not None:
+            params["options[timestart]"] = timestart
+        if timeend is not None:
+            params["options[timeend]"] = timeend
+        raw = await self._call(
+            "core_calendar_get_calendar_events", **params
+        )
+        events = raw.get("events", [])
+        return [CalendarEvent.model_validate(e) for e in events][:MAX_RESULTS]
+
+    # ---------------------------------------------------------------
+    # Write operations (Feature 7)
+    # ---------------------------------------------------------------
+
+    async def enrol_users(self, enrolments: list[dict]) -> dict:
+        """Enrol users via ``enrol_manual_enrol_users``."""
+        params: dict[str, str | int] = {}
+        for i, e in enumerate(enrolments):
+            params[f"enrolments[{i}][roleid]"] = e["roleid"]
+            params[f"enrolments[{i}][userid]"] = e["userid"]
+            params[f"enrolments[{i}][courseid]"] = e["courseid"]
+        raw = await self._call("enrol_manual_enrol_users", **params)
+        if raw is None:
+            return {"warnings": []}
+        return raw if isinstance(raw, dict) else {"warnings": []}
+
+    async def send_messages(self, messages: list[dict]) -> list[dict]:
+        """Send messages via ``core_message_send_instant_messages``."""
+        params: dict[str, str | int] = {}
+        for i, m in enumerate(messages):
+            params[f"messages[{i}][touserid]"] = m["touserid"]
+            params[f"messages[{i}][text]"] = m["text"]
+            params[f"messages[{i}][textformat]"] = m.get("textformat", 0)
+        raw = await self._call(
+            "core_message_send_instant_messages", **params
+        )
+        return raw if isinstance(raw, list) else []
