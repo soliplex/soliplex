@@ -11,6 +11,7 @@ import yaml
 from pydantic_ai import settings as ai_settings
 
 from soliplex import config
+from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
 
 AGENT_ID = "testing-agent"
@@ -47,7 +48,7 @@ system_prompt: "{SYSTEM_PROMPT}"
 W_PROVIDER_KW_AGENT_CONFIG_KW = dict(
     id=AGENT_ID,
     model_name=MODEL_NAME,
-    provider_type=config.LLMProviderType.OPENAI,
+    provider_type=config_agents.LLMProviderType.OPENAI,
     provider_base_url=OTHER_PROVIDER_BASE_URL,
     provider_key="secret:OTHER_PROVIDER_KEY",
 )
@@ -174,7 +175,7 @@ agui_feature_names:
   - "{AGUI_FEATURE_NAME}"
 """
 
-FACTORY_NAME = "soliplex.config.test_factory_wo_config"
+FACTORY_NAME = "soliplex.config.agents.test_factory_wo_config"
 WO_CONFIG_FACTORY_AGENT_CONFIG_KW = dict(
     id=AGENT_ID,
     factory_name=FACTORY_NAME,
@@ -287,15 +288,15 @@ def test__apply_agent_config_template(temp_dir, config_dict, expected):
     config_path = temp_dir / "test.yaml"
 
     if expected is None:
-        with pytest.raises(config.InvalidAgentTemplateID):
-            config._apply_agent_config_template(
+        with pytest.raises(config_agents.InvalidAgentTemplateID):
+            config_agents._apply_agent_config_template(
                 config_dict,
                 i_config,
                 config_path,
             )
 
     else:
-        found = config._apply_agent_config_template(
+        found = config_agents._apply_agent_config_template(
             config_dict,
             i_config,
             config_path,
@@ -313,7 +314,7 @@ def test__apply_agent_config_template(temp_dir, config_dict, expected):
 def test_agentconfig_ctor(installation_config, kw):
     kw["_installation_config"] = installation_config
 
-    found = config.AgentConfig(**kw)
+    found = config_agents.AgentConfig(**kw)
 
     assert found.model_name == kw["model_name"]
 
@@ -386,21 +387,21 @@ def test_agentconfig_from_yaml(
             "provider_base_url": OTHER_PROVIDER_BASE_URL,
         }
         installation_config.agent_configs = [
-            config.AgentConfig(id=template_id, **template_kw),
+            config_agents.AgentConfig(id=template_id, **template_kw),
         ]
     else:
         template_kw = {}
         installation_config.agent_configs = []
 
     with expectation as expected:
-        found = config.AgentConfig.from_yaml(
+        found = config_agents.AgentConfig.from_yaml(
             installation_config,
             yaml_file,
             config_dict,
         )
 
     if isinstance(expected, dict):
-        exp_agent_config = config.AgentConfig(
+        exp_agent_config = config_agents.AgentConfig(
             _installation_config=installation_config,
             _config_path=yaml_file,
             **(template_kw | expected),
@@ -434,7 +435,7 @@ def test_agentconfig_get_system_prompt(
 
         agent_config_kw["_config_path"] = config_path
 
-    agent_config = config.AgentConfig(**agent_config_kw)
+    agent_config = config_agents.AgentConfig(**agent_config_kw)
 
     if agent_config._system_prompt_text is not None:
         found = agent_config.get_system_prompt()
@@ -461,19 +462,19 @@ def test_agentconfig_get_system_prompt(
 @pytest.mark.parametrize(
     "provider_type, kw, expected",
     [
-        (config.LLMProviderType.OLLAMA, {}, OLLAMA_BASE_URL),
+        (config_agents.LLMProviderType.OLLAMA, {}, OLLAMA_BASE_URL),
         (
-            config.LLMProviderType.OLLAMA,
+            config_agents.LLMProviderType.OLLAMA,
             {"provider_base_url": PROVIDER_BASE_URL},
             PROVIDER_BASE_URL,
         ),
-        (config.LLMProviderType.OPENAI, {}, None),
+        (config_agents.LLMProviderType.OPENAI, {}, None),
         (
-            config.LLMProviderType.OPENAI,
+            config_agents.LLMProviderType.OPENAI,
             {"provider_base_url": PROVIDER_BASE_URL},
             PROVIDER_BASE_URL,
         ),
-        (config.LLMProviderType.GOOGLE, {}, None),
+        (config_agents.LLMProviderType.GOOGLE, {}, None),
     ],
 )
 def test_agentconfig_llm_provider_base_url(
@@ -485,7 +486,7 @@ def test_agentconfig_llm_provider_base_url(
     ic_environ = {"OLLAMA_BASE_URL": OLLAMA_BASE_URL}
     installation_config.get_environment = ic_environ.get
 
-    aconfig = config.AgentConfig(
+    aconfig = config_agents.AgentConfig(
         id="test-agent",
         system_prompt="You are a test",
         provider_type=provider_type,
@@ -515,10 +516,10 @@ def test_agentconfig_llm_provider_kw_ollama_w_default_base_url(
         kw["provider_key"] = "secret:SECRET_NAME"
         expected["api_key"] = installation_config.get_secret.return_value
 
-    aconfig = config.AgentConfig(
+    aconfig = config_agents.AgentConfig(
         id="test-agent",
         system_prompt="You are a test",
-        provider_type=config.LLMProviderType.OLLAMA,
+        provider_type=config_agents.LLMProviderType.OLLAMA,
         _installation_config=installation_config,
         **kw,
     )
@@ -549,10 +550,10 @@ def test_agentconfig_llm_provider_kw_ollama_w_explicit_base_url(
         kw["provider_key"] = "secret:SECRET_NAME"
         expected["api_key"] = installation_config.get_secret.return_value
 
-    aconfig = config.AgentConfig(
+    aconfig = config_agents.AgentConfig(
         id="test-agent",
         system_prompt="You are a test",
-        provider_type=config.LLMProviderType.OLLAMA,
+        provider_type=config_agents.LLMProviderType.OLLAMA,
         provider_base_url=PROVIDER_BASE_URL,
         _installation_config=installation_config,
         **kw,
@@ -582,10 +583,10 @@ def test_agentconfig_llm_provider_kw_openai_wo_provider_url(
         kw["provider_key"] = "secret:SECRET_NAME"
         expected["api_key"] = installation_config.get_secret.return_value
 
-    aconfig = config.AgentConfig(
+    aconfig = config_agents.AgentConfig(
         id="test-agent",
         system_prompt="You are a test",
-        provider_type=config.LLMProviderType.OPENAI,
+        provider_type=config_agents.LLMProviderType.OPENAI,
         _installation_config=installation_config,
         **kw,
     )
@@ -616,10 +617,10 @@ def test_agentconfig_llm_provider_kw_openai_w_provider_url(
         kw["provider_key"] = "secret:SECRET_NAME"
         expected["api_key"] = installation_config.get_secret.return_value
 
-    aconfig = config.AgentConfig(
+    aconfig = config_agents.AgentConfig(
         id="test-agent",
         system_prompt="You are a test",
-        provider_type=config.LLMProviderType.OPENAI,
+        provider_type=config_agents.LLMProviderType.OPENAI,
         provider_base_url=PROVIDER_BASE_URL,
         _installation_config=installation_config,
         **kw,
@@ -649,10 +650,10 @@ def test_agentconfig_llm_provider_kw_google(
         kw["provider_key"] = "secret:SECRET_NAME"
         expected["api_key"] = installation_config.get_secret.return_value
 
-    aconfig = config.AgentConfig(
+    aconfig = config_agents.AgentConfig(
         id="test-agent",
         system_prompt="You are a test",
-        provider_type=config.LLMProviderType.GOOGLE,
+        provider_type=config_agents.LLMProviderType.GOOGLE,
         _installation_config=installation_config,
         **kw,
     )
@@ -713,7 +714,7 @@ def test_agentconfig_as_yaml(
 
     expected["provider_key"] = agent_config_kw.get("provider_key")
 
-    aconfig = config.AgentConfig(**agent_config_kw)
+    aconfig = config_agents.AgentConfig(**agent_config_kw)
 
     found = aconfig.as_yaml
 
@@ -730,7 +731,7 @@ def test_agentconfig_as_yaml(
     ],
 )
 def test_factoryagentconfig_ctor(kw):
-    found = config.FactoryAgentConfig(**kw)
+    found = config_agents.FactoryAgentConfig(**kw)
 
     assert found.id == AGENT_ID
     assert found.factory_name == kw["factory_name"]
@@ -753,7 +754,7 @@ def test_factoryagentconfig_factory(kw, w_existing):
     def test_factory(ctx, agent_config=None):
         "This is a test"
 
-    pyagent_config = config.FactoryAgentConfig(**kw)
+    pyagent_config = config_agents.FactoryAgentConfig(**kw)
 
     if w_existing:
         pyagent_config._factory = existing
@@ -761,7 +762,7 @@ def test_factoryagentconfig_factory(kw, w_existing):
     _, factory_name = kw["factory_name"].rsplit(".", 1)
     patch = {factory_name: test_factory}
 
-    with mock.patch.dict("soliplex.config.__dict__", **patch):
+    with mock.patch.dict("soliplex.config.agents.__dict__", **patch):
         found = pyagent_config.factory
 
     if w_existing:
@@ -828,7 +829,7 @@ def test_factoryagentconfig_from_yaml(
             "with_agent_config": True,
         }
         installation_config.agent_configs = [
-            config.FactoryAgentConfig(id=template_id, **template_kw),
+            config_agents.FactoryAgentConfig(id=template_id, **template_kw),
         ]
     else:
         template_kw = {}
@@ -836,19 +837,19 @@ def test_factoryagentconfig_from_yaml(
 
     if expected_kw is None:
         with pytest.raises(config_exc.FromYamlException):
-            config.FactoryAgentConfig.from_yaml(
+            config_agents.FactoryAgentConfig.from_yaml(
                 installation_config,
                 yaml_file,
                 config_dict,
             )
     else:
-        expected = config.FactoryAgentConfig(
+        expected = config_agents.FactoryAgentConfig(
             _installation_config=installation_config,
             _config_path=yaml_file,
             **(template_kw | expected_kw),
         )
 
-        found = config.FactoryAgentConfig.from_yaml(
+        found = config_agents.FactoryAgentConfig.from_yaml(
             installation_config,
             yaml_file,
             config_dict,
@@ -877,7 +878,7 @@ def test_factoryagentconfig_as_yaml(
     if "extra_config" not in expected:
         expected["extra_config"] = {}
 
-    aconfig = config.FactoryAgentConfig(**kw)
+    aconfig = config_agents.FactoryAgentConfig(**kw)
 
     found = aconfig.as_yaml
 
@@ -894,6 +895,7 @@ def test_factoryagentconfig_as_yaml(
 def test_extract_agent_configs(
     installation_config,
     temp_dir,
+    patched_agent_configs,
     agent_config,
     expected_kw,
 ):
@@ -913,6 +915,9 @@ def test_extract_agent_configs(
                 **c_dict,
             )
 
+    # Register our extension agent config
+    patched_agent_configs["testing"] = TestAgentConfig
+
     if agent_config.get("kind") == "testing":
         kw_no_kind = {k: v for k, v in expected_kw.items() if k != "kind"}
         expected = TestAgentConfig(
@@ -921,21 +926,16 @@ def test_extract_agent_configs(
             **kw_no_kind,
         )
     else:
-        expected = config.AgentConfig(
+        expected = config_agents.AgentConfig(
             _installation_config=installation_config,
             _config_path=temp_dir,
             **expected_kw,
         )
 
-    # Register our extension agent config
-    with mock.patch.dict(
-        "soliplex.config.AGENT_CONFIG_CLASSES_BY_KIND",
-        testing=TestAgentConfig,
-    ):
-        found = config.extract_agent_config(
-            installation_config,
-            temp_dir,
-            agent_config,
-        )
+    found = config_agents.extract_agent_config(
+        installation_config,
+        temp_dir,
+        agent_config,
+    )
 
     assert found == expected

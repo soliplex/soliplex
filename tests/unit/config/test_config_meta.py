@@ -10,6 +10,7 @@ import yaml
 from soliplex import config
 from soliplex import secrets
 from soliplex.agui import features as agui_features
+from soliplex.config import agents as config_agents
 from soliplex.config import tools as config_tools
 
 NoRaise = contextlib.nullcontext()
@@ -132,16 +133,16 @@ W_AGENT_CONFIGS_ICMETA_KW = {
     "mcp_server_tool_wrappers": [],
     "skill_configs": [],
     "agent_configs": [
-        config.ConfigMeta(config_klass=config.AgentConfig),
-        config.ConfigMeta(config_klass=config.FactoryAgentConfig),
+        config.ConfigMeta(config_klass=config_agents.AgentConfig),
+        config.ConfigMeta(config_klass=config_agents.FactoryAgentConfig),
     ],
     "secret_sources": [],
 }
 W_AGENT_CONFIGS_ICMETA_YAML = """\
 meta:
   agent_configs:
-      - "soliplex.config.AgentConfig"
-      - "soliplex.config.FactoryAgentConfig"
+      - "soliplex.config.agents.AgentConfig"
+      - "soliplex.config.agents.FactoryAgentConfig"
 """
 
 SECRET_SOURCE_FUNC = lambda source: "SEEKRIT"  # noqa E731
@@ -190,8 +191,8 @@ FULL_ICMETA_KW = {
         config.ConfigMeta(config_klass=config.HR_RLM_SkillConfig),
     ],
     "agent_configs": [
-        config.ConfigMeta(config_klass=config.AgentConfig),
-        config.ConfigMeta(config_klass=config.FactoryAgentConfig),
+        config.ConfigMeta(config_klass=config_agents.AgentConfig),
+        config.ConfigMeta(config_klass=config_agents.FactoryAgentConfig),
     ],
     "secret_sources": [
         config.ConfigMeta(
@@ -213,8 +214,8 @@ meta:
       - "soliplex.config.HR_RAG_SkillConfig"
       - "soliplex.config.HR_RLM_SkillConfig"
   agent_configs:
-      - "soliplex.config.AgentConfig"
-      - "soliplex.config.FactoryAgentConfig"
+      - "soliplex.config.agents.AgentConfig"
+      - "soliplex.config.agents.FactoryAgentConfig"
   secret_sources:
     - "config_klass": "soliplex.config.EnvVarSecretSource"
       "registered_func": "soliplex.config.test_secret_func"
@@ -414,8 +415,13 @@ def test_installationconfigmeta_from_yaml(
 @pytest.mark.parametrize("w_tools", [False, True])
 def test_installationconfigmeta_as_yaml(
     patched_soliplex_config,
+    patched_agent_configs,
+    patched_skill_configs,
+    patched_secret_getters,
     patched_agui_features,
-    patched_tool_registries,
+    patched_tool_configs,
+    patched_mcp_tool_wrappers,
+    patched_mcp_toolset_configs,
     w_tools,
     w_mcp_toolsets,
     w_skills,
@@ -430,14 +436,12 @@ def test_installationconfigmeta_as_yaml(
 
     if w_tools:
         klass = FauxToolConfig
-        tool_registry = config_tools.TOOL_CONFIG_CLASSES_BY_TOOL_NAME
-        tool_registry[klass.tool_name] = klass
+        patched_tool_configs[klass.tool_name] = klass
         expected_dict["tool_configs"].append(
             "test_config_meta.FauxToolConfig",
         )
         wrapper_klass = config_tools.NoArgsMCPWrapper
-        wrapper_registry = config_tools.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME
-        wrapper_registry[klass.tool_name] = wrapper_klass
+        patched_mcp_tool_wrappers[klass.tool_name] = wrapper_klass
         expected_dict["mcp_server_tool_wrappers"].append(
             {
                 "config_klass": "test_config_meta.FauxToolConfig",
@@ -447,33 +451,29 @@ def test_installationconfigmeta_as_yaml(
 
     if w_mcp_toolsets:
         klass = config_tools.Stdio_MCP_ClientToolsetConfig
-        mcpts_registry = config_tools.MCP_TOOLSET_CONFIG_CLASSES_BY_KIND
-        mcpts_registry[klass.kind] = klass
+        patched_mcp_toolset_configs[klass.kind] = klass
         expected_dict["mcp_toolset_configs"].append(
             "soliplex.config.tools.Stdio_MCP_ClientToolsetConfig",
         )
 
     if w_skills:
         klass = config.HR_RAG_SkillConfig
-        skill_registry = config.SKILL_CONFIG_CLASSES_BY_KIND
-        skill_registry[klass.kind] = klass
+        patched_skill_configs[klass.kind] = klass
         expected_dict["skill_configs"].append(
             "soliplex.config.HR_RAG_SkillConfig",
         )
 
     if w_agent:
-        klass = config.AgentConfig
-        agent_registry = config.AGENT_CONFIG_CLASSES_BY_KIND
-        agent_registry[klass.kind] = klass
+        klass = config_agents.AgentConfig
+        patched_agent_configs[klass.kind] = klass
         expected_dict["agent_configs"].append(
-            "soliplex.config.AgentConfig",
+            "soliplex.config.agents.AgentConfig",
         )
 
     if w_secret_reg:
         klass = config.EnvVarSecretSource
         registered_func = secrets.get_env_var_secret
-        secret_registry = config.SECRET_GETTERS_BY_KIND
-        secret_registry[klass.kind] = registered_func
+        patched_secret_getters[klass.kind] = registered_func
         expected_dict["secret_sources"].append(
             {
                 "config_klass": "soliplex.config.EnvVarSecretSource",

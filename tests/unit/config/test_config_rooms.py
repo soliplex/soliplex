@@ -7,6 +7,7 @@ import yaml
 from haiku.skills import models as hs_models
 
 from soliplex import config
+from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
 from soliplex.config import tools as config_tools
 from tests.unit.config import test_config_agents as test_agents
@@ -31,7 +32,7 @@ BARE_ROOM_CONFIG_KW = {
     "id": ROOM_ID,
     "name": ROOM_NAME,
     "description": ROOM_DESCRIPTION,
-    "agent_config": config.AgentConfig(
+    "agent_config": config_agents.AgentConfig(
         id=f"room-{ROOM_ID}",
         model_name=test_agents.MODEL_NAME,
         system_prompt=test_agents.SYSTEM_PROMPT,
@@ -57,7 +58,7 @@ FULL_ROOM_CONFIG_KW = {
     ],
     "enable_attachments": True,
     "logo_image": f"./{IMAGE_FILENAME}",
-    "agent_config": config.AgentConfig(
+    "agent_config": config_agents.AgentConfig(
         id=f"room-{ROOM_ID}",
         model_name=test_agents.MODEL_NAME,
         system_prompt=test_agents.SYSTEM_PROMPT,
@@ -67,7 +68,7 @@ FULL_ROOM_CONFIG_KW = {
         config.QuizConfig(
             id=test_quizzes.TEST_QUIZ_ID,
             question_file=test_quizzes.TEST_QUIZ_OVR,
-            judge_agent=config.AgentConfig(
+            judge_agent=config_agents.AgentConfig(
                 id="test-quiz-judge",
                 model_name=test_quizzes.TEST_QUIZ_MODEL_EXPLICIT,
                 provider_base_url=test_quizzes.TEST_QUIZ_PROVIDER_BASE_URL,

@@ -12,6 +12,7 @@ from haiku.skills import models as hs_models
 from soliplex import agui as agui_package
 from soliplex import authz as authz_package
 from soliplex import config
+from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import tools as config_tools
 
@@ -175,13 +176,13 @@ class DefaultAgent(pydantic.BaseModel):
     model_name: str
     retries: int
     system_prompt: str | None
-    provider_type: config.LLMProviderType  # enum, not dataclass
+    provider_type: config_agents.LLMProviderType  # enum, not dataclass
     provider_base_url: str | None
     provider_key: str
     agui_feature_names: list[str] = pydantic.Field(default_factory=list)
 
     @classmethod
-    def from_config(cls, agent_config: config.AgentConfig):
+    def from_config(cls, agent_config: config_agents.AgentConfig):
         llm_provider_kw = agent_config.llm_provider_kw
         return cls(
             id=agent_config.id,
@@ -202,7 +203,7 @@ class FactoryAgent(pydantic.BaseModel):
     agui_feature_names: list[str] = pydantic.Field(default_factory=list)
 
     @classmethod
-    def from_config(cls, agent_config: config.AgentConfig):
+    def from_config(cls, agent_config: config_agents.AgentConfig):
         agui_feature_names = getattr(agent_config, "agui_feature_names", [])
         return cls(
             id=agent_config.id,

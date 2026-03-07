@@ -13,6 +13,7 @@ from haiku.skills import models as hs_models
 from soliplex import agui as agui_package
 from soliplex import config
 from soliplex import models
+from soliplex.config import agents as config_agents
 from soliplex.config import tools as config_tools
 
 NOW = datetime.datetime.now(datetime.UTC)
@@ -520,33 +521,33 @@ def installation_config():
     [
         (  # Ollama, default URL
             {
-                "provider_type": config.LLMProviderType.OLLAMA,
+                "provider_type": config_agents.LLMProviderType.OLLAMA,
             },
             f"{OLLAMA_BASE_URL}/v1",
         ),
         (  # Ollama, explicit URL
             {
-                "provider_type": config.LLMProviderType.OLLAMA,
+                "provider_type": config_agents.LLMProviderType.OLLAMA,
                 "provider_base_url": AGENT_BASE_URL,
             },
             f"{AGENT_BASE_URL}/v1",
         ),
         (  # OpenAI, no URL
             {
-                "provider_type": config.LLMProviderType.OPENAI,
+                "provider_type": config_agents.LLMProviderType.OPENAI,
             },
             None,
         ),
         (  # OpenAI, explicit URL
             {
-                "provider_type": config.LLMProviderType.OPENAI,
+                "provider_type": config_agents.LLMProviderType.OPENAI,
                 "provider_base_url": AGENT_BASE_URL,
             },
             f"{AGENT_BASE_URL}/v1",
         ),
         (  # Google, no URL
             {
-                "provider_type": config.LLMProviderType.GOOGLE,
+                "provider_type": config_agents.LLMProviderType.GOOGLE,
             },
             None,
         ),
@@ -558,7 +559,7 @@ def test_defaultagent_from_config(
     agent_provider_kw,
     exp_base,
 ):
-    agent_config = config.AgentConfig(
+    agent_config = config_agents.AgentConfig(
         id=AGENT_ID,
         model_name=AGENT_MODEL,
         system_prompt=AGENT_PROMPT,
@@ -606,7 +607,7 @@ def test_factoryagent_from_config(
     with_agent_config,
     extra_config,
 ):
-    agent_config = config.FactoryAgentConfig(
+    agent_config = config_agents.FactoryAgentConfig(
         id=AGENT_ID,
         factory_name=FACTORY_NAME,
         _installation_config=installation_config,
@@ -667,7 +668,7 @@ def room_allow_mcp(request):
 
 @pytest.fixture
 def default_agent(installation_config):
-    return config.AgentConfig(
+    return config_agents.AgentConfig(
         id=AGENT_ID,
         model_name=AGENT_MODEL,
         system_prompt=AGENT_PROMPT,
@@ -677,7 +678,7 @@ def default_agent(installation_config):
 
 @pytest.fixture
 def factory_agent(installation_config):
-    return config.FactoryAgentConfig(
+    return config_agents.FactoryAgentConfig(
         id=AGENT_ID,
         factory_name=FACTORY_NAME,
         with_agent_config=False,
@@ -1058,14 +1059,14 @@ def test_installation_from_config_w_haiku_rag_config_file(
 
 @pytest.fixture(
     params=[
-        config.AgentConfig(
+        config_agents.AgentConfig(
             id=INSTALLATION_AGENT_ID,
             model_name=INSTALLATION_AGENT_MODEL_NAME,
             system_prompt=INSTALLATION_AGENT_SYSTEM_PROMPT,
-            provider_type=config.LLMProviderType.OLLAMA,
+            provider_type=config_agents.LLMProviderType.OLLAMA,
             provider_base_url=AGENT_BASE_URL,
         ),
-        config.FactoryAgentConfig(
+        config_agents.FactoryAgentConfig(
             id=INSTALLATION_AGENT_ID,
             factory_name=FACTORY_NAME,
             with_agent_config=False,
@@ -1089,7 +1090,7 @@ def test_installation_from_config_w_agent(
 
     (m_agent,) = installation_model.agents
 
-    if isinstance(installation_agent, config.FactoryAgentConfig):
+    if isinstance(installation_agent, config_agents.FactoryAgentConfig):
         assert m_agent.factory_name == installation_agent.factory_name
     else:
         assert m_agent.model_name == installation_agent.model_name

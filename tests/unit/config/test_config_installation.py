@@ -12,6 +12,7 @@ from haiku.skills import models as hs_models
 from soliplex import config
 from soliplex import secrets
 from soliplex.agui import features as agui_features
+from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
 from tests.unit.config import test_config_agents as test_agents
 from tests.unit.config import test_config_authsystem as test_authsystem
@@ -169,7 +170,7 @@ AGENT_CONFIG_ID = "agent-config-1"
 W_AGENT_CONFIG_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
     "agent_configs": [
-        config.AgentConfig(
+        config_agents.AgentConfig(
             id=AGENT_CONFIG_ID,
             model_name=test_agents.MODEL_NAME,
             system_prompt=test_agents.SYSTEM_PROMPT,
@@ -188,11 +189,11 @@ W_FACTORY_AGENT_CONFIG_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
     "meta": {
         "agent_configs": [
-            config.ConfigMeta(config_klass=config.FactoryAgentConfig),
+            config.ConfigMeta(config_klass=config_agents.FactoryAgentConfig),
         ],
     },
     "agent_configs": [
-        config.FactoryAgentConfig(
+        config_agents.FactoryAgentConfig(
             id=AGENT_CONFIG_ID,
             factory_name="soliplex.haiku_chat.chat_agent_factory",
         ),
@@ -202,7 +203,7 @@ W_FACTORY_AGENT_CONFIG_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
 meta:
     agent_configs:
-        - "soliplex.config.FactoryAgentConfig"
+        - "soliplex.config.agents.FactoryAgentConfig"
 agent_configs:
     - id: "{AGENT_CONFIG_ID}"
       kind: "factory"
@@ -850,7 +851,7 @@ environment: production
 
 def test_installationconfig_agent_configs_map_wo_existing():
     agent_configs = [
-        config.AgentConfig(
+        config_agents.AgentConfig(
             id=f"agent-config-{i_agent_config}",
         )
         for i_agent_config in range(5)
@@ -1380,7 +1381,7 @@ def test_installationconfig_as_yaml(w_logfire_config):
     meta = mock.create_autospec(config.InstallationConfigMeta)
     secret_1 = config.SecretConfig(secret_name="SECRET_ONE")
     secret_2 = config.SecretConfig(secret_name="SECRET_TWO")
-    agent_config = config.AgentConfig(
+    agent_config = config_agents.AgentConfig(
         id="test-agent",
         system_prompt="You are a test",
         model_name=test_agents.MODEL_NAME,

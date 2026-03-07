@@ -7,6 +7,7 @@ import pytest
 from soliplex import completions
 from soliplex import config
 from soliplex import models
+from soliplex.config import agents as config_agents
 from soliplex.config import tools as config_tools
 
 COMPLETION_ID = "testing-completion"
@@ -15,7 +16,7 @@ MODEL_NAME = "test-model"
 
 BARE_CONFIG = config.CompletionConfig(
     id=COMPLETION_ID,
-    agent_config=config.AgentConfig(
+    agent_config=config_agents.AgentConfig(
         id=f"completions-{COMPLETION_ID}",
         system_prompt=SYSTEM_PROMPT,
         model_name=MODEL_NAME,
@@ -30,7 +31,7 @@ agent:
 
 W_TOOLS_CONFIG = config.CompletionConfig(
     id=COMPLETION_ID,
-    agent_config=config.AgentConfig(
+    agent_config=config_agents.AgentConfig(
         id=f"completions-{COMPLETION_ID}",
         system_prompt=SYSTEM_PROMPT,
         model_name=MODEL_NAME,

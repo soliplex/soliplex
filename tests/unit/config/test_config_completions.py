@@ -4,6 +4,7 @@ import pytest
 import yaml
 
 from soliplex import config
+from soliplex.config import agents as config_agents
 from soliplex.config import tools as config_tools
 from tests.unit.config import test_config_agents as test_agents
 from tests.unit.config import test_config_tools as test_tools
@@ -13,7 +14,7 @@ COMPLETION_NAME = "Test Completions"
 
 BARE_COMPLETION_CONFIG_KW = {
     "id": COMPLETION_ID,
-    "agent_config": config.AgentConfig(
+    "agent_config": config_agents.AgentConfig(
         id=f"completion-{COMPLETION_ID}",
         model_name=test_agents.MODEL_NAME,
         system_prompt=test_agents.SYSTEM_PROMPT,
@@ -29,7 +30,7 @@ agent:
 FULL_COMPLETION_CONFIG_KW = {
     "id": COMPLETION_ID,
     "name": COMPLETION_NAME,
-    "agent_config": config.AgentConfig(
+    "agent_config": config_agents.AgentConfig(
         id=f"completion-{COMPLETION_ID}",
         model_name=test_agents.MODEL_NAME,
         system_prompt=test_agents.SYSTEM_PROMPT,

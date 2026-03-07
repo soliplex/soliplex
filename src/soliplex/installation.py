@@ -20,11 +20,12 @@ from soliplex import secrets
 from soliplex import util
 from soliplex.agui import schema as agui_schema
 from soliplex.authz import schema as authz_schema
+from soliplex.config import agents as config_agents
 
 ProviderURL = str | None
 ProviderModelNames = set[str]
 ProviderTypeInfo = dict[ProviderURL, ProviderModelNames]
-ProviderInfoMap = dict[config.LLMProviderType, ProviderTypeInfo]
+ProviderInfoMap = dict[config_agents.LLMProviderType, ProviderTypeInfo]
 
 
 NO_AUTH_MODE_USER_TOKEN = {
@@ -58,9 +59,9 @@ class Installation:
         return self._config.haiku_rag_config
 
     @property
-    def all_agent_configs(self) -> config.AgentConfigMap:
+    def all_agent_configs(self) -> config_agents.AgentConfigMap:
         """Return a mapping by ID of all defined agent configs"""
-        found: config.AgentConfigMap = {}
+        found: config_agents.AgentConfigMap = {}
 
         for ac in self._config.agent_configs:
             found[ac.id] = ac
@@ -119,7 +120,7 @@ class Installation:
                 ac_models = ac_info.get(hr_url, set())
                 ac_info[hr_url] = ac_models | hr_models
 
-        ollama_url_info = found.get(config.LLMProviderType.OLLAMA)
+        ollama_url_info = found.get(config_agents.LLMProviderType.OLLAMA)
 
         if ollama_url_info is not None:
             no_url_models = ollama_url_info.pop(None, set())

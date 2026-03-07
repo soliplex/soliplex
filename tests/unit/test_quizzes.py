@@ -5,6 +5,7 @@ import pytest
 from soliplex import config
 from soliplex import models
 from soliplex import quizzes
+from soliplex.config import agents as config_agents
 
 INPUTS = "What color is the sky"
 EXPECTED_ANSWER = "Blue"
@@ -60,8 +61,8 @@ def installation_config():
 
 @pytest.fixture(
     params=[
-        config.LLMProviderType.OLLAMA,
-        config.LLMProviderType.OPENAI,
+        config_agents.LLMProviderType.OLLAMA,
+        config_agents.LLMProviderType.OPENAI,
     ],
 )
 def agent_provider_type(request) -> dict:
@@ -76,7 +77,7 @@ def a_quiz(
     agent_provider_type,
 ):
     judge_agent = mock.create_autospec(
-        config.AgentConfig,
+        config_agents.AgentConfig,
         id="quiz-testing-judge",
         model_name=QUIZ_JUDGE_AGENT_MODEL,
         llm_provider_kw={
@@ -110,7 +111,8 @@ def test_get_quiz_judge_agent(
     a_quiz,
 ):
     is_openai = (
-        a_quiz.judge_agent.provider_type == config.LLMProviderType.OPENAI
+        a_quiz.judge_agent.provider_type
+        == config_agents.LLMProviderType.OPENAI
     )
 
     found = quizzes.get_quiz_judge_agent(a_quiz)

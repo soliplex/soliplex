@@ -5,6 +5,7 @@ from pydantic_ai.providers import openai as openai_providers
 
 from soliplex import config
 from soliplex import models
+from soliplex.config import agents as config_agents
 
 
 class QuestionNotFound(ValueError):
@@ -45,7 +46,7 @@ def get_quiz_judge_agent(quiz: config.QuizConfig):
     provider_type = quiz.judge_agent.provider_type
     llm_provider_kw = quiz.judge_agent.llm_provider_kw
 
-    if provider_type == config.LLMProviderType.OPENAI:
+    if provider_type == config_agents.LLMProviderType.OPENAI:
         model_provider = openai_providers.OpenAIProvider(**llm_provider_kw)
     else:
         model_provider = ollama_providers.OllamaProvider(**llm_provider_kw)

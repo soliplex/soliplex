@@ -14,7 +14,6 @@ import ssl
 import sys
 import typing
 import warnings
-from collections import abc
 
 import dotenv
 import logfire
@@ -26,12 +25,11 @@ from haiku.rag.skills import rlm as hr_skills_rlm
 from haiku.skills import agent as hs_agent
 from haiku.skills import discovery as hs_discovery
 from haiku.skills import models as hs_models
-from pydantic_ai import settings as ai_settings
-from pydantic_ai.agent import abstract as ai_ag_abstract
 
 from soliplex.agui import features as agui_features_module  # noqa F401
 
 from . import _utils
+from . import agents
 from . import agui
 from . import exceptions
 from . import rag
@@ -55,16 +53,6 @@ _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 _no_repr_no_compare_dict = _utils._no_repr_no_compare_dict
 _default_list_field = _utils._default_list_field
 _default_dict_field = _utils._default_dict_field
-
-
-class InvalidAgentTemplateID(KeyError):
-    def __init__(self, template_id, _config_path):
-        self.template_id = template_id
-        self._config_path = _config_path
-        super().__init__(
-            f"Template agent not found: {template_id} "
-            f"(configured in {_config_path})"
-        )
 
 
 class OnlyOneOfToolNamesRagFeatures(ValueError):
@@ -669,303 +657,6 @@ def extract_skill_configs(
 
 
 # ============================================================================
-#   Agent-related configuration types
-# ============================================================================
-
-
-class LLMProviderType(enum.StrEnum):
-    OPENAI = "openai"
-    OLLAMA = "ollama"
-    GOOGLE = "google"
-
-
-def _apply_agent_config_template(
-    config_dict,
-    installation_config,
-    config_path,
-):
-    template_id = config_dict.pop("template_id", None)
-
-    if template_id is not None:
-        # Cannot use 'agent_configs_map' because we might still be
-        # initalizing the IC.
-        ic_agent_configs_map = {
-            agent_config.id: agent_config
-            for agent_config in installation_config.agent_configs
-        }
-
-        if template_id not in ic_agent_configs_map:
-            raise InvalidAgentTemplateID(template_id, config_path)
-
-        template_config = ic_agent_configs_map[template_id]
-
-        config_dict = (
-            template_config.as_yaml
-            | config_dict
-            | {"_template_id": template_id}
-        )
-
-    return config_dict
-
-
-@dataclasses.dataclass(kw_only=True)
-class AgentConfig:
-    #
-    # Agent-specific options
-    #
-    id: str  # set as 'room-{room_id}' or 'completion-{completion_id}'
-    kind: typing.ClassVar[str] = "default"
-    model_name: str = None
-    retries: int = 3
-
-    system_prompt: dataclasses.InitVar[str] = None
-    _system_prompt_text: str = None
-    _system_prompt_path: pathlib.Path = None
-
-    provider_type: LLMProviderType = LLMProviderType.OLLAMA
-    provider_base_url: str = None  # installation config provides default
-    provider_key: str = None  # secret containing API key
-
-    model_settings: ai_settings.ModelSettings = None
-
-    agui_feature_names: tuple[str] = ()
-
-    # Set by `from_yaml` factory
-    _installation_config: InstallationConfig = _no_repr_no_compare_none()
-    _config_path: pathlib.Path = None
-
-    # Use a config from the top-level InstallationConfig's 'agent_configs'
-    # as a template.
-    _template_id: str = None
-
-    def __post_init__(self, system_prompt):
-        if system_prompt is not None:
-            self._system_prompt_text = system_prompt
-
-    @classmethod
-    def from_yaml(
-        cls,
-        installation_config: InstallationConfig,
-        config_path: pathlib.Path,
-        config_dict: dict,
-    ):
-        try:
-            config_dict["_installation_config"] = installation_config
-            config_dict["_config_path"] = config_path
-
-            config_dict = _apply_agent_config_template(
-                config_dict,
-                installation_config,
-                config_path,
-            )
-
-            if "system_prompt" in config_dict:
-                system_prompt = config_dict.pop("system_prompt")
-
-                if system_prompt.startswith("./"):
-                    config_dict["_system_prompt_path"] = system_prompt
-                else:
-                    config_dict["system_prompt"] = system_prompt
-
-            if config_dict.get("model_settings") is not None:
-                pm_settings = config_dict.pop("model_settings")
-                config_dict["model_settings"] = ai_settings.ModelSettings(
-                    **pm_settings
-                )
-
-            agui_feature_names = config_dict.pop("agui_feature_names", ())
-            config_dict["agui_feature_names"] = tuple(agui_feature_names)
-
-            return cls(**config_dict)
-        except Exception as exc:
-            raise FromYamlException(
-                config_path,
-                "agent",
-                config_dict,
-            ) from exc
-
-    def get_system_prompt(self) -> str | None:
-        if self._system_prompt_text is not None:
-            return self._system_prompt_text
-
-        if self._system_prompt_path is not None:
-            if self._config_path is None:
-                raise exceptions.NoConfigPath()
-
-            system_prompt_file = (
-                self._config_path.parent / self._system_prompt_path
-            )
-            return system_prompt_file.read_text()
-
-        else:  # pragma: NO COVER
-            pass
-
-    @property
-    def llm_provider_base_url(self) -> str | None:
-        if (
-            self.provider_type == LLMProviderType.OLLAMA
-            and self.provider_base_url is None
-        ):
-            ic = self._installation_config
-            return ic.get_environment("OLLAMA_BASE_URL")
-        else:
-            return self.provider_base_url
-
-    @property
-    def llm_provider_kw(self) -> dict:
-        provider_kw = {}
-        base_url = self.llm_provider_base_url
-
-        if base_url is not None:
-            provider_kw["base_url"] = f"{base_url}/v1"
-
-        if self.provider_key is not None:
-            provider_kw["api_key"] = self._installation_config.get_secret(
-                self.provider_key
-            )
-
-        return provider_kw
-
-    @property
-    def as_yaml(self) -> dict:
-        prompt = (
-            self._system_prompt_path
-            if self._system_prompt_text is None
-            else self._system_prompt_text
-        )
-        if self.provider_base_url is None:
-            provider_base_url = self._installation_config.get_environment(
-                "OLLAMA_BASE_URL"
-            )
-        else:
-            provider_base_url = self.provider_base_url
-
-        return {
-            "id": self.id,
-            "model_name": self.model_name,
-            "retries": self.retries,
-            "system_prompt": prompt,
-            "model_settings": self.model_settings,
-            "provider_type": str(self.provider_type),
-            "provider_base_url": provider_base_url,
-            "provider_key": self.provider_key,  # "secret:SECRET_NAME"
-        }
-
-
-AgentFactory = abc.Callable[[], ai_ag_abstract.AbstractAgent]
-
-
-@dataclasses.dataclass(kw_only=True)
-class FactoryAgentConfig:
-    id: str
-    factory_name: str  # dotted name for import
-    kind: typing.ClassVar[str] = "factory"
-    with_agent_config: bool = False
-    extra_config: dict[str, typing.Any] = _default_dict_field()
-
-    agui_feature_names: tuple[str] = ()
-
-    _factory: AgentFactory = None
-
-    # Set by `from_yaml` factory
-    _installation_config: InstallationConfig = _no_repr_no_compare_none()
-    _config_path: pathlib.Path = None
-
-    # Use a config from the top-level InstallationConfig's 'agent_configs'
-    # as a template.
-    _template_id: str = None
-
-    @property
-    def factory(self) -> AgentFactory:
-        if self._factory is None:
-            module_name, factory_id = self.factory_name.rsplit(".", 1)
-            module = importlib.import_module(module_name)
-            factory = getattr(module, factory_id)
-
-            if self.with_agent_config:
-                self._factory = functools.update_wrapper(
-                    functools.partial(factory, agent_config=self),
-                    factory,
-                )
-            else:
-                self._factory = factory
-
-        return self._factory
-
-    @classmethod
-    def from_yaml(
-        cls,
-        installation_config: InstallationConfig,
-        config_path: pathlib.Path,
-        config_dict: dict,
-    ):
-        try:
-            config_dict["_installation_config"] = installation_config
-            config_dict["_config_path"] = config_path
-
-            config_dict = _apply_agent_config_template(
-                config_dict,
-                installation_config,
-                config_path,
-            )
-
-            agui_feature_names = config_dict.pop("agui_feature_names", ())
-            config_dict["agui_feature_names"] = tuple(agui_feature_names)
-
-            return cls(**config_dict)
-
-        except Exception as exc:
-            raise FromYamlException(
-                config_path,
-                "python_agent",
-                config_dict,
-            ) from exc
-
-    @property
-    def as_yaml(self) -> dict:
-        return {
-            "id": self.id,
-            "factory_name": self.factory_name,
-            "with_agent_config": self.with_agent_config,
-            "extra_config": self.extra_config,
-        }
-
-
-AGENT_CONFIG_CLASSES_BY_KIND = {
-    klass.kind: klass
-    for klass in [
-        AgentConfig,
-        FactoryAgentConfig,
-    ]
-}
-
-AgentConfigTypes = AgentConfig | FactoryAgentConfig
-
-AgentConfigMap = dict[str, AgentConfigTypes]
-
-
-def extract_agent_config(
-    installation_config: InstallationConfig,
-    config_path: pathlib.Path,
-    config_dict: dict,
-) -> AgentConfig:  # or subclass
-    agent_kind = config_dict.get("kind")
-
-    if agent_kind is not None:  # kind is a typing.ClassVar
-        config_dict = {
-            key: value for key, value in config_dict.items() if key != "kind"
-        }
-
-    ac_class = AGENT_CONFIG_CLASSES_BY_KIND.get(agent_kind, AgentConfig)
-
-    return ac_class.from_yaml(
-        installation_config,
-        config_path,
-        config_dict,
-    )
-
-
-# ============================================================================
 #   Quiz-related configuration types
 # ============================================================================
 
@@ -1002,7 +693,7 @@ class QuizConfig:
     randomize: bool = False
     max_questions: int = None
 
-    judge_agent: AgentConfig | None = None
+    judge_agent: agents.AgentConfig | None = None
 
     # Set by `from_yaml` factory
     _installation_config: InstallationConfig = _no_repr_no_compare_none()
@@ -1021,7 +712,7 @@ class QuizConfig:
 
             ja_config = config_dict.pop("judge_agent", None)
             if ja_config is not None:
-                config_dict["judge_agent"] = extract_agent_config(
+                config_dict["judge_agent"] = agents.extract_agent_config(
                     installation_config,
                     config_path,
                     ja_config,
@@ -1063,7 +754,7 @@ class QuizConfig:
                 kwargs["provider_base_url"] = i_config.get_environment(
                     "OLLAMA_BASE_URL",
                 )
-            self.judge_agent = AgentConfig(**kwargs)
+            self.judge_agent = agents.AgentConfig(**kwargs)
 
     @property
     def question_file_path(self) -> pathlib.Path:
@@ -1240,7 +931,7 @@ class RoomConfig:
     id: str
     name: str
     description: str
-    agent_config: AgentConfig
+    agent_config: agents.AgentConfig
 
     #
     # Room UI options
@@ -1302,7 +993,7 @@ class RoomConfig:
             agent_config_yaml = config_dict.pop("agent")
             agent_config_yaml["id"] = f"room-{room_id}"
 
-            config_dict["agent_config"] = extract_agent_config(
+            config_dict["agent_config"] = agents.extract_agent_config(
                 installation_config,
                 config_path,
                 agent_config_yaml,
@@ -1412,7 +1103,7 @@ class CompletionConfig:
     # Required metadata
     #
     id: str
-    agent_config: AgentConfig
+    agent_config: agents.AgentConfig
 
     name: str = None
 
@@ -1446,7 +1137,7 @@ class CompletionConfig:
         agent_config_yaml = config_dict.pop("agent")
         agent_config_yaml["id"] = f"completion-{completion_id}"
 
-        config_dict["agent_config"] = extract_agent_config(
+        config_dict["agent_config"] = agents.extract_agent_config(
             installation_config,
             config_path,
             agent_config_yaml,
@@ -2217,7 +1908,7 @@ class InstallationConfigMeta:
         self.agent_configs = list(self.agent_configs)
         for ac_meta in self.agent_configs:
             klass = ac_meta.config_klass
-            AGENT_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
+            agents.AGENT_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
 
         self.secret_sources = list(self.secret_sources)
         for ss_meta in self.secret_sources:
@@ -2259,7 +1950,7 @@ class InstallationConfigMeta:
         ]
         agent_config_entries = [
             _dotted_name(klass)
-            for klass in AGENT_CONFIG_CLASSES_BY_KIND.values()
+            for klass in agents.AGENT_CONFIG_CLASSES_BY_KIND.values()
         ]
         secret_source_entries = [
             {
@@ -2531,11 +2222,11 @@ class InstallationConfig:
     #
     # Agent configurations not bound to a room or completion.
     #
-    agent_configs: list[AgentConfigTypes] = _default_list_field()
-    _agent_configs_map: AgentConfigMap = None
+    agent_configs: list[agents.AgentConfigTypes] = _default_list_field()
+    _agent_configs_map: agents.AgentConfigMap = None
 
     @property
-    def agent_configs_map(self) -> AgentConfigMap:
+    def agent_configs_map(self) -> agents.AgentConfigMap:
         if self._agent_configs_map is None:
             self._agent_configs_map = {
                 agent_config.id: agent_config
@@ -2782,7 +2473,7 @@ class InstallationConfig:
             )
 
             agent_configs = [
-                extract_agent_config(
+                agents.extract_agent_config(
                     None,
                     config_path,
                     a_config,

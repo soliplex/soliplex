@@ -6,6 +6,7 @@ import pytest
 
 from soliplex import config
 from soliplex.agui import features as agui_features
+from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import tools as config_tools
 
@@ -93,8 +94,11 @@ def patched_skill_configs(patched_soliplex_config):
 
 
 @pytest.fixture
-def patched_agent_configs(patched_soliplex_config):
-    return patched_soliplex_config["AGENT_CONFIG_CLASSES_BY_KIND"]
+def patched_agent_configs():
+    with mock.patch.dict(config_agents.__dict__) as patched:
+        result = patched["AGENT_CONFIG_CLASSES_BY_KIND"] = {}
+
+        yield result
 
 
 @pytest.fixture

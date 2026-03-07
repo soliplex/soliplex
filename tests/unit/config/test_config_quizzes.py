@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from soliplex import config
+from soliplex.config import agents as config_agents
 
 NoRaise = contextlib.nullcontext()
 
@@ -245,7 +246,7 @@ def test_quizconfig_from_yaml(
         jac["_config_path"] = yaml_file
         jac["_installation_config"] = installation_config
 
-    expected_kw["judge_agent"] = config.AgentConfig(**jac)
+    expected_kw["judge_agent"] = config_agents.AgentConfig(**jac)
 
     expected = config.QuizConfig(**expected_kw)
 

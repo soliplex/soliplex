@@ -15,6 +15,7 @@ from soliplex import loggers
 from soliplex import models
 from soliplex import secrets
 from soliplex import util
+from soliplex.config import agents as config_agents
 from soliplex.config import tools as config_tools
 
 KEY = "test-key"
@@ -175,9 +176,9 @@ def standalone_agents(request):
 
     if request.param == "agent":
         standalone_agent = mock.create_autospec(
-            config.AgentConfig,
+            config_agents.AgentConfig,
             id="standalone-agent",
-            provider_type=config.LLMProviderType.OLLAMA,
+            provider_type=config_agents.LLMProviderType.OLLAMA,
             llm_provider_base_url=OLLAMA_BASE_URL,
             model_name="standalone-model",
         )
@@ -188,7 +189,7 @@ def standalone_agents(request):
 
     elif request.param == "factory":
         standalone_factory_agent = mock.create_autospec(
-            config.FactoryAgentConfig,
+            config_agents.FactoryAgentConfig,
             id="standalone-factory-agent",
         )
 
@@ -205,9 +206,9 @@ def quiz_judge_agents(request):
 
     if request.param:
         kw["judge_agent"] = mock.create_autospec(
-            config.AgentConfig,
+            config_agents.AgentConfig,
             id="judge-agent",
-            provider_type=config.LLMProviderType.OLLAMA,
+            provider_type=config_agents.LLMProviderType.OLLAMA,
             llm_provider_base_url=OLLAMA_BASE_URL,
             model_name="judge-model",
         )
@@ -239,9 +240,9 @@ def rooms_with_agents(request, room_quizzes):
 
     if request.param:
         room_agent = mock.create_autospec(
-            config.AgentConfig,
+            config_agents.AgentConfig,
             id="room-agent",
-            provider_type=config.LLMProviderType.OLLAMA,
+            provider_type=config_agents.LLMProviderType.OLLAMA,
             llm_provider_base_url=OLLAMA_BASE_URL,
             model_name="room-model",
         )
@@ -263,9 +264,9 @@ def completions_with_agents(request):
 
     if request.param:
         completion_agent = mock.create_autospec(
-            config.AgentConfig,
+            config_agents.AgentConfig,
             id="completion-agent",
-            provider_type=config.LLMProviderType.OLLAMA,
+            provider_type=config_agents.LLMProviderType.OLLAMA,
             llm_provider_base_url=OLLAMA_BASE_URL,
             model_name="completion-model",
         )
@@ -780,7 +781,7 @@ async def test_installation_get_completion_config(
 )
 @mock.patch("soliplex.agents.get_agent_from_configs")
 def test_installation_get_agent_by_id(gafc, w_agent_id, raises):
-    a_config = mock.create_autospec(config.AgentConfig)
+    a_config = mock.create_autospec(config_agents.AgentConfig)
 
     i_config = mock.create_autospec(config.InstallationConfig)
     i_config.agent_configs_map = {"agent_id": a_config}
@@ -819,7 +820,7 @@ async def test_installation_get_agent_for_room(
     w_room_skills,
     w_the_logger,
 ):
-    a_config = mock.create_autospec(config.AgentConfig)
+    a_config = mock.create_autospec(config_agents.AgentConfig)
 
     tc_config = mock.create_autospec(config_tools.ToolConfig)
     sdtc_config = mock.create_autospec(config_tools.ToolConfig)
@@ -929,7 +930,7 @@ async def test_installation_get_agent_for_completion(
     w_completion_id,
     raises,
 ):
-    a_config = mock.create_autospec(config.AgentConfig)
+    a_config = mock.create_autospec(config_agents.AgentConfig)
 
     tc_config = mock.create_autospec(config_tools.ToolConfig)
     sdtc_config = mock.create_autospec(config_tools.ToolConfig)

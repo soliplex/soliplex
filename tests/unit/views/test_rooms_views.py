@@ -11,6 +11,7 @@ from soliplex import config
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
+from soliplex.config import agents as config_agents
 from soliplex.config import rag as config_rag
 from soliplex.config import tools as config_tools
 from soliplex.views import rooms as rooms_views
@@ -348,7 +349,7 @@ async def test_get_room_documents(
         }
 
         # Agent config without haiku_rag_config (default agent)
-        agent_config_mock = mock.create_autospec(config.AgentConfig)
+        agent_config_mock = mock.create_autospec(config_agents.AgentConfig)
         del agent_config_mock.haiku_rag_config
         room_configs[ROOM_ID].agent_config = agent_config_mock
 
@@ -467,7 +468,9 @@ async def test_get_chunk_visualization(
 
     if ROOM_ID in room_configs:
         room_config = room_configs[ROOM_ID]
-        room_config.agent_config = mock.create_autospec(config.AgentConfig)
+        room_config.agent_config = mock.create_autospec(
+            config_agents.AgentConfig,
+        )
         non_hr_tool_config = mock.create_autospec(config_tools.ToolConfig)
         tool_configs = room_config.tool_configs = {
             "non_hr": non_hr_tool_config,
