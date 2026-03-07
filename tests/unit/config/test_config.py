@@ -15,9 +15,9 @@ from soliplex import secrets
 from soliplex.agui import features as agui_features
 from tests.unit.config import test_agents
 from tests.unit.config import test_authsystem
+from tests.unit.config import test_completions
 from tests.unit.config import test_rooms
 from tests.unit.config import test_skills
-from tests.unit.config import test_tools
 
 NoRaise = contextlib.nullcontext()
 
@@ -27,82 +27,6 @@ BARE_INSTALLATION_CONFIG_ENVIRONMENT = {
 }
 AGUI_FEATURE_NAME = "test-agui-feature"
 OLLAMA_BASE_URL = "https://example.com:12345"
-
-
-COMPLETION_ID = "test-completion"
-COMPLETION_NAME = "Test Completions"
-
-BARE_COMPLETION_CONFIG_KW = {
-    "id": COMPLETION_ID,
-    "agent_config": config.AgentConfig(
-        id=f"completion-{COMPLETION_ID}",
-        model_name=test_agents.MODEL_NAME,
-        system_prompt=test_agents.SYSTEM_PROMPT,
-    ),
-}
-BARE_COMPLETION_CONFIG_YAML = f"""\
-id: "{COMPLETION_ID}"
-agent:
-    model_name: "{test_agents.MODEL_NAME}"
-    system_prompt: "{test_agents.SYSTEM_PROMPT}"
-"""
-
-FULL_COMPLETION_CONFIG_KW = {
-    "id": COMPLETION_ID,
-    "name": COMPLETION_NAME,
-    "agent_config": config.AgentConfig(
-        id=f"completion-{COMPLETION_ID}",
-        model_name=test_agents.MODEL_NAME,
-        system_prompt=test_agents.SYSTEM_PROMPT,
-    ),
-    "tool_configs": {
-        "get_current_datetime": config.ToolConfig(
-            tool_name="soliplex.tools.get_current_datetime",
-        ),
-    },
-    "mcp_client_toolset_configs": {
-        "stdio_test": config.Stdio_MCP_ClientToolsetConfig(
-            command="cat",
-            args=[
-                "-",
-            ],
-            env={
-                "foo": "bar",
-            },
-        ),
-        "http_test": config.HTTP_MCP_ClientToolsetConfig(
-            url=test_tools.HTTP_MCP_URL,
-            headers={
-                "Authorization": "Bearer secret:BEARER_TOKEN",
-            },
-            query_params=test_tools.HTTP_MCP_QUERY_PARAMS,
-        ),
-    },
-}
-FULL_COMPLETION_CONFIG_YAML = f"""\
-id: "{COMPLETION_ID}"
-name: "{COMPLETION_NAME}"
-agent:
-    model_name: "{test_agents.MODEL_NAME}"
-    system_prompt: "{test_agents.SYSTEM_PROMPT}"
-tools:
-    - tool_name: "soliplex.tools.get_current_datetime"
-mcp_client_toolsets:
-    stdio_test:
-      kind: "stdio"
-      command: "cat"
-      args:
-        - "-"
-      env:
-        foo: "bar"
-    http_test:
-      kind: "http"
-      url: "{test_tools.HTTP_MCP_URL}"
-      headers:
-        Authorization: "Bearer secret:BEARER_TOKEN"
-      query_params:
-        {test_tools.HTTP_MCP_QP_KEY}: "{test_tools.HTTP_MCP_QP_VALUE}"
-"""
 
 EMPTY_LFIPYDAI_CONFIG_YAML = ""  # raises
 DEFAULT_LFIPYDAI_EXP_KWARGS = {
@@ -1078,60 +1002,6 @@ authorization_dburi:
     sync: {RA_DBURI_SYNC_W_SECRET}
     async: {RA_DBURI_ASYNC}
 """
-
-
-@pytest.mark.parametrize(
-    "config_yaml, expected_kw",
-    [
-        (BARE_COMPLETION_CONFIG_YAML, BARE_COMPLETION_CONFIG_KW),
-        (FULL_COMPLETION_CONFIG_YAML, FULL_COMPLETION_CONFIG_KW),
-    ],
-)
-def test_completionconfig_from_yaml(
-    installation_config,
-    temp_dir,
-    config_yaml,
-    expected_kw,
-):
-    if "name" not in expected_kw:
-        expected_kw = expected_kw.copy()
-        expected_kw["name"] = expected_kw["id"]
-
-    expected = config.CompletionConfig(**expected_kw)
-
-    yaml_file = temp_dir / "test.yaml"
-    yaml_file.write_text(config_yaml)
-    expected = dataclasses.replace(
-        expected,
-        _installation_config=installation_config,
-        _config_path=yaml_file,
-    )
-    expected.agent_config = dataclasses.replace(
-        expected.agent_config,
-        _installation_config=installation_config,
-        _config_path=yaml_file,
-    )
-
-    if len(expected_kw.get("tool_configs", {})) > 0:
-        for tool_config in expected_kw["tool_configs"].values():
-            tool_config._installation_config = installation_config
-            tool_config._config_path = yaml_file
-
-    if len(expected_kw.get("mcp_client_toolset_configs", {})) > 0:
-        for mcts_config in expected_kw["mcp_client_toolset_configs"].values():
-            mcts_config._installation_config = installation_config
-            mcts_config._config_path = yaml_file
-
-    with yaml_file.open() as stream:
-        config_dict = yaml.safe_load(stream)
-
-    found = config.CompletionConfig.from_yaml(
-        installation_config,
-        yaml_file,
-        config_dict,
-    )
-
-    assert found == expected
 
 
 @pytest.mark.parametrize(
@@ -3396,8 +3266,8 @@ def test_installationconfig_completion_configs_wo_existing(temp_dir):
         completion_path.mkdir()
         completion_config = completion_path / "completion_config.yaml"
         completion_config.write_text(
-            BARE_COMPLETION_CONFIG_YAML.replace(
-                f'id: "{COMPLETION_ID}"',
+            test_completions.BARE_COMPLETION_CONFIG_YAML.replace(
+                f'id: "{test_completions.COMPLETION_ID}"',
                 f'id: "{completion_id}"',
                 1,
             ),
@@ -3426,11 +3296,11 @@ def test_installationconfig_completion_configs_wo_existing_w_conflict(
         completion_path.mkdir()
         completion_config = completion_path / "completion_config.yaml"
         completion_config.write_text(
-            FULL_COMPLETION_CONFIG_YAML.replace(
+            test_completions.FULL_COMPLETION_CONFIG_YAML.replace(
                 # f'id: "{COMPLETION_ID}"',
                 # f'id: "{completion_id}"',
                 # 1, # conflict on ID
-                f'name: "{COMPLETION_NAME}"',
+                f'name: "{test_completions.COMPLETION_NAME}"',
                 f'name: "{completion_path.name}"',
                 1,
             )
@@ -3440,9 +3310,10 @@ def test_installationconfig_completion_configs_wo_existing_w_conflict(
 
     found = i_config.completion_configs
 
-    assert found[COMPLETION_ID].id == COMPLETION_ID
+    compl_id = test_completions.COMPLETION_ID
+    assert found[compl_id].id == compl_id
     # order of 'completion_paths' governs who wins
-    assert found[COMPLETION_ID].name == "foo"
+    assert found[compl_id].name == "foo"
 
 
 def test_installationconfig_completion_configs_w_existing():
