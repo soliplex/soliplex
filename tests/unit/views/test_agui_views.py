@@ -604,6 +604,7 @@ async def test_get_room_agui_thread_id_run_id(
 @mock.patch("soliplex.views.agui._check_user_in_room")
 async def test_post_room_agui_only(
     cuir,
+    patched_agui_features,
     the_threads,
     test_thread,
     test_run,
@@ -655,21 +656,18 @@ async def test_post_room_agui_only(
         test_thread,
     )
 
-    patch_features = {EMPTY_FEATURE_NAME: EMPTY_FEATURE}
-    with mock.patch.dict(
-        "soliplex.config.agui.AGUI_FEATURES_BY_NAME",
-        **patch_features,
-    ):
-        found = await agui_views.post_room_agui(
-            request,
-            room_id=TEST_ROOM_ID,
-            new_thread_request=new_thread_request,
-            the_installation=the_installation,
-            the_threads=the_threads,
-            the_authz_policy=the_authz_policy,
-            the_user_claims=THE_USER_CLAIMS,
-            the_logger=the_logger,
-        )
+    patched_agui_features[EMPTY_FEATURE_NAME] = EMPTY_FEATURE
+
+    found = await agui_views.post_room_agui(
+        request,
+        room_id=TEST_ROOM_ID,
+        new_thread_request=new_thread_request,
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_authz_policy=the_authz_policy,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
 
     assert found.room_id == TEST_ROOM_ID
     assert found.thread_id == TEST_THREAD_ID
@@ -684,7 +682,7 @@ async def test_post_room_agui_only(
     assert set(m_run_state) == exp_inital_state_keys
 
     for state_key in exp_inital_state_keys:
-        exp_klass = patch_features[state_key].model_klass
+        exp_klass = patched_agui_features[state_key].model_klass
         exp_inst = exp_klass()
         assert m_run_state[state_key] == exp_inst.model_dump(mode="python")
 

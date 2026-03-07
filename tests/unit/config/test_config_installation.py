@@ -14,7 +14,6 @@ from soliplex import secrets
 from soliplex.agui import features as agui_features
 from soliplex.config import exceptions as config_exc
 from tests.unit.config import test_config_agents as test_agents
-from tests.unit.config import test_config_agui as test_agui
 from tests.unit.config import test_config_authsystem as test_authsystem
 from tests.unit.config import test_config_completions as test_completions
 from tests.unit.config import test_config_logfire as test_logfire
@@ -23,10 +22,6 @@ from tests.unit.config import test_config_rooms as test_rooms
 from tests.unit.config import test_config_skills as test_skills
 
 NoRaise = contextlib.nullcontext()
-
-the_agui_feature = test_agui.the_agui_feature
-patched_soliplex_config = test_meta.patched_soliplex_config
-patched_soliplex_config_agui = test_meta.patched_soliplex_config_agui
 
 BARE_INSTALLATION_CONFIG_ENVIRONMENT = {
     "OLLAMA_BASE_URL": test_agents.PROVIDER_BASE_URL,
@@ -986,15 +981,15 @@ def test_installationconfig_logging_claims_map(temp_dir, w_map):
         assert logging_claims_map == {}
 
 
-def test_installationconfig_agui_features(the_agui_feature):
+def test_installationconfig_agui_features(
+    patched_agui_features,
+    the_agui_feature,
+):
+    patched_agui_features[the_agui_feature.name] = the_agui_feature
+
     i_config = config.InstallationConfig(id="test-ic")
 
-    with mock.patch.dict(
-        "soliplex.config.agui.AGUI_FEATURES_BY_NAME",
-        clear=True,
-        the_agui_feature=the_agui_feature,
-    ):
-        found = i_config.agui_features
+    found = i_config.agui_features
 
     assert found == [the_agui_feature]
 
@@ -1200,6 +1195,7 @@ def test_installationconfig_from_yaml(
     config_yaml,
     expected_kw,
 ):
+    patched_soliplex_config["test_secret_func"] = test_meta.SECRET_SOURCE_FUNC
     config_path = temp_dir / "installation.yaml"
     config_path.write_text(config_yaml)
 
@@ -1705,7 +1701,7 @@ def test_installationconfig_completion_configs_w_existing():
 def test_installationconfig_avl_fs_skill_configs_wo_existing(
     temp_dir,
     w_error,
-    patched_soliplex_config_agui,
+    patched_agui_features,
 ):
     SKILL_NAMES = ["foo", "bar"]
 
@@ -1755,7 +1751,7 @@ description: Describing {skill_name}
 def test_installationconfig_avl_fs_skill_configs_wo_existing_w_conflict(
     temp_dir,
     w_error,
-    patched_soliplex_config_agui,
+    patched_agui_features,
 ):
     SKILLS_PATHS = ["./foo", "./bar"]
 
@@ -1826,23 +1822,23 @@ def test_installationconfig_avl_fs_skill_configs_w_existing():
 def test_installationconfig_avl_ep_skill_configs_wo_existing(
     dfe,
     patched_soliplex_config,
-    patched_soliplex_config_agui,
+    patched_agui_features,
 ):
+    STATE_NAMESPACE = "test-state-namespace"
+
     class DerivedFeatureModel(agui_features.EmptyFeatureModel):
         pass
-
-    agui_registry = patched_soliplex_config_agui["AGUI_FEATURES_BY_NAME"]
 
     ep_skill_1 = mock.create_autospec(hs_models.Skill)
     ep_skill_1.metadata = mock.create_autospec(hs_models.SkillMetadata)
     ep_skill_1.metadata.name = "foo"
-    ep_skill_1.state_namespace = test_agui.AGUI_FEATURE_NAME
+    ep_skill_1.state_namespace = STATE_NAMESPACE
     ep_skill_1.state_type = agui_features.EmptyFeatureModel
 
     ep_skill_2 = mock.create_autospec(hs_models.Skill)
     ep_skill_2.metadata = mock.create_autospec(hs_models.SkillMetadata)
     ep_skill_2.metadata.name = "bar"
-    ep_skill_2.state_namespace = test_agui.AGUI_FEATURE_NAME
+    ep_skill_2.state_namespace = STATE_NAMESPACE
     ep_skill_2.state_type = DerivedFeatureModel
 
     dfe.return_value = [ep_skill_1, ep_skill_2]
@@ -1856,8 +1852,8 @@ def test_installationconfig_avl_ep_skill_configs_wo_existing(
     assert found["bar"].name == "bar"
 
     # First registration wins
-    registered = agui_registry[test_agui.AGUI_FEATURE_NAME]
-    assert registered.name == test_agui.AGUI_FEATURE_NAME
+    registered = patched_agui_features[STATE_NAMESPACE]
+    assert registered.name == STATE_NAMESPACE
     assert registered.model_klass is agui_features.EmptyFeatureModel
 
 
@@ -1865,7 +1861,7 @@ def test_installationconfig_avl_ep_skill_configs_wo_existing(
 def test_installationconfig_avl_ep_skill_configs_wo_existing_w_conflict(
     dfe,
     patched_soliplex_config,
-    patched_soliplex_config_agui,
+    patched_agui_features,
 ):
     ep_skill_1 = mock.create_autospec(hs_models.Skill)
     ep_skill_1.metadata = mock.create_autospec(hs_models.SkillMetadata)

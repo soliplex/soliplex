@@ -1,9 +1,15 @@
 import pathlib
 import tempfile
+from unittest import mock
 
 import pytest
 
 from soliplex import config
+from soliplex.agui import features as agui_features
+from soliplex.config import agui as config_agui
+from soliplex.config import tools as config_tools
+
+AGUI_FEATURE_NAME = "test-agui-feature"
 
 
 def _auth_systems(n_auth_systems):
@@ -28,3 +34,69 @@ def temp_dir() -> pathlib.Path:
 @pytest.fixture(params=[0, 1, 2])
 def with_auth_systems(request):
     return _auth_systems(request.param)
+
+
+@pytest.fixture
+def the_agui_feature():
+    return config_agui.AGUI_Feature(
+        name=AGUI_FEATURE_NAME,
+        model_klass=agui_features.EmptyFeatureModel,
+        source=config_agui.AGUI_FeatureSource.CLIENT,
+    )
+
+
+@pytest.fixture
+def patched_agui_features():
+    with mock.patch.dict(config_agui.__dict__) as patched:
+        registry = patched["AGUI_FEATURES_BY_NAME"] = {}
+
+        yield registry
+
+
+@pytest.fixture
+def patched_tool_registries():
+    with mock.patch.dict(config_tools.__dict__) as patched:
+        patched["TOOL_CONFIG_CLASSES_BY_TOOL_NAME"] = {}
+        patched["MCP_TOOLSET_CONFIG_CLASSES_BY_KIND"] = {}
+        patched["MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME"] = {}
+        yield patched
+
+
+@pytest.fixture
+def patched_tool_configs(patched_tool_registries):
+    return patched_tool_registries["TOOL_CONFIG_CLASSES_BY_TOOL_NAME"]
+
+
+@pytest.fixture
+def patched_mcp_toolset_configs(patched_tool_registries):
+    return patched_tool_registries["MCP_TOOLSET_CONFIG_CLASSES_BY_KIND"]
+
+
+@pytest.fixture
+def patched_mcp_tool_wrappers(patched_tool_registries):
+    return patched_tool_registries["MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME"]
+
+
+@pytest.fixture
+def patched_soliplex_config():
+    with mock.patch.dict(config.__dict__) as patched:
+        patched["SKILL_CONFIG_CLASSES_BY_KIND"] = {}
+        patched["AGENT_CONFIG_CLASSES_BY_KIND"] = {}
+        patched["SECRET_GETTERS_BY_KIND"] = {}
+
+        yield patched
+
+
+@pytest.fixture
+def patched_skill_configs(patched_soliplex_config):
+    return patched_soliplex_config["SKILL_CONFIG_CLASSES_BY_KIND"]
+
+
+@pytest.fixture
+def patched_agent_configs(patched_soliplex_config):
+    return patched_soliplex_config["AGENT_CONFIG_CLASSES_BY_KIND"]
+
+
+@pytest.fixture
+def patched_secret_getters(patched_soliplex_config):
+    return patched_soliplex_config["SECRET_GETTERS_BY_KIND"]

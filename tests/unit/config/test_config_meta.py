@@ -10,9 +10,7 @@ import yaml
 from soliplex import config
 from soliplex import secrets
 from soliplex.agui import features as agui_features
-from soliplex.config import agui as config_agui
 from soliplex.config import tools as config_tools
-from tests.unit.config import test_config_agui as test_agui
 
 NoRaise = contextlib.nullcontext()
 
@@ -38,10 +36,11 @@ BARE_ICMETA_YAML = """\
 meta:
 """
 
+AGUI_FEATURE_NAME_FOR_META = "test-agui-feature-for-meta"
 W_AGUI_FEATURES_ICMETA_KW = {
     "agui_features": [
         config.AGUI_FeatureConfigMeta(
-            name=test_agui.AGUI_FEATURE_NAME,
+            name=AGUI_FEATURE_NAME_FOR_META,
             model_klass=agui_features.EmptyFeatureModel,
             source="server",
         ),
@@ -56,7 +55,7 @@ W_AGUI_FEATURES_ICMETA_KW = {
 W_AGUI_FEATURES_ICMETA_YAML = f"""\
 meta:
   agui_features:
-      - name: "{test_agui.AGUI_FEATURE_NAME}"
+      - name: "{AGUI_FEATURE_NAME_FOR_META}"
         model_klass: "soliplex.agui.features.EmptyFeatureModel"
         source: "server"
 """
@@ -171,7 +170,7 @@ meta:
 FULL_ICMETA_KW = {
     "agui_features": [
         config.AGUI_FeatureConfigMeta(
-            name=test_agui.AGUI_FEATURE_NAME,
+            name=AGUI_FEATURE_NAME_FOR_META,
             model_klass=agui_features.EmptyFeatureModel,
             source="server",
         ),
@@ -204,7 +203,7 @@ FULL_ICMETA_KW = {
 FULL_ICMETA_YAML = f"""\
 meta:
   agui_features:
-      - name: "{test_agui.AGUI_FEATURE_NAME}"
+      - name: "{AGUI_FEATURE_NAME_FOR_META}"
         model_klass: "soliplex.agui.features.EmptyFeatureModel"
         source: "server"
   mcp_toolset_configs:
@@ -286,34 +285,6 @@ def test_configmeta_dottedname():
     assert meta.dotted_name == "some.module.some_config"
 
 
-@pytest.fixture
-def patched_soliplex_config_agui():
-    with mock.patch.dict(config_agui.__dict__) as patched:
-        patched["AGUI_FEATURES_BY_NAME"] = {}
-
-        yield patched
-
-
-@pytest.fixture
-def patched_soliplex_config_tools():
-    with mock.patch.dict(config_tools.__dict__) as patched:
-        patched["TOOL_CONFIG_CLASSES_BY_TOOL_NAME"] = {}
-        patched["MCP_TOOLSET_CONFIG_CLASSES_BY_KIND"] = {}
-        patched["MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME"] = {}
-        yield patched
-
-
-@pytest.fixture
-def patched_soliplex_config():
-    with mock.patch.dict(config.__dict__) as patched:
-        patched["test_secret_func"] = SECRET_SOURCE_FUNC
-        patched["SKILL_CONFIG_CLASSES_BY_KIND"] = {}
-        patched["AGENT_CONFIG_CLASSES_BY_KIND"] = {}
-        patched["SECRET_GETTERS_BY_KIND"] = {}
-
-        yield patched
-
-
 @pytest.mark.parametrize(
     "config_yaml, expected_kw",
     [
@@ -334,11 +305,17 @@ def patched_soliplex_config():
 def test_installationconfigmeta_from_yaml(
     temp_dir,
     patched_soliplex_config,
-    patched_soliplex_config_agui,
-    patched_soliplex_config_tools,
+    patched_skill_configs,
+    patched_agent_configs,
+    patched_secret_getters,
+    patched_agui_features,
+    patched_tool_configs,
+    patched_mcp_toolset_configs,
+    patched_mcp_tool_wrappers,
     config_yaml,
     expected_kw,
 ):
+    patched_soliplex_config["test_secret_func"] = SECRET_SOURCE_FUNC
     expected_kw = copy.deepcopy(expected_kw)
 
     yaml_file = temp_dir / "config.yaml"
@@ -370,14 +347,9 @@ def test_installationconfigmeta_from_yaml(
 
         assert ic_meta == expected
 
-        PSC = patched_soliplex_config
-        PSCA = patched_soliplex_config_agui
-        PSCT = patched_soliplex_config_tools
-
         if config_meta and "agui_features" in config_meta:
-            agui_registry = PSCA["AGUI_FEATURES_BY_NAME"]
             for (af_name, af_found), af_expected in zip(
-                agui_registry.items(),
+                patched_agui_features.items(),
                 config_meta["agui_features"],
                 strict=True,
             ):
@@ -387,51 +359,50 @@ def test_installationconfigmeta_from_yaml(
                 assert af_found.source == af_expected["source"]
 
         if config_meta and "tool_configs" in config_meta:
-            tool_registry = PSCT["TOOL_CONFIG_CLASSES_BY_TOOL_NAME"]
             tcs_by_class_name = {
                 f"{klass.__module__}.{klass.__name__}": klass
-                for klass in tool_registry.values()
+                for klass in patched_tool_configs.values()
             }
             for klass_name in config_meta["tool_configs"]:
-                assert tcs_by_class_name[klass_name].tool_name in tool_registry
+                assert (
+                    tcs_by_class_name[klass_name].tool_name
+                    in patched_tool_configs
+                )
 
         if config_meta and "mcp_toolset_configs" in config_meta:
-            mcp_toolset_registry = PSCT["MCP_TOOLSET_CONFIG_CLASSES_BY_KIND"]
-            tcs_by_class_name = {
+            mtscs_by_class_name = {
                 f"{klass.__module__}.{klass.__name__}": klass
-                for klass in mcp_toolset_registry.values()
+                for klass in patched_mcp_toolset_configs.values()
             }
             for klass_name in config_meta["mcp_toolset_configs"]:
                 assert (
-                    tcs_by_class_name[klass_name].kind in mcp_toolset_registry
+                    mtscs_by_class_name[klass_name].kind
+                    in patched_mcp_toolset_configs
                 )
 
         if config_meta and "mcp_server_tool_wrappers" in config_meta:
-            wrapper_registry = PSCT["MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME"]
             mcptcp_by_class_name = {
                 f"{klass.__module__}.{klass.__name__}": klass
-                for klass in wrapper_registry.values()
+                for klass in patched_mcp_tool_wrappers.values()
             }
             for meta_kw in config_meta["mcp_server_tool_wrappers"]:
                 wrapper_klass_name = meta_kw["wrapper_klass"]
                 assert (
-                    wrapper_registry["faux"]
+                    patched_mcp_tool_wrappers["faux"]
                     == mcptcp_by_class_name[wrapper_klass_name]
                 )
 
         if config_meta and "agent_configs" in config_meta:
-            agent_registry = PSC["AGENT_CONFIG_CLASSES_BY_KIND"]
             acs_by_class_name = {
                 f"{klass.__module__}.{klass.__name__}": klass
-                for klass in agent_registry.values()
+                for klass in patched_agent_configs.values()
             }
             for klass_name in config_meta["agent_configs"]:
                 kind = acs_by_class_name[klass_name].kind
-                assert kind in agent_registry
+                assert kind in patched_agent_configs
 
         if config_meta and "secret_sources" in config_meta:
-            ss_registry = PSC["SECRET_GETTERS_BY_KIND"]
-            assert ss_registry == {
+            assert patched_secret_getters == {
                 config.EnvVarSecretSource.kind: SECRET_SOURCE_FUNC
             }
 
@@ -443,14 +414,16 @@ def test_installationconfigmeta_from_yaml(
 @pytest.mark.parametrize("w_tools", [False, True])
 def test_installationconfigmeta_as_yaml(
     patched_soliplex_config,
-    patched_soliplex_config_agui,
-    patched_soliplex_config_tools,
+    patched_agui_features,
+    patched_tool_registries,
     w_tools,
     w_mcp_toolsets,
     w_skills,
     w_agent,
     w_secret_reg,
 ):
+    patched_soliplex_config["test_secret_func"] = SECRET_SOURCE_FUNC
+
     icmeta_kw = {}
     expected_dict = copy.deepcopy(BARE_ICMETA_KW)
     icmeta_kw = icmeta_kw.copy()
@@ -516,7 +489,7 @@ def test_installationconfigmeta_as_yaml(
 
 
 def test_installationconfigmeta_postinit_registers_tool_configs(
-    patched_soliplex_config_tools,
+    patched_tool_configs,
 ):
     @dataclasses.dataclass(kw_only=True)
     class _DummyToolConfig(config_tools.ToolConfig):
@@ -525,12 +498,11 @@ def test_installationconfigmeta_postinit_registers_tool_configs(
     tc_meta = config.ConfigMeta(config_klass=_DummyToolConfig)
     config.InstallationConfigMeta(tool_configs=[tc_meta])
 
-    tcs = patched_soliplex_config_tools["TOOL_CONFIG_CLASSES_BY_TOOL_NAME"]
-    assert tcs[_DummyToolConfig.tool_name] is _DummyToolConfig
+    assert patched_tool_configs[_DummyToolConfig.tool_name] is _DummyToolConfig
 
 
 def test_installationconfigmeta_postinit_registers_mcp_tool_wrappers(
-    patched_soliplex_config_tools,
+    patched_mcp_tool_wrappers,
 ):
     @dataclasses.dataclass(kw_only=True)
     class _DummyToolConfig(config_tools.ToolConfig):
@@ -547,7 +519,6 @@ def test_installationconfigmeta_postinit_registers_mcp_tool_wrappers(
     )
     config.InstallationConfigMeta(mcp_server_tool_wrappers=[mstw_meta])
 
-    wrappers = patched_soliplex_config_tools[
-        "MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME"
-    ]
-    assert wrappers[_DummyToolConfig.tool_name] is _DummyWrapper
+    assert (
+        patched_mcp_tool_wrappers[_DummyToolConfig.tool_name] is _DummyWrapper
+    )

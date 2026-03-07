@@ -4,24 +4,8 @@ from unittest import mock
 import pytest
 
 from soliplex.agui import features as agui_features
-from soliplex.config import agui as agui_config
 
 NoRaise = contextlib.nullcontext()
-
-
-AGUI_FEATURE_NAME = "test-agui-feature"
-AGUI_FEATURE_DESCRIPTION = "This is an AG-UI feature"
-AGUI_FEATURE_DESCRIPTION_EXTRA = "It is a really useful feature"
-AGUI_FEATURE_MODEL_KLASS = "soliplex.agui.features.Testing"
-
-
-@pytest.fixture
-def the_agui_feature():
-    return agui_config.AGUI_Feature(
-        name=AGUI_FEATURE_NAME,
-        model_klass=agui_features.EmptyFeatureModel,
-        source=agui_config.AGUI_FeatureSource.CLIENT,
-    )
 
 
 @pytest.mark.parametrize("wo_schema_desc", [False, True])
@@ -46,7 +30,7 @@ def test_aguifeature_as_yaml(the_agui_feature):
     found = the_agui_feature.as_yaml
 
     assert found == {
-        "name": AGUI_FEATURE_NAME,
+        "name": the_agui_feature.name,
         "description": agui_features.EmptyFeatureModel.__doc__,
         "source": "client",
     }

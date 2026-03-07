@@ -13,7 +13,6 @@ from haiku.skills import models as hs_models
 from soliplex import agui as agui_package
 from soliplex import config
 from soliplex import models
-from soliplex.config import agui as config_agui
 from soliplex.config import tools as config_tools
 
 NOW = datetime.datetime.now(datetime.UTC)
@@ -60,10 +59,6 @@ HAIKU_RAG_CONFIG_FILE = "/path/to/haiku.rag.yaml"
 OTHER_AGENT_KIND = "other-agent-kind"
 
 FACTORY_NAME = "some.package.function"
-
-AGUI_FEATURE_NAME = "test-agui-feature"
-AGUI_FEATURE_DESCRIPTION = "This is a test AG-UI feature"
-AGUI_FEATURE_MODEL_KLASS = "soliplex.agui.features.testing"
 
 INSTALLATION_ID = "test-installation"
 INSTALLATION_SECRET = "Seeeeeekrit!"
@@ -586,51 +581,14 @@ def test_defaultagent_from_config(
     assert agent_model.provider_base_url == exp_base
 
 
-class FeatureModel(pydantic.BaseModel):
-    """Feature model for testing"""
-
-    foo: str
-    bar: str | None = None
-
-    @classmethod
-    def model_json_schema(cls):
-        return {
-            "type": "object",
-            "title": cls.__name__,
-            "description": cls.__doc__,
-            "properties": {
-                "foo": {
-                    "title": "Foo",
-                    "type": "string",
-                },
-                "bar": {
-                    "title": "Bar",
-                    "anyOf:": [
-                        {"type": "string"},
-                        {"type": "null"},
-                    ],
-                    "default": None,
-                },
-            },
-        }
-
-
-@pytest.fixture
-def the_agui_feature():
-    return config_agui.AGUI_Feature(
-        name=AGUI_FEATURE_NAME,
-        model_klass=FeatureModel,
-        source=config_agui.AGUI_FeatureSource.CLIENT,
-    )
-
-
 def test_aguifeature_from_config(the_agui_feature):
     feature_model = models.AGUI_Feature.from_config(the_agui_feature)
 
-    assert feature_model.name == AGUI_FEATURE_NAME
+    assert feature_model.name == the_agui_feature.name
     assert feature_model.description == the_agui_feature.description
     assert feature_model.source == the_agui_feature.source
-    assert feature_model.json_schema == FeatureModel.model_json_schema()
+    model_klass = the_agui_feature.model_klass
+    assert feature_model.json_schema == model_klass.model_json_schema()
 
 
 @pytest.fixture(params=[False, True])
@@ -728,12 +686,12 @@ def factory_agent(installation_config):
 
 
 @pytest.fixture
-def w_agui_features_agent(installation_config):
+def w_agui_features_agent(installation_config, the_agui_feature):
     return mock.Mock(
         spec_set=["id", "kind", "agui_feature_names"],
         id=AGENT_ID,
         kind=OTHER_AGENT_KIND,
-        agui_feature_names=(AGUI_FEATURE_NAME,),
+        agui_feature_names=(the_agui_feature.name,),
     )
 
 
@@ -1228,17 +1186,15 @@ def test_installation_from_config_w_logging_config_file(
 
 def test_installation_from_config_w_agui_feature(
     bare_installation_config,
+    patched_agui_features,
     the_agui_feature,
 ):
     # Ensure that the registry has only a  single, known feature.
-    with mock.patch.dict(
-        "soliplex.config.agui.AGUI_FEATURES_BY_NAME",
-        clear=True,
-        the_agui_feature=the_agui_feature,
-    ):
-        installation_model = models.Installation.from_config(
-            bare_installation_config,
-        )
+    patched_agui_features[the_agui_feature.name] = the_agui_feature
+
+    installation_model = models.Installation.from_config(
+        bare_installation_config,
+    )
 
     for m_feature, c_feature in zip(
         installation_model.agui_features,
