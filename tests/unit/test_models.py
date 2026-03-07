@@ -13,6 +13,7 @@ from haiku.skills import models as hs_models
 from soliplex import agui as agui_package
 from soliplex import config
 from soliplex import models
+from soliplex.config import agui as config_agui
 from soliplex.config import tools as config_tools
 
 NOW = datetime.datetime.now(datetime.UTC)
@@ -616,10 +617,10 @@ class FeatureModel(pydantic.BaseModel):
 
 @pytest.fixture
 def the_agui_feature():
-    return config.AGUI_Feature(
+    return config_agui.AGUI_Feature(
         name=AGUI_FEATURE_NAME,
         model_klass=FeatureModel,
-        source=config.AGUI_FeatureSource.CLIENT,
+        source=config_agui.AGUI_FeatureSource.CLIENT,
     )
 
 
@@ -1231,7 +1232,7 @@ def test_installation_from_config_w_agui_feature(
 ):
     # Ensure that the registry has only a  single, known feature.
     with mock.patch.dict(
-        "soliplex.config.AGUI_FEATURES_BY_NAME",
+        "soliplex.config.agui.AGUI_FEATURES_BY_NAME",
         clear=True,
         the_agui_feature=the_agui_feature,
     ):

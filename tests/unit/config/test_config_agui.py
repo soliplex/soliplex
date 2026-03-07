@@ -3,8 +3,8 @@ from unittest import mock
 
 import pytest
 
-from soliplex import config
 from soliplex.agui import features as agui_features
+from soliplex.config import agui as agui_config
 
 NoRaise = contextlib.nullcontext()
 
@@ -17,10 +17,10 @@ AGUI_FEATURE_MODEL_KLASS = "soliplex.agui.features.Testing"
 
 @pytest.fixture
 def the_agui_feature():
-    return config.AGUI_Feature(
+    return agui_config.AGUI_Feature(
         name=AGUI_FEATURE_NAME,
         model_klass=agui_features.EmptyFeatureModel,
-        source=config.AGUI_FeatureSource.CLIENT,
+        source=agui_config.AGUI_FeatureSource.CLIENT,
     )
 
 

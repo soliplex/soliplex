@@ -12,6 +12,7 @@ from haiku.skills import models as hs_models
 from soliplex import agui as agui_package
 from soliplex import authz as authz_package
 from soliplex import config
+from soliplex.config import agui as config_agui
 from soliplex.config import tools as config_tools
 
 KW_ONLY = pydantic.Field(kw_only=True)
@@ -233,11 +234,11 @@ Agent = DefaultAgent | FactoryAgent | OtherAgent
 class AGUI_Feature(pydantic.BaseModel):
     name: str
     description: str
-    source: config.AGUI_FeatureSource
+    source: config_agui.AGUI_FeatureSource
     json_schema: dict[str, typing.Any]
 
     @classmethod
-    def from_config(cls, agui_feature: config.AGUI_Feature):
+    def from_config(cls, agui_feature: config_agui.AGUI_Feature):
         return cls(
             name=agui_feature.name,
             description=agui_feature.description,

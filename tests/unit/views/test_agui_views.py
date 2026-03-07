@@ -14,6 +14,7 @@ from soliplex import installation
 from soliplex import loggers
 from soliplex import models
 from soliplex.agui import features as agui_features
+from soliplex.config import agui as config_agui
 from soliplex.views import agui as agui_views
 
 NOW = datetime.datetime.now(datetime.UTC)
@@ -50,10 +51,10 @@ TEST_RUN_FEEDBACK = "test-feedback"
 TEST_RUN_FEEDBACK_REASON = "Just because"
 
 EMPTY_FEATURE_NAME = "test-empty-feature"
-EMPTY_FEATURE = config.AGUI_Feature(
+EMPTY_FEATURE = config_agui.AGUI_Feature(
     name=EMPTY_FEATURE_NAME,
     model_klass=agui_features.EmptyFeatureModel,
-    source=config.AGUI_FeatureSource.SERVER,
+    source=config_agui.AGUI_FeatureSource.SERVER,
 )
 
 EMPTY_RUN_INPUT = agui_core.RunAgentInput(
@@ -656,7 +657,7 @@ async def test_post_room_agui_only(
 
     patch_features = {EMPTY_FEATURE_NAME: EMPTY_FEATURE}
     with mock.patch.dict(
-        "soliplex.config.AGUI_FEATURES_BY_NAME",
+        "soliplex.config.agui.AGUI_FEATURES_BY_NAME",
         **patch_features,
     ):
         found = await agui_views.post_room_agui(

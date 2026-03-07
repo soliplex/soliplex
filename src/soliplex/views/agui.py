@@ -19,6 +19,7 @@ from soliplex import models
 from soliplex import util
 from soliplex import views
 from soliplex.agui import persistence as agui_persistence
+from soliplex.config import agui as config_agui
 
 router = fastapi.APIRouter(tags=["rooms"])
 
@@ -302,7 +303,9 @@ async def post_room_agui(
     agui_state = {}
 
     for feature_name in room_config.agui_feature_names:
-        feature_klass = config.AGUI_FEATURES_BY_NAME[feature_name].model_klass
+        feature_klass = config_agui.AGUI_FEATURES_BY_NAME[
+            feature_name
+        ].model_klass
         agui_state[feature_name] = feature_klass().model_dump(mode="python")
 
     run_input = agui_core.RunAgentInput(

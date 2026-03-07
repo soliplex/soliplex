@@ -32,6 +32,7 @@ from pydantic_ai.agent import abstract as ai_ag_abstract
 from soliplex.agui import features as agui_features_module  # noqa F401
 
 from . import _utils
+from . import agui
 from . import exceptions
 from . import rag
 from . import tools
@@ -1638,63 +1639,6 @@ class SecretConfig:
 
 
 # ============================================================================
-#   AGUI feature configuration types
-# ============================================================================
-
-
-class AGUI_FeatureSource(enum.StrEnum):
-    CLIENT = "client"
-    SERVER = "server"
-    EITHER = "either"
-
-
-@dataclasses.dataclass(kw_only=True)
-class AGUI_Feature:
-    """Registration of schema and semantics defining a Soliplex AGUI feature
-
-    Features define a contract between the Soliplex client and the Soliplex
-    server, describing the schema of a portion of the AG-UI protocol's
-    'state' mapping.
-    """
-
-    name: str
-    """Key within the AG-UI state in which the feature's data is stored"""
-
-    model_klass: type
-    """Pydantic model class defining schema for the feature's data"""
-
-    source: AGUI_FeatureSource = AGUI_FeatureSource.EITHER
-    """Parties allowed to write to the feature's data in the AG-UI 'state'"""
-
-    @property
-    def description(self) -> str:
-        schema = self.model_klass.model_json_schema()
-        if "description" not in schema:
-            return self.model_klass.__name__
-        else:
-            return schema["description"]
-
-    @property
-    def as_yaml(self):
-        return {
-            "name": self.name,
-            "description": self.description,
-            "source": str(self.source),
-        }
-
-    @property
-    def json_schema(self):
-        return self.model_klass.model_json_schema()
-
-
-AGUI_FEATURES_BY_NAME = {
-    agui_feature.name: agui_feature
-    for agui_feature in [
-        # Add features here as needed
-    ]
-}
-
-# ============================================================================
 #   Logfire configuration types
 # ============================================================================
 
@@ -2052,7 +1996,7 @@ class AGUI_FeatureConfigMeta:
     """Registered config class
 
     'model_klass'
-        dotted name of a a class or factory returning an 'AGUI_Feature'
+        dotted name of a a class or factory returning an 'agui.AGUI_Feature'
         when passed the feature name and an instance of this class.
 
     'source':
@@ -2062,7 +2006,7 @@ class AGUI_FeatureConfigMeta:
 
     name: str
     model_klass: typing.Any
-    source: AGUI_FeatureSource = "either"
+    source: agui.AGUI_FeatureSource = "either"
 
     @classmethod
     def from_yaml(cls, yaml_config: str | dict):
@@ -2240,7 +2184,7 @@ class InstallationConfigMeta:
     def __post_init__(self):
         self.agui_features = list(self.agui_features)
         for af_meta in self.agui_features:
-            AGUI_FEATURES_BY_NAME[af_meta.name] = AGUI_Feature(
+            agui.AGUI_FEATURES_BY_NAME[af_meta.name] = agui.AGUI_Feature(
                 name=af_meta.name,
                 model_klass=af_meta.model_klass,
                 source=af_meta.source,
@@ -2289,7 +2233,7 @@ class InstallationConfigMeta:
                 "model_klass": _dotted_name(feature.model_klass),
                 "source": str(feature.source),
             }
-            for feature in AGUI_FEATURES_BY_NAME.values()
+            for feature in agui.AGUI_FEATURES_BY_NAME.values()
         ]
         tool_config_entries = [
             _dotted_name(klass)
@@ -2372,12 +2316,12 @@ def _load_entrypoint_skill_configs() -> SkillConfigMap:
 
         if (
             feature_name is not None
-            and feature_name not in AGUI_FEATURES_BY_NAME
+            and feature_name not in agui.AGUI_FEATURES_BY_NAME
         ):
-            AGUI_FEATURES_BY_NAME[feature_name] = AGUI_Feature(
+            agui.AGUI_FEATURES_BY_NAME[feature_name] = agui.AGUI_Feature(
                 name=feature_name,
                 model_klass=skill.state_type,
-                source=AGUI_FeatureSource.SERVER,
+                source=agui.AGUI_FeatureSource.SERVER,
             )
 
         skill_config = EntrypointSkillConfig.from_skill(skill)
@@ -2415,8 +2359,8 @@ class InstallationConfig:
     # AG-UI features defined via metaconfig / defaults
     #
     @property
-    def agui_features(self) -> list[AGUI_Feature]:
-        return [feature for feature in AGUI_FEATURES_BY_NAME.values()]
+    def agui_features(self) -> list[agui.AGUI_Feature]:
+        return [feature for feature in agui.AGUI_FEATURES_BY_NAME.values()]
 
     #
     # Variables loaded via 'dotenv' library

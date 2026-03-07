@@ -10,6 +10,7 @@ import yaml
 from soliplex import config
 from soliplex import secrets
 from soliplex.agui import features as agui_features
+from soliplex.config import agui as config_agui
 from soliplex.config import tools as config_tools
 from tests.unit.config import test_config_agui as test_agui
 
@@ -286,6 +287,14 @@ def test_configmeta_dottedname():
 
 
 @pytest.fixture
+def patched_soliplex_config_agui():
+    with mock.patch.dict(config_agui.__dict__) as patched:
+        patched["AGUI_FEATURES_BY_NAME"] = {}
+
+        yield patched
+
+
+@pytest.fixture
 def patched_soliplex_config_tools():
     with mock.patch.dict(config_tools.__dict__) as patched:
         patched["TOOL_CONFIG_CLASSES_BY_TOOL_NAME"] = {}
@@ -298,7 +307,6 @@ def patched_soliplex_config_tools():
 def patched_soliplex_config():
     with mock.patch.dict(config.__dict__) as patched:
         patched["test_secret_func"] = SECRET_SOURCE_FUNC
-        patched["AGUI_FEATURES_BY_NAME"] = {}
         patched["SKILL_CONFIG_CLASSES_BY_KIND"] = {}
         patched["AGENT_CONFIG_CLASSES_BY_KIND"] = {}
         patched["SECRET_GETTERS_BY_KIND"] = {}
@@ -326,6 +334,7 @@ def patched_soliplex_config():
 def test_installationconfigmeta_from_yaml(
     temp_dir,
     patched_soliplex_config,
+    patched_soliplex_config_agui,
     patched_soliplex_config_tools,
     config_yaml,
     expected_kw,
@@ -362,12 +371,13 @@ def test_installationconfigmeta_from_yaml(
         assert ic_meta == expected
 
         PSC = patched_soliplex_config
+        PSCA = patched_soliplex_config_agui
         PSCT = patched_soliplex_config_tools
 
         if config_meta and "agui_features" in config_meta:
-            feature_registry = PSC["AGUI_FEATURES_BY_NAME"]
+            agui_registry = PSCA["AGUI_FEATURES_BY_NAME"]
             for (af_name, af_found), af_expected in zip(
-                feature_registry.items(),
+                agui_registry.items(),
                 config_meta["agui_features"],
                 strict=True,
             ):
@@ -433,6 +443,7 @@ def test_installationconfigmeta_from_yaml(
 @pytest.mark.parametrize("w_tools", [False, True])
 def test_installationconfigmeta_as_yaml(
     patched_soliplex_config,
+    patched_soliplex_config_agui,
     patched_soliplex_config_tools,
     w_tools,
     w_mcp_toolsets,
