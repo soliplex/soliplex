@@ -12,7 +12,7 @@ from textual import widget as t_widget
 from textual import widgets as t_widgets
 
 from soliplex.agui import parser as agui_parser
-from soliplex.config import AGUI_FEATURES_BY_NAME
+from soliplex.config.agui import AGUI_FEATURES_BY_NAME
 from soliplex.tui import rest_api
 
 

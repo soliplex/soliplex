@@ -14,6 +14,7 @@ from soliplex import config
 from soliplex import secrets
 from soliplex.agui import features as agui_features
 from tests.unit.config import test_agents
+from tests.unit.config import test_agui
 from tests.unit.config import test_authsystem
 from tests.unit.config import test_completions
 from tests.unit.config import test_logfire
@@ -22,16 +23,12 @@ from tests.unit.config import test_skills
 
 NoRaise = contextlib.nullcontext()
 
+the_agui_feature = test_agui.the_agui_feature
 
 BARE_INSTALLATION_CONFIG_ENVIRONMENT = {
     "OLLAMA_BASE_URL": test_agents.PROVIDER_BASE_URL,
 }
 OLLAMA_BASE_URL = "https://example.com:12345"
-
-AGUI_FEATURE_NAME = "test-agui-feature"
-AGUI_FEATURE_DESCRIPTION = "This is an AG-UI feature"
-AGUI_FEATURE_DESCRIPTION_EXTRA = "It is a really useful feature"
-AGUI_FEATURE_MODEL_KLASS = "soliplex.agui.features.Testing"
 
 BOGUS_ICMETA_YAML = """\
 meta:
@@ -53,7 +50,7 @@ meta:
 W_AGUI_FEATURES_ICMETA_KW = {
     "agui_features": [
         config.AGUI_FeatureConfigMeta(
-            name=AGUI_FEATURE_NAME,
+            name=test_agui.AGUI_FEATURE_NAME,
             model_klass=agui_features.EmptyFeatureModel,
             source="server",
         ),
@@ -68,7 +65,7 @@ W_AGUI_FEATURES_ICMETA_KW = {
 W_AGUI_FEATURES_ICMETA_YAML = f"""\
 meta:
   agui_features:
-      - name: "{AGUI_FEATURE_NAME}"
+      - name: "{test_agui.AGUI_FEATURE_NAME}"
         model_klass: "soliplex.agui.features.EmptyFeatureModel"
         source: "server"
 """
@@ -155,7 +152,7 @@ meta:
 FULL_ICMETA_KW = {
     "agui_features": [
         config.AGUI_FeatureConfigMeta(
-            name=AGUI_FEATURE_NAME,
+            name=test_agui.AGUI_FEATURE_NAME,
             model_klass=agui_features.EmptyFeatureModel,
             source="server",
         ),
@@ -184,7 +181,7 @@ FULL_ICMETA_KW = {
 FULL_ICMETA_YAML = f"""\
 meta:
   agui_features:
-      - name: "{AGUI_FEATURE_NAME}"
+      - name: "{test_agui.AGUI_FEATURE_NAME}"
         model_klass: "soliplex.agui.features.EmptyFeatureModel"
         source: "server"
   mcp_toolset_configs:
@@ -632,49 +629,6 @@ authorization_dburi:
     sync: {RA_DBURI_SYNC_W_SECRET}
     async: {RA_DBURI_ASYNC}
 """
-
-
-@pytest.fixture
-def the_agui_feature():
-    return config.AGUI_Feature(
-        name=AGUI_FEATURE_NAME,
-        model_klass=agui_features.EmptyFeatureModel,
-        source=config.AGUI_FeatureSource.CLIENT,
-    )
-
-
-@pytest.mark.parametrize("wo_schema_desc", [False, True])
-def test_aguifeature_description(the_agui_feature, wo_schema_desc):
-    if wo_schema_desc:
-        model_klass = mock.Mock(
-            spec_set=["model_json_schema", "__name__"],
-            __name__="NoDescription",
-        )
-        model_klass.model_json_schema.return_value = {}
-        the_agui_feature.model_klass = model_klass
-
-    found = the_agui_feature.description
-
-    if wo_schema_desc:
-        assert found == "NoDescription"
-    else:
-        assert found == agui_features.EmptyFeatureModel.__doc__
-
-
-def test_aguifeature_as_yaml(the_agui_feature):
-    found = the_agui_feature.as_yaml
-
-    assert found == {
-        "name": AGUI_FEATURE_NAME,
-        "description": agui_features.EmptyFeatureModel.__doc__,
-        "source": "client",
-    }
-
-
-def test_aguifeature_json_schema(the_agui_feature):
-    found = the_agui_feature.json_schema
-
-    assert found == agui_features.EmptyFeatureModel.model_json_schema()
 
 
 def test__load_config_yaml_w_missing(temp_dir):
@@ -2511,13 +2465,13 @@ def test_installationconfig_avl_ep_skill_configs_wo_existing(
     ep_skill_1 = mock.create_autospec(hs_models.Skill)
     ep_skill_1.metadata = mock.create_autospec(hs_models.SkillMetadata)
     ep_skill_1.metadata.name = "foo"
-    ep_skill_1.state_namespace = AGUI_FEATURE_NAME
+    ep_skill_1.state_namespace = test_agui.AGUI_FEATURE_NAME
     ep_skill_1.state_type = agui_features.EmptyFeatureModel
 
     ep_skill_2 = mock.create_autospec(hs_models.Skill)
     ep_skill_2.metadata = mock.create_autospec(hs_models.SkillMetadata)
     ep_skill_2.metadata.name = "bar"
-    ep_skill_2.state_namespace = AGUI_FEATURE_NAME
+    ep_skill_2.state_namespace = test_agui.AGUI_FEATURE_NAME
     ep_skill_2.state_type = DerivedFeatureModel
 
     dfe.return_value = [ep_skill_1, ep_skill_2]
@@ -2531,8 +2485,8 @@ def test_installationconfig_avl_ep_skill_configs_wo_existing(
     assert found["bar"].name == "bar"
 
     # First registration wins
-    registered = registry[AGUI_FEATURE_NAME]
-    assert registered.name == AGUI_FEATURE_NAME
+    registered = registry[test_agui.AGUI_FEATURE_NAME]
+    assert registered.name == test_agui.AGUI_FEATURE_NAME
     assert registered.model_klass is agui_features.EmptyFeatureModel
 
 

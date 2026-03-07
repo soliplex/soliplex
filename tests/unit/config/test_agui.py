@@ -1,0 +1,58 @@
+import contextlib
+from unittest import mock
+
+import pytest
+
+from soliplex import config
+from soliplex.agui import features as agui_features
+
+NoRaise = contextlib.nullcontext()
+
+
+AGUI_FEATURE_NAME = "test-agui-feature"
+AGUI_FEATURE_DESCRIPTION = "This is an AG-UI feature"
+AGUI_FEATURE_DESCRIPTION_EXTRA = "It is a really useful feature"
+AGUI_FEATURE_MODEL_KLASS = "soliplex.agui.features.Testing"
+
+
+@pytest.fixture
+def the_agui_feature():
+    return config.AGUI_Feature(
+        name=AGUI_FEATURE_NAME,
+        model_klass=agui_features.EmptyFeatureModel,
+        source=config.AGUI_FeatureSource.CLIENT,
+    )
+
+
+@pytest.mark.parametrize("wo_schema_desc", [False, True])
+def test_aguifeature_description(the_agui_feature, wo_schema_desc):
+    if wo_schema_desc:
+        model_klass = mock.Mock(
+            spec_set=["model_json_schema", "__name__"],
+            __name__="NoDescription",
+        )
+        model_klass.model_json_schema.return_value = {}
+        the_agui_feature.model_klass = model_klass
+
+    found = the_agui_feature.description
+
+    if wo_schema_desc:
+        assert found == "NoDescription"
+    else:
+        assert found == agui_features.EmptyFeatureModel.__doc__
+
+
+def test_aguifeature_as_yaml(the_agui_feature):
+    found = the_agui_feature.as_yaml
+
+    assert found == {
+        "name": AGUI_FEATURE_NAME,
+        "description": agui_features.EmptyFeatureModel.__doc__,
+        "source": "client",
+    }
+
+
+def test_aguifeature_json_schema(the_agui_feature):
+    found = the_agui_feature.json_schema
+
+    assert found == agui_features.EmptyFeatureModel.model_json_schema()
