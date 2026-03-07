@@ -2,7 +2,6 @@ import contextlib
 import copy
 import dataclasses
 import pathlib
-import typing
 from unittest import mock
 
 import pytest
@@ -18,185 +17,20 @@ from tests.unit.config import test_agui
 from tests.unit.config import test_authsystem
 from tests.unit.config import test_completions
 from tests.unit.config import test_logfire
+from tests.unit.config import test_meta
 from tests.unit.config import test_rooms
 from tests.unit.config import test_skills
 
 NoRaise = contextlib.nullcontext()
 
 the_agui_feature = test_agui.the_agui_feature
+patched_soliplex_config = test_meta.patched_soliplex_config
 
 BARE_INSTALLATION_CONFIG_ENVIRONMENT = {
     "OLLAMA_BASE_URL": test_agents.PROVIDER_BASE_URL,
 }
 OLLAMA_BASE_URL = "https://example.com:12345"
 
-BOGUS_ICMETA_YAML = """\
-meta:
-    tool_configs:
-"""
-BARE_ICMETA_KW = {
-    "agui_features": [],
-    "tool_configs": [],
-    "mcp_toolset_configs": [],
-    "skill_configs": [],
-    "mcp_server_tool_wrappers": [],
-    "agent_configs": [],
-    "secret_sources": [],
-}
-BARE_ICMETA_YAML = """\
-meta:
-"""
-
-W_AGUI_FEATURES_ICMETA_KW = {
-    "agui_features": [
-        config.AGUI_FeatureConfigMeta(
-            name=test_agui.AGUI_FEATURE_NAME,
-            model_klass=agui_features.EmptyFeatureModel,
-            source="server",
-        ),
-    ],
-    "tool_configs": [],
-    "mcp_toolset_configs": [],
-    "skill_configs": [],
-    "mcp_server_tool_wrappers": [],
-    "agent_configs": [],
-    "secret_sources": [],
-}
-W_AGUI_FEATURES_ICMETA_YAML = f"""\
-meta:
-  agui_features:
-      - name: "{test_agui.AGUI_FEATURE_NAME}"
-        model_klass: "soliplex.agui.features.EmptyFeatureModel"
-        source: "server"
-"""
-
-
-W_MCP_TOOLSET_CONFIGS_ICMETA_KW = {
-    "agui_features": [],
-    "tool_configs": [],
-    "mcp_toolset_configs": [
-        config.ConfigMeta(config_klass=config.Stdio_MCP_ClientToolsetConfig),
-    ],
-    "mcp_server_tool_wrappers": [],
-    "skill_configs": [],
-    "agent_configs": [],
-    "secret_sources": [],
-}
-W_MCP_TOOLSET_CONFIGS_ICMETA_YAML = """\
-meta:
-  mcp_toolset_configs:
-    - "soliplex.config.Stdio_MCP_ClientToolsetConfig"
-"""
-
-
-W_SKILL_CONFIGS_ICMETA_KW = {
-    "agui_features": [],
-    "tool_configs": [],
-    "mcp_toolset_configs": [],
-    "skill_configs": [
-        config.ConfigMeta(config_klass=config.HR_RAG_SkillConfig),
-    ],
-    "mcp_server_tool_wrappers": [],
-    "agent_configs": [],
-    "secret_sources": [],
-}
-W_SKILL_CONFIGS_ICMETA_YAML = """\
-meta:
-  skill_configs:
-    - "soliplex.config.HR_RAG_SkillConfig"
-"""
-
-
-W_AGENT_CONFIGS_ICMETA_KW = {
-    "agui_features": [],
-    "tool_configs": [],
-    "mcp_toolset_configs": [],
-    "mcp_server_tool_wrappers": [],
-    "skill_configs": [],
-    "agent_configs": [
-        config.ConfigMeta(config_klass=config.AgentConfig),
-        config.ConfigMeta(config_klass=config.FactoryAgentConfig),
-    ],
-    "secret_sources": [],
-}
-W_AGENT_CONFIGS_ICMETA_YAML = """\
-meta:
-  agent_configs:
-      - "soliplex.config.AgentConfig"
-      - "soliplex.config.FactoryAgentConfig"
-"""
-
-SECRET_SOURCE_FUNC = lambda source: "SEEKRIT"  # noqa E731
-W_SECRET_SOURCE_ICMETA_KW = {
-    "agui_features": [],
-    "tool_configs": [],
-    "mcp_toolset_configs": [],
-    "mcp_server_tool_wrappers": [],
-    "skill_configs": [],
-    "agent_configs": [],
-    "secret_sources": [
-        config.ConfigMeta(
-            config_klass=config.EnvVarSecretSource,
-            registered_func=SECRET_SOURCE_FUNC,
-        ),
-    ],
-}
-W_SECRET_SOURCE_ICMETA_YAML = """\
-meta:
-  secret_sources:
-    - "config_klass": "soliplex.config.EnvVarSecretSource"
-      "registered_func": "soliplex.config.test_secret_func"
-"""
-
-
-FULL_ICMETA_KW = {
-    "agui_features": [
-        config.AGUI_FeatureConfigMeta(
-            name=test_agui.AGUI_FEATURE_NAME,
-            model_klass=agui_features.EmptyFeatureModel,
-            source="server",
-        ),
-    ],
-    "tool_configs": [],
-    "mcp_toolset_configs": [
-        config.ConfigMeta(config_klass=config.Stdio_MCP_ClientToolsetConfig),
-        config.ConfigMeta(config_klass=config.HTTP_MCP_ClientToolsetConfig),
-    ],
-    "mcp_server_tool_wrappers": [],
-    "skill_configs": [
-        config.ConfigMeta(config_klass=config.HR_RAG_SkillConfig),
-        config.ConfigMeta(config_klass=config.HR_RLM_SkillConfig),
-    ],
-    "agent_configs": [
-        config.ConfigMeta(config_klass=config.AgentConfig),
-        config.ConfigMeta(config_klass=config.FactoryAgentConfig),
-    ],
-    "secret_sources": [
-        config.ConfigMeta(
-            config_klass=config.EnvVarSecretSource,
-            registered_func=SECRET_SOURCE_FUNC,
-        ),
-    ],
-}
-FULL_ICMETA_YAML = f"""\
-meta:
-  agui_features:
-      - name: "{test_agui.AGUI_FEATURE_NAME}"
-        model_klass: "soliplex.agui.features.EmptyFeatureModel"
-        source: "server"
-  mcp_toolset_configs:
-      - "soliplex.config.Stdio_MCP_ClientToolsetConfig"
-      - "soliplex.config.HTTP_MCP_ClientToolsetConfig"
-  skill_configs:
-      - "soliplex.config.HR_RAG_SkillConfig"
-      - "soliplex.config.HR_RLM_SkillConfig"
-  agent_configs:
-      - "soliplex.config.AgentConfig"
-      - "soliplex.config.FactoryAgentConfig"
-  secret_sources:
-    - "config_klass": "soliplex.config.EnvVarSecretSource"
-      "registered_func": "soliplex.config.test_secret_func"
-"""
 
 INSTALLATION_ID = "test-installation"
 
@@ -211,7 +45,7 @@ id: "{INSTALLATION_ID}"
 
 W_BARE_META_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "meta": copy.deepcopy(BARE_ICMETA_KW),
+    "meta": copy.deepcopy(test_meta.BARE_ICMETA_KW),
 }
 W_BARE_META_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
@@ -220,11 +54,11 @@ meta:
 
 W_FULL_META_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "meta": FULL_ICMETA_KW,
+    "meta": test_meta.FULL_ICMETA_KW,
 }
 W_FULL_META_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
-{FULL_ICMETA_YAML}
+{test_meta.FULL_ICMETA_YAML}
 """
 
 SECRET_NAME_1 = "TEST_SECRET_ONE"
@@ -629,283 +463,6 @@ authorization_dburi:
     sync: {RA_DBURI_SYNC_W_SECRET}
     async: {RA_DBURI_ASYNC}
 """
-
-
-@mock.patch("importlib.import_module")
-def test_configmeta_from_yaml_w_dotted_name(im):
-    config_yaml = "somemodule.SomeClass"
-
-    faux_module = im.return_value = mock.Mock()
-
-    meta = config.ConfigMeta.from_yaml(config_yaml)
-
-    assert meta.config_klass is faux_module.SomeClass
-
-
-@pytest.mark.parametrize("w_wrapper", [False, True])
-def test_configmeta_from_yaml_w_dict(w_wrapper):
-    config_klass = mock.Mock()
-    wrapper_klass = mock.Mock()
-
-    config_yaml = {"config_klass": config_klass}
-
-    if w_wrapper:
-        config_yaml["wrapper_klass"] = wrapper_klass
-
-    meta = config.ConfigMeta.from_yaml(config_yaml)
-
-    assert meta.config_klass is config_klass
-
-    if w_wrapper:
-        assert meta.wrapper_klass is wrapper_klass
-    else:
-        assert meta.wrapper_klass is None
-
-
-@pytest.mark.parametrize("w_wrapper", [False, True])
-def test_configmeta_from_yaml_w_dict_w_names(w_wrapper):
-    dummy_module = mock.Mock()
-    config_klass = dummy_module.ConfigClass = mock.Mock()
-    wrapper_klass = dummy_module.WrapperClass = mock.Mock()
-
-    config_yaml = {"config_klass": "dummy.ConfigClass"}
-
-    if w_wrapper:
-        config_yaml["wrapper_klass"] = "dummy.WrapperClass"
-
-    with mock.patch.dict("sys.modules", dummy=dummy_module):
-        meta = config.ConfigMeta.from_yaml(config_yaml)
-
-    assert meta.config_klass is config_klass
-
-    if w_wrapper:
-        assert meta.wrapper_klass is wrapper_klass
-    else:
-        assert meta.wrapper_klass is None
-
-
-def test_configmeta_dottedname():
-    config_klass = mock.create_autospec(
-        type,
-        __module__="some.module",
-        __name__="some_config",
-    )
-    meta = config.ConfigMeta(config_klass=config_klass)
-
-    assert meta.dotted_name == "some.module.some_config"
-
-
-@pytest.fixture
-def patched_soliplex_config():
-    with mock.patch.dict(config.__dict__) as patched:
-        patched["test_secret_func"] = SECRET_SOURCE_FUNC
-        patched["AGUI_FEATURES_BY_NAME"] = {}
-        patched["TOOL_CONFIG_CLASSES_BY_TOOL_NAME"] = {}
-        patched["MCP_TOOLSET_CONFIG_CLASSES_BY_KIND"] = {}
-        patched["MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME"] = {}
-        patched["SKILL_CONFIG_CLASSES_BY_KIND"] = {}
-        patched["AGENT_CONFIG_CLASSES_BY_KIND"] = {}
-        patched["SECRET_GETTERS_BY_KIND"] = {}
-
-        yield patched
-
-
-@pytest.mark.parametrize(
-    "config_yaml, expected_kw",
-    [
-        (BOGUS_ICMETA_YAML, None),
-        (BARE_ICMETA_YAML, BARE_ICMETA_KW),
-        (W_AGUI_FEATURES_ICMETA_YAML, W_AGUI_FEATURES_ICMETA_KW),
-        (W_MCP_TOOLSET_CONFIGS_ICMETA_YAML, W_MCP_TOOLSET_CONFIGS_ICMETA_KW),
-        (W_SKILL_CONFIGS_ICMETA_YAML, W_SKILL_CONFIGS_ICMETA_KW),
-        (W_AGENT_CONFIGS_ICMETA_YAML, W_AGENT_CONFIGS_ICMETA_KW),
-        (
-            W_SECRET_SOURCE_ICMETA_YAML,
-            W_SECRET_SOURCE_ICMETA_KW,
-        ),
-        (FULL_ICMETA_YAML, FULL_ICMETA_KW),
-    ],
-)
-def test_installationconfigmeta_from_yaml(
-    temp_dir,
-    patched_soliplex_config,
-    config_yaml,
-    expected_kw,
-):
-    expected_kw = copy.deepcopy(expected_kw)
-
-    yaml_file = temp_dir / "config.yaml"
-    yaml_file.write_text(config_yaml)
-
-    with yaml_file.open() as fp:
-        config_dict = yaml.safe_load(fp)
-
-    config_meta = config_dict["meta"]
-
-    if expected_kw is None:
-        with pytest.raises(config.FromYamlException) as exc:
-            config.InstallationConfigMeta.from_yaml(
-                yaml_file,
-                config_meta,
-            )
-        assert exc.value._config_path == yaml_file
-
-    else:
-        expected = config.InstallationConfigMeta(
-            _config_path=yaml_file,
-            **expected_kw,
-        )
-
-        ic_meta = config.InstallationConfigMeta.from_yaml(
-            yaml_file,
-            config_meta.copy() if config_meta is not None else None,
-        )
-
-        assert ic_meta == expected
-
-        if config_meta and "agui_features" in config_meta:
-            afs_by_feature_name = patched_soliplex_config[
-                "AGUI_FEATURES_BY_NAME"
-            ]
-            for (af_name, af_found), af_expected in zip(
-                afs_by_feature_name.items(),
-                config_meta["agui_features"],
-                strict=True,
-            ):
-                assert af_name == af_expected["name"]
-                assert af_found.name == af_expected["name"]
-                assert af_found.model_klass == af_expected["model_klass"]
-                assert af_found.source == af_expected["source"]
-
-        if config_meta and "mcp_toolset_configs" in config_meta:
-            tcs_by_kind = patched_soliplex_config[
-                "MCP_TOOLSET_CONFIG_CLASSES_BY_KIND"
-            ]
-            tcs_by_class_name = {
-                f"{klass.__module__}.{klass.__name__}": klass
-                for klass in tcs_by_kind.values()
-            }
-            for klass_name in config_meta["mcp_toolset_configs"]:
-                assert tcs_by_class_name[klass_name].kind in tcs_by_kind
-
-        if config_meta and "mcp_toolset_configs" in config_meta:
-            tcs_by_kind = patched_soliplex_config[
-                "MCP_TOOLSET_CONFIG_CLASSES_BY_KIND"
-            ]
-            tcs_by_class_name = {
-                f"{klass.__module__}.{klass.__name__}": klass
-                for klass in tcs_by_kind.values()
-            }
-            for klass_name in config_meta["mcp_toolset_configs"]:
-                assert tcs_by_class_name[klass_name].kind in tcs_by_kind
-
-        if config_meta and "agent_configs" in config_meta:
-            acs_by_kind = patched_soliplex_config[
-                "AGENT_CONFIG_CLASSES_BY_KIND"
-            ]
-            acs_by_class_name = {
-                f"{klass.__module__}.{klass.__name__}": klass
-                for klass in acs_by_kind.values()
-            }
-            for klass_name in config_meta["agent_configs"]:
-                kind = acs_by_class_name[klass_name].kind
-                assert kind in acs_by_kind
-
-        if config_meta and "secret_sources" in config_meta:
-            sg_by_kind = patched_soliplex_config["SECRET_GETTERS_BY_KIND"]
-            assert sg_by_kind == {
-                config.EnvVarSecretSource.kind: SECRET_SOURCE_FUNC
-            }
-
-
-@pytest.mark.parametrize("w_secret_reg", [False, True])
-@pytest.mark.parametrize("w_agent", [False, True])
-@pytest.mark.parametrize("w_skills", [False, True])
-@pytest.mark.parametrize("w_mcp_toolsets", [False, True])
-def test_installationconfigmeta_as_yaml(
-    patched_soliplex_config,
-    w_mcp_toolsets,
-    w_skills,
-    w_agent,
-    w_secret_reg,
-):
-    icmeta_kw = {}
-    expected_dict = copy.deepcopy(BARE_ICMETA_KW)
-    icmeta_kw = icmeta_kw.copy()
-
-    if w_mcp_toolsets:
-        klass = config.Stdio_MCP_ClientToolsetConfig
-        config.MCP_TOOLSET_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
-        expected_dict["mcp_toolset_configs"].append(
-            "soliplex.config.Stdio_MCP_ClientToolsetConfig",
-        )
-
-    if w_skills:
-        klass = config.HR_RAG_SkillConfig
-        config.SKILL_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
-        expected_dict["skill_configs"].append(
-            "soliplex.config.HR_RAG_SkillConfig",
-        )
-
-    if w_agent:
-        klass = config.AgentConfig
-        config.AGENT_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
-        expected_dict["agent_configs"].append(
-            "soliplex.config.AgentConfig",
-        )
-
-    if w_secret_reg:
-        klass = config.EnvVarSecretSource
-        registered_func = secrets.get_env_var_secret
-        config.SECRET_GETTERS_BY_KIND[klass.kind] = registered_func
-        expected_dict["secret_sources"].append(
-            {
-                "config_klass": "soliplex.config.EnvVarSecretSource",
-                "registered_func": "soliplex.secrets.get_env_var_secret",
-            }
-        )
-
-    icmeta = config.InstallationConfigMeta(**icmeta_kw)
-
-    found = icmeta.as_yaml
-
-    assert found == expected_dict
-
-
-def test_installationconfigmeta_postinit_registers_tool_configs(
-    patched_soliplex_config,
-):
-    @dataclasses.dataclass(kw_only=True)
-    class _DummyToolConfig(config.ToolConfig):
-        tool_name: str = "tests.unit.test_config.dummy_tool"
-
-    tc_meta = config.ConfigMeta(config_klass=_DummyToolConfig)
-    config.InstallationConfigMeta(tool_configs=[tc_meta])
-
-    tcs = patched_soliplex_config["TOOL_CONFIG_CLASSES_BY_TOOL_NAME"]
-    assert tcs[_DummyToolConfig.tool_name] is _DummyToolConfig
-
-
-def test_installationconfigmeta_postinit_registers_mcp_tool_wrappers(
-    patched_soliplex_config,
-):
-    @dataclasses.dataclass(kw_only=True)
-    class _DummyToolConfig(config.ToolConfig):
-        tool_name: str = "tests.unit.test_config.dummy_tool"
-
-    @dataclasses.dataclass(kw_only=True)
-    class _DummyWrapper:
-        func: typing.Any
-        tool_config: config.ToolConfig
-
-    mstw_meta = config.ConfigMeta(
-        config_klass=_DummyToolConfig,
-        wrapper_klass=_DummyWrapper,
-    )
-    config.InstallationConfigMeta(mcp_server_tool_wrappers=[mstw_meta])
-
-    wrappers = patched_soliplex_config["MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME"]
-    assert wrappers[_DummyToolConfig.tool_name] is _DummyWrapper
 
 
 @pytest.mark.parametrize("w_disable_dotenv", [False, True])
