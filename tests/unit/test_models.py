@@ -13,6 +13,7 @@ from haiku.skills import models as hs_models
 from soliplex import agui as agui_package
 from soliplex import config
 from soliplex import models
+from soliplex.config import tools as config_tools
 
 NOW = datetime.datetime.now(datetime.UTC)
 
@@ -335,7 +336,7 @@ def test_tool_from_config_w_toolconfig():
     def test_tool():
         """This is a test tool"""
 
-    tool_config = config.ToolConfig(
+    tool_config = config_tools.ToolConfig(
         tool_name="soliplex.tools.test_tool",
     )
 
@@ -345,17 +346,17 @@ def test_tool_from_config_w_toolconfig():
     assert tool_model.kind == "test_tool"
     assert tool_model.tool_name == "soliplex.tools.test_tool"
     assert tool_model.tool_description == test_tool.__doc__.strip()
-    assert tool_model.tool_requires == config.ToolRequires.BARE
+    assert tool_model.tool_requires == config_tools.ToolRequires.BARE
     assert tool_model.allow_mcp is False
     assert tool_model.agui_feature_names == []
     assert tool_model.extra_parameters == {}
 
 
-def test_mcp_client_toolset_from_config_w_toolconfig():
+def test_mcp_client_toolset_from_config_w_stdio():
     def test_tool():
         """This is a test tool"""
 
-    mcp_ct_config = config.Stdio_MCP_ClientToolsetConfig(
+    mcp_ct_config = config_tools.Stdio_MCP_ClientToolsetConfig(
         command="cat",
         args=["-"],
         env={"foo": "env:not_in_my_environment_really"},
@@ -373,8 +374,8 @@ def test_mcp_client_toolset_from_config_w_toolconfig():
     assert params["env"] == mcp_ct_config.env
 
 
-def test_mcp_client_toolset_from_config_w_sdtc():
-    mcp_ct_config = config.HTTP_MCP_ClientToolsetConfig(
+def test_mcp_client_toolset_from_config_w_http():
+    mcp_ct_config = config_tools.HTTP_MCP_ClientToolsetConfig(
         url="https://example.com/mcp",
         headers={"Authorization": "Bearer env:{BEARER_TOKEN}"},
         query_params={"foo": "env:not_in_my_environment_really"},
@@ -685,7 +686,7 @@ def test_otheragent_from_config(
 
 @pytest.fixture
 def gcd_tool_config():
-    return config.ToolConfig(
+    return config_tools.ToolConfig(
         tool_name="soliplex.tools.get_current_datetime",
         agui_feature_names=(FEATURE_NAME,),
     )

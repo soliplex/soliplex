@@ -7,10 +7,12 @@ import yaml
 from haiku.skills import models as hs_models
 
 from soliplex import config
-from tests.unit.config import test_agents
-from tests.unit.config import test_quizzes
-from tests.unit.config import test_skills
-from tests.unit.config import test_tools
+from soliplex.config import exceptions as config_exc
+from soliplex.config import tools as config_tools
+from tests.unit.config import test_config_agents as test_agents
+from tests.unit.config import test_config_quizzes as test_quizzes
+from tests.unit.config import test_config_skills as test_skills
+from tests.unit.config import test_config_tools as test_tools
 
 NoRaise = contextlib.nullcontext()
 
@@ -77,13 +79,13 @@ FULL_ROOM_CONFIG_KW = {
     ],
     "allow_mcp": True,
     "tool_configs": {
-        "get_current_datetime": config.ToolConfig(
+        "get_current_datetime": config_tools.ToolConfig(
             tool_name="soliplex.tools.get_current_datetime",
             allow_mcp=True,
         ),
     },
     "mcp_client_toolset_configs": {
-        "stdio_test": config.Stdio_MCP_ClientToolsetConfig(
+        "stdio_test": config_tools.Stdio_MCP_ClientToolsetConfig(
             command="cat",
             args=[
                 "-",
@@ -92,7 +94,7 @@ FULL_ROOM_CONFIG_KW = {
                 "foo": "bar",
             },
         ),
-        "http_test": config.HTTP_MCP_ClientToolsetConfig(
+        "http_test": config_tools.HTTP_MCP_ClientToolsetConfig(
             url=test_tools.HTTP_MCP_URL,
             headers={
                 "Authorization": "Bearer secret:BEARER_TOKEN",
@@ -400,7 +402,7 @@ def test_roomconfig_get_logo_image(temp_dir, room_config_kw, w_config_path):
 
     else:
         if room_config._logo_image is not None:
-            with pytest.raises(config.NoConfigPath):
+            with pytest.raises(config_exc.NoConfigPath):
                 room_config.get_logo_image()
 
         else:

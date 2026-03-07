@@ -4,6 +4,7 @@ from unittest import mock
 import pytest
 
 from soliplex import config
+from soliplex.config import exceptions as config_exc
 
 
 def test__load_config_yaml_w_missing(temp_dir):
@@ -11,7 +12,7 @@ def test__load_config_yaml_w_missing(temp_dir):
     config_path.mkdir()
     missing_cfg = config_path / "config.yaml"
 
-    with pytest.raises(config.NoSuchConfig) as exc:
+    with pytest.raises(config_exc.NoSuchConfig) as exc:
         config._load_config_yaml(missing_cfg)
 
     assert exc.value._config_path == missing_cfg
@@ -38,7 +39,7 @@ def test__load_config_yaml_w_invalid(temp_dir, invalid):
     else:
         invalid_cfg.write_text(invalid)
 
-    with pytest.raises(config.FromYamlException) as exc:
+    with pytest.raises(config_exc.FromYamlException) as exc:
         config._load_config_yaml(invalid_cfg)
 
     assert exc.value._config_path == invalid_cfg

@@ -11,6 +11,7 @@ import yaml
 from pydantic_ai import settings as ai_settings
 
 from soliplex import config
+from soliplex.config import exceptions as config_exc
 
 AGENT_ID = "testing-agent"
 TEMPLATE_AGENT_ID = "testing-template"
@@ -322,7 +323,7 @@ def test_agentconfig_ctor(installation_config, kw):
     [
         (
             BOGUS_AGENT_CONFIG_YAML,
-            pytest.raises(config.FromYamlException),
+            pytest.raises(config_exc.FromYamlException),
         ),
         (
             BARE_AGENT_CONFIG_YAML,
@@ -352,7 +353,7 @@ def test_agentconfig_ctor(installation_config, kw):
         ),
         (
             W_PROMPT_FILE_W_BOGUS_TEMPLATE_ID_AGENT_CONFIG_YAML,
-            pytest.raises(config.FromYamlException),
+            pytest.raises(config_exc.FromYamlException),
         ),
         (
             W_AGUI_FEATURE_NAMES_AGENT_CONFIG_YAML,
@@ -450,7 +451,7 @@ def test_agentconfig_get_system_prompt(
 
     else:
         if agent_config._system_prompt_path is not None:
-            with pytest.raises(config.NoConfigPath):
+            with pytest.raises(config_exc.NoConfigPath):
                 agent_config.get_system_prompt()
 
         else:
@@ -834,7 +835,7 @@ def test_factoryagentconfig_from_yaml(
         installation_config.agent_configs = []
 
     if expected_kw is None:
-        with pytest.raises(config.FromYamlException):
+        with pytest.raises(config_exc.FromYamlException):
             config.FactoryAgentConfig.from_yaml(
                 installation_config,
                 yaml_file,

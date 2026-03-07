@@ -4,7 +4,6 @@ import dataclasses
 import enum
 import functools
 import importlib
-import inspect
 import itertools
 import json
 import os
@@ -16,7 +15,6 @@ import sys
 import typing
 import warnings
 from collections import abc
-from urllib import parse as url_parse
 
 import dotenv
 import logfire
@@ -33,6 +31,11 @@ from pydantic_ai.agent import abstract as ai_ag_abstract
 
 from soliplex.agui import features as agui_features_module  # noqa F401
 
+from . import _utils
+from . import exceptions
+from . import rag
+from . import tools
+
 FILE_PREFIX = "file:"
 
 SECRET_PREFIX = "secret:"
@@ -42,75 +45,15 @@ SECRET_RE = re.compile(SECRET_PATTERN)
 SYNC_MEMORY_ENGINE_URL = "sqlite://"
 ASYNC_MEMORY_ENGINE_URL = "sqlite+aiosqlite://"
 
-# ============================================================================
-#   Exceptions raised during YAML config processing
-# ============================================================================
+FromYamlException = exceptions.FromYamlException
 
-
-class FromYamlException(ValueError):
-    def __init__(self, _config_path, kind: str, config_dict: dict):
-        self._config_path = _config_path
-        self.kind = kind
-        self.config_dict = config_dict
-
-        if config_dict is not None and "_installation_config" in config_dict:
-            elide_ic = {"_installation_config": "<elided>"}
-            tb_config = config_dict | elide_ic
-        else:
-            tb_config = config_dict
-
-        super().__init__(
-            f"Error in YAML configuration: {_config_path}; "
-            f"Kind: {kind}; "
-            f"Config: {tb_config}; "
-        )
-
-
-class NoConfigPath(ValueError):
-    def __init__(self):
-        super().__init__("No '_config_path' set")
-
-
-class NoSuchConfig(ValueError):
-    def __init__(self, _config_path):
-        self._config_path = _config_path
-        super().__init__(f"Config path is not a YAML file: {_config_path}")
-
-
-class NotADict(ValueError):
-    def __init__(self, found):
-        self.found = found
-        super().__init__(f"YAML did not parse as a dict: {found}")
-
-
-class ToolRequirementConflict(ValueError):
-    def __init__(self, tool_name, _config_path):
-        self.tool_name = tool_name
-        self._config_path = _config_path
-        super().__init__(
-            f"Tool {tool_name} requires both context and tool config "
-            f"(configured in {_config_path}"
-        )
-
-
-class RagDbExactlyOneOfStemOrOverride(TypeError):
-    def __init__(self, _config_path):
-        self._config_path = _config_path
-        super().__init__(
-            f"Configure exactly one of 'rag_lancedb_stem' or "
-            f"'rag_lancedb_override_path' "
-            f"(configured in {_config_path})"
-        )
-
-
-class RagDbFileNotFound(ValueError):
-    def __init__(self, rag_db_filename, _config_path):
-        self.rag_db_filename = rag_db_filename
-        self._config_path = _config_path
-        super().__init__(
-            f"RAG DB file not found: {rag_db_filename} "
-            f"(configured in {_config_path})"
-        )
+_dotted_name = _utils._dotted_name
+_no_repr = _utils._no_repr
+_no_repr_no_compare = _utils._no_repr_no_compare
+_no_repr_no_compare_none = _utils._no_repr_no_compare_none
+_no_repr_no_compare_dict = _utils._no_repr_no_compare_dict
+_default_list_field = _utils._default_list_field
+_default_dict_field = _utils._default_dict_field
 
 
 class InvalidAgentTemplateID(KeyError):
@@ -241,34 +184,6 @@ class MissingEnvVars(ExceptionGroup, ValueError):
         )
 
 
-def _dotted_name(type_or_func) -> str:
-    return f"{type_or_func.__module__}.{type_or_func.__name__}"
-
-
-def _no_repr(**kw):
-    return dataclasses.field(repr=False, **kw)
-
-
-def _no_repr_no_compare(**kw):
-    return _no_repr(compare=False, **kw)
-
-
-def _no_repr_no_compare_none(**kw):
-    return _no_repr_no_compare(default=None, **kw)
-
-
-def _no_repr_no_compare_dict(**kw):
-    return _no_repr_no_compare(default_factory=dict, **kw)
-
-
-def _default_list_field() -> dataclasses.field:
-    return dataclasses.field(default_factory=list)
-
-
-def _default_dict_field() -> dataclasses.field:
-    return dataclasses.field(default_factory=dict)
-
-
 # ============================================================================
 #   OIDC Authentication system configuration types
 # ============================================================================
@@ -350,405 +265,6 @@ class OIDCAuthSystemConfig:
 @dataclasses.dataclass(kw_only=True)
 class AvailableOIDCAuthSystemConfigs:
     systems: list[OIDCAuthSystemConfig] = _default_list_field()
-
-
-# ============================================================================
-#   Tool configuration types
-# ============================================================================
-
-
-class ToolRequires(enum.StrEnum):
-    FASTAPI_CONTEXT = "fastapi_context"
-    TOOL_CONFIG = "tool_config"
-    BARE = "bare"
-
-
-@dataclasses.dataclass(kw_only=True)
-class ToolConfig:
-    tool_name: str
-    allow_mcp: bool = False
-    agui_feature_names: tuple[str] = ()
-
-    _tool: abc.Callable[..., typing.Any] = None
-
-    # Set in 'from_yaml' below
-    _installation_config: InstallationConfig = _no_repr_no_compare_none()
-    _config_path: pathlib.Path = None
-
-    @classmethod
-    def from_yaml(
-        cls,
-        installation_config: InstallationConfig,
-        config_path: pathlib.Path,
-        config_dict: dict[str, typing.Any],
-    ):
-        config_dict["_installation_config"] = installation_config
-        config_dict["_config_path"] = config_path
-
-        agui_feature_names = config_dict.pop("agui_feature_names", ())
-        config_dict["agui_feature_names"] = tuple(agui_feature_names)
-
-        try:
-            return cls(**config_dict)
-        except Exception as exc:
-            raise FromYamlException(
-                config_path, "toolconfig", config_dict
-            ) from exc
-
-    @property
-    def kind(self):
-        _, kind = self.tool_name.rsplit(".", 1)
-        return kind
-
-    @property
-    def tool_id(self):
-        return self.kind
-
-    @property
-    def tool(self):
-        if self._tool is None:
-            module_name, tool_id = self.tool_name.rsplit(".", 1)
-            module = importlib.import_module(module_name)
-            self._tool = getattr(module, tool_id)
-
-        return self._tool
-
-    @property
-    def tool_description(self) -> str:
-        return inspect.getdoc(self.tool)
-
-    @property
-    def tool_requires(self) -> ToolRequires | None:
-        tool_params = inspect.signature(self.tool).parameters
-
-        if "ctx" in tool_params and "tool_config" in tool_params:
-            raise ToolRequirementConflict(self.tool_name, self._config_path)
-
-        if "ctx" in tool_params:
-            return ToolRequires.FASTAPI_CONTEXT
-        elif "tool_config" in tool_params:
-            return ToolRequires.TOOL_CONFIG
-        else:
-            return ToolRequires.BARE
-
-    @property
-    def tool_with_config(self) -> abc.Callable[..., typing.Any]:
-        if self.tool_requires == ToolRequires.TOOL_CONFIG:
-            tool_func_sig = inspect.signature(self.tool)
-            wo_tc_sig = tool_func_sig.replace(
-                parameters=[
-                    param
-                    for param in tool_func_sig.parameters.values()
-                    if param.name != "tool_config"
-                ]
-            )
-            tool_w_config = functools.update_wrapper(
-                functools.partial(self.tool, tool_config=self),
-                self.tool,
-            )
-            tool_w_config.__signature__ = wo_tc_sig
-
-            return tool_w_config
-        else:
-            return self.tool
-
-    def get_extra_parameters(self) -> dict:
-        return {}
-
-
-@dataclasses.dataclass(kw_only=True)
-class _RAGConfigBase:
-    # Set in '__post_init__' below
-    _rag_lancedb_path: pathlib.Path = None
-
-    # One of these two options must be specified
-    rag_lancedb_stem: str = None
-    rag_lancedb_override_path: str = None
-
-    # Normally set via subclass 'from_yaml'
-    _installation_config: InstallationConfig = _no_repr_no_compare_none()
-    _config_path: pathlib.Path = None
-    _haiku_rag_config: hr_config.AppConfig | None = None
-
-    def __post_init__(self):
-        exclusive_required = [
-            self.rag_lancedb_stem,
-            self.rag_lancedb_override_path,
-        ]
-        passed = list(filter(None, exclusive_required))
-
-        if len(list(passed)) != 1:
-            raise RagDbExactlyOneOfStemOrOverride(self._config_path)
-
-    @property
-    def haiku_rag_config(self) -> hr_config.AppConfig:
-        """Populate a haiku-rag config object w/ room-level overrides
-
-        Use installation's 'haiku_rag_config' as a base.  If the room
-        directory holds a 'haiku.rag.yaml' file, load it's mapping, and
-        treat it as overrides.
-        """
-        if self._haiku_rag_config is None:
-            if self._config_path is None:
-                raise NoConfigPath()
-
-            base_config = self._installation_config.haiku_rag_config
-
-            hr_config_file = self._config_path.parent / "haiku.rag.yaml"
-
-            if hr_config_file.is_file():
-                base_config_yaml = base_config.model_dump()
-                room_config_yaml = hr_config.load_yaml_config(hr_config_file)
-
-                self._haiku_rag_config = hr_config.AppConfig.model_validate(
-                    base_config_yaml | room_config_yaml
-                )
-            else:
-                self._haiku_rag_config = base_config
-
-        return self._haiku_rag_config
-
-    @property
-    def rag_lancedb_path(self) -> pathlib.Path:
-        """Compute the path for the room's RAG rag_lancedb_path database"""
-        if self.rag_lancedb_override_path is not None:
-            rsop = self.rag_lancedb_override_path
-
-            if self._config_path is not None:
-                rsop = (self._config_path.parent / rsop).resolve()
-            else:
-                rsop = pathlib.Path(rsop).resolve()
-
-            if not rsop.is_dir():
-                raise RagDbFileNotFound(rsop, self._config_path)
-
-            return rsop
-        else:
-            db_rag_dir = pathlib.Path(
-                self._installation_config.get_environment(
-                    "RAG_LANCE_DB_PATH",
-                )
-            )
-            rspdb = (db_rag_dir / f"{self.rag_lancedb_stem}.lancedb").resolve()
-
-            if not rspdb.is_dir():
-                raise RagDbFileNotFound(rspdb, self._config_path)
-
-            return rspdb
-
-    def get_extra_parameters(self) -> dict:
-        try:
-            rag_lancedb_path = self.rag_lancedb_path
-        except RagDbFileNotFound as exc:
-            rag_lancedb_path = f"MISSING: {exc.rag_db_filename}"
-
-        return {
-            "rag_lancedb_path": rag_lancedb_path,
-        }
-
-
-TOOL_CONFIG_CLASSES_BY_TOOL_NAME = {}
-
-
-ToolConfigMap = dict[str, ToolConfig]
-
-
-def extract_tool_configs(
-    installation_config: InstallationConfig,
-    config_path: pathlib.Path,
-    config_dict: dict,
-) -> ToolConfigMap:
-    tool_configs = {}
-
-    for t_config in config_dict.pop("tools", ()):
-        tool_name = t_config.get("tool_name")
-        tc_class = TOOL_CONFIG_CLASSES_BY_TOOL_NAME.get(tool_name, ToolConfig)
-
-        tool_config = tc_class.from_yaml(
-            installation_config,
-            config_path,
-            t_config,
-        )
-        tool_configs[tool_config.kind] = tool_config
-
-    return tool_configs
-
-
-@dataclasses.dataclass(kw_only=True)
-class Stdio_MCP_ClientToolsetConfig:
-    """Configure an MCP client toolset which runs as a subprocess"""
-
-    kind: typing.ClassVar[str] = "stdio"
-    command: str
-    args: list[str] = _default_list_field()
-
-    env: dict[str, str] = _default_dict_field()
-    allowed_tools: list[str] = None
-
-    # set in 'from_yaml' class factory
-    _installation_config: InstallationConfig = _no_repr_no_compare_none()
-    _config_path: pathlib.Path = None
-
-    @classmethod
-    def from_yaml(
-        cls,
-        installation_config: InstallationConfig,
-        config_path: pathlib.Path,
-        config_dict: dict[str, typing.Any],
-    ):
-        try:
-            config_dict["_installation_config"] = installation_config
-            config_dict["_config_path"] = config_path
-
-            return cls(**config_dict)
-        except Exception as exc:
-            raise FromYamlException(
-                config_path,
-                "stdio_mcptc",
-                config_dict,
-            ) from exc
-
-    @property
-    def toolset_params(self) -> dict:
-        return {
-            "command": self.command,
-            "args": self.args,
-            "env": self.env,
-            "allowed_tools": self.allowed_tools,
-        }
-
-    @property
-    def tool_kwargs(self) -> dict:
-        env_map = {
-            key: self._installation_config.get_secret(value)
-            for (key, value) in self.env.items()
-        }
-        return {
-            "command": self.command,
-            "args": self.args,
-            "env": env_map,
-            "allowed_tools": self.allowed_tools,
-        }
-
-
-@dataclasses.dataclass(kw_only=True)
-class HTTP_MCP_ClientToolsetConfig:
-    """Configure an MCP client toolset which makes calls over streaming HTTP"""
-
-    kind: typing.ClassVar[str] = "http"
-    url: str
-    headers: dict[str, typing.Any] = _default_dict_field()
-
-    query_params: dict[str, str] = _default_dict_field()
-    allowed_tools: list[str] = None
-
-    # set in 'from_yaml' class factory
-    _installation_config: InstallationConfig = _no_repr_no_compare_none()
-    _config_path: pathlib.Path = None
-
-    @classmethod
-    def from_yaml(
-        cls,
-        installation_config: InstallationConfig,
-        config_path: pathlib.Path,
-        config_dict: dict[str, typing.Any],
-    ):
-        try:
-            config_dict["_installation_config"] = installation_config
-            config_dict["_config_path"] = config_path
-
-            return cls(**config_dict)
-        except Exception as exc:
-            raise FromYamlException(
-                config_path, "http_mcptc", config_dict
-            ) from exc
-
-    @property
-    def toolset_params(self) -> dict:
-        return {
-            "url": self.url,
-            "headers": self.headers,
-            "query_params": self.query_params,
-            "allowed_tools": self.allowed_tools,
-        }
-
-    @property
-    def tool_kwargs(self) -> dict:
-        url = self.url
-
-        headers = {
-            key: self._installation_config.interpolate_secrets(value)
-            for (key, value) in self.headers.items()
-        }
-
-        if self.query_params:
-            qp = {
-                key: self._installation_config.get_secret(value)
-                for (key, value) in self.query_params.items()
-            }
-            qs = url_parse.urlencode(qp)
-            url = f"{url}?{qs}"
-
-        return {
-            "url": url,
-            "headers": headers,
-            "allowed_tools": self.allowed_tools,
-        }
-
-
-MCP_TOOLSET_CONFIG_CLASSES_BY_KIND = {
-    "stdio": Stdio_MCP_ClientToolsetConfig,
-    "http": HTTP_MCP_ClientToolsetConfig,
-}
-
-
-def extract_mcp_client_toolset_configs(
-    installation_config: InstallationConfig,
-    config_path: pathlib.Path,
-    config_dict: dict,
-):
-    mcp_client_toolset_configs = {}
-
-    for mcp_name, mcp_client_toolset_config in config_dict.pop(
-        "mcp_client_toolsets", {}
-    ).items():
-        kind = mcp_client_toolset_config.pop("kind")
-        mcp_config_klass = MCP_TOOLSET_CONFIG_CLASSES_BY_KIND[kind]
-        mcp_client_toolset_configs[mcp_name] = mcp_config_klass.from_yaml(
-            installation_config=installation_config,
-            config_path=config_path,
-            config_dict=mcp_client_toolset_config,
-        )
-
-    return mcp_client_toolset_configs
-
-
-MCP_ClientToolsetConfig = (
-    Stdio_MCP_ClientToolsetConfig | HTTP_MCP_ClientToolsetConfig
-)
-
-MCP_ClientToolsetConfigMap = dict[str, MCP_ClientToolsetConfig]
-
-
-@dataclasses.dataclass(kw_only=True)
-class NoArgsMCPWrapper:
-    func: abc.Callable[..., typing.Any]
-    tool_config: ToolConfig
-
-    def __call__(self):
-        return self.func(tool_config=self.tool_config)
-
-
-@dataclasses.dataclass(kw_only=True)
-class WithQueryMCPWrapper:
-    func: abc.Callable[..., typing.Any]
-    tool_config: ToolConfig
-
-    def __call__(self, query):
-        return self.func(query, tool_config=self.tool_config)
-
-
-MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME = {}
 
 
 # ============================================================================
@@ -914,7 +430,7 @@ class EntrypointSkillConfig(_DiscoveredSkillConfigBase):
 @dataclasses.dataclass(kw_only=True)
 class _HR_SkillConfigBase(
     _SkillConfigBase,
-    _RAGConfigBase,
+    rag._RAGConfigBase,
     _SkillPropertiesFromMetadata,
 ):
     """Base class for 'haiku-rag' skll configs"""
@@ -1273,7 +789,7 @@ class AgentConfig:
 
         if self._system_prompt_path is not None:
             if self._config_path is None:
-                raise NoConfigPath()
+                raise exceptions.NoConfigPath()
 
             system_prompt_file = (
                 self._config_path.parent / self._system_prompt_path
@@ -1736,8 +1252,8 @@ class RoomConfig:
     #
     # Tool options
     #
-    tool_configs: ToolConfigMap = _default_dict_field()
-    mcp_client_toolset_configs: MCP_ClientToolsetConfigMap = (
+    tool_configs: tools.ToolConfigMap = _default_dict_field()
+    mcp_client_toolset_configs: tools.MCP_ClientToolsetConfigMap = (
         _default_dict_field()
     )
 
@@ -1791,14 +1307,14 @@ class RoomConfig:
                 agent_config_yaml,
             )
 
-            config_dict["tool_configs"] = extract_tool_configs(
+            config_dict["tool_configs"] = tools.extract_tool_configs(
                 installation_config,
                 config_path,
                 config_dict,
             )
 
             config_dict["mcp_client_toolset_configs"] = (
-                extract_mcp_client_toolset_configs(
+                tools.extract_mcp_client_toolset_configs(
                     installation_config,
                     config_path,
                     config_dict,
@@ -1877,7 +1393,7 @@ class RoomConfig:
     def get_logo_image(self) -> pathlib.Path | None:
         if self._logo_image is not None:
             if self._config_path is None:
-                raise NoConfigPath()
+                raise exceptions.NoConfigPath()
 
             return self._config_path.parent / self._logo_image
 
@@ -1902,8 +1418,8 @@ class CompletionConfig:
     #
     # Tool options
     #
-    tool_configs: dict[str, ToolConfig] = _default_dict_field()
-    mcp_client_toolset_configs: dict[str, MCP_ClientToolsetConfig] = (
+    tool_configs: tools.ToolConfigMap = _default_dict_field()
+    mcp_client_toolset_configs: tools.MCP_ClientToolsetConfigMap = (
         _default_dict_field()
     )
 
@@ -1935,14 +1451,14 @@ class CompletionConfig:
             agent_config_yaml,
         )
 
-        config_dict["tool_configs"] = extract_tool_configs(
+        config_dict["tool_configs"] = tools.extract_tool_configs(
             installation_config,
             config_path,
             config_dict,
         )
 
         config_dict["mcp_client_toolset_configs"] = (
-            extract_mcp_client_toolset_configs(
+            tools.extract_mcp_client_toolset_configs(
                 installation_config,
                 config_path,
                 config_dict,
@@ -2419,7 +1935,7 @@ class LogfireConfig:
 
 def _check_is_dict(config_yaml):
     if not isinstance(config_yaml, dict):
-        raise NotADict(config_yaml)
+        raise exceptions.NotADict(config_yaml)
 
     return config_yaml
 
@@ -2427,7 +1943,7 @@ def _check_is_dict(config_yaml):
 def _load_config_yaml(config_path: pathlib.Path) -> dict:
     """Load a YAML config file"""
     if not config_path.is_file():
-        raise NoSuchConfig(config_path)
+        raise exceptions.NoSuchConfig(config_path)
 
     try:
         with config_path.open() as stream:
@@ -2461,7 +1977,7 @@ def _find_configs_yaml(
     try:
         yield config_file, _load_config_yaml(config_file)
 
-    except NoSuchConfig:
+    except exceptions.NoSuchConfig:
         for sub in sorted(to_search.glob("*")):
             # See #233
             if sub.name.startswith("."):
@@ -2471,7 +1987,7 @@ def _find_configs_yaml(
                 sub_config = sub / filename_yaml
                 try:
                     yield sub_config, _load_config_yaml(sub_config)
-                except NoSuchConfig:
+                except exceptions.NoSuchConfig:
                     continue
             else:  # pragma: NO COVER
                 pass
@@ -2560,9 +2076,8 @@ class ConfigMeta:
     """Registered config class
 
     'config_klass'
-        a class or factory: must have a 'from_yaml' method compatible
-        with 'extract_tool_configs' / 'extract_mcp_client_toolset_configs'
-        usage above.
+        a class or factory: returned value must have a 'from_yaml' method
+        compatible with the category for which it is used.
 
     'wrapper_klass'
         a class or factory used to wrap instances of 'config_klass'
@@ -2650,7 +2165,7 @@ class InstallationConfigMeta:
 
     After loading, adds the configured classes to the registry mappings
     'TOOL_CONFIG_CLASSES_BY_TOOL_NAME' and
-    'MCP_TOOLSET_CONFIG_CLASSES_BY_TYPE'.
+    'MCP_TOOLSET_CONFIG_CLASSES_BY_KIND'.
     """
 
     agui_features: list[str | AGUI_FeatureConfigMeta] = ()
@@ -2734,19 +2249,21 @@ class InstallationConfigMeta:
         self.tool_configs = list(self.tool_configs)
         for tc_meta in self.tool_configs:
             klass = tc_meta.config_klass
-            TOOL_CONFIG_CLASSES_BY_TOOL_NAME[klass.tool_name] = klass
+            tools.TOOL_CONFIG_CLASSES_BY_TOOL_NAME[klass.tool_name] = klass
 
         self.mcp_toolset_configs = list(self.mcp_toolset_configs)
         for mtc_meta in self.mcp_toolset_configs:
             klass = mtc_meta.config_klass
-            MCP_TOOLSET_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
+            tools.MCP_TOOLSET_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
 
         self.mcp_server_tool_wrappers = list(self.mcp_server_tool_wrappers)
         for mstw_meta in self.mcp_server_tool_wrappers:
             config_klass = mstw_meta.config_klass
             tool_name = config_klass.tool_name
             wrapper_klass = mstw_meta.wrapper_klass
-            MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME[tool_name] = wrapper_klass
+            tools.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME[tool_name] = (
+                wrapper_klass
+            )
 
         self.skill_configs = list(self.skill_configs)
         for sc_meta in self.skill_configs:
@@ -2776,17 +2293,17 @@ class InstallationConfigMeta:
         ]
         tool_config_entries = [
             _dotted_name(klass)
-            for klass in TOOL_CONFIG_CLASSES_BY_TOOL_NAME.values()
+            for klass in tools.TOOL_CONFIG_CLASSES_BY_TOOL_NAME.values()
         ]
         mcp_toolset_config_entries = [
             _dotted_name(klass)
-            for klass in MCP_TOOLSET_CONFIG_CLASSES_BY_KIND.values()
+            for klass in tools.MCP_TOOLSET_CONFIG_CLASSES_BY_KIND.values()
         ]
-        mcptcw_items = MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME.items()
+        mcptcw_items = tools.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME.items()
         mcp_server_tool_wrapper_entries = [
             {
                 "config_klass": _dotted_name(
-                    TOOL_CONFIG_CLASSES_BY_TOOL_NAME[tool_name],
+                    tools.TOOL_CONFIG_CLASSES_BY_TOOL_NAME[tool_name],
                 ),
                 "wrapper_klass": _dotted_name(wrapper_klass),
             }

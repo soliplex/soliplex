@@ -7,6 +7,7 @@ from fastmcp import tools as fmcp_tools
 from soliplex import config
 from soliplex import installation
 from soliplex import mcp_server
+from soliplex.config import tools as config_tools
 
 ROOM_ID = "testing"
 
@@ -16,50 +17,50 @@ def tool_for_testing():
 
 
 TOOL_CONFIG_WO_MCP = mock.create_autospec(
-    config.ToolConfig,
+    config_tools.ToolConfig,
     kind="testing",
     tool_name="soliplex.config.testing",
     tool=tool_for_testing,
     tool_id="mcp_false_bare",
     allow_mcp=False,
-    tool_requires=config.ToolRequires.BARE,
+    tool_requires=config_tools.ToolRequires.BARE,
 )
 TOOL_CONFIG_W_MCP_WO_REQ_CTX = mock.create_autospec(
-    config.ToolConfig,
+    config_tools.ToolConfig,
     kind="testing",
     tool_name="soliplex.tools.testing",
     tool=tool_for_testing,
     allow_mcp=True,
     tool_id="mcp_true_bare",
-    tool_requires=config.ToolRequires.BARE,
+    tool_requires=config_tools.ToolRequires.BARE,
 )
 TOOL_CONFIG_W_MCP_W_REQ_CTX = mock.create_autospec(
-    config.ToolConfig,
+    config_tools.ToolConfig,
     kind="testing",
     tool_name="soliplex.tools.testing",
     tool=tool_for_testing,
     tool_id="mcp_true_w_ctx",
     allow_mcp=True,
-    tool_requires=config.ToolRequires.FASTAPI_CONTEXT,
+    tool_requires=config_tools.ToolRequires.FASTAPI_CONTEXT,
 )
 
 SDTC_WO_MCP = mock.create_autospec(
-    config.ToolConfig,
+    config_tools.ToolConfig,
     kind="search_documents",
     tool_name="soliplex.tools.search_documents",
     tool=tool_for_testing,
     allow_mcp=False,
     tool_id="mcp_false_sdtc",
-    tool_requires=config.ToolRequires.TOOL_CONFIG,
+    tool_requires=config_tools.ToolRequires.TOOL_CONFIG,
 )
 SDTC_W_MCP = mock.create_autospec(
-    config.ToolConfig,
+    config_tools.ToolConfig,
     kind="search_documents",
     tool_name="soliplex.tools.search_documents",
     tool=tool_for_testing,
     allow_mcp=True,
     tool_id="mcp_true_sdtc",
-    tool_requires=config.ToolRequires.TOOL_CONFIG,
+    tool_requires=config_tools.ToolRequires.TOOL_CONFIG,
 )
 
 MCP_TOOL = object()
@@ -89,18 +90,18 @@ def test_mcp_tool(tool_config, hit):
 def test_mcp_tool_w_wrapper():
     tool_name = "soliplex.tools.testing"
     tc = mock.create_autospec(
-        config.ToolConfig,
+        config_tools.ToolConfig,
         kind="testing",
         tool_name=tool_name,
         tool=tool_for_testing,
         tool_id="mcp_true_w_wrapper",
         allow_mcp=True,
-        tool_requires=config.ToolRequires.TOOL_CONFIG,
+        tool_requires=config_tools.ToolRequires.TOOL_CONFIG,
     )
 
     with mock.patch.dict(
-        config.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME,
-        {tool_name: config.WithQueryMCPWrapper},
+        config_tools.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME,
+        {tool_name: config_tools.WithQueryMCPWrapper},
     ):
         found = mcp_server.mcp_tool(tc)
 

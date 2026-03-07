@@ -4,8 +4,9 @@ import pytest
 import yaml
 
 from soliplex import config
-from tests.unit.config import test_agents
-from tests.unit.config import test_tools
+from soliplex.config import tools as config_tools
+from tests.unit.config import test_config_agents as test_agents
+from tests.unit.config import test_config_tools as test_tools
 
 COMPLETION_ID = "test-completion"
 COMPLETION_NAME = "Test Completions"
@@ -34,12 +35,12 @@ FULL_COMPLETION_CONFIG_KW = {
         system_prompt=test_agents.SYSTEM_PROMPT,
     ),
     "tool_configs": {
-        "get_current_datetime": config.ToolConfig(
+        "get_current_datetime": config_tools.ToolConfig(
             tool_name="soliplex.tools.get_current_datetime",
         ),
     },
     "mcp_client_toolset_configs": {
-        "stdio_test": config.Stdio_MCP_ClientToolsetConfig(
+        "stdio_test": config_tools.Stdio_MCP_ClientToolsetConfig(
             command="cat",
             args=[
                 "-",
@@ -48,7 +49,7 @@ FULL_COMPLETION_CONFIG_KW = {
                 "foo": "bar",
             },
         ),
-        "http_test": config.HTTP_MCP_ClientToolsetConfig(
+        "http_test": config_tools.HTTP_MCP_ClientToolsetConfig(
             url=test_tools.HTTP_MCP_URL,
             headers={
                 "Authorization": "Bearer secret:BEARER_TOKEN",

@@ -12,14 +12,15 @@ from haiku.skills import models as hs_models
 from soliplex import config
 from soliplex import secrets
 from soliplex.agui import features as agui_features
-from tests.unit.config import test_agents
-from tests.unit.config import test_agui
-from tests.unit.config import test_authsystem
-from tests.unit.config import test_completions
-from tests.unit.config import test_logfire
-from tests.unit.config import test_meta
-from tests.unit.config import test_rooms
-from tests.unit.config import test_skills
+from soliplex.config import exceptions as config_exc
+from tests.unit.config import test_config_agents as test_agents
+from tests.unit.config import test_config_agui as test_agui
+from tests.unit.config import test_config_authsystem as test_authsystem
+from tests.unit.config import test_config_completions as test_completions
+from tests.unit.config import test_config_logfire as test_logfire
+from tests.unit.config import test_config_meta as test_meta
+from tests.unit.config import test_config_rooms as test_rooms
+from tests.unit.config import test_config_skills as test_skills
 
 NoRaise = contextlib.nullcontext()
 
@@ -2009,11 +2010,11 @@ def populated_temp_dir(temp_dir):
     [
         (".", False, "testing"),
         ("./installation.yaml", False, "testing"),
-        ("no_such_filename.yaml", config.NoSuchConfig, None),
-        ("not_a_yaml_file.yaml", config.FromYamlException, None),
-        ("/dev/null", config.NoSuchConfig, None),
-        ("./not-there", config.NoSuchConfig, None),
-        ("./there-but-no-config", config.NoSuchConfig, None),
+        ("no_such_filename.yaml", config_exc.NoSuchConfig, None),
+        ("not_a_yaml_file.yaml", config_exc.FromYamlException, None),
+        ("/dev/null", config_exc.NoSuchConfig, None),
+        ("./not-there", config_exc.NoSuchConfig, None),
+        ("./there-but-no-config", config_exc.NoSuchConfig, None),
         ("./there-with-config", False, "there-with-config"),
         ("./alt-config/filename.yaml", False, "alt-config"),
     ],

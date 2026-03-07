@@ -4,11 +4,12 @@ import pytest
 import yaml
 from haiku.rag import config as hr_config_module
 
-from soliplex import config
+from soliplex.config import exceptions as config_exc
+from soliplex.config import rag as config_rag
 
-rdb_exactly_one = pytest.raises(config.RagDbExactlyOneOfStemOrOverride)
-rdb_not_found = pytest.raises(config.RagDbFileNotFound)
-no_config_path = pytest.raises(config.NoConfigPath)
+rdb_exactly_one = pytest.raises(config_rag.RagDbExactlyOneOfStemOrOverride)
+rdb_not_found = pytest.raises(config_rag.RagDbFileNotFound)
+no_config_path = pytest.raises(config_exc.NoConfigPath)
 ok_stem = contextlib.nullcontext("stem")
 ok_ovr = contextlib.nullcontext("override")
 
@@ -68,7 +69,7 @@ def test__rcb_ctor(
         kw["rag_lancedb_override_path"] = override
 
     with ctor_expectation as ctor_which:
-        rcb_config = config._RAGConfigBase(**kw)
+        rcb_config = config_rag._RAGConfigBase(**kw)
 
     if isinstance(ctor_which, str):
         if ctor_which == "stem":
@@ -137,7 +138,7 @@ def test__rcb_haiku_rag_config(
     else:
         exp_room_config_path = None
 
-    rcb_config = config._RAGConfigBase(**kw)
+    rcb_config = config_rag._RAGConfigBase(**kw)
 
     if w_already:
         assert rcb_config.haiku_rag_config is already

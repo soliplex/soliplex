@@ -12,6 +12,7 @@ from haiku.skills import models as hs_models
 from soliplex import agui as agui_package
 from soliplex import authz as authz_package
 from soliplex import config
+from soliplex.config import tools as config_tools
 
 KW_ONLY = pydantic.Field(kw_only=True)
 KW_ONLY_NONE = pydantic.Field(kw_only=True, default=None)
@@ -88,7 +89,7 @@ class Tool(pydantic.BaseModel):
     kind: str
     tool_name: str
     tool_description: str
-    tool_requires: config.ToolRequires  # enum, not dataclass
+    tool_requires: config_tools.ToolRequires  # enum, not dataclass
     allow_mcp: bool
     agui_feature_names: list[str]
     extra_parameters: dict[str, typing.Any]

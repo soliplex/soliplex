@@ -7,6 +7,7 @@ from soliplex import agents
 from soliplex import config
 from soliplex import mcp_client
 from soliplex import tools
+from soliplex.config import tools as config_tools
 
 MODEL = "testing"
 SYSTEM_PROMPT = "You are a test"
@@ -30,7 +31,7 @@ MODEL_SETTINGS = {
 ROOM_ID = "test-room"
 RAG_LANCEDB_OVERRIDE_PATH = "/path/to/db/rag"
 
-TC_TOOL_CONFIG = config.ToolConfig(tool_name="soliplex.tools.test_tool")
+TC_TOOL_CONFIG = config_tools.ToolConfig(tool_name="soliplex.tools.test_tool")
 
 
 @pytest.mark.parametrize(
@@ -124,7 +125,7 @@ def tool_configs_tools(request):
             yield [(tc, ai_tool)]
 
 
-STDIO_MCTC = config.Stdio_MCP_ClientToolsetConfig(
+STDIO_MCTC = config_tools.Stdio_MCP_ClientToolsetConfig(
     command="cat",
     args=["-"],
 )
@@ -134,7 +135,7 @@ STDIO_TOOL = mcp_client.Stdio_MCP_Client_Toolset(
     env={},
 )
 
-HTTP_MCTC = config.HTTP_MCP_ClientToolsetConfig(
+HTTP_MCTC = config_tools.HTTP_MCP_ClientToolsetConfig(
     url="https://example.com/mcp",
 )
 HTTP_TOOL = mcp_client.HTTP_MCP_Client_Toolset(
@@ -294,10 +295,10 @@ def test_get_agent_from_configs_wo_hit_w_python_kind(w_room_skills):
     agent_config.kind = "factory"
     agent_config.id = ROOM_ID
 
-    tool_config = mock.create_autospec(config.ToolConfig)
+    tool_config = mock.create_autospec(config_tools.ToolConfig)
     tool_configs = {"test_tool": tool_config}
 
-    mcpcts = mock.create_autospec(config.MCP_ClientToolsetConfig)
+    mcpcts = mock.create_autospec(config_tools.MCP_ClientToolsetConfig)
     mcpcts_configs = {"test_mcpcts": mcpcts}
 
     room_skills = mock.create_autospec(agents.SkillToolsetConfig)

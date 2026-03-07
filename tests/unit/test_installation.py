@@ -15,6 +15,7 @@ from soliplex import loggers
 from soliplex import models
 from soliplex import secrets
 from soliplex import util
+from soliplex.config import tools as config_tools
 
 KEY = "test-key"
 VALUE = "test-value"
@@ -820,14 +821,14 @@ async def test_installation_get_agent_for_room(
 ):
     a_config = mock.create_autospec(config.AgentConfig)
 
-    tc_config = mock.create_autospec(config.ToolConfig)
-    sdtc_config = mock.create_autospec(config.ToolConfig)
+    tc_config = mock.create_autospec(config_tools.ToolConfig)
+    sdtc_config = mock.create_autospec(config_tools.ToolConfig)
 
     mcp_stdio_config = mock.create_autospec(
-        config.Stdio_MCP_ClientToolsetConfig
+        config_tools.Stdio_MCP_ClientToolsetConfig
     )
     mcp_http_streaming_config = mock.create_autospec(
-        config.HTTP_MCP_ClientToolsetConfig
+        config_tools.HTTP_MCP_ClientToolsetConfig
     )
 
     r_config = mock.create_autospec(config.RoomConfig)
@@ -930,14 +931,14 @@ async def test_installation_get_agent_for_completion(
 ):
     a_config = mock.create_autospec(config.AgentConfig)
 
-    tc_config = mock.create_autospec(config.ToolConfig)
-    sdtc_config = mock.create_autospec(config.ToolConfig)
+    tc_config = mock.create_autospec(config_tools.ToolConfig)
+    sdtc_config = mock.create_autospec(config_tools.ToolConfig)
 
     mcp_stdio_config = mock.create_autospec(
-        config.Stdio_MCP_ClientToolsetConfig
+        config_tools.Stdio_MCP_ClientToolsetConfig
     )
     mcp_http_streaming_config = mock.create_autospec(
-        config.HTTP_MCP_ClientToolsetConfig
+        config_tools.HTTP_MCP_ClientToolsetConfig
     )
 
     c_config = mock.create_autospec(config.CompletionConfig)
@@ -994,8 +995,8 @@ async def test_installation_get_agent_deps_for_room(
     w_run_agent_input,
     w_the_logger,
 ):
-    tc_config = mock.create_autospec(config.ToolConfig)
-    sdtc_config = mock.create_autospec(config.ToolConfig)
+    tc_config = mock.create_autospec(config_tools.ToolConfig)
+    sdtc_config = mock.create_autospec(config_tools.ToolConfig)
 
     r_config = mock.create_autospec(config.RoomConfig)
     t_configs = r_config.tool_configs = {
@@ -1076,8 +1077,8 @@ async def test_installation_get_agent_deps_for_completion(
     raises,
     w_run_agent_input,
 ):
-    tc_config = mock.create_autospec(config.ToolConfig)
-    sdtc_config = mock.create_autospec(config.ToolConfig)
+    tc_config = mock.create_autospec(config_tools.ToolConfig)
+    sdtc_config = mock.create_autospec(config_tools.ToolConfig)
 
     c_config = mock.create_autospec(config.CompletionConfig)
     t_configs = c_config.tool_configs = {

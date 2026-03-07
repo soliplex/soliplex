@@ -8,14 +8,17 @@ from fastmcp import tools as fmcp_tools
 from soliplex import config
 from soliplex import installation
 from soliplex import mcp_auth
+from soliplex.config import tools as config_tools
 
 
 def mcp_tool(tool_config: config.ToolConfig) -> fmcp_tools.Tool | None:
     if (
         tool_config.allow_mcp
-        and tool_config.tool_requires != config.ToolRequires.FASTAPI_CONTEXT
+        and tool_config.tool_requires
+        != config_tools.ToolRequires.FASTAPI_CONTEXT
     ):
-        wrapper_type = config.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME.get(
+        wrapper_registry = config_tools.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME
+        wrapper_type = wrapper_registry.get(
             tool_config.tool_name,
         )
 

@@ -7,6 +7,7 @@ import pytest
 from soliplex import completions
 from soliplex import config
 from soliplex import models
+from soliplex.config import tools as config_tools
 
 COMPLETION_ID = "testing-completion"
 SYSTEM_PROMPT = "You are a test"
@@ -35,7 +36,7 @@ W_TOOLS_CONFIG = config.CompletionConfig(
         model_name=MODEL_NAME,
     ),
     tool_configs={
-        "get_current_datetime": config.ToolConfig(
+        "get_current_datetime": config_tools.ToolConfig(
             tool_name="soliplex.tools.get_current_datetime",
         ),
     },
