@@ -15,6 +15,7 @@ from soliplex import config
 from soliplex import models
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
+from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
 
 NOW = datetime.datetime.now(datetime.UTC)
@@ -436,7 +437,7 @@ def filesystem_skill_config(
         metadata=w_metadata,
     )
     skill_metadata.name = SKILL_NAME  # mock quirk
-    return config.FilesystemSkillConfig(
+    return config_skills.FilesystemSkillConfig(
         _skill_metadata=skill_metadata,
         _skill_path=skill_path,
         model_name=SKILL_MODEL_NAME,
@@ -480,7 +481,7 @@ def entrypoint_skill_config(
         metadata=w_metadata,
     )
     skill_metadata.name = SKILL_NAME  # mock quirk
-    return config.EntrypointSkillConfig(
+    return config_skills.EntrypointSkillConfig(
         _skill_metadata=skill_metadata,
         model_name=SKILL_MODEL_NAME,
         state_type=StateModelTest,
@@ -827,7 +828,7 @@ def test_room_from_config_w_fs_skills(
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,
         agent_config=default_agent,
-        skills=config.RoomSkillsConfig(
+        skills=config_skills.RoomSkillsConfig(
             installation_skill_names=[SKILL_NAME],
             _installation_config=room_ic,
         ),
@@ -853,7 +854,7 @@ def test_room_from_config_w_ep_skills(
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,
         agent_config=default_agent,
-        skills=config.RoomSkillsConfig(
+        skills=config_skills.RoomSkillsConfig(
             installation_skill_names=[SKILL_NAME],
             _installation_config=room_ic,
         ),

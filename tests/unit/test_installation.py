@@ -16,6 +16,7 @@ from soliplex import models
 from soliplex import secrets
 from soliplex import util
 from soliplex.config import agents as config_agents
+from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
 
 KEY = "test-key"
@@ -838,7 +839,7 @@ async def test_installation_get_agent_for_room(
     exp_gafc_kwargs = {}
 
     if w_room_skills:
-        r_config.skills = mock.create_autospec(config.RoomSkillsConfig)
+        r_config.skills = mock.create_autospec(config_skills.RoomSkillsConfig)
         exp_gafc_kwargs["skill_toolset_config"] = r_config.skills
     else:
         r_config.skills = None

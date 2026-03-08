@@ -9,6 +9,7 @@ from soliplex.agui import features as agui_features
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import authsystem as config_authsystem
+from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
 
 AGUI_FEATURE_NAME = "test-agui-feature"
@@ -81,17 +82,16 @@ def patched_mcp_tool_wrappers(patched_tool_registries):
 
 @pytest.fixture
 def patched_soliplex_config():
-    with mock.patch.dict(config.__dict__) as patched:
-        patched["SKILL_CONFIG_CLASSES_BY_KIND"] = {}
-        patched["AGENT_CONFIG_CLASSES_BY_KIND"] = {}
-        patched["SECRET_GETTERS_BY_KIND"] = {}
-
+    with mock.patch.dict(config.__dict__, patched_for_testing=True) as patched:
         yield patched
 
 
 @pytest.fixture
-def patched_skill_configs(patched_soliplex_config):
-    return patched_soliplex_config["SKILL_CONFIG_CLASSES_BY_KIND"]
+def patched_skill_configs():
+    with mock.patch.dict(config_skills.__dict__) as patched:
+        result = patched["SKILL_CONFIG_CLASSES_BY_KIND"] = {}
+
+        yield result
 
 
 @pytest.fixture
@@ -104,4 +104,6 @@ def patched_agent_configs():
 
 @pytest.fixture
 def patched_secret_getters(patched_soliplex_config):
-    return patched_soliplex_config["SECRET_GETTERS_BY_KIND"]
+    result = patched_soliplex_config["SECRET_GETTERS_BY_KIND"] = {}
+
+    return result

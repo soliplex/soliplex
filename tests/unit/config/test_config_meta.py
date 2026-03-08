@@ -11,6 +11,7 @@ from soliplex import config
 from soliplex import secrets
 from soliplex.agui import features as agui_features
 from soliplex.config import agents as config_agents
+from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
 
 NoRaise = contextlib.nullcontext()
@@ -113,7 +114,7 @@ W_SKILL_CONFIGS_ICMETA_KW = {
     "tool_configs": [],
     "mcp_toolset_configs": [],
     "skill_configs": [
-        config.ConfigMeta(config_klass=config.HR_RAG_SkillConfig),
+        config.ConfigMeta(config_klass=config_skills.HR_RAG_SkillConfig),
     ],
     "mcp_server_tool_wrappers": [],
     "agent_configs": [],
@@ -122,7 +123,7 @@ W_SKILL_CONFIGS_ICMETA_KW = {
 W_SKILL_CONFIGS_ICMETA_YAML = """\
 meta:
   skill_configs:
-    - "soliplex.config.HR_RAG_SkillConfig"
+    - "soliplex.config.skills.HR_RAG_SkillConfig"
 """
 
 
@@ -187,8 +188,8 @@ FULL_ICMETA_KW = {
     ],
     "mcp_server_tool_wrappers": [],
     "skill_configs": [
-        config.ConfigMeta(config_klass=config.HR_RAG_SkillConfig),
-        config.ConfigMeta(config_klass=config.HR_RLM_SkillConfig),
+        config.ConfigMeta(config_klass=config_skills.HR_RAG_SkillConfig),
+        config.ConfigMeta(config_klass=config_skills.HR_RLM_SkillConfig),
     ],
     "agent_configs": [
         config.ConfigMeta(config_klass=config_agents.AgentConfig),
@@ -211,8 +212,8 @@ meta:
       - "soliplex.config.tools.Stdio_MCP_ClientToolsetConfig"
       - "soliplex.config.tools.HTTP_MCP_ClientToolsetConfig"
   skill_configs:
-      - "soliplex.config.HR_RAG_SkillConfig"
-      - "soliplex.config.HR_RLM_SkillConfig"
+      - "soliplex.config.skills.HR_RAG_SkillConfig"
+      - "soliplex.config.skills.HR_RLM_SkillConfig"
   agent_configs:
       - "soliplex.config.agents.AgentConfig"
       - "soliplex.config.agents.FactoryAgentConfig"
@@ -457,10 +458,10 @@ def test_installationconfigmeta_as_yaml(
         )
 
     if w_skills:
-        klass = config.HR_RAG_SkillConfig
+        klass = config_skills.HR_RAG_SkillConfig
         patched_skill_configs[klass.kind] = klass
         expected_dict["skill_configs"].append(
-            "soliplex.config.HR_RAG_SkillConfig",
+            "soliplex.config.skills.HR_RAG_SkillConfig",
         )
 
     if w_agent:

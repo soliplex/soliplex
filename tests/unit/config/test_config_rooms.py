@@ -9,6 +9,7 @@ from haiku.skills import models as hs_models
 from soliplex import config
 from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
+from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
 from tests.unit.config import test_config_agents as test_agents
 from tests.unit.config import test_config_quizzes as test_quizzes
@@ -103,7 +104,7 @@ FULL_ROOM_CONFIG_KW = {
             query_params=test_tools.HTTP_MCP_QUERY_PARAMS,
         ),
     },
-    "skills": config.RoomSkillsConfig(
+    "skills": config_skills.RoomSkillsConfig(
         model_name=test_skills.SKILL_MODEL_NAME,
         installation_skill_names=[test_skills.SKILL_NAME],
     ),
@@ -172,7 +173,10 @@ def test_roomconfig_from_yaml(
     expectation,
 ):
     skill = mock.create_autospec(hs_models.Skill)
-    skill_config = mock.create_autospec(config._SkillConfigBase, skill=skill)
+    skill_config = mock.create_autospec(
+        config_skills._SkillConfigBase,
+        skill=skill,
+    )
 
     installation_config.skill_configs = {
         test_skills.SKILL_NAME: skill_config,
@@ -278,7 +282,7 @@ def test_roomconfig_skill_configs_bare(installation_config):
 
 
 def test_roomconfig_skill_configs_w_hit(installation_config):
-    skill_config = mock.create_autospec(config._SkillConfigBase)
+    skill_config = mock.create_autospec(config_skills._SkillConfigBase)
     installation_config.skill_configs = {
         test_skills.SKILL_NAME: skill_config,
         "other_skill": object(),
@@ -320,7 +324,7 @@ def test_roomconfig_agui_feature_names(
     expected,
 ):
     skill_config = mock.create_autospec(
-        config._SkillConfigBase,
+        config_skills._SkillConfigBase,
         agui_feature_names=[test_skills.SKILL_STATE_NAMESPACE],
     )
     installation_config.skill_configs = {

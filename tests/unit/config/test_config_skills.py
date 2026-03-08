@@ -11,7 +11,8 @@ from haiku.rag.skills import rlm as hr_skills_rlm
 from haiku.skills import agent as hs_agent
 from haiku.skills import models as hs_models
 
-from soliplex import config
+from soliplex.config import exceptions as config_exc
+from soliplex.config import skills as config_skills
 
 SKILL_NAME = "test-skill"
 FILESYSTEM_SKILL_NAME = "test-fs-skill"
@@ -144,7 +145,7 @@ def test_filesystemskillconfig_ctor(
     w_metadata_kw,
     exp_allowed_tools,
 ):
-    skill_config = config.FilesystemSkillConfig(
+    skill_config = config_skills.FilesystemSkillConfig(
         _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
         _skill_path=skill_path,
     )
@@ -169,7 +170,7 @@ def test_filesystemskillconfig_ctor_w_errors(skill_path):
         name=SKILL_NAME,
         description=SKILL_VALIDATION_ERROR,
     )
-    skill_config = config.FilesystemSkillConfig(
+    skill_config = config_skills.FilesystemSkillConfig(
         _skill_path=skill_path,
         _skill_metadata=skill_metadata,
         _validation_errors=[validation_error],
@@ -207,7 +208,7 @@ def test_filesystemskillconfig_from_path(
         skill.path = skill_path
         hsd_dfp.return_value = [skill], []
 
-    found = config.FilesystemSkillConfig.from_path(skill_path)
+    found = config_skills.FilesystemSkillConfig.from_path(skill_path)
 
     if w_errors:
         assert found.name == SKILL_NAME
@@ -231,7 +232,7 @@ def test_filesystemskillconfig_from_path(
     ],
 )
 def test_filesystemskillconfig_agui_feature_names(skill_path, w_kw):
-    skill_config = config.FilesystemSkillConfig(
+    skill_config = config_skills.FilesystemSkillConfig(
         _skill_path=skill_path,
         _skill_metadata=hs_models.SkillMetadata(
             name=SKILL_NAME,
@@ -275,7 +276,7 @@ def test_filesystemskillconfig_agui_feature_names(skill_path, w_kw):
     ],
 )
 def test_filesystemskillconfig_skill(skill_path, w_metadata_kw, w_kw):
-    skill_config = config.FilesystemSkillConfig(
+    skill_config = config_skills.FilesystemSkillConfig(
         _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
         _skill_path=skill_path,
         **w_kw,
@@ -325,7 +326,7 @@ def test_filesystemskillconfig_skill(skill_path, w_metadata_kw, w_kw):
     ],
 )
 def test_entrypointskillconfig_ctor(w_metadata_kw, exp_allowed_tools):
-    skill_config = config.EntrypointSkillConfig(
+    skill_config = config_skills.EntrypointSkillConfig(
         _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
     )
 
@@ -348,7 +349,7 @@ def test_entrypointskillconfig_ctor(w_metadata_kw, exp_allowed_tools):
     ],
 )
 def test_entrypointskillconfig_agui_feature_names(w_kw):
-    skill_config = config.EntrypointSkillConfig(
+    skill_config = config_skills.EntrypointSkillConfig(
         _skill_metadata=hs_models.SkillMetadata(
             name=SKILL_NAME,
             description=SKILL_DESC,
@@ -391,7 +392,7 @@ def test_entrypointskillconfig_agui_feature_names(w_kw):
     ],
 )
 def test_entrypointskillconfig_skill(skill_path, w_metadata_kw, w_kw):
-    skill_config = config.EntrypointSkillConfig(
+    skill_config = config_skills.EntrypointSkillConfig(
         _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
         **w_kw,
     )
@@ -421,7 +422,7 @@ def derived_hrskillconfig():
         ],
     )
 
-    class TestHRSkllConfig(config._HR_SkillConfigBase):
+    class TestHRSkllConfig(config_skills._HR_SkillConfigBase):
         _hr_skill_module = skill_module
         rag_lancedb_path = mock.Mock(spec_set=())
         haiku_rag_config = mock.Mock(spec_set=())
@@ -483,7 +484,7 @@ def test_hr_rag_skillconfig_metadata(
     lancedb = temp_dir / "rag.lancedb"
     lancedb.mkdir()
 
-    inst = config.HR_RAG_SkillConfig(
+    inst = config_skills.HR_RAG_SkillConfig(
         rag_lancedb_override_path=lancedb,
         _haiku_rag_config=skill_haiku_rag_config,
         _config_path=config_path,
@@ -498,38 +499,38 @@ def test_hr_rag_skillconfig_metadata(
 @pytest.mark.parametrize(
     "w_config, expectation",
     [
-        ({}, contextlib.nullcontext(config.DEFAULT_RAG_TOOLS)),
+        ({}, contextlib.nullcontext(config_skills.DEFAULT_RAG_TOOLS)),
         (
             {"tool_names": ["get_document", "list_documents"]},
             contextlib.nullcontext(
                 [
-                    config.HR_RAG_Tools.GET_DOCUMENT,
-                    config.HR_RAG_Tools.LIST_DOCUMENTS,
+                    config_skills.HR_RAG_Tools.GET_DOCUMENT,
+                    config_skills.HR_RAG_Tools.LIST_DOCUMENTS,
                 ]
             ),
         ),
         (
             {"rag_features": ["search"]},
-            contextlib.nullcontext([config.HR_RAG_Tools.SEARCH]),
+            contextlib.nullcontext([config_skills.HR_RAG_Tools.SEARCH]),
         ),
         (
             {"not_a_valid_key": "FAIL"},
-            pytest.raises(config.FromYamlException),
+            pytest.raises(config_exc.FromYamlException),
         ),
         (
             {"rag_features": ["bogus"]},
-            pytest.raises(config.Invalid_RAG_Feature),
+            pytest.raises(config_skills.Invalid_RAG_Feature),
         ),
         (
             {"rag_features": ["analysis"]},
             pytest.raises(
-                config.Invalid_RAG_Feature,
-                match=config.USE_HR_SKILLS_RLM,
+                config_skills.Invalid_RAG_Feature,
+                match=config_skills.USE_HR_SKILLS_RLM,
             ),
         ),
         (
             {"tool_names": ["ask"], "rag_features": ["search"]},
-            pytest.raises(config.OnlyOneOfToolNamesRagFeatures),
+            pytest.raises(config_skills.OnlyOneOfToolNamesRagFeatures),
         ),
     ],
 )
@@ -551,7 +552,7 @@ def test_hr_rag_skillconfig_from_yaml(
         warnings.catch_warnings(record=True) as warned,
         expectation as expected,
     ):
-        inst = config.HR_RAG_SkillConfig.from_yaml(
+        inst = config_skills.HR_RAG_SkillConfig.from_yaml(
             installation_config=installation_config,
             config_path=config_path,
             config_dict=config_dict,
@@ -574,7 +575,7 @@ def test_hr_rag_skillconfig_from_yaml(
 @pytest.mark.parametrize(
     "w_tool_names, exp_skill_tools",
     [
-        (None, config.DEFAULT_RAG_TOOLS),
+        (None, config_skills.DEFAULT_RAG_TOOLS),
         (["search"], ["search"]),
         (["search", "ask"], ["search", "ask"]),
         (
@@ -599,7 +600,7 @@ def test_hr_rag_skillconfig_skill(
     if w_tool_names:
         kwargs["_tool_names"] = w_tool_names
 
-    inst = config.HR_RAG_SkillConfig(
+    inst = config_skills.HR_RAG_SkillConfig(
         rag_lancedb_override_path=lancedb,
         _haiku_rag_config=skill_haiku_rag_config,
         _config_path=config_path,
@@ -626,7 +627,7 @@ def test_hr_rlm_skillconfig_metadata(
     lancedb = temp_dir / "rag.lancedb"
     lancedb.mkdir()
 
-    inst = config.HR_RLM_SkillConfig(
+    inst = config_skills.HR_RLM_SkillConfig(
         rag_lancedb_override_path=lancedb,
         _haiku_rag_config=skill_haiku_rag_config,
         _config_path=config_path,
@@ -645,7 +646,7 @@ def test_hr_rlm_skillconfig_skill(temp_dir, installation_config):
     lancedb = temp_dir / "rag.lancedb"
     lancedb.mkdir()
 
-    inst = config.HR_RLM_SkillConfig(
+    inst = config_skills.HR_RLM_SkillConfig(
         rag_lancedb_override_path=lancedb,
         _haiku_rag_config=skill_haiku_rag_config,
         _config_path=config_path,
@@ -662,7 +663,7 @@ def test_hr_rlm_skillconfig_skill(temp_dir, installation_config):
     "w_error, expectation",
     [
         (False, contextlib.nullcontext()),
-        (True, pytest.raises(config.FromYamlException)),
+        (True, pytest.raises(config_exc.FromYamlException)),
     ],
 )
 def test_hr_rlm_skillconfig_from_yaml(
@@ -682,7 +683,7 @@ def test_hr_rlm_skillconfig_from_yaml(
         config_dict["not_a_valid_key"] = "FAIL"
 
     with expectation as expected:
-        inst = config.HR_RLM_SkillConfig.from_yaml(
+        inst = config_skills.HR_RLM_SkillConfig.from_yaml(
             installation_config=installation_config,
             config_path=config_path,
             config_dict=config_dict,
@@ -697,7 +698,7 @@ def test_hr_rlm_skillconfig_from_yaml(
     "w_invalid_kind, expectation",
     [
         (False, contextlib.nullcontext()),
-        (True, pytest.raises(config.InvalidSkillKind)),
+        (True, pytest.raises(config_skills.InvalidSkillKind)),
     ],
 )
 def test_extractskillconfigs(
@@ -728,17 +729,17 @@ def test_extractskillconfigs(
         )
 
     with expectation as expected:
-        found = config.extract_skill_configs(
+        found = config_skills.extract_skill_configs(
             installation_config=installation_config,
             config_path=config_path,
             config_dict=config_dict,
         )
 
     if expected is None:
-        assert isinstance(found["rag"], config.HR_RAG_SkillConfig)
+        assert isinstance(found["rag"], config_skills.HR_RAG_SkillConfig)
         assert found["rag"].rag_lancedb_stem == "test-foo"
 
-        assert isinstance(found["rag-rlm"], config.HR_RLM_SkillConfig)
+        assert isinstance(found["rag-rlm"], config_skills.HR_RLM_SkillConfig)
         assert found["rag-rlm"].rag_lancedb_stem == "test-bar"
 
         assert "skill_configs" not in config_dict
@@ -749,14 +750,14 @@ def test_extractskillconfigs(
     [
         (
             BOGUS_ROOM_SKILLS_CONFIG_YAML,
-            pytest.raises(config.FromYamlException),
+            pytest.raises(config_exc.FromYamlException),
         ),
         (
             W_MISSING_INSTALLATION_SKILLS_ROOM_SKILLS_CONFIG_YAML,
             pytest.raises(
-                config.FromYamlException,
+                config_exc.FromYamlException,
                 check=lambda exc: isinstance(
-                    exc.__cause__, config.MissingSkillNames
+                    exc.__cause__, config_skills.MissingSkillNames
                 ),
             ),
         ),
@@ -788,7 +789,7 @@ def test_roomskillsconfig_from_yaml(
         config_dict = yaml.safe_load(stream)
 
     with expectation as expected:
-        found = config.RoomSkillsConfig.from_yaml(
+        found = config_skills.RoomSkillsConfig.from_yaml(
             installation_config,
             yaml_file,
             config_dict,
@@ -798,7 +799,7 @@ def test_roomskillsconfig_from_yaml(
         assert expected.value._config_path == yaml_file
 
     else:
-        expected = config.RoomSkillsConfig(**expected)
+        expected = config_skills.RoomSkillsConfig(**expected)
         expected = dataclasses.replace(
             expected,
             _installation_config=installation_config,
@@ -809,14 +810,14 @@ def test_roomskillsconfig_from_yaml(
 
 
 def test_roomskillsconfig_skill_configs(installation_config):
-    skill_config = mock.create_autospec(config._SkillConfigBase)
+    skill_config = mock.create_autospec(config_skills._SkillConfigBase)
     installation_config.skill_configs = {
         SKILL_NAME: skill_config,
         "other_skill": object(),
     }
 
     room_skills_config_kw = {"installation_skill_names": [SKILL_NAME]}
-    room_skills_config = config.RoomSkillsConfig(
+    room_skills_config = config_skills.RoomSkillsConfig(
         **room_skills_config_kw,
         _installation_config=installation_config,
     )
@@ -828,14 +829,16 @@ def test_roomskillsconfig_skill_configs(installation_config):
 
 def test_roomskillsconfig_skills(installation_config):
     skill = mock.create_autospec(hs_models.Skill)
-    skill_config = mock.create_autospec(config._SkillConfigBase, skill=skill)
+    skill_config = mock.create_autospec(
+        config_skills._SkillConfigBase, skill=skill
+    )
     installation_config.skill_configs = {
         SKILL_NAME: skill_config,
         "other_skill": object(),
     }
 
     room_skill_config_kw = {"installation_skill_names": [SKILL_NAME]}
-    room_skill_config = config.RoomSkillsConfig(
+    room_skill_config = config_skills.RoomSkillsConfig(
         **room_skill_config_kw,
         _installation_config=installation_config,
     )
@@ -851,14 +854,16 @@ def test_roomskillsconfig_skill_toolset(installation_config):
     skill.metadata.name = SKILL_NAME
     skill.metadata.description = SKILL_DESC
 
-    skill_config = mock.create_autospec(config._SkillConfigBase, skill=skill)
+    skill_config = mock.create_autospec(
+        config_skills._SkillConfigBase, skill=skill
+    )
 
     installation_config.skill_configs = {
         SKILL_NAME: skill_config,
         "other_skill": object(),
     }
 
-    room_skill_config = config.RoomSkillsConfig(
+    room_skill_config = config_skills.RoomSkillsConfig(
         model_name=ROOM_SKILLS_MODEL_NAME,
         installation_skill_names=[SKILL_NAME],
         _installation_config=installation_config,

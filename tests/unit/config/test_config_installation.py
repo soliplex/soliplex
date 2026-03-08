@@ -15,6 +15,7 @@ from soliplex.agui import features as agui_features
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
 from soliplex.config import exceptions as config_exc
+from soliplex.config import skills as config_skills
 from tests.unit.config import test_config_agents as test_agents
 from tests.unit.config import test_config_authsystem as test_authsystem
 from tests.unit.config import test_config_completions as test_completions
@@ -1194,6 +1195,11 @@ def test_installationconfig_authorization_dburi_async(w_kw, expected):
 def test_installationconfig_from_yaml(
     temp_dir,
     patched_soliplex_config,
+    patched_tool_registries,
+    patched_mcp_toolset_configs,
+    patched_mcp_tool_wrappers,
+    patched_skill_configs,
+    patched_secret_getters,
     config_yaml,
     expected_kw,
 ):
@@ -1232,12 +1238,16 @@ def test_installationconfig_from_yaml(
             )
 
         lfssc = mock.Mock(spec_set=())
-        fs_skill_config = mock.create_autospec(config.FilesystemSkillConfig)
+        fs_skill_config = mock.create_autospec(
+            config_skills.FilesystemSkillConfig
+        )
         lfssc.return_value = {
             test_skills.FILESYSTEM_SKILL_NAME: fs_skill_config,
         }
         lepsc = mock.Mock(spec_set=())
-        ep_skill_config = mock.create_autospec(config.EntrypointSkillConfig)
+        ep_skill_config = mock.create_autospec(
+            config_skills.EntrypointSkillConfig
+        )
         lepsc.return_value = {
             test_skills.ENTRYPOINT_SKILL_NAME: ep_skill_config,
         }
@@ -1915,7 +1925,7 @@ def test_installationconfig_skill_configs_wo_set():
 
 def test_installationconfig_skill_configs_w_set():
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
-    skill_config = mock.create_autospec(config._SkillConfigBase)
+    skill_config = mock.create_autospec(config_skills._SkillConfigBase)
     kw["_skill_configs"] = {
         test_skills.SKILL_NAME: skill_config,
     }

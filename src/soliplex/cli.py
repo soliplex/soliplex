@@ -23,6 +23,7 @@ from soliplex import ollama
 from soliplex import secrets
 from soliplex import util
 from soliplex.authz import schema as authz_schema
+from soliplex.config import rag as config_rag
 
 
 class ReloadOption(enum.StrEnum):
@@ -425,7 +426,7 @@ def check_config(
             the_console.print("OK")
         the_console.line()
 
-        if isinstance(room_config.agent_config, config._RAGConfigBase):
+        if isinstance(room_config.agent_config, config_rag._RAGConfigBase):
             the_console.print("- Checking agent RAG DB")
             try:
                 room_config.agent_config.rag_lancedb_path  # noqa B018
@@ -436,7 +437,7 @@ def check_config(
             the_console.line()
 
         for tool_config in room_config.tool_configs:
-            if isinstance(tool_config, config._RAGConfigBase):
+            if isinstance(tool_config, config_rag._RAGConfigBase):
                 the_console.print("- Checking tool RAG DB: {tool_config.id}")
                 try:
                     tool_config.rag_lancedb_path  # noqa B018

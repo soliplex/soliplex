@@ -286,7 +286,12 @@ RANDOM_CHARS = config.RandomCharsSecretSource(secret_name=SECRET_NAME)
     ],
 )
 @mock.patch("os.urandom")
-def test_secret_ctor_w_sources(o_ur, sources, expectation, expected):
+def test_secret_ctor_w_sources(
+    o_ur,
+    sources,
+    expectation,
+    expected,
+):
     secret_config = config.SecretConfig(
         secret_name=SECRET_NAME,
         sources=sources,
