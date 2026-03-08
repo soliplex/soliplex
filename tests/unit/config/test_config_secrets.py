@@ -3,10 +3,10 @@ from unittest import mock
 
 import pytest
 
-from soliplex import config
+from soliplex.config import secrets as config_secrets
 
 NoRaise = contextlib.nullcontext()
-NotASecret = pytest.raises(config.NotASecret)
+NotASecret = pytest.raises(config_secrets.NotASecret)
 
 
 SECRET_NAME = "TEST_SECRET"
@@ -24,7 +24,9 @@ COMMAND = "cat"
     ],
 )
 def test_envvarsecretsource_ctor(w_params, exp_env_var_name):
-    source = config.EnvVarSecretSource(secret_name=SECRET_NAME, **w_params)
+    source = config_secrets.EnvVarSecretSource(
+        secret_name=SECRET_NAME, **w_params
+    )
 
     assert source.env_var_name == exp_env_var_name
     assert source.extra_arguments == {"env_var_name": exp_env_var_name}
@@ -35,7 +37,9 @@ def test_envvarsecretsource_from_yaml(temp_dir, yaml_config):
     config_path = temp_dir / "installation.yaml"
     yaml_config["secret_name"] = SECRET_NAME
 
-    source = config.EnvVarSecretSource.from_yaml(config_path, yaml_config)
+    source = config_secrets.EnvVarSecretSource.from_yaml(
+        config_path, yaml_config
+    )
 
     assert source._config_path == config_path
     assert source.secret_name == SECRET_NAME
@@ -55,10 +59,10 @@ def test_envvarsecretsource_as_yaml(has_ev):
     if has_ev:
         config_kw["env_var_name"] = ENV_VAR_NAME
 
-    source = config.EnvVarSecretSource(**config_kw)
+    source = config_secrets.EnvVarSecretSource(**config_kw)
 
     expected = {
-        "kind": config.EnvVarSecretSource.kind,
+        "kind": config_secrets.EnvVarSecretSource.kind,
         "secret_name": SECRET_NAME,
         "env_var_name": ENV_VAR_NAME if has_ev else SECRET_NAME,
     }
@@ -73,7 +77,9 @@ def test_filepathsecretsource_from_yaml(temp_dir, file_path):
     config_path = temp_dir / "installation.yaml"
     yaml_config = {"secret_name": SECRET_NAME, "file_path": file_path}
 
-    source = config.FilePathSecretSource.from_yaml(config_path, yaml_config)
+    source = config_secrets.FilePathSecretSource.from_yaml(
+        config_path, yaml_config
+    )
 
     assert source._config_path == config_path
     assert source.secret_name == SECRET_NAME
@@ -87,10 +93,10 @@ def test_filepathsecretsource_as_yaml():
         "file_path": SECRET_FILE_PATH,
     }
 
-    source = config.FilePathSecretSource(**config_kw)
+    source = config_secrets.FilePathSecretSource(**config_kw)
 
     expected = {
-        "kind": config.FilePathSecretSource.kind,
+        "kind": config_secrets.FilePathSecretSource.kind,
         "secret_name": SECRET_NAME,
         "file_path": SECRET_FILE_PATH,
     }
@@ -108,7 +114,7 @@ def test_filepathsecretsource_as_yaml():
     ],
 )
 def test_subprocess_secret_source_command_line(w_args, exp_command_line):
-    source = config.SubprocessSecretSource(
+    source = config_secrets.SubprocessSecretSource(
         secret_name=SECRET_NAME,
         command=COMMAND,
         args=w_args,
@@ -131,10 +137,10 @@ def test_subprocesssecretsource_as_yaml(w_args):
         "args": w_args,
     }
 
-    source = config.SubprocessSecretSource(**config_kw)
+    source = config_secrets.SubprocessSecretSource(**config_kw)
 
     expected = {
-        "kind": config.SubprocessSecretSource.kind,
+        "kind": config_secrets.SubprocessSecretSource.kind,
         "secret_name": SECRET_NAME,
         "command": COMMAND,
         "args": list(w_args),
@@ -153,7 +159,9 @@ def test_subprocesssecretsource_as_yaml(w_args):
     ],
 )
 def test_randomcharssecretsource_extra_args(kwargs, exp_nc):
-    source = config.RandomCharsSecretSource(secret_name=SECRET_NAME, **kwargs)
+    source = config_secrets.RandomCharsSecretSource(
+        secret_name=SECRET_NAME, **kwargs
+    )
 
     assert source.extra_arguments == {"n_chars": exp_nc}
 
@@ -166,10 +174,12 @@ def test_randomcharssecretsource_extra_args(kwargs, exp_nc):
     ],
 )
 def test_randomcharssecretsource_as_yaml(kwargs, exp_nc):
-    source = config.RandomCharsSecretSource(secret_name=SECRET_NAME, **kwargs)
+    source = config_secrets.RandomCharsSecretSource(
+        secret_name=SECRET_NAME, **kwargs
+    )
 
     expected = {
-        "kind": config.RandomCharsSecretSource.kind,
+        "kind": config_secrets.RandomCharsSecretSource.kind,
         "secret_name": SECRET_NAME,
         "n_chars": exp_nc,
     }
@@ -182,10 +192,10 @@ def test_randomcharssecretsource_as_yaml(kwargs, exp_nc):
 @pytest.mark.parametrize(
     "w_sources, exp_sources",
     [
-        (None, [config.EnvVarSecretSource(secret_name=SECRET_NAME)]),
+        (None, [config_secrets.EnvVarSecretSource(secret_name=SECRET_NAME)]),
         (
             [
-                config.EnvVarSecretSource(
+                config_secrets.EnvVarSecretSource(
                     secret_name=SECRET_NAME,
                     env_var_name=ENV_VAR_NAME,
                 ),
@@ -198,7 +208,9 @@ def test_secretconfig_ctor(w_sources, exp_sources):
     if exp_sources is None:
         exp_sources = w_sources
 
-    secret = config.SecretConfig(secret_name=SECRET_NAME, sources=w_sources)
+    secret = config_secrets.SecretConfig(
+        secret_name=SECRET_NAME, sources=w_sources
+    )
 
     assert secret.secret_name == SECRET_NAME
     assert secret.sources == exp_sources
@@ -207,7 +219,7 @@ def test_secretconfig_ctor(w_sources, exp_sources):
 def test_secretconfig_as_yaml():
     source_1 = mock.Mock(spec_set=["as_yaml"])
     source_2 = mock.Mock(spec_set=["as_yaml"])
-    secret = config.SecretConfig(
+    secret = config_secrets.SecretConfig(
         secret_name=SECRET_NAME,
         sources=[source_1, source_2],
     )
@@ -225,7 +237,7 @@ def test_secretconfig_as_yaml():
 
 
 def test_secretconfig_resolved():
-    secret = config.SecretConfig(secret_name=SECRET_NAME)
+    secret = config_secrets.SecretConfig(secret_name=SECRET_NAME)
 
     assert secret.resolved is None
     secret._resolved = SECRET_VALUE
@@ -241,7 +253,7 @@ def test_secretconfig_resolved():
 )
 def test_strip_secret_prefix(config_str, expectation, expected):
     with expectation:
-        found = config.strip_secret_prefix(config_str)
+        found = config_secrets.strip_secret_prefix(config_str)
 
     if expected is not None:
         assert found == expected

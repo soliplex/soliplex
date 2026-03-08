@@ -15,6 +15,7 @@ from soliplex.agui import features as agui_features
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
 from soliplex.config import exceptions as config_exc
+from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from tests.unit.config import test_config_agents as test_agents
 from tests.unit.config import test_config_authsystem as test_authsystem
@@ -66,9 +67,9 @@ SECRET_NAME_2 = "TEST_SECRET_TWO"
 DB_SECRET_NAME = "DBSECRET"
 DB_SECRET_VALUE = "R34ll7#S33KR1T"
 
-SECRET_CONFIG_1 = config.SecretConfig(secret_name=SECRET_NAME_1)
-SECRET_CONFIG_2 = config.SecretConfig(secret_name=SECRET_NAME_2)
-DB_SECRET_CONFIG = config.SecretConfig(
+SECRET_CONFIG_1 = config_secrets.SecretConfig(secret_name=SECRET_NAME_1)
+SECRET_CONFIG_2 = config_secrets.SecretConfig(secret_name=SECRET_NAME_2)
+DB_SECRET_CONFIG = config_secrets.SecretConfig(
     secret_name=DB_SECRET_NAME,
     _resolved=DB_SECRET_VALUE,
 )
@@ -82,24 +83,24 @@ SECRET_NCHARS = 37
 W_SECRETS_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
     "secrets": [
-        config.SecretConfig(secret_name=SECRET_NAME_1),
-        config.SecretConfig(
+        config_secrets.SecretConfig(secret_name=SECRET_NAME_1),
+        config_secrets.SecretConfig(
             secret_name=SECRET_NAME_2,
             sources=[
-                config.EnvVarSecretSource(
+                config_secrets.EnvVarSecretSource(
                     secret_name=SECRET_NAME_2,
                     env_var_name=SECRET_ENV_VAR,
                 ),
-                config.FilePathSecretSource(
+                config_secrets.FilePathSecretSource(
                     secret_name=SECRET_NAME_2,
                     file_path=SECRET_FILE_PATH,
                 ),
-                config.SubprocessSecretSource(
+                config_secrets.SubprocessSecretSource(
                     secret_name=SECRET_NAME_2,
                     command=SECRET_COMAND,
                     args=SECRET_ARGS,
                 ),
-                config.RandomCharsSecretSource(
+                config_secrets.RandomCharsSecretSource(
                     secret_name=SECRET_NAME_2,
                     n_chars=SECRET_NCHARS,
                 ),
@@ -531,7 +532,7 @@ def test_installationconfig_from_dotenv(
 
 def test_installationconfig_secrets_map_wo_existing():
     secrets = [
-        config.SecretConfig(secret_name=f"secret-{i_secret}")
+        config_secrets.SecretConfig(secret_name=f"secret-{i_secret}")
         for i_secret in range(5)
     ]
 
@@ -1390,8 +1391,8 @@ def test_installationconfig_from_yaml_environ_wo_value(temp_dir, config_yaml):
 @pytest.mark.parametrize("w_logfire_config", [False, True])
 def test_installationconfig_as_yaml(w_logfire_config):
     meta = mock.create_autospec(config.InstallationConfigMeta)
-    secret_1 = config.SecretConfig(secret_name="SECRET_ONE")
-    secret_2 = config.SecretConfig(secret_name="SECRET_TWO")
+    secret_1 = config_secrets.SecretConfig(secret_name="SECRET_ONE")
+    secret_2 = config_secrets.SecretConfig(secret_name="SECRET_TWO")
     agent_config = config_agents.AgentConfig(
         id="test-agent",
         system_prompt="You are a test",

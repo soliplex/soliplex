@@ -11,6 +11,7 @@ from soliplex import config
 from soliplex import secrets
 from soliplex.agui import features as agui_features
 from soliplex.config import agents as config_agents
+from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
 
@@ -156,7 +157,7 @@ W_SECRET_SOURCE_ICMETA_KW = {
     "agent_configs": [],
     "secret_sources": [
         config.ConfigMeta(
-            config_klass=config.EnvVarSecretSource,
+            config_klass=config_secrets.EnvVarSecretSource,
             registered_func=SECRET_SOURCE_FUNC,
         ),
     ],
@@ -164,7 +165,7 @@ W_SECRET_SOURCE_ICMETA_KW = {
 W_SECRET_SOURCE_ICMETA_YAML = """\
 meta:
   secret_sources:
-    - "config_klass": "soliplex.config.EnvVarSecretSource"
+    - "config_klass": "soliplex.config.secrets.EnvVarSecretSource"
       "registered_func": "soliplex.config.test_secret_func"
 """
 
@@ -197,7 +198,7 @@ FULL_ICMETA_KW = {
     ],
     "secret_sources": [
         config.ConfigMeta(
-            config_klass=config.EnvVarSecretSource,
+            config_klass=config_secrets.EnvVarSecretSource,
             registered_func=SECRET_SOURCE_FUNC,
         ),
     ],
@@ -218,7 +219,7 @@ meta:
       - "soliplex.config.agents.AgentConfig"
       - "soliplex.config.agents.FactoryAgentConfig"
   secret_sources:
-    - "config_klass": "soliplex.config.EnvVarSecretSource"
+    - "config_klass": "soliplex.config.secrets.EnvVarSecretSource"
       "registered_func": "soliplex.config.test_secret_func"
 """
 
@@ -405,7 +406,7 @@ def test_installationconfigmeta_from_yaml(
 
         if config_meta and "secret_sources" in config_meta:
             assert patched_secret_getters == {
-                config.EnvVarSecretSource.kind: SECRET_SOURCE_FUNC
+                config_secrets.EnvVarSecretSource.kind: SECRET_SOURCE_FUNC
             }
 
 
@@ -472,12 +473,12 @@ def test_installationconfigmeta_as_yaml(
         )
 
     if w_secret_reg:
-        klass = config.EnvVarSecretSource
+        klass = config_secrets.EnvVarSecretSource
         registered_func = secrets.get_env_var_secret
         patched_secret_getters[klass.kind] = registered_func
         expected_dict["secret_sources"].append(
             {
-                "config_klass": "soliplex.config.EnvVarSecretSource",
+                "config_klass": "soliplex.config.secrets.EnvVarSecretSource",
                 "registered_func": "soliplex.secrets.get_env_var_secret",
             }
         )

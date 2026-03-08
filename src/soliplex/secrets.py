@@ -2,7 +2,9 @@ import os
 import pathlib
 import subprocess
 
-from soliplex import config
+from soliplex.config import secrets as config_secrets
+
+_secrets_getters = config_secrets.SECRET_GETTERS_BY_KIND
 
 
 class SecretError(ValueError):
@@ -62,7 +64,7 @@ class SecretsNotFound(ExceptionGroup, SecretError):
         )
 
 
-def get_env_var_secret(source: config.EnvVarSecretSource):
+def get_env_var_secret(source: config_secrets.EnvVarSecretSource):
     if source._installation_config is not None:
         from_dotenv = source._installation_config.from_dotenv
     else:
@@ -79,12 +81,10 @@ def get_env_var_secret(source: config.EnvVarSecretSource):
         ) from exc
 
 
-config.SECRET_GETTERS_BY_KIND[config.EnvVarSecretSource.kind] = (
-    get_env_var_secret
-)
+_secrets_getters[config_secrets.EnvVarSecretSource.kind] = get_env_var_secret
 
 
-def get_file_path_secret(source: config.FilePathSecretSource):
+def get_file_path_secret(source: config_secrets.FilePathSecretSource):
     file_path = pathlib.Path(source.file_path)
     if not file_path.is_absolute():
         file_path = source._config_path.parent / source.file_path
@@ -98,12 +98,12 @@ def get_file_path_secret(source: config.FilePathSecretSource):
         ) from exc
 
 
-config.SECRET_GETTERS_BY_KIND[config.FilePathSecretSource.kind] = (
+_secrets_getters[config_secrets.FilePathSecretSource.kind] = (
     get_file_path_secret
 )
 
 
-def get_subprocess_secret(source: config.SubprocessSecretSource):
+def get_subprocess_secret(source: config_secrets.SubprocessSecretSource):
     try:
         found = subprocess.check_output(
             [source.command, *source.args],
@@ -124,26 +124,26 @@ def get_subprocess_secret(source: config.SubprocessSecretSource):
     return found.strip()
 
 
-config.SECRET_GETTERS_BY_KIND[config.SubprocessSecretSource.kind] = (
+_secrets_getters[config_secrets.SubprocessSecretSource.kind] = (
     get_subprocess_secret
 )
 
 
-def get_random_chars_secret(source: config.RandomCharsSecretSource):
+def get_random_chars_secret(source: config_secrets.RandomCharsSecretSource):
     return os.urandom(source.n_chars).hex()
 
 
-config.SECRET_GETTERS_BY_KIND[config.RandomCharsSecretSource.kind] = (
+_secrets_getters[config_secrets.RandomCharsSecretSource.kind] = (
     get_random_chars_secret
 )
 
 
-def get_secret(secret_config: config.SecretConfig) -> str:
+def get_secret(secret_config: config_secrets.SecretConfig) -> str:
     excs = []
     sources = secret_config.sources
     while secret_config.resolved is None and sources:
         source, *sources = sources
-        getter = config.SECRET_GETTERS_BY_KIND[source.kind]
+        getter = _secrets_getters[source.kind]
         try:
             secret_config._resolved = getter(source)
         except SecretError as exc:
@@ -155,7 +155,7 @@ def get_secret(secret_config: config.SecretConfig) -> str:
     return secret_config.resolved
 
 
-def resolve_secrets(secret_configs: list[config.SecretConfig]) -> None:
+def resolve_secrets(secret_configs: list[config_secrets.SecretConfig]) -> None:
     failed_names = []
     excs = []
 

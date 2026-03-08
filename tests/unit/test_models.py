@@ -15,6 +15,7 @@ from soliplex import config
 from soliplex import models
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
+from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
 
@@ -985,7 +986,7 @@ def test_installation_from_config_bare(bare_installation_config):
 
 @pytest.fixture
 def a_secret():
-    return config.SecretConfig(secret_name=INSTALLATION_SECRET)
+    return config_secrets.SecretConfig(secret_name=INSTALLATION_SECRET)
 
 
 def test_installation_from_config_w_secrets(

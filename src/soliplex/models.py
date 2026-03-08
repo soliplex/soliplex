@@ -15,6 +15,7 @@ from soliplex import config
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import authsystem as config_authsystem
+from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
 
@@ -370,7 +371,7 @@ class SecretSource(pydantic.BaseModel):
     extra_arguments: dict[str, typing.Any]
 
     @classmethod
-    def from_config(cls, source_config: config.SecretSource):
+    def from_config(cls, source_config: config_secrets.SecretSource):
         return cls(
             kind=source_config.kind,
             extra_arguments=source_config.extra_arguments,
@@ -382,7 +383,7 @@ class Secret(pydantic.BaseModel):
     sources: list[SecretSource]
 
     @classmethod
-    def from_config(cls, secret_config: config.SecretConfig):
+    def from_config(cls, secret_config: config_secrets.SecretConfig):
         return cls(
             secret_name=secret_config.secret_name,
             sources=[

@@ -5,6 +5,7 @@ import pytest
 
 from soliplex import config
 from soliplex import secrets
+from soliplex.config import secrets as config_secrets
 
 SECRET_NAME = "TEST_SECRET"
 ENV_VAR_NAME = "TEST_ENV_VAR"
@@ -14,8 +15,8 @@ ERROR_MISS = object()
 
 SECRET_NAME_1 = "TEST_SECRET"
 SECRET_NAME_2 = "OTHER_SECRET"
-SECRET_CONFIG_1 = config.SecretConfig(secret_name=SECRET_NAME_1)
-SECRET_CONFIG_2 = config.SecretConfig(secret_name=SECRET_NAME_2)
+SECRET_CONFIG_1 = config_secrets.SecretConfig(secret_name=SECRET_NAME_1)
+SECRET_CONFIG_2 = config_secrets.SecretConfig(secret_name=SECRET_NAME_2)
 
 NoRaise = contextlib.nullcontext()
 EnvVarNotFound = pytest.raises(secrets.SecretEnvVarNotFound)
@@ -72,11 +73,11 @@ def test_get_env_var_secret_wo_installation_config(
     expected,
 ):
     if ev_name is None:
-        source = config.EnvVarSecretSource(
+        source = config_secrets.EnvVarSecretSource(
             secret_name=SECRET_NAME,
         )
     else:
-        source = config.EnvVarSecretSource(
+        source = config_secrets.EnvVarSecretSource(
             secret_name=SECRET_NAME,
             env_var_name=ev_name,
         )
@@ -171,12 +172,12 @@ def test_get_env_var_secret_w_installation_config(
         from_dotenv=from_dotenv,
     )
     if ev_name is None:
-        source = config.EnvVarSecretSource(
+        source = config_secrets.EnvVarSecretSource(
             secret_name=SECRET_NAME,
             _installation_config=installation_config,
         )
     else:
-        source = config.EnvVarSecretSource(
+        source = config_secrets.EnvVarSecretSource(
             secret_name=SECRET_NAME,
             env_var_name=ev_name,
             _installation_config=installation_config,
@@ -204,7 +205,7 @@ def test_get_file_path_secret(temp_dir, file_path, expectation, expected):
         if expected is not ERROR_MISS:
             write_file_path.write_text(expected)
 
-    source = config.FilePathSecretSource(
+    source = config_secrets.FilePathSecretSource(
         secret_name=SECRET_NAME,
         file_path=file_path,
         _config_path=temp_dir / "installation.yaml",
@@ -226,7 +227,7 @@ def test_get_file_path_secret(temp_dir, file_path, expectation, expected):
     ],
 )
 def test_get_subprocess_secret(command, args, expectation, expected):
-    source = config.SubprocessSecretSource(
+    source = config_secrets.SubprocessSecretSource(
         secret_name=SECRET_NAME,
         command=command,
         args=args,
@@ -243,7 +244,7 @@ def test_get_subprocess_secret(command, args, expectation, expected):
 def test_get_subprocess_secret_empty_output(sco):
     sco.return_value = ""
 
-    source = config.SubprocessSecretSource(
+    source = config_secrets.SubprocessSecretSource(
         secret_name=SECRET_NAME,
         command="some_cmd",
         args=(),
@@ -255,7 +256,7 @@ def test_get_subprocess_secret_empty_output(sco):
 
 @mock.patch("os.urandom")
 def test_random_chars_secret_source(o_ur):
-    source = config.RandomCharsSecretSource(
+    source = config_secrets.RandomCharsSecretSource(
         secret_name=SECRET_NAME,
         n_chars=32,
     )
@@ -267,15 +268,15 @@ def test_random_chars_secret_source(o_ur):
     o_ur.assert_called_once_with(32)
 
 
-ENV_VAR_MISS = config.EnvVarSecretSource(
+ENV_VAR_MISS = config_secrets.EnvVarSecretSource(
     secret_name=SECRET_NAME,
     env_var_name="NONESUCH",
 )
-ENV_VAR_HIT = config.EnvVarSecretSource(
+ENV_VAR_HIT = config_secrets.EnvVarSecretSource(
     secret_name=SECRET_NAME,
     env_var_name=ENV_VAR_NAME,
 )
-RANDOM_CHARS = config.RandomCharsSecretSource(secret_name=SECRET_NAME)
+RANDOM_CHARS = config_secrets.RandomCharsSecretSource(secret_name=SECRET_NAME)
 
 
 @pytest.mark.parametrize(
@@ -292,7 +293,7 @@ def test_secret_ctor_w_sources(
     expectation,
     expected,
 ):
-    secret_config = config.SecretConfig(
+    secret_config = config_secrets.SecretConfig(
         secret_name=SECRET_NAME,
         sources=sources,
     )

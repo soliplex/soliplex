@@ -9,6 +9,7 @@ from soliplex.agui import features as agui_features
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import authsystem as config_authsystem
+from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
 
@@ -103,7 +104,8 @@ def patched_agent_configs():
 
 
 @pytest.fixture
-def patched_secret_getters(patched_soliplex_config):
-    result = patched_soliplex_config["SECRET_GETTERS_BY_KIND"] = {}
+def patched_secret_getters():
+    with mock.patch.dict(config_secrets.__dict__) as patched:
+        result = patched["SECRET_GETTERS_BY_KIND"] = {}
 
-    return result
+        yield result

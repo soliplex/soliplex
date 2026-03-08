@@ -16,6 +16,7 @@ from soliplex import models
 from soliplex import secrets
 from soliplex import util
 from soliplex.config import agents as config_agents
+from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
 
@@ -28,8 +29,8 @@ LOG_CONFIG_FILE = "logging.yaml"
 
 SECRET_NAME_1 = "TEST_SECRET"
 SECRET_NAME_2 = "OTHER_SECRET"
-SECRET_CONFIG_1 = config.SecretConfig(secret_name=SECRET_NAME_1)
-SECRET_CONFIG_2 = config.SecretConfig(secret_name=SECRET_NAME_2)
+SECRET_CONFIG_1 = config_secrets.SecretConfig(secret_name=SECRET_NAME_1)
+SECRET_CONFIG_2 = config_secrets.SecretConfig(secret_name=SECRET_NAME_2)
 MISS_ERROR = object()
 OLLAMA_BASE_URL = "http://ollama.example.com:11434"
 
