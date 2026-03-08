@@ -8,6 +8,7 @@ from soliplex import config
 from soliplex.agui import features as agui_features
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
+from soliplex.config import authsystem as config_authsystem
 from soliplex.config import tools as config_tools
 
 AGUI_FEATURE_NAME = "test-agui-feature"
@@ -15,7 +16,7 @@ AGUI_FEATURE_NAME = "test-agui-feature"
 
 def _auth_systems(n_auth_systems):
     return [
-        config.OIDCAuthSystemConfig(
+        config_authsystem.OIDCAuthSystemConfig(
             id=f"auth-system-{i_auth_system}",
             title=f"Auth System #{i_auth_system}",
             token_validation_pem=f"PEM {i_auth_system:3d}",

@@ -14,6 +14,7 @@ from soliplex import agui as agui_package
 from soliplex import config
 from soliplex import models
 from soliplex.config import agents as config_agents
+from soliplex.config import authsystem as config_authsystem
 from soliplex.config import tools as config_tools
 
 NOW = datetime.datetime.now(datetime.UTC)
@@ -80,7 +81,7 @@ INSTALLATION_OIDC_AUTH_SYSTEM_SERVER_URL = "https://oidc.example.com/"
 INSTALLATION_OIDC_AUTH_SYSTEM_TOKEN_VALIDATION_PEM = "PEM GOES HERE"
 INSTALLATION_OIDC_AUTH_SYSTEM_CLIENT_ID = "oicd-client-test"
 INSTALLATION_OIDC_AUTH_SYSTEM_SCOPE = "oicd-client-scope"
-INSTALLATION_OIDC_AUTH_SYSTEM_CONFIG = config.OIDCAuthSystemConfig(
+INSTALLATION_OIDC_AUTH_SYSTEM_CONFIG = config_authsystem.OIDCAuthSystemConfig(
     id=INSTALLATION_OIDC_AUTH_SYSTEM_ID,
     title=INSTALLATION_OIDC_AUTH_SYSTEM_TITLE,
     server_url=INSTALLATION_OIDC_AUTH_SYSTEM_SERVER_URL,

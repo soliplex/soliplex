@@ -14,6 +14,7 @@ from soliplex import authz as authz_package
 from soliplex import config
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
+from soliplex.config import authsystem as config_authsystem
 from soliplex.config import tools as config_tools
 
 KW_ONLY = pydantic.Field(kw_only=True)
@@ -353,7 +354,7 @@ class OIDCAuthSystem(pydantic.BaseModel):
     scope: str | None = None
 
     @classmethod
-    def from_config(cls, oas_config: config.OIDCAuthSystemConfig):
+    def from_config(cls, oas_config: config_authsystem.OIDCAuthSystemConfig):
         kwargs = dataclasses.asdict(
             dataclasses.replace(oas_config, _installation_config=None)
         )

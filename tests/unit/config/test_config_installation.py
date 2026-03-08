@@ -13,6 +13,7 @@ from soliplex import config
 from soliplex import secrets
 from soliplex.agui import features as agui_features
 from soliplex.config import agents as config_agents
+from soliplex.config import authsystem as config_authsystem
 from soliplex.config import exceptions as config_exc
 from tests.unit.config import test_config_agents as test_agents
 from tests.unit.config import test_config_authsystem as test_authsystem
@@ -1507,11 +1508,11 @@ def test_installationconfig_oidc_auth_system_configs_wo_existing(
     i_config = config.InstallationConfig(**i_config_kw)
 
     expected = [
-        config.OIDCAuthSystemConfig(
+        config_authsystem.OIDCAuthSystemConfig(
             _installation_config=i_config,
             **oidc_bare_kw,
         ),
-        config.OIDCAuthSystemConfig(
+        config_authsystem.OIDCAuthSystemConfig(
             _installation_config=i_config,
             **oidc_w_scope_kw,
         ),

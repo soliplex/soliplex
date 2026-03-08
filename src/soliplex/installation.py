@@ -21,6 +21,7 @@ from soliplex import util
 from soliplex.agui import schema as agui_schema
 from soliplex.authz import schema as authz_schema
 from soliplex.config import agents as config_agents
+from soliplex.config import authsystem as config_authsystem
 
 ProviderURL = str | None
 ProviderModelNames = set[str]
@@ -155,7 +156,9 @@ class Installation:
         return len(self._config.oidc_auth_system_configs) == 0
 
     @property
-    def oidc_auth_system_configs(self) -> list[config.OIDCAuthSystemConfig]:
+    def oidc_auth_system_configs(
+        self,
+    ) -> list[config_authsystem.OIDCAuthSystemConfig]:
         return self._config.oidc_auth_system_configs
 
     async def get_room_configs(

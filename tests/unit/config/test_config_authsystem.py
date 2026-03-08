@@ -5,7 +5,8 @@ import ssl
 import pytest
 import yaml
 
-from soliplex import config
+from soliplex.config import authsystem as config_authsystem
+from soliplex.config import exceptions as config_exc
 
 here = pathlib.Path(__file__).resolve().parent
 
@@ -124,8 +125,8 @@ def test_authsystem_from_yaml_w_error(
     with config_path.open() as stream:
         config_dict = yaml.safe_load(stream)
 
-    with pytest.raises(config.FromYamlException) as exc_info:
-        config.OIDCAuthSystemConfig.from_yaml(
+    with pytest.raises(config_exc.FromYamlException) as exc_info:
+        config_authsystem.OIDCAuthSystemConfig.from_yaml(
             installation_config,
             config_path,
             config_dict,
@@ -148,7 +149,7 @@ def test_authsystem_from_yaml(
     config_yaml,
     exp_config,
 ):
-    expected = config.OIDCAuthSystemConfig(
+    expected = config_authsystem.OIDCAuthSystemConfig(
         _installation_config=installation_config,
         **exp_config,
     )
@@ -169,7 +170,7 @@ def test_authsystem_from_yaml(
 
     expected._config_path = config_path
 
-    found = config.OIDCAuthSystemConfig.from_yaml(
+    found = config_authsystem.OIDCAuthSystemConfig.from_yaml(
         installation_config,
         config_path,
         config_dict,
@@ -206,14 +207,14 @@ def test_authsystem_from_yaml_w_client_secret(
     with config_path.open() as stream:
         config_dict = yaml.safe_load(stream)
 
-    expected = config.OIDCAuthSystemConfig(
+    expected = config_authsystem.OIDCAuthSystemConfig(
         _installation_config=installation_config,
         _config_path=config_path,
         **exp_config,
     )
     expected.client_secret = exp_secret
 
-    found = config.OIDCAuthSystemConfig.from_yaml(
+    found = config_authsystem.OIDCAuthSystemConfig.from_yaml(
         installation_config,
         config_path,
         config_dict,
@@ -238,7 +239,7 @@ def test_authsystem_from_yaml_w_oid_cpp(
     exp_config,
     exp_path,
 ):
-    expected = config.OIDCAuthSystemConfig(
+    expected = config_authsystem.OIDCAuthSystemConfig(
         _installation_config=installation_config,
         **exp_config,
     )
@@ -253,7 +254,7 @@ def test_authsystem_from_yaml_w_oid_cpp(
 
     expected.oidc_client_pem_path = pathlib.Path(exp_path)
 
-    found = config.OIDCAuthSystemConfig.from_yaml(
+    found = config_authsystem.OIDCAuthSystemConfig.from_yaml(
         installation_config,
         config_path,
         exp_config,
@@ -263,10 +264,11 @@ def test_authsystem_from_yaml_w_oid_cpp(
 
 
 def test_authsystem_server_metadata_url():
-    inst = config.OIDCAuthSystemConfig(**BARE_AUTHSYSTEM_CONFIG_KW)
+    inst = config_authsystem.OIDCAuthSystemConfig(**BARE_AUTHSYSTEM_CONFIG_KW)
 
     assert inst.server_metadata_url == (
-        f"{AUTHSYSTEM_SERVER_URL}/{config.WELL_KNOWN_OPENID_CONFIGURATION}"
+        f"{AUTHSYSTEM_SERVER_URL}/"
+        f"{config_authsystem.WELL_KNOWN_OPENID_CONFIGURATION}"
     )
 
 
@@ -303,12 +305,13 @@ def test_authsystem_oauth_client_args(
     exp_secret,
     bare_secret,
 ):
-    inst = config.OIDCAuthSystemConfig(
+    inst = config_authsystem.OIDCAuthSystemConfig(
         **w_config,
     )
     inst._installation_config = installation_config
     exp_url = (
-        f"{AUTHSYSTEM_SERVER_URL}/{config.WELL_KNOWN_OPENID_CONFIGURATION}"
+        f"{AUTHSYSTEM_SERVER_URL}/"
+        f"{config_authsystem.WELL_KNOWN_OPENID_CONFIGURATION}"
     )
 
     icgs = installation_config.get_secret
