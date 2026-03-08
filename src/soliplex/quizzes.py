@@ -3,9 +3,9 @@ from pydantic_ai.models import openai as openai_models
 from pydantic_ai.providers import ollama as ollama_providers
 from pydantic_ai.providers import openai as openai_providers
 
-from soliplex import config
 from soliplex import models
 from soliplex.config import agents as config_agents
+from soliplex.config import quizzes as config_quizzes
 
 
 class QuestionNotFound(ValueError):
@@ -42,7 +42,7 @@ GUIDELINES:
 /no_think"""  # noqa: E501 first line is important to the LLM.
 
 
-def get_quiz_judge_agent(quiz: config.QuizConfig):
+def get_quiz_judge_agent(quiz: config_quizzes.QuizConfig):
     provider_type = quiz.judge_agent.provider_type
     llm_provider_kw = quiz.judge_agent.llm_provider_kw
 
@@ -65,8 +65,8 @@ def get_quiz_judge_agent(quiz: config.QuizConfig):
 
 
 async def check_answer_with_agent(
-    quiz: config.QuizConfig,
-    question: config.QuizQuestion,
+    quiz: config_quizzes.QuizConfig,
+    question: config_quizzes.QuizQuestion,
     answer: str,
 ) -> bool:
     agent = get_quiz_judge_agent(quiz)
@@ -83,7 +83,7 @@ EXPECTED ANSWER: {question.expected_output}"""
 
 
 async def check_answer(
-    quiz: config.QuizConfig,
+    quiz: config_quizzes.QuizConfig,
     question_uuid: str,
     answer: str,
 ) -> dict:
@@ -92,7 +92,10 @@ async def check_answer(
     except KeyError:
         raise QuestionNotFound(quiz.id, question_uuid) from None
 
-    if question.metadata.type == config.QuizQuestionType.MULTIPLE_CHOICE:
+    if (
+        question.metadata.type
+        == config_quizzes.QuizQuestionType.MULTIPLE_CHOICE
+    ):
         answer = answer.strip().lower()
         correct = answer == question.expected_output.lower()
 

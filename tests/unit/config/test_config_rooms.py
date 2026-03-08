@@ -9,6 +9,7 @@ from haiku.skills import models as hs_models
 from soliplex import config
 from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
+from soliplex.config import quizzes as config_quizzes
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
 from tests.unit.config import test_config_agents as test_agents
@@ -66,7 +67,7 @@ FULL_ROOM_CONFIG_KW = {
         agui_feature_names=(AGUI_FEATURE_NAME,),
     ),
     "quizzes": [
-        config.QuizConfig(
+        config_quizzes.QuizConfig(
             id=test_quizzes.TEST_QUIZ_ID,
             question_file=test_quizzes.TEST_QUIZ_OVR,
             judge_agent=config_agents.AgentConfig(
@@ -353,7 +354,7 @@ def test_roomconfig_quiz_map(w_existing):
     NUM_QUIZZES = 3
     quizzes = [
         mock.create_autospec(
-            config.QuizConfig,
+            config_quizzes.QuizConfig,
             id=f"quiz-{iq}",
             question_file=f"ignored-{iq}.json",
         )

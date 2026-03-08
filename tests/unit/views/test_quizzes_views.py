@@ -4,11 +4,11 @@ import fastapi
 import pytest
 
 from soliplex import authz as authz_package
-from soliplex import config
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
 from soliplex import quizzes
+from soliplex.config import quizzes as config_quizzes
 from soliplex.views import quizzes as quizzes_views
 
 TEST_ROOM_ID = "test_room"
@@ -27,10 +27,10 @@ MC_OPTIONS = ["orange", "blue", "purple"]
 
 @pytest.fixture
 def qa_question():
-    return config.QuizQuestion(
+    return config_quizzes.QuizQuestion(
         inputs=INPUTS,
         expected_output=EXPECTED_ANSWER,
-        metadata=config.QuizQuestionMetadata(
+        metadata=config_quizzes.QuizQuestionMetadata(
             uuid=QA_QUESTION_UUID,
             type=QUESTION_TYPE_QA,
         ),
@@ -39,10 +39,10 @@ def qa_question():
 
 @pytest.fixture
 def mc_question():
-    return config.QuizQuestion(
+    return config_quizzes.QuizQuestion(
         inputs=INPUTS,
         expected_output=EXPECTED_ANSWER,
-        metadata=config.QuizQuestionMetadata(
+        metadata=config_quizzes.QuizQuestionMetadata(
             uuid=MC_QUESTION_UUID,
             type=QUESTION_TYPE_MC,
             options=MC_OPTIONS,
@@ -52,7 +52,7 @@ def mc_question():
 
 @pytest.fixture
 def test_quiz(qa_question, mc_question):
-    quiz = config.QuizConfig(
+    quiz = config_quizzes.QuizConfig(
         id="testing",
         question_file="ignored.json",
     )

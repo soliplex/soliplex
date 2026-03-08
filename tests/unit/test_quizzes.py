@@ -6,6 +6,7 @@ from soliplex import config
 from soliplex import models
 from soliplex import quizzes
 from soliplex.config import agents as config_agents
+from soliplex.config import quizzes as config_quizzes
 
 INPUTS = "What color is the sky"
 EXPECTED_ANSWER = "Blue"
@@ -28,10 +29,10 @@ def _from_param(request, key):
 
 @pytest.fixture
 def qa_question():
-    return config.QuizQuestion(
+    return config_quizzes.QuizQuestion(
         inputs=INPUTS,
         expected_output=EXPECTED_ANSWER,
-        metadata=config.QuizQuestionMetadata(
+        metadata=config_quizzes.QuizQuestionMetadata(
             uuid=QA_QUESTION_UUID,
             type=QUESTION_TYPE_QA,
         ),
@@ -40,10 +41,10 @@ def qa_question():
 
 @pytest.fixture
 def mc_question():
-    return config.QuizQuestion(
+    return config_quizzes.QuizQuestion(
         inputs=INPUTS,
         expected_output=EXPECTED_ANSWER,
-        metadata=config.QuizQuestionMetadata(
+        metadata=config_quizzes.QuizQuestionMetadata(
             uuid=MC_QUESTION_UUID,
             type=QUESTION_TYPE_MC,
             options=MC_OPTIONS,
@@ -86,7 +87,7 @@ def a_quiz(
         },
         **agent_provider_type,
     )
-    quiz = config.QuizConfig(
+    quiz = config_quizzes.QuizConfig(
         id="testing",
         question_file="ignored.json",
         judge_agent=judge_agent,

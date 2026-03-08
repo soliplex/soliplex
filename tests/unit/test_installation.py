@@ -16,6 +16,7 @@ from soliplex import models
 from soliplex import secrets
 from soliplex import util
 from soliplex.config import agents as config_agents
+from soliplex.config import quizzes as config_quizzes
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
@@ -227,7 +228,7 @@ def room_quizzes(request, quiz_judge_agents):
     if request.param:
         kw["quizzes"].append(
             mock.create_autospec(
-                config.QuizConfig,
+                config_quizzes.QuizConfig,
                 **quiz_judge_agents,
             )
         )

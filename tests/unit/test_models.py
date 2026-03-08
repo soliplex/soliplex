@@ -15,6 +15,7 @@ from soliplex import config
 from soliplex import models
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
+from soliplex.config import quizzes as config_quizzes
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
@@ -216,10 +217,10 @@ def run_input():
 
 @pytest.fixture
 def qa_question():
-    return config.QuizQuestion(
+    return config_quizzes.QuizQuestion(
         inputs=INPUTS,
         expected_output=EXPECTED_ANSWER,
-        metadata=config.QuizQuestionMetadata(
+        metadata=config_quizzes.QuizQuestionMetadata(
             uuid=QA_QUESTION_UUID,
             type=QUESTION_TYPE_QA,
             options=None,
@@ -229,10 +230,10 @@ def qa_question():
 
 @pytest.fixture
 def mc_question():
-    return config.QuizQuestion(
+    return config_quizzes.QuizQuestion(
         inputs=INPUTS,
         expected_output=EXPECTED_ANSWER,
-        metadata=config.QuizQuestionMetadata(
+        metadata=config_quizzes.QuizQuestionMetadata(
             uuid=MC_QUESTION_UUID,
             type=QUESTION_TYPE_MC,
             options=MC_OPTIONS,
@@ -272,11 +273,11 @@ def quiz_max_questions(request):
 
 
 def test_quizquestion_from_config():
-    question_config = config.QuizQuestion(
+    question_config = config_quizzes.QuizQuestion(
         inputs="What color is the sky?",
         expected_output="Blue",
-        metadata=config.QuizQuestionMetadata(
-            type=config.QuizQuestionType.QA,
+        metadata=config_quizzes.QuizQuestionMetadata(
+            type=config_quizzes.QuizQuestionType.QA,
             uuid=QA_QUESTION_UUID,
             options=[],
         ),
@@ -286,7 +287,9 @@ def test_quizquestion_from_config():
 
     assert question_model.inputs == question_config.inputs
     assert question_model.expected_output == question_config.expected_output
-    assert question_model.metadata.type == str(config.QuizQuestionType.QA)
+    assert question_model.metadata.type == str(
+        config_quizzes.QuizQuestionType.QA
+    )
     assert question_model.metadata.uuid == QA_QUESTION_UUID
     assert question_model.metadata.options == []
 
@@ -298,7 +301,7 @@ def test_quiz_from_config(
     quiz_randomize,
     quiz_max_questions,
 ):
-    quiz_config = config.QuizConfig(
+    quiz_config = config_quizzes.QuizConfig(
         id=QUIZ_ID,
         title=QUIZ_TITLE,
         _question_file_path_override=str(quiz_path),
@@ -657,7 +660,7 @@ def gcd_tool_config():
 
 @pytest.fixture
 def a_quiz(quiz_path):
-    return config.QuizConfig(
+    return config_quizzes.QuizConfig(
         id=QUIZ_ID,
         title=QUIZ_TITLE,
         _question_file_path_override=str(quiz_path),

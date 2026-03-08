@@ -7,8 +7,9 @@ from unittest import mock
 import pytest
 import yaml
 
-from soliplex import config
 from soliplex.config import agents as config_agents
+from soliplex.config import exceptions as config_exc
+from soliplex.config import quizzes as config_quizzes
 
 NoRaise = contextlib.nullcontext()
 
@@ -41,18 +42,18 @@ TYPE_2 = "multiple-choice"
 OPTIONS_2 = ["red", "green", "blue"]
 
 QUESTIONS = [
-    config.QuizQuestion(
+    config_quizzes.QuizQuestion(
         inputs=QUESTION_1,
         expected_output=ANSWER_1,
-        metadata=config.QuizQuestionMetadata(
+        metadata=config_quizzes.QuizQuestionMetadata(
             uuid=Q_UUID_1,
             type=TYPE_1,
         ),
     ),
-    config.QuizQuestion(
+    config_quizzes.QuizQuestion(
         inputs=QUESTION_2,
         expected_output=ANSWER_2,
-        metadata=config.QuizQuestionMetadata(
+        metadata=config_quizzes.QuizQuestionMetadata(
             type=TYPE_2, uuid=Q_UUID_2, options=OPTIONS_2
         ),
     ),
@@ -98,10 +99,10 @@ question_file: "{TEST_QUIZ_OVR}"
 
 @pytest.fixture
 def qa_question():
-    return config.QuizQuestion(
+    return config_quizzes.QuizQuestion(
         inputs=INPUTS,
         expected_output=EXPECTED_ANSWER,
-        metadata=config.QuizQuestionMetadata(
+        metadata=config_quizzes.QuizQuestionMetadata(
             uuid=QA_QUESTION_UUID,
             type=QUESTION_TYPE_QA,
             options=None,
@@ -111,10 +112,10 @@ def qa_question():
 
 @pytest.fixture
 def mc_question():
-    return config.QuizQuestion(
+    return config_quizzes.QuizQuestion(
         inputs=INPUTS,
         expected_output=EXPECTED_ANSWER,
-        metadata=config.QuizQuestionMetadata(
+        metadata=config_quizzes.QuizQuestionMetadata(
             uuid=MC_QUESTION_UUID,
             type=QUESTION_TYPE_MC,
             options=MC_OPTIONS,
@@ -144,13 +145,13 @@ def populated_quiz(temp_dir, quiz_json):
 
 
 def test_quizconfig_ctor_defaults():
-    with pytest.raises(config.QCExactlyOneOfStemOrOverride):
-        config.QuizConfig(id=TEST_QUIZ_ID)
+    with pytest.raises(config_quizzes.QCExactlyOneOfStemOrOverride):
+        config_quizzes.QuizConfig(id=TEST_QUIZ_ID)
 
 
 def test_quizconfig_ctor_exclusive():
-    with pytest.raises(config.QCExactlyOneOfStemOrOverride):
-        config.QuizConfig(
+    with pytest.raises(config_quizzes.QCExactlyOneOfStemOrOverride):
+        config_quizzes.QuizConfig(
             id=TEST_QUIZ_ID,
             _question_file_stem="question_file.json",
             _question_file_path_override="/path/to/question_file.json",
@@ -184,7 +185,7 @@ def test_quizconfig_ctor_w_question_file(
 
     installation_config.quizzes_paths = [qp_1, qp_2]
 
-    qc = config.QuizConfig(
+    qc = config_quizzes.QuizConfig(
         id=TEST_QUIZ_ID,
         question_file=qf,
         _installation_config=installation_config,
@@ -210,8 +211,8 @@ def test_quizconfig_from_yaml_exceptions(installation_config, temp_dir):
 
     config_path = temp_dir / "test.yaml"
 
-    with pytest.raises(config.FromYamlException) as exc:
-        config.QuizConfig.from_yaml(
+    with pytest.raises(config_exc.FromYamlException) as exc:
+        config_quizzes.QuizConfig.from_yaml(
             installation_config,
             config_path,
             config_kw,
@@ -248,7 +249,7 @@ def test_quizconfig_from_yaml(
 
     expected_kw["judge_agent"] = config_agents.AgentConfig(**jac)
 
-    expected = config.QuizConfig(**expected_kw)
+    expected = config_quizzes.QuizConfig(**expected_kw)
 
     expected = dataclasses.replace(
         expected,
@@ -259,7 +260,7 @@ def test_quizconfig_from_yaml(
     with yaml_file.open() as stream:
         config_dict = yaml.safe_load(stream)
 
-    found = config.QuizConfig.from_yaml(
+    found = config_quizzes.QuizConfig.from_yaml(
         installation_config,
         yaml_file,
         config_dict,
@@ -273,13 +274,13 @@ def test_quizconfig__load_questions_file_miss_w_stem(
     temp_dir,
 ):
     installation_config.quizzes_paths = [temp_dir]
-    qc = config.QuizConfig(
+    qc = config_quizzes.QuizConfig(
         id=TEST_QUIZ_ID,
         question_file="nonesuch",
         _installation_config=installation_config,
     )
 
-    with pytest.raises(config.QuestionFileNotFoundWithStem):
+    with pytest.raises(config_quizzes.QuestionFileNotFoundWithStem):
         qc._load_questions_file()
 
 
@@ -287,20 +288,20 @@ def test_quizconfig__load_questions_file_miss_w_override(
     installation_config,
     temp_dir,
 ):
-    qc = config.QuizConfig(
+    qc = config_quizzes.QuizConfig(
         id=TEST_QUIZ_ID,
         question_file=str(temp_dir / "nonesuch.json"),
         _installation_config=installation_config,
     )
 
-    with pytest.raises(config.QuestionFileNotFoundWithOverride):
+    with pytest.raises(config_quizzes.QuestionFileNotFoundWithOverride):
         qc._load_questions_file()
 
 
 def test_quizconfig__load_questions_file(temp_dir, populated_quiz, quiz_json):
     expected_questions = quiz_json["cases"]
 
-    qc = config.QuizConfig(
+    qc = config_quizzes.QuizConfig(
         id=TEST_QUIZ_ID,
         question_file=str(populated_quiz),
     )
@@ -335,7 +336,7 @@ def test_quizconfig_get_questions(quiz_questions, w_loaded, w_max_questions):
         question.metadata.uuid: question for question in expected_questions
     }
 
-    qc = config.QuizConfig(**kwargs)
+    qc = config_quizzes.QuizConfig(**kwargs)
 
     if w_loaded:
         qc._questions_map = q_map
@@ -354,7 +355,7 @@ def test_quizconfig_get_questions_w_randomize(
     populated_quiz,
     quiz_json,
 ):
-    qc = config.QuizConfig(
+    qc = config_quizzes.QuizConfig(
         id=TEST_QUIZ_ID,
         question_file=str(populated_quiz),
         randomize=True,
@@ -371,7 +372,7 @@ def test_quizconfig_get_question(w_loaded, w_miss):
     UUID = "DEADBEEF"
     expected = object()
 
-    qc = config.QuizConfig(
+    qc = config_quizzes.QuizConfig(
         id=TEST_QUIZ_ID,
         question_file="ignored.json",
     )

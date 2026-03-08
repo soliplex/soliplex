@@ -5,10 +5,8 @@ import enum
 import functools
 import importlib
 import itertools
-import json
 import os
 import pathlib
-import random
 import sys
 import typing
 
@@ -22,20 +20,21 @@ from haiku.skills import models as hs_models
 from soliplex.agui import features as agui_features_module  # noqa F401
 
 from . import _utils
-from . import agents
-from . import agui
-from . import authsystem
-from . import exceptions
+from . import agents as config_agents
+from . import agui as config_agui
+from . import authsystem as config_authsystem
+from . import exceptions as config_exc
+from . import quizzes as config_quizzes
 from . import secrets as config_secrets
-from . import skills
-from . import tools
+from . import skills as config_skills
+from . import tools as config_tools
 
 FILE_PREFIX = "file:"
 
 SYNC_MEMORY_ENGINE_URL = "sqlite://"
 ASYNC_MEMORY_ENGINE_URL = "sqlite+aiosqlite://"
 
-FromYamlException = exceptions.FromYamlException
+FromYamlException = config_exc.FromYamlException
 
 _dotted_name = _utils._dotted_name
 _no_repr = _utils._no_repr
@@ -44,37 +43,6 @@ _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 _no_repr_no_compare_dict = _utils._no_repr_no_compare_dict
 _default_list_field = _utils._default_list_field
 _default_dict_field = _utils._default_dict_field
-
-
-class QCExactlyOneOfStemOrOverride(TypeError):
-    def __init__(self, _config_path):
-        self._config_path = _config_path
-        super().__init__(
-            f"Configure exactly one of '_question_file_stem' or "
-            f"'_question_file_override_path' "
-            f"(configured in {_config_path})"
-        )
-
-
-class QuestionFileNotFoundWithStem(ValueError):
-    def __init__(self, stem, quizzes_paths, _config_path):
-        self.stem = stem
-        self.quizzes_paths = quizzes_paths
-        self._config_path = _config_path
-        super().__init__(
-            f"'{stem}.json' file not found on paths: "
-            f"{','.join([str(qp) for qp in quizzes_paths])} "
-            f"(configured in {_config_path})"
-        )
-
-
-class QuestionFileNotFoundWithOverride(ValueError):
-    def __init__(self, override, _config_path):
-        self.override = override
-        self._config_path = _config_path
-        super().__init__(
-            f"'{override}' file not found (configured in {_config_path})"
-        )
 
 
 class MissingEnvVar(ValueError):
@@ -95,173 +63,6 @@ class MissingEnvVars(ExceptionGroup, ValueError):
 
 
 # ============================================================================
-#   Quiz-related configuration types
-# ============================================================================
-
-
-class QuizQuestionType(enum.StrEnum):
-    QA = "qa"
-    FILL_BLANK = "fill-blank"
-    MULTIPLE_CHOICE = "multiple-choice"
-
-
-@dataclasses.dataclass(kw_only=True)
-class QuizQuestionMetadata:
-    type: QuizQuestionType
-    uuid: str
-    options: list[str] = _default_list_field()
-
-
-@dataclasses.dataclass(kw_only=True)
-class QuizQuestion:
-    inputs: str
-    expected_output: str
-    metadata: QuizQuestionMetadata
-
-
-@dataclasses.dataclass(kw_only=True)
-class QuizConfig:
-    id: str
-    question_file: dataclasses.InitVar[str] = None
-    _question_file_stem: str = None
-    _question_file_path_override: str = None
-    _questions_map: dict[str, QuizQuestion] = None
-
-    title: str = "Quiz"
-    randomize: bool = False
-    max_questions: int = None
-
-    judge_agent: agents.AgentConfig | None = None
-
-    # Set by `from_yaml` factory
-    _installation_config: InstallationConfig = _no_repr_no_compare_none()
-    _config_path: pathlib.Path = None
-
-    @classmethod
-    def from_yaml(
-        cls,
-        installation_config: InstallationConfig,
-        config_path: pathlib.Path,
-        config_dict: dict,
-    ):
-        try:
-            config_dict["_installation_config"] = installation_config
-            config_dict["_config_path"] = config_path
-
-            ja_config = config_dict.pop("judge_agent", None)
-            if ja_config is not None:
-                config_dict["judge_agent"] = agents.extract_agent_config(
-                    installation_config,
-                    config_path,
-                    ja_config,
-                )
-
-            return cls(**config_dict)
-
-        except FromYamlException:  # pragma: NO COVER
-            raise
-
-        except Exception as exc:
-            raise FromYamlException(config_path, "quiz", config_dict) from exc
-
-    def __post_init__(self, question_file):
-        if question_file is not None:
-            if "/" in question_file:
-                self._question_file_path_override = question_file
-            else:
-                if question_file.endswith(".json"):
-                    question_file = question_file[: -len(".json")]
-
-                self._question_file_stem = question_file
-        if (
-            self._question_file_stem is None
-            and self._question_file_path_override is None
-        ) or (
-            self._question_file_stem is not None
-            and self._question_file_path_override is not None
-        ):
-            raise QCExactlyOneOfStemOrOverride(self._config_path)
-
-        if self.judge_agent is None:
-            kwargs = {
-                "id": f"quiz-{self.id}-judge",
-                "model_name": "gpt-oss:20b",
-            }
-            if self._installation_config is not None:
-                i_config = self._installation_config
-                kwargs["provider_base_url"] = i_config.get_environment(
-                    "OLLAMA_BASE_URL",
-                )
-            self.judge_agent = agents.AgentConfig(**kwargs)
-
-    @property
-    def question_file_path(self) -> pathlib.Path:
-        if self._question_file_path_override is not None:
-            return pathlib.Path(self._question_file_path_override)
-        else:
-            for quizzes_path in self._installation_config.quizzes_paths:
-                qf_path = quizzes_path / f"{self._question_file_stem}.json"
-
-                if qf_path.is_file():
-                    return qf_path
-
-    @staticmethod
-    def _make_question(question: dict) -> QuizQuestion:
-        metadata = QuizQuestionMetadata(
-            uuid=question["metadata"]["uuid"],
-            type=question["metadata"]["type"],
-            options=question["metadata"].get("options", []),
-        )
-        return QuizQuestion(
-            inputs=question["inputs"],
-            expected_output=question["expected_output"],
-            metadata=metadata,
-        )
-
-    def _load_questions_file(self) -> dict[str, QuizQuestion]:
-        question_file = self.question_file_path
-
-        if question_file is None:
-            raise QuestionFileNotFoundWithStem(
-                self._question_file_stem,
-                self._installation_config.quizzes_paths,
-                self._config_path,
-            )
-
-        if not question_file.is_file():
-            raise QuestionFileNotFoundWithOverride(
-                self._question_file_path_override,
-                self._config_path,
-            )
-
-        quiz_json = json.loads(self.question_file_path.read_text())
-        return {
-            q_dict["metadata"]["uuid"]: self._make_question(q_dict)
-            for q_dict in quiz_json["cases"]
-        }
-
-    def get_questions(self) -> list[QuizQuestion]:
-        if self._questions_map is None:
-            self._questions_map = self._load_questions_file()
-
-        questions = list(self._questions_map.values())
-
-        if self.randomize:
-            random.shuffle(questions)
-
-        if self.max_questions is not None:
-            questions = questions[: self.max_questions]
-
-        return questions
-
-    def get_question(self, uuid: str) -> QuizQuestion:
-        if self._questions_map is None:
-            self._questions_map = self._load_questions_file()
-
-        return self._questions_map[uuid]
-
-
-# ============================================================================
 #   Room-related configuration types
 # ============================================================================
 
@@ -276,7 +77,7 @@ class RoomConfig:
     id: str
     name: str
     description: str
-    agent_config: agents.AgentConfig
+    agent_config: config_agents.AgentConfig
 
     #
     # Room UI options
@@ -289,8 +90,8 @@ class RoomConfig:
     #
     # Tool options
     #
-    tool_configs: tools.ToolConfigMap = _default_dict_field()
-    mcp_client_toolset_configs: tools.MCP_ClientToolsetConfigMap = (
+    tool_configs: config_tools.ToolConfigMap = _default_dict_field()
+    mcp_client_toolset_configs: config_tools.MCP_ClientToolsetConfigMap = (
         _default_dict_field()
     )
 
@@ -302,13 +103,13 @@ class RoomConfig:
     #
     # Skills options
     #
-    skills: skills.RoomSkillsConfig = None
+    skills: config_skills.RoomSkillsConfig = None
 
     #
     # Quiz-specific options
     #
-    quizzes: list[QuizConfig] = _default_list_field()
-    _quiz_map: dict[str, QuizConfig] = None
+    quizzes: list[config_quizzes.QuizConfig] = _default_list_field()
+    _quiz_map: config_quizzes.QuizConfigMap = None
 
     # Set by `from_yaml` factory
     _installation_config: InstallationConfig = _no_repr_no_compare_none()
@@ -338,20 +139,20 @@ class RoomConfig:
             agent_config_yaml = config_dict.pop("agent")
             agent_config_yaml["id"] = f"room-{room_id}"
 
-            config_dict["agent_config"] = agents.extract_agent_config(
+            config_dict["agent_config"] = config_agents.extract_agent_config(
                 installation_config,
                 config_path,
                 agent_config_yaml,
             )
 
-            config_dict["tool_configs"] = tools.extract_tool_configs(
+            config_dict["tool_configs"] = config_tools.extract_tool_configs(
                 installation_config,
                 config_path,
                 config_dict,
             )
 
             config_dict["mcp_client_toolset_configs"] = (
-                tools.extract_mcp_client_toolset_configs(
+                config_tools.extract_mcp_client_toolset_configs(
                     installation_config,
                     config_path,
                     config_dict,
@@ -360,16 +161,18 @@ class RoomConfig:
 
             skills_config_yaml = config_dict.pop("skills", None)
             if skills_config_yaml is not None:
-                config_dict["skills"] = skills.RoomSkillsConfig.from_yaml(
-                    installation_config,
-                    config_path,
-                    skills_config_yaml,
+                config_dict["skills"] = (
+                    config_skills.RoomSkillsConfig.from_yaml(
+                        installation_config,
+                        config_path,
+                        skills_config_yaml,
+                    )
                 )
 
             quizzes_config_yaml = config_dict.pop("quizzes", None)
             if quizzes_config_yaml is not None:
                 config_dict["quizzes"] = [
-                    QuizConfig.from_yaml(
+                    config_quizzes.QuizConfig.from_yaml(
                         installation_config,
                         config_path,
                         quiz_config_yaml,
@@ -400,7 +203,7 @@ class RoomConfig:
         return self.id
 
     @property
-    def skill_configs(self) -> skills.SkillConfigMap:
+    def skill_configs(self) -> config_skills.SkillConfigMap:
         return self.skills.skill_configs if self.skills is not None else {}
 
     @property
@@ -421,7 +224,7 @@ class RoomConfig:
         )
 
     @property
-    def quiz_map(self) -> dict[str, QuizConfig]:
+    def quiz_map(self) -> config_quizzes.QuizConfigMap:
         if self._quiz_map is None:
             self._quiz_map = {quiz.id: quiz for quiz in self.quizzes}
 
@@ -430,7 +233,7 @@ class RoomConfig:
     def get_logo_image(self) -> pathlib.Path | None:
         if self._logo_image is not None:
             if self._config_path is None:
-                raise exceptions.NoConfigPath()
+                raise config_exc.NoConfigPath()
 
             return self._config_path.parent / self._logo_image
 
@@ -448,15 +251,15 @@ class CompletionConfig:
     # Required metadata
     #
     id: str
-    agent_config: agents.AgentConfig
+    agent_config: config_agents.AgentConfig
 
     name: str = None
 
     #
     # Tool options
     #
-    tool_configs: tools.ToolConfigMap = _default_dict_field()
-    mcp_client_toolset_configs: tools.MCP_ClientToolsetConfigMap = (
+    tool_configs: config_tools.ToolConfigMap = _default_dict_field()
+    mcp_client_toolset_configs: config_tools.MCP_ClientToolsetConfigMap = (
         _default_dict_field()
     )
 
@@ -482,20 +285,20 @@ class CompletionConfig:
         agent_config_yaml = config_dict.pop("agent")
         agent_config_yaml["id"] = f"completion-{completion_id}"
 
-        config_dict["agent_config"] = agents.extract_agent_config(
+        config_dict["agent_config"] = config_agents.extract_agent_config(
             installation_config,
             config_path,
             agent_config_yaml,
         )
 
-        config_dict["tool_configs"] = tools.extract_tool_configs(
+        config_dict["tool_configs"] = config_tools.extract_tool_configs(
             installation_config,
             config_path,
             config_dict,
         )
 
         config_dict["mcp_client_toolset_configs"] = (
-            tools.extract_mcp_client_toolset_configs(
+            config_tools.extract_mcp_client_toolset_configs(
                 installation_config,
                 config_path,
                 config_dict,
@@ -746,7 +549,7 @@ class LogfireConfig:
 
 def _check_is_dict(config_yaml):
     if not isinstance(config_yaml, dict):
-        raise exceptions.NotADict(config_yaml)
+        raise config_exc.NotADict(config_yaml)
 
     return config_yaml
 
@@ -754,7 +557,7 @@ def _check_is_dict(config_yaml):
 def _load_config_yaml(config_path: pathlib.Path) -> dict:
     """Load a YAML config file"""
     if not config_path.is_file():
-        raise exceptions.NoSuchConfig(config_path)
+        raise config_exc.NoSuchConfig(config_path)
 
     try:
         with config_path.open() as stream:
@@ -788,7 +591,7 @@ def _find_configs_yaml(
     try:
         yield config_file, _load_config_yaml(config_file)
 
-    except exceptions.NoSuchConfig:
+    except config_exc.NoSuchConfig:
         for sub in sorted(to_search.glob("*")):
             # See #233
             if sub.name.startswith("."):
@@ -798,7 +601,7 @@ def _find_configs_yaml(
                 sub_config = sub / filename_yaml
                 try:
                     yield sub_config, _load_config_yaml(sub_config)
-                except exceptions.NoSuchConfig:
+                except config_exc.NoSuchConfig:
                     continue
             else:  # pragma: NO COVER
                 pass
@@ -866,7 +669,7 @@ class AGUI_FeatureConfigMeta:
 
     name: str
     model_klass: typing.Any
-    source: agui.AGUI_FeatureSource = "either"
+    source: config_agui.AGUI_FeatureSource = "either"
 
     @classmethod
     def from_yaml(cls, yaml_config: str | dict):
@@ -1043,8 +846,9 @@ class InstallationConfigMeta:
 
     def __post_init__(self):
         self.agui_features = list(self.agui_features)
+        feature_registry = config_agui.AGUI_FEATURES_BY_NAME
         for af_meta in self.agui_features:
-            agui.AGUI_FEATURES_BY_NAME[af_meta.name] = agui.AGUI_Feature(
+            feature_registry[af_meta.name] = config_agui.AGUI_Feature(
                 name=af_meta.name,
                 model_klass=af_meta.model_klass,
                 source=af_meta.source,
@@ -1053,31 +857,33 @@ class InstallationConfigMeta:
         self.tool_configs = list(self.tool_configs)
         for tc_meta in self.tool_configs:
             klass = tc_meta.config_klass
-            tools.TOOL_CONFIG_CLASSES_BY_TOOL_NAME[klass.tool_name] = klass
+            config_tools.TOOL_CONFIG_CLASSES_BY_TOOL_NAME[klass.tool_name] = (
+                klass
+            )
 
         self.mcp_toolset_configs = list(self.mcp_toolset_configs)
         for mtc_meta in self.mcp_toolset_configs:
             klass = mtc_meta.config_klass
-            tools.MCP_TOOLSET_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
+            config_tools.MCP_TOOLSET_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
 
         self.mcp_server_tool_wrappers = list(self.mcp_server_tool_wrappers)
         for mstw_meta in self.mcp_server_tool_wrappers:
             config_klass = mstw_meta.config_klass
             tool_name = config_klass.tool_name
             wrapper_klass = mstw_meta.wrapper_klass
-            tools.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME[tool_name] = (
+            config_tools.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME[tool_name] = (
                 wrapper_klass
             )
 
         self.skill_configs = list(self.skill_configs)
         for sc_meta in self.skill_configs:
             klass = sc_meta.config_klass
-            skills.SKILL_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
+            config_skills.SKILL_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
 
         self.agent_configs = list(self.agent_configs)
         for ac_meta in self.agent_configs:
             klass = ac_meta.config_klass
-            agents.AGENT_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
+            config_agents.AGENT_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
 
         self.secret_sources = list(self.secret_sources)
         ss_registry = config_secrets.SECRET_GETTERS_BY_KIND
@@ -1088,49 +894,64 @@ class InstallationConfigMeta:
 
     @property
     def as_yaml(self) -> dict:
+        agui_feature_registry = config_agui.AGUI_FEATURES_BY_NAME
         agui_feature_entries = [
             {
                 "name": feature.name,
                 "model_klass": _dotted_name(feature.model_klass),
                 "source": str(feature.source),
             }
-            for feature in agui.AGUI_FEATURES_BY_NAME.values()
+            for feature in agui_feature_registry.values()
         ]
+
+        tool_config_registry = config_tools.TOOL_CONFIG_CLASSES_BY_TOOL_NAME
         tool_config_entries = [
-            _dotted_name(klass)
-            for klass in tools.TOOL_CONFIG_CLASSES_BY_TOOL_NAME.values()
+            _dotted_name(klass) for klass in tool_config_registry.values()
         ]
+
+        mcp_toolset_config_registry = (
+            config_tools.MCP_TOOLSET_CONFIG_CLASSES_BY_KIND
+        )
         mcp_toolset_config_entries = [
             _dotted_name(klass)
-            for klass in tools.MCP_TOOLSET_CONFIG_CLASSES_BY_KIND.values()
+            for klass in mcp_toolset_config_registry.values()
         ]
-        mcptcw_items = tools.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME.items()
+
+        mcp_tool_wrapper_registry = (
+            config_tools.MCP_TOOL_CONFIG_WRAPPERS_BY_TOOL_NAME
+        )
         mcp_server_tool_wrapper_entries = [
             {
                 "config_klass": _dotted_name(
-                    tools.TOOL_CONFIG_CLASSES_BY_TOOL_NAME[tool_name],
+                    tool_config_registry[tool_name],
                 ),
                 "wrapper_klass": _dotted_name(wrapper_klass),
             }
-            for tool_name, wrapper_klass in mcptcw_items
+            for tool_name, wrapper_klass in mcp_tool_wrapper_registry.items()
         ]
+
+        skill_config_registry = config_skills.SKILL_CONFIG_CLASSES_BY_KIND
         skill_config_entries = [
-            _dotted_name(klass)
-            for klass in skills.SKILL_CONFIG_CLASSES_BY_KIND.values()
+            _dotted_name(klass) for klass in skill_config_registry.values()
         ]
+
+        agent_config_registry = config_agents.AGENT_CONFIG_CLASSES_BY_KIND
         agent_config_entries = [
-            _dotted_name(klass)
-            for klass in agents.AGENT_CONFIG_CLASSES_BY_KIND.values()
+            _dotted_name(klass) for klass in agent_config_registry.values()
         ]
+
+        secret_source_registry = config_secrets.SourceClassesByKind
+        secret_getter_registry = config_secrets.SECRET_GETTERS_BY_KIND
         secret_source_entries = [
             {
                 "config_klass": _dotted_name(
-                    config_secrets.SourceClassesByKind[kind],
+                    secret_source_registry[kind],
                 ),
                 "registered_func": _dotted_name(r_func),
             }
-            for kind, r_func in config_secrets.SECRET_GETTERS_BY_KIND.items()
+            for kind, r_func in secret_getter_registry.items()
         ]
+
         return {
             "agui_features": agui_feature_entries,
             "tool_configs": tool_config_entries,
@@ -1142,14 +963,14 @@ class InstallationConfigMeta:
         }
 
 
-def _load_filesystem_skill_configs(i_config) -> skills.SkillConfigMap:
+def _load_filesystem_skill_configs(i_config) -> config_skills.SkillConfigMap:
     fs_skill_configs = {}
 
     fs_skills, validation_errors = hs_discovery.discover_from_paths(
         i_config.filesystem_skills_paths,
     )
     for fs_skill in fs_skills:
-        skill_config = skills.FilesystemSkillConfig.from_skill(fs_skill)
+        skill_config = config_skills.FilesystemSkillConfig.from_skill(fs_skill)
 
         if skill_config.name not in fs_skill_configs:
             fs_skill_configs[skill_config.name] = skill_config
@@ -1162,7 +983,7 @@ def _load_filesystem_skill_configs(i_config) -> skills.SkillConfigMap:
             name=skill_name,
             description=f"Invalid filesystem skill: {skill_path}",
         )
-        fs_skill_configs[skill_name] = skills.FilesystemSkillConfig(
+        fs_skill_configs[skill_name] = config_skills.FilesystemSkillConfig(
             _skill_metadata=skill_metadata,
             _skill_path=skill_path,
             _validation_errors=[message],
@@ -1171,23 +992,21 @@ def _load_filesystem_skill_configs(i_config) -> skills.SkillConfigMap:
     return fs_skill_configs
 
 
-def _load_entrypoint_skill_configs() -> skills.SkillConfigMap:
+def _load_entrypoint_skill_configs() -> config_skills.SkillConfigMap:
     ep_skill_configs = {}
 
     for skill in hs_discovery.discover_from_entrypoints():
         feature_name = skill.state_namespace
+        feature_registry = config_agui.AGUI_FEATURES_BY_NAME
 
-        if (
-            feature_name is not None
-            and feature_name not in agui.AGUI_FEATURES_BY_NAME
-        ):
-            agui.AGUI_FEATURES_BY_NAME[feature_name] = agui.AGUI_Feature(
+        if feature_name is not None and feature_name not in feature_registry:
+            feature_registry[feature_name] = config_agui.AGUI_Feature(
                 name=feature_name,
                 model_klass=skill.state_type,
-                source=agui.AGUI_FeatureSource.SERVER,
+                source=config_agui.AGUI_FeatureSource.SERVER,
             )
 
-        skill_config = skills.EntrypointSkillConfig.from_skill(skill)
+        skill_config = config_skills.EntrypointSkillConfig.from_skill(skill)
 
         if skill_config.name not in ep_skill_configs:
             ep_skill_configs[skill_config.name] = skill_config
@@ -1222,8 +1041,10 @@ class InstallationConfig:
     # AG-UI features defined via metaconfig / defaults
     #
     @property
-    def agui_features(self) -> list[agui.AGUI_Feature]:
-        return [feature for feature in agui.AGUI_FEATURES_BY_NAME.values()]
+    def agui_features(self) -> list[config_agui.AGUI_Feature]:
+        return [
+            feature for feature in config_agui.AGUI_FEATURES_BY_NAME.values()
+        ]
 
     #
     # Variables loaded via 'dotenv' library
@@ -1394,11 +1215,11 @@ class InstallationConfig:
     #
     # Agent configurations not bound to a room or completion.
     #
-    agent_configs: list[agents.AgentConfigTypes] = _default_list_field()
-    _agent_configs_map: agents.AgentConfigMap = None
+    agent_configs: list[config_agents.AgentConfigTypes] = _default_list_field()
+    _agent_configs_map: config_agents.AgentConfigMap = None
 
     @property
-    def agent_configs_map(self) -> agents.AgentConfigMap:
+    def agent_configs_map(self) -> config_agents.AgentConfigMap:
         if self._agent_configs_map is None:
             self._agent_configs_map = {
                 agent_config.id: agent_config
@@ -1417,12 +1238,14 @@ class InstallationConfig:
     #
     filesystem_skills_paths: list[pathlib.Path] = None
 
-    _available_filesystem_skill_configs: skills.SkillConfigMap = None
-    _available_entrypoint_skill_configs: skills.SkillConfigMap = None
-    _skill_configs: skills.SkillConfigMap = None
+    _available_filesystem_skill_configs: config_skills.SkillConfigMap = None
+    _available_entrypoint_skill_configs: config_skills.SkillConfigMap = None
+    _skill_configs: config_skills.SkillConfigMap = None
 
     @property
-    def available_filesystem_skill_configs(self) -> skills.SkillConfigMap:
+    def available_filesystem_skill_configs(
+        self,
+    ) -> config_skills.SkillConfigMap:
         if self._available_filesystem_skill_configs is None:
             self._available_filesystem_skill_configs = (
                 _load_filesystem_skill_configs(self)
@@ -1431,7 +1254,9 @@ class InstallationConfig:
         return self._available_filesystem_skill_configs.copy()
 
     @property
-    def available_entrypoint_skill_configs(self) -> skills.SkillConfigMap:
+    def available_entrypoint_skill_configs(
+        self,
+    ) -> config_skills.SkillConfigMap:
         if self._available_entrypoint_skill_configs is None:
             self._available_entrypoint_skill_configs = (
                 _load_entrypoint_skill_configs()  # no 'self' needed
@@ -1440,7 +1265,7 @@ class InstallationConfig:
         return self._available_entrypoint_skill_configs.copy()
 
     @property
-    def skill_configs(self) -> skills.SkillConfigMap:
+    def skill_configs(self) -> config_skills.SkillConfigMap:
         if self._skill_configs is not None:
             return self._skill_configs.copy()
         else:
@@ -1453,7 +1278,9 @@ class InstallationConfig:
     #
     oidc_paths: list[pathlib.Path | None] = None
 
-    _oidc_auth_system_configs: list[authsystem.OIDCAuthSystemConfig] = None
+    _oidc_auth_system_configs: list[config_authsystem.OIDCAuthSystemConfig] = (
+        None
+    )
 
     #
     # Path(s) to room configs:  each item can be either a single
@@ -1648,7 +1475,7 @@ class InstallationConfig:
             )
 
             agent_configs = [
-                agents.extract_agent_config(
+                config_agents.extract_agent_config(
                     None,
                     config_path,
                     a_config,
@@ -1808,7 +1635,7 @@ class InstallationConfig:
                 for skill_config_dict in self._skill_configs:
                     if (
                         skill_config_dict["kind"]
-                        == skills.SkillKind.FILESYSTEM
+                        == config_skills.SkillKind.FILESYSTEM
                     ):
                         skill_name = skill_config_dict["skill_name"]
                         fs_skills[skill_name] = available_fs[skill_name]
@@ -1817,7 +1644,7 @@ class InstallationConfig:
                 for skill_config_dict in self._skill_configs:
                     if (
                         skill_config_dict["kind"]
-                        == skills.SkillKind.ENTRYPOINT
+                        == config_skills.SkillKind.ENTRYPOINT
                     ):
                         skill_name = skill_config_dict["skill_name"]
                         ep_skills[skill_name] = available_ep[skill_name]
@@ -1851,7 +1678,7 @@ class InstallationConfig:
 
     def _load_oidc_auth_system_configs(
         self,
-    ) -> list[authsystem.OIDCAuthSystemConfig]:
+    ) -> list[config_authsystem.OIDCAuthSystemConfig]:
         oas_configs = []
 
         for oidc_path in self.oidc_paths:
@@ -1867,7 +1694,7 @@ class InstallationConfig:
                     auth_system_yaml["oidc_client_pem_path"] = (
                         oidc_client_pem_path
                     )
-                oas_config = authsystem.OIDCAuthSystemConfig.from_yaml(
+                oas_config = config_authsystem.OIDCAuthSystemConfig.from_yaml(
                     self,
                     oidc_config,
                     auth_system_yaml,
@@ -1879,7 +1706,7 @@ class InstallationConfig:
     @property
     def oidc_auth_system_configs(
         self,
-    ) -> list[authsystem.OIDCAuthSystemConfig]:
+    ) -> list[config_authsystem.OIDCAuthSystemConfig]:
         if self._oidc_auth_system_configs is None:
             self._oidc_auth_system_configs = (
                 self._load_oidc_auth_system_configs()

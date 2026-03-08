@@ -15,6 +15,7 @@ from soliplex import config
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import authsystem as config_authsystem
+from soliplex.config import quizzes as config_quizzes
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
@@ -36,7 +37,7 @@ class QuizQuestionMetadata(pydantic.BaseModel):
     options: list[str] | None
 
     @classmethod
-    def from_config(cls, qq_meta: config.QuizQuestionMetadata):
+    def from_config(cls, qq_meta: config_quizzes.QuizQuestionMetadata):
         return cls(
             type=str(qq_meta.type),
             uuid=qq_meta.uuid,
@@ -50,7 +51,7 @@ class QuizQuestion(pydantic.BaseModel):
     metadata: QuizQuestionMetadata
 
     @classmethod
-    def from_config(cls, question: config.QuizQuestionMetadata):
+    def from_config(cls, question: config_quizzes.QuizQuestionMetadata):
         return cls(
             inputs=question.inputs,
             expected_output=question.expected_output,
@@ -73,7 +74,7 @@ class Quiz(pydantic.BaseModel):
     questions: list[QuizQuestion]
 
     @classmethod
-    def from_config(cls, quiz_config: config.QuizConfig):
+    def from_config(cls, quiz_config: config_quizzes.QuizConfig):
         questions = [
             QuizQuestion.from_config(question)
             for question in quiz_config.get_questions()
@@ -100,7 +101,7 @@ class Tool(pydantic.BaseModel):
     extra_parameters: dict[str, typing.Any]
 
     @classmethod
-    def from_config(cls, tool_config: config.ToolConfig):
+    def from_config(cls, tool_config: config_tools.ToolConfig):
         return cls(
             kind=tool_config.kind,
             tool_name=tool_config.tool_name,
