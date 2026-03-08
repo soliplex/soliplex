@@ -23,6 +23,7 @@ from soliplex.authz import schema as authz_schema
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
 from soliplex.config import completions as config_completions
+from soliplex.config import logfire as config_logfire
 from soliplex.config import rooms as config_rooms
 
 ProviderURL = str | None
@@ -134,7 +135,7 @@ class Installation:
         return found
 
     @property
-    def logfire_config(self) -> config.LogfireConfig | None:
+    def logfire_config(self) -> config_logfire.LogfireConfig | None:
         return self._config.logfire_config
 
     @property

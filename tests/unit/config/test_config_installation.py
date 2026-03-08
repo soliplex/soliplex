@@ -15,6 +15,7 @@ from soliplex.agui import features as agui_features
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
 from soliplex.config import exceptions as config_exc
+from soliplex.config import logfire as config_logfire
 from soliplex.config import meta as config_meta
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
@@ -390,7 +391,7 @@ filesystem_skills_paths:
 
 W_LOGFIRE_CONFIG_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "logfire_config": config.LogfireConfig(
+    "logfire_config": config_logfire.LogfireConfig(
         token=test_logfire.TEST_LOGFIRE_TOKEN
     ),
 }
@@ -1406,7 +1407,7 @@ def test_installationconfig_as_yaml(w_logfire_config):
     kwargs = {}
 
     if w_logfire_config:
-        kwargs["logfire_config"] = config.LogfireConfig(
+        kwargs["logfire_config"] = config_logfire.LogfireConfig(
             token="secret:LOGFIRE_TOKEN",
         )
 

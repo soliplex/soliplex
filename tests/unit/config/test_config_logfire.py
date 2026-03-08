@@ -3,8 +3,8 @@ import dataclasses
 import pytest
 import yaml
 
-from soliplex import config
 from soliplex.config import exceptions as config_exc
+from soliplex.config import logfire as config_logfire
 
 EMPTY_LFIPYDAI_CONFIG_YAML = ""  # raises
 DEFAULT_LFIPYDAI_EXP_KWARGS = {
@@ -311,7 +311,7 @@ W_SCRUBBING_LOGFIRE_CONFIG_AS_YAML = {
 
 W_IPYDAI_LOGFIRE_CONFIG_INIT_KW = {
     "token": "secret:LOGFIRE_TOKEN",
-    "instrument_pydantic_ai": config.LogfireInstrumentPydanticAI(
+    "instrument_pydantic_ai": config_logfire.LogfireInstrumentPydanticAI(
         include_binary_content=False,
         include_content=False,
     ),
@@ -339,7 +339,7 @@ W_IPYDAI_LOGFIRE_CONFIG_AS_YAML = {
 
 W_IFAPI_LOGFIRE_CONFIG_INIT_KW = {
     "token": "secret:LOGFIRE_TOKEN",
-    "instrument_fast_api": config.LogfireInstrumentFastAPI(
+    "instrument_fast_api": config_logfire.LogfireInstrumentFastAPI(
         capture_headers=True,
         excluded_urls=[LFIFAPI_EXCLUDE_URL],
         record_send_receive=True,
@@ -381,7 +381,7 @@ W_IFAPI_LOGFIRE_CONFIG_AS_YAML = {
     ],
 )
 def test_lfipydai_instrument_pydantic_ai_kwargs(init_kw, expected):
-    ipydai_config = config.LogfireInstrumentPydanticAI(**init_kw)
+    ipydai_config = config_logfire.LogfireInstrumentPydanticAI(**init_kw)
 
     found = ipydai_config.instrument_pydantic_ai_kwargs
 
@@ -396,7 +396,7 @@ def test_lfipydai_instrument_pydantic_ai_kwargs(init_kw, expected):
     ],
 )
 def test_lfipydai_as_yaml(init_kw, expected):
-    ipydai_config = config.LogfireInstrumentPydanticAI(**init_kw)
+    ipydai_config = config_logfire.LogfireInstrumentPydanticAI(**init_kw)
 
     found = ipydai_config.as_yaml
 
@@ -424,7 +424,7 @@ def test_lfipydai_from_yaml(
 
     if expected_kw is None:
         with pytest.raises(config_exc.FromYamlException) as exc:
-            config.LogfireInstrumentPydanticAI.from_yaml(
+            config_logfire.LogfireInstrumentPydanticAI.from_yaml(
                 yaml_file,
                 config_dict,
             )
@@ -432,13 +432,13 @@ def test_lfipydai_from_yaml(
         assert exc.value._config_path == yaml_file
 
     else:
-        expected = config.LogfireInstrumentPydanticAI(**expected_kw)
+        expected = config_logfire.LogfireInstrumentPydanticAI(**expected_kw)
         expected = dataclasses.replace(
             expected,
             _config_path=yaml_file,
         )
 
-        found = config.LogfireInstrumentPydanticAI.from_yaml(
+        found = config_logfire.LogfireInstrumentPydanticAI.from_yaml(
             yaml_file,
             config_dict,
         )
@@ -454,7 +454,7 @@ def test_lfipydai_from_yaml(
     ],
 )
 def test_lfifapi_instrument_fast_api_kwargs(init_kw, expected):
-    ipydai_config = config.LogfireInstrumentFastAPI(**init_kw)
+    ipydai_config = config_logfire.LogfireInstrumentFastAPI(**init_kw)
 
     found = ipydai_config.instrument_fast_api_kwargs
 
@@ -469,7 +469,7 @@ def test_lfifapi_instrument_fast_api_kwargs(init_kw, expected):
     ],
 )
 def test_lfifapi_as_yaml(init_kw, expected):
-    ipydai_config = config.LogfireInstrumentFastAPI(**init_kw)
+    ipydai_config = config_logfire.LogfireInstrumentFastAPI(**init_kw)
 
     found = ipydai_config.as_yaml
 
@@ -497,7 +497,7 @@ def test_lfifapi_from_yaml(
 
     if expected_kw is None:
         with pytest.raises(config_exc.FromYamlException) as exc:
-            config.LogfireInstrumentFastAPI.from_yaml(
+            config_logfire.LogfireInstrumentFastAPI.from_yaml(
                 yaml_file,
                 config_dict,
             )
@@ -505,13 +505,13 @@ def test_lfifapi_from_yaml(
         assert exc.value._config_path == yaml_file
 
     else:
-        expected = config.LogfireInstrumentFastAPI(**expected_kw)
+        expected = config_logfire.LogfireInstrumentFastAPI(**expected_kw)
         expected = dataclasses.replace(
             expected,
             _config_path=yaml_file,
         )
 
-        found = config.LogfireInstrumentFastAPI.from_yaml(
+        found = config_logfire.LogfireInstrumentFastAPI.from_yaml(
             yaml_file,
             config_dict,
         )
@@ -572,7 +572,7 @@ def test_logfireconfig_logfire_config_kwargs(
 
     installation_config.get_environment.side_effect = ic_env.get
 
-    lf_config = config.LogfireConfig(
+    lf_config = config_logfire.LogfireConfig(
         _installation_config=installation_config,
         **init_kw,
     )
@@ -624,7 +624,7 @@ def test_logfireconfig_logfire_as_yaml(
     init_kw,
     expected,
 ):
-    lf_config = config.LogfireConfig(
+    lf_config = config_logfire.LogfireConfig(
         _installation_config=installation_config,
         **init_kw,
     )
@@ -686,7 +686,7 @@ def test_logfireconfig_from_yaml(
 
     if expected_kw is None:
         with pytest.raises(config_exc.FromYamlException) as exc:
-            config.LogfireConfig.from_yaml(
+            config_logfire.LogfireConfig.from_yaml(
                 installation_config,
                 yaml_file,
                 config_dict,
@@ -707,14 +707,14 @@ def test_logfireconfig_from_yaml(
             ifapi = dataclasses.replace(ifapi, _config_path=yaml_file)
             expected_kw["instrument_fast_api"] = ifapi
 
-        expected = config.LogfireConfig(**expected_kw)
+        expected = config_logfire.LogfireConfig(**expected_kw)
         expected = dataclasses.replace(
             expected,
             _installation_config=installation_config,
             _config_path=yaml_file,
         )
 
-        found = config.LogfireConfig.from_yaml(
+        found = config_logfire.LogfireConfig.from_yaml(
             installation_config,
             yaml_file,
             config_dict,

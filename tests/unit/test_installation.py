@@ -17,6 +17,7 @@ from soliplex import secrets
 from soliplex import util
 from soliplex.config import agents as config_agents
 from soliplex.config import completions as config_completions
+from soliplex.config import logfire as config_logfire
 from soliplex.config import quizzes as config_quizzes
 from soliplex.config import rooms as config_rooms
 from soliplex.config import secrets as config_secrets
@@ -1148,7 +1149,7 @@ def test_apply_logfire_configuration(logfire, w_logfire_config, w_disable_lc):
         kwargs["disable_logfire_console"] = w_disable_lc
 
     if w_logfire_config is not None:
-        logfire_config = mock.create_autospec(config.LogfireConfig)
+        logfire_config = mock.create_autospec(config_logfire.LogfireConfig)
         logfire_config.logfire_config_kwargs = {"foo": "bar"}
 
         if w_logfire_config == "ipydai":
