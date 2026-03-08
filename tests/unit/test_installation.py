@@ -9,7 +9,6 @@ from ag_ui import core as agui_core
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
-from soliplex import config
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -17,6 +16,7 @@ from soliplex import secrets
 from soliplex import util
 from soliplex.config import agents as config_agents
 from soliplex.config import completions as config_completions
+from soliplex.config import installation as config_installation
 from soliplex.config import logfire as config_logfire
 from soliplex.config import quizzes as config_quizzes
 from soliplex.config import rooms as config_rooms
@@ -72,7 +72,7 @@ def test_user() -> models.UserProfile:
 @mock.patch("soliplex.secrets.get_secret")
 def test_installation_get_secret(gs, secrets_map, expectation):
     i_config = mock.create_autospec(
-        config.InstallationConfig,
+        config_installation.InstallationConfig,
         secrets_map=secrets_map,
     )
     the_installation = installation.Installation(i_config)
@@ -99,7 +99,7 @@ def test_installation_get_secret(gs, secrets_map, expectation):
 @mock.patch("soliplex.secrets.resolve_secrets")
 def test_installation_resolve_secrets(srs, secret_configs, expectation):
     i_config = mock.create_autospec(
-        config.InstallationConfig,
+        config_installation.InstallationConfig,
     )
     i_config.secrets = secret_configs
     the_installation = installation.Installation(i_config)
@@ -115,7 +115,7 @@ def test_installation_resolve_secrets(srs, secret_configs, expectation):
 
 @pytest.mark.parametrize("w_default", [False, True])
 def test_installation_get_environment(w_default):
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
 
     kwargs = {}
@@ -134,7 +134,7 @@ def test_installation_get_environment(w_default):
 
 
 def test_installation_get_environment_sources():
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
 
     found = the_installation.get_environment_sources(KEY)
@@ -146,15 +146,17 @@ def test_installation_get_environment_sources():
 
 @pytest.mark.parametrize("w_raise", [False, True])
 def test_installation_resolve_environment(w_raise):
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
 
     if w_raise:
-        i_config.resolve_environment.side_effect = config.MissingEnvVars(
-            "test1,test2",
-            [
-                config.MissingEnvVar("test1"),
-                config.MissingEnvVar("test2"),
-            ],
+        i_config.resolve_environment.side_effect = (
+            config_installation.MissingEnvVars(
+                "test1,test2",
+                [
+                    config_installation.MissingEnvVar("test1"),
+                    config_installation.MissingEnvVar("test2"),
+                ],
+            )
         )
     else:
         i_config.resolve_environment.return_value = None
@@ -162,14 +164,14 @@ def test_installation_resolve_environment(w_raise):
     the_installation = installation.Installation(i_config)
 
     if w_raise:
-        with pytest.raises(config.MissingEnvVars):
+        with pytest.raises(config_installation.MissingEnvVars):
             the_installation.resolve_environment()
     else:
         the_installation.resolve_environment()
 
 
 def test_installation_haiku_rag_config():
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
 
     assert the_installation.haiku_rag_config is i_config.haiku_rag_config
@@ -292,7 +294,7 @@ def test_installation_all_agent_configs(
     completions_with_agents,
 ):
     i_config = mock.create_autospec(
-        config.InstallationConfig,
+        config_installation.InstallationConfig,
         **standalone_agents,
         **rooms_with_agents,
         **completions_with_agents,
@@ -342,7 +344,7 @@ def test_installation_agent_provider_info(
     completions_with_agents,
 ):
     i_config = mock.create_autospec(
-        config.InstallationConfig,
+        config_installation.InstallationConfig,
         **standalone_agents,
         **rooms_with_agents,
         **completions_with_agents,
@@ -420,7 +422,7 @@ def hr_config_w_providers(request):
 
 def test_installation_haiku_rag_provider_info(hr_config_w_providers):
     i_config = mock.create_autospec(
-        config.InstallationConfig,
+        config_installation.InstallationConfig,
         haiku_rag_config=hr_config_w_providers,
     )
     the_installation = installation.Installation(i_config)
@@ -444,7 +446,7 @@ def test_installation_all_provider_info(
     hr_config_w_providers,
 ):
     i_config = mock.create_autospec(
-        config.InstallationConfig,
+        config_installation.InstallationConfig,
         haiku_rag_config=hr_config_w_providers,
         **standalone_agents,
         **rooms_with_agents,
@@ -496,14 +498,14 @@ def test_installation_all_provider_info(
 
 
 def test_installation_logfire_config():
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
 
     assert the_installation.logfire_config is i_config.logfire_config
 
 
 def test_installation_thread_persistence_dburi_sync():
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
 
     assert (
@@ -513,7 +515,7 @@ def test_installation_thread_persistence_dburi_sync():
 
 
 def test_installation_thread_persistence_dburi_async():
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
 
     assert (
@@ -523,7 +525,7 @@ def test_installation_thread_persistence_dburi_async():
 
 
 def test_installation_authorization_dburi_sync():
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
 
     assert (
@@ -533,7 +535,7 @@ def test_installation_authorization_dburi_sync():
 
 
 def test_installation_authorization_dburi_async():
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
 
     assert (
@@ -544,7 +546,7 @@ def test_installation_authorization_dburi_async():
 
 @pytest.mark.parametrize("w_oidc_configs", [[], [object()]])
 def test_installation_auth_disabled(w_oidc_configs):
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     i_config.oidc_auth_system_configs = w_oidc_configs
 
     the_installation = installation.Installation(i_config)
@@ -553,7 +555,7 @@ def test_installation_auth_disabled(w_oidc_configs):
 
 
 def test_installation_oidc_auth_system_configs():
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
 
     assert (
@@ -606,7 +608,7 @@ async def test_installation_get_room_configs(
     the_logger,
     w_the_logger,
 ):
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     i_config.room_configs = r_configs
 
     the_installation = installation.Installation(i_config)
@@ -671,7 +673,7 @@ async def test_installation_get_room_config(
     raises,
     w_the_logger,
 ):
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     i_config.room_configs = r_configs
 
     the_installation = installation.Installation(i_config)
@@ -741,7 +743,7 @@ async def test_installation_get_room_config(
 async def test_installation_get_completion_configs(test_user):
     c_config = mock.create_autospec(config_completions.CompletionConfig)
     c_configs = {"completion_id": c_config}
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     i_config.completion_configs = c_configs
 
     the_installation = installation.Installation(i_config)
@@ -762,7 +764,7 @@ async def test_installation_get_completion_config(
 ):
     c_config = mock.create_autospec(config_completions.CompletionConfig)
     c_configs = {"completion_id": c_config}
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     i_config.completion_configs = c_configs
 
     the_installation = installation.Installation(i_config)
@@ -789,7 +791,7 @@ async def test_installation_get_completion_config(
 def test_installation_get_agent_by_id(gafc, w_agent_id, raises):
     a_config = mock.create_autospec(config_agents.AgentConfig)
 
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     i_config.agent_configs_map = {"agent_id": a_config}
 
     the_installation = installation.Installation(i_config)
@@ -860,7 +862,7 @@ async def test_installation_get_agent_for_room(
     }
 
     r_configs = {"room_id": r_config}
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     i_config.room_configs = r_configs
 
     if authz_kwargs:
@@ -960,7 +962,7 @@ async def test_installation_get_agent_for_completion(
     }
 
     c_configs = {"completion_id": c_config}
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     i_config.completion_configs = c_configs
 
     the_installation = installation.Installation(i_config)
@@ -1012,7 +1014,7 @@ async def test_installation_get_agent_deps_for_room(
     }
 
     r_configs = {"room_id": r_config}
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     i_config.room_configs = r_configs
 
     if authz_kwargs:
@@ -1094,7 +1096,7 @@ async def test_installation_get_agent_deps_for_completion(
     }
 
     c_configs = {"completion_id": c_config}
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     i_config.completion_configs = c_configs
 
     the_installation = installation.Installation(i_config)
@@ -1126,7 +1128,7 @@ async def test_installation_get_agent_deps_for_completion(
 
 @pytest.mark.anyio
 async def test_get_the_installation():
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
     request = mock.create_autospec(fastapi.Request)
     request.state.the_installation = the_installation
@@ -1289,7 +1291,7 @@ def mcp_apps():
 @mock.patch("soliplex.installation.apply_logfire_configuration")
 @mock.patch("soliplex.secrets.resolve_secrets")
 @mock.patch("soliplex.mcp_server.setup_mcp_for_rooms")
-@mock.patch("soliplex.config.load_installation")
+@mock.patch("soliplex.config.installation.load_installation")
 @mock.patch("logging.config.dictConfig")
 async def test_lifespan(
     lcdc,
@@ -1312,13 +1314,13 @@ async def test_lifespan(
     smfr.return_value = mcp_apps
 
     i_config = mock.create_autospec(
-        config.InstallationConfig,
+        config_installation.InstallationConfig,
         secrets=(),
         oidc_paths=["oidc"],
         environment={"OLLAMA_BASE_URL": OLLAMA_BASE_URL},
         logging_config=w_ic_logging_config,
-        thread_persistence_dburi_async=config.ASYNC_MEMORY_ENGINE_URL,
-        authorization_dburi_async=config.ASYNC_MEMORY_ENGINE_URL,
+        thread_persistence_dburi_async=config_installation.ASYNC_MEMORY_ENGINE_URL,
+        authorization_dburi_async=config_installation.ASYNC_MEMORY_ENGINE_URL,
     )
     load_installation.return_value = i_config
     app = mock.create_autospec(fastapi.FastAPI)

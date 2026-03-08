@@ -5,10 +5,10 @@ import fastapi
 import pytest
 
 from soliplex import authn
-from soliplex import config
 from soliplex import installation
 from soliplex import loggers
 from soliplex import views
+from soliplex.config import installation as config_installation
 
 EMAIL = "phreddy@example.com"
 THE_USER_CLAIMS = {
@@ -20,7 +20,9 @@ ROOM_ID = "test-room"
 @pytest.fixture
 def the_installation():
     result = mock.create_autospec(installation.Installation)
-    result._config = mock.create_autospec(config.InstallationConfig)
+    result._config = mock.create_autospec(
+        config_installation.InstallationConfig
+    )
     return result
 
 

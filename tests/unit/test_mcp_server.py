@@ -4,9 +4,9 @@ from unittest import mock
 import pytest
 from fastmcp import tools as fmcp_tools
 
-from soliplex import config
 from soliplex import installation
 from soliplex import mcp_server
+from soliplex.config import installation as config_installation
 from soliplex.config import rooms as config_rooms
 from soliplex.config import tools as config_tools
 
@@ -149,7 +149,7 @@ def test_room_mcp_tools(mcp_tool, tool_configs, exp_mcp_tools, allow_mcp):
 @mock.patch("soliplex.mcp_auth.FastMCPTokenProvider")
 @mock.patch("fastmcp.server.FastMCP")
 def test_setup_mcp_for_rooms(fmcp_klass, fmtp_klass, rmt, w_max_age):
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     i_config.room_configs = room_configs = {
         "room1": mock.create_autospec(config_rooms.RoomConfig, allow_mcp=True),
         "room2": mock.create_autospec(config_rooms.RoomConfig, allow_mcp=True),

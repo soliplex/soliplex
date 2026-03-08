@@ -2,10 +2,10 @@ from unittest import mock
 
 import pytest
 
-from soliplex import config
 from soliplex import models
 from soliplex import quizzes
 from soliplex.config import agents as config_agents
+from soliplex.config import installation as config_installation
 from soliplex.config import quizzes as config_quizzes
 
 INPUTS = "What color is the sky"
@@ -55,7 +55,7 @@ def mc_question():
 @pytest.fixture
 def installation_config():
     environ = {"OLLAMA_BASE_URL": OLLAMA_BASE_URL}
-    installation = mock.create_autospec(config.InstallationConfig)
+    installation = mock.create_autospec(config_installation.InstallationConfig)
     installation.get_environment = environ.get
     return installation
 

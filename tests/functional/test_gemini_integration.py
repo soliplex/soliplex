@@ -28,9 +28,9 @@ import pytest
 from fastapi import testclient
 
 from soliplex import agents
-from soliplex import config
 from soliplex import main
 from soliplex import models
+from soliplex.config import installation as config_installation
 
 HAS_GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
@@ -129,7 +129,9 @@ def gemini_room_config():
     """Load the gemini_flash room configuration directly."""
     installation_path = pathlib.Path("example/installation.yaml")
     main.register_metaconfigs()  # 'haiku.rag.chat' agent config support
-    installation_config = config.load_installation(installation_path)
+    installation_config = config_installation.load_installation(
+        installation_path,
+    )
     return installation_config.room_configs["gemini_flash"]
 
 

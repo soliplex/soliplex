@@ -5,11 +5,11 @@ import fastapi
 import pytest
 
 from soliplex import authz
-from soliplex import config
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
 from soliplex.config import agents as config_agents
+from soliplex.config import installation as config_installation
 from soliplex.views import installation as installation_views
 
 OLLAMA_BASE_URL = "http://ollama.example.com:11434"
@@ -31,7 +31,7 @@ async def test_get_installation(fc, w_admin_access):
 
     request = mock.create_autospec(fastapi.Request)
 
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
     the_authz_policy = mock.create_autospec(authz.AuthorizationPolicy)
     the_authz_policy.check_admin_access.return_value = w_admin_access

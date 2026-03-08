@@ -6,9 +6,9 @@ import pytest_asyncio
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agui as agui_package
-from soliplex import config
 from soliplex.agui import persistence as agui_persistence
 from soliplex.agui import schema as agui_schema
+from soliplex.config import installation as config_installation
 from tests.unit.agui import agui_constants
 
 NOW = datetime.datetime.now(datetime.UTC)
@@ -42,7 +42,7 @@ async def test_threadstorage_session(faux_sqlaa_session):
 @pytest_asyncio.fixture()
 async def the_async_engine():
     engine = sqla_asyncio.create_async_engine(
-        config.ASYNC_MEMORY_ENGINE_URL,
+        config_installation.ASYNC_MEMORY_ENGINE_URL,
     )
     async with engine.begin() as connection:
         await connection.run_sync(agui_schema.Base.metadata.create_all)

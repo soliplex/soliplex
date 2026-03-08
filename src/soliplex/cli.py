@@ -15,7 +15,6 @@ from skills_ref import validator as skill_validator
 
 import soliplex
 from soliplex import authz as authz_package
-from soliplex import config
 from soliplex import installation
 from soliplex import main
 from soliplex import models
@@ -23,6 +22,8 @@ from soliplex import ollama
 from soliplex import secrets
 from soliplex import util
 from soliplex.authz import schema as authz_schema
+from soliplex.config import installation as config_installation
+from soliplex.config import quizzes as config_quizzes
 from soliplex.config import rag as config_rag
 
 
@@ -79,7 +80,7 @@ def get_installation(
 
     if installation_path.is_dir():
         installation_path = installation_path / "installation.yaml"
-    i_config = config.load_installation(installation_path)
+    i_config = config_installation.load_installation(installation_path)
     i_config.reload_configurations()
     return installation.Installation(i_config)
 
@@ -379,7 +380,7 @@ def check_config(
     the_console.line()
     try:
         the_installation.resolve_environment()
-    except config.MissingEnvVars as exc:
+    except config_installation.MissingEnvVars as exc:
         the_console.line()
         the_console.print("Missing environment variables")
         for env_var in exc.env_vars.split(","):
@@ -469,7 +470,7 @@ def check_config(
         the_console.print(f"Quizzes path: {q_path}")
         for q_file in q_path.glob("*.json"):
             the_console.print(f"- Question file stem: {q_file.stem}")
-            q_config = config.QuizConfig(
+            q_config = config_quizzes.QuizConfig(
                 id="check",
                 question_file=str(q_file),
             )
@@ -580,7 +581,7 @@ Show available sources, and which is selected.
     the_installation = get_installation(installation_path)
     try:
         the_installation.resolve_environment()
-    except config.MissingEnvVars as exc:
+    except config_installation.MissingEnvVars as exc:
         missing = set(exc.env_vars.split(","))
     else:
         missing = set()
@@ -716,7 +717,7 @@ def config_as_yaml(
 
     try:
         the_installation.resolve_environment()
-    except config.MissingEnvVars:
+    except config_installation.MissingEnvVars:
         pass
 
     exported_yaml = yaml.dump(
@@ -731,7 +732,7 @@ def config_as_yaml(
 
 
 def _check_ram_dburi(dburi: str, command: str):
-    if dburi == config.SYNC_MEMORY_ENGINE_URL:
+    if dburi == config_installation.SYNC_MEMORY_ENGINE_URL:
         the_console.rule("Authorization DB is RAM-based")
         the_console.print(f"'{command}' is a no-op with a RAM-based database")
         raise typer.Exit()

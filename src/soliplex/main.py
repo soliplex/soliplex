@@ -13,10 +13,10 @@ import uvicorn
 from fastapi.middleware import cors as fastapi_mw_cors
 from starlette.middleware import sessions as starlette_mw_sessions
 
-from soliplex import config
 from soliplex import installation
 from soliplex import util
 from soliplex import views
+from soliplex.config import installation as config_installation
 from soliplex.views import agui as agui_views
 from soliplex.views import authn as authn_views
 from soliplex.views import authz as authz_views
@@ -155,7 +155,7 @@ def create_app(
 
     # Create a temporary InstallationConfig, to permit us to use
     # its secrets before the lifespan starts.
-    tmp_installation = config.load_installation(
+    tmp_installation = config_installation.load_installation(
         pathlib.Path(installation_path)
     )
 

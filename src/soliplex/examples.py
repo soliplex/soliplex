@@ -18,7 +18,8 @@ from pydantic_ai.models import openai as openai_models
 from pydantic_ai.providers import ollama as ollama_providers
 
 from soliplex import agents
-from soliplex import config
+from soliplex.config import agents as config_agents
+from soliplex.config import tools as config_tools
 
 JOKER_AGENT_PROMPT = """\
 Use the `joke_factory` to generate some jokes, then choose the best. 
@@ -29,8 +30,8 @@ You must return just a single joke.
 
 def joker_agent_factory(
     agent_config,
-    tool_configs: config.ToolConfigMap = None,
-    mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap = None,
+    tool_configs: config_tools.ToolConfigMap = None,
+    mcp_client_toolset_configs: config_tools.MCP_ClientToolsetConfigMap = None,
     skills_toolset_config: agents.SkillToolsetConfig | None = None,
 ):  # pragma NO COVER
     installation_config = agent_config._installation_config
@@ -143,9 +144,9 @@ class FauxAgentRun:
 
 @dataclasses.dataclass
 class FauxAgent:
-    agent_config: config.FactoryAgentConfig
-    tool_configs: config.ToolConfigMap = None
-    mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap = None
+    agent_config: config_agents.FactoryAgentConfig
+    tool_configs: config_tools.ToolConfigMap = None
+    mcp_client_toolset_configs: config_tools.MCP_ClientToolsetConfigMap = None
     skill_toolset_config: agents.SkillToolsetConfig | None = None
 
     output_type = None
@@ -269,9 +270,9 @@ class FauxAgent:
 
 
 def faux_agent_factory(
-    agent_config: config.FactoryAgentConfig,
-    tool_configs: config.ToolConfigMap = None,
-    mcp_client_toolset_configs: config.MCP_ClientToolsetConfigMap = None,
+    agent_config: config_agents.FactoryAgentConfig,
+    tool_configs: config_tools.ToolConfigMap = None,
+    mcp_client_toolset_configs: config_tools.MCP_ClientToolsetConfigMap = None,
     skill_toolset_config: agents.SkillToolsetConfig | None = None,
 ):
     return FauxAgent(

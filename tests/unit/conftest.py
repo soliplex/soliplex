@@ -4,7 +4,7 @@ from unittest import mock
 
 import pytest
 
-from soliplex import config
+from soliplex import config  # only used to patch a test function
 from soliplex.agui import features as agui_features
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui

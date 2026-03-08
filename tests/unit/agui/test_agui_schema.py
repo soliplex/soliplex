@@ -4,9 +4,9 @@ import pytest
 from sqlalchemy import orm as sqla_orm
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
-from soliplex import config
 from soliplex import util
 from soliplex.agui import schema as agui_schema
+from soliplex.config import installation as config_installation
 from tests.unit.agui import agui_constants
 
 ROOM_ID = "test-room"
@@ -334,7 +334,7 @@ def test_get_engine(
     assert found is ce.return_value
 
     ce.assert_called_once_with(
-        config.SYNC_MEMORY_ENGINE_URL,
+        config_installation.SYNC_MEMORY_ENGINE_URL,
         json_serializer=util.serialize_sqla_json,
     )
 
@@ -364,7 +364,7 @@ def test_get_session(
         assert session.bind is ge.return_value
 
         ge.assert_called_once_with(
-            engine_url=config.SYNC_MEMORY_ENGINE_URL,
+            engine_url=config_installation.SYNC_MEMORY_ENGINE_URL,
             **exp_kwargs,
         )
 
@@ -390,7 +390,7 @@ async def test_get_async_engine(
     assert found is cae.return_value
 
     cae.assert_called_once_with(
-        config.ASYNC_MEMORY_ENGINE_URL,
+        config_installation.ASYNC_MEMORY_ENGINE_URL,
         json_serializer=util.serialize_sqla_json,
     )
 
@@ -424,6 +424,6 @@ async def test_get_async_session(
         assert session.bind is gae.return_value
 
         gae.assert_called_once_with(
-            engine_url=config.ASYNC_MEMORY_ENGINE_URL,
+            engine_url=config_installation.ASYNC_MEMORY_ENGINE_URL,
             **exp_kwargs,
         )

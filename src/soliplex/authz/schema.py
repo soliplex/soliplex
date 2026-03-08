@@ -10,9 +10,9 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 from sqlalchemy.sql import sqltypes as sqla_sqltypes
 
 from soliplex import authz as authz_package
-from soliplex import config
 from soliplex import models
 from soliplex import util
+from soliplex.config import installation as config_installation
 
 AsyncAttrs = sqla_asyncio.AsyncAttrs
 DeclarativeBase = sqla_orm.DeclarativeBase
@@ -219,7 +219,7 @@ class ACLEntry(Base):
 
 def get_engine(
     *,
-    engine_url=config.SYNC_MEMORY_ENGINE_URL,
+    engine_url=config_installation.SYNC_MEMORY_ENGINE_URL,
     init_schema=False,
     **engine_kwargs,
 ) -> sqlalchemy.Engine:
@@ -237,7 +237,7 @@ def get_engine(
 
 def get_session(
     *,
-    engine_url=config.SYNC_MEMORY_ENGINE_URL,
+    engine_url=config_installation.SYNC_MEMORY_ENGINE_URL,
     init_schema=False,
     **engine_kwargs,
 ) -> sqla_orm.Session:
@@ -251,7 +251,7 @@ def get_session(
 
 async def get_async_engine(
     *,
-    engine_url=config.ASYNC_MEMORY_ENGINE_URL,
+    engine_url=config_installation.ASYNC_MEMORY_ENGINE_URL,
     init_schema=False,
     **engine_kwargs,
 ):
@@ -270,7 +270,7 @@ async def get_async_engine(
 
 async def get_async_session(
     *,
-    engine_url=config.ASYNC_MEMORY_ENGINE_URL,
+    engine_url=config_installation.ASYNC_MEMORY_ENGINE_URL,
     init_schema=False,
     **engine_kwargs,
 ):

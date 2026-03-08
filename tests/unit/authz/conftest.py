@@ -4,13 +4,15 @@ import sqlalchemy
 from sqlalchemy import orm as sqla_orm
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
-from soliplex import config
 from soliplex.authz import schema as authz_schema
+from soliplex.config import installation as config_installation
 
 
 @pytest.fixture
 def the_engine():
-    engine = sqlalchemy.create_engine(config.SYNC_MEMORY_ENGINE_URL)
+    engine = sqlalchemy.create_engine(
+        config_installation.SYNC_MEMORY_ENGINE_URL,
+    )
 
     yield engine
 
@@ -31,7 +33,7 @@ def the_session(the_engine):
 @pytest_asyncio.fixture()
 async def the_async_engine():  # pragma: NO COVER
     engine = sqla_asyncio.create_async_engine(
-        config.ASYNC_MEMORY_ENGINE_URL,
+        config_installation.ASYNC_MEMORY_ENGINE_URL,
     )
     async with engine.begin() as connection:
         await connection.run_sync(authz_schema.Base.metadata.create_all)

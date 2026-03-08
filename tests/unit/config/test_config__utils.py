@@ -3,8 +3,8 @@ from unittest import mock
 
 import pytest
 
-from soliplex import config
 from soliplex.config import exceptions as config_exc
+from soliplex.config import installation as config_installation
 
 
 def test__load_config_yaml_w_missing(temp_dir):
@@ -13,7 +13,7 @@ def test__load_config_yaml_w_missing(temp_dir):
     missing_cfg = config_path / "config.yaml"
 
     with pytest.raises(config_exc.NoSuchConfig) as exc:
-        config._load_config_yaml(missing_cfg)
+        config_installation._load_config_yaml(missing_cfg)
 
     assert exc.value._config_path == missing_cfg
 
@@ -40,7 +40,7 @@ def test__load_config_yaml_w_invalid(temp_dir, invalid):
         invalid_cfg.write_text(invalid)
 
     with pytest.raises(config_exc.FromYamlException) as exc:
-        config._load_config_yaml(invalid_cfg)
+        config_installation._load_config_yaml(invalid_cfg)
 
     assert exc.value._config_path == invalid_cfg
 
@@ -54,7 +54,9 @@ def test__find_configs_yaml_w_single(temp_dir):
     config_file.write_text(f"id: {THING_ID}")
     expected = {"id": THING_ID}
 
-    found = list(config._find_configs_yaml(to_search, CONFIG_FILENAME))
+    found = list(
+        config_installation._find_configs_yaml(to_search, CONFIG_FILENAME)
+    )
 
     assert found == [(config_file, expected)]
 
@@ -78,7 +80,9 @@ def test__find_configs_w_multiple(temp_dir):
             expected_thing = {"id": thing_id}
             expected_things.append((config_file, expected_thing))
 
-    found_things = list(config._find_configs_yaml(temp_dir, CONFIG_FILENAME))
+    found_things = list(
+        config_installation._find_configs_yaml(temp_dir, CONFIG_FILENAME)
+    )
 
     for (f_key, f_thing), (e_key, e_thing) in zip(
         sorted(found_things),
@@ -103,7 +107,7 @@ def test_resolve_file_prefix(temp_dir, config_value, expected):
     if isinstance(expected, str):
         expected = expected.format(temp_dir=temp_dir.resolve())
 
-    found = config.resolve_file_prefix(config_value, config_path)
+    found = config_installation.resolve_file_prefix(config_value, config_path)
 
     assert found == expected
 
@@ -111,7 +115,13 @@ def test_resolve_file_prefix(temp_dir, config_value, expected):
 @pytest.mark.parametrize(
     "env_name, env_value, dotenv_env, osenv_patch, expectation",
     [
-        ("ENVVAR", None, {}, {}, pytest.raises(config.MissingEnvVar)),
+        (
+            "ENVVAR",
+            None,
+            {},
+            {},
+            pytest.raises(config_installation.MissingEnvVar),
+        ),
         (
             "ENVVAR",
             None,
@@ -174,7 +184,7 @@ def test_resolve_environment_entry(
         mock.patch.dict("os.environ", **osenv_patch),
         expectation as expected,
     ):
-        found = config.resolve_environment_entry(
+        found = config_installation.resolve_environment_entry(
             env_name,
             env_value,
             dotenv_env,

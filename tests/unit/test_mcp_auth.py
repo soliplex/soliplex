@@ -3,8 +3,8 @@ from unittest import mock
 import pytest
 from mcp.server.auth import provider as mcp_auth_provider
 
-from soliplex import config
 from soliplex import mcp_auth
+from soliplex.config import installation as config_installation
 
 URL_SAFE_TOKEN_SECRET_KEY = "really, seriously seekrit"
 URL_SAFE_TOKEN_SALT = "testing"
@@ -74,7 +74,7 @@ def test_validate_url_safe_token(idusts_klass, w_max_age, w_valid):
 
 @pytest.fixture
 def the_installation():
-    return mock.create_autospec(config.InstallationConfig)
+    return mock.create_autospec(config_installation.InstallationConfig)
 
 
 @pytest.mark.parametrize("w_max_age", [None, 3600])

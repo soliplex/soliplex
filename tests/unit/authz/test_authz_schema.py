@@ -6,10 +6,10 @@ from sqlalchemy import orm as sqla_orm
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import authz as authz_package
-from soliplex import config
 from soliplex import models
 from soliplex import util
 from soliplex.authz import schema as authz_schema
+from soliplex.config import installation as config_installation
 
 NOW = datetime.datetime.now(datetime.UTC)
 
@@ -377,7 +377,7 @@ def test_get_engine(
     assert found is ce.return_value
 
     ce.assert_called_once_with(
-        config.SYNC_MEMORY_ENGINE_URL,
+        config_installation.SYNC_MEMORY_ENGINE_URL,
         json_serializer=util.serialize_sqla_json,
     )
 
@@ -407,7 +407,7 @@ def test_get_session(
         assert session.bind is ge.return_value
 
         ge.assert_called_once_with(
-            engine_url=config.SYNC_MEMORY_ENGINE_URL,
+            engine_url=config_installation.SYNC_MEMORY_ENGINE_URL,
             **exp_kwargs,
         )
 
@@ -427,7 +427,7 @@ async def test_get_async_engine(ca, cae, init_schema):
     assert found is cae.return_value
 
     cae.assert_called_once_with(
-        config.ASYNC_MEMORY_ENGINE_URL,
+        config_installation.ASYNC_MEMORY_ENGINE_URL,
         json_serializer=util.serialize_sqla_json,
     )
 
@@ -458,6 +458,6 @@ async def test_get_async_session(gae, init_schema):
         assert session.bind is gae.return_value
 
         gae.assert_called_once_with(
-            engine_url=config.ASYNC_MEMORY_ENGINE_URL,
+            engine_url=config_installation.ASYNC_MEMORY_ENGINE_URL,
             **exp_kwargs,
         )

@@ -3,8 +3,8 @@ from unittest import mock
 
 import pytest
 
-from soliplex import config
 from soliplex import secrets
+from soliplex.config import installation as config_installation
 from soliplex.config import secrets as config_secrets
 
 SECRET_NAME = "TEST_SECRET"
@@ -168,7 +168,7 @@ def test_get_env_var_secret_w_installation_config(
     expected,
 ):
     installation_config = mock.create_autospec(
-        config.InstallationConfig,
+        config_installation.InstallationConfig,
         from_dotenv=from_dotenv,
     )
     if ev_name is None:

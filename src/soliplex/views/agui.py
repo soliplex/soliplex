@@ -12,7 +12,6 @@ from pydantic_ai.ui import ag_ui as ai_ag_ui
 from soliplex import agui as agui_package
 from soliplex import authn
 from soliplex import authz as authz_package
-from soliplex import config
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -20,6 +19,7 @@ from soliplex import util
 from soliplex import views
 from soliplex.agui import persistence as agui_persistence
 from soliplex.config import agui as config_agui
+from soliplex.config import rooms as config_rooms
 
 router = fastapi.APIRouter(tags=["rooms"])
 
@@ -37,7 +37,7 @@ async def _check_user_in_room(
     the_authz_policy: authz_package.AuthorizationPolicy,
     the_user_claims: authn.UserClaims,
     the_logger: loggers.LogWrapper,
-) -> config.RoomConfig:
+) -> config_rooms.RoomConfig:
     """Check that the user has access to the given room.
 
     If so, return the room configuration.

@@ -2,13 +2,15 @@ import pytest
 import sqlalchemy
 from sqlalchemy import orm as sqla_orm
 
-from soliplex import config
 from soliplex.agui import schema as agui_schema
+from soliplex.config import installation as config_installation
 
 
 @pytest.fixture
 def the_engine():
-    engine = sqlalchemy.create_engine(config.SYNC_MEMORY_ENGINE_URL)
+    engine = sqlalchemy.create_engine(
+        config_installation.SYNC_MEMORY_ENGINE_URL,
+    )
 
     yield engine
 

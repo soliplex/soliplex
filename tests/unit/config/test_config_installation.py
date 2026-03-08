@@ -9,12 +9,12 @@ import yaml
 from haiku.rag import config as hr_config_module
 from haiku.skills import models as hs_models
 
-from soliplex import config
 from soliplex import secrets
 from soliplex.agui import features as agui_features
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
 from soliplex.config import exceptions as config_exc
+from soliplex.config import installation as config_installation
 from soliplex.config import logfire as config_logfire
 from soliplex.config import meta as config_meta
 from soliplex.config import secrets as config_secrets
@@ -474,7 +474,7 @@ authorization_dburi:
 def test_installationconfig_from_dotenv_already(w_disable_dotenv):
     already = {"KEY": "value"}
 
-    i_config = config.InstallationConfig(
+    i_config = config_installation.InstallationConfig(
         id="test-ic",
         disable_dotenv=w_disable_dotenv,
         _from_dotenv=already,
@@ -523,7 +523,7 @@ def test_installationconfig_from_dotenv(
     if w_disable_dotenv:
         expected = {}
 
-    i_config = config.InstallationConfig(
+    i_config = config_installation.InstallationConfig(
         id="test-ic",
         disable_dotenv=w_disable_dotenv,
         _config_path=inst_config_file,
@@ -540,7 +540,9 @@ def test_installationconfig_secrets_map_wo_existing():
         for i_secret in range(5)
     ]
 
-    i_config = config.InstallationConfig(id="test-ic", secrets=secrets)
+    i_config = config_installation.InstallationConfig(
+        id="test-ic", secrets=secrets
+    )
 
     found = i_config.secrets_map
 
@@ -555,7 +557,9 @@ def test_installationconfig_secrets_map_wo_existing():
 
 def test_installationconfig_secrets_map_w_existing():
     already = object()
-    i_config = config.InstallationConfig(id="test-ic", _secrets_map=already)
+    i_config = config_installation.InstallationConfig(
+        id="test-ic", _secrets_map=already
+    )
 
     found = i_config.secrets_map
 
@@ -574,7 +578,7 @@ RaiseUnknownSecret = pytest.raises(secrets.UnknownSecret)
 )
 @mock.patch("soliplex.secrets.get_secret")
 def test_installationconfig_get_secret(gs, secret_map, expectation):
-    i_config = config.InstallationConfig(
+    i_config = config_installation.InstallationConfig(
         id="test-ic",
         _secrets_map=secret_map,
     )
@@ -624,7 +628,7 @@ def test_installationconfig_interpolate_secret(
 ):
     gs.side_effect = ["<secret1>", "<secret2>"]
 
-    i_config = config.InstallationConfig(
+    i_config = config_installation.InstallationConfig(
         id="test-ic",
         _secrets_map=secret_map,
     )
@@ -647,7 +651,7 @@ def test_installationconfig_interpolate_secret(
         gs.assert_not_called()
 
 
-EST = config.EnvironmentSourceType
+EST = config_installation.EnvironmentSourceType
 
 
 @pytest.mark.parametrize(
@@ -690,7 +694,7 @@ def test_installationconfig_get_environment_sources(
     else:
         os_getenv.return_value = None
 
-    i_config = config.InstallationConfig(**kwargs)
+    i_config = config_installation.InstallationConfig(**kwargs)
 
     found = i_config.get_environment_sources(KEY)
 
@@ -710,7 +714,7 @@ def test_installationconfig_get_environment(w_hit, w_default):
     if w_default:
         kwargs["default"] = DEFAULT
 
-    i_config = config.InstallationConfig(id="test-ic")
+    i_config = config_installation.InstallationConfig(id="test-ic")
 
     if w_hit:
         i_config.environment[KEY] = VALUE
@@ -750,21 +754,21 @@ RESOLVED = {"name": "RESOLVED", "value": "resolved"}
         (
             [UNRESOLVED],
             (None, False),
-            pytest.raises(config.MissingEnvVars),
+            pytest.raises(config_installation.MissingEnvVars),
             "UNRESOLVED",
             None,
         ),
         (
             [UNRESOLVED, UNRESOLVED_MOAR],
             (None, False),
-            pytest.raises(config.MissingEnvVars),
+            pytest.raises(config_installation.MissingEnvVars),
             "UNRESOLVED,UNRESOLVED_MOAR",
             None,
         ),
         (
             [UNRESOLVED, UNRESOLVED_MOAR],
             ({"UNRESOLVED": "via_dotenv"}, False),
-            pytest.raises(config.MissingEnvVars),
+            pytest.raises(config_installation.MissingEnvVars),
             "UNRESOLVED_MOAR",
             None,
         ),
@@ -778,7 +782,7 @@ RESOLVED = {"name": "RESOLVED", "value": "resolved"}
         (
             [UNRESOLVED],
             ({"UNRESOLVED": "via_dotenv"}, True),
-            pytest.raises(config.MissingEnvVars),
+            pytest.raises(config_installation.MissingEnvVars),
             "UNRESOLVED",
             None,
         ),
@@ -815,7 +819,7 @@ def test_installationconfig_resolve_environment(
     if from_dotenv is not None:
         dotenv_kwargs["_from_dotenv"] = from_dotenv
 
-    i_config = config.InstallationConfig(
+    i_config = config_installation.InstallationConfig(
         id="test-ic",
         _config_path=temp_dir / "installation.yaml",
         environment=environment,
@@ -838,7 +842,7 @@ def test_installationconfig_haiku_rag_config(temp_dir, w_obu):
 environment: production
 """)
 
-    i_config = config.InstallationConfig(
+    i_config = config_installation.InstallationConfig(
         id="test-ic",
         _config_path=temp_dir / "installation.yaml",
         _haiku_rag_config_file=hr_config_file,
@@ -864,7 +868,7 @@ def test_installationconfig_agent_configs_map_wo_existing():
         for i_agent_config in range(5)
     ]
 
-    i_config = config.InstallationConfig(
+    i_config = config_installation.InstallationConfig(
         id="test-ic",
         agent_configs=agent_configs,
     )
@@ -885,7 +889,7 @@ def test_installationconfig_agent_configs_map_wo_existing():
 
 def test_installationconfig_agent_configs_map_w_existing():
     already = object()
-    i_config = config.InstallationConfig(
+    i_config = config_installation.InstallationConfig(
         id="test-ic",
         _agent_configs_map=already,
     )
@@ -906,7 +910,7 @@ version: 1
     if w_filename:
         kw["_logging_config_file"] = logging_config_file
 
-    i_config = config.InstallationConfig(
+    i_config = config_installation.InstallationConfig(
         id="test-ic",
         _config_path=temp_dir / "installation.yaml",
         **kw,
@@ -931,7 +935,7 @@ version: 1
     if w_filename:
         kw["_logging_config_file"] = logging_config_file
 
-    i_config = config.InstallationConfig(
+    i_config = config_installation.InstallationConfig(
         id="test-ic",
         _config_path=temp_dir / "installation.yaml",
         **kw,
@@ -954,7 +958,7 @@ def test_installationconfig_logging_headers_map(temp_dir, w_map):
     if w_map:
         kw["_logging_headers_map"] = {"foo": "bar"}
 
-    i_config = config.InstallationConfig(
+    i_config = config_installation.InstallationConfig(
         id="test-ic",
         _config_path=temp_dir / "installation.yaml",
         **kw,
@@ -975,7 +979,7 @@ def test_installationconfig_logging_claims_map(temp_dir, w_map):
     if w_map:
         kw["_logging_claims_map"] = {"foo": "bar"}
 
-    i_config = config.InstallationConfig(
+    i_config = config_installation.InstallationConfig(
         id="test-ic",
         _config_path=temp_dir / "installation.yaml",
         **kw,
@@ -995,7 +999,7 @@ def test_installationconfig_agui_features(
 ):
     patched_agui_features[the_agui_feature.name] = the_agui_feature
 
-    i_config = config.InstallationConfig(id="test-ic")
+    i_config = config_installation.InstallationConfig(id="test-ic")
 
     found = i_config.agui_features
 
@@ -1007,7 +1011,7 @@ def test_installationconfig_agui_features(
     [
         (
             BARE_INSTALLATION_CONFIG_KW.copy(),
-            config.SYNC_MEMORY_ENGINE_URL,
+            config_installation.SYNC_MEMORY_ENGINE_URL,
         ),
         (W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(), TP_DBURI_SYNC),
         (
@@ -1020,7 +1024,7 @@ def test_installationconfig_agui_features(
     ],
 )
 def test_installationconfig_thread_persistence_dburi_sync(w_kw, expected):
-    installation_config = config.InstallationConfig(**w_kw)
+    installation_config = config_installation.InstallationConfig(**w_kw)
 
     found = installation_config.thread_persistence_dburi_sync
 
@@ -1032,13 +1036,13 @@ def test_installationconfig_thread_persistence_dburi_sync(w_kw, expected):
     [
         (
             BARE_INSTALLATION_CONFIG_KW.copy(),
-            config.ASYNC_MEMORY_ENGINE_URL,
+            config_installation.ASYNC_MEMORY_ENGINE_URL,
         ),
         (W_TP_DBURI_INSTALLATION_CONFIG_KW.copy(), TP_DBURI_ASYNC),
     ],
 )
 def test_installationconfig_thread_persistence_dburi_async(w_kw, expected):
-    installation_config = config.InstallationConfig(**w_kw)
+    installation_config = config_installation.InstallationConfig(**w_kw)
 
     found = installation_config.thread_persistence_dburi_async
 
@@ -1050,7 +1054,7 @@ def test_installationconfig_thread_persistence_dburi_async(w_kw, expected):
     [
         (
             BARE_INSTALLATION_CONFIG_KW.copy(),
-            config.SYNC_MEMORY_ENGINE_URL,
+            config_installation.SYNC_MEMORY_ENGINE_URL,
         ),
         (W_RA_DBURI_INSTALLATION_CONFIG_KW.copy(), RA_DBURI_SYNC),
         (
@@ -1063,7 +1067,7 @@ def test_installationconfig_thread_persistence_dburi_async(w_kw, expected):
     ],
 )
 def test_installationconfig_authorization_dburi_sync(w_kw, expected):
-    installation_config = config.InstallationConfig(**w_kw)
+    installation_config = config_installation.InstallationConfig(**w_kw)
 
     found = installation_config.authorization_dburi_sync
 
@@ -1075,13 +1079,13 @@ def test_installationconfig_authorization_dburi_sync(w_kw, expected):
     [
         (
             BARE_INSTALLATION_CONFIG_KW.copy(),
-            config.ASYNC_MEMORY_ENGINE_URL,
+            config_installation.ASYNC_MEMORY_ENGINE_URL,
         ),
         (W_RA_DBURI_INSTALLATION_CONFIG_KW.copy(), RA_DBURI_ASYNC),
     ],
 )
 def test_installationconfig_authorization_dburi_async(w_kw, expected):
-    installation_config = config.InstallationConfig(**w_kw)
+    installation_config = config_installation.InstallationConfig(**w_kw)
 
     found = installation_config.authorization_dburi_async
 
@@ -1219,7 +1223,9 @@ def test_installationconfig_from_yaml(
 
     if expected_kw is None:
         with pytest.raises(config_exc.FromYamlException) as exc:
-            config.InstallationConfig.from_yaml(config_path, config_dict)
+            config_installation.InstallationConfig.from_yaml(
+                config_path, config_dict
+            )
 
         assert exc.value._config_path == config_path
 
@@ -1261,8 +1267,8 @@ def test_installationconfig_from_yaml(
             patched["_load_filesystem_skill_configs"] = lfssc
             patched["_load_entrypoint_skill_configs"] = lepsc
 
-        with mock.patch.multiple(config, **patched):
-            expected = config.InstallationConfig(
+        with mock.patch.multiple(config_installation, **patched):
+            expected = config_installation.InstallationConfig(
                 **expected_kw,
                 _config_path=config_path,
             )
@@ -1285,8 +1291,8 @@ def test_installationconfig_from_yaml(
 
         expected = dataclasses.replace(expected, room_paths=exp_room_paths)
 
-        with mock.patch.multiple(config, **patched):
-            found = config.InstallationConfig.from_yaml(
+        with mock.patch.multiple(config_installation, **patched):
+            found = config_installation.InstallationConfig.from_yaml(
                 config_path,
                 config_dict,
             )
@@ -1367,7 +1373,7 @@ def test_installationconfig_from_yaml_environ_wo_value(temp_dir, config_yaml):
 
     expected_kw = copy.deepcopy(BARE_INSTALLATION_CONFIG_KW)
     expected_kw["environment"] = {"TEST_ENVVAR": None}
-    expected = config.InstallationConfig(**expected_kw)
+    expected = config_installation.InstallationConfig(**expected_kw)
     expected = dataclasses.replace(
         expected,
         _config_path=yaml_file,
@@ -1387,7 +1393,9 @@ def test_installationconfig_from_yaml_environ_wo_value(temp_dir, config_yaml):
         config_dict = yaml.safe_load(stream)
 
     with mock.patch.dict("os.environ", clear=True, TEST_ENVVAR=TEST_VALUE):
-        found = config.InstallationConfig.from_yaml(yaml_file, config_dict)
+        found = config_installation.InstallationConfig.from_yaml(
+            yaml_file, config_dict
+        )
 
     assert found == expected
 
@@ -1411,7 +1419,7 @@ def test_installationconfig_as_yaml(w_logfire_config):
             token="secret:LOGFIRE_TOKEN",
         )
 
-    installation_config = config.InstallationConfig(
+    installation_config = config_installation.InstallationConfig(
         id=INSTALLATION_ID,
         meta=meta,
         secrets=[secret_1, secret_2],
@@ -1472,7 +1480,7 @@ def test_installationconfig_as_yaml(w_logfire_config):
     ],
 )
 @pytest.mark.parametrize("w_pem", [False, "bare_top", "bare_authsys"])
-@mock.patch("soliplex.config._load_config_yaml")
+@mock.patch("soliplex.config.installation._load_config_yaml")
 def test_installationconfig_oidc_auth_system_configs_wo_existing(
     lcy,
     temp_dir,
@@ -1520,7 +1528,7 @@ def test_installationconfig_oidc_auth_system_configs_wo_existing(
     i_config_kw = BARE_INSTALLATION_CONFIG_KW.copy()
     i_config_kw["oidc_paths"] = [oidc_bare_path, oidc_w_scope_path]
 
-    i_config = config.InstallationConfig(**i_config_kw)
+    i_config = config_installation.InstallationConfig(**i_config_kw)
 
     expected = [
         config_authsystem.OIDCAuthSystemConfig(
@@ -1545,7 +1553,7 @@ def test_installationconfig_oidc_auth_system_configs_w_existing():
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_oidc_auth_system_configs"] = [OASC_1, OASC_2]
 
-    i_config = config.InstallationConfig(**kw)
+    i_config = config_installation.InstallationConfig(**kw)
 
     found = i_config.oidc_auth_system_configs
 
@@ -1578,7 +1586,7 @@ def test_installationconfig_room_configs_wo_existing(temp_dir):
             ),
         )
 
-    i_config = config.InstallationConfig(**kw)
+    i_config = config_installation.InstallationConfig(**kw)
 
     found = i_config.room_configs
 
@@ -1610,7 +1618,7 @@ def test_installationconfig_room_configs_wo_existing_w_conflict(temp_dir):
             )
         )
 
-    i_config = config.InstallationConfig(**kw)
+    i_config = config_installation.InstallationConfig(**kw)
 
     found = i_config.room_configs
 
@@ -1626,7 +1634,7 @@ def test_installationconfig_room_configs_w_existing():
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_room_configs"] = existing
 
-    i_config = config.InstallationConfig(**kw)
+    i_config = config_installation.InstallationConfig(**kw)
 
     found = i_config.room_configs
 
@@ -1656,7 +1664,7 @@ def test_installationconfig_completion_configs_wo_existing(temp_dir):
             ),
         )
 
-    i_config = config.InstallationConfig(**kw)
+    i_config = config_installation.InstallationConfig(**kw)
 
     found = i_config.completion_configs
 
@@ -1689,7 +1697,7 @@ def test_installationconfig_completion_configs_wo_existing_w_conflict(
             )
         )
 
-    i_config = config.InstallationConfig(**kw)
+    i_config = config_installation.InstallationConfig(**kw)
 
     found = i_config.completion_configs
 
@@ -1706,7 +1714,7 @@ def test_installationconfig_completion_configs_w_existing():
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_completion_configs"] = existing
 
-    i_config = config.InstallationConfig(**kw)
+    i_config = config_installation.InstallationConfig(**kw)
 
     found = i_config.completion_configs
 
@@ -1748,7 +1756,7 @@ description: Describing {skill_name}
         skill_config = skill_path / "SKILL.md"
         skill_config.write_text(FOREMATTER.format(skill_name=skill_name))
 
-    i_config = config.InstallationConfig(**kw)
+    i_config = config_installation.InstallationConfig(**kw)
 
     found = i_config.available_filesystem_skill_configs
 
@@ -1800,7 +1808,7 @@ description: Describing {skill_name} in {skills_path}
             )
         )
 
-    i_config = config.InstallationConfig(**kw)
+    i_config = config_installation.InstallationConfig(**kw)
 
     found = i_config.available_filesystem_skill_configs
 
@@ -1827,7 +1835,7 @@ def test_installationconfig_avl_fs_skill_configs_w_existing():
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_available_filesystem_skill_configs"] = existing
 
-    i_config = config.InstallationConfig(**kw)
+    i_config = config_installation.InstallationConfig(**kw)
 
     found = i_config.available_filesystem_skill_configs
 
@@ -1861,7 +1869,7 @@ def test_installationconfig_avl_ep_skill_configs_wo_existing(
     dfe.return_value = [ep_skill_1, ep_skill_2]
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
-    i_config = config.InstallationConfig(**kw)
+    i_config = config_installation.InstallationConfig(**kw)
 
     found = i_config.available_entrypoint_skill_configs
 
@@ -1895,7 +1903,7 @@ def test_installationconfig_avl_ep_skill_configs_wo_existing_w_conflict(
     dfe.return_value = [ep_skill_1, ep_skill_2]
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
-    i_config = config.InstallationConfig(**kw)
+    i_config = config_installation.InstallationConfig(**kw)
 
     found = i_config.available_entrypoint_skill_configs
 
@@ -1912,7 +1920,7 @@ def test_installationconfig_avl_ep_skill_configs_w_existing(
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_available_entrypoint_skill_configs"] = existing
-    i_config = config.InstallationConfig(**kw)
+    i_config = config_installation.InstallationConfig(**kw)
 
     found = i_config.available_entrypoint_skill_configs
 
@@ -1923,7 +1931,7 @@ def test_installationconfig_avl_ep_skill_configs_w_existing(
 def test_installationconfig_skill_configs_wo_set():
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
 
-    i_config = config.InstallationConfig(**kw)
+    i_config = config_installation.InstallationConfig(**kw)
 
     assert i_config.skill_configs == {}
 
@@ -1939,7 +1947,7 @@ def test_installationconfig_skill_configs_w_set():
         "other-skill": object(),
     }
 
-    i_config = config.InstallationConfig(**kw)
+    i_config = config_installation.InstallationConfig(**kw)
 
     assert i_config.skill_configs == {test_skills.SKILL_NAME: skill_config}
 
@@ -1954,7 +1962,7 @@ def test_installationconfig_reload_configurations(temp_dir):
     kw["_available_filesystem_skill_configs"] = {}
     kw["_available_entrypoint_skill_configs"] = {}
     kw["_skill_configs"] = ()
-    i_config = config.InstallationConfig(
+    i_config = config_installation.InstallationConfig(
         _config_path=temp_dir / "installation.yaml",
         **kw,
     )
@@ -1967,7 +1975,7 @@ def test_installationconfig_reload_configurations(temp_dir):
             _load_completion_configs=mock.DEFAULT,
         ) as ic_patch,
         mock.patch.multiple(
-            config,
+            config_installation,
             _load_filesystem_skill_configs=mock.DEFAULT,
             _load_entrypoint_skill_configs=mock.DEFAULT,
         ) as config_patch,
@@ -2042,9 +2050,9 @@ def test_load_installation(populated_temp_dir, rel_path, raises, expected_id):
 
     if raises:
         with pytest.raises(raises):
-            config.load_installation(target)
+            config_installation.load_installation(target)
 
     else:
-        installation = config.load_installation(target)
+        installation = config_installation.load_installation(target)
 
         assert installation.id == expected_id

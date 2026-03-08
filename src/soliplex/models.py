@@ -11,11 +11,11 @@ from haiku.skills import models as hs_models
 
 from soliplex import agui as agui_package
 from soliplex import authz as authz_package
-from soliplex import config
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import authsystem as config_authsystem
 from soliplex.config import completions as config_completions
+from soliplex.config import installation as config_installation
 from soliplex.config import quizzes as config_quizzes
 from soliplex.config import rooms as config_rooms
 from soliplex.config import secrets as config_secrets
@@ -422,7 +422,9 @@ class Installation(pydantic.BaseModel):
     logging_claims_map: dict[str, str] | None = {}
 
     @classmethod
-    def from_config(cls, installation_config: config.InstallationConfig):
+    def from_config(
+        cls, installation_config: config_installation.InstallationConfig
+    ):
         oidc_auth_systems = [
             OIDCAuthSystem.from_config(oas_config)
             for oas_config in installation_config.oidc_auth_system_configs
@@ -469,11 +471,11 @@ class Installation(pydantic.BaseModel):
             # interpolated secrets
             thread_persistence_dburi_sync=(
                 installation_config._thread_persistence_dburi_sync
-                or config.SYNC_MEMORY_ENGINE_URL
+                or config_installation.SYNC_MEMORY_ENGINE_URL
             ),
             thread_persistence_dburi_async=(
                 installation_config._thread_persistence_dburi_async
-                or config.ASYNC_MEMORY_ENGINE_URL
+                or config_installation.ASYNC_MEMORY_ENGINE_URL
             ),
             # Don't resolve path to logging config
             logging_config_file=installation_config._logging_config_file,

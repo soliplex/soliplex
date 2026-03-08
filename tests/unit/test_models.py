@@ -11,11 +11,11 @@ from ag_ui import core as agui_core
 from haiku.skills import models as hs_models
 
 from soliplex import agui as agui_package
-from soliplex import config
 from soliplex import models
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
 from soliplex.config import completions as config_completions
+from soliplex.config import installation as config_installation
 from soliplex.config import quizzes as config_quizzes
 from soliplex.config import rooms as config_rooms
 from soliplex.config import secrets as config_secrets
@@ -519,7 +519,7 @@ def agent_retries(request):
 @pytest.fixture
 def installation_config():
     environ = {"OLLAMA_BASE_URL": OLLAMA_BASE_URL}
-    installation = mock.create_autospec(config.InstallationConfig)
+    installation = mock.create_autospec(config_installation.InstallationConfig)
     installation.get_environment = environ.get
     return installation
 
@@ -721,7 +721,7 @@ def which_agent(
 
 @pytest.fixture
 def room_ic():
-    return config.InstallationConfig(
+    return config_installation.InstallationConfig(
         id=INSTALLATION_ID,
         oidc_paths=[],
         room_paths=[],
@@ -952,7 +952,7 @@ def test_completion_from_config_w_tools(default_agent, gcd_tool_config):
 
 @pytest.fixture
 def bare_installation_config():
-    return config.InstallationConfig(
+    return config_installation.InstallationConfig(
         id=INSTALLATION_ID,
         oidc_paths=[],
         room_paths=[],
@@ -978,11 +978,11 @@ def test_installation_from_config_bare(bare_installation_config):
     assert installation_model.oidc_auth_systems == []
     assert (
         installation_model.thread_persistence_dburi_sync
-        == config.SYNC_MEMORY_ENGINE_URL
+        == config_installation.SYNC_MEMORY_ENGINE_URL
     )
     assert (
         installation_model.thread_persistence_dburi_async
-        == config.ASYNC_MEMORY_ENGINE_URL
+        == config_installation.ASYNC_MEMORY_ENGINE_URL
     )
     assert installation_model.logging_config_file is None
     assert installation_model.logging_headers_map == {}

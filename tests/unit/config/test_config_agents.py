@@ -10,9 +10,9 @@ import pytest
 import yaml
 from pydantic_ai import settings as ai_settings
 
-from soliplex import config
 from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
+from soliplex.config import installation as config_installation
 
 AGENT_ID = "testing-agent"
 TEMPLATE_AGENT_ID = "testing-template"
@@ -283,7 +283,7 @@ def test__apply_agent_config_template(temp_dir, config_dict, expected):
     template_ac = mock.Mock(spec_set=["id", "as_yaml"])
     template_ac.id = TEMPLATE_AGENT_ID
     template_ac.as_yaml = {"key": "from_template"}
-    i_config = mock.create_autospec(config.InstallationConfig)
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     i_config.agent_configs = [template_ac]
     config_path = temp_dir / "test.yaml"
 
@@ -904,7 +904,7 @@ def test_extract_agent_configs(
         id: str
         model_name: str
         kind: typing.ClassVar[str] = "testing"
-        _installation_config: config.InstallationConfig = None
+        _installation_config: config_installation.InstallationConfig = None
         _config_path: pathlib.Path = None
 
         @classmethod

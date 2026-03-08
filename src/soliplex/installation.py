@@ -13,7 +13,6 @@ from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
 from soliplex import authz as authz_package
-from soliplex import config
 from soliplex import loggers
 from soliplex import mcp_server
 from soliplex import secrets
@@ -23,6 +22,7 @@ from soliplex.authz import schema as authz_schema
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
 from soliplex.config import completions as config_completions
+from soliplex.config import installation as config_installation
 from soliplex.config import logfire as config_logfire
 from soliplex.config import rooms as config_rooms
 
@@ -40,7 +40,7 @@ NO_AUTH_MODE_USER_TOKEN = {
 
 @dataclasses.dataclass
 class Installation:
-    _config: config.InstallationConfig
+    _config: config_installation.InstallationConfig
 
     def get_secret(self, secret_name) -> str:
         secret_config = self._config.secrets_map[secret_name]
@@ -49,7 +49,9 @@ class Installation:
     def resolve_secrets(self):
         secrets.resolve_secrets(self._config.secrets)
 
-    def get_environment_sources(self, key) -> list[config.EnvironmentSource]:
+    def get_environment_sources(
+        self, key
+    ) -> list[config_installation.EnvironmentSource]:
         return self._config.get_environment_sources(key)
 
     def get_environment(self, key, default=None) -> str:
@@ -350,7 +352,7 @@ class Installation:
 
 async def get_the_installation(
     request: fastapi.Request,
-) -> config.InstallationConfig:
+) -> config_installation.InstallationConfig:
     return request.state.the_installation
 
 
@@ -429,7 +431,7 @@ async def lifespan(
     log_config_file: str = None,
     add_admin_user: str = None,
 ):
-    i_config = config.load_installation(installation_path)
+    i_config = config_installation.load_installation(installation_path)
 
     if no_auth_mode:
         del i_config.oidc_paths[:]
@@ -441,7 +443,9 @@ async def lifespan(
 
     if log_config_file is not None:
         log_config_file = pathlib.Path(log_config_file)
-        logging_config_dict = config._load_config_yaml(log_config_file)
+        logging_config_dict = config_installation._load_config_yaml(
+            log_config_file
+        )
     else:
         logging_config_dict = i_config.logging_config
 
