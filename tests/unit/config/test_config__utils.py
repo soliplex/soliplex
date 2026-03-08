@@ -185,14 +185,3 @@ def test_resolve_environment_entry(
 
     else:
         assert expected.value.env_var == "ENVVAR"
-
-
-@mock.patch("importlib.import_module")
-def test__from_dotted_name(im):
-    dotted_name = "somemodule.SomeClass"
-
-    faux_module = im.return_value = mock.Mock()
-
-    klass = config._from_dotted_name(dotted_name)
-
-    assert klass is faux_module.SomeClass

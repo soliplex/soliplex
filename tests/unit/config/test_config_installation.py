@@ -15,6 +15,7 @@ from soliplex.agui import features as agui_features
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
 from soliplex.config import exceptions as config_exc
+from soliplex.config import meta as config_meta
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from tests.unit.config import test_config_agents as test_agents
@@ -192,7 +193,9 @@ W_FACTORY_AGENT_CONFIG_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
     "meta": {
         "agent_configs": [
-            config.ConfigMeta(config_klass=config_agents.FactoryAgentConfig),
+            config_meta.ConfigMeta(
+                config_klass=config_agents.FactoryAgentConfig,
+            ),
         ],
     },
     "agent_configs": [
@@ -1214,7 +1217,7 @@ def test_installationconfig_from_yaml(
     expected_kw = copy.deepcopy(expected_kw)
 
     if expected_kw is None:
-        with pytest.raises(config.FromYamlException) as exc:
+        with pytest.raises(config_exc.FromYamlException) as exc:
             config.InstallationConfig.from_yaml(config_path, config_dict)
 
         assert exc.value._config_path == config_path
@@ -1224,12 +1227,12 @@ def test_installationconfig_from_yaml(
 
         if "meta" in expected_kw:
             icmeta_kw = expected_kw.pop("meta")
-            expected_kw["meta"] = config.InstallationConfigMeta(
+            expected_kw["meta"] = config_meta.InstallationConfigMeta(
                 **icmeta_kw,
                 _config_path=config_path,
             )
         else:
-            expected_kw["meta"] = config.InstallationConfigMeta(
+            expected_kw["meta"] = config_meta.InstallationConfigMeta(
                 _config_path=config_path,
             )
 
@@ -1390,7 +1393,7 @@ def test_installationconfig_from_yaml_environ_wo_value(temp_dir, config_yaml):
 
 @pytest.mark.parametrize("w_logfire_config", [False, True])
 def test_installationconfig_as_yaml(w_logfire_config):
-    meta = mock.create_autospec(config.InstallationConfigMeta)
+    meta = mock.create_autospec(config_meta.InstallationConfigMeta)
     secret_1 = config_secrets.SecretConfig(secret_name="SECRET_ONE")
     secret_2 = config_secrets.SecretConfig(secret_name="SECRET_TWO")
     agent_config = config_agents.AgentConfig(

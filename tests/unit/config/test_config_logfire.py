@@ -4,6 +4,7 @@ import pytest
 import yaml
 
 from soliplex import config
+from soliplex.config import exceptions as config_exc
 
 EMPTY_LFIPYDAI_CONFIG_YAML = ""  # raises
 DEFAULT_LFIPYDAI_EXP_KWARGS = {
@@ -422,7 +423,7 @@ def test_lfipydai_from_yaml(
         config_dict = yaml.safe_load(stream)
 
     if expected_kw is None:
-        with pytest.raises(config.FromYamlException) as exc:
+        with pytest.raises(config_exc.FromYamlException) as exc:
             config.LogfireInstrumentPydanticAI.from_yaml(
                 yaml_file,
                 config_dict,
@@ -495,7 +496,7 @@ def test_lfifapi_from_yaml(
         config_dict = yaml.safe_load(stream)
 
     if expected_kw is None:
-        with pytest.raises(config.FromYamlException) as exc:
+        with pytest.raises(config_exc.FromYamlException) as exc:
             config.LogfireInstrumentFastAPI.from_yaml(
                 yaml_file,
                 config_dict,
@@ -684,7 +685,7 @@ def test_logfireconfig_from_yaml(
         config_dict = yaml.safe_load(stream)
 
     if expected_kw is None:
-        with pytest.raises(config.FromYamlException) as exc:
+        with pytest.raises(config_exc.FromYamlException) as exc:
             config.LogfireConfig.from_yaml(
                 installation_config,
                 yaml_file,
