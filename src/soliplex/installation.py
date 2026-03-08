@@ -22,6 +22,7 @@ from soliplex.agui import schema as agui_schema
 from soliplex.authz import schema as authz_schema
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
+from soliplex.config import rooms as config_rooms
 
 ProviderURL = str | None
 ProviderModelNames = set[str]
@@ -167,7 +168,7 @@ class Installation:
         user: dict,
         the_authz_policy: authz_package.AuthorizationPolicy = None,
         the_logger: loggers.LogWrapper = None,
-    ) -> dict[str, config.RoomConfig]:
+    ) -> config_rooms.RoomConfigMap:
         """Return room configs available to the user"""
         if the_logger is None:
             logger = loggers.LogWrapper(
@@ -204,7 +205,7 @@ class Installation:
         user: dict,
         the_authz_policy: authz_package.AuthorizationPolicy = None,
         the_logger: loggers.LogWrapper = None,
-    ) -> config.RoomConfig:
+    ) -> config_rooms.RoomConfig:
         """Return a room configs IFF available to the user"""
         if the_logger is None:
             logger = loggers.LogWrapper(

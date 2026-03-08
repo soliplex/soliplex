@@ -17,6 +17,7 @@ from soliplex import secrets
 from soliplex import util
 from soliplex.config import agents as config_agents
 from soliplex.config import quizzes as config_quizzes
+from soliplex.config import rooms as config_rooms
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
@@ -250,7 +251,7 @@ def rooms_with_agents(request, room_quizzes):
             model_name="room-model",
         )
         room_config = mock.create_autospec(
-            config.RoomConfig,
+            config_rooms.RoomConfig,
             id="test-room",
             agent_config=room_agent,
             **room_quizzes,
@@ -561,7 +562,7 @@ def test_installation_oidc_auth_system_configs():
 
 @pytest.fixture
 def r_configs():
-    r_config = mock.create_autospec(config.RoomConfig)
+    r_config = mock.create_autospec(config_rooms.RoomConfig)
     return {"room_id": r_config}
 
 
@@ -835,7 +836,7 @@ async def test_installation_get_agent_for_room(
         config_tools.HTTP_MCP_ClientToolsetConfig
     )
 
-    r_config = mock.create_autospec(config.RoomConfig)
+    r_config = mock.create_autospec(config_rooms.RoomConfig)
     r_config.agent_config = a_config
 
     exp_gafc_kwargs = {}
@@ -1002,7 +1003,7 @@ async def test_installation_get_agent_deps_for_room(
     tc_config = mock.create_autospec(config_tools.ToolConfig)
     sdtc_config = mock.create_autospec(config_tools.ToolConfig)
 
-    r_config = mock.create_autospec(config.RoomConfig)
+    r_config = mock.create_autospec(config_rooms.RoomConfig)
     t_configs = r_config.tool_configs = {
         "test_tool": tc_config,
         "test_sdtc": sdtc_config,

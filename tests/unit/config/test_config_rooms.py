@@ -6,10 +6,10 @@ import pytest
 import yaml
 from haiku.skills import models as hs_models
 
-from soliplex import config
 from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
 from soliplex.config import quizzes as config_quizzes
+from soliplex.config import rooms as config_rooms
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
 from tests.unit.config import test_config_agents as test_agents
@@ -162,7 +162,7 @@ allow_mcp: true
 @pytest.mark.parametrize(
     "config_yaml, expectation",
     [
-        (BOGUS_ROOM_CONFIG_YAML, pytest.raises(config.FromYamlException)),
+        (BOGUS_ROOM_CONFIG_YAML, pytest.raises(config_exc.FromYamlException)),
         (BARE_ROOM_CONFIG_YAML, contextlib.nullcontext(BARE_ROOM_CONFIG_KW)),
         (FULL_ROOM_CONFIG_YAML, contextlib.nullcontext(FULL_ROOM_CONFIG_KW)),
     ],
@@ -191,7 +191,7 @@ def test_roomconfig_from_yaml(
         config_dict = yaml.safe_load(stream)
 
     with expectation as expected:
-        found = config.RoomConfig.from_yaml(
+        found = config_rooms.RoomConfig.from_yaml(
             installation_config,
             yaml_file,
             config_dict,
@@ -201,7 +201,7 @@ def test_roomconfig_from_yaml(
         assert expected.value._config_path == yaml_file
 
     else:
-        expected = config.RoomConfig(**expected)
+        expected = config_rooms.RoomConfig(**expected)
         expected = dataclasses.replace(
             expected,
             _installation_config=installation_config,
@@ -258,7 +258,7 @@ def test_roomconfig_sort_key(w_order):
     if w_order:
         room_config_kw["_order"] = _ORDER
 
-    room_config = config.RoomConfig(**room_config_kw)
+    room_config = config_rooms.RoomConfig(**room_config_kw)
 
     found = room_config.sort_key
 
@@ -272,7 +272,7 @@ def test_roomconfig_skill_configs_bare(installation_config):
     installation_config.skill_configs = {}
 
     room_config_kw = BARE_ROOM_CONFIG_KW.copy()
-    room_config = config.RoomConfig(
+    room_config = config_rooms.RoomConfig(
         **room_config_kw,
         _installation_config=installation_config,
     )
@@ -292,7 +292,7 @@ def test_roomconfig_skill_configs_w_hit(installation_config):
     room_config_kw = FULL_ROOM_CONFIG_KW.copy()
     room_config_kw["skills"].entrypoint_skills = []
     room_config_kw["skills"]._installation_config = installation_config
-    room_config = config.RoomConfig(
+    room_config = config_rooms.RoomConfig(
         **room_config_kw,
         _installation_config=installation_config,
     )
@@ -339,7 +339,7 @@ def test_roomconfig_agui_feature_names(
             _installation_config=installation_config,
         )
 
-    room_config = config.RoomConfig(
+    room_config = config_rooms.RoomConfig(
         _installation_config=installation_config,
         **rc_kwargs,
     )
@@ -362,7 +362,7 @@ def test_roomconfig_quiz_map(w_existing):
     ]
 
     existing = object()
-    room_config = config.RoomConfig(**BARE_ROOM_CONFIG_KW)
+    room_config = config_rooms.RoomConfig(**BARE_ROOM_CONFIG_KW)
 
     if w_existing:
         room_config._quiz_map = existing
@@ -394,7 +394,7 @@ def test_roomconfig_get_logo_image(temp_dir, room_config_kw, w_config_path):
     if w_config_path:
         room_config_kw["_config_path"] = temp_dir / "room_config.yaml"
 
-    room_config = config.RoomConfig(**room_config_kw)
+    room_config = config_rooms.RoomConfig(**room_config_kw)
 
     if room_config._config_path:
         if room_config._logo_image is not None:

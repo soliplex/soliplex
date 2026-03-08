@@ -16,6 +16,7 @@ from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import authsystem as config_authsystem
 from soliplex.config import quizzes as config_quizzes
+from soliplex.config import rooms as config_rooms
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
@@ -268,7 +269,7 @@ class Room(pydantic.BaseModel):
     allow_mcp: bool
 
     @classmethod
-    def from_config(cls, room_config: config.RoomConfig):
+    def from_config(cls, room_config: config_rooms.RoomConfig):
         agent_config = room_config.agent_config
 
         if agent_config.kind == "factory":

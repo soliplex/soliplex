@@ -7,12 +7,12 @@ import pytest
 from haiku.rag.store.models import chunk as hr_chunk
 
 from soliplex import authz as authz_package
-from soliplex import config
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
 from soliplex.config import agents as config_agents
 from soliplex.config import rag as config_rag
+from soliplex.config import rooms as config_rooms
 from soliplex.config import tools as config_tools
 from soliplex.views import rooms as rooms_views
 
@@ -64,7 +64,10 @@ RAG_DOCUMENT = models.RAGDocument(**DOCUMENT_KWARGS)
 @pytest.fixture(scope="module", params=[(), ROOM_IDS])
 def room_configs(request):
     return {
-        room_id: mock.create_autospec(config.RoomConfig, sort_key=room_id)
+        room_id: mock.create_autospec(
+            config_rooms.RoomConfig,
+            sort_key=room_id,
+        )
         for room_id in request.param
     }
 

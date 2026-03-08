@@ -16,6 +16,7 @@ from soliplex import models
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
 from soliplex.config import quizzes as config_quizzes
+from soliplex.config import rooms as config_rooms
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
@@ -732,7 +733,7 @@ def room_ic():
 
 
 def test_room_from_config_bare(room_ic, which_agent):
-    room_config = config.RoomConfig(
+    room_config = config_rooms.RoomConfig(
         id=ROOM_ID,
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,
@@ -772,7 +773,7 @@ def test_room_from_config_bare(room_ic, which_agent):
 
 
 def test_room_from_config_w_welcome(room_ic, default_agent):
-    room_config = config.RoomConfig(
+    room_config = config_rooms.RoomConfig(
         id=ROOM_ID,
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,
@@ -787,7 +788,7 @@ def test_room_from_config_w_welcome(room_ic, default_agent):
 
 
 def test_room_from_config_w_suggestions(room_ic, default_agent):
-    room_config = config.RoomConfig(
+    room_config = config_rooms.RoomConfig(
         id=ROOM_ID,
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,
@@ -802,7 +803,7 @@ def test_room_from_config_w_suggestions(room_ic, default_agent):
 
 
 def test_room_from_config_w_tools(room_ic, default_agent, gcd_tool_config):
-    room_config = config.RoomConfig(
+    room_config = config_rooms.RoomConfig(
         id=ROOM_ID,
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,
@@ -827,7 +828,7 @@ def test_room_from_config_w_fs_skills(
 ):
     room_ic._skill_configs[SKILL_NAME] = filesystem_skill_config
 
-    room_config = config.RoomConfig(
+    room_config = config_rooms.RoomConfig(
         id=ROOM_ID,
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,
@@ -853,7 +854,7 @@ def test_room_from_config_w_ep_skills(
 ):
     room_ic._skill_configs[SKILL_NAME] = entrypoint_skill_config
 
-    room_config = config.RoomConfig(
+    room_config = config_rooms.RoomConfig(
         id=ROOM_ID,
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,
@@ -873,7 +874,7 @@ def test_room_from_config_w_ep_skills(
 
 
 def test_room_from_config_w_quizzes(room_ic, default_agent, a_quiz):
-    room_config = config.RoomConfig(
+    room_config = config_rooms.RoomConfig(
         id=ROOM_ID,
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,
@@ -888,7 +889,7 @@ def test_room_from_config_w_quizzes(room_ic, default_agent, a_quiz):
 
 
 def test_room_from_config_w_allow_mcp(room_ic, default_agent, room_allow_mcp):
-    room_config = config.RoomConfig(
+    room_config = config_rooms.RoomConfig(
         id=ROOM_ID,
         name=ROOM_NAME,
         description=ROOM_DESCRIPTION,

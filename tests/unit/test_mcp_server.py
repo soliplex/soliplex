@@ -7,6 +7,7 @@ from fastmcp import tools as fmcp_tools
 from soliplex import config
 from soliplex import installation
 from soliplex import mcp_server
+from soliplex.config import rooms as config_rooms
 from soliplex.config import tools as config_tools
 
 ROOM_ID = "testing"
@@ -129,7 +130,7 @@ def test_mcp_tool_w_wrapper():
 @mock.patch("soliplex.mcp_server.mcp_tool")
 def test_room_mcp_tools(mcp_tool, tool_configs, exp_mcp_tools, allow_mcp):
     mcp_tool.side_effect = lambda tc: MCP_TOOL if tc.allow_mcp else None
-    room_config = mock.create_autospec(config.RoomConfig)
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
     room_config.allow_mcp = allow_mcp
     room_config.tool_configs = tool_configs
 
@@ -150,9 +151,11 @@ def test_room_mcp_tools(mcp_tool, tool_configs, exp_mcp_tools, allow_mcp):
 def test_setup_mcp_for_rooms(fmcp_klass, fmtp_klass, rmt, w_max_age):
     i_config = mock.create_autospec(config.InstallationConfig)
     i_config.room_configs = room_configs = {
-        "room1": mock.create_autospec(config.RoomConfig, allow_mcp=True),
-        "room2": mock.create_autospec(config.RoomConfig, allow_mcp=True),
-        "room3": mock.create_autospec(config.RoomConfig, allow_mcp=False),
+        "room1": mock.create_autospec(config_rooms.RoomConfig, allow_mcp=True),
+        "room2": mock.create_autospec(config_rooms.RoomConfig, allow_mcp=True),
+        "room3": mock.create_autospec(
+            config_rooms.RoomConfig, allow_mcp=False
+        ),
     }
     the_installation = mock.create_autospec(installation.Installation)
     the_installation._config = i_config

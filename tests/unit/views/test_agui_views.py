@@ -9,12 +9,12 @@ from ag_ui import core as agui_core
 
 from soliplex import agui as agui_package
 from soliplex import authz as authz_package
-from soliplex import config
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
 from soliplex.agui import features as agui_features
 from soliplex.config import agui as config_agui
+from soliplex.config import rooms as config_rooms
 from soliplex.views import agui as agui_views
 
 NOW = datetime.datetime.now(datetime.UTC)
@@ -260,7 +260,7 @@ async def test_get_room_agui_only(
     test_thread,
     w_thread_meta,
 ):
-    room_config = mock.create_autospec(config.RoomConfig)
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
     cuir.return_value = room_config
 
     request = fastapi.Request(scope={"type": "http"})
@@ -345,7 +345,7 @@ async def test_get_room_agui_thread_id_only(
     tsgt_side_effect,
     expectation,
 ):
-    room_config = mock.create_autospec(config.RoomConfig)
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
     cuir.return_value = room_config
 
     test_thread.list_runs.return_value = [test_run]
@@ -482,7 +482,7 @@ async def test_get_room_agui_thread_id_run_id(
     tsgr_side_effect,
     expectation,
 ):
-    room_config = mock.create_autospec(config.RoomConfig)
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
     cuir.return_value = room_config
 
     test_run.list_events.return_value = w_events
@@ -611,7 +611,7 @@ async def test_post_room_agui_only(
     w_thread_meta,
     w_agui_feature_names,
 ):
-    room_config = mock.create_autospec(config.RoomConfig)
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
     room_config.agui_feature_names = w_agui_feature_names
     cuir.return_value = room_config
 
@@ -730,7 +730,7 @@ async def test_post_room_agui_thread_id_only(
     missing_parent,
     expectation,
 ):
-    room_config = mock.create_autospec(config.RoomConfig)
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
     cuir.return_value = room_config
 
     request = fastapi.Request(scope={"type": "http"})
@@ -846,7 +846,7 @@ async def test_post_room_agui_thread_id_meta(
     tsutm_side_effect,
     expectation,
 ):
-    room_config = mock.create_autospec(config.RoomConfig)
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
     cuir.return_value = room_config
 
     request = fastapi.Request(scope={"type": "http"})
@@ -1148,7 +1148,7 @@ async def test_post_room_agui_thread_id_run_id_meta(
     tsurm_side_effect,
     expectation,
 ):
-    room_config = mock.create_autospec(config.RoomConfig)
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
     cuir.return_value = room_config
 
     request = fastapi.Request(scope={"type": "http"})
@@ -1220,7 +1220,7 @@ async def test_post_room_agui_thread_id_run_id_feedback(
     tssrf_side_effect,
     expectation,
 ):
-    room_config = mock.create_autospec(config.RoomConfig)
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
     cuir.return_value = room_config
 
     request = fastapi.Request(scope={"type": "http"})
@@ -1291,7 +1291,7 @@ async def test_delete_room_agui_thread_id(
     tsdr_side_effect,
     expectation,
 ):
-    room_config = mock.create_autospec(config.RoomConfig)
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
     cuir.return_value = room_config
 
     request = fastapi.Request(scope={"type": "http"})
