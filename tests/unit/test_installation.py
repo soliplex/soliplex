@@ -16,6 +16,7 @@ from soliplex import models
 from soliplex import secrets
 from soliplex import util
 from soliplex.config import agents as config_agents
+from soliplex.config import completions as config_completions
 from soliplex.config import quizzes as config_quizzes
 from soliplex.config import rooms as config_rooms
 from soliplex.config import secrets as config_secrets
@@ -275,7 +276,7 @@ def completions_with_agents(request):
             model_name="completion-model",
         )
         completion_config = mock.create_autospec(
-            config.CompletionConfig,
+            config_completions.CompletionConfig,
             id="test-completion",
             agent_config=completion_agent,
         )
@@ -737,7 +738,7 @@ async def test_installation_get_room_config(
 
 @pytest.mark.anyio
 async def test_installation_get_completion_configs(test_user):
-    c_config = mock.create_autospec(config.CompletionConfig)
+    c_config = mock.create_autospec(config_completions.CompletionConfig)
     c_configs = {"completion_id": c_config}
     i_config = mock.create_autospec(config.InstallationConfig)
     i_config.completion_configs = c_configs
@@ -758,7 +759,7 @@ async def test_installation_get_completion_config(
     w_completion_id,
     raises,
 ):
-    c_config = mock.create_autospec(config.CompletionConfig)
+    c_config = mock.create_autospec(config_completions.CompletionConfig)
     c_configs = {"completion_id": c_config}
     i_config = mock.create_autospec(config.InstallationConfig)
     i_config.completion_configs = c_configs
@@ -946,7 +947,7 @@ async def test_installation_get_agent_for_completion(
         config_tools.HTTP_MCP_ClientToolsetConfig
     )
 
-    c_config = mock.create_autospec(config.CompletionConfig)
+    c_config = mock.create_autospec(config_completions.CompletionConfig)
     c_config.agent_config = a_config
     t_configs = c_config.tool_configs = {
         "test_tool": tc_config,
@@ -1085,7 +1086,7 @@ async def test_installation_get_agent_deps_for_completion(
     tc_config = mock.create_autospec(config_tools.ToolConfig)
     sdtc_config = mock.create_autospec(config_tools.ToolConfig)
 
-    c_config = mock.create_autospec(config.CompletionConfig)
+    c_config = mock.create_autospec(config_completions.CompletionConfig)
     t_configs = c_config.tool_configs = {
         "test_tool": tc_config,
         "test_sdtc": sdtc_config,

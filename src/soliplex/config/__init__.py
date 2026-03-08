@@ -23,6 +23,7 @@ from . import _utils
 from . import agents as config_agents
 from . import agui as config_agui
 from . import authsystem as config_authsystem
+from . import completions as config_completions
 from . import exceptions as config_exc
 
 # from . import quizzes as config_quizzes
@@ -63,76 +64,6 @@ class MissingEnvVars(ExceptionGroup, ValueError):
             f"Environment variables cannot be resolved: {env_vars}",
             excs,
         )
-
-
-# ============================================================================
-#   Completions endpoint-related configuration types
-# ============================================================================
-
-
-@dataclasses.dataclass(kw_only=True)
-class CompletionConfig:
-    """Configuration for a completion endpoint."""
-
-    #
-    # Required metadata
-    #
-    id: str
-    agent_config: config_agents.AgentConfig
-
-    name: str = None
-
-    #
-    # Tool options
-    #
-    tool_configs: config_tools.ToolConfigMap = _default_dict_field()
-    mcp_client_toolset_configs: config_tools.MCP_ClientToolsetConfigMap = (
-        _default_dict_field()
-    )
-
-    # Set by `from_yaml` factory
-    _installation_config: InstallationConfig = _no_repr_no_compare_none()
-    _config_path: pathlib.Path = None
-
-    @classmethod
-    def from_yaml(
-        cls,
-        installation_config: InstallationConfig,
-        config_path: pathlib.Path,
-        config_dict: dict,
-    ):
-        config_dict["_installation_config"] = installation_config
-        config_dict["_config_path"] = config_path
-
-        completion_id = config_dict["id"]
-
-        if "name" not in config_dict:
-            config_dict["name"] = completion_id
-
-        agent_config_yaml = config_dict.pop("agent")
-        agent_config_yaml["id"] = f"completion-{completion_id}"
-
-        config_dict["agent_config"] = config_agents.extract_agent_config(
-            installation_config,
-            config_path,
-            agent_config_yaml,
-        )
-
-        config_dict["tool_configs"] = config_tools.extract_tool_configs(
-            installation_config,
-            config_path,
-            config_dict,
-        )
-
-        config_dict["mcp_client_toolset_configs"] = (
-            config_tools.extract_mcp_client_toolset_configs(
-                installation_config,
-                config_path,
-                config_dict,
-            )
-        )
-
-        return cls(**config_dict)
 
 
 # ============================================================================
@@ -1132,7 +1063,7 @@ class InstallationConfig:
     #
     completion_paths: list[pathlib.Path] = None
 
-    _completion_configs: dict[str, CompletionConfig] = None
+    _completion_configs: config_completions.CompletionConfigMap = None
 
     #
     # Path(s) to quiz data:  each item must be a single directory containing
@@ -1567,7 +1498,9 @@ class InstallationConfig:
 
         return self._room_configs.copy()
 
-    def _load_completion_configs(self) -> dict[str, CompletionConfig]:
+    def _load_completion_configs(
+        self,
+    ) -> config_completions.CompletionConfigMap:
         completion_configs = {}
 
         for completion_path in self.completion_paths:
@@ -1578,16 +1511,18 @@ class InstallationConfig:
                 #      first-past-the-post for any conflict on completion ID.
                 config_id = config_yaml["id"]
                 if config_id not in completion_configs:
-                    completion_configs[config_id] = CompletionConfig.from_yaml(
-                        self,
-                        config_path,
-                        config_yaml,
+                    completion_configs[config_id] = (
+                        config_completions.CompletionConfig.from_yaml(
+                            self,
+                            config_path,
+                            config_yaml,
+                        )
                     )
 
         return completion_configs
 
     @property
-    def completion_configs(self) -> dict[str, CompletionConfig]:
+    def completion_configs(self) -> config_completions.CompletionConfigMap:
         if self._completion_configs is None:
             self._completion_configs = self._load_completion_configs()
 

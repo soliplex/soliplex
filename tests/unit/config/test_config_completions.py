@@ -3,8 +3,8 @@ import dataclasses
 import pytest
 import yaml
 
-from soliplex import config
 from soliplex.config import agents as config_agents
+from soliplex.config import completions as config_completions
 from soliplex.config import tools as config_tools
 from tests.unit.config import test_config_agents as test_agents
 from tests.unit.config import test_config_tools as test_tools
@@ -102,7 +102,7 @@ def test_completionconfig_from_yaml(
         expected_kw = expected_kw.copy()
         expected_kw["name"] = expected_kw["id"]
 
-    expected = config.CompletionConfig(**expected_kw)
+    expected = config_completions.CompletionConfig(**expected_kw)
 
     yaml_file = temp_dir / "test.yaml"
     yaml_file.write_text(config_yaml)
@@ -130,7 +130,7 @@ def test_completionconfig_from_yaml(
     with yaml_file.open() as stream:
         config_dict = yaml.safe_load(stream)
 
-    found = config.CompletionConfig.from_yaml(
+    found = config_completions.CompletionConfig.from_yaml(
         installation_config,
         yaml_file,
         config_dict,

@@ -22,6 +22,7 @@ from soliplex.agui import schema as agui_schema
 from soliplex.authz import schema as authz_schema
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
+from soliplex.config import completions as config_completions
 from soliplex.config import rooms as config_rooms
 
 ProviderURL = str | None
@@ -232,7 +233,7 @@ class Installation:
         self,
         *,
         user: dict,
-    ) -> dict[str, config.CompletionConfig]:
+    ) -> dict[str, config_completions.CompletionConfig]:
         return self._config.completion_configs
 
     async def get_completion_config(
@@ -240,7 +241,7 @@ class Installation:
         *,
         completion_id: str,
         user: dict,
-    ) -> config.CompletionConfig:
+    ) -> config_completions.CompletionConfig:
         return self._config.completion_configs[completion_id]
 
     def get_agent_by_id(

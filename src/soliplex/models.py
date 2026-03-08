@@ -15,6 +15,7 @@ from soliplex import config
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import authsystem as config_authsystem
+from soliplex.config import completions as config_completions
 from soliplex.config import quizzes as config_quizzes
 from soliplex.config import rooms as config_rooms
 from soliplex.config import secrets as config_secrets
@@ -322,7 +323,10 @@ class Completion(pydantic.BaseModel):
     agent: Agent
 
     @classmethod
-    def from_config(cls, completion_config: config.CompletionConfig):
+    def from_config(
+        cls,
+        completion_config: config_completions.CompletionConfig,
+    ):
         agent_config = completion_config.agent_config
 
         if agent_config.kind == "factory":

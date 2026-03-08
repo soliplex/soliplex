@@ -15,6 +15,7 @@ from soliplex import config
 from soliplex import models
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
+from soliplex.config import completions as config_completions
 from soliplex.config import quizzes as config_quizzes
 from soliplex.config import rooms as config_rooms
 from soliplex.config import secrets as config_secrets
@@ -904,7 +905,7 @@ def test_room_from_config_w_allow_mcp(room_ic, default_agent, room_allow_mcp):
 
 
 def test_completion_from_config_bare(which_agent):
-    completion_config = config.CompletionConfig(
+    completion_config = config_completions.CompletionConfig(
         id=COMPLETION_ID,
         name=COMPLETION_NAME,
         agent_config=which_agent,
@@ -935,7 +936,7 @@ def test_completion_from_config_bare(which_agent):
 
 
 def test_completion_from_config_w_tools(default_agent, gcd_tool_config):
-    completion_config = config.CompletionConfig(
+    completion_config = config_completions.CompletionConfig(
         id=COMPLETION_ID,
         name=COMPLETION_NAME,
         agent_config=default_agent,

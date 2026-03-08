@@ -3,9 +3,9 @@ from unittest import mock
 import fastapi
 import pytest
 
-from soliplex import config
 from soliplex import installation
 from soliplex import models
+from soliplex.config import completions as config_completions
 from soliplex.views import completions as completions_views
 
 COMPLETION_IDS = ["foo", "bar", "baz"]
@@ -34,7 +34,9 @@ UNKNOWN_USER_CLAIMS = {
 @pytest.fixture(scope="module", params=[(), COMPLETION_IDS])
 def completion_configs(request):
     return {
-        completion_id: mock.create_autospec(config.CompletionConfig)
+        completion_id: mock.create_autospec(
+            config_completions.CompletionConfig,
+        )
         for completion_id in request.param
     }
 
