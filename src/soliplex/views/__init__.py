@@ -15,6 +15,11 @@ depend_the_installation = installation_module.depend_the_installation
 Installation = installation_module.Installation
 HTTPAuthorizationCredentials = security.HTTPAuthorizationCredentials
 
+HEADERS_DO_NOT_BUFFER_SSE = {
+    "Cache-Control": "no-cache, no-store",
+    "X-Accel-Buffering": "no",
+}
+
 
 async def get_the_unauth_logger(
     request: fastapi.Request,

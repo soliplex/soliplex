@@ -13,6 +13,7 @@ from soliplex import config
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
+from soliplex import views
 from soliplex.agui import features as agui_features
 from soliplex.views import agui as agui_views
 
@@ -1024,6 +1025,7 @@ async def test_post_room_agui_thread_id_run_id(
         sr.assert_called_once_with(
             exp_sse_stream,
             media_type=exp_adapter.accept,
+            headers=views.HEADERS_DO_NOT_BUFFER_SSE,
         )
 
         exp_adapter.encode_stream.assert_called_once_with(tee.return_value)

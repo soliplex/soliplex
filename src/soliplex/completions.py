@@ -1,13 +1,10 @@
 import json
 import time
 
-import fastapi
 import pydantic_ai
-from fastapi import responses
 from pydantic_ai import messages as ai_messages
 
 from soliplex import agents
-from soliplex import models
 
 
 def openai_chunk_repr(model, i_chunk, chunk):
@@ -63,31 +60,3 @@ async def stream_chat_responses(
             i_chunk += 1
 
     yield "data: [DONE]\n\n"
-
-
-async def openai_chat_completion(
-    agent: pydantic_ai.Agent,
-    agent_deps: agents.AgentDependencies,
-    chat_request: models.ChatCompletionRequest,
-) -> responses.StreamingResponse:
-    openai_payload = chat_request.model_dump(exclude_unset=True)
-    user_question = openai_payload["messages"][-1]["content"]
-    # TODO: figure out how to convert message history to PydanticAI's
-    #       format.
-    # message_history = munge(openai_payload["messages"][:-1])
-    message_history = []
-
-    try:
-        return responses.StreamingResponse(
-            stream_chat_responses(
-                agent,
-                agent_deps,
-                user_question,
-                message_history,
-            ),
-            media_type="text/event-stream",
-        )
-    except Exception:
-        raise fastapi.HTTPException(
-            status_code=500, detail="Error streaming chat responses"
-        ) from None
