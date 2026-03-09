@@ -635,8 +635,7 @@ async def post_room_agui_thread_id_run_id(
         async for event in compacted_stream:
             if await request.is_disconnected():
                 logfire.info(
-                    "Client disconnected during stream "
-                    "{thread_id}/{run_id}",
+                    "Client disconnected during stream {thread_id}/{run_id}",
                     thread_id=thread_id,
                     run_id=run_id,
                 )
@@ -668,9 +667,7 @@ async def post_room_agui_thread_id_run_id(
                     break
 
                 if pending is None:
-                    pending = asyncio.ensure_future(
-                        encoded_iter.__anext__()
-                    )
+                    pending = asyncio.ensure_future(encoded_iter.__anext__())
 
                 done, _ = await asyncio.wait(
                     [pending],
@@ -689,10 +686,7 @@ async def post_room_agui_thread_id_run_id(
                         pending = None
                 else:
                     # Poll timed out — check for keepalive
-                    if (
-                        time.monotonic() - last_data
-                        >= _KEEPALIVE_INTERVAL
-                    ):
+                    if time.monotonic() - last_data >= _KEEPALIVE_INTERVAL:
                         yield ": keepalive\n\n"
                         last_data = time.monotonic()
 

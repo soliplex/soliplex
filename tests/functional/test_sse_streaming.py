@@ -286,9 +286,7 @@ async def collect_events(
         async with httpx.AsyncClient(
             transport=transport, base_url="http://testserver"
         ) as client:
-            async with client.stream(
-                "POST", "/stream", json={}
-            ) as response:
+            async with client.stream("POST", "/stream", json={}) as response:
                 status = response.status_code
                 async for line in response.aiter_lines():
                     line = line.strip()
@@ -429,9 +427,7 @@ async def test_t4_missing_anti_buffering_headers():
     async with httpx.AsyncClient(
         transport=transport, base_url="http://testserver"
     ) as client:
-        async with client.stream(
-            "POST", "/stream", json={}
-        ) as response:
+        async with client.stream("POST", "/stream", json={}) as response:
             headers = dict(response.headers)
 
             # These headers MUST be present for SSE to work through
@@ -483,20 +479,14 @@ async def test_t5_no_heartbeat_during_idle():
         base_url="http://testserver",
         timeout=30.0,
     ) as client:
-        async with client.stream(
-            "POST", "/stream", json={}
-        ) as response:
+        async with client.stream("POST", "/stream", json={}) as response:
             async for line in response.aiter_lines():
                 if line.strip():
                     lines_received.append(line.strip())
 
     # Check for keepalive comments (lines starting with ':')
-    keepalives = [
-        line for line in lines_received if line.startswith(":")
-    ]
-    data_events = [
-        line for line in lines_received if line.startswith("data:")
-    ]
+    keepalives = [line for line in lines_received if line.startswith(":")]
+    data_events = [line for line in lines_received if line.startswith("data:")]
 
     print(f"\n  data_events: {len(data_events)}")
     print(f"  keepalives: {len(keepalives)}")
@@ -558,7 +548,8 @@ async def test_t7_fixed_pattern_client_disconnect():
 
         async def counting_stream():
             async for event in fake_agent_stream(
-                n_events=20, delay=0.2,
+                n_events=20,
+                delay=0.2,
             ):
                 if await request.is_disconnected():
                     break
@@ -610,9 +601,7 @@ async def test_t7_fixed_pattern_client_disconnect():
             media_type="text/event-stream",
         )
 
-    events, status, error = await collect_events(
-        slow_app, disconnect_after=3
-    )
+    events, status, error = await collect_events(slow_app, disconnect_after=3)
 
     assert len(events) == 3
 
@@ -658,16 +647,11 @@ async def test_t8_fixed_pattern_has_headers():
     async with httpx.AsyncClient(
         transport=transport, base_url="http://testserver"
     ) as client:
-        async with client.stream(
-            "POST", "/stream", json={}
-        ) as response:
+        async with client.stream("POST", "/stream", json={}) as response:
             headers = dict(response.headers)
 
             print(f"\n  cache-control: {headers.get('cache-control')}")
-            print(
-                f"  x-accel-buffering: "
-                f"{headers.get('x-accel-buffering')}"
-            )
+            print(f"  x-accel-buffering: {headers.get('x-accel-buffering')}")
 
             assert "cache-control" in headers
             assert "no-cache" in headers["cache-control"]
@@ -700,19 +684,13 @@ async def test_t9_fixed_pattern_heartbeat():
         base_url="http://testserver",
         timeout=30.0,
     ) as client:
-        async with client.stream(
-            "POST", "/stream", json={}
-        ) as response:
+        async with client.stream("POST", "/stream", json={}) as response:
             async for line in response.aiter_lines():
                 if line.strip():
                     lines_received.append(line.strip())
 
-    keepalives = [
-        line for line in lines_received if line.startswith(":")
-    ]
-    data_events = [
-        line for line in lines_received if line.startswith("data:")
-    ]
+    keepalives = [line for line in lines_received if line.startswith(":")]
+    data_events = [line for line in lines_received if line.startswith("data:")]
 
     print(f"\n  data_events: {len(data_events)}")
     print(f"  keepalives: {len(keepalives)}")

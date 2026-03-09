@@ -987,7 +987,13 @@ async def test__save_events_background_save_exception(logfire):
 @mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
 async def test_post_room_agui_stream_generator_happy_path(
-    cura, aga, ces, logfire_mod, the_threads, test_run, run_input,
+    cura,
+    aga,
+    ces,
+    logfire_mod,
+    the_threads,
+    test_run,
+    run_input,
 ):
     """Cover _accumulating_stream and _response_generator closures.
 
@@ -1066,7 +1072,13 @@ async def test_post_room_agui_stream_generator_happy_path(
 @mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
 async def test_post_room_agui_stream_disconnect_mid_stream(
-    cura, aga, ces, logfire_mod, the_threads, test_run, run_input,
+    cura,
+    aga,
+    ces,
+    logfire_mod,
+    the_threads,
+    test_run,
+    run_input,
 ):
     """Cover the disconnect-detection branch in _accumulating_stream.
 
@@ -1165,7 +1177,13 @@ async def test_post_room_agui_stream_disconnect_mid_stream(
 @mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
 async def test_post_room_agui_stream_keepalive_emitted(
-    cura, aga, ces, logfire_mod, the_threads, test_run, run_input,
+    cura,
+    aga,
+    ces,
+    logfire_mod,
+    the_threads,
+    test_run,
+    run_input,
 ):
     """Cover keepalive emission and the timeout branch.
 
@@ -1253,7 +1271,13 @@ async def test_post_room_agui_stream_keepalive_emitted(
 @mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
 async def test_post_room_agui_stream_cancelled_error(
-    cura, aga, ces, logfire_mod, the_threads, test_run, run_input,
+    cura,
+    aga,
+    ces,
+    logfire_mod,
+    the_threads,
+    test_run,
+    run_input,
 ):
     """Cover the CancelledError handler and pending.cancel() in
     finally."""
