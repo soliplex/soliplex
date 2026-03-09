@@ -44,6 +44,7 @@ soliplex-tui-serve = "soliplex.tui.serve:main"
 [dependency-groups]
 dev = [
     "anyio",
+    "asyncstdlib",
     "coverage",
     "pytest",
     "pytest-cov",
