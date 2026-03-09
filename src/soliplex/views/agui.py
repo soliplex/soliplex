@@ -6,6 +6,7 @@ import fastapi
 import logfire
 import pydantic_ai
 from ag_ui import core as agui_core
+from asyncstdlib import itertools as a_itertools
 from fastapi import responses
 from pydantic_ai.ui import ag_ui as ai_ag_ui
 
@@ -462,8 +463,8 @@ async def post_room_agui_thread_id_meta(
     return fastapi.Response(status_code=205)
 
 
-async def tee_events(
-    event_stream: agui_package.AGUI_EventStream,
+async def consume_db_stream(
+    db_stream: agui_package.AGUI_EventStream,
     on_done,
     thread_id: str,
     run_id: str,
@@ -477,9 +478,8 @@ async def tee_events(
         thread_id=thread_id,
         run_id=run_id,
     ):
-        async for event in event_stream:
+        async for event in db_stream:
             event_list.append(event)
-            yield event
 
         if event_list:
             last = event_list[-1]
@@ -514,6 +514,7 @@ async def post_room_agui_thread_id_run_id(
     room_id: str,
     thread_id: str,
     run_id: str,
+    background_tasks: fastapi.BackgroundTasks,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
@@ -562,7 +563,7 @@ async def post_room_agui_thread_id_run_id(
         the_logger=the_logger,
     )
 
-    async def finish_stream(result):
+    async def capture_usage_after_stream(result):
         usage = getattr(result, "usage", None)
 
         if usage is not None:
@@ -580,10 +581,15 @@ async def post_room_agui_thread_id_run_id(
 
     agent_stream = agui_adapter.run_stream(
         deps=agent_deps,
-        on_complete=finish_stream,
+        on_complete=capture_usage_after_stream,
     )
 
     compacted_stream = agui_package.compact_event_stream(agent_stream)
+
+    # Fork the event stream:
+    # - one side to do the thread persistence and usage
+    # - the other to hand to the streaming response
+    db_stream, response_stream = a_itertools.tee(compacted_stream, 2)
 
     save_events = functools.partial(
         the_threads.save_run_events,
@@ -593,14 +599,16 @@ async def post_room_agui_thread_id_run_id(
         run_id=run_id,
     )
 
-    db_stream = tee_events(
-        compacted_stream,
+    # Save the thread persistence and usage in a background task.
+    background_tasks.add_task(
+        consume_db_stream,
+        db_stream,
         on_done=save_events,
         thread_id=thread_id,
         run_id=run_id,
     )
 
-    sse_stream = agui_adapter.encode_stream(db_stream)
+    sse_stream = agui_adapter.encode_stream(response_stream)
 
     return responses.StreamingResponse(
         sse_stream,

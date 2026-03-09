@@ -903,7 +903,7 @@ async def test_post_room_agui_thread_id_meta(
 @pytest.mark.parametrize("w_event_count", [0, 1, 10])
 @pytest.mark.parametrize("w_finished_error", [None, "finished", "error"])
 @mock.patch("soliplex.views.agui.logfire")
-async def test_tee_events(logfire, w_finished_error, w_event_count):
+async def test_consume_db_stream(logfire, w_finished_error, w_event_count):
     on_done = mock.AsyncMock(spec_set=())
 
     finished_event = agui_core.events.RunFinishedEvent(
@@ -922,15 +922,14 @@ async def test_tee_events(logfire, w_finished_error, w_event_count):
         elif w_finished_error == "error":
             yield error_event
 
-    expected = [
-        event
-        async for event in agui_views.tee_events(
-            event_iter(),
-            on_done=on_done,
-            thread_id=TEST_THREAD_ID,
-            run_id=TEST_RUN_ID,
-        )
-    ]
+    expected = [event async for event in event_iter()]
+
+    await agui_views.consume_db_stream(
+        event_iter(),
+        on_done=on_done,
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+    )
 
     on_done.assert_awaited_once_with(events=expected)
 
@@ -970,15 +969,17 @@ async def test_tee_events(logfire, w_finished_error, w_event_count):
 )
 @pytest.mark.parametrize("w_usage", [False, True])
 @mock.patch("fastapi.responses.StreamingResponse")
-@mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
+@mock.patch("soliplex.views.agui.consume_db_stream")
+@mock.patch("asyncstdlib.itertools.tee")
 @mock.patch("soliplex.agui.compact_event_stream")
+@mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
-@mock.patch("soliplex.views.agui.tee_events")
 async def test_post_room_agui_thread_id_run_id(
-    tee,
     cura,
-    ces,
     aga,
+    ces,
+    tee,
+    cdbs,
     sr,
     the_threads,
     test_run,
@@ -993,6 +994,7 @@ async def test_post_room_agui_thread_id_run_id(
 
     request = fastapi.Request(scope={"type": "http"})
 
+    background_tasks = mock.create_autospec(fastapi.BackgroundTasks)
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_agent_for_room.return_value = agent
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
@@ -1014,6 +1016,10 @@ async def test_post_room_agui_thread_id_run_id(
     exp_adapter.encode_stream = mock.MagicMock()
     exp_adapter.run_stream = mock.MagicMock()
     exp_agent_stream = exp_adapter.run_stream.return_value
+
+    lhs_stream, rhs_stream = object(), object()
+    tee.return_value = (lhs_stream, rhs_stream)
+
     exp_sse_stream = exp_adapter.encode_stream.return_value
 
     with expectation as expected:
@@ -1022,6 +1028,7 @@ async def test_post_room_agui_thread_id_run_id(
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID,
             run_id=TEST_RUN_ID,
+            background_tasks=background_tasks,
             the_installation=the_installation,
             the_threads=the_threads,
             the_authz_policy=the_authz_policy,
@@ -1037,22 +1044,24 @@ async def test_post_room_agui_thread_id_run_id(
             media_type=exp_adapter.accept,
         )
 
-        exp_adapter.encode_stream.assert_called_once_with(tee.return_value)
+        exp_adapter.encode_stream.assert_called_once_with(rhs_stream)
 
-        tee.assert_called_once()
-        (event_stream,) = tee.call_args_list[0].args
+        (bgt_at_call0,) = background_tasks.add_task.call_args_list
+        assert bgt_at_call0.args == (cdbs, lhs_stream)
+        assert bgt_at_call0.kwargs["thread_id"] == TEST_THREAD_ID
+        assert bgt_at_call0.kwargs["run_id"] == TEST_RUN_ID
 
-        assert event_stream is ces.return_value
-
-        on_done = tee.call_args_list[0].kwargs["on_done"]
-        assert isinstance(on_done, functools.partial)
-        assert on_done.func is the_threads.save_run_events
-        assert on_done.keywords == {
+        bgt_at_on_done = bgt_at_call0.kwargs["on_done"]
+        assert isinstance(bgt_at_on_done, functools.partial)
+        assert bgt_at_on_done.func is the_threads.save_run_events
+        assert bgt_at_on_done.keywords == {
             "user_name": USER_NAME,
             "room_id": TEST_ROOM_ID,
             "thread_id": TEST_THREAD_ID,
             "run_id": TEST_RUN_ID,
         }
+
+        tee.assert_called_once_with(ces.return_value, 2)
 
         ces.assert_called_once_with(exp_agent_stream)
 
@@ -1060,6 +1069,8 @@ async def test_post_room_agui_thread_id_run_id(
         (rs_call_0,) = exp_adapter.run_stream.call_args_list
         assert rs_call_0.args == ()
         assert rs_call_0.kwargs["deps"] is exp_deps
+        capture = rs_call_0.kwargs["on_complete"]
+        assert capture.__name__ == "capture_usage_after_stream"
 
         the_threads.save_run_usage.assert_not_awaited()
 

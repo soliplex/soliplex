@@ -16,6 +16,7 @@ classifiers = [
 dependencies = [
     "ag-ui-protocol >= 0.1.10",
     "aiosqlite",
+    "asyncstdlib",
     "authlib",
     "fastapi",
     "fastmcp >= 2.14.0, < 2.15",
