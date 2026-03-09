@@ -175,7 +175,7 @@ def test_roomconfig_from_yaml(
 ):
     skill = mock.create_autospec(hs_models.Skill)
     skill_config = mock.create_autospec(
-        config_skills._SkillConfigBase,
+        config_skills._SkillConfigModelBase,
         skill=skill,
     )
 
@@ -283,7 +283,7 @@ def test_roomconfig_skill_configs_bare(installation_config):
 
 
 def test_roomconfig_skill_configs_w_hit(installation_config):
-    skill_config = mock.create_autospec(config_skills._SkillConfigBase)
+    skill_config = mock.create_autospec(config_skills._SkillConfigModelBase)
     installation_config.skill_configs = {
         test_skills.SKILL_NAME: skill_config,
         "other_skill": object(),
@@ -325,7 +325,7 @@ def test_roomconfig_agui_feature_names(
     expected,
 ):
     skill_config = mock.create_autospec(
-        config_skills._SkillConfigBase,
+        config_skills._SkillConfigModelBase,
         agui_feature_names=[test_skills.SKILL_STATE_NAMESPACE],
     )
     installation_config.skill_configs = {

@@ -13,16 +13,33 @@ from haiku.rag.skills import rlm as hr_skills_rlm
 from haiku.skills import agent as hs_agent
 from haiku.skills import discovery as hs_discovery
 from haiku.skills import models as hs_models
+from pydantic_ai import models as ai_models
 
+from soliplex import agents
 from soliplex.agui import features as agui_features_module  # noqa F401
 
 from . import _utils
-from . import exceptions
-from . import rag
+from . import agents as config_agents
+from . import exceptions as config_exc
+from . import rag as config_rag
 
 _default_list_field = _utils._default_list_field
 _default_dict_field = _utils._default_dict_field
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
+
+
+# ============================================================================
+#   Skill configuration types
+# ============================================================================
+
+
+class OnlyOneOfModelNameAgentConfig(ValueError):
+    def __init__(self, _config_path):
+        self._config_path = _config_path
+        super().__init__(
+            f"Pass only one of 'model_name' and 'agent_config' "
+            f"(configured in {_config_path})"
+        )
 
 
 class OnlyOneOfToolNamesRagFeatures(ValueError):
@@ -87,20 +104,33 @@ class MissingSkillNames(KeyError):
         )
 
 
-# ============================================================================
-#   Skill configuration types
-# ============================================================================
-
-
 SkillKind = hs_models.SkillSource
 SkillStateType = type[pydantic.BaseModel] | None
 
 
 @dataclasses.dataclass(kw_only=True)
-class _SkillConfigBase:
+class _SkillConfigModelBase:
     """Base for configuration for an agent skill."""
 
     model_name: str | None = None
+    agent_config: config_agents.AgentConfig | None = None
+
+    _config_path: pathlib.Path | None = None
+
+    def __post_init__(self):
+        if self.model_name is not None and self.agent_config is not None:
+            raise OnlyOneOfModelNameAgentConfig(
+                _config_path=self._config_path,
+            )
+
+    @property
+    def model_or_name(self) -> ai_models.Model | str | None:
+        if self.agent_config is not None:
+            return agents.get_model_from_config(
+                agent_config=self.agent_config,
+            )
+        if self.model_name is not None:
+            return self.model_name
 
 
 class _SkillPropertiesFromMetadata(typing.Protocol):
@@ -135,7 +165,7 @@ class _SkillPropertiesFromMetadata(typing.Protocol):
 
 @dataclasses.dataclass(kw_only=True)
 class _DiscoveredSkillConfigBase(
-    _SkillConfigBase,
+    _SkillConfigModelBase,
     _SkillPropertiesFromMetadata,
 ):
     """Configuration for an agent skill discovered by the installation"""
@@ -172,6 +202,7 @@ class _DiscoveredSkillConfigBase(
             metadata=self._skill_metadata,
             state_type=self.state_type,
             state_namespace=self.state_namespace,
+            model=self.model_or_name,
         )
 
 
@@ -237,6 +268,7 @@ class FilesystemSkillConfig(_DiscoveredSkillConfigBase):
             path=self._skill_path,
             state_type=self.state_type,
             state_namespace=self.state_namespace,
+            model=self.model_or_name,
         )
 
 
@@ -249,8 +281,7 @@ class EntrypointSkillConfig(_DiscoveredSkillConfigBase):
 
 @dataclasses.dataclass(kw_only=True)
 class _HR_SkillConfigBase(
-    _SkillConfigBase,
-    rag._RAGConfigBase,
+    config_rag._RAGConfigBase,
     _SkillPropertiesFromMetadata,
 ):
     """Base class for 'haiku-rag' skll configs"""
@@ -289,7 +320,7 @@ class _HR_SkillConfigBase(
 
             return cls(**config_dict)
         except Exception as exc:
-            raise exceptions.FromYamlException(
+            raise config_exc.FromYamlException(
                 config_path,
                 cls._hr_skill_module.STATE_NAMESPACE,
                 config_dict,
@@ -488,14 +519,13 @@ def extract_skill_configs(
 
 
 @dataclasses.dataclass(kw_only=True)
-class RoomSkillsConfig:
+class RoomSkillsConfig(_SkillConfigModelBase):
     """Configure skills in a room"""
 
     #
     # Use skills defined in the installation, identified by name
     #
     installation_skill_names: list[str] = _default_list_field()
-    model_name: str | None = None
 
     # Set by `from_yaml` factory
     _skill_configs: SkillConfigMap = _default_dict_field()
@@ -548,11 +578,11 @@ class RoomSkillsConfig:
 
             return cls(**config_dict)
 
-        except exceptions.FromYamlException:  # pragma: NO COVER
+        except config_exc.FromYamlException:  # pragma: NO COVER
             raise
 
         except Exception as exc:
-            raise exceptions.FromYamlException(
+            raise config_exc.FromYamlException(
                 config_path,
                 "room_skills",
                 config_dict,
@@ -578,5 +608,5 @@ class RoomSkillsConfig:
         skill_map = self.skills
         return hs_agent.SkillToolset(
             skills=skill_map.values(),
-            skill_model=self.model_name,
+            skill_model=self.model_or_name,
         )

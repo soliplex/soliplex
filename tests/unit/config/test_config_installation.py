@@ -1938,7 +1938,7 @@ def test_installationconfig_skill_configs_wo_set():
 
 def test_installationconfig_skill_configs_w_set():
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
-    skill_config = mock.create_autospec(config_skills._SkillConfigBase)
+    skill_config = mock.create_autospec(config_skills._SkillConfigModelBase)
     kw["_skill_configs"] = {
         test_skills.SKILL_NAME: skill_config,
     }

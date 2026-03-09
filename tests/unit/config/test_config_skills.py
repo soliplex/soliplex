@@ -10,7 +10,10 @@ from haiku.rag.skills import rag as hr_skills_rag
 from haiku.rag.skills import rlm as hr_skills_rlm
 from haiku.skills import agent as hs_agent
 from haiku.skills import models as hs_models
+from pydantic_ai.models import openai as openai_models
+from pydantic_ai.providers import ollama as ollama_providers
 
+from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
 from soliplex.config import skills as config_skills
 
@@ -99,6 +102,81 @@ model_name: "{ROOM_SKILLS_MODEL_NAME}"
 installation_skill_names:
     - "bogus"
 """
+
+
+@pytest.fixture
+def derived_skillconfigmodel_klass():
+    class TestSkillConfigModel(config_skills._SkillConfigModelBase):
+        pass
+
+    return TestSkillConfigModel
+
+
+@pytest.fixture
+def model_agent_config():
+    return mock.create_autospec(config_agents.AgentConfig)
+
+
+@pytest.fixture
+def openai_test_model():
+    provider = ollama_providers.OllamaProvider(
+        base_url="http://ollama.example.com:11434",
+        api_key="dummy",
+    )
+    return openai_models.OpenAIChatModel(
+        model_name="test-model",
+        provider=provider,
+    )
+
+
+USE_MODEL_AGENT_CONFIG = object()
+GMFC_RETURN_VALUE = object()
+
+
+@pytest.mark.parametrize(
+    "ctor_kwargs, expectation",
+    [
+        ({}, contextlib.nullcontext(None)),
+        (
+            {"model_name": SKILL_MODEL_NAME},
+            contextlib.nullcontext(SKILL_MODEL_NAME),
+        ),
+        (
+            {"agent_config": USE_MODEL_AGENT_CONFIG},
+            contextlib.nullcontext(GMFC_RETURN_VALUE),
+        ),
+        (
+            {
+                "model_name": SKILL_MODEL_NAME,
+                "agent_config": USE_MODEL_AGENT_CONFIG,
+            },
+            pytest.raises(config_skills.OnlyOneOfModelNameAgentConfig),
+        ),
+    ],
+)
+@mock.patch("soliplex.agents.get_model_from_config")
+def test_derivedskillconfigmodel_model_or_name(
+    gmfc,
+    derived_skillconfigmodel_klass,
+    model_agent_config,
+    ctor_kwargs,
+    expectation,
+):
+    if "agent_config" in ctor_kwargs:
+        ctor_kwargs |= {"agent_config": model_agent_config}
+
+    with expectation as expected:
+        derived = derived_skillconfigmodel_klass(**ctor_kwargs)
+
+        found = derived.model_or_name
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        if "agent_config" in ctor_kwargs:
+            assert found is gmfc.return_value
+            gmfc.assert_called_once_with(agent_config=model_agent_config)
+        else:
+            assert found == expected
+            gmfc.assert_not_called()
 
 
 class SkillTypeTest(pydantic.BaseModel):
@@ -250,7 +328,7 @@ def test_filesystemskillconfig_agui_feature_names(skill_path, w_kw):
 
 
 @pytest.mark.parametrize(
-    "w_metadata_kw, w_kw",
+    "w_metadata_kw, w_kw, exp_model",
     [
         (
             {
@@ -258,6 +336,7 @@ def test_filesystemskillconfig_agui_feature_names(skill_path, w_kw):
                 "description": SKILL_DESC,
             },
             {},
+            None,
         ),
         (
             {
@@ -271,11 +350,50 @@ def test_filesystemskillconfig_agui_feature_names(skill_path, w_kw):
             {
                 "state_type": SkillTypeTest,
                 "state_namespace": SKILL_TYPE_NAMESPACE,
+                # no 'model_name' or 'agent_config'
             },
+            None,
+        ),
+        (
+            {
+                "name": SKILL_NAME,
+                "description": SKILL_DESC,
+            },
+            {
+                "state_type": SkillTypeTest,
+                "state_namespace": SKILL_TYPE_NAMESPACE,
+                "model_name": SKILL_MODEL_NAME,
+            },
+            SKILL_MODEL_NAME,
+        ),
+        (
+            {
+                "name": SKILL_NAME,
+                "description": SKILL_DESC,
+            },
+            {
+                "state_type": SkillTypeTest,
+                "state_namespace": SKILL_TYPE_NAMESPACE,
+                "agent_config": USE_MODEL_AGENT_CONFIG,
+            },
+            GMFC_RETURN_VALUE,
         ),
     ],
 )
-def test_filesystemskillconfig_skill(skill_path, w_metadata_kw, w_kw):
+@mock.patch("soliplex.agents.get_model_from_config")
+def test_filesystemskillconfig_skill(
+    gmfc,
+    skill_path,
+    model_agent_config,
+    openai_test_model,
+    w_metadata_kw,
+    w_kw,
+    exp_model,
+):
+    if "agent_config" in w_kw:
+        w_kw |= {"agent_config": model_agent_config}
+        exp_model = gmfc.return_value = openai_test_model
+
     skill_config = config_skills.FilesystemSkillConfig(
         _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
         _skill_path=skill_path,
@@ -295,6 +413,12 @@ def test_filesystemskillconfig_skill(skill_path, w_metadata_kw, w_kw):
     assert found.path == skill_path
     assert found.state_type is w_kw.get("state_type")
     assert found.state_namespace is w_kw.get("state_namespace")
+    assert found.model is exp_model
+
+    if "agent_config" in w_kw:
+        gmfc.assert_called_once_with(agent_config=model_agent_config)
+    else:
+        gmfc.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -366,7 +490,7 @@ def test_entrypointskillconfig_agui_feature_names(w_kw):
 
 
 @pytest.mark.parametrize(
-    "w_metadata_kw, w_kw",
+    "w_metadata_kw, w_kw, exp_model",
     [
         (
             {
@@ -374,6 +498,7 @@ def test_entrypointskillconfig_agui_feature_names(w_kw):
                 "description": SKILL_DESC,
             },
             {},
+            None,
         ),
         (
             {
@@ -387,11 +512,38 @@ def test_entrypointskillconfig_agui_feature_names(w_kw):
             {
                 "state_type": SkillTypeTest,
                 "state_namespace": SKILL_TYPE_NAMESPACE,
+                "model_name": SKILL_MODEL_NAME,
             },
+            SKILL_MODEL_NAME,
+        ),
+        (
+            {
+                "name": SKILL_NAME,
+                "description": SKILL_DESC,
+            },
+            {
+                "state_type": SkillTypeTest,
+                "state_namespace": SKILL_TYPE_NAMESPACE,
+                "agent_config": USE_MODEL_AGENT_CONFIG,
+            },
+            GMFC_RETURN_VALUE,
         ),
     ],
 )
-def test_entrypointskillconfig_skill(skill_path, w_metadata_kw, w_kw):
+@mock.patch("soliplex.agents.get_model_from_config")
+def test_entrypointskillconfig_skill(
+    gmfc,
+    skill_path,
+    model_agent_config,
+    openai_test_model,
+    w_metadata_kw,
+    w_kw,
+    exp_model,
+):
+    if "agent_config" in w_kw:
+        w_kw |= {"agent_config": model_agent_config}
+        exp_model = gmfc.return_value = openai_test_model
+
     skill_config = config_skills.EntrypointSkillConfig(
         _skill_metadata=hs_models.SkillMetadata(**w_metadata_kw),
         **w_kw,
@@ -409,6 +561,12 @@ def test_entrypointskillconfig_skill(skill_path, w_metadata_kw, w_kw):
     assert found.metadata.metadata == skill_config.metadata
     assert found.state_type is w_kw.get("state_type")
     assert found.state_namespace is w_kw.get("state_namespace")
+    assert found.model is exp_model
+
+    if "agent_config" in w_kw:
+        gmfc.assert_called_once_with(agent_config=model_agent_config)
+    else:
+        gmfc.assert_not_called()
 
 
 @pytest.fixture
@@ -810,7 +968,9 @@ def test_roomskillsconfig_from_yaml(
 
 
 def test_roomskillsconfig_skill_configs(installation_config):
-    skill_config = mock.create_autospec(config_skills._SkillConfigBase)
+    skill_config = mock.create_autospec(
+        config_skills._DiscoveredSkillConfigBase,
+    )
     installation_config.skill_configs = {
         SKILL_NAME: skill_config,
         "other_skill": object(),
@@ -830,7 +990,7 @@ def test_roomskillsconfig_skill_configs(installation_config):
 def test_roomskillsconfig_skills(installation_config):
     skill = mock.create_autospec(hs_models.Skill)
     skill_config = mock.create_autospec(
-        config_skills._SkillConfigBase, skill=skill
+        config_skills._DiscoveredSkillConfigBase, skill=skill
     )
     installation_config.skill_configs = {
         SKILL_NAME: skill_config,
@@ -848,14 +1008,47 @@ def test_roomskillsconfig_skills(installation_config):
     assert found == {SKILL_NAME: skill_config.skill}
 
 
-def test_roomskillsconfig_skill_toolset(installation_config):
+@pytest.mark.parametrize(
+    "w_kw, exp_model",
+    [
+        (
+            {},
+            None,
+        ),
+        (
+            {
+                "model_name": ROOM_SKILLS_MODEL_NAME,
+            },
+            ROOM_SKILLS_MODEL_NAME,
+        ),
+        (
+            {
+                "agent_config": USE_MODEL_AGENT_CONFIG,
+            },
+            GMFC_RETURN_VALUE,
+        ),
+    ],
+)
+@mock.patch("soliplex.agents.get_model_from_config")
+def test_roomskillsconfig_skill_toolset(
+    gmfc,
+    installation_config,
+    model_agent_config,
+    openai_test_model,
+    w_kw,
+    exp_model,
+):
+    if "agent_config" in w_kw:
+        w_kw |= {"agent_config": model_agent_config}
+        exp_model = gmfc.return_value = openai_test_model
+
     skill = mock.create_autospec(hs_models.Skill)
     skill.metadata = mock.create_autospec(hs_models.SkillMetadata)
     skill.metadata.name = SKILL_NAME
     skill.metadata.description = SKILL_DESC
 
     skill_config = mock.create_autospec(
-        config_skills._SkillConfigBase, skill=skill
+        config_skills._DiscoveredSkillConfigBase, skill=skill
     )
 
     installation_config.skill_configs = {
@@ -864,14 +1057,19 @@ def test_roomskillsconfig_skill_toolset(installation_config):
     }
 
     room_skill_config = config_skills.RoomSkillsConfig(
-        model_name=ROOM_SKILLS_MODEL_NAME,
         installation_skill_names=[SKILL_NAME],
         _installation_config=installation_config,
+        **w_kw,
     )
 
     found = room_skill_config.skill_toolset
 
     assert isinstance(found, hs_agent.SkillToolset)
-    assert found._skill_model == ROOM_SKILLS_MODEL_NAME
     catalog_lines = found.skill_catalog.splitlines()
     assert f"- **{SKILL_NAME}**: {SKILL_DESC}" in catalog_lines
+    assert found._skill_model is exp_model
+
+    if "agent_config" in w_kw:
+        gmfc.assert_called_once_with(agent_config=model_agent_config)
+    else:
+        gmfc.assert_not_called()
