@@ -903,58 +903,429 @@ async def test_post_room_agui_thread_id_meta(
 @pytest.mark.parametrize("w_event_count", [0, 1, 10])
 @pytest.mark.parametrize("w_finished_error", [None, "finished", "error"])
 @mock.patch("soliplex.views.agui.logfire")
-async def test_tee_events(logfire, w_finished_error, w_event_count):
-    on_done = mock.AsyncMock(spec_set=())
+async def test__save_events_background(
+    logfire, w_finished_error, w_event_count
+):
+    save_events = mock.AsyncMock(spec_set=())
 
-    finished_event = agui_core.events.RunFinishedEvent(
+    finished_event = mock.Mock()
+    finished_event.type = agui_core.EventType.RUN_FINISHED
+
+    error_event = mock.Mock()
+    error_event.type = agui_core.EventType.RUN_ERROR
+    error_event.message = "test error"
+
+    events_list = []
+    for _i_event in range(w_event_count):
+        raw = mock.Mock()
+        raw.type = agui_core.EventType.RAW
+        events_list.append(raw)
+
+    if w_finished_error == "finished":
+        events_list.append(finished_event)
+    elif w_finished_error == "error":
+        events_list.append(error_event)
+
+    await agui_views._save_events_background(
+        events_list,
+        save_events,
         thread_id=TEST_THREAD_ID,
         run_id=TEST_RUN_ID,
     )
-    error_event = agui_core.events.RunErrorEvent(message="test error")
 
-    async def event_iter():
-        for i_event in range(w_event_count):
-            yield agui_core.events.RawEvent(event=i_event)
-
-        if w_finished_error == "finished":
-            yield finished_event
-
-        elif w_finished_error == "error":
-            yield error_event
-
-    expected = [
-        event
-        async for event in agui_views.tee_events(
-            event_iter(),
-            on_done=on_done,
-            thread_id=TEST_THREAD_ID,
-            run_id=TEST_RUN_ID,
-        )
-    ]
-
-    on_done.assert_awaited_once_with(events=expected)
+    save_events.assert_awaited_once_with(events=events_list)
 
     logfire.span.assert_called_once_with(
-        "AG-UI event stream: {thread_id}/{run_id}",
+        "AG-UI event stream save: {thread_id}/{run_id}",
         thread_id=TEST_THREAD_ID,
         run_id=TEST_RUN_ID,
     )
 
-    if len(expected) == 0:
+    if len(events_list) == 0:
         logfire.info.assert_called_once_with(
-            "Stream status: {status}",
+            "Stream status: {status} ({n} events)",
             status="EMPTY",
+            n=0,
         )
     elif w_finished_error == "finished":
         logfire.info.assert_called_once_with(
-            "Stream status: {status}",
+            "Stream status: {status} ({n} events)",
             status="FINISHED",
+            n=len(events_list),
         )
     elif w_finished_error == "error":
         logfire.error.assert_called_once_with(
             "Stream error: {error_message}",
             error_message="test error",
         )
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.views.agui.logfire")
+async def test__save_events_background_save_exception(logfire):
+    """Cover the except branch when save_events raises."""
+    save_events = mock.AsyncMock(side_effect=RuntimeError("db down"))
+    events_list = [mock.Mock(type=agui_core.EventType.RUN_FINISHED)]
+
+    await agui_views._save_events_background(
+        events_list,
+        save_events,
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+    )
+
+    logfire.exception.assert_called_once_with(
+        "Failed to save run events for {thread_id}/{run_id}",
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+    )
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.views.agui.logfire")
+@mock.patch("soliplex.agui.compact_event_stream")
+@mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
+@mock.patch("soliplex.views.agui._check_user_room_agent")
+async def test_post_room_agui_stream_generator_happy_path(
+    cura, aga, ces, logfire_mod, the_threads, test_run, run_input,
+):
+    """Cover _accumulating_stream and _response_generator closures.
+
+    Calls the endpoint WITHOUT mocking StreamingResponse so the
+    returned response's body_iterator can be consumed, exercising
+    the inline accumulation and asyncio.wait polling loop.
+    """
+    USER_PROFILE = models.UserProfile(**AUTH_USER)
+    agent = object()
+    cura.return_value = (USER_PROFILE, agent)
+
+    request = mock.AsyncMock(spec=fastapi.Request)
+    request.is_disconnected = mock.AsyncMock(return_value=False)
+
+    background_tasks = mock.create_autospec(fastapi.BackgroundTasks)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_authz_policy = mock.create_autospec(
+        authz_package.AuthorizationPolicy,
+    )
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    the_installation.get_agent_deps_for_room.return_value = object()
+
+    test_run.run_input = None
+    the_threads.get_run.return_value = test_run
+    the_threads.add_run_input.return_value = test_run
+
+    aga.from_request = mock.AsyncMock()
+    exp_adapter = aga.from_request.return_value
+    exp_adapter.run_input = run_input
+    exp_adapter.run_stream = mock.MagicMock()
+    exp_adapter.accept = "text/event-stream"
+
+    test_events = [
+        mock.Mock(type=agui_core.EventType.RUN_STARTED),
+        mock.Mock(type=agui_core.EventType.RUN_FINISHED),
+    ]
+
+    async def fake_compact():
+        for event in test_events:
+            yield event
+
+    ces.return_value = fake_compact()
+
+    async def fake_encode(stream):
+        async for event in stream:
+            yield f"data: {event}\n\n"
+
+    exp_adapter.encode_stream = fake_encode
+
+    result = await agui_views.post_room_agui_thread_id_run_id(
+        request,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+        background_tasks=background_tasks,
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_authz_policy=the_authz_policy,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    # Iterate the response body to exercise the closures
+    chunks = []
+    async for chunk in result.body_iterator:
+        chunks.append(chunk)
+
+    assert len(chunks) == 2
+    assert all(c.startswith("data: ") for c in chunks)
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.views.agui.logfire")
+@mock.patch("soliplex.agui.compact_event_stream")
+@mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
+@mock.patch("soliplex.views.agui._check_user_room_agent")
+async def test_post_room_agui_stream_disconnect_mid_stream(
+    cura, aga, ces, logfire_mod, the_threads, test_run, run_input,
+):
+    """Cover the disconnect-detection branch in _accumulating_stream.
+
+    is_disconnected returns True after 1 event, causing the generator
+    to break early.
+    """
+    import asyncio
+
+    USER_PROFILE = models.UserProfile(**AUTH_USER)
+    agent = object()
+    cura.return_value = (USER_PROFILE, agent)
+
+    call_count = 0
+
+    async def is_disconnected():
+        nonlocal call_count
+        call_count += 1
+        # Return True after a few calls (second event check)
+        return call_count > 3
+
+    request = mock.AsyncMock(spec=fastapi.Request)
+    request.is_disconnected = is_disconnected
+
+    background_tasks = mock.create_autospec(fastapi.BackgroundTasks)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_authz_policy = mock.create_autospec(
+        authz_package.AuthorizationPolicy,
+    )
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    the_installation.get_agent_deps_for_room.return_value = object()
+
+    test_run.run_input = None
+    the_threads.get_run.return_value = test_run
+    the_threads.add_run_input.return_value = test_run
+
+    aga.from_request = mock.AsyncMock()
+    exp_adapter = aga.from_request.return_value
+    exp_adapter.run_input = run_input
+    exp_adapter.run_stream = mock.MagicMock()
+    exp_adapter.accept = "text/event-stream"
+
+    test_events = [
+        mock.Mock(type=agui_core.EventType.RUN_STARTED),
+        mock.Mock(type=agui_core.EventType.RUN_STARTED),
+        mock.Mock(type=agui_core.EventType.RUN_STARTED),
+        mock.Mock(type=agui_core.EventType.RUN_FINISHED),
+    ]
+
+    async def fake_compact():
+        for event in test_events:
+            await asyncio.sleep(0)
+            yield event
+
+    ces.return_value = fake_compact()
+
+    async def fake_encode(stream):
+        async for event in stream:
+            yield f"data: {event}\n\n"
+
+    exp_adapter.encode_stream = fake_encode
+
+    result = await agui_views.post_room_agui_thread_id_run_id(
+        request,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+        background_tasks=background_tasks,
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_authz_policy=the_authz_policy,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    chunks = []
+    async for chunk in result.body_iterator:
+        chunks.append(chunk)
+
+    # Should have fewer chunks than total events due to disconnect
+    assert len(chunks) < len(test_events)
+
+    # Disconnect was logged
+    logfire_mod.info.assert_any_call(
+        "Client disconnected during stream {thread_id}/{run_id}",
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+    )
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.views.agui.logfire")
+@mock.patch("soliplex.views.agui._KEEPALIVE_INTERVAL", 0.0)
+@mock.patch("soliplex.views.agui._DISCONNECT_POLL_INTERVAL", 0.05)
+@mock.patch("soliplex.agui.compact_event_stream")
+@mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
+@mock.patch("soliplex.views.agui._check_user_room_agent")
+async def test_post_room_agui_stream_keepalive_emitted(
+    cura, aga, ces, logfire_mod, the_threads, test_run, run_input,
+):
+    """Cover keepalive emission and the timeout branch.
+
+    Uses a slow encode that pauses longer than KEEPALIVE_INTERVAL
+    (patched to 0s) so the timeout branch fires and emits a keepalive.
+    Also covers the _response_generator disconnect break by having
+    is_disconnected return True after the keepalive.
+    """
+    import asyncio
+
+    USER_PROFILE = models.UserProfile(**AUTH_USER)
+    agent = object()
+    cura.return_value = (USER_PROFILE, agent)
+
+    disconnect_after = 4
+
+    call_count = 0
+
+    async def is_disconnected():
+        nonlocal call_count
+        call_count += 1
+        return call_count > disconnect_after
+
+    request = mock.AsyncMock(spec=fastapi.Request)
+    request.is_disconnected = is_disconnected
+
+    background_tasks = mock.create_autospec(fastapi.BackgroundTasks)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_authz_policy = mock.create_autospec(
+        authz_package.AuthorizationPolicy,
+    )
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    the_installation.get_agent_deps_for_room.return_value = object()
+
+    test_run.run_input = None
+    the_threads.get_run.return_value = test_run
+    the_threads.add_run_input.return_value = test_run
+
+    aga.from_request = mock.AsyncMock()
+    exp_adapter = aga.from_request.return_value
+    exp_adapter.run_input = run_input
+    exp_adapter.run_stream = mock.MagicMock()
+    exp_adapter.accept = "text/event-stream"
+
+    async def fake_compact():
+        yield mock.Mock(type=agui_core.EventType.RUN_STARTED)
+        # Long pause — triggers timeout and keepalive
+        await asyncio.sleep(0.2)
+        yield mock.Mock(type=agui_core.EventType.RUN_FINISHED)
+
+    ces.return_value = fake_compact()
+
+    async def fake_encode(stream):
+        async for event in stream:
+            yield f"data: {event}\n\n"
+
+    exp_adapter.encode_stream = fake_encode
+
+    result = await agui_views.post_room_agui_thread_id_run_id(
+        request,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+        background_tasks=background_tasks,
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_authz_policy=the_authz_policy,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    chunks = []
+    async for chunk in result.body_iterator:
+        chunks.append(chunk)
+
+    # Should have at least one keepalive comment
+    keepalives = [c for c in chunks if c.startswith(":")]
+    assert len(keepalives) >= 1
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.views.agui.logfire")
+@mock.patch("soliplex.agui.compact_event_stream")
+@mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
+@mock.patch("soliplex.views.agui._check_user_room_agent")
+async def test_post_room_agui_stream_cancelled_error(
+    cura, aga, ces, logfire_mod, the_threads, test_run, run_input,
+):
+    """Cover the CancelledError handler and pending.cancel() in
+    finally."""
+    import asyncio
+
+    USER_PROFILE = models.UserProfile(**AUTH_USER)
+    agent = object()
+    cura.return_value = (USER_PROFILE, agent)
+
+    request = mock.AsyncMock(spec=fastapi.Request)
+    request.is_disconnected = mock.AsyncMock(return_value=False)
+
+    background_tasks = mock.create_autospec(fastapi.BackgroundTasks)
+    the_installation = mock.create_autospec(installation.Installation)
+    the_authz_policy = mock.create_autospec(
+        authz_package.AuthorizationPolicy,
+    )
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    the_installation.get_agent_deps_for_room.return_value = object()
+
+    test_run.run_input = None
+    the_threads.get_run.return_value = test_run
+    the_threads.add_run_input.return_value = test_run
+
+    aga.from_request = mock.AsyncMock()
+    exp_adapter = aga.from_request.return_value
+    exp_adapter.run_input = run_input
+    exp_adapter.run_stream = mock.MagicMock()
+    exp_adapter.accept = "text/event-stream"
+
+    async def fake_compact():
+        yield mock.Mock(type=agui_core.EventType.RUN_STARTED)
+        # Block forever — will be cancelled
+        await asyncio.sleep(999)
+        yield mock.Mock(type=agui_core.EventType.RUN_FINISHED)
+
+    ces.return_value = fake_compact()
+
+    async def fake_encode(stream):
+        async for event in stream:
+            yield f"data: {event}\n\n"
+
+    exp_adapter.encode_stream = fake_encode
+
+    result = await agui_views.post_room_agui_thread_id_run_id(
+        request,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+        background_tasks=background_tasks,
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_authz_policy=the_authz_policy,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    # Get the generator and consume one chunk, then cancel
+    gen = result.body_iterator
+    first_chunk = await gen.__anext__()
+    assert first_chunk.startswith("data: ")
+
+    # Throw CancelledError to exercise the except branch
+    with pytest.raises(asyncio.CancelledError):
+        await gen.athrow(asyncio.CancelledError())
+
+    logfire_mod.info.assert_any_call(
+        "SSE generator cancelled {thread_id}/{run_id}",
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+    )
 
 
 @pytest.mark.asyncio
@@ -970,15 +1341,15 @@ async def test_tee_events(logfire, w_finished_error, w_event_count):
 )
 @pytest.mark.parametrize("w_usage", [False, True])
 @mock.patch("fastapi.responses.StreamingResponse")
-@mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
+@mock.patch("soliplex.views.agui._save_events_background")
 @mock.patch("soliplex.agui.compact_event_stream")
+@mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
-@mock.patch("soliplex.views.agui.tee_events")
 async def test_post_room_agui_thread_id_run_id(
-    tee,
     cura,
-    ces,
     aga,
+    ces,
+    seb,
     sr,
     the_threads,
     test_run,
@@ -993,9 +1364,12 @@ async def test_post_room_agui_thread_id_run_id(
 
     request = fastapi.Request(scope={"type": "http"})
 
+    background_tasks = mock.create_autospec(fastapi.BackgroundTasks)
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_agent_for_room.return_value = agent
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_authz_policy = mock.create_autospec(
+        authz_package.AuthorizationPolicy,
+    )
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     exp_deps = the_installation.get_agent_deps_for_room.return_value
@@ -1014,7 +1388,6 @@ async def test_post_room_agui_thread_id_run_id(
     exp_adapter.encode_stream = mock.MagicMock()
     exp_adapter.run_stream = mock.MagicMock()
     exp_agent_stream = exp_adapter.run_stream.return_value
-    exp_sse_stream = exp_adapter.encode_stream.return_value
 
     with expectation as expected:
         found = await agui_views.post_room_agui_thread_id_run_id(
@@ -1022,6 +1395,7 @@ async def test_post_room_agui_thread_id_run_id(
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID,
             run_id=TEST_RUN_ID,
+            background_tasks=background_tasks,
             the_installation=the_installation,
             the_threads=the_threads,
             the_authz_policy=the_authz_policy,
@@ -1032,27 +1406,34 @@ async def test_post_room_agui_thread_id_run_id(
     if expected is None:
         assert found is sr.return_value
 
-        sr.assert_called_once_with(
-            exp_sse_stream,
-            media_type=exp_adapter.accept,
-        )
+        # StreamingResponse called with a generator, media_type,
+        # and headers
+        sr.assert_called_once()
+        sr_call = sr.call_args
+        assert sr_call.kwargs["media_type"] == exp_adapter.accept
+        assert sr_call.kwargs["headers"] == {
+            "Cache-Control": "no-cache, no-store",
+            "X-Accel-Buffering": "no",
+        }
 
-        exp_adapter.encode_stream.assert_called_once_with(tee.return_value)
-
-        tee.assert_called_once()
-        (event_stream,) = tee.call_args_list[0].args
-
-        assert event_stream is ces.return_value
-
-        on_done = tee.call_args_list[0].kwargs["on_done"]
-        assert isinstance(on_done, functools.partial)
-        assert on_done.func is the_threads.save_run_events
-        assert on_done.keywords == {
+        # BackgroundTask wires _save_events_background with
+        # the shared events_list and a partial save_events
+        (bgt_at_call0,) = background_tasks.add_task.call_args_list
+        assert bgt_at_call0.args[0] is seb
+        # args[1] is events_list (a list)
+        assert isinstance(bgt_at_call0.args[1], list)
+        # args[2] is the functools.partial save_events
+        save_events_partial = bgt_at_call0.args[2]
+        assert isinstance(save_events_partial, functools.partial)
+        assert save_events_partial.func is the_threads.save_run_events
+        assert save_events_partial.keywords == {
             "user_name": USER_NAME,
             "room_id": TEST_ROOM_ID,
             "thread_id": TEST_THREAD_ID,
             "run_id": TEST_RUN_ID,
         }
+        assert bgt_at_call0.kwargs["thread_id"] == TEST_THREAD_ID
+        assert bgt_at_call0.kwargs["run_id"] == TEST_RUN_ID
 
         ces.assert_called_once_with(exp_agent_stream)
 
@@ -1060,6 +1441,8 @@ async def test_post_room_agui_thread_id_run_id(
         (rs_call_0,) = exp_adapter.run_stream.call_args_list
         assert rs_call_0.args == ()
         assert rs_call_0.kwargs["deps"] is exp_deps
+        capture = rs_call_0.kwargs["on_complete"]
+        assert capture.__name__ == "capture_usage_after_stream"
 
         the_threads.save_run_usage.assert_not_awaited()
 
@@ -1120,7 +1503,9 @@ async def test_post_room_agui_thread_id_run_id(
             the_logger=the_logger,
         )
 
-    the_logger.debug.assert_called_once_with(loggers.AGUI_POST_ROOM_THREAD_RUN)
+    the_logger.debug.assert_called_once_with(
+        loggers.AGUI_POST_ROOM_THREAD_RUN,
+    )
 
 
 @pytest.mark.anyio

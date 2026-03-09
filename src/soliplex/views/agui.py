@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import functools
+import time
 
 import fastapi
 import logfire
@@ -462,35 +464,34 @@ async def post_room_agui_thread_id_meta(
     return fastapi.Response(status_code=205)
 
 
-async def tee_events(
-    event_stream: agui_package.AGUI_EventStream,
-    on_done,
+async def _save_events_background(
+    events_list: list,
+    save_events,
     thread_id: str,
     run_id: str,
 ):
-    event_list = []
+    """Background task: persist accumulated events to DB.
+
+    Runs after the streaming response completes (or the client
+    disconnects). Reads from the events_list that was populated
+    inline during streaming.
+    """
     error_message = None
     status = None
 
     with logfire.span(
-        "AG-UI event stream: {thread_id}/{run_id}",
+        "AG-UI event stream save: {thread_id}/{run_id}",
         thread_id=thread_id,
         run_id=run_id,
     ):
-        async for event in event_stream:
-            event_list.append(event)
-            yield event
-
-        if event_list:
-            last = event_list[-1]
+        if events_list:
+            last = events_list[-1]
 
             if last.type == agui_core.EventType.RUN_FINISHED:
                 status = "FINISHED"
-
             elif last.type == agui_core.EventType.RUN_ERROR:
                 status = "ERROR"
-                error_message = last.message
-
+                error_message = getattr(last, "message", None)
             else:
                 status = "UNKNOWN"
         else:
@@ -502,9 +503,24 @@ async def tee_events(
                 error_message=error_message,
             )
         else:
-            logfire.info("Stream status: {status}", status=status)
+            logfire.info(
+                "Stream status: {status} ({n} events)",
+                status=status,
+                n=len(events_list),
+            )
 
-    await on_done(events=event_list)
+    try:
+        await save_events(events=events_list)
+    except Exception:
+        logfire.exception(
+            "Failed to save run events for {thread_id}/{run_id}",
+            thread_id=thread_id,
+            run_id=run_id,
+        )
+
+
+_KEEPALIVE_INTERVAL = 15.0
+_DISCONNECT_POLL_INTERVAL = 2.0
 
 
 @util.logfire_span("POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}")
@@ -514,6 +530,7 @@ async def post_room_agui_thread_id_run_id(
     room_id: str,
     thread_id: str,
     run_id: str,
+    background_tasks: fastapi.BackgroundTasks,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
@@ -562,7 +579,7 @@ async def post_room_agui_thread_id_run_id(
         the_logger=the_logger,
     )
 
-    async def finish_stream(result):
+    async def capture_usage_after_stream(result):
         usage = getattr(result, "usage", None)
 
         if usage is not None:
@@ -580,10 +597,15 @@ async def post_room_agui_thread_id_run_id(
 
     agent_stream = agui_adapter.run_stream(
         deps=agent_deps,
-        on_complete=finish_stream,
+        on_complete=capture_usage_after_stream,
     )
 
     compacted_stream = agui_package.compact_event_stream(agent_stream)
+
+    # Accumulate events inline for DB persistence.
+    # No tee — a single pass through the stream that both yields
+    # to the client and collects for the background save.
+    events_list: list = []
 
     save_events = functools.partial(
         the_threads.save_run_events,
@@ -593,18 +615,105 @@ async def post_room_agui_thread_id_run_id(
         run_id=run_id,
     )
 
-    db_stream = tee_events(
-        compacted_stream,
-        on_done=save_events,
+    # Schedule DB persistence as a background task. It reads
+    # events_list after the stream generator completes (or the
+    # client disconnects). BackgroundTasks run even on disconnect.
+    background_tasks.add_task(
+        _save_events_background,
+        events_list,
+        save_events,
         thread_id=thread_id,
         run_id=run_id,
     )
 
-    sse_stream = agui_adapter.encode_stream(db_stream)
+    async def _accumulating_stream():
+        """Intercept compacted events: accumulate and yield.
+
+        Checks for client disconnect every event to avoid zombie
+        LLM generation on dead connections.
+        """
+        async for event in compacted_stream:
+            if await request.is_disconnected():
+                logfire.info(
+                    "Client disconnected during stream "
+                    "{thread_id}/{run_id}",
+                    thread_id=thread_id,
+                    run_id=run_id,
+                )
+                break
+            events_list.append(event)
+            yield event
+
+    async def _response_generator():
+        """Encode events as SSE with keepalive heartbeats.
+
+        Wraps the accumulating stream with SSE encoding and injects
+        `: keepalive` comments every 15s during idle periods (LLM
+        think time, tool calls). This prevents ELBs and Akamai from
+        killing the connection for being idle.
+
+        Also polls request.is_disconnected() every 2s during idle to
+        stop the generator promptly on client disconnect.
+        """
+        encoded = agui_adapter.encode_stream(
+            _accumulating_stream(),
+        )
+        encoded_iter = encoded.__aiter__()
+        pending = None
+        last_data = time.monotonic()
+
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+
+                if pending is None:
+                    pending = asyncio.ensure_future(
+                        encoded_iter.__anext__()
+                    )
+
+                done, _ = await asyncio.wait(
+                    [pending],
+                    timeout=_DISCONNECT_POLL_INTERVAL,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+
+                if pending in done:
+                    try:
+                        chunk = pending.result()
+                        yield chunk
+                        last_data = time.monotonic()
+                    except StopAsyncIteration:
+                        break
+                    finally:
+                        pending = None
+                else:
+                    # Poll timed out — check for keepalive
+                    if (
+                        time.monotonic() - last_data
+                        >= _KEEPALIVE_INTERVAL
+                    ):
+                        yield ": keepalive\n\n"
+                        last_data = time.monotonic()
+
+        except asyncio.CancelledError:
+            logfire.info(
+                "SSE generator cancelled {thread_id}/{run_id}",
+                thread_id=thread_id,
+                run_id=run_id,
+            )
+            raise
+        finally:
+            if pending and not pending.done():
+                pending.cancel()
 
     return responses.StreamingResponse(
-        sse_stream,
+        _response_generator(),
         media_type=agui_adapter.accept,
+        headers={
+            "Cache-Control": "no-cache, no-store",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
