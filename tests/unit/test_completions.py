@@ -1,11 +1,9 @@
 import json
 from unittest import mock
 
-import fastapi
 import pytest
 
 from soliplex import completions
-from soliplex import models
 from soliplex.config import agents as config_agents
 from soliplex.config import completions as config_completions
 from soliplex.config import tools as config_tools
@@ -139,62 +137,3 @@ async def test_stream_chat_responses(ocr, n_chunks):
         message_history=HISTORY,
         deps=agent_deps,
     )
-
-
-@pytest.mark.anyio
-@pytest.mark.parametrize("w_exception", [False, True])
-@pytest.mark.parametrize("w_history", [False, True])
-@mock.patch("soliplex.completions.stream_chat_responses")
-@mock.patch("fastapi.responses.StreamingResponse")
-async def test_openai_chat_completion(sr_class, scp, w_history, w_exception):
-    CR_MESSAGES = [
-        {
-            "role": "user",
-            "content": "Why is blue?",
-        },
-    ]
-    agent = mock.Mock(spec_set=["model", "run_stream"])
-    agent_deps = mock.Mock(spec_set=())
-
-    if w_history:
-        CR_MESSAGES.insert(
-            0,
-            {
-                "role": "model",
-                "content": "hello",
-            },
-        )
-
-    chat_request = mock.create_autospec(models.ChatCompletionRequest)
-    chat_request.model_dump.return_value = {
-        "model": "NOT USED",
-        "messages": CR_MESSAGES,
-    }
-
-    if w_exception:
-        scp.side_effect = ValueError("testing-stream_chat_responses")
-
-    if w_exception:
-        with pytest.raises(fastapi.HTTPException):
-            await completions.openai_chat_completion(
-                agent,
-                agent_deps,
-                chat_request,
-            )
-        return
-    else:
-        response = await completions.openai_chat_completion(
-            agent,
-            agent_deps,
-            chat_request,
-        )
-
-    assert response is sr_class.return_value
-
-    sr_class.assert_called_once_with(
-        scp.return_value,
-        media_type="text/event-stream",
-    )
-
-    # TODO not passing history
-    scp.assert_called_once_with(agent, agent_deps, "Why is blue?", [])

@@ -12,6 +12,7 @@ from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
+from soliplex import views
 from soliplex.agui import features as agui_features
 from soliplex.config import agui as config_agui
 from soliplex.config import rooms as config_rooms
@@ -1035,6 +1036,7 @@ async def test_post_room_agui_thread_id_run_id(
         sr.assert_called_once_with(
             exp_sse_stream,
             media_type=exp_adapter.accept,
+            headers=views.HEADERS_DO_NOT_BUFFER_SSE,
         )
 
         exp_adapter.encode_stream.assert_called_once_with(tee.return_value)

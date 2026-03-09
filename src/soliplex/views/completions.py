@@ -1,6 +1,8 @@
 import fastapi
+import pydantic_ai
 from fastapi import responses
 
+from soliplex import agents
 from soliplex import authn
 from soliplex import completions
 from soliplex import installation
@@ -61,6 +63,35 @@ async def get_chat_completion(
     return models.Completion.from_config(completion_config)
 
 
+async def openai_chat_completion(
+    agent: pydantic_ai.Agent,
+    agent_deps: agents.AgentDependencies,
+    chat_request: models.ChatCompletionRequest,
+) -> responses.StreamingResponse:
+    openai_payload = chat_request.model_dump(exclude_unset=True)
+    user_question = openai_payload["messages"][-1]["content"]
+    # TODO: figure out how to convert message history to PydanticAI's
+    #       format.
+    # message_history = munge(openai_payload["messages"][:-1])
+    message_history = []
+
+    try:
+        return responses.StreamingResponse(
+            completions.stream_chat_responses(
+                agent,
+                agent_deps,
+                user_question,
+                message_history,
+            ),
+            media_type="text/event-stream",
+            headers=views.HEADERS_DO_NOT_BUFFER_SSE,
+        )
+    except Exception:
+        raise fastapi.HTTPException(
+            status_code=500, detail="Error streaming chat responses"
+        ) from None
+
+
 @util.logfire_span("POST /v1/chat/completions/{completion_id}")
 @router.post(
     "/v1/chat/completions/{completion_id}",
@@ -90,7 +121,7 @@ async def post_chat_completion(
         user=user_profile,
     )
 
-    return await completions.openai_chat_completion(
+    return await openai_chat_completion(
         agent,
         agent_deps,
         chat_request,

@@ -605,6 +605,7 @@ async def post_room_agui_thread_id_run_id(
     return responses.StreamingResponse(
         sse_stream,
         media_type=agui_adapter.accept,
+        headers=views.HEADERS_DO_NOT_BUFFER_SSE,
     )
 
 
