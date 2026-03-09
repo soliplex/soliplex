@@ -1,6 +1,6 @@
+import asyncio
 import contextlib
 import datetime
-import functools
 from unittest import mock
 
 import fastapi
@@ -901,11 +901,50 @@ async def test_post_room_agui_thread_id_meta(
 
 
 @pytest.mark.asyncio
+@mock.patch("soliplex.agui.persistence.ThreadStorage")
+@mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
+async def test_save_thread_run_events(a_session, t_storage):
+    w_session = a_session.return_value.__aenter__.return_value
+    the_threads = t_storage.return_value
+    the_threads.save_run_events = mock.AsyncMock(spec_set=())
+    sqla_engine = object()
+    event_list = [object()]
+
+    await agui_views.save_thread_run_events(
+        sqla_engine=sqla_engine,
+        event_list=event_list,
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+    )
+
+    the_threads.save_run_events.assert_called_once_with(
+        events=event_list,
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+    )
+
+    t_storage.assert_called_once_with(w_session)
+
+    a_session.assert_called_once_with(bind=sqla_engine)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("w_event_count", [0, 1, 10])
 @pytest.mark.parametrize("w_finished_error", [None, "finished", "error"])
+@mock.patch("soliplex.views.agui.save_thread_run_events")
 @mock.patch("soliplex.views.agui.logfire")
-async def test_tee_events(logfire, w_finished_error, w_event_count):
-    on_done = mock.AsyncMock(spec_set=())
+async def test_drive_llm_stream(
+    logfire,
+    stre,
+    w_finished_error,
+    w_event_count,
+):
+    sqla_engine = mock.AsyncMock(spec_set=())
+    event_queue = asyncio.Queue()
 
     finished_event = agui_core.events.RunFinishedEvent(
         thread_id=TEST_THREAD_ID,
@@ -923,17 +962,34 @@ async def test_tee_events(logfire, w_finished_error, w_event_count):
         elif w_finished_error == "error":
             yield error_event
 
-    expected = [
-        event
-        async for event in agui_views.tee_events(
-            event_iter(),
-            on_done=on_done,
-            thread_id=TEST_THREAD_ID,
-            run_id=TEST_RUN_ID,
-        )
-    ]
+    expected = [event async for event in event_iter()]
 
-    on_done.assert_awaited_once_with(events=expected)
+    await agui_views.drive_llm_stream(
+        event_iter(),
+        sqla_engine=sqla_engine,
+        event_queue=event_queue,
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+    )
+
+    assert event_queue.qsize() == len(expected) + 1
+
+    for expected_event in expected:
+        found_event = await event_queue.get()
+        assert found_event == expected_event
+
+    assert await event_queue.get() is None  # sentinel
+
+    stre.assert_called_once_with(
+        event_list=expected,
+        sqla_engine=sqla_engine,
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+    )
 
     logfire.span.assert_called_once_with(
         "AG-UI event stream: {thread_id}/{run_id}",
@@ -959,6 +1015,28 @@ async def test_tee_events(logfire, w_finished_error, w_event_count):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("num_events", [0, 1, 10, 100])
+async def test_stream_llm_events(num_events):
+    expected = [
+        agui_core.events.RawEvent(event=i_event)
+        for i_event in range(num_events)
+    ]
+
+    event_queue = asyncio.Queue()
+
+    for event in expected:
+        event_queue.put_nowait(event)
+
+    event_queue.put_nowait(None)
+
+    found = [
+        event async for event in agui_views.stream_llm_events(event_queue)
+    ]
+
+    assert found == expected
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "ari_side_effect, expectation",
     [
@@ -971,16 +1049,18 @@ async def test_tee_events(logfire, w_finished_error, w_event_count):
 )
 @pytest.mark.parametrize("w_usage", [False, True])
 @mock.patch("fastapi.responses.StreamingResponse")
-@mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
+@mock.patch("soliplex.views.agui.stream_llm_events")
+@mock.patch("soliplex.views.agui.drive_llm_stream")
 @mock.patch("soliplex.agui.compact_event_stream")
+@mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
-@mock.patch("soliplex.views.agui.tee_events")
 async def test_post_room_agui_thread_id_run_id(
-    tee,
     cura,
-    ces,
     aga,
-    sr,
+    ces,
+    dls,
+    sle,
+    frsr,
     the_threads,
     test_run,
     run_input,
@@ -993,6 +1073,7 @@ async def test_post_room_agui_thread_id_run_id(
     cura.return_value = (USER_PROFILE, agent)
 
     request = fastapi.Request(scope={"type": "http"})
+    sqla_engine = request.state.threads_engine = object()
 
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_agent_for_room.return_value = agent
@@ -1015,6 +1096,7 @@ async def test_post_room_agui_thread_id_run_id(
     exp_adapter.encode_stream = mock.MagicMock()
     exp_adapter.run_stream = mock.MagicMock()
     exp_agent_stream = exp_adapter.run_stream.return_value
+
     exp_sse_stream = exp_adapter.encode_stream.return_value
 
     with expectation as expected:
@@ -1031,30 +1113,29 @@ async def test_post_room_agui_thread_id_run_id(
         )
 
     if expected is None:
-        assert found is sr.return_value
+        assert found is frsr.return_value
 
-        sr.assert_called_once_with(
+        frsr.assert_called_once_with(
             exp_sse_stream,
             media_type=exp_adapter.accept,
             headers=views.HEADERS_DO_NOT_BUFFER_SSE,
         )
 
-        exp_adapter.encode_stream.assert_called_once_with(tee.return_value)
+        exp_adapter.encode_stream.assert_called_once_with(sle.return_value)
 
-        tee.assert_called_once()
-        (event_stream,) = tee.call_args_list[0].args
+        sle.assert_called_once()
+        assert sle.call_args_list[0].kwargs == {}
+        (event_queue,) = sle.call_args_list[0].args
 
-        assert event_stream is ces.return_value
-
-        on_done = tee.call_args_list[0].kwargs["on_done"]
-        assert isinstance(on_done, functools.partial)
-        assert on_done.func is the_threads.save_run_events
-        assert on_done.keywords == {
-            "user_name": USER_NAME,
-            "room_id": TEST_ROOM_ID,
-            "thread_id": TEST_THREAD_ID,
-            "run_id": TEST_RUN_ID,
-        }
+        dls.assert_called_once_with(
+            llm_stream=ces.return_value,
+            sqla_engine=sqla_engine,
+            event_queue=event_queue,
+            user_name=USER_NAME,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID,
+            run_id=TEST_RUN_ID,
+        )
 
         ces.assert_called_once_with(exp_agent_stream)
 
@@ -1062,6 +1143,8 @@ async def test_post_room_agui_thread_id_run_id(
         (rs_call_0,) = exp_adapter.run_stream.call_args_list
         assert rs_call_0.args == ()
         assert rs_call_0.kwargs["deps"] is exp_deps
+        capture = rs_call_0.kwargs["on_complete"]
+        assert capture.__name__ == "capture_usage_after_stream"
 
         the_threads.save_run_usage.assert_not_awaited()
 

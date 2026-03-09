@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import functools
+import asyncio
 
 import fastapi
 import logfire
@@ -8,6 +8,7 @@ import pydantic_ai
 from ag_ui import core as agui_core
 from fastapi import responses
 from pydantic_ai.ui import ag_ui as ai_ag_ui
+from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agui as agui_package
 from soliplex import authn
@@ -462,49 +463,103 @@ async def post_room_agui_thread_id_meta(
     return fastapi.Response(status_code=205)
 
 
-async def tee_events(
-    event_stream: agui_package.AGUI_EventStream,
-    on_done,
+async def save_thread_run_events(
+    sqla_engine,
+    event_list,
+    user_name: str,
+    room_id: str,
     thread_id: str,
     run_id: str,
 ):
-    event_list = []
-    error_message = None
-    status = None
+    """Save the run events to the database.
 
+    This function needs to build its own session, because the one bound
+    to the request lifetime in the `the_threads` dependency might have
+    been closed (e.g., with an early connection reset).
+    """
+    async with sqla_asyncio.AsyncSession(bind=sqla_engine) as session:
+        the_threads = agui_persistence.ThreadStorage(session)
+
+        await the_threads.save_run_events(
+            events=event_list,
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+        )
+
+
+async def drive_llm_stream(
+    llm_stream,
+    sqla_engine,
+    event_queue: asyncio.Queue,
+    user_name: str,
+    room_id: str,
+    thread_id: str,
+    run_id: str,
+):
+    """Primary consumer of LLM event stream
+
+    Always runs to completion.
+    """
     with logfire.span(
         "AG-UI event stream: {thread_id}/{run_id}",
         thread_id=thread_id,
         run_id=run_id,
     ):
-        async for event in event_stream:
-            event_list.append(event)
-            yield event
+        event_list = []
+        error_message = None
+        status = None
+        try:
+            async for event in llm_stream:
+                event_list.append(event)
+                await event_queue.put(event)
+        finally:
+            await event_queue.put(None)  # sentinel
 
-        if event_list:
-            last = event_list[-1]
-
-            if last.type == agui_core.EventType.RUN_FINISHED:
-                status = "FINISHED"
-
-            elif last.type == agui_core.EventType.RUN_ERROR:
-                status = "ERROR"
-                error_message = last.message
-
-            else:
-                status = "UNKNOWN"
-        else:
-            status = "EMPTY"
-
-        if error_message:
-            logfire.error(
-                "Stream error: {error_message}",
-                error_message=error_message,
+            await save_thread_run_events(
+                event_list=event_list,
+                sqla_engine=sqla_engine,
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
             )
-        else:
-            logfire.info("Stream status: {status}", status=status)
 
-    await on_done(events=event_list)
+            if event_list:
+                last = event_list[-1]
+
+                if last.type == agui_core.EventType.RUN_FINISHED:
+                    status = "FINISHED"
+
+                elif last.type == agui_core.EventType.RUN_ERROR:
+                    status = "ERROR"
+                    error_message = last.message
+
+                else:
+                    status = "UNKNOWN"
+            else:
+                status = "EMPTY"
+
+            if error_message:
+                logfire.error(
+                    "Stream error: {error_message}",
+                    error_message=error_message,
+                )
+            else:
+                logfire.info("Stream status: {status}", status=status)
+
+
+async def stream_llm_events(event_queue: asyncio.Queue):
+    """Read/yield events from queue
+
+    Stop if client disconnects.
+    """
+    while True:
+        event = await event_queue.get()
+        if event is None:
+            break
+        yield event
 
 
 @util.logfire_span("POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}")
@@ -562,7 +617,7 @@ async def post_room_agui_thread_id_run_id(
         the_logger=the_logger,
     )
 
-    async def finish_stream(result):
+    async def capture_usage_after_stream(result):
         usage = getattr(result, "usage", None)
 
         if usage is not None:
@@ -580,27 +635,33 @@ async def post_room_agui_thread_id_run_id(
 
     agent_stream = agui_adapter.run_stream(
         deps=agent_deps,
-        on_complete=finish_stream,
+        on_complete=capture_usage_after_stream,
     )
 
     compacted_stream = agui_package.compact_event_stream(agent_stream)
 
-    save_events = functools.partial(
-        the_threads.save_run_events,
-        user_name=user_name,
-        room_id=room_id,
-        thread_id=thread_id,
-        run_id=run_id,
+    event_queue = asyncio.Queue()
+
+    # Drive the LLM stream in a background task, in order to save
+    # the thread persistence and usage at the end.
+    asyncio.create_task(
+        # No 'await' here:  'create_task' *wants* a coroutine
+        drive_llm_stream(
+            llm_stream=compacted_stream,
+            sqla_engine=request.state.threads_engine,
+            event_queue=event_queue,
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+        )
     )
 
-    db_stream = tee_events(
-        compacted_stream,
-        on_done=save_events,
-        thread_id=thread_id,
-        run_id=run_id,
+    # Stream events to the client from the queue, as pushed from
+    # the driver.
+    sse_stream = agui_adapter.encode_stream(
+        stream_llm_events(event_queue),
     )
-
-    sse_stream = agui_adapter.encode_stream(db_stream)
 
     return responses.StreamingResponse(
         sse_stream,
