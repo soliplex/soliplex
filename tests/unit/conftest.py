@@ -4,7 +4,6 @@ from unittest import mock
 
 import pytest
 
-from soliplex import config  # only used to patch a test function
 from soliplex.agui import features as agui_features
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
@@ -83,6 +82,8 @@ def patched_mcp_tool_wrappers(patched_tool_registries):
 
 @pytest.fixture
 def patched_soliplex_config():
+    from soliplex import config
+
     with mock.patch.dict(config.__dict__, patched_for_testing=True) as patched:
         yield patched
 
