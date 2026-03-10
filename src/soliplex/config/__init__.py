@@ -41,12 +41,19 @@ from soliplex.config.secrets import (  # noqa F401 API
     SecretSource,
 )
 from soliplex.config.skills import (  # noqa F401 API
+    HR_RAG_SkillConfig,
+    HR_RLM_SkillConfig,
     SkillConfigTypes,
+    RoomSkillsConfig,
 )
 from soliplex.config.tools import (  # noqa F401 API
+    HTTP_MCP_ClientToolsetConfig,
     MCP_ClientToolsetConfig,
     MCP_ClientToolsetConfigMap,
+    NoArgsMCPWrapper,
+    Stdio_MCP_ClientToolsetConfig,
     ToolConfig,
     ToolConfigMap,
     ToolRequires,
+    WithQueryMCPWrapper,
 )
