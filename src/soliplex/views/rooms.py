@@ -13,6 +13,7 @@ from soliplex import mcp_auth
 from soliplex import models
 from soliplex import util
 from soliplex import views
+from soliplex.config import rooms as config_rooms
 
 router = fastapi.APIRouter(tags=["rooms"])
 
@@ -164,6 +165,24 @@ async def get_room_mcp_token(
     return models.MCPToken(room_id=room_id, mcp_token=mcp_token)
 
 
+def _get_haiku_rag_client_kw(room_config: config_rooms.RoomConfig):
+    candidates = (
+        [room_config.agent_config]
+        + list(room_config.tool_configs.values())
+        + list(room_config.skills.skill_configs.values())
+    )
+
+    for cfg in candidates:
+        hr_config = getattr(cfg, "haiku_rag_config", None)
+
+        if hr_config is not None:
+            return {
+                "db_path": cfg.rag_lancedb_path,
+                "config": hr_config,
+                "read_only": True,
+            }
+
+
 @util.logfire_span("GET /v1/rooms/{room_id}/documents")
 @router.get("/v1/rooms/{room_id}/documents")
 async def get_room_documents(
@@ -194,33 +213,21 @@ async def get_room_documents(
         ) from None
 
     document_set = {}
+    hr_client_kw = _get_haiku_rag_client_kw(room_config)
 
-    candidates = [room_config.agent_config] + list(
-        room_config.tool_configs.values()
-    )
+    if hr_client_kw is not None:
+        async with rag_client.HaikuRAG(**hr_client_kw) as rag:
+            results = await rag.list_documents()
 
-    for cfg in candidates:
-        hr_config = getattr(cfg, "haiku_rag_config", None)
-
-        if hr_config is not None:
-            hr_client_kw = {
-                "db_path": cfg.rag_lancedb_path,
-                "config": hr_config,
-                "read_only": True,
-            }
-
-            async with rag_client.HaikuRAG(**hr_client_kw) as rag:
-                results = await rag.list_documents()
-
-            for document in results:
-                document_set[document.id] = models.RAGDocument(
-                    id=document.id,
-                    uri=document.uri,
-                    title=document.title,
-                    metadata=document.metadata,
-                    created_at=document.created_at,
-                    updated_at=document.updated_at,
-                )
+        for document in results:
+            document_set[document.id] = models.RAGDocument(
+                id=document.id,
+                uri=document.uri,
+                title=document.title,
+                metadata=document.metadata,
+                created_at=document.created_at,
+                updated_at=document.updated_at,
+            )
 
     return models.RoomDocuments(
         room_id=room_id,
@@ -259,37 +266,23 @@ async def get_chunk_visualization(
         ) from None
 
     images = None
+    hr_client_kw = _get_haiku_rag_client_kw(room_config)
 
-    candidates = [room_config.agent_config] + list(
-        room_config.tool_configs.values()
-    )
+    if hr_client_kw is not None:
+        async with rag_client.HaikuRAG(**hr_client_kw) as rag:
+            chunk = await rag.chunk_repository.get_by_id(chunk_id)
 
-    for candidate in candidates:
-        hr_config = getattr(candidate, "haiku_rag_config", None)
+            if not chunk:
+                the_logger.error(
+                    loggers.ROOM_UNKNOWN_CHUNK_ID,
+                    chunk_id,
+                )
+                raise fastapi.HTTPException(
+                    status_code=404,
+                    detail=loggers.ROOM_UNKNOWN_CHUNK_ID % chunk_id,
+                ) from None
 
-        if hr_config is not None:
-            hr_client_kw = {
-                "db_path": candidate.rag_lancedb_path,
-                "config": hr_config,
-                "read_only": True,
-            }
-
-            async with rag_client.HaikuRAG(**hr_client_kw) as rag:
-                chunk = await rag.chunk_repository.get_by_id(chunk_id)
-
-                if not chunk:
-                    the_logger.error(
-                        loggers.ROOM_UNKNOWN_CHUNK_ID,
-                        chunk_id,
-                    )
-                    raise fastapi.HTTPException(
-                        status_code=404,
-                        detail=loggers.ROOM_UNKNOWN_CHUNK_ID % chunk_id,
-                    ) from None
-
-                images = await rag.visualize_chunk(chunk)
-
-            break
+            images = await rag.visualize_chunk(chunk)
 
     # Convert PIL images to base64
     base64_images = []

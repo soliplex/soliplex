@@ -11,8 +11,8 @@ from soliplex import installation
 from soliplex import loggers
 from soliplex import models
 from soliplex.config import agents as config_agents
-from soliplex.config import rag as config_rag
 from soliplex.config import rooms as config_rooms
+from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
 from soliplex.views import rooms as rooms_views
 
@@ -318,13 +318,76 @@ async def test_get_room_mcp_token(gust, w_error):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_hr_tool", [False, True])
+@pytest.mark.parametrize("w_hr_skill", [False, True])
+async def test__get_haiku_rag_client_kw(w_hr_skill, w_hr_tool):
+    tool_hr_config = object()
+    skill_hr_config = object()
+    db_path = pathlib.Path("/tmp/rag.db")
+
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+
+    agent_config = mock.create_autospec(config_agents.AgentConfig)
+    del agent_config.haiku_rag_config  # no agent kinds have it now
+
+    room_config.agent_config = agent_config
+
+    room_skills = mock.create_autospec(
+        config_skills.RoomSkillsConfig,
+        skill_configs={},
+    )
+    room_config.skills = room_skills
+
+    if w_hr_skill:
+        # There are no non-HR skill_configs which can be added now.
+        skill_config = mock.create_autospec(
+            config_skills.HR_RAG_SkillConfig,
+            haiku_rag_config=skill_hr_config,
+            rag_lancedb_path=db_path,
+        )
+        room_skills.skill_configs["hr_skill"] = skill_config
+
+    room_config.tool_configs = {
+        "non_hr_tool": mock.create_autospec(config_tools.ToolConfig)
+    }
+
+    if w_hr_tool:
+        hr_tool_config = mock.create_autospec(
+            config_tools.ToolConfig,
+            haiku_rag_config=tool_hr_config,
+            rag_lancedb_path=db_path,
+        )
+        room_skills.skill_configs["hr_tool"] = hr_tool_config
+
+    found = rooms_views._get_haiku_rag_client_kw(room_config)
+
+    if w_hr_skill:
+        assert found == {
+            "db_path": db_path,
+            "config": skill_hr_config,
+            "read_only": True,
+        }
+    elif w_hr_tool:
+        assert found == {
+            "db_path": db_path,
+            "config": tool_hr_config,
+            "read_only": True,
+        }
+    else:
+        assert found is None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("w_hrck", [None, {"foo": "bar"}])
+@mock.patch("soliplex.views.rooms._get_haiku_rag_client_kw")
 @mock.patch("haiku.rag.client.HaikuRAG")
 async def test_get_room_documents(
     hr_klass,
+    ghrck,
+    w_hrck,
     temp_dir,
-    w_hr_tool,
     room_configs,
 ):
+    ghrck.return_value = w_hrck
     ROOM_ID = "foo"
 
     hr_inst = hr_klass.return_value
@@ -342,28 +405,8 @@ async def test_get_room_documents(
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
-    hr_config = object()
-    db_path = pathlib.Path("/tmp/rag.db")
-
     if ROOM_ID in room_configs:
-        non_hr_tool_config = mock.create_autospec(config_tools.ToolConfig)
-        tool_configs = room_configs[ROOM_ID].tool_configs = {
-            "non_hr": non_hr_tool_config,
-        }
-
-        # Agent config without haiku_rag_config (default agent)
-        agent_config_mock = mock.create_autospec(config_agents.AgentConfig)
-        del agent_config_mock.haiku_rag_config
-        room_configs[ROOM_ID].agent_config = agent_config_mock
-
-        if w_hr_tool:
-            tool_config = mock.create_autospec(
-                config_tools.ToolConfig,
-                haiku_rag_config=hr_config,
-                rag_lancedb_path=db_path,
-            )
-            tool_configs["testing"] = tool_config
-
+        if w_hrck:
             hr_entered.list_documents.return_value = [DOCUMENT]
             exp_docs = {DOCUMENT_ID: RAG_DOCUMENT}
         else:
@@ -401,14 +444,9 @@ async def test_get_room_documents(
             document_set=exp_docs,
         )
 
-        if w_hr_tool:
+        if w_hrck:
             hr_entered.list_documents.assert_called_once_with()
-
-            hr_klass.assert_called_once_with(
-                db_path=db_path,
-                config=hr_config,
-                read_only=True,
-            )
+            hr_klass.assert_called_once_with(**w_hrck)
         else:
             hr_entered.list_documents.assert_not_called()
             hr_klass.list_documents.assert_not_called()
@@ -424,17 +462,17 @@ async def test_get_room_documents(
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_chunk", [False, True])
-@pytest.mark.parametrize("w_hr_via", [None, "agent", "tool"])
-@pytest.mark.parametrize("w_hr_agent", [False, True])
+@pytest.mark.parametrize("w_hrck", [None, {"foo": "bar"}])
+@mock.patch("soliplex.views.rooms._get_haiku_rag_client_kw")
 @mock.patch("haiku.rag.client.HaikuRAG")
 @mock.patch("base64.b64encode")
 async def test_get_chunk_visualization(
     b64enc,
     hr_klass,
-    temp_dir,
-    w_hr_agent,
-    w_hr_via,
+    ghrck,
+    w_hrck,
     w_chunk,
+    temp_dir,
     room_configs,
 ):
     ROOM_ID = "foo"
@@ -449,6 +487,7 @@ async def test_get_chunk_visualization(
         "deadbeef3456",
     ]
     b64enc.return_value.decode.side_effect = PAGES_B64
+    ghrck.return_value = w_hrck
 
     hr_inst = hr_klass.return_value
     hr_entered = hr_inst.__aenter__.return_value
@@ -466,45 +505,19 @@ async def test_get_chunk_visualization(
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
-    hr_config = object()
-    db_path = pathlib.Path("/tmp/rag.db")
-
     if ROOM_ID in room_configs:
-        room_config = room_configs[ROOM_ID]
-        room_config.agent_config = mock.create_autospec(
-            config_agents.AgentConfig,
-        )
-        non_hr_tool_config = mock.create_autospec(config_tools.ToolConfig)
-        tool_configs = room_config.tool_configs = {
-            "non_hr": non_hr_tool_config,
-        }
+        if w_hrck:
+            if w_chunk:
+                chunk = hr_chunk.Chunk(
+                    chunk_id=CHUNK_ID,
+                    document_uri=DOCUMENT_URI,
+                    content="waaa",
+                )
+                chunk_repo.get_by_id.return_value = chunk
 
-        if w_hr_via == "agent":
-            room_config.agent_config = mock.create_autospec(
-                config_rag._RAGConfigBase,
-                haiku_rag_config=hr_config,
-                rag_lancedb_path=db_path,
-            )
-
-        elif w_hr_via == "tool":
-            tool_config = mock.create_autospec(
-                config_tools.ToolConfig,
-                haiku_rag_config=hr_config,
-                rag_lancedb_path=db_path,
-            )
-            tool_configs["testing"] = tool_config
-
-        if w_chunk:
-            chunk = hr_chunk.Chunk(
-                chunk_id=CHUNK_ID,
-                document_uri=DOCUMENT_URI,
-                content="waaa",
-            )
-            chunk_repo.get_by_id.return_value = chunk
-
-            hr_entered.visualize_chunk.return_value = PAGES_PNG
-        else:
-            chunk_repo.get_by_id.return_value = None
+                hr_entered.visualize_chunk.return_value = PAGES_PNG
+            else:
+                chunk_repo.get_by_id.return_value = None
 
     if ROOM_ID not in room_configs:
         with pytest.raises(fastapi.HTTPException) as exc:
@@ -525,7 +538,7 @@ async def test_get_chunk_visualization(
             ROOM_ID,
         )
 
-    elif w_hr_via is None:
+    elif w_hrck is None:
         with pytest.raises(fastapi.HTTPException) as exc:
             await rooms_views.get_chunk_visualization(
                 request,
@@ -582,11 +595,7 @@ async def test_get_chunk_visualization(
 
         hr_entered.visualize_chunk.assert_called_once_with(chunk)
         chunk_repo.get_by_id.assert_called_once_with(CHUNK_ID)
-        hr_klass.assert_called_once_with(
-            db_path=db_path,
-            config=hr_config,
-            read_only=True,
-        )
+        hr_klass.assert_called_once_with(**w_hrck)
 
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
