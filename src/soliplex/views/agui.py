@@ -21,6 +21,7 @@ from soliplex import views
 from soliplex.agui import persistence as agui_persistence
 from soliplex.config import agui as config_agui
 from soliplex.config import rooms as config_rooms
+from soliplex.views import streaming as streaming_views
 
 router = fastapi.APIRouter(tags=["rooms"])
 
@@ -663,10 +664,17 @@ async def post_room_agui_thread_id_run_id(
         stream_llm_events(event_queue),
     )
 
-    return responses.StreamingResponse(
+    # Wrap the response stream w/ keepalives, cancellation detection
+    w_keepalive_stream = streaming_views.stream_sse_with_keepalive(
         sse_stream,
+        request=request,
+        log_info=logfire.info,
+    )
+
+    return responses.StreamingResponse(
+        w_keepalive_stream,
         media_type=agui_adapter.accept,
-        headers=views.HEADERS_DO_NOT_BUFFER_SSE,
+        headers=streaming_views.HEADERS_DO_NOT_BUFFER_SSE,
     )
 
 

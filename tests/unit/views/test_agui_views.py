@@ -12,11 +12,11 @@ from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
-from soliplex import views
 from soliplex.agui import features as agui_features
 from soliplex.config import agui as config_agui
 from soliplex.config import rooms as config_rooms
 from soliplex.views import agui as agui_views
+from soliplex.views import streaming as streaming_views
 
 NOW = datetime.datetime.now(datetime.UTC)
 USER_NAME = "phreddy"
@@ -1049,17 +1049,21 @@ async def test_stream_llm_events(num_events):
 )
 @pytest.mark.parametrize("w_usage", [False, True])
 @mock.patch("fastapi.responses.StreamingResponse")
+@mock.patch("soliplex.views.streaming.stream_sse_with_keepalive")
 @mock.patch("soliplex.views.agui.stream_llm_events")
 @mock.patch("soliplex.views.agui.drive_llm_stream")
 @mock.patch("soliplex.agui.compact_event_stream")
 @mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
-async def test_post_room_agui_thread_id_run_id(
+@mock.patch("soliplex.views.agui.logfire")
+async def test_post_room_agui_thread_id_run_id_streaming(
+    logfire,
     cura,
     aga,
     ces,
     dls,
     sle,
+    sswk,
     frsr,
     the_threads,
     test_run,
@@ -1116,9 +1120,15 @@ async def test_post_room_agui_thread_id_run_id(
         assert found is frsr.return_value
 
         frsr.assert_called_once_with(
-            exp_sse_stream,
+            sswk.return_value,
             media_type=exp_adapter.accept,
-            headers=views.HEADERS_DO_NOT_BUFFER_SSE,
+            headers=streaming_views.HEADERS_DO_NOT_BUFFER_SSE,
+        )
+
+        sswk.assert_called_once_with(
+            exp_sse_stream,
+            request=request,
+            log_info=logfire.info,
         )
 
         exp_adapter.encode_stream.assert_called_once_with(sle.return_value)

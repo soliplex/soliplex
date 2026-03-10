@@ -9,6 +9,7 @@ from soliplex import installation
 from soliplex import models
 from soliplex import util
 from soliplex import views
+from soliplex.views import streaming as streaming_views
 
 # -----------------------------------------------------------------------------
 #   Completions endpoints
@@ -64,6 +65,7 @@ async def get_chat_completion(
 
 
 async def openai_chat_completion(
+    request: fastapi.Request,
     agent: pydantic_ai.Agent,
     agent_deps: agents.AgentDependencies,
     chat_request: models.ChatCompletionRequest,
@@ -76,15 +78,21 @@ async def openai_chat_completion(
     message_history = []
 
     try:
+        completion_stream = completions.stream_chat_responses(
+            agent,
+            agent_deps,
+            user_question,
+            message_history,
+        )
+        # Wrap the response stream w/ keepalives, cancellation detection
+        w_keepalive_stream = streaming_views.stream_sse_with_keepalive(
+            completion_stream,
+            request=request,
+        )
         return responses.StreamingResponse(
-            completions.stream_chat_responses(
-                agent,
-                agent_deps,
-                user_question,
-                message_history,
-            ),
+            w_keepalive_stream,
             media_type="text/event-stream",
-            headers=views.HEADERS_DO_NOT_BUFFER_SSE,
+            headers=streaming_views.HEADERS_DO_NOT_BUFFER_SSE,
         )
     except Exception:
         raise fastapi.HTTPException(
@@ -122,6 +130,7 @@ async def post_chat_completion(
     )
 
     return await openai_chat_completion(
+        request,
         agent,
         agent_deps,
         chat_request,

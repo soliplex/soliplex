@@ -5,9 +5,9 @@ import pytest
 
 from soliplex import installation
 from soliplex import models
-from soliplex import views
 from soliplex.config import completions as config_completions
 from soliplex.views import completions as completions_views
+from soliplex.views import streaming as streaming_views
 
 COMPLETION_IDS = ["foo", "bar", "baz"]
 COMPLETION_ID = "qux"
@@ -121,9 +121,16 @@ async def test_get_chat_completion(fc, completion_configs):
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_exception", [False, True])
 @pytest.mark.parametrize("w_history", [False, True])
+@mock.patch("soliplex.views.streaming.stream_sse_with_keepalive")
 @mock.patch("soliplex.completions.stream_chat_responses")
 @mock.patch("fastapi.responses.StreamingResponse")
-async def test_openai_chat_completion(sr_class, scp, w_history, w_exception):
+async def test_openai_chat_completion(
+    sr_class,
+    scp,
+    sswk,
+    w_history,
+    w_exception,
+):
     CR_MESSAGES = [
         {
             "role": "user",
@@ -132,6 +139,7 @@ async def test_openai_chat_completion(sr_class, scp, w_history, w_exception):
     ]
     agent = mock.Mock(spec_set=["model", "run_stream"])
     agent_deps = mock.Mock(spec_set=())
+    request = mock.create_autospec(fastapi.Request)
 
     if w_history:
         CR_MESSAGES.insert(
@@ -154,6 +162,7 @@ async def test_openai_chat_completion(sr_class, scp, w_history, w_exception):
     if w_exception:
         with pytest.raises(fastapi.HTTPException):
             await completions_views.openai_chat_completion(
+                request,
                 agent,
                 agent_deps,
                 chat_request,
@@ -161,6 +170,7 @@ async def test_openai_chat_completion(sr_class, scp, w_history, w_exception):
         return
     else:
         response = await completions_views.openai_chat_completion(
+            request,
             agent,
             agent_deps,
             chat_request,
@@ -169,9 +179,14 @@ async def test_openai_chat_completion(sr_class, scp, w_history, w_exception):
     assert response is sr_class.return_value
 
     sr_class.assert_called_once_with(
-        scp.return_value,
+        sswk.return_value,
         media_type="text/event-stream",
-        headers=views.HEADERS_DO_NOT_BUFFER_SSE,
+        headers=streaming_views.HEADERS_DO_NOT_BUFFER_SSE,
+    )
+
+    sswk.assert_called_once_with(
+        scp.return_value,
+        request=request,
     )
 
     # TODO not passing history
@@ -247,6 +262,7 @@ async def test_post_chat_completion_hit(
 
     exp_user_profile = models.UserProfile(**exp_user)
     occ.assert_awaited_once_with(
+        request,
         the_installation.get_agent_for_completion.return_value,
         the_installation.get_agent_deps_for_completion.return_value,
         chat_request,
