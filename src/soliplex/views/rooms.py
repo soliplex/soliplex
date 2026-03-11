@@ -166,21 +166,12 @@ async def get_room_mcp_token(
 
 
 def _get_haiku_rag_client_kw(room_config: config_rooms.RoomConfig):
-    candidates = (
-        [room_config.agent_config]
-        + list(room_config.tool_configs.values())
-        + list(room_config.skills.skill_configs.values())
-    )
+    hr_client_kws = list(room_config.list_haiku_rag_client_kw())
 
-    for cfg in candidates:
-        hr_config = getattr(cfg, "haiku_rag_config", None)
-
-        if hr_config is not None:
-            return {
-                "db_path": cfg.rag_lancedb_path,
-                "config": hr_config,
-                "read_only": True,
-            }
+    if hr_client_kws:
+        return hr_client_kws[0]
+    else:
+        return None
 
 
 @util.logfire_span("GET /v1/rooms/{room_id}/documents")

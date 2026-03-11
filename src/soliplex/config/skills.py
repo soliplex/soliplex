@@ -7,7 +7,6 @@ import typing
 import warnings
 
 import pydantic
-from haiku.rag import config as hr_config
 from haiku.rag.skills import rag as hr_skills_rag
 from haiku.rag.skills import rlm as hr_skills_rlm
 from haiku.skills import agent as hs_agent
@@ -298,8 +297,6 @@ class _HR_SkillConfigBase(
     """Base class for 'haiku-rag' skll configs"""
 
     source: typing.ClassVar[hs_models.SkillSource] = SkillKind.ENTRYPOINT
-
-    _haiku_rag_config: hr_config.AppConfig = None
 
     @property
     def _skill_metadata(self) -> hs_models.SkillMetadata:
