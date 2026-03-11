@@ -1,8 +1,10 @@
+import asyncio
 import enum
 import json
 import os
 import pathlib
 import typing
+import warnings
 from importlib import metadata as importlib_metadata
 
 import requests
@@ -10,6 +12,7 @@ import typer
 import uvicorn
 import uvicorn.config
 import yaml
+from haiku.rag import client as hr_client
 from rich import console
 from skills_ref import validator as skill_validator
 
@@ -644,6 +647,20 @@ def list_oidc_auth_providers(
         the_console.line()
 
 
+async def _async_count(rag):
+    with warnings.catch_warnings():
+        return await rag.count_documents()
+
+
+def _count_rag_documents(rag: hr_client.HaikuRAG):
+    try:
+        count = asyncio.run(_async_count(rag))
+    except Exception:
+        return "error"
+
+    return f"{count} documents"
+
+
 @the_cli.command(
     "list-rooms",
 )
@@ -653,6 +670,10 @@ def list_rooms(
 ):
     """List rooms defined in the installation"""
     the_installation = get_installation(installation_path)
+    try:
+        the_installation.resolve_environment()
+    except config_installation.MissingEnvVars:
+        pass
 
     the_console.line()
     the_console.rule("Configured Rooms")
@@ -660,9 +681,31 @@ def list_rooms(
 
     # Deliberately bypass auth check done by 'get_room_configs' here.
     available_rooms = the_installation._config.room_configs
+    cwd = pathlib.Path.cwd()
+
     for room_config in available_rooms.values():
         the_console.print(f"- [ {room_config.id} ] {room_config.name}: ")
         the_console.print(f"  {room_config.description}")
+        try:
+            hrc_kws = list(
+                room_config.list_haiku_rag_client_kw(include_source=True)
+            )
+        except config_rag.RagDbFileNotFound as exc:
+            the_console.log("   Invalid Haiku Rag configs")
+            the_console.print(str(exc))
+        else:
+            if hrc_kws:
+                the_console.print()
+                the_console.print("   Haiku Rag DBs")
+                for hr_client_kw in hrc_kws:
+                    source = hr_client_kw.pop("source")
+                    db_path = hr_client_kw["db_path"].relative_to(cwd)
+                    rag = hr_client.HaikuRAG(**hr_client_kw)
+                    count = _count_rag_documents(rag)
+                    the_console.print(
+                        f"   - {source:20}: {str(db_path):30} {count}"
+                    )
+                    the_console.print()
         the_console.line()
 
 

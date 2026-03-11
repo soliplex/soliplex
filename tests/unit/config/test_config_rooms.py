@@ -524,6 +524,7 @@ def test_roomconfig_get_logo_image(temp_dir, room_config_kw, w_config_path):
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("incl_source_kwargs", [{}, {"include_source": True}])
 @pytest.mark.parametrize(
     "room_config_kwargs, expected",
     [
@@ -536,6 +537,7 @@ def test_roomconfig_get_logo_image(temp_dir, room_config_kw, w_config_path):
                     "db_path": LANCE_DB_OVERRIDE_PATH,
                     "config": HR_CONFIG,
                     "read_only": True,
+                    "source": "skill:rag",
                 },
             ],
         ),
@@ -547,6 +549,7 @@ def test_roomconfig_get_logo_image(temp_dir, room_config_kw, w_config_path):
                     "db_path": LANCE_DB_OVERRIDE_PATH,
                     "config": HR_CONFIG,
                     "read_only": True,
+                    "source": "tool:hr_tool",
                 },
             ],
         ),
@@ -557,6 +560,7 @@ async def test_roomconfig_list_haiku_rag_client_kws(
     temp_dir,
     installation_config_w_skill,
     room_config_kwargs,
+    incl_source_kwargs,
     expected,
 ):
     db_path = temp_dir / "rag.lancedb"
@@ -566,6 +570,12 @@ async def test_roomconfig_list_haiku_rag_client_kws(
         exp_kw | {"db_path": db_path} if "db_path" in exp_kw else exp_kw
         for exp_kw in expected
     ]
+
+    if not incl_source_kwargs.get("include_source"):
+        expected = [
+            {key: value for key, value in exp_kw.items() if key != "source"}
+            for exp_kw in expected
+        ]
 
     skills = room_config_kwargs.pop("skills", None)
     if skills is not None:
@@ -596,6 +606,6 @@ async def test_roomconfig_list_haiku_rag_client_kws(
         **room_config_kwargs,
     )
 
-    found = list(room_config.list_haiku_rag_client_kw())
+    found = list(room_config.list_haiku_rag_client_kw(**incl_source_kwargs))
 
     assert found == expected

@@ -198,7 +198,10 @@ class RoomConfig:
 
             return self._config_path.parent / self._logo_image
 
-    def list_haiku_rag_client_kw(self) -> typing.Sequence[dict]:
+    def list_haiku_rag_client_kw(
+        self,
+        include_source: bool = False,
+    ) -> typing.Sequence[dict]:
         """List of kwargs to be passed to 'haiku.rag.client.HaikuRAG' ctor
 
         Candidates for producing these args include:
@@ -211,24 +214,35 @@ class RoomConfig:
         the corresponding kwargs dict.
         """
         candidates = (
-            [self.agent_config]
+            [("agent", self.agent_config)]
             + list(
-                self.skills.skill_configs.values()
+                (
+                    (f"skill:{key}", value)
+                    for key, value in self.skills.skill_configs.items()
+                )
                 if self.skills is not None
                 else ()
             )
-            + list(self.tool_configs.values())
+            + list(
+                (f"tool:{key}", value)
+                for key, value in self.tool_configs.items()
+            )
         )
 
-        for cfg in candidates:
+        for source, cfg in candidates:
             hr_config = getattr(cfg, "haiku_rag_config", None)
 
             if hr_config is not None:
-                yield {
+                hrc_kw = {
                     "db_path": cfg.rag_lancedb_path,
                     "config": hr_config,
                     "read_only": True,
                 }
+
+                if include_source:
+                    hrc_kw["source"] = source
+
+                yield hrc_kw
 
 
 RoomConfigMap = dict[str, RoomConfig]
