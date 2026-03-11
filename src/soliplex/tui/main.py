@@ -952,11 +952,13 @@ class RoomView(t_screen.Screen):
             self.thread_id = thread_id = new_thread["thread_id"]
             self.thread_name = None
             (run_id,) = new_thread["runs"].keys()
+            empty_run = new_thread["runs"][run_id]
+            empty_rai = empty_run["run_input"]
 
             self.run_agent_input = agui_core.RunAgentInput(
                 thread_id=thread_id,
                 run_id=run_id,
-                state=self._build_initial_state(),
+                state=empty_rai["state"],
                 messages=[
                     {"id": "user_001", "role": "user", "content": prompt}
                 ],
