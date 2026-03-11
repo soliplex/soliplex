@@ -123,9 +123,7 @@ async def post_chat_completion(
         ) from None
 
     try:
-        user_profile = models.UserProfile.from_user_claims(
-            the_user_claims
-        )
+        user_profile = models.UserProfile.from_user_claims(the_user_claims)
     except ValueError as exc:
         raise fastapi.HTTPException(
             status_code=401,

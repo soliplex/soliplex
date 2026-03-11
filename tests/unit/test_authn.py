@@ -146,9 +146,7 @@ def test_authenticate(vat, with_auth_systems, w_hit):
                 vat.assert_called_once_with(
                     token,
                     with_auth_systems[0].token_validation_pem,
-                    expected_audience=with_auth_systems[
-                        0
-                    ].expected_audience,
+                    expected_audience=with_auth_systems[0].expected_audience,
                 )
             else:
                 assert found is SECOND_USER
@@ -156,16 +154,12 @@ def test_authenticate(vat, with_auth_systems, w_hit):
                 assert first_call == mock.call(
                     token,
                     with_auth_systems[0].token_validation_pem,
-                    expected_audience=with_auth_systems[
-                        0
-                    ].expected_audience,
+                    expected_audience=with_auth_systems[0].expected_audience,
                 )
                 assert second_call == mock.call(
                     token,
                     with_auth_systems[1].token_validation_pem,
-                    expected_audience=with_auth_systems[
-                        1
-                    ].expected_audience,
+                    expected_audience=with_auth_systems[1].expected_audience,
                 )
 
 

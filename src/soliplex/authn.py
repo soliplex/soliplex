@@ -71,9 +71,7 @@ def authenticate(
     )
 
 
-def validate_access_token(
-    token, token_validation_pem, expected_audience=None
-):
+def validate_access_token(token, token_validation_pem, expected_audience=None):
     try:
         options = {"verify_aud": expected_audience is not None}
         return jwt.decode(
