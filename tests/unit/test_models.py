@@ -1241,7 +1241,7 @@ def test_userprofile_from_user_claims_defaults():
     ],
 )
 def test_userprofile_from_user_claims_rejects_missing(claims):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError):  # noqa PT011
         models.UserProfile.from_user_claims(claims)
 
 
