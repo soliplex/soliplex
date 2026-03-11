@@ -31,7 +31,7 @@ def _auth_systems(n_auth_systems):
 @pytest.fixture
 def temp_dir() -> pathlib.Path:
     with tempfile.TemporaryDirectory() as td:
-        yield pathlib.Path(td)
+        yield pathlib.Path(td).resolve()
 
 
 @pytest.fixture(params=[0, 1, 2])
