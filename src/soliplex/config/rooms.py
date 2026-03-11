@@ -2,6 +2,7 @@ from __future__ import annotations  # forward refs in typing decls
 
 import dataclasses
 import pathlib
+import typing
 
 from soliplex.agui import features as agui_features_module  # noqa F401
 
@@ -196,6 +197,38 @@ class RoomConfig:
                 raise config_exc.NoConfigPath()
 
             return self._config_path.parent / self._logo_image
+
+    def list_haiku_rag_client_kw(self) -> typing.Sequence[dict]:
+        """List of kwargs to be passed to 'haiku.rag.client.HaikuRAG' ctor
+
+        Candidates for producing these args include:
+        - The room agent
+        - Room skills (whether locally configured or via the installation)
+        - Tool configs defined in the room
+
+        For each candidate: if it derives from `config.rag._RAGConfigBase`
+        (has `haiku_rag_config`/`rag_lancedb_path` attributes), return
+        the corresponding kwargs dict.
+        """
+        candidates = (
+            [self.agent_config]
+            + list(
+                self.skills.skill_configs.values()
+                if self.skills is not None
+                else ()
+            )
+            + list(self.tool_configs.values())
+        )
+
+        for cfg in candidates:
+            hr_config = getattr(cfg, "haiku_rag_config", None)
+
+            if hr_config is not None:
+                yield {
+                    "db_path": cfg.rag_lancedb_path,
+                    "config": hr_config,
+                    "read_only": True,
+                }
 
 
 RoomConfigMap = dict[str, RoomConfig]

@@ -4,6 +4,8 @@ from unittest import mock
 
 import pytest
 import yaml
+from haiku.rag import config as hr_config
+from haiku.rag.skills import rag as hr_skills_rag
 from haiku.skills import models as hs_models
 
 from soliplex.config import agents as config_agents
@@ -27,6 +29,7 @@ WELCOME_MESSAGE = "Welcome to this room!"
 SUGGESTION = "Try us out for a spin!"
 IMAGE_FILENAME = "test_image.jpg"
 AGUI_FEATURE_NAME = "test-agui-feature"
+TOOL_AGUI_FEATURE_NAME = "test-tool-agui-feature"
 
 BOGUS_ROOM_CONFIG_YAML = ""
 
@@ -48,6 +51,66 @@ agent:
     model_name: "{test_agents.MODEL_NAME}"
     system_prompt: "{test_agents.SYSTEM_PROMPT}"
 """
+
+W_NON_HR_SKILLS_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
+    "skills": config_skills.RoomSkillsConfig(
+        installation_skill_names=[test_skills.SKILL_NAME],
+    ),
+}
+W_NON_HR_SKILLS_ROOM_CONFIG_YAML = f"""\
+{BARE_ROOM_CONFIG_YAML}
+skills:
+    installation_skill_names:
+        - "{test_skills.SKILL_NAME}"
+"""
+
+LANCE_DB_OVERRIDE_PATH = "/tmp/rag.lancedb"
+
+W_HR_SKILLS_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
+    "skills": config_skills.RoomSkillsConfig(
+        _skill_configs={
+            "rag": config_skills.HR_RAG_SkillConfig(
+                rag_lancedb_override_path=LANCE_DB_OVERRIDE_PATH,
+            ),
+        }
+    ),
+}
+W_HR_SKILLS_ROOM_CONFIG_YAML = f"""\
+{BARE_ROOM_CONFIG_YAML}
+skills:
+    skill_configs:
+        - kind: "haiku.rag.skills.rag"
+          rag_lancedb_override_path: "{LANCE_DB_OVERRIDE_PATH}"
+"""
+
+W_NON_HR_TOOLS_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
+    "tool_configs": {
+        "get_current_datetime": config_tools.ToolConfig(
+            tool_name="soliplex.tools.get_current_datetime",
+            allow_mcp=True,
+            agui_feature_names=(TOOL_AGUI_FEATURE_NAME,),
+        ),
+    },
+}
+W_NON_HR_TOOLS_ROOM_CONFIG_YAML = f"""\
+{BARE_ROOM_CONFIG_YAML}
+tools:
+    - tool_name: "soliplex.tools.get_current_datetime"
+      allow_mcp: true
+      agui_feature_names:
+          - "{TOOL_AGUI_FEATURE_NAME}"
+"""
+
+HR_CONFIG = hr_config.AppConfig(environment="testing")
+W_HR_TOOLS_ROOM_CONFIG_KW = BARE_ROOM_CONFIG_KW | {
+    "tool_configs": {
+        "hr_tool": mock.create_autospec(
+            config_tools.ToolConfig,
+            rag_lancedb_path=LANCE_DB_OVERRIDE_PATH,
+            haiku_rag_config=HR_CONFIG,
+        ),
+    },
+}
 
 EXTRA_AGUI_FEATURE_NAME = "extra-agui-feature"
 FULL_ROOM_CONFIG_KW = {
@@ -164,6 +227,18 @@ allow_mcp: true
     [
         (BOGUS_ROOM_CONFIG_YAML, pytest.raises(config_exc.FromYamlException)),
         (BARE_ROOM_CONFIG_YAML, contextlib.nullcontext(BARE_ROOM_CONFIG_KW)),
+        (
+            W_NON_HR_SKILLS_ROOM_CONFIG_YAML,
+            contextlib.nullcontext(W_NON_HR_SKILLS_ROOM_CONFIG_KW),
+        ),
+        (
+            W_HR_SKILLS_ROOM_CONFIG_YAML,
+            contextlib.nullcontext(W_HR_SKILLS_ROOM_CONFIG_KW),
+        ),
+        (
+            W_NON_HR_TOOLS_ROOM_CONFIG_YAML,
+            contextlib.nullcontext(W_NON_HR_TOOLS_ROOM_CONFIG_KW),
+        ),
         (FULL_ROOM_CONFIG_YAML, contextlib.nullcontext(FULL_ROOM_CONFIG_KW)),
     ],
 )
@@ -230,10 +305,18 @@ def test_roomconfig_from_yaml(
             mcts_config._config_path = yaml_file
 
         if "skills" in config_yaml:
+            replaced_skill_configs = {}
+            for key, skill_config in expected.skills._skill_configs.items():
+                replaced_skill_configs[key] = dataclasses.replace(
+                    skill_config,
+                    _installation_config=installation_config_w_skill,
+                    _config_path=yaml_file,
+                )
             expected.skills = dataclasses.replace(
                 expected.skills,
                 _installation_config=installation_config,
                 _config_path=yaml_file,
+                _skill_configs=replaced_skill_configs,
             )
 
         if "quizzes" in config_yaml:
@@ -302,16 +385,49 @@ def test_roomconfig_skill_configs_w_hit(installation_config):
     assert found == {test_skills.SKILL_NAME: skill_config}
 
 
+@pytest.fixture
+def installation_config_w_skill(installation_config):
+    skill_config = mock.create_autospec(
+        config_skills._SkillConfigModelBase,
+        agui_feature_names=[test_skills.SKILL_STATE_NAMESPACE],
+    )
+    installation_config.skill_configs = {
+        test_skills.SKILL_NAME: skill_config,
+    }
+    return installation_config
+
+
 @pytest.mark.parametrize(
-    "rc_kwargs, expected",
+    "room_config_kwargs, expected",
     [
         (BARE_ROOM_CONFIG_KW.copy(), ()),
+        (
+            W_NON_HR_SKILLS_ROOM_CONFIG_KW.copy(),
+            [
+                # from 'skills' via installation_config
+                test_skills.SKILL_STATE_NAMESPACE,
+            ],
+        ),
+        (
+            W_HR_SKILLS_ROOM_CONFIG_KW.copy(),
+            [
+                # from 'skills' via local config
+                hr_skills_rag.STATE_NAMESPACE,
+            ],
+        ),
+        (
+            W_NON_HR_TOOLS_ROOM_CONFIG_KW.copy(),
+            [
+                # from 'tool_configs'
+                TOOL_AGUI_FEATURE_NAME,
+            ],
+        ),
         (
             FULL_ROOM_CONFIG_KW.copy(),
             [
                 # from 'agent_config'
                 AGUI_FEATURE_NAME,
-                # from 'skills'
+                # from 'skills' via installation_config
                 test_skills.SKILL_STATE_NAMESPACE,
                 # from 'room_config'
                 EXTRA_AGUI_FEATURE_NAME,
@@ -320,28 +436,20 @@ def test_roomconfig_skill_configs_w_hit(installation_config):
     ],
 )
 def test_roomconfig_agui_feature_names(
-    installation_config,
-    rc_kwargs,
+    installation_config_w_skill,
+    room_config_kwargs,
     expected,
 ):
-    skill_config = mock.create_autospec(
-        config_skills._SkillConfigModelBase,
-        agui_feature_names=[test_skills.SKILL_STATE_NAMESPACE],
-    )
-    installation_config.skill_configs = {
-        test_skills.SKILL_NAME: skill_config,
-    }
-
-    skills = rc_kwargs.pop("skills", None)
+    skills = room_config_kwargs.pop("skills", None)
     if skills is not None:
-        rc_kwargs["skills"] = dataclasses.replace(
+        room_config_kwargs["skills"] = dataclasses.replace(
             skills,
-            _installation_config=installation_config,
+            _installation_config=installation_config_w_skill,
         )
 
     room_config = config_rooms.RoomConfig(
-        _installation_config=installation_config,
-        **rc_kwargs,
+        _installation_config=installation_config_w_skill,
+        **room_config_kwargs,
     )
 
     found = room_config.agui_feature_names
@@ -413,3 +521,81 @@ def test_roomconfig_get_logo_image(temp_dir, room_config_kw, w_config_path):
 
         else:
             assert room_config.get_logo_image() is None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "room_config_kwargs, expected",
+    [
+        (BARE_ROOM_CONFIG_KW, []),
+        (W_NON_HR_SKILLS_ROOM_CONFIG_KW, []),
+        (
+            W_HR_SKILLS_ROOM_CONFIG_KW,
+            [
+                {
+                    "db_path": LANCE_DB_OVERRIDE_PATH,
+                    "config": HR_CONFIG,
+                    "read_only": True,
+                },
+            ],
+        ),
+        (W_NON_HR_TOOLS_ROOM_CONFIG_KW, []),
+        (
+            W_HR_TOOLS_ROOM_CONFIG_KW,
+            [
+                {
+                    "db_path": LANCE_DB_OVERRIDE_PATH,
+                    "config": HR_CONFIG,
+                    "read_only": True,
+                },
+            ],
+        ),
+        (FULL_ROOM_CONFIG_KW, []),
+    ],
+)
+async def test_roomconfig_list_haiku_rag_client_kws(
+    temp_dir,
+    installation_config_w_skill,
+    room_config_kwargs,
+    expected,
+):
+    db_path = temp_dir / "rag.lancedb"
+    db_path.mkdir()
+
+    expected = [
+        exp_kw | {"db_path": db_path} if "db_path" in exp_kw else exp_kw
+        for exp_kw in expected
+    ]
+
+    skills = room_config_kwargs.pop("skills", None)
+    if skills is not None:
+        replaced_skill_configs = {}
+        for key, skill_config in skills._skill_configs.items():
+            replaced_skill_configs[key] = dataclasses.replace(
+                skill_config,
+                _installation_config=installation_config_w_skill,
+                rag_lancedb_override_path=db_path,
+                _haiku_rag_config=HR_CONFIG,
+            )
+
+        room_config_kwargs["skills"] = dataclasses.replace(
+            skills,
+            _installation_config=installation_config_w_skill,
+            _skill_configs=replaced_skill_configs,
+        )
+
+    tool_configs = room_config_kwargs.get("tool_configs")
+    if tool_configs is not None:
+        for value in tool_configs.values():
+            rldbp = getattr(value, "rag_lancedb_path", None)
+            if rldbp is not None:
+                value.rag_lancedb_path = db_path
+
+    room_config = config_rooms.RoomConfig(
+        _installation_config=installation_config_w_skill,
+        **room_config_kwargs,
+    )
+
+    found = list(room_config.list_haiku_rag_client_kw())
+
+    assert found == expected

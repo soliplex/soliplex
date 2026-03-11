@@ -1,5 +1,4 @@
 import datetime
-import pathlib
 from unittest import mock
 
 import fastapi
@@ -10,10 +9,7 @@ from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
-from soliplex.config import agents as config_agents
 from soliplex.config import rooms as config_rooms
-from soliplex.config import skills as config_skills
-from soliplex.config import tools as config_tools
 from soliplex.views import rooms as rooms_views
 
 NOW = datetime.datetime.now(datetime.UTC)
@@ -317,63 +313,21 @@ async def test_get_room_mcp_token(gust, w_error):
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("w_hr_tool", [False, True])
-@pytest.mark.parametrize("w_hr_skill", [False, True])
-async def test__get_haiku_rag_client_kw(w_hr_skill, w_hr_tool):
-    tool_hr_config = object()
-    skill_hr_config = object()
-    db_path = pathlib.Path("/tmp/rag.db")
-
+@pytest.mark.parametrize(
+    "w_kws, expected",
+    [
+        ([], None),
+        ([{"foo": "bar"}], {"foo": "bar"}),
+        ([{"foo": "bar"}, {"spam": "qux"}], {"foo": "bar"}),
+    ],
+)
+async def test__get_haiku_rag_client_kw(w_kws, expected):
     room_config = mock.create_autospec(config_rooms.RoomConfig)
-
-    agent_config = mock.create_autospec(config_agents.AgentConfig)
-    del agent_config.haiku_rag_config  # no agent kinds have it now
-
-    room_config.agent_config = agent_config
-
-    room_skills = mock.create_autospec(
-        config_skills.RoomSkillsConfig,
-        skill_configs={},
-    )
-    room_config.skills = room_skills
-
-    if w_hr_skill:
-        # There are no non-HR skill_configs which can be added now.
-        skill_config = mock.create_autospec(
-            config_skills.HR_RAG_SkillConfig,
-            haiku_rag_config=skill_hr_config,
-            rag_lancedb_path=db_path,
-        )
-        room_skills.skill_configs["hr_skill"] = skill_config
-
-    room_config.tool_configs = {
-        "non_hr_tool": mock.create_autospec(config_tools.ToolConfig)
-    }
-
-    if w_hr_tool:
-        hr_tool_config = mock.create_autospec(
-            config_tools.ToolConfig,
-            haiku_rag_config=tool_hr_config,
-            rag_lancedb_path=db_path,
-        )
-        room_skills.skill_configs["hr_tool"] = hr_tool_config
+    room_config.list_haiku_rag_client_kw.return_value = w_kws
 
     found = rooms_views._get_haiku_rag_client_kw(room_config)
 
-    if w_hr_skill:
-        assert found == {
-            "db_path": db_path,
-            "config": skill_hr_config,
-            "read_only": True,
-        }
-    elif w_hr_tool:
-        assert found == {
-            "db_path": db_path,
-            "config": tool_hr_config,
-            "read_only": True,
-        }
-    else:
-        assert found is None
+    assert found == expected
 
 
 @pytest.mark.anyio
