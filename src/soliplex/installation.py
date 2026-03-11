@@ -15,6 +15,7 @@ from soliplex import agents
 from soliplex import authz as authz_package
 from soliplex import loggers
 from soliplex import mcp_server
+from soliplex import models
 from soliplex import secrets
 from soliplex import util
 from soliplex.agui import schema as agui_schema
@@ -35,6 +36,9 @@ ProviderInfoMap = dict[config_agents.LLMProviderType, ProviderTypeInfo]
 NO_AUTH_MODE_USER_TOKEN = {
     "name": "Phreddy Phlyntstone",
     "email": "phreddy@example.com",
+    "preferred_username": "phreddy",
+    "given_name": "Phreddy",
+    "family_name": "Phlyntstone",
 }
 
 
@@ -302,7 +306,8 @@ class Installation:
         self,
         *,
         room_id: str,
-        user: dict,
+        user: models.UserProfile,
+        principal: agents.AgentPrincipal = None,
         the_authz_policy: authz_package.AuthorizationPolicy = None,
         run_agent_input: agui_core.RunAgentInput = None,
         the_logger: loggers.LogWrapper = None,
@@ -323,6 +328,7 @@ class Installation:
         return agents.AgentDependencies(
             the_installation=self,
             user=user,
+            principal=principal,
             tool_configs=room_config.tool_configs,
             thread_id=thread_id,
             **kwargs,
@@ -332,7 +338,7 @@ class Installation:
         self,
         *,
         completion_id: str,
-        user: dict,
+        user: models.UserProfile,
         run_agent_input: agui_core.RunAgentInput = None,
     ) -> pydantic_ai.Agent:
         completion_config = await self.get_completion_config(

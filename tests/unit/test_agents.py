@@ -1,3 +1,4 @@
+import datetime
 from unittest import mock
 
 import pytest
@@ -5,6 +6,7 @@ from pydantic_ai import tools as ai_tools
 
 from soliplex import agents
 from soliplex import mcp_client
+from soliplex import models
 from soliplex import tools
 from soliplex.config import agents as config_agents
 from soliplex.config import tools as config_tools
@@ -345,3 +347,58 @@ def test_get_agent_from_configs_w_hit():
         )
 
     assert found is expected
+
+
+TEST_USER = models.UserProfile(
+    given_name="Phreddy",
+    family_name="Phlyntstone",
+    email="phreddy@example.com",
+    preferred_username="phreddy",
+)
+
+
+def test_agent_principal_mint():
+    p = agents.AgentPrincipal.mint(
+        user=TEST_USER,
+        room_id=ROOM_ID,
+    )
+
+    assert p.user_email == "phreddy@example.com"
+    assert p.user_username == "phreddy"
+    assert p.room_id == ROOM_ID
+    assert p.parent_principal_id is None
+    assert isinstance(p.principal_id, str)
+    assert len(p.principal_id) == 36  # UUID format
+    assert p.expires_at == p.created_at + datetime.timedelta(
+        seconds=agents.DEFAULT_PRINCIPAL_MAX_DURATION,
+    )
+
+
+def test_agent_principal_mint_unique_ids():
+    p1 = agents.AgentPrincipal.mint(user=TEST_USER, room_id=ROOM_ID)
+    p2 = agents.AgentPrincipal.mint(user=TEST_USER, room_id=ROOM_ID)
+    assert p1.principal_id != p2.principal_id
+
+
+def test_agent_principal_mint_w_parent():
+    p = agents.AgentPrincipal.mint(
+        user=TEST_USER,
+        room_id=ROOM_ID,
+        parent_principal_id="parent-123",
+    )
+    assert p.parent_principal_id == "parent-123"
+
+
+def test_agent_principal_mint_custom_duration():
+    p = agents.AgentPrincipal.mint(
+        user=TEST_USER,
+        room_id=ROOM_ID,
+        max_duration_seconds=60,
+    )
+    assert p.expires_at == p.created_at + datetime.timedelta(seconds=60)
+
+
+def test_agent_principal_is_frozen():
+    p = agents.AgentPrincipal.mint(user=TEST_USER, room_id=ROOM_ID)
+    with pytest.raises(AttributeError):
+        p.principal_id = "new-id"

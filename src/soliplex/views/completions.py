@@ -122,7 +122,15 @@ async def post_chat_completion(
             status_code=404, detail=f"No such completion: {completion_id}"
         ) from None
 
-    user_profile = models.UserProfile.from_user_claims(the_user_claims)
+    try:
+        user_profile = models.UserProfile.from_user_claims(
+            the_user_claims
+        )
+    except ValueError as exc:
+        raise fastapi.HTTPException(
+            status_code=401,
+            detail="missing_identity_claims",
+        ) from exc
 
     agent_deps = await the_installation.get_agent_deps_for_completion(
         completion_id=completion_id,

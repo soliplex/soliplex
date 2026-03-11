@@ -160,6 +160,9 @@ class Run(abc.ABC):
     run_input: agui_core.RunAgentInput
     """Input from the client-request which initiates the AG-UI run"""
 
+    principal_id: str | None
+    """Agent principal that executed this run"""
+
     created: datetime.datetime
     """Timestamp"""
 
@@ -280,6 +283,7 @@ class ThreadStorage(abc.ABC):
         thread_id: str,
         run_metadata: RunMetadata = None,
         parent_run_id: str = None,
+        principal_id: str = None,
     ) -> Run:
         """Create a new run for the thread
 
@@ -307,6 +311,7 @@ class ThreadStorage(abc.ABC):
         thread_id: str,
         run_id: str,
         run_input: agui_core.RunAgentInput,
+        principal_id: str = None,
     ) -> Run:
         """Update a run with the given 'run_agent_input'"""
 

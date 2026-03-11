@@ -10,6 +10,7 @@ from fastapi import responses
 from pydantic_ai.ui import ag_ui as ai_ag_ui
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
+from soliplex import agents
 from soliplex import agui as agui_package
 from soliplex import authn
 from soliplex import authz as authz_package
@@ -30,6 +31,22 @@ depend_the_threads = agui_package.depend_the_threads
 depend_the_authz = authz_package.depend_the_authz_policy
 depend_the_user_claims = views.depend_the_user_claims
 depend_the_logger = views.depend_the_logger
+
+
+def _get_user_profile(
+    the_user_claims: authn.UserClaims,
+) -> models.UserProfile:
+    """Validate and convert user claims to a UserProfile.
+
+    Raises HTTP 401 if required claims are missing.
+    """
+    try:
+        return models.UserProfile.from_user_claims(the_user_claims)
+    except ValueError as exc:
+        raise fastapi.HTTPException(
+            status_code=401,
+            detail="missing_identity_claims",
+        ) from exc
 
 
 async def _check_user_in_room(
@@ -90,7 +107,7 @@ async def _check_user_room_agent(
             detail=f"No such room: {room_id}",
         ) from None
 
-    user_profile = models.UserProfile.from_user_claims(the_user_claims)
+    user_profile = _get_user_profile(the_user_claims)
     return user_profile, agent
 
 
@@ -108,7 +125,7 @@ async def get_room_agui(
     """Return user's extant AGUI threads within the given room"""
     the_logger.debug(loggers.AGUI_GET_ROOM)
 
-    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    user_name = _get_user_profile(the_user_claims).preferred_username
     _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
@@ -158,7 +175,7 @@ async def get_room_agui_thread_id(
     """Return metadata about a specific thread and its runs"""
     the_logger.debug(loggers.AGUI_GET_ROOM_THREAD)
 
-    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    user_name = _get_user_profile(the_user_claims).preferred_username
     _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
@@ -218,7 +235,7 @@ async def get_room_agui_thread_id_run_id(
     """Return metadata about a specific run"""
     the_logger.debug(loggers.AGUI_GET_ROOM_THREAD_RUN)
 
-    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    user_name = _get_user_profile(the_user_claims).preferred_username
     _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
@@ -272,7 +289,7 @@ async def post_room_agui(
     """
     the_logger.debug(loggers.AGUI_POST_ROOM)
 
-    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    user_name = _get_user_profile(the_user_claims).preferred_username
     room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
@@ -358,7 +375,7 @@ async def post_room_agui_thread_id(
     """
     the_logger.debug(loggers.AGUI_POST_ROOM_THREAD)
 
-    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    user_name = _get_user_profile(the_user_claims).preferred_username
     _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
@@ -432,7 +449,7 @@ async def post_room_agui_thread_id_meta(
     """
     the_logger.debug(loggers.AGUI_POST_ROOM_THREAD_META)
 
-    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    user_name = _get_user_profile(the_user_claims).preferred_username
     _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
@@ -498,6 +515,7 @@ async def drive_llm_stream(
     room_id: str,
     thread_id: str,
     run_id: str,
+    principal_id: str = None,
 ):
     """Primary consumer of LLM event stream
 
@@ -507,6 +525,9 @@ async def drive_llm_stream(
         "AG-UI event stream: {thread_id}/{run_id}",
         thread_id=thread_id,
         run_id=run_id,
+        principal_id=principal_id,
+        room_id=room_id,
+        user_name=user_name,
     ):
         event_list = []
         error_message = None
@@ -582,7 +603,6 @@ async def post_room_agui_thread_id_run_id(
     """
     the_logger.debug(loggers.AGUI_POST_ROOM_THREAD_RUN)
 
-    user_name = the_user_claims.get("preferred_username", "<unknown>")
     user, agent = await _check_user_room_agent(
         room_id=room_id,
         the_installation=the_installation,
@@ -590,10 +610,20 @@ async def post_room_agui_thread_id_run_id(
         the_user_claims=the_user_claims,
         the_logger=the_logger,
     )
+    user_name = user.preferred_username
 
     agui_adapter = await ai_ag_ui.AGUIAdapter.from_request(
         request=request,
         agent=agent,
+    )
+
+    principal = agents.AgentPrincipal.mint(
+        user=user,
+        room_id=room_id,
+    )
+    the_logger.debug(
+        loggers.AGUI_RUN_PRINCIPAL_MINTED,
+        principal.principal_id,
     )
 
     try:
@@ -603,6 +633,7 @@ async def post_room_agui_thread_id_run_id(
             thread_id=thread_id,
             run_id=run_id,
             run_input=agui_adapter.run_input,
+            principal_id=principal.principal_id,
         )
 
     except agui_package.AGUI_Exception as exc:
@@ -614,6 +645,7 @@ async def post_room_agui_thread_id_run_id(
     agent_deps = await the_installation.get_agent_deps_for_room(
         room_id=room_id,
         user=user,
+        principal=principal,
         run_agent_input=agui_adapter.run_input,
         the_logger=the_logger,
     )
@@ -655,6 +687,7 @@ async def post_room_agui_thread_id_run_id(
             room_id=room_id,
             thread_id=thread_id,
             run_id=run_id,
+            principal_id=principal.principal_id,
         )
     )
 
@@ -702,7 +735,7 @@ async def post_room_agui_thread_id_run_id_meta(
     """
     the_logger.debug(loggers.AGUI_POST_ROOM_THREAD_RUN_META)
 
-    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    user_name = _get_user_profile(the_user_claims).preferred_username
     _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
@@ -757,7 +790,7 @@ async def post_room_agui_thread_id_run_id_feedback(
     """
     the_logger.debug(loggers.AGUI_POST_ROOM_THREAD_RUN_FEEDBACK)
 
-    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    user_name = _get_user_profile(the_user_claims).preferred_username
     _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
@@ -800,7 +833,7 @@ async def delete_room_agui_thread_id(
     """Delete an AGUI thread within the given room"""
     the_logger.debug(loggers.AGUI_DELETE_ROOM_THREAD)
 
-    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    user_name = _get_user_profile(the_user_claims).preferred_username
     _room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,

@@ -60,6 +60,7 @@ def authenticate(
         payload = validate_access_token(
             token,
             auth_system.token_validation_pem,
+            expected_audience=auth_system.expected_audience,
         )
         if payload is not None:
             return payload
@@ -70,13 +71,17 @@ def authenticate(
     )
 
 
-def validate_access_token(token, token_validation_pem):
+def validate_access_token(
+    token, token_validation_pem, expected_audience=None
+):
     try:
+        options = {"verify_aud": expected_audience is not None}
         return jwt.decode(
             token,
             token_validation_pem,
             algorithms=["RS256"],
-            options={"verify_aud": False},
+            options=options,
+            audience=expected_audience,
         )
     except jwt.InvalidTokenError:
         return None

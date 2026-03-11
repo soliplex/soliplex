@@ -194,14 +194,7 @@ async def test_openai_chat_completion(
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize(
-    "w_auth_user, exp_user",
-    [
-        ({}, UNKNOWN_USER_CLAIMS),
-        (AUTH_USER_CLAIMS, AUTH_USER_CLAIMS),
-    ],
-)
-async def test_post_chat_completion_miss(w_auth_user, exp_user):
+async def test_post_chat_completion_miss():
     request = object()
     chat_request = mock.create_autospec(models.ChatCompletionRequest)
     chat_request.messages = ()
@@ -215,17 +208,35 @@ async def test_post_chat_completion_miss(w_auth_user, exp_user):
             completion_id="nonesuch",
             chat_request=chat_request,
             the_installation=the_installation,
-            the_user_claims=w_auth_user,
+            the_user_claims=AUTH_USER_CLAIMS,
         )
 
     assert exc.value.status_code == 404
 
 
 @pytest.mark.anyio
+async def test_post_chat_completion_missing_claims():
+    request = object()
+    chat_request = mock.create_autospec(models.ChatCompletionRequest)
+    the_installation = mock.create_autospec(installation.Installation)
+
+    with pytest.raises(fastapi.HTTPException) as exc:
+        await completions_views.post_chat_completion(
+            request=request,
+            completion_id="test",
+            chat_request=chat_request,
+            the_installation=the_installation,
+            the_user_claims={},
+        )
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail == "missing_identity_claims"
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     "w_auth_user, exp_user",
     [
-        ({}, UNKNOWN_USER_CLAIMS),
         (AUTH_USER_CLAIMS, AUTH_USER_CLAIMS),
     ],
 )

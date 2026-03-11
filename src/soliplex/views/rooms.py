@@ -161,7 +161,11 @@ async def get_room_mcp_token(
         room_id,
         **the_user_claims,
     )
-    return models.MCPToken(room_id=room_id, mcp_token=mcp_token)
+    return models.MCPToken(
+        room_id=room_id,
+        mcp_token=mcp_token,
+        expires_in=mcp_auth.DEFAULT_MCP_TOKEN_MAX_AGE,
+    )
 
 
 @util.logfire_span("GET /v1/rooms/{room_id}/documents")

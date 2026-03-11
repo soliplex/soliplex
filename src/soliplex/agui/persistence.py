@@ -193,6 +193,7 @@ class ThreadStorage(agui_package.ThreadStorage):
         thread_id: str,
         run_metadata: agui_schema.RunMetadata | dict = None,
         parent_run_id: str = None,
+        principal_id: str = None,
     ) -> agui_schema.Run:
         async with self.session as session:
             thread = await self._find_user_thread(
@@ -218,6 +219,7 @@ class ThreadStorage(agui_package.ThreadStorage):
                 run = agui_schema.Run(
                     thread=thread,
                     parent=parent,
+                    principal_id=principal_id,
                 )
                 session.add(run)
 
@@ -263,6 +265,7 @@ class ThreadStorage(agui_package.ThreadStorage):
         thread_id: str,
         run_id: str,
         run_input: agui_core.RunAgentInput,
+        principal_id: str = None,
     ) -> agui_schema.Run:
         """Update a run with the given 'run_agent_input'"""
         async with self.session as session:
@@ -282,6 +285,10 @@ class ThreadStorage(agui_package.ThreadStorage):
                     thread_id,
                     run_id,
                 )
+
+            if principal_id is not None:
+                run.principal_id = principal_id
+
             session.add(
                 agui_schema.RunAgentInput.from_agui_model(
                     run=run, model=run_input
