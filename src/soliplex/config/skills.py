@@ -132,6 +132,8 @@ class _SkillConfigModelBase:
         if self.model_name is not None:
             return self.model_name
 
+        return None
+
 
 class _SkillPropertiesFromMetadata(typing.Protocol):
     @property
