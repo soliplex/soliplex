@@ -437,6 +437,20 @@ def check_config(
                 the_console.print("  OK")
             the_console.line()
 
+        room_skills = room_config.skills
+
+        if room_skills is not None:
+            for s_name, s_config in room_skills.skill_configs.items():
+                if isinstance(s_config, config_rag._RAGConfigBase):
+                    the_console.print(f"- Checking skill RAG DB: {s_name}")
+                    try:
+                        s_config.rag_lancedb_path  # noqa B018
+                    except Exception as exc:
+                        the_console.print(exc)
+                    else:
+                        the_console.print("  OK")
+                    the_console.line()
+
         for tool_config in room_config.tool_configs:
             if isinstance(tool_config, config_rag._RAGConfigBase):
                 the_console.print("- Checking tool RAG DB: {tool_config.id}")
