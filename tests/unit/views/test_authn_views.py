@@ -386,6 +386,23 @@ async def test_get_authn_system_without_hash():
 
 
 @pytest.mark.anyio
+async def test_get_user_info_missing_claims():
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.auth_disabled = False
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    with pytest.raises(fastapi.HTTPException) as exc:
+        await authn_views.get_user_info(
+            the_installation=the_installation,
+            the_user_claims={"preferred_username": USER_NAME},
+            the_logger=the_logger,
+        )
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail == "missing_identity_claims"
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("w_auth_disabled", [False, True])
 async def test_get_user_info(w_auth_disabled):
     the_installation = mock.create_autospec(installation.Installation)

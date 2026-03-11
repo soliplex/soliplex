@@ -166,6 +166,7 @@ AGUI_RUNS = {
         created=NOW,
         finished=None,
         parent_run_id=None,
+        principal_id=None,
         run_metadata=None,
         run_input=EMPTY_AGUI_RUN_INPUT.model_copy(deep=True),
         _events=AGUI_EVENTS,
@@ -1215,19 +1216,33 @@ def test_installation_from_config_w_agui_feature(
         assert m_feature.source == c_feature.source
 
 
+def test_userprofile_from_user_claims():
+    found = models.UserProfile.from_user_claims(AUTH_USER_CLAIMS)
+
+    assert found == models.UserProfile(**AUTH_USER_CLAIMS)
+
+
+def test_userprofile_from_user_claims_defaults():
+    claims = {"email": EMAIL, "preferred_username": USER_NAME}
+    found = models.UserProfile.from_user_claims(claims)
+
+    assert found.given_name == ""
+    assert found.family_name == ""
+    assert found.email == EMAIL
+    assert found.preferred_username == USER_NAME
+
+
 @pytest.mark.parametrize(
-    "user_claims, exp_profile_kw",
+    "claims",
     [
-        ({}, UNKNOWN_USER_PROFILE_KW),
-        (AUTH_USER_CLAIMS, AUTH_USER_CLAIMS),
+        {},
+        {"email": EMAIL},
+        {"preferred_username": USER_NAME},
     ],
 )
-def test_userprofile_from_user_claims(user_claims, exp_profile_kw):
-    expected = models.UserProfile(**exp_profile_kw)
-
-    found = models.UserProfile.from_user_claims(user_claims)
-
-    assert found == expected
+def test_userprofile_from_user_claims_rejects_missing(claims):
+    with pytest.raises(ValueError):  # noqa PT011
+        models.UserProfile.from_user_claims(claims)
 
 
 @pytest.mark.parametrize(
@@ -1271,6 +1286,10 @@ def test_aguirunusage_from_tuple():
 @pytest.mark.parametrize("w_finished", [False, True])
 @pytest.mark.parametrize("w_events", [False, True])
 @pytest.mark.parametrize("w_parent", [False, True])
+@pytest.mark.parametrize(
+    "w_principal_id",
+    [None, "principal-abc-123"],
+)
 def test_aguirun_from_run(
     run_input,
     w_parent,
@@ -1278,6 +1297,7 @@ def test_aguirun_from_run(
     w_finished,
     run_metadata,
     exp_label,
+    w_principal_id,
 ):
     a_run = _make_run(
         thread_id=AGUI_THREAD_ID,
@@ -1285,6 +1305,7 @@ def test_aguirun_from_run(
         created=NOW,
         finished=NOW if w_finished else None,
         parent_run_id=AGUI_PARENT_RUN_ID if w_parent else None,
+        principal_id=w_principal_id,
         run_input=run_input,
     )
 
@@ -1299,6 +1320,7 @@ def test_aguirun_from_run(
     assert found.run_id == AGUI_RUN_ID
     assert found.created == NOW
     assert found.parent_run_id == (AGUI_PARENT_RUN_ID if w_parent else None)
+    assert found.principal_id == w_principal_id
     assert found.run_input is run_input
 
     if w_events:

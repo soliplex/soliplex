@@ -28,6 +28,7 @@ class OIDCAuthSystemConfig:
     token_validation_pem: str
     client_id: str
     scope: str = None
+    expected_audience: str = None
     client_secret: str = ""  # "env:{JOSCE_CLIENT_SECRET}"
     oidc_client_pem_path: pathlib.Path = None
 

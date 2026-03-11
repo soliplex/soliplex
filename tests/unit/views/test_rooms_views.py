@@ -295,6 +295,7 @@ async def test_get_room_mcp_token(gust, w_error):
         expected = {
             "room_id": ROOM_ID,
             "mcp_token": MCP_TOKEN,
+            "expires_in": 3600,
         }
         assert found.model_dump() == expected
 

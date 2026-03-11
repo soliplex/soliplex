@@ -267,6 +267,8 @@ class Run(Base):
         default=None,
     )
 
+    principal_id: Mapped[str | None] = mapped_column(default=None)
+
     async def list_events(self) -> list[agui_core.Event]:
         return [
             event.to_agui_model()

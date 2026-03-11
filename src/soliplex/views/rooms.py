@@ -162,7 +162,11 @@ async def get_room_mcp_token(
         room_id,
         **the_user_claims,
     )
-    return models.MCPToken(room_id=room_id, mcp_token=mcp_token)
+    return models.MCPToken(
+        room_id=room_id,
+        mcp_token=mcp_token,
+        expires_in=mcp_auth.DEFAULT_MCP_TOKEN_MAX_AGE,
+    )
 
 
 def _get_haiku_rag_client_kw(room_config: config_rooms.RoomConfig):

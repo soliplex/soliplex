@@ -77,7 +77,7 @@ def the_installation():
     return mock.create_autospec(config_installation.InstallationConfig)
 
 
-@pytest.mark.parametrize("w_max_age", [None, 3600])
+@pytest.mark.parametrize("w_max_age", [None, 7200])
 @pytest.mark.parametrize("w_auth_disabled", [False, True])
 def test_fmcptokenprovider_ctor(the_installation, w_auth_disabled, w_max_age):
     the_installation.auth_disabled = w_auth_disabled
@@ -90,7 +90,12 @@ def test_fmcptokenprovider_ctor(the_installation, w_auth_disabled, w_max_age):
         found = mcp_auth.FastMCPTokenProvider(ROOM_ID, the_installation)
 
     assert found.room_id == ROOM_ID
-    assert found.max_age == w_max_age
+    exp_max_age = (
+        w_max_age
+        if w_max_age is not None
+        else mcp_auth.DEFAULT_MCP_TOKEN_MAX_AGE
+    )
+    assert found.max_age == exp_max_age
     assert found.auth_disabled == w_auth_disabled
     assert found.secret_key == the_installation.get_secret.return_value
 
@@ -101,7 +106,7 @@ def test_fmcptokenprovider_ctor(the_installation, w_auth_disabled, w_max_age):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_hit", [False, True])
-@pytest.mark.parametrize("w_max_age", [None, 3600])
+@pytest.mark.parametrize("w_max_age", [None, 7200])
 @pytest.mark.parametrize("w_auth_disabled", [False, True])
 @mock.patch("soliplex.mcp_auth.validate_url_safe_token")
 async def test_fmcptokenprovider_verify_token(
@@ -115,6 +120,7 @@ async def test_fmcptokenprovider_verify_token(
     REAL_USER = {
         "name": "Bharney Rhybble",
         "email": "bharney@example.com",
+        "preferred_username": "bharney",
     }
 
     the_installation.auth_disabled = w_auth_disabled
@@ -136,17 +142,51 @@ async def test_fmcptokenprovider_verify_token(
 
     found = await fmtp.verify_token(TOKEN)
 
-    if w_auth_disabled or w_hit:
+    if w_auth_disabled:
         assert isinstance(found, mcp_auth_provider.AccessToken)
         assert found.token == TOKEN
-        assert found.client_id == ROOM_ID
+        assert found.client_id == "phreddy"
+        assert list(found.scopes) == [f"room:{ROOM_ID}"]
+    elif w_hit:
+        assert isinstance(found, mcp_auth_provider.AccessToken)
+        assert found.token == TOKEN
+        assert found.client_id == "bharney"
+        assert list(found.scopes) == [f"room:{ROOM_ID}"]
     else:
         assert found is None
 
     if not w_auth_disabled:
+        exp_max_age = (
+            w_max_age
+            if w_max_age is not None
+            else mcp_auth.DEFAULT_MCP_TOKEN_MAX_AGE
+        )
         vust.assert_called_once_with(
             URL_SAFE_TOKEN_SECRET_KEY,
             ROOM_ID,
             TOKEN,
-            max_age=w_max_age,
+            max_age=exp_max_age,
         )
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.mcp_auth.validate_url_safe_token")
+async def test_fmcptokenprovider_rejects_missing_username(
+    vust,
+    the_installation,
+):
+    TOKEN = "DEADBEEF"
+    REAL_USER_NO_USERNAME = {
+        "name": "Bharney Rhybble",
+        "email": "bharney@example.com",
+    }
+
+    the_installation.auth_disabled = False
+    the_installation.get_secret.return_value = URL_SAFE_TOKEN_SECRET_KEY
+
+    fmtp = mcp_auth.FastMCPTokenProvider(ROOM_ID, the_installation)
+    vust.return_value = REAL_USER_NO_USERNAME
+
+    found = await fmtp.verify_token(TOKEN)
+
+    assert found is None

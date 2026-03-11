@@ -5,12 +5,15 @@ import pytest
 
 from soliplex import agents
 from soliplex import installation
+from soliplex import models
 from soliplex import tools
 
-USER = {
-    "full_name": "Phreddy Phlyntstone",
-    "email": "phreddy@example.com",
-}
+USER = models.UserProfile(
+    given_name="Phreddy",
+    family_name="Phlyntstone",
+    email="phreddy@example.com",
+    preferred_username="phreddy",
+)
 
 
 @pytest.fixture

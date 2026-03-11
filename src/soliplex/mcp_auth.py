@@ -66,15 +66,18 @@ def validate_url_safe_token(
         return found
 
 
+DEFAULT_MCP_TOKEN_MAX_AGE = 3600
+
+
 class FastMCPTokenProvider(fmcp_server_auth.TokenVerifier):
     room_id: str
-    max_age: int = None
+    max_age: int = DEFAULT_MCP_TOKEN_MAX_AGE
 
     def __init__(
         self,
         room_id: str,
         the_installation: installation.Installation,
-        max_age: int = None,
+        max_age: int = DEFAULT_MCP_TOKEN_MAX_AGE,
     ):
         self.room_id = room_id
         self.max_age = max_age
@@ -88,7 +91,7 @@ class FastMCPTokenProvider(fmcp_server_auth.TokenVerifier):
         token: str,
     ) -> mcp_auth_provider.AccessToken | None:
         if self.auth_disabled:
-            validated = token
+            validated = {"preferred_username": "phreddy"}
         else:
             validated = validate_url_safe_token(
                 self.secret_key,
@@ -98,8 +101,11 @@ class FastMCPTokenProvider(fmcp_server_auth.TokenVerifier):
             )
 
         if validated is not None:
+            username = validated.get("preferred_username")
+            if not username:
+                return None
             return mcp_auth_provider.AccessToken(
                 token=token,
-                client_id=self.room_id,
-                scopes=(),
+                client_id=username,
+                scopes=(f"room:{self.room_id}",),
             )

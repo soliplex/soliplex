@@ -146,6 +146,7 @@ def test_authenticate(vat, with_auth_systems, w_hit):
                 vat.assert_called_once_with(
                     token,
                     with_auth_systems[0].token_validation_pem,
+                    expected_audience=with_auth_systems[0].expected_audience,
                 )
             else:
                 assert found is SECOND_USER
@@ -153,16 +154,19 @@ def test_authenticate(vat, with_auth_systems, w_hit):
                 assert first_call == mock.call(
                     token,
                     with_auth_systems[0].token_validation_pem,
+                    expected_audience=with_auth_systems[0].expected_audience,
                 )
                 assert second_call == mock.call(
                     token,
                     with_auth_systems[1].token_validation_pem,
+                    expected_audience=with_auth_systems[1].expected_audience,
                 )
 
 
 @pytest.mark.parametrize("w_hit", [False, True])
+@pytest.mark.parametrize("w_audience", [None, "soliplex-backend"])
 @mock.patch("jwt.decode")
-def test_validate_access_token(jwtd, w_hit):
+def test_validate_access_token(jwtd, w_audience, w_hit):
     TOKEN = object()
     PEM = "abcdef0123456789"
     PAYLOAD = {"name": "Phreddy Phlyntstone", "email": "phreddy@example.com"}
@@ -172,7 +176,9 @@ def test_validate_access_token(jwtd, w_hit):
     else:
         jwtd.side_effect = jwt.InvalidTokenError
 
-    found = authn.validate_access_token(TOKEN, PEM)
+    found = authn.validate_access_token(
+        TOKEN, PEM, expected_audience=w_audience
+    )
 
     if w_hit:
         assert found == PAYLOAD
@@ -184,5 +190,6 @@ def test_validate_access_token(jwtd, w_hit):
         TOKEN,
         PEM,
         algorithms=["RS256"],
-        options={"verify_aud": False},
+        options={"verify_aud": w_audience is not None},
+        audience=w_audience,
     )

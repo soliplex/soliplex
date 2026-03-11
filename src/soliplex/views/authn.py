@@ -169,4 +169,10 @@ async def get_user_info(
         )
 
     the_logger.debug(loggers.AUTHN_GET_USER_INFO)
-    return models.UserProfile.from_user_claims(the_user_claims)
+    try:
+        return models.UserProfile.from_user_claims(the_user_claims)
+    except ValueError as exc:
+        raise fastapi.HTTPException(
+            status_code=401,
+            detail="missing_identity_claims",
+        ) from exc

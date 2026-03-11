@@ -313,6 +313,34 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     await the_async_session.commit()
 
+    w_principal = await ts.new_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+
+    w_principal_id = await w_principal.awaitable_attrs.run_id
+
+    await the_async_session.commit()
+
+    await ts.add_run_input(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=w_principal_id,
+        run_input=agui_constants.FULL_RUN_AGENT_INPUT,
+        principal_id="test-principal-id",
+    )
+
+    await the_async_session.commit()
+
+    assert (
+        await w_principal.awaitable_attrs.principal_id
+        == "test-principal-id"
+    )
+
+    await the_async_session.commit()
+
     with pytest.raises(agui_package.RunAlreadyStarted):
         await ts.add_run_input(
             user_name=USER_NAME,

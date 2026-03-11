@@ -24,7 +24,10 @@ GIVEN_NAME = "Phred"
 FAMILY_NAME = "Phlyntstone"
 EMAIL = "phreddy@example.com"
 
-THE_USER_CLAIMS = {"preferred_username": USER_NAME}
+THE_USER_CLAIMS = {
+    "preferred_username": USER_NAME,
+    "email": EMAIL,
+}
 
 AUTH_USER = {
     "preferred_username": USER_NAME,
@@ -34,10 +37,10 @@ AUTH_USER = {
 }
 
 UNKNOWN_USER = {
-    "preferred_username": "<unknown>",
-    "given_name": "<unknown>",
-    "family_name": "<unknown>",
-    "email": "<unknown>",
+    "preferred_username": USER_NAME,
+    "given_name": "",
+    "family_name": "",
+    "email": EMAIL,
 }
 
 TEST_ROOM_ID = "test-room"
@@ -112,6 +115,7 @@ def test_run():
         thread_id=TEST_THREAD_ID,
         run_id=TEST_RUN_ID,
         parent_run_id=None,
+        principal_id=None,
         run_metadata=None,
         created=NOW,
         finished=None,
@@ -250,6 +254,27 @@ async def test__check_user_room_agent(w_miss, expectation):
         the_authz_policy=the_authz_policy,
         the_logger=the_logger,
     )
+
+
+@pytest.mark.parametrize(
+    "claims, raises",
+    [
+        ({"email": "a@b.com", "preferred_username": "a"}, False),
+        ({"email": "a@b.com"}, True),
+        ({"preferred_username": "a"}, True),
+        ({}, True),
+    ],
+)
+def test__get_user_profile(claims, raises):
+    if raises:
+        with pytest.raises(fastapi.HTTPException) as exc:
+            agui_views._get_user_profile(claims)
+        assert exc.value.status_code == 401
+        assert exc.value.detail == "missing_identity_claims"
+    else:
+        profile = agui_views._get_user_profile(claims)
+        assert profile.email == "a@b.com"
+        assert profile.preferred_username == "a"
 
 
 @pytest.mark.anyio
@@ -995,6 +1020,9 @@ async def test_drive_llm_stream(
         "AG-UI event stream: {thread_id}/{run_id}",
         thread_id=TEST_THREAD_ID,
         run_id=TEST_RUN_ID,
+        principal_id=None,
+        room_id=TEST_ROOM_ID,
+        user_name=USER_NAME,
     )
 
     if len(expected) == 0:
@@ -1055,9 +1083,11 @@ async def test_stream_llm_events(num_events):
 @mock.patch("soliplex.agui.compact_event_stream")
 @mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
+@mock.patch("soliplex.views.agui.agents.AgentPrincipal.mint")
 @mock.patch("soliplex.views.agui.logfire")
 async def test_post_room_agui_thread_id_run_id_streaming(
     logfire,
+    mint_principal,
     cura,
     aga,
     ces,
@@ -1137,6 +1167,8 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         assert sle.call_args_list[0].kwargs == {}
         (event_queue,) = sle.call_args_list[0].args
 
+        exp_principal = mint_principal.return_value
+
         dls.assert_called_once_with(
             llm_stream=ces.return_value,
             sqla_engine=sqla_engine,
@@ -1145,6 +1177,7 @@ async def test_post_room_agui_thread_id_run_id_streaming(
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID,
             run_id=TEST_RUN_ID,
+            principal_id=exp_principal.principal_id,
         )
 
         ces.assert_called_once_with(exp_agent_stream)
@@ -1190,6 +1223,7 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         the_installation.get_agent_deps_for_room.assert_called_once_with(
             room_id=TEST_ROOM_ID,
             user=USER_PROFILE,
+            principal=exp_principal,
             run_agent_input=exp_adapter.run_input,
             the_logger=the_logger,
         )
@@ -1205,6 +1239,7 @@ async def test_post_room_agui_thread_id_run_id_streaming(
             thread_id=TEST_THREAD_ID,
             run_id=TEST_RUN_ID,
             run_input=exp_adapter.run_input,
+            principal_id=exp_principal.principal_id,
         )
 
         cura.assert_called_once_with(
@@ -1215,7 +1250,17 @@ async def test_post_room_agui_thread_id_run_id_streaming(
             the_logger=the_logger,
         )
 
-    the_logger.debug.assert_called_once_with(loggers.AGUI_POST_ROOM_THREAD_RUN)
+    the_logger.debug.assert_any_call(loggers.AGUI_POST_ROOM_THREAD_RUN)
+
+    if expected is None:
+        the_logger.debug.assert_any_call(
+            loggers.AGUI_RUN_PRINCIPAL_MINTED,
+            exp_principal.principal_id,
+        )
+        mint_principal.assert_called_once_with(
+            user=USER_PROFILE,
+            room_id=TEST_ROOM_ID,
+        )
 
 
 @pytest.mark.anyio

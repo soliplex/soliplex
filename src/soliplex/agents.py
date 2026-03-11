@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import abc
 import dataclasses
+import datetime
 import typing
+import uuid
 
 import pydantic_ai
 from haiku.skills import agent as hs_agent
@@ -25,6 +27,43 @@ from soliplex.config import tools as config_tools
 
 ToolConfigMap = dict[str, typing.Any]
 
+DEFAULT_PRINCIPAL_MAX_DURATION = 300
+
+
+@dataclasses.dataclass(frozen=True)
+class AgentPrincipal:
+    """Unique identity for an agent run execution."""
+
+    principal_id: str
+    parent_principal_id: str | None
+    user_email: str
+    user_username: str
+    room_id: str
+    created_at: datetime.datetime
+    expires_at: datetime.datetime
+
+    @classmethod
+    def mint(
+        cls,
+        user: models.UserProfile,
+        room_id: str,
+        max_duration_seconds: int = DEFAULT_PRINCIPAL_MAX_DURATION,
+        parent_principal_id: str | None = None,
+    ) -> AgentPrincipal:
+        now = datetime.datetime.now(datetime.UTC)
+        return cls(
+            principal_id=str(uuid.uuid4()),
+            parent_principal_id=parent_principal_id,
+            user_email=user.email,
+            user_username=user.preferred_username,
+            room_id=room_id,
+            created_at=now,
+            expires_at=now
+            + datetime.timedelta(
+                seconds=max_duration_seconds,
+            ),
+        )
+
 
 class SkillToolsetConfig(typing.Protocol):
     # contract for config.RoomSkillsConfig etc.
@@ -41,7 +80,8 @@ class AgentDependencies:
     """
 
     the_installation: typing.Any  # installation.Installation
-    user: models.UserProfile = None  # TBD make required
+    user: models.UserProfile
+    principal: AgentPrincipal | None = None
     tool_configs: ToolConfigMap = None
     thread_id: str | None = None
     state: agui.AGUI_State = dataclasses.field(default_factory=dict)

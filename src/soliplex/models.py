@@ -513,6 +513,7 @@ class GitMetadata(pydantic.BaseModel):
 class MCPToken(pydantic.BaseModel):
     room_id: str
     mcp_token: str
+    expires_in: int | None = None
 
 
 # ----------------------------------------------------------------------------
@@ -528,14 +529,20 @@ class UserProfile(pydantic.BaseModel):
 
     @classmethod
     def from_user_claims(cls, user_claims: dict[str, typing.Any]):
+        email = user_claims.get("email")
+        username = user_claims.get("preferred_username")
+        if not email or not username:
+            missing = []
+            if not email:
+                missing.append("email")
+            if not username:
+                missing.append("preferred_username")
+            raise ValueError(", ".join(missing))
         return cls(
-            given_name=user_claims.get("given_name", "<unknown>"),
-            family_name=user_claims.get("family_name", "<unknown>"),
-            email=user_claims.get("email", "<unknown>"),
-            preferred_username=user_claims.get(
-                "preferred_username",
-                "<unknown>",
-            ),
+            given_name=user_claims.get("given_name", ""),
+            family_name=user_claims.get("family_name", ""),
+            email=email,
+            preferred_username=username,
         )
 
 
@@ -622,6 +629,7 @@ class AGUI_Run(pydantic.BaseModel):
     run_id: str = KW_ONLY
 
     parent_run_id: str | None = KW_ONLY_NONE
+    principal_id: str | None = KW_ONLY_NONE
 
     run_input: agui_core.RunAgentInput | None = KW_ONLY_NONE
     created: datetime.datetime = KW_ONLY_NONE
@@ -649,6 +657,7 @@ class AGUI_Run(pydantic.BaseModel):
             created=a_run.created,
             finished=a_run.finished,
             parent_run_id=a_run.parent_run_id,
+            principal_id=a_run.principal_id,
             run_input=a_run_input,
             events=a_run_events,
             metadata=AGUI_RunMetadata.from_run_meta(a_run_meta),
