@@ -267,6 +267,7 @@ class Room(pydantic.BaseModel):
     quizzes: ConfiguredQuizzes
     agent: Agent
     agui_feature_names: list[str]
+    agui_initial_state: dict[str, typing.Any]
     allow_mcp: bool
 
     @classmethod
@@ -309,6 +310,13 @@ class Room(pydantic.BaseModel):
             },
             allow_mcp=room_config.allow_mcp,
             agui_feature_names=list(room_config.agui_feature_names),
+            agui_initial_state={
+                name: config_agui.AGUI_FEATURES_BY_NAME[name]
+                .model_klass()
+                .model_dump(mode="json")
+                for name in room_config.agui_feature_names
+                if name in config_agui.AGUI_FEATURES_BY_NAME
+            },
             agent=agent,
         )
 

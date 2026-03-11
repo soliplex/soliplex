@@ -13,6 +13,7 @@ from haiku.skills import models as hs_models
 from soliplex import agui as agui_package
 from soliplex import models
 from soliplex.config import agents as config_agents
+from soliplex.config import agui as config_agui
 from soliplex.config import authsystem as config_authsystem
 from soliplex.config import completions as config_completions
 from soliplex.config import installation as config_installation
@@ -820,6 +821,37 @@ def test_room_from_config_w_tools(room_ic, default_agent, gcd_tool_config):
     }
 
     assert room_model.agui_feature_names == [FEATURE_NAME]
+    # Feature not registered, so initial state should be empty
+    assert room_model.agui_initial_state == {}
+
+
+def test_room_from_config_agui_initial_state(
+    room_ic,
+    default_agent,
+    gcd_tool_config,
+    patched_agui_features,
+    the_agui_feature,
+):
+    patched_agui_features[FEATURE_NAME] = config_agui.AGUI_Feature(
+        name=FEATURE_NAME,
+        model_klass=the_agui_feature.model_klass,
+        source=the_agui_feature.source,
+    )
+
+    room_config = config_rooms.RoomConfig(
+        id=ROOM_ID,
+        name=ROOM_NAME,
+        description=ROOM_DESCRIPTION,
+        agent_config=default_agent,
+        tool_configs={"get_current_datetime": gcd_tool_config},
+        _installation_config=room_ic,
+    )
+
+    room_model = models.Room.from_config(room_config)
+
+    assert room_model.agui_initial_state == {
+        FEATURE_NAME: {},
+    }
 
 
 def test_room_from_config_w_fs_skills(

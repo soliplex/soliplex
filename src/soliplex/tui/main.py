@@ -12,7 +12,6 @@ from textual import widget as t_widget
 from textual import widgets as t_widgets
 
 from soliplex.agui import parser as agui_parser
-from soliplex.config.agui import AGUI_FEATURES_BY_NAME
 from soliplex.tui import rest_api
 
 
@@ -769,15 +768,7 @@ class RoomView(t_screen.Screen):
 
     def _build_initial_state(self) -> dict:
         """Build initial AG-UI state based on room features."""
-        state = {}
-        feature_names = self.room_info.get("agui_feature_names", [])
-        for feature_name in feature_names:
-            feature = AGUI_FEATURES_BY_NAME.get(feature_name)
-            if feature is not None:
-                state[feature_name] = feature.model_klass().model_dump(
-                    mode="json"
-                )
-        return state
+        return dict(self.room_info.get("agui_initial_state", {}))
 
     def compose(self) -> t_app.ComposeResult:
         room_info = self.room_info
