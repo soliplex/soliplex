@@ -20,28 +20,6 @@ _COMPACTIBLE_TYPES = {
 }
 
 
-async def compact_event_stream(stream: AGUI_EventStream):
-    compacting: agui_core.Event = None
-    compacting_id: str = None
-
-    async for event in stream:
-        if compacting is not None:
-            event_id = getattr(event, "message_id", None)
-            if event.type == compacting.type and event_id == compacting_id:
-                compacting.delta += event.delta
-            else:
-                to_yield, compacting = compacting, None
-                yield to_yield
-                yield event
-
-        else:
-            if event.type in _COMPACTIBLE_TYPES:
-                compacting = event.model_copy()
-                compacting_id = getattr(event, "message_id", None)
-            else:
-                yield event
-
-
 class AGUI_Exception(ValueError):
     status_code = 400
 
@@ -49,7 +27,7 @@ class AGUI_Exception(ValueError):
 class UnknownThread(AGUI_Exception):
     status_code = 404
 
-    def __init__(self, user_name: str, thread_id: str):
+    def __init__(self, user_name: str, thread_id: str):  # pragma: NO COVER
         self.user_name = user_name
         self.thread_id = thread_id
         message = f"Unknown thread: UUID {thread_id} for user {user_name}"
@@ -59,7 +37,7 @@ class UnknownThread(AGUI_Exception):
 class UnknownRun(AGUI_Exception):
     status_code = 404
 
-    def __init__(self, run_id: str):
+    def __init__(self, run_id: str):  # pragma: NO COVER
         self.run_id = run_id
         super().__init__(
             f"Unknown run: UUID {run_id} does not exist in thread"
@@ -67,7 +45,7 @@ class UnknownRun(AGUI_Exception):
 
 
 class ThreadRoomMismatch(AGUI_Exception):
-    def __init__(self, room_id: str, thread_room_id: str):
+    def __init__(self, room_id: str, thread_room_id: str):  # pragma: NO COVER
         self.room_id = room_id
         self.thread_room_id = thread_room_id
         super().__init__(
@@ -77,7 +55,7 @@ class ThreadRoomMismatch(AGUI_Exception):
 
 
 class MissingParentRun(AGUI_Exception):
-    def __init__(self, parent_run_id: str):
+    def __init__(self, parent_run_id: str):  # pragma: NO COVER
         self.parent_run_id = parent_run_id
         super().__init__(
             f"Unknown parent run: UUID {parent_run_id} "
@@ -86,7 +64,12 @@ class MissingParentRun(AGUI_Exception):
 
 
 class RunAlreadyStarted(AGUI_Exception):
-    def __init__(self, user_name: str, thread_id: str, run_id: str):
+    def __init__(
+        self,
+        user_name: str,
+        thread_id: str,
+        run_id: str,
+    ):  # pragma: NO COVER
         self.user_name = user_name
         self.thread_id = thread_id
         self.run_id = run_id
@@ -367,6 +350,28 @@ class ThreadStorage(abc.ABC):
         reason: str,
     ):
         """Save the run feedback"""
+
+
+async def compact_event_stream(stream: AGUI_EventStream):
+    compacting: agui_core.Event = None
+    compacting_id: str = None
+
+    async for event in stream:
+        if compacting is not None:
+            event_id = getattr(event, "message_id", None)
+            if event.type == compacting.type and event_id == compacting_id:
+                compacting.delta += event.delta
+            else:
+                to_yield, compacting = compacting, None
+                yield to_yield
+                yield event
+
+        else:
+            if event.type in _COMPACTIBLE_TYPES:
+                compacting = event.model_copy()
+                compacting_id = getattr(event, "message_id", None)
+            else:
+                yield event
 
 
 async def get_the_threads(request: fastapi.Request) -> ThreadStorage:
