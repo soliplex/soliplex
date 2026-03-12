@@ -411,6 +411,29 @@ def test_entrypointskillconfig_skill(skill_path, w_metadata_kw, w_kw):
     assert found.state_namespace is w_kw.get("state_namespace")
 
 
+def test_entrypointskillconfig_from_skill_preserves_original():
+    """EntrypointSkillConfig.from_skill returns the original Skill object,
+    preserving tools, instructions, and other fields that would be lost
+    if the Skill were reconstructed from metadata alone."""
+
+    my_tool = mock.Mock()
+
+    original = hs_models.Skill(
+        metadata=hs_models.SkillMetadata(
+            name=SKILL_NAME,
+            description=SKILL_DESC,
+        ),
+        source=hs_models.SkillSource.ENTRYPOINT,
+        instructions="Use the tool.",
+        tools=[my_tool],
+    )
+
+    skill_config = config_skills.EntrypointSkillConfig.from_skill(original)
+    found = skill_config.skill
+
+    assert found is original
+
+
 @pytest.fixture
 def derived_hrskillconfig():
     skill_module = mock.Mock(

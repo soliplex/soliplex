@@ -246,6 +246,20 @@ class EntrypointSkillConfig(_DiscoveredSkillConfigBase):
 
     kind: typing.ClassVar[hs_models.SkillSource] = SkillKind.ENTRYPOINT
 
+    _skill: hs_models.Skill = None
+
+    @classmethod
+    def from_skill(cls, skill: hs_models.Skill):
+        result = super().from_skill(skill)
+        result._skill = skill
+        return result
+
+    @property
+    def skill(self) -> hs_models.Skill:
+        if self._skill is not None:
+            return self._skill
+        return super().skill
+
 
 @dataclasses.dataclass(kw_only=True)
 class _HR_SkillConfigBase(
