@@ -3,6 +3,7 @@ from __future__ import annotations
 import abc
 import collections.abc
 import datetime
+import enum
 import typing
 
 import fastapi
@@ -110,6 +111,21 @@ class RunUsage(abc.ABC):
     @abc.abstractmethod
     def as_tuple(self) -> RunUsageStats:
         """Return values as a tuple."""
+
+
+class RunFeedbackType(enum.StrEnum):
+    OK = "ok"
+    NOT_OK = "not_ok"
+
+
+class RunFeedback(abc.ABC):
+    """Feedback returned from a user for a run"""
+
+    feedback: RunFeedbackType
+    """Feedback for a run (thumbs up / thumbs down)"""
+
+    reason: str | None
+    """Explanation"""
 
 
 class RunMetadata(abc.ABC):
@@ -350,6 +366,17 @@ class ThreadStorage(abc.ABC):
         reason: str,
     ):
         """Save the run feedback"""
+
+    @abc.abstractmethod
+    async def get_run_feedback(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+    ) -> RunFeedback | None:
+        """Get the run feedback"""
 
 
 async def compact_event_stream(stream: AGUI_EventStream):

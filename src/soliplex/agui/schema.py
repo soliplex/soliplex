@@ -490,7 +490,7 @@ class RunFeedback(Base):
     )
     run: Mapped[Run] = relationship(back_populates="run_feedback")
 
-    feedback: Mapped[str] = mapped_column()
+    feedback: Mapped[agui_package.RunFeedbackType] = mapped_column()
     reason: Mapped[str | None] = mapped_column(default=None)
 
 

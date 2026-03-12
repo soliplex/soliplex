@@ -424,3 +424,32 @@ class ThreadStorage(agui_package.ThreadStorage):
             )
 
         return run
+
+    async def get_run_feedback(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+    ) -> agui_package.RunFeedbackType | None:
+        """Get the run feedback"""
+        await self._session.commit()
+
+        result = None
+
+        async with self.session as session:
+            run = await self._find_thread_run(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+                session=session,
+            )
+
+            existing = await run.awaitable_attrs.run_feedback
+
+            if existing is not None:
+                result = existing
+
+        return result

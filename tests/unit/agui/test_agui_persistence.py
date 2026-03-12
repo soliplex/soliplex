@@ -502,7 +502,12 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 
     await the_async_session.commit()
 
-    pre_feedback = await after.awaitable_attrs.run_feedback
+    pre_feedback = await ts.get_run_feedback(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=before_id,
+    )
     assert pre_feedback is None
 
     await the_async_session.commit()
@@ -512,60 +517,44 @@ async def test_threadstorage_thread_run_cru(the_async_session):
         room_id=ROOM_ID,
         thread_id=thread_id,
         run_id=before_id,
-        feedback="testing",
+        feedback="ok",
         reason="just because",
     )
 
     await the_async_session.commit()
 
-    w_feedback = await ts.get_run(
+    run_feedback = await ts.get_run_feedback(
         user_name=USER_NAME,
         room_id=ROOM_ID,
         thread_id=thread_id,
         run_id=before_id,
     )
 
-    feedback = await w_feedback.awaitable_attrs.run_feedback
-
-    assert feedback.feedback == "testing"
-    assert feedback.reason == "just because"
+    assert await run_feedback.awaitable_attrs.feedback == "ok"
+    assert await run_feedback.awaitable_attrs.reason == "just because"
 
     await the_async_session.commit()
-
-    w_feedback = await ts.get_run(
-        user_name=USER_NAME,
-        room_id=ROOM_ID,
-        thread_id=thread_id,
-        run_id=before_id,
-    )
-
-    feedback = await w_feedback.awaitable_attrs.run_feedback
-
-    assert feedback.feedback == "testing"
-    assert feedback.reason == "just because"
 
     await ts.save_run_feedback(
         user_name=USER_NAME,
         room_id=ROOM_ID,
         thread_id=thread_id,
         run_id=before_id,
-        feedback="moar testing",
+        feedback="not_ok",
         reason="dithering",
     )
 
     await the_async_session.commit()
 
-    w_moar_feedback = await ts.get_run(
+    moar_run_feedback = await ts.get_run_feedback(
         user_name=USER_NAME,
         room_id=ROOM_ID,
         thread_id=thread_id,
         run_id=before_id,
     )
 
-    moar_feedback = await w_moar_feedback.awaitable_attrs.run_feedback
-
-    assert moar_feedback.feedback == "moar testing"
-    assert moar_feedback.reason == "dithering"
+    assert await moar_run_feedback.awaitable_attrs.feedback == "not_ok"
+    assert await moar_run_feedback.awaitable_attrs.reason == "dithering"
 
 
 @pytest.mark.asyncio
