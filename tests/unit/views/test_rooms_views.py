@@ -316,7 +316,7 @@ async def test_get_room_mcp_token(gust, w_error):
 @pytest.mark.parametrize(
     "w_kws, expected",
     [
-        (None, None),
+        ([], None),
         ([{"foo": "bar"}], {"foo": "bar"}),
         ([{"foo": "bar"}, {"spam": "qux"}], {"foo": "bar"}),
     ],
