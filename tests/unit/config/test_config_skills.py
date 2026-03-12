@@ -263,6 +263,30 @@ def test_filesystemskillconfig_ctor_w_errors(skill_path):
     assert skill_config.errors == [validation_error]
 
 
+def test_filesystemskillconfig_from_skill_preserves_original(skill_path):
+    """FilesystemSkillConfig.from_skill returns the original Skill object,
+    preserving tools, instructions, and other fields that would be lost
+    if the Skill were reconstructed from metadata alone."""
+
+    my_tool = mock.Mock()
+
+    original = hs_models.Skill(
+        metadata=hs_models.SkillMetadata(
+            name=SKILL_NAME,
+            description=SKILL_DESC,
+        ),
+        source=hs_models.SkillSource.FILESYSTEM,
+        path=skill_path,
+        instructions="Use the tool.",
+        tools=[my_tool],
+    )
+
+    skill_config = config_skills.FilesystemSkillConfig.from_skill(original)
+    found = skill_config.skill
+
+    assert found is original
+
+
 @pytest.mark.parametrize("w_errors", [[], [SKILL_VALIDATION_ERROR]])
 @mock.patch("haiku.skills.discovery.discover_from_paths")
 def test_filesystemskillconfig_from_path(
@@ -460,6 +484,29 @@ def test_entrypointskillconfig_ctor(w_metadata_kw, exp_allowed_tools):
     assert skill_config.compatibility == w_metadata_kw.get("compatibility")
     assert skill_config.allowed_tools == exp_allowed_tools
     assert skill_config.metadata == w_metadata_kw.get("metadata", {})
+
+
+def test_entrypointskillconfig_from_skill_preserves_original():
+    """EntrypointSkillConfig.from_skill returns the original Skill object,
+    preserving tools, instructions, and other fields that would be lost
+    if the Skill were reconstructed from metadata alone."""
+
+    my_tool = mock.Mock()
+
+    original = hs_models.Skill(
+        metadata=hs_models.SkillMetadata(
+            name=SKILL_NAME,
+            description=SKILL_DESC,
+        ),
+        source=hs_models.SkillSource.ENTRYPOINT,
+        instructions="Use the tool.",
+        tools=[my_tool],
+    )
+
+    skill_config = config_skills.EntrypointSkillConfig.from_skill(original)
+    found = skill_config.skill
+
+    assert found is original
 
 
 @pytest.mark.parametrize(
