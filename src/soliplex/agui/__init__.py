@@ -3,7 +3,6 @@ from __future__ import annotations
 import abc
 import collections.abc
 import datetime
-import enum
 import typing
 
 import fastapi
@@ -113,15 +112,10 @@ class RunUsage(abc.ABC):
         """Return values as a tuple."""
 
 
-class RunFeedbackType(enum.StrEnum):
-    OK = "ok"
-    NOT_OK = "not_ok"
-
-
 class RunFeedback(abc.ABC):
     """Feedback returned from a user for a run"""
 
-    feedback: RunFeedbackType
+    feedback: str
     """Feedback for a run (thumbs up / thumbs down)"""
 
     reason: str | None

@@ -530,7 +530,7 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
         room_id=ROOM_ID,
         thread_id=thread_id,
         run_id=before_id,
-        feedback="ok",
+        feedback="thumbs_up",
         reason="just because",
     )
 
@@ -543,7 +543,7 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
         run_id=before_id,
     )
 
-    assert await run_feedback.awaitable_attrs.feedback == "ok"
+    assert await run_feedback.awaitable_attrs.feedback == "thumbs_up"
     assert await run_feedback.awaitable_attrs.reason == "just because"
 
     await the_async_session.commit()
@@ -553,7 +553,7 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
         room_id=ROOM_ID,
         thread_id=thread_id,
         run_id=before_id,
-        feedback="not_ok",
+        feedback="thumbs_down",
         reason="dithering",
     )
 
@@ -566,7 +566,7 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
         run_id=before_id,
     )
 
-    assert await moar_run_feedback.awaitable_attrs.feedback == "not_ok"
+    assert await moar_run_feedback.awaitable_attrs.feedback == "thumbs_down"
     assert await moar_run_feedback.awaitable_attrs.reason == "dithering"
 
     await the_async_session.commit()
@@ -583,7 +583,7 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
         room_id=ROOM_ID,
         thread_id=thread_id,
         run_id=added_id,
-        feedback="ok",
+        feedback="thumbs_up",
         reason="fresh",
     )
 
@@ -593,11 +593,11 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     later, earlier = await ts.list_recent_run_feedback()
 
     later_fb = await later.awaitable_attrs.run_feedback
-    assert await later_fb.awaitable_attrs.feedback == "ok"
+    assert await later_fb.awaitable_attrs.feedback == "thumbs_up"
     assert await later_fb.awaitable_attrs.reason == "fresh"
 
     earlier_fb = await earlier.awaitable_attrs.run_feedback
-    assert await earlier_fb.awaitable_attrs.feedback == "not_ok"
+    assert await earlier_fb.awaitable_attrs.feedback == "thumbs_down"
     assert await earlier_fb.awaitable_attrs.reason == "dithering"
 
     # Query with 'since'
@@ -605,14 +605,14 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     (only,) = await ts.list_recent_run_feedback(since=when)
 
     only_fb = await only.awaitable_attrs.run_feedback
-    assert await only_fb.awaitable_attrs.feedback == "ok"
+    assert await only_fb.awaitable_attrs.feedback == "thumbs_up"
     assert await only_fb.awaitable_attrs.reason == "fresh"
 
     # Query with 'explicit limit'
     (lonely,) = await ts.list_recent_run_feedback(since=when)
 
     lonely_fb = await lonely.awaitable_attrs.run_feedback
-    assert await lonely_fb.awaitable_attrs.feedback == "ok"
+    assert await lonely_fb.awaitable_attrs.feedback == "thumbs_up"
     assert await lonely_fb.awaitable_attrs.reason == "fresh"
 
     # Query with room_id
@@ -626,11 +626,11 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     )
 
     rid_later_fb = await rid_later.awaitable_attrs.run_feedback
-    assert await rid_later_fb.awaitable_attrs.feedback == "ok"
+    assert await rid_later_fb.awaitable_attrs.feedback == "thumbs_up"
     assert await rid_later_fb.awaitable_attrs.reason == "fresh"
 
     rid_earlier_fb = await rid_earlier.awaitable_attrs.run_feedback
-    assert await rid_earlier_fb.awaitable_attrs.feedback == "not_ok"
+    assert await rid_earlier_fb.awaitable_attrs.feedback == "thumbs_down"
     assert await rid_earlier_fb.awaitable_attrs.reason == "dithering"
 
     # Query with user_name
@@ -644,11 +644,11 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     )
 
     uname_later_fb = await uname_later.awaitable_attrs.run_feedback
-    assert await uname_later_fb.awaitable_attrs.feedback == "ok"
+    assert await uname_later_fb.awaitable_attrs.feedback == "thumbs_up"
     assert await uname_later_fb.awaitable_attrs.reason == "fresh"
 
     uname_earlier_fb = await uname_earlier.awaitable_attrs.run_feedback
-    assert await uname_earlier_fb.awaitable_attrs.feedback == "not_ok"
+    assert await uname_earlier_fb.awaitable_attrs.feedback == "thumbs_down"
     assert await uname_earlier_fb.awaitable_attrs.reason == "dithering"
 
     # Query with thread_id
@@ -662,11 +662,11 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     )
 
     tid_later_fb = await tid_later.awaitable_attrs.run_feedback
-    assert await tid_later_fb.awaitable_attrs.feedback == "ok"
+    assert await tid_later_fb.awaitable_attrs.feedback == "thumbs_up"
     assert await tid_later_fb.awaitable_attrs.reason == "fresh"
 
     tid_earlier_fb = await tid_earlier.awaitable_attrs.run_feedback
-    assert await tid_earlier_fb.awaitable_attrs.feedback == "not_ok"
+    assert await tid_earlier_fb.awaitable_attrs.feedback == "thumbs_down"
     assert await tid_earlier_fb.awaitable_attrs.reason == "dithering"
 
 
