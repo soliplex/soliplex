@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 
 import fastapi
 import logfire
@@ -464,6 +465,82 @@ async def post_room_agui_thread_id_meta(
     return fastapi.Response(status_code=205)
 
 
+@util.logfire_span("DELETE /v1/rooms/{room_id}/agui/{thread_id}")
+@router.delete("/v1/rooms/{room_id}/agui/{thread_id}")
+async def delete_room_agui_thread_id(
+    request: fastapi.Request,
+    room_id: str,
+    thread_id: str,
+    the_installation: installation.Installation = depend_the_installation,
+    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
+) -> fastapi.Response:
+    """Delete an AGUI thread within the given room"""
+    the_logger.debug(loggers.AGUI_DELETE_ROOM_THREAD)
+
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    _room_config = await _check_user_in_room(
+        room_id=room_id,
+        the_installation=the_installation,
+        the_authz_policy=the_authz_policy,
+        the_user_claims=the_user_claims,
+        the_logger=the_logger,
+    )
+    try:
+        await the_threads.delete_thread(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+        )
+
+    except agui_package.AGUI_Exception as exc:
+        raise fastapi.HTTPException(
+            status_code=exc.status_code,
+            detail=exc.args,
+        ) from None
+
+    return fastapi.Response(
+        status_code=204,
+        content=f"Deleted thread: {thread_id}",
+    )
+
+
+async def capture_usage_after_stream(
+    result,
+    *,
+    sqla_engine,
+    user_name: str,
+    room_id: str,
+    thread_id: str,
+    run_id: str,
+):
+    """Save the run usage to the database.
+
+    This function needs to build its own session, because the one bound
+    to the request lifetime in the `the_threads` dependency might have
+    been closed (e.g., with an early connection reset).
+    """
+    usage = getattr(result, "usage", None)
+
+    if usage is not None:
+        async with sqla_asyncio.AsyncSession(bind=sqla_engine) as session:
+            the_threads = agui_persistence.ThreadStorage(session)
+
+            usage = usage()
+            await the_threads.save_run_usage(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+                requests=usage.requests,
+                tool_calls=usage.tool_calls,
+            )
+
+
 async def save_thread_run_events(
     sqla_engine,
     event_list,
@@ -618,25 +695,16 @@ async def post_room_agui_thread_id_run_id(
         the_logger=the_logger,
     )
 
-    async def capture_usage_after_stream(result):
-        usage = getattr(result, "usage", None)
-
-        if usage is not None:
-            usage = usage()
-            await the_threads.save_run_usage(
-                user_name=user_name,
-                room_id=room_id,
-                thread_id=thread_id,
-                run_id=run_id,
-                input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-                requests=usage.requests,
-                tool_calls=usage.tool_calls,
-            )
-
     agent_stream = agui_adapter.run_stream(
         deps=agent_deps,
-        on_complete=capture_usage_after_stream,
+        on_complete=functools.partial(
+            capture_usage_after_stream,
+            sqla_engine=request.state.threads_engine,
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+        ),
     )
 
     compacted_stream = agui_package.compact_event_stream(agent_stream)
@@ -783,45 +851,3 @@ async def post_room_agui_thread_id_run_id_feedback(
         ) from None
 
     return fastapi.Response(status_code=205)
-
-
-@util.logfire_span("DELETE /v1/rooms/{room_id}/agui/{thread_id}")
-@router.delete("/v1/rooms/{room_id}/agui/{thread_id}")
-async def delete_room_agui_thread_id(
-    request: fastapi.Request,
-    room_id: str,
-    thread_id: str,
-    the_installation: installation.Installation = depend_the_installation,
-    the_threads: agui_package.ThreadStorage = depend_the_threads,
-    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
-    the_user_claims: authn.UserClaims = depend_the_user_claims,
-    the_logger: loggers.LogWrapper = depend_the_logger,
-) -> fastapi.Response:
-    """Delete an AGUI thread within the given room"""
-    the_logger.debug(loggers.AGUI_DELETE_ROOM_THREAD)
-
-    user_name = the_user_claims.get("preferred_username", "<unknown>")
-    _room_config = await _check_user_in_room(
-        room_id=room_id,
-        the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
-        the_user_claims=the_user_claims,
-        the_logger=the_logger,
-    )
-    try:
-        await the_threads.delete_thread(
-            user_name=user_name,
-            room_id=room_id,
-            thread_id=thread_id,
-        )
-
-    except agui_package.AGUI_Exception as exc:
-        raise fastapi.HTTPException(
-            status_code=exc.status_code,
-            detail=exc.args,
-        ) from None
-
-    return fastapi.Response(
-        status_code=204,
-        content=f"Deleted thread: {thread_id}",
-    )

@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import datetime
+import functools
 from unittest import mock
 
 import fastapi
@@ -900,6 +901,114 @@ async def test_post_room_agui_thread_id_meta(
     )
 
 
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "tsdr_side_effect, expectation",
+    [
+        (None, no_error(204)),
+        (UNKNOWN_THREAD, raises_httpexc(code=404, match="Unknown thread")),
+        (THREAD_ROOM_MISMATCH, raises_httpexc(code=400, match="Thread room")),
+    ],
+)
+@mock.patch("soliplex.views.agui._check_user_in_room")
+async def test_delete_room_agui_thread_id(
+    cuir,
+    the_threads,
+    test_thread,
+    tsdr_side_effect,
+    expectation,
+):
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    cuir.return_value = room_config
+
+    request = fastapi.Request(scope={"type": "http"})
+    the_installation = mock.create_autospec(installation.Installation)
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    the_threads.delete_thread.side_effect = tsdr_side_effect
+
+    with expectation as expected:
+        found = await agui_views.delete_room_agui_thread_id(
+            request,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID,
+            the_installation=the_installation,
+            the_threads=the_threads,
+            the_authz_policy=the_authz_policy,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    if isinstance(expected, int):
+        assert isinstance(found, fastapi.Response)
+        assert found.status_code == expected
+
+    the_threads.delete_thread.assert_called_once_with(
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+    )
+    cuir.assert_called_once_with(
+        room_id=TEST_ROOM_ID,
+        the_installation=the_installation,
+        the_authz_policy=the_authz_policy,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+    the_logger.debug.assert_called_once_with(loggers.AGUI_DELETE_ROOM_THREAD)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("w_usage", [False, True])
+@mock.patch("soliplex.agui.persistence.ThreadStorage")
+@mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
+async def test_capture_usage_after_stream(a_session, t_storage, w_usage):
+    w_session = a_session.return_value.__aenter__.return_value
+    the_threads = t_storage.return_value
+    the_threads.save_run_usage = mock.AsyncMock(spec_set=())
+    sqla_engine = object()
+    usage = mock.create_autospec(
+        agui_package.RunUsage,
+        input_tokens=1,
+        output_tokens=2,
+        requests=3,
+        tool_calls=4,
+    )
+    if w_usage:
+        result = mock.Mock(spec_set=["usage"])
+        result.usage.return_value = usage
+    else:
+        result = object()
+
+    await agui_views.capture_usage_after_stream(
+        result,
+        sqla_engine=sqla_engine,
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+    )
+
+    if w_usage:
+        the_threads.save_run_usage.assert_awaited_once_with(
+            user_name=USER_NAME,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID,
+            run_id=TEST_RUN_ID,
+            input_tokens=1,
+            output_tokens=2,
+            requests=3,
+            tool_calls=4,
+        )
+        t_storage.assert_called_once_with(w_session)
+        a_session.assert_called_once_with(bind=sqla_engine)
+    else:
+        the_threads.save_run_usage.assert_not_awaited()
+        t_storage.assert_not_called()
+        a_session.assert_not_called()
+
+
 @pytest.mark.asyncio
 @mock.patch("soliplex.agui.persistence.ThreadStorage")
 @mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
@@ -1047,11 +1156,11 @@ async def test_stream_llm_events(num_events):
         (ALREADY_STARTED, raises_httpexc(code=400, match="already started")),
     ],
 )
-@pytest.mark.parametrize("w_usage", [False, True])
 @mock.patch("fastapi.responses.StreamingResponse")
 @mock.patch("soliplex.views.streaming.stream_sse_with_keepalive")
 @mock.patch("soliplex.views.agui.stream_llm_events")
 @mock.patch("soliplex.views.agui.drive_llm_stream")
+@mock.patch("soliplex.views.agui.capture_usage_after_stream")
 @mock.patch("soliplex.agui.compact_event_stream")
 @mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
@@ -1061,6 +1170,7 @@ async def test_post_room_agui_thread_id_run_id_streaming(
     cura,
     aga,
     ces,
+    cuas,
     dls,
     sle,
     sswk,
@@ -1068,7 +1178,6 @@ async def test_post_room_agui_thread_id_run_id_streaming(
     the_threads,
     test_run,
     run_input,
-    w_usage,
     ari_side_effect,
     expectation,
 ):
@@ -1154,38 +1263,22 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         assert rs_call_0.args == ()
         assert rs_call_0.kwargs["deps"] is exp_deps
         capture = rs_call_0.kwargs["on_complete"]
-        assert capture.__name__ == "capture_usage_after_stream"
-
-        the_threads.save_run_usage.assert_not_awaited()
+        assert isinstance(capture, functools.partial)
+        assert capture.func is cuas
 
         rs_on_complete = rs_call_0.kwargs["on_complete"]
-
-        if w_usage:
-            faux_result = mock.Mock()
-            faux_result.usage.return_value = agui_package.RunUsageStats(
-                1,
-                2,
-                3,
-                4,
-            )
-        else:
-            faux_result = object()
+        faux_result = object()
 
         await rs_on_complete(faux_result)
 
-        if w_usage:
-            the_threads.save_run_usage.assert_awaited_once_with(
-                user_name=USER_NAME,
-                room_id=TEST_ROOM_ID,
-                thread_id=TEST_THREAD_ID,
-                run_id=TEST_RUN_ID,
-                input_tokens=1,
-                output_tokens=2,
-                requests=3,
-                tool_calls=4,
-            )
-        else:
-            the_threads.save_run_usage.assert_not_awaited()
+        cuas.assert_awaited_once_with(
+            faux_result,
+            sqla_engine=sqla_engine,
+            user_name=USER_NAME,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID,
+            run_id=TEST_RUN_ID,
+        )
 
         the_installation.get_agent_deps_for_room.assert_called_once_with(
             room_id=TEST_ROOM_ID,
@@ -1367,61 +1460,3 @@ async def test_post_room_agui_thread_id_run_id_feedback(
     the_logger.debug.assert_called_once_with(
         loggers.AGUI_POST_ROOM_THREAD_RUN_FEEDBACK,
     )
-
-
-@pytest.mark.anyio
-@pytest.mark.parametrize(
-    "tsdr_side_effect, expectation",
-    [
-        (None, no_error(204)),
-        (UNKNOWN_THREAD, raises_httpexc(code=404, match="Unknown thread")),
-        (THREAD_ROOM_MISMATCH, raises_httpexc(code=400, match="Thread room")),
-    ],
-)
-@mock.patch("soliplex.views.agui._check_user_in_room")
-async def test_delete_room_agui_thread_id(
-    cuir,
-    the_threads,
-    test_thread,
-    tsdr_side_effect,
-    expectation,
-):
-    room_config = mock.create_autospec(config_rooms.RoomConfig)
-    cuir.return_value = room_config
-
-    request = fastapi.Request(scope={"type": "http"})
-    the_installation = mock.create_autospec(installation.Installation)
-    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
-    the_logger = mock.create_autospec(loggers.LogWrapper)
-
-    the_threads.delete_thread.side_effect = tsdr_side_effect
-
-    with expectation as expected:
-        found = await agui_views.delete_room_agui_thread_id(
-            request,
-            room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
-            the_installation=the_installation,
-            the_threads=the_threads,
-            the_authz_policy=the_authz_policy,
-            the_user_claims=THE_USER_CLAIMS,
-            the_logger=the_logger,
-        )
-
-    if isinstance(expected, int):
-        assert isinstance(found, fastapi.Response)
-        assert found.status_code == expected
-
-    the_threads.delete_thread.assert_called_once_with(
-        user_name=USER_NAME,
-        room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
-    )
-    cuir.assert_called_once_with(
-        room_id=TEST_ROOM_ID,
-        the_installation=the_installation,
-        the_authz_policy=the_authz_policy,
-        the_user_claims=THE_USER_CLAIMS,
-        the_logger=the_logger,
-    )
-    the_logger.debug.assert_called_once_with(loggers.AGUI_DELETE_ROOM_THREAD)
