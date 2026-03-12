@@ -378,6 +378,22 @@ class ThreadStorage(abc.ABC):
     ) -> RunFeedback | None:
         """Get the run feedback"""
 
+    @abc.abstractmethod
+    async def list_recent_run_feedback(
+        self,
+        *,
+        user_name: str | None = None,
+        room_id: str | None = None,
+        thread_id: str | None = None,
+        limit: int | None = None,
+        since: datetime.datetime | None = None,
+    ) -> typing.Sequence[Run]:
+        """Query run feedback matching given criteria
+
+        Selected values are returned in most-recent first order,
+        based on the run's timestamp.
+        """
+
 
 async def compact_event_stream(stream: AGUI_EventStream):
     compacting: agui_core.Event = None

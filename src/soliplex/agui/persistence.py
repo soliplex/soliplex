@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import contextlib
+import datetime
+import typing
 
 from ag_ui import core as agui_core
 from sqlalchemy import sql as sqla_sql
@@ -453,3 +455,53 @@ class ThreadStorage(agui_package.ThreadStorage):
                 result = existing
 
         return result
+
+    async def list_recent_run_feedback(
+        self,
+        *,
+        user_name: str | None = None,
+        room_id: str | None = None,
+        thread_id: str | None = None,
+        limit: int | None = None,
+        since: datetime.datetime | None = None,
+    ) -> typing.Sequence[agui_schema.Run]:
+        """Query run feedback matching given criteria
+
+        Selected values are returned in most-recent first order,
+        based on the run's timestamp.
+        """
+        if limit is None and since is None:
+            limit = 20
+
+        await self._session.commit()
+
+        async with self.session as session:
+            query = (
+                sqla_sql.Select(
+                    agui_schema.Run,
+                )
+                .join(
+                    agui_schema.Run.run_feedback,
+                )
+                .join(
+                    agui_schema.Run.thread,
+                )
+                .order_by(agui_schema.Run.created.desc())
+            )
+
+            if room_id is not None:
+                query = query.where(agui_schema.Thread.room_id == room_id)
+
+            if user_name is not None:
+                query = query.where(agui_schema.Thread.user_name == user_name)
+
+            if thread_id is not None:
+                query = query.where(agui_schema.Thread.thread_id == thread_id)
+
+            if since is not None:
+                query = query.where(agui_schema.Run.created >= since)
+
+            if limit is not None:
+                query = query.limit(limit)
+
+            return (await session.scalars(query)).all()
