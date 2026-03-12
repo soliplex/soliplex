@@ -143,6 +143,7 @@ class _DiscoveredSkillConfigBase(
     kind: typing.ClassVar[hs_models.SkillSource]  # quasi- @abstractproperty
 
     _skill_metadata: hs_models.SkillMetadata
+    _skill: hs_models.Skill = None
     state_namespace: str | None = None
     state_type: SkillStateType = None
 
@@ -154,6 +155,7 @@ class _DiscoveredSkillConfigBase(
     def from_skill(cls, skill: hs_models.Skill):
         return cls(
             _skill_metadata=skill.metadata,
+            _skill=skill,
             state_type=skill.state_type,
             state_namespace=skill.state_namespace,
         )
@@ -167,6 +169,9 @@ class _DiscoveredSkillConfigBase(
 
     @property
     def skill(self) -> hs_models.Skill:
+        if self._skill is not None:
+            return self._skill
+
         return hs_models.Skill(
             source=self.kind,
             metadata=self._skill_metadata,
@@ -188,6 +193,7 @@ class FilesystemSkillConfig(_DiscoveredSkillConfigBase):
     def from_skill(cls, skill: hs_models.Skill):
         return cls(
             _skill_metadata=skill.metadata,
+            _skill=skill,
             _skill_path=skill.path,
             state_type=skill.state_type,
             state_namespace=skill.state_namespace,
@@ -231,6 +237,9 @@ class FilesystemSkillConfig(_DiscoveredSkillConfigBase):
 
     @property
     def skill(self) -> hs_models.Skill:
+        if self._skill is not None:
+            return self._skill
+
         return hs_models.Skill(
             source=self.kind,
             metadata=self._skill_metadata,
@@ -245,20 +254,6 @@ class EntrypointSkillConfig(_DiscoveredSkillConfigBase):
     """Configuration for an agent skill loaded from an entrypoint"""
 
     kind: typing.ClassVar[hs_models.SkillSource] = SkillKind.ENTRYPOINT
-
-    _skill: hs_models.Skill = None
-
-    @classmethod
-    def from_skill(cls, skill: hs_models.Skill):
-        result = super().from_skill(skill)
-        result._skill = skill
-        return result
-
-    @property
-    def skill(self) -> hs_models.Skill:
-        if self._skill is not None:
-            return self._skill
-        return super().skill
 
 
 @dataclasses.dataclass(kw_only=True)
