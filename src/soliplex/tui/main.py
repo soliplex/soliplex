@@ -198,6 +198,59 @@ class EditRunMetadataDialog(t_screen.Screen):
         self.dismiss(payload)
 
 
+class RunFeedbackDialog(t_screen.Screen):
+    BINDINGS = [
+        t_binding.Binding("escape", "dismiss(None)", "Exit"),
+    ]
+
+    def __init__(self, run_id: str, label_text: str, *args, **kwargs):
+        self.run_id = run_id
+        super().__init__()
+
+    def compose(self) -> t_app.ComposeResult:
+        yield t_widgets.Header()
+
+        yield t_widgets.Label(f"Run UUID: {self.run_id}")
+
+        with LabeledInputWidget(id="feedback-block"):
+            yield t_widgets.Label("Feedback")
+            with t_widgets.RadioSet(id="feedback-rs"):
+                yield t_widgets.RadioButton("Thumbs Up", id="ok")
+                yield t_widgets.RadioButton("Thumbs Down")
+
+        with LabeledInputWidget():
+            yield t_widgets.Label("Reason")
+            yield t_widgets.Input(id="feedback-reason")
+
+        yield t_widgets.Footer()
+
+    def on_mount(self) -> None:
+        self.query_one("#feedback-rs").focus()
+
+    @textual.on(t_widgets.Input.Submitted)
+    async def on_input(self, event: t_widgets.Input.Submitted) -> None:
+        """When the user hits return."""
+        payload = {}
+
+        w_feedback_rs = self.query_one("#feedback-block #feedback-rs")
+        pressed = w_feedback_rs.pressed_index
+        if pressed >= 0:
+            feedback = {0: "ok", 1: "notok"}[pressed]
+
+            w_reason = self.query_one("#feedback-reason")
+            reason = w_reason.value.strip()
+
+            if feedback:
+                payload["feedback"] = feedback
+                payload["reason"] = reason
+
+                print(f"Feedback: {payload}")
+            else:
+                print("No feedback")
+
+            self.dismiss(payload)
+
+
 class EditThreadMetadataDialog(t_screen.Screen):
     BINDINGS = [
         t_binding.Binding("escape", "dismiss(None)", "Exit"),
@@ -384,6 +437,7 @@ class StateViewModal(t_screen.ModalScreen):
 class RunView(t_screen.Screen):
     BINDINGS = [
         t_binding.Binding("escape", "dismiss(None)", "Exit"),
+        t_binding.Binding("ctrl+f", "run_feedback", "Feedback"),
         t_binding.Binding("ctrl+z", "edit_metadata", "Metadata"),
     ]
     DEFAULT_CSS = """
@@ -504,6 +558,19 @@ class RunView(t_screen.Screen):
 
             self._run_info["metadata"] = payload
             self.query_one("#run-label").content = self.label_text
+
+    @textual.work
+    async def action_run_feedback(self) -> None:
+        rfb = RunFeedbackDialog(self.run_id, self.label_text)
+        payload = await self.app.push_screen_wait(rfb)
+
+        if payload is not None:
+            self.rest_api.post_run_feedback(
+                self.room_id,
+                self.thread_id,
+                self.run_id,
+                payload,
+            )
 
 
 class RunButtonWidget(t_widget.Widget):
