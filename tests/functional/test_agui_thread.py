@@ -1,4 +1,5 @@
 import json
+import time
 import uuid
 
 import pydantic
@@ -70,3 +71,19 @@ def test_post_rooms_roomid_agui_etc(client_no_llm):
                 # )
                 agui_event = agui_parser.agui_event_from_json(event_json)
                 esp(agui_event)
+
+    time.sleep(0.25)  # let background save complete
+
+    response = client_no_llm.get(
+        f"/api/v1/rooms/{room_id}/agui/{thread_id}/{run_id}",
+    )
+    run_json = response.json()
+    events = run_json["events"]
+    assert len(events) > 2
+    assert events[0]["type"] == "RUN_STARTED"
+    assert events[-1]["type"] == "RUN_FINISHED"
+
+    # Attempt to exercise https://github.com/soliplex/soliplex/issues/733
+    response = client_no_llm.delete(
+        f"/api/v1/rooms/{room_id}/agui/{thread_id}",
+    )

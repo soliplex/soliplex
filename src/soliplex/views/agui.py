@@ -504,7 +504,6 @@ async def delete_room_agui_thread_id(
 
     return fastapi.Response(
         status_code=204,
-        content=f"Deleted thread: {thread_id}",
     )
 
 

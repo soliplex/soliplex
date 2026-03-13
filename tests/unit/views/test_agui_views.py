@@ -915,7 +915,7 @@ async def test_post_room_agui_thread_id_meta(
 @pytest.mark.parametrize(
     "tsdr_side_effect, expectation",
     [
-        (None, no_error(204)),
+        (None, no_error((204, b""))),
         (UNKNOWN_THREAD, raises_httpexc(code=404, match="Unknown thread")),
         (THREAD_ROOM_MISMATCH, raises_httpexc(code=400, match="Thread room")),
     ],
@@ -950,9 +950,11 @@ async def test_delete_room_agui_thread_id(
             the_logger=the_logger,
         )
 
-    if isinstance(expected, int):
+    if isinstance(expected, tuple):
         assert isinstance(found, fastapi.Response)
-        assert found.status_code == expected
+        exp_code, exp_body = expected
+        assert found.status_code == exp_code
+        assert found.body == exp_body
 
     the_threads.delete_thread.assert_called_once_with(
         user_name=USER_NAME,
