@@ -651,6 +651,19 @@ tool_call_nonesuch = pytest.raises(agui_parser.ToolCallDoesNotExist)
             W_PARENT_E_TOOL_CALL_START,
             no_error(None),
         ),
+        # Parent exists but tool_calls is None
+        (
+            RUNNING,
+            [
+                agui_core.AssistantMessage(
+                    id=TOOL_CALL_PARENT_MESSAGE_ID,
+                    content="",
+                )
+            ],
+            {},
+            W_PARENT_E_TOOL_CALL_START,
+            no_error(None),
+        ),
         (RUNNING, [], {}, W_PARENT_E_TOOL_CALL_START, no_error(None)),
         (FINISHED, [], {}, E_TOOL_CALL_START, not_running),
         (ERROR, [], {}, E_TOOL_CALL_START, not_running),

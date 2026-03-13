@@ -1,4 +1,5 @@
 import contextlib
+import pathlib
 from unittest import mock
 
 import pytest
@@ -194,7 +195,11 @@ def test_get_env_var_secret_w_installation_config(
 @pytest.mark.parametrize(
     "file_path, expectation, expected",
     [
-        ("/path/to/nowhere", FilePathNotFound, ERROR_MISS),
+        (
+            str(pathlib.Path("/path/to/nowhere").resolve()),
+            FilePathNotFound,
+            ERROR_MISS,
+        ),
         ("./nonesuch", FilePathNotFound, ERROR_MISS),
         ("./secret_file", NoRaise, SECRET_VALUE),
     ],
