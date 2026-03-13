@@ -1257,8 +1257,7 @@ def test_installationconfig_from_yaml(
         else:
             # Match from_yaml: config_path.parent / hr_config_file
             expected_kw["_haiku_rag_config_file"] = (
-                config_path.parent
-                / expected_kw["_haiku_rag_config_file"]
+                config_path.parent / expected_kw["_haiku_rag_config_file"]
             )
 
         lfssc = mock.Mock(spec_set=())
@@ -1463,27 +1462,19 @@ def test_installationconfig_as_yaml(w_logfire_config):
         "environment": {
             "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
         },
-        "haiku_rag_config_file": str(
-            pathlib.Path(HAIKU_RAG_CONFIG_FILE)
-        ),
+        "haiku_rag_config_file": str(pathlib.Path(HAIKU_RAG_CONFIG_FILE)),
         "agent_configs": [
             agent_config.as_yaml,
         ],
-        "logging_config_file": str(
-            pathlib.Path(LOGGING_CONFIG_FILE)
-        ),
+        "logging_config_file": str(pathlib.Path(LOGGING_CONFIG_FILE)),
         "oidc_paths": [str(pathlib.Path("oidc-test"))],
         "room_paths": [
             str(pathlib.Path("/path/to/rooms")),
             str(pathlib.Path("other/rooms")),
         ],
-        "completion_paths": [
-            str(pathlib.Path("/path/to/completions"))
-        ],
+        "completion_paths": [str(pathlib.Path("/path/to/completions"))],
         "quizzes_paths": [str(pathlib.Path("other/quizzes"))],
-        "filesystem_skills_paths": [
-            str(pathlib.Path("other/skills"))
-        ],
+        "filesystem_skills_paths": [str(pathlib.Path("other/skills"))],
     }
 
     if w_logfire_config:
