@@ -203,6 +203,11 @@ class RunFeedbackDialog(t_screen.Screen):
         t_binding.Binding("escape", "dismiss(None)", "Exit"),
     ]
 
+    _RADIO_INDEX_TO_VALUE = {
+        0: "thumbs_up",
+        1: "thumbs_down",
+    }
+
     def __init__(self, run_id: str, label_text: str, *args, **kwargs):
         self.run_id = run_id
         super().__init__()
@@ -235,7 +240,7 @@ class RunFeedbackDialog(t_screen.Screen):
         w_feedback_rs = self.query_one("#feedback-block #feedback-rs")
         pressed = w_feedback_rs.pressed_index
         if pressed >= 0:
-            feedback = {0: "ok", 1: "notok"}[pressed]
+            feedback = self._RADIO_INDEX_TO_VALUE[pressed]
 
             w_reason = self.query_one("#feedback-reason")
             reason = w_reason.value.strip()
