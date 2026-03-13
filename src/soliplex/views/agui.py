@@ -641,6 +641,10 @@ async def post_room_agui_thread_id_run_id(
 
     compacted_stream = agui_package.compact_event_stream(agent_stream)
 
+    # We use an unbounded queue here, so that the 'drive_llm_stream'
+    # task completes even when the SSE stream gets cancelled due to a
+    # client disconnect, thereby permitting the client to see the
+    # completed run after reconnecting.
     event_queue = asyncio.Queue()
 
     # Drive the LLM stream in a background task, in order to save
