@@ -9,11 +9,20 @@ from sqlalchemy import sql as sqla_sql
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agui as agui_package
+from soliplex.agui import persistence as agui_persistence
 from soliplex.agui import schema as agui_schema
 from soliplex.agui import util as agui_util
 
 # Temporary backward-compatibility:  to be removed in 'v0.45'
 from soliplex.agui.schema import *  # noqa F403
+
+FeedbackReviewStatus = agui_package.FeedbackReviewStatus
+
+
+class NoFeedbackFound(ValueError):
+    def __init__(self, run_id: str):
+        self.run_id = run_id
+        super().__init__(f"No feed back found for run: {run_id}")
 
 
 class ThreadStorage(agui_package.ThreadStorage):
@@ -438,8 +447,6 @@ class ThreadStorage(agui_package.ThreadStorage):
         """Get the run feedback"""
         await self._session.commit()
 
-        result = None
-
         async with self.session as session:
             run = await self._find_thread_run(
                 user_name=user_name,
@@ -449,12 +456,7 @@ class ThreadStorage(agui_package.ThreadStorage):
                 session=session,
             )
 
-            existing = await run.awaitable_attrs.run_feedback
-
-            if existing is not None:
-                result = existing
-
-        return result
+            return await run.awaitable_attrs.run_feedback
 
     async def list_recent_run_feedback(
         self,
@@ -464,7 +466,8 @@ class ThreadStorage(agui_package.ThreadStorage):
         thread_id: str | None = None,
         limit: int | None = None,
         since: datetime.datetime | None = None,
-    ) -> typing.Sequence[agui_schema.Run]:
+        status: FeedbackReviewStatus | None = None,
+    ) -> typing.Sequence[agui_schema.RunFeedback]:
         """Query run feedback matching given criteria
 
         Selected values are returned in most-recent first order,
@@ -489,6 +492,18 @@ class ThreadStorage(agui_package.ThreadStorage):
                 .order_by(agui_schema.RunFeedback.created.desc())
             )
 
+            if status is not None:
+                query = (
+                    query.join(agui_schema.RunFeedback.review_history)
+                    .where(
+                        agui_schema.RunFeedbackReviewEntry.status == status,
+                    )
+                    .order_by(
+                        agui_schema.RunFeedbackReviewEntry.created,
+                    )
+                    .distinct()
+                )
+
             if room_id is not None:
                 query = query.where(agui_schema.Thread.room_id == room_id)
 
@@ -505,3 +520,147 @@ class ThreadStorage(agui_package.ThreadStorage):
                 query = query.limit(limit)
 
             return (await session.scalars(query)).all()
+
+    async def _find_run_feedback(
+        self,
+        session,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+    ) -> agui_schema.RunFeedback:
+        run = await self._find_thread_run(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+            session=session,
+        )
+        run_feedback = await run.awaitable_attrs.run_feedback
+
+        if run_feedback is None:
+            raise NoFeedbackFound(run.run_id)
+
+        return run_feedback
+
+    async def _record_run_feedback_history(
+        self,
+        session,
+        run_feedback: agui_persistence.RunFeedback,
+        status: FeedbackReviewStatus,
+        note: str | None,
+    ):
+        history_entry = agui_schema.RunFeedbackReviewEntry(
+            run_feedback=run_feedback,
+            status=status,
+            note=note,
+        )
+        session.add(history_entry)
+
+        return history_entry
+
+    @typing.overload
+    async def review_run_feedback(
+        self,
+        note: str | None = None,
+        *,
+        run_feedback: agui_persistence.RunFeedback,
+    ) -> agui_schema.RunFeedbackReviewEntry: ...
+
+    @typing.overload
+    async def review_run_feedback(
+        self,
+        note: str | None = None,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+    ) -> agui_schema.RunFeedbackReviewEntry: ...
+
+    async def review_run_feedback(
+        self,
+        note: str | None = None,
+        *,
+        run_feedback: agui_persistence.RunFeedback | None = None,
+        user_name: str | None = None,
+        room_id: str | None = None,
+        thread_id: str | None = None,
+        run_id: str | None = None,
+    ) -> agui_schema.RunFeedbackReviewEntry:
+        """Note that a run's feedback has been reviewed.
+
+        Find the feedback from its run.
+        """
+
+        async with self.session as session:
+            if run_feedback is None:
+                run_feedback = await self._find_run_feedback(
+                    user_name=user_name,
+                    room_id=room_id,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    session=session,
+                )
+
+            history_entry = await self._record_run_feedback_history(
+                session,
+                run_feedback,
+                FeedbackReviewStatus.REVIEWED,
+                note,
+            )
+
+            return history_entry
+
+    @typing.overload
+    async def resolve_run_feedback(
+        self,
+        note: str | None = None,
+        *,
+        run_feedback: agui_persistence.RunFeedback,
+    ) -> agui_schema.RunFeedbackReviewEntry: ...
+
+    @typing.overload
+    async def resolve_run_feedback(
+        self,
+        note: str | None = None,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+    ) -> agui_schema.RunFeedbackReviewEntry: ...
+
+    async def resolve_run_feedback(
+        self,
+        note: str | None = None,
+        *,
+        run_feedback: agui_persistence.RunFeedback | None = None,
+        user_name: str | None = None,
+        room_id: str | None = None,
+        thread_id: str | None = None,
+        run_id: str | None = None,
+    ) -> agui_schema.RunFeedbackReviewEntry:
+        """Note that a run's feedback has been resolveed.
+
+        Find the feedback from its run.
+        """
+
+        async with self.session as session:
+            if run_feedback is None:
+                run_feedback = await self._find_run_feedback(
+                    user_name=user_name,
+                    room_id=room_id,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    session=session,
+                )
+
+            history_entry = await self._record_run_feedback_history(
+                session,
+                run_feedback,
+                FeedbackReviewStatus.RESOLVED,
+                note,
+            )
+
+            return history_entry

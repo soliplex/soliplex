@@ -42,6 +42,8 @@ JSON_Mapped_From = dict[str, typing.Any]
 
 metadata = sqla_schema.MetaData(naming_convention=NAMING_CONVENTION)
 
+FeedbackReviewStatus = agui_package.FeedbackReviewStatus
+
 
 class Base(AsyncAttrs, DeclarativeBase):
     metadata = metadata
@@ -484,6 +486,10 @@ class RunFeedback(Base):
         sqla_sqltypes.TIMESTAMP(timezone=True),
         default=agui_util._timestamp,
     )
+    updated: Mapped[datetime.datetime | None] = mapped_column(
+        sqla_sqltypes.TIMESTAMP(timezone=True),
+        default=None,
+    )
 
     run_id_: Mapped[int] = mapped_column(
         ForeignKey("run.id_", ondelete="CASCADE"),
@@ -492,6 +498,43 @@ class RunFeedback(Base):
 
     feedback: Mapped[str] = mapped_column()
     reason: Mapped[str | None] = mapped_column(default=None)
+
+    review_history: Mapped[list[RunFeedbackReviewEntry]] = relationship(
+        back_populates="run_feedback",
+        cascade="all, delete",
+        passive_deletes=True,
+        order_by="desc(RunFeedbackReviewEntry.created)",
+    )
+
+
+class RunFeedbackReviewEntry(Base):
+    """Hold optional feedback info for an AG-UI run
+
+    'run' is a one-to-one relationship to 'Run' (but optional from
+          the run side).
+
+    'feedback', str, required
+    'reason', str, optional
+    """
+
+    __tablename__ = "review_history"
+
+    id_: Mapped[int] = mapped_column(primary_key=True)
+    created: Mapped[datetime.datetime] = mapped_column(
+        sqla_sqltypes.TIMESTAMP(timezone=True),
+        default=agui_util._timestamp,
+    )
+
+    run_feedback_id_: Mapped[int] = mapped_column(
+        ForeignKey("run_feedback.id_", ondelete="CASCADE"),
+    )
+    run_feedback: Mapped[RunFeedback] = relationship(
+        back_populates="review_history",
+    )
+
+    status: Mapped[FeedbackReviewStatus | None] = mapped_column()
+
+    note: Mapped[str | None] = mapped_column(default=None)
 
 
 def get_engine(

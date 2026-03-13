@@ -11,6 +11,8 @@ from soliplex.agui import schema as agui_schema
 from soliplex.config import installation as config_installation
 from tests.unit.agui import agui_constants
 
+FeedbackReviewStatus = agui_package.FeedbackReviewStatus
+
 NOW = datetime.datetime.now(datetime.UTC)
 
 ROOM_ID = "test-room"
@@ -704,6 +706,252 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     tid_earlier_fb = await tid_earlier.awaitable_attrs.run_feedback
     assert await tid_earlier_fb.awaitable_attrs.feedback == "thumbs_up"
     assert await tid_earlier_fb.awaitable_attrs.reason == "fresh"
+
+    # Feedback review workflow
+    tid_later_hist = await tid_later_fb.awaitable_attrs.review_history
+    assert tid_later_hist == []
+
+    await the_async_session.commit()
+
+    await ts.review_run_feedback(
+        note="reviewing feedback",
+        run_feedback=tid_later_fb,
+    )
+
+    await the_async_session.commit()
+
+    tid_later_hist = await tid_later_fb.awaitable_attrs.review_history
+    (tid_later_entry,) = tid_later_hist
+    assert await tid_later_entry.awaitable_attrs.run_feedback is tid_later_fb
+    assert await tid_later_entry.awaitable_attrs.status == (
+        FeedbackReviewStatus.REVIEWED
+    )
+    assert await tid_later_entry.awaitable_attrs.note == "reviewing feedback"
+
+    await the_async_session.commit()
+
+    await ts.resolve_run_feedback(
+        note="resolving feedback",
+        run_feedback=tid_later_fb,
+    )
+    tid_later_hist = await tid_later_fb.awaitable_attrs.review_history
+
+    # Check that review history is sorted in descending order
+    (
+        first_entry,
+        *_,
+    ) = tid_later_hist
+    assert await first_entry.awaitable_attrs.run_feedback is tid_later_fb
+    assert await first_entry.awaitable_attrs.status == (
+        FeedbackReviewStatus.RESOLVED
+    )
+    assert await first_entry.awaitable_attrs.note == ("resolving feedback")
+
+    (
+        *_,
+        last_entry,
+    ) = tid_later_hist
+    assert await last_entry.awaitable_attrs.run_feedback is tid_later_fb
+    assert await last_entry.awaitable_attrs.status == (
+        FeedbackReviewStatus.REVIEWED
+    )
+    assert await last_entry.awaitable_attrs.note == ("reviewing feedback")
+
+    await the_async_session.commit()
+
+    # Feedback review workflow using lookup
+    await ts.review_run_feedback(
+        note="reviewing feedback",
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=added_id,
+    )
+
+    await the_async_session.commit()
+
+    tid_earlier_hist = await tid_earlier_fb.awaitable_attrs.review_history
+    (tid_earlier_entry,) = tid_earlier_hist
+    assert (
+        await tid_earlier_entry.awaitable_attrs.run_feedback is tid_earlier_fb
+    )
+    assert await tid_earlier_entry.awaitable_attrs.status == (
+        FeedbackReviewStatus.REVIEWED
+    )
+    assert await tid_earlier_entry.awaitable_attrs.note == "reviewing feedback"
+
+    await the_async_session.commit()
+
+    await ts.resolve_run_feedback(
+        note="resolving feedback",
+        run_feedback=tid_later_fb,
+    )
+    tid_later_hist = await tid_later_fb.awaitable_attrs.review_history
+
+    (
+        first_entry,
+        *_,
+    ) = tid_later_hist
+    assert await first_entry.awaitable_attrs.run_feedback is tid_later_fb
+    assert await first_entry.awaitable_attrs.status == (
+        FeedbackReviewStatus.RESOLVED
+    )
+    assert await first_entry.awaitable_attrs.note == "resolving feedback"
+
+    (
+        *_,
+        last_entry,
+    ) = tid_later_hist
+    assert await last_entry.awaitable_attrs.run_feedback is tid_later_fb
+    assert await last_entry.awaitable_attrs.status == (
+        FeedbackReviewStatus.REVIEWED
+    )
+    assert await last_entry.awaitable_attrs.note == "reviewing feedback"
+
+    await the_async_session.commit()
+
+    await ts.resolve_run_feedback(
+        note="resolving feedback",
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=added_id,
+    )
+
+    await the_async_session.commit()
+
+    tid_earlier_hist = await tid_earlier_fb.awaitable_attrs.review_history
+
+    (
+        first_entry,
+        *_,
+    ) = tid_earlier_hist
+    assert await first_entry.awaitable_attrs.run_feedback is tid_earlier_fb
+    assert await first_entry.awaitable_attrs.status == (
+        FeedbackReviewStatus.RESOLVED
+    )
+
+    (
+        *_,
+        last_entry,
+    ) = tid_earlier_hist
+    assert await last_entry.awaitable_attrs.run_feedback is tid_earlier_fb
+    assert await last_entry.awaitable_attrs.status == (
+        FeedbackReviewStatus.REVIEWED
+    )
+    assert await last_entry.awaitable_attrs.note == "reviewing feedback"
+
+    await the_async_session.commit()
+
+    # Test lookup where no feedback found
+    no_feedback = await ts.new_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+    no_feedback_id = await no_feedback.awaitable_attrs.run_id
+
+    await the_async_session.commit()
+
+    with pytest.raises(agui_persistence.NoFeedbackFound):
+        await ts.review_run_feedback(
+            note="reviewing feedback",
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=no_feedback_id,
+        )
+
+    await the_async_session.commit()
+
+    with pytest.raises(agui_persistence.NoFeedbackFound):
+        await ts.resolve_run_feedback(
+            note="resolving feedback",
+            user_name=USER_NAME,
+            room_id=ROOM_ID,
+            thread_id=thread_id,
+            run_id=no_feedback_id,
+        )
+
+    await the_async_session.commit()
+
+    # Query for reviewed status
+    review_only = await ts.new_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+    review_only_id = await review_only.awaitable_attrs.run_id
+
+    await the_async_session.commit()
+
+    await ts.save_run_feedback(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=review_only_id,
+        feedback="thumbs_up",
+        reason="winning",
+    )
+
+    await the_async_session.commit()
+
+    review_only_fb = await review_only.awaitable_attrs.run_feedback
+
+    await the_async_session.commit()
+
+    await ts.review_run_feedback(
+        note="reviewing feedback; no resolve",
+        run_feedback=review_only_fb,
+    )
+
+    await the_async_session.commit()
+
+    resolve_only = await ts.new_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+    )
+    await the_async_session.commit()
+
+    resolve_only_id = await resolve_only.awaitable_attrs.run_id
+
+    await the_async_session.commit()
+
+    await ts.save_run_feedback(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=resolve_only_id,
+        feedback="thumbs_up",
+        reason="winning",
+    )
+
+    await the_async_session.commit()
+
+    resolve_only_fb = await resolve_only.awaitable_attrs.run_feedback
+
+    await the_async_session.commit()
+
+    await ts.resolve_run_feedback(
+        note="resolving feedback; no view",
+        run_feedback=resolve_only_fb,
+    )
+
+    await the_async_session.commit()
+
+    w_reviewed = await ts.list_recent_run_feedback(
+        status=agui_package.FeedbackReviewStatus.REVIEWED,
+    )
+    assert review_only in w_reviewed
+    assert resolve_only not in w_reviewed
+
+    # Query for resolved status
+    w_resolved = await ts.list_recent_run_feedback(
+        status=agui_package.FeedbackReviewStatus.RESOLVED,
+    )
+    assert review_only not in w_resolved
+    assert resolve_only in w_resolved
 
 
 @pytest.mark.asyncio

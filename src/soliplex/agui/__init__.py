@@ -3,6 +3,7 @@ from __future__ import annotations
 import abc
 import collections.abc
 import datetime
+import enum
 import typing
 
 import fastapi
@@ -112,6 +113,24 @@ class RunUsage(abc.ABC):
         """Return values as a tuple."""
 
 
+class FeedbackReviewStatus(enum.StrEnum):
+    """Workflow state for feedback."""
+
+    REVIEWED = "reviewed"
+    RESOLVED = "resolved"
+
+
+class RunFeedbackReviewEntry(abc.ABC):
+    status: FeedbackReviewStatus
+    """Reviewer marked state"""
+
+    note: str | None = None
+    """Reviewer supplied"""
+
+    created: datetime.datetime
+    """Timestamp"""
+
+
 class RunFeedback(abc.ABC):
     """Feedback returned from a user for a run"""
 
@@ -120,6 +139,15 @@ class RunFeedback(abc.ABC):
 
     reason: str | None
     """Explanation"""
+
+    created: datetime.datetime
+    """Timestamp"""
+
+    updated: datetime.datetime
+    """Timestamp"""
+
+    review_history: list[RunFeedbackReviewEntry]
+    """Track review state over time"""
 
 
 class RunMetadata(abc.ABC):
@@ -387,6 +415,44 @@ class ThreadStorage(abc.ABC):
         Selected values are returned in most-recent first order,
         based on the run's timestamp.
         """
+
+    @typing.overload
+    async def review_run_feedback(
+        self,
+        note: str | None = None,
+        *,
+        run_feedback: RunFeedback,
+    ) -> RunFeedbackReviewEntry: ...
+
+    @typing.overload
+    async def review_run_feedback(
+        self,
+        note: str | None = None,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+    ) -> RunFeedbackReviewEntry: ...
+
+    @typing.overload
+    async def resolve_run_feedback(
+        self,
+        note: str | None = None,
+        *,
+        run_feedback: RunFeedback,
+    ) -> RunFeedbackReviewEntry: ...
+
+    @typing.overload
+    async def resolve_run_feedback(
+        self,
+        note: str | None = None,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+    ) -> RunFeedbackReviewEntry: ...
 
 
 async def compact_event_stream(stream: AGUI_EventStream):
