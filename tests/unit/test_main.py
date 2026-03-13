@@ -99,6 +99,7 @@ def test_app_with_lifespan(acm, fapi):
     found = main.app_with_lifespan(lifespan)
 
     assert found is fapi.return_value
+    assert found.state.agui_background_tasks == set()
 
     fapi.assert_called_once_with(lifespan=acm.return_value)
     acm.assert_called_once_with(lifespan)

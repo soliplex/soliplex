@@ -54,6 +54,7 @@ def curry_lifespan(
 def app_with_lifespan(curried_lifespan: typing.Callable) -> fastapi.FastAPI:
     acm_lifespan = contextlib.asynccontextmanager(curried_lifespan)
     app = fastapi.FastAPI(lifespan=acm_lifespan)
+    app.state.agui_background_tasks = set()
 
     return app
 

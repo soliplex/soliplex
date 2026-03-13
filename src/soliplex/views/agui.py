@@ -645,7 +645,8 @@ async def post_room_agui_thread_id_run_id(
 
     # Drive the LLM stream in a background task, in order to save
     # the thread persistence and usage at the end.
-    asyncio.create_task(
+    bg_tasks = request.app.state.agui_background_tasks
+    task = asyncio.create_task(
         # No 'await' here:  'create_task' *wants* a coroutine
         drive_llm_stream(
             llm_stream=compacted_stream,
@@ -657,6 +658,8 @@ async def post_room_agui_thread_id_run_id(
             run_id=run_id,
         )
     )
+    bg_tasks.add(task)
+    task.add_done_callback(bg_tasks.discard)
 
     # Stream events to the client from the queue, as pushed from
     # the driver.

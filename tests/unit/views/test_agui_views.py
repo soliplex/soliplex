@@ -1076,7 +1076,10 @@ async def test_post_room_agui_thread_id_run_id_streaming(
     agent = object()
     cura.return_value = (USER_PROFILE, agent)
 
-    request = fastapi.Request(scope={"type": "http"})
+    state = mock.Mock()
+    global_agui_bg_tasks = state.agui_background_tasks = set()
+    app = mock.create_autospec(fastapi.FastAPI, state=state)
+    request = fastapi.Request(scope={"type": "http", "app": app})
     sqla_engine = request.state.threads_engine = object()
 
     the_installation = mock.create_autospec(installation.Installation)
@@ -1137,6 +1140,7 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         assert sle.call_args_list[0].kwargs == {}
         (event_queue,) = sle.call_args_list[0].args
 
+        # asyncio.task starts 'drive_llm_stream' right away.
         dls.assert_called_once_with(
             llm_stream=ces.return_value,
             sqla_engine=sqla_engine,
@@ -1214,6 +1218,9 @@ async def test_post_room_agui_thread_id_run_id_streaming(
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
         )
+
+        assert state.agui_background_tasks is global_agui_bg_tasks
+        assert len(global_agui_bg_tasks) == 1
 
     the_logger.debug.assert_called_once_with(loggers.AGUI_POST_ROOM_THREAD_RUN)
 
