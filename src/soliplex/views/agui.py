@@ -9,6 +9,7 @@ import pydantic_ai
 from ag_ui import core as agui_core
 from fastapi import responses
 from pydantic_ai.ui import ag_ui as ai_ag_ui
+from sqlalchemy import exc as sqla_exc
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agui as agui_package
@@ -595,14 +596,21 @@ async def drive_llm_stream(
         finally:
             await event_queue.put(None)  # sentinel
 
-            await save_thread_run_events(
-                event_list=event_list,
-                sqla_engine=sqla_engine,
-                user_name=user_name,
-                room_id=room_id,
-                thread_id=thread_id,
-                run_id=run_id,
-            )
+            try:
+                await save_thread_run_events(
+                    event_list=event_list,
+                    sqla_engine=sqla_engine,
+                    user_name=user_name,
+                    room_id=room_id,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                )
+            except sqla_exc.SQLAlchemyError as sa_exc:
+                logfire.error(
+                    "Error saving run events: {error_message}",
+                    error_message=str(sa_exc),
+                )
+                raise
 
             if event_list:
                 last = event_list[-1]

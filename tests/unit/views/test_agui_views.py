@@ -7,6 +7,7 @@ from unittest import mock
 import fastapi
 import pytest
 from ag_ui import core as agui_core
+from sqlalchemy import exc as sqla_exc
 
 from soliplex import agui as agui_package
 from soliplex import authz as authz_package
@@ -1043,6 +1044,13 @@ async def test_save_thread_run_events(a_session, t_storage):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("w_event_count", [0, 1, 10])
+@pytest.mark.parametrize(
+    "w_stre_error, stre_expectation",
+    [
+        (False, contextlib.nullcontext()),
+        (True, pytest.raises(sqla_exc.SQLAlchemyError)),
+    ],
+)
 @pytest.mark.parametrize("w_finished_error", [None, "finished", "error"])
 @mock.patch("soliplex.views.agui.save_thread_run_events")
 @mock.patch("soliplex.views.agui.logfire")
@@ -1050,6 +1058,8 @@ async def test_drive_llm_stream(
     logfire,
     stre,
     w_finished_error,
+    w_stre_error,
+    stre_expectation,
     w_event_count,
 ):
     sqla_engine = mock.AsyncMock(spec_set=())
@@ -1060,6 +1070,9 @@ async def test_drive_llm_stream(
         run_id=TEST_RUN_ID,
     )
     error_event = agui_core.events.RunErrorEvent(message="test error")
+
+    if w_stre_error:
+        stre.side_effect = sqla_exc.SQLAlchemyError("stre error")
 
     async def event_iter():
         for i_event in range(w_event_count):
@@ -1073,12 +1086,19 @@ async def test_drive_llm_stream(
 
     expected = [event async for event in event_iter()]
 
-    await agui_views.drive_llm_stream(
-        event_iter(),
-        sqla_engine=sqla_engine,
-        event_queue=event_queue,
-        user_name=USER_NAME,
-        room_id=TEST_ROOM_ID,
+    with stre_expectation as stre_expected:
+        await agui_views.drive_llm_stream(
+            event_iter(),
+            sqla_engine=sqla_engine,
+            event_queue=event_queue,
+            user_name=USER_NAME,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID,
+            run_id=TEST_RUN_ID,
+        )
+
+    logfire.span.assert_called_once_with(
+        "AG-UI event stream: {thread_id}/{run_id}",
         thread_id=TEST_THREAD_ID,
         run_id=TEST_RUN_ID,
     )
@@ -1100,26 +1120,27 @@ async def test_drive_llm_stream(
         run_id=TEST_RUN_ID,
     )
 
-    logfire.span.assert_called_once_with(
-        "AG-UI event stream: {thread_id}/{run_id}",
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
-    )
+    if stre_expected is None:
+        if len(expected) == 0:
+            logfire.info.assert_called_once_with(
+                "Stream status: {status}",
+                status="EMPTY",
+            )
+        elif w_finished_error == "finished":
+            logfire.info.assert_called_once_with(
+                "Stream status: {status}",
+                status="FINISHED",
+            )
+        elif w_finished_error == "error":
+            logfire.error.assert_called_once_with(
+                "Stream error: {error_message}",
+                error_message="test error",
+            )
 
-    if len(expected) == 0:
-        logfire.info.assert_called_once_with(
-            "Stream status: {status}",
-            status="EMPTY",
-        )
-    elif w_finished_error == "finished":
-        logfire.info.assert_called_once_with(
-            "Stream status: {status}",
-            status="FINISHED",
-        )
-    elif w_finished_error == "error":
+    else:
         logfire.error.assert_called_once_with(
-            "Stream error: {error_message}",
-            error_message="test error",
+            "Error saving run events: {error_message}",
+            error_message="stre error",
         )
 
 
