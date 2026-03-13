@@ -34,6 +34,7 @@ RAG_LANCEDB_OVERRIDE_PATH = "/path/to/db/rag"
 TC_TOOL_CONFIG = config_tools.ToolConfig(tool_name="soliplex.tools.test_tool")
 
 
+@pytest.mark.parametrize("w_model_settings", [None, MODEL_SETTINGS])
 @pytest.mark.parametrize(
     "provider_type, llm_provider_kw",
     [
@@ -55,12 +56,14 @@ def test_get_model_from_config(
     google_provider_klass,
     provider_type,
     llm_provider_kw,
+    w_model_settings,
 ):
     agent_config = mock.create_autospec(config_agents.AgentConfig)
     agent_config.kind = "default"
     agent_config.id = ROOM_ID
     agent_config.model_name = MODEL
     agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
+    agent_config.model_settings = w_model_settings
     agent_config.provider_type = provider_type
     agent_config.llm_provider_kw = llm_provider_kw
 
@@ -68,10 +71,17 @@ def test_get_model_from_config(
 
     if provider_type == config_agents.LLMProviderType.GOOGLE:
         assert model is google_model_klass.return_value
-        google_model_klass.assert_called_once_with(
-            model_name=MODEL,
-            provider=google_provider_klass.return_value,
-        )
+        if w_model_settings:
+            google_model_klass.assert_called_once_with(
+                model_name=MODEL,
+                model_settings=w_model_settings,
+                provider=google_provider_klass.return_value,
+            )
+        else:
+            google_model_klass.assert_called_once_with(
+                model_name=MODEL,
+                provider=google_provider_klass.return_value,
+            )
         google_provider_klass.assert_called_once_with(**llm_provider_kw)
 
         oai_model_klass.assert_not_called()
@@ -80,10 +90,17 @@ def test_get_model_from_config(
 
     elif provider_type == config_agents.LLMProviderType.OPENAI:
         assert model is oai_model_klass.return_value
-        oai_model_klass.assert_called_once_with(
-            model_name=MODEL,
-            provider=oai_provider_klass.return_value,
-        )
+        if w_model_settings:
+            oai_model_klass.assert_called_once_with(
+                model_name=MODEL,
+                model_settings=w_model_settings,
+                provider=oai_provider_klass.return_value,
+            )
+        else:
+            oai_model_klass.assert_called_once_with(
+                model_name=MODEL,
+                provider=oai_provider_klass.return_value,
+            )
         oai_provider_klass.assert_called_once_with(**llm_provider_kw)
 
         oll_provider_klass.assert_not_called()
@@ -92,10 +109,17 @@ def test_get_model_from_config(
 
     else:
         assert model is oai_model_klass.return_value
-        oai_model_klass.assert_called_once_with(
-            model_name=MODEL,
-            provider=oll_provider_klass.return_value,
-        )
+        if w_model_settings:
+            oai_model_klass.assert_called_once_with(
+                model_name=MODEL,
+                model_settings=w_model_settings,
+                provider=oll_provider_klass.return_value,
+            )
+        else:
+            oai_model_klass.assert_called_once_with(
+                model_name=MODEL,
+                provider=oll_provider_klass.return_value,
+            )
         oll_provider_klass.assert_called_once_with(**llm_provider_kw)
 
         oai_provider_klass.assert_not_called()

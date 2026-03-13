@@ -86,11 +86,17 @@ def get_model_from_config(
 ) -> ai_models.Model:
     provider_kw = agent_config.llm_provider_kw
 
+    model_settings_kw = {}
+
+    if agent_config.model_settings:
+        model_settings_kw["model_settings"] = agent_config.model_settings
+
     if agent_config.provider_type == config_agents.LLMProviderType.GOOGLE:
         provider = google_providers.GoogleProvider(**provider_kw)
         return google_models.GoogleModel(
             model_name=agent_config.model_name,
             provider=provider,
+            **model_settings_kw,
         )
 
     elif agent_config.provider_type == config_agents.LLMProviderType.OLLAMA:
@@ -99,12 +105,14 @@ def get_model_from_config(
         return openai_models.OpenAIChatModel(
             model_name=agent_config.model_name,
             provider=provider,
+            **model_settings_kw,
         )
     else:
         provider = openai_providers.OpenAIProvider(**provider_kw)
         return openai_models.OpenAIChatModel(
             model_name=agent_config.model_name,
             provider=provider,
+            **model_settings_kw,
         )
 
 
