@@ -596,6 +596,25 @@ class AGUI_RunFeedback(pydantic.BaseModel):
     reason: str | None = KW_ONLY_NONE
 
 
+class AGUI_FeedbackQueryTerms(pydantic.BaseModel):
+    """Narrow feedback"""
+
+    limit: int | None = KW_ONLY_NONE
+    since: datetime.datetime | None = KW_ONLY_NONE
+
+    @property
+    def as_dict(self) -> dict:
+        result = {}
+
+        if self.limit is not None:
+            result["limit"] = self.limit
+
+        if self.since is not None:
+            result["since"] = self.since
+
+        return result
+
+
 class AGUI_NewRunRequest(pydantic.BaseModel):
     parent_run_id: str = KW_ONLY_NONE
     metadata: AGUI_RunMetadata = KW_ONLY_NONE

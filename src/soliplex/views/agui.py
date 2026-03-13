@@ -819,6 +819,53 @@ async def post_room_agui_thread_id_run_id_meta(
 
 
 @util.logfire_span(
+    "GET /v1/rooms/{room_id}/agui/{thread_id}/{run_id}/feedback"
+)
+@router.get("/v1/rooms/{room_id}/agui/{thread_id}/{run_id}/feedback")
+async def get_room_agui_thread_id_run_id_feedback(
+    request: fastapi.Request,
+    room_id: str,
+    thread_id: str,
+    run_id: str,
+    the_installation: installation.Installation = depend_the_installation,
+    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
+) -> models.AGUI_RunFeedback | None:
+    """Retrieve feedback for a run"""
+    the_logger.debug(loggers.AGUI_GET_ROOM_THREAD_RUN_FEEDBACK)
+
+    user_name = the_user_claims.get("preferred_username", "<unknown>")
+    _room_config = await _check_user_in_room(
+        room_id=room_id,
+        the_installation=the_installation,
+        the_authz_policy=the_authz_policy,
+        the_user_claims=the_user_claims,
+        the_logger=the_logger,
+    )
+
+    try:
+        run_feedback = await the_threads.get_run_feedback(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+        )
+
+    except agui_package.AGUI_Exception as exc:
+        raise fastapi.HTTPException(
+            status_code=exc.status_code,
+            detail=exc.args,
+        ) from None
+
+    return models.AGUI_RunFeedback(
+        feedback=run_feedback.feedback,
+        reason=run_feedback.reason,
+    )
+
+
+@util.logfire_span(
     "POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}/feedback"
 )
 @router.post("/v1/rooms/{room_id}/agui/{thread_id}/{run_id}/feedback")
@@ -866,3 +913,88 @@ async def post_room_agui_thread_id_run_id_feedback(
         ) from None
 
     return fastapi.Response(status_code=205)
+
+
+@util.logfire_span("POST /v1/agui/feedback")
+@router.post("/v1/agui/feedback")
+async def post_agui_recent_feedback(
+    request: fastapi.Request,
+    query_terms: models.AGUI_FeedbackQueryTerms,
+    the_installation: installation.Installation = depend_the_installation,
+    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
+) -> list[models.AGUI_RunFeedback]:
+    """Retrieve recent feedback for runs"""
+    the_logger.debug(loggers.AGUI_POST_RECENT_FEEDBACK)
+
+    recent_feedback = await the_threads.list_recent_run_feedback(
+        **query_terms.as_dict,
+    )
+
+    return [
+        models.AGUI_RunFeedback(
+            feedback=run_feedback.feedback,
+            reason=run_feedback.reason,
+        )
+        for run_feedback in recent_feedback
+    ]
+
+
+@util.logfire_span("POST /v1/agui/feedback/rooms/{room_id}")
+@router.post("/v1/agui/feedback/rooms/{room_id}")
+async def post_agui_recent_room_feedback(
+    request: fastapi.Request,
+    room_id: str,
+    query_terms: models.AGUI_FeedbackQueryTerms,
+    the_installation: installation.Installation = depend_the_installation,
+    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
+) -> list[models.AGUI_RunFeedback]:
+    """Retrieve recent feedback for runs in a room"""
+    the_logger.debug(loggers.AGUI_POST_RECENT_ROOM_FEEDBACK)
+
+    recent_feedback = await the_threads.list_recent_run_feedback(
+        room_id=room_id,
+        **query_terms.as_dict,
+    )
+
+    return [
+        models.AGUI_RunFeedback(
+            feedback=run_feedback.feedback,
+            reason=run_feedback.reason,
+        )
+        for run_feedback in recent_feedback
+    ]
+
+
+@util.logfire_span("POST /v1/agui/feedback/user/{user_name}")
+@router.post("/v1/agui/feedback/user/{user_name}")
+async def post_agui_recent_user_feedback(
+    request: fastapi.Request,
+    user_name: str,
+    query_terms: models.AGUI_FeedbackQueryTerms,
+    the_installation: installation.Installation = depend_the_installation,
+    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
+) -> list[models.AGUI_RunFeedback]:
+    """Retrieve recent feedback for runs made by a user"""
+    the_logger.debug(loggers.AGUI_POST_RECENT_USER_FEEDBACK)
+
+    recent_feedback = await the_threads.list_recent_run_feedback(
+        user_name=user_name,
+        **query_terms.as_dict,
+    )
+
+    return [
+        models.AGUI_RunFeedback(
+            feedback=run_feedback.feedback,
+            reason=run_feedback.reason,
+        )
+        for run_feedback in recent_feedback
+    ]
