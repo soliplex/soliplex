@@ -669,6 +669,42 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     assert await tid_earlier_fb.awaitable_attrs.feedback == "thumbs_down"
     assert await tid_earlier_fb.awaitable_attrs.reason == "dithering"
 
+    await the_async_session.commit()
+
+    await ts.save_run_feedback(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=before_id,
+        feedback="thumbs_up",
+        reason="vacillating",
+    )
+
+    # Test sorting by 'run_feedback.created'
+    further_run_feedback = await ts.get_run_feedback(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=before_id,
+    )
+
+    assert await further_run_feedback.awaitable_attrs.feedback == "thumbs_up"
+    assert await further_run_feedback.awaitable_attrs.reason == "vacillating"
+
+    await the_async_session.commit()
+
+    tid_later, tid_earlier = await ts.list_recent_run_feedback(
+        thread_id=thread_id,
+    )
+
+    tid_later_fb = await tid_later.awaitable_attrs.run_feedback
+    assert await tid_later_fb.awaitable_attrs.feedback == "thumbs_up"
+    assert await tid_later_fb.awaitable_attrs.reason == "vacillating"
+
+    tid_earlier_fb = await tid_earlier.awaitable_attrs.run_feedback
+    assert await tid_earlier_fb.awaitable_attrs.feedback == "thumbs_up"
+    assert await tid_earlier_fb.awaitable_attrs.reason == "fresh"
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(

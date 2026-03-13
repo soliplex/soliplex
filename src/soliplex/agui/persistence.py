@@ -486,7 +486,7 @@ class ThreadStorage(agui_package.ThreadStorage):
                 .join(
                     agui_schema.Run.thread,
                 )
-                .order_by(agui_schema.Run.created.desc())
+                .order_by(agui_schema.RunFeedback.created.desc())
             )
 
             if room_id is not None:
