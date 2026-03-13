@@ -70,6 +70,7 @@ def make_ai_tool(tool_config: config_tools.ToolConfig) -> ai_tools.Tool:
     return ai_tools.Tool(
         tool_func,
         name=tool_config.tool_id,
+        **tool_config.get_extra_parameters(),
     )
 
 
