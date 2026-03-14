@@ -3,7 +3,6 @@ from __future__ import annotations  # forward refs in typing decls
 import dataclasses
 import enum
 import functools
-import importlib
 import pathlib
 import typing
 from collections import abc
@@ -243,9 +242,7 @@ class FactoryAgentConfig:
     @property
     def factory(self) -> AgentFactory:
         if self._factory is None:
-            module_name, factory_id = self.factory_name.rsplit(".", 1)
-            module = importlib.import_module(module_name)
-            factory = getattr(module, factory_id)
+            factory = _utils._from_dotted_name(self.factory_name)
 
             if self.with_agent_config:
                 self._factory = functools.update_wrapper(

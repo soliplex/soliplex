@@ -226,17 +226,6 @@ meta:
 
 
 @mock.patch("importlib.import_module")
-def test__from_dotted_name(im):
-    dotted_name = "somemodule.SomeClass"
-
-    faux_module = im.return_value = mock.Mock()
-
-    klass = config_meta._from_dotted_name(dotted_name)
-
-    assert klass is faux_module.SomeClass
-
-
-@mock.patch("importlib.import_module")
 def test_configmeta_from_yaml_w_dotted_name(im):
     config_yaml = "somemodule.SomeClass"
 

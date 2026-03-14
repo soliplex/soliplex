@@ -1,8 +1,15 @@
 import dataclasses
+import importlib
 
 
 def _dotted_name(type_or_func) -> str:
     return f"{type_or_func.__module__}.{type_or_func.__name__}"
+
+
+def _from_dotted_name(dotted_name: str):
+    module_name, target = dotted_name.rsplit(".", 1)
+    module = importlib.import_module(module_name)
+    return getattr(module, target)
 
 
 def _no_repr(**kw):

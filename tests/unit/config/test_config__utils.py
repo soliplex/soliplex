@@ -3,8 +3,20 @@ from unittest import mock
 
 import pytest
 
+from soliplex.config import _utils as config__utils
 from soliplex.config import exceptions as config_exc
 from soliplex.config import installation as config_installation
+
+
+@mock.patch("importlib.import_module")
+def test__from_dotted_name(im):
+    dotted_name = "somemodule.SomeClass"
+
+    faux_module = im.return_value = mock.Mock()
+
+    klass = config__utils._from_dotted_name(dotted_name)
+
+    assert klass is faux_module.SomeClass
 
 
 def test__load_config_yaml_w_missing(temp_dir):

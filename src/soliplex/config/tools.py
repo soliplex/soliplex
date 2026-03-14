@@ -3,7 +3,6 @@ from __future__ import annotations  # forward refs in typing decls
 import dataclasses
 import enum
 import functools
-import importlib
 import inspect
 import pathlib
 import typing
@@ -80,9 +79,7 @@ class ToolConfig:
     @property
     def tool(self):
         if self._tool is None:
-            module_name, tool_id = self.tool_name.rsplit(".", 1)
-            module = importlib.import_module(module_name)
-            self._tool = getattr(module, tool_id)
+            self._tool = _utils._from_dotted_name(self.tool_name)
 
         return self._tool
 

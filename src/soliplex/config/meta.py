@@ -1,7 +1,6 @@
 from __future__ import annotations  # forward refs in typing decls
 
 import dataclasses
-import importlib
 import pathlib
 import typing
 
@@ -18,19 +17,12 @@ from . import secrets as config_secrets
 from . import skills as config_skills
 from . import tools as config_tools
 
-_dotted_name = _utils._dotted_name
 _no_repr = _utils._no_repr
 _no_repr_no_compare = _utils._no_repr_no_compare
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 _no_repr_no_compare_dict = _utils._no_repr_no_compare_dict
 _default_list_field = _utils._default_list_field
 _default_dict_field = _utils._default_dict_field
-
-
-def _from_dotted_name(dotted_name: str):
-    module_name, target = dotted_name.rsplit(".", 1)
-    module = importlib.import_module(module_name)
-    return getattr(module, target)
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -53,7 +45,7 @@ class AGUI_FeatureConfigMeta:
     @classmethod
     def from_yaml(cls, yaml_config: str | dict):
         model_klass = yaml_config["model_klass"]
-        yaml_config["model_klass"] = _from_dotted_name(model_klass)
+        yaml_config["model_klass"] = _utils._from_dotted_name(model_klass)
         return cls(**yaml_config)
 
 
@@ -81,23 +73,23 @@ class ConfigMeta:
     @classmethod
     def from_yaml(cls, yaml_config: str | dict):
         if isinstance(yaml_config, str):
-            config_klass = _from_dotted_name(yaml_config)
+            config_klass = _utils._from_dotted_name(yaml_config)
             return cls(config_klass=config_klass)
         else:
             config_klass = yaml_config["config_klass"]
 
             if isinstance(config_klass, str):
-                config_klass = _from_dotted_name(config_klass)
+                config_klass = _utils._from_dotted_name(config_klass)
 
             wrapper_klass = yaml_config.get("wrapper_klass")
 
             if isinstance(wrapper_klass, str):
-                wrapper_klass = _from_dotted_name(wrapper_klass)
+                wrapper_klass = _utils._from_dotted_name(wrapper_klass)
 
             registered_func = yaml_config.get("registered_func")
 
             if isinstance(registered_func, str):
-                registered_func = _from_dotted_name(registered_func)
+                registered_func = _utils._from_dotted_name(registered_func)
 
             return cls(
                 config_klass=config_klass,
@@ -277,7 +269,7 @@ class InstallationConfigMeta:
         agui_feature_entries = [
             {
                 "name": feature.name,
-                "model_klass": _dotted_name(feature.model_klass),
+                "model_klass": _utils._dotted_name(feature.model_klass),
                 "source": str(feature.source),
             }
             for feature in agui_feature_registry.values()
@@ -285,14 +277,15 @@ class InstallationConfigMeta:
 
         tool_config_registry = config_tools.TOOL_CONFIG_CLASSES_BY_TOOL_NAME
         tool_config_entries = [
-            _dotted_name(klass) for klass in tool_config_registry.values()
+            _utils._dotted_name(klass)
+            for klass in tool_config_registry.values()
         ]
 
         mcp_toolset_config_registry = (
             config_tools.MCP_TOOLSET_CONFIG_CLASSES_BY_KIND
         )
         mcp_toolset_config_entries = [
-            _dotted_name(klass)
+            _utils._dotted_name(klass)
             for klass in mcp_toolset_config_registry.values()
         ]
 
@@ -301,32 +294,34 @@ class InstallationConfigMeta:
         )
         mcp_server_tool_wrapper_entries = [
             {
-                "config_klass": _dotted_name(
+                "config_klass": _utils._dotted_name(
                     tool_config_registry[tool_name],
                 ),
-                "wrapper_klass": _dotted_name(wrapper_klass),
+                "wrapper_klass": _utils._dotted_name(wrapper_klass),
             }
             for tool_name, wrapper_klass in mcp_tool_wrapper_registry.items()
         ]
 
         skill_config_registry = config_skills.SKILL_CONFIG_CLASSES_BY_KIND
         skill_config_entries = [
-            _dotted_name(klass) for klass in skill_config_registry.values()
+            _utils._dotted_name(klass)
+            for klass in skill_config_registry.values()
         ]
 
         agent_config_registry = config_agents.AGENT_CONFIG_CLASSES_BY_KIND
         agent_config_entries = [
-            _dotted_name(klass) for klass in agent_config_registry.values()
+            _utils._dotted_name(klass)
+            for klass in agent_config_registry.values()
         ]
 
         secret_source_registry = config_secrets.SourceClassesByKind
         secret_getter_registry = config_secrets.SECRET_GETTERS_BY_KIND
         secret_source_entries = [
             {
-                "config_klass": _dotted_name(
+                "config_klass": _utils._dotted_name(
                     secret_source_registry[kind],
                 ),
-                "registered_func": _dotted_name(r_func),
+                "registered_func": _utils._dotted_name(r_func),
             }
             for kind, r_func in secret_getter_registry.items()
         ]
