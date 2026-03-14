@@ -19,11 +19,11 @@ HTTP_MCP_QP_VALUE = "secret:BAZQUYTH"
 HTTP_MCP_QUERY_PARAMS = {HTTP_MCP_QP_KEY: HTTP_MCP_QP_VALUE}
 
 
-async def _ai_tools_prepare(_ctx, tool_def):
+async def _ai_tools_prepare(_ctx, tool_def):  # pragma: NO COVER
     return tool_def
 
 
-async def _ai_tools_args_validator(_ctx, _tool_params):
+async def _ai_tools_args_validator(_ctx, _tool_params):  # pragma: NO COVER
     pass
 
 
