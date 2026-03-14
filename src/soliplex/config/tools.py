@@ -218,6 +218,9 @@ class ToolConfig:
                 )
 
             return cls(**config_dict)
+        except config_exc.FromYamlException:  # pragma: NO COVER
+            raise
+
         except Exception as exc:
             raise config_exc.FromYamlException(
                 config_path, "toolconfig", config_dict
