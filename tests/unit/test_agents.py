@@ -1,3 +1,4 @@
+import dataclasses
 from unittest import mock
 
 import pytest
@@ -31,7 +32,105 @@ MODEL_SETTINGS = {
 ROOM_ID = "test-room"
 RAG_LANCEDB_OVERRIDE_PATH = "/path/to/db/rag"
 
+TOOL_ID = "test-tool-id"
+AI_TOOL_PARAM_NAME = "test-ai-tool-param-name"
+
 TC_TOOL_CONFIG = config_tools.ToolConfig(tool_name="soliplex.tools.test_tool")
+
+STDIO_MCTC = config_tools.Stdio_MCP_ClientToolsetConfig(
+    command="cat",
+    args=["-"],
+)
+STDIO_TOOL = mcp_client.Stdio_MCP_Client_Toolset(
+    command="cat",
+    args=["-"],
+    env={},
+)
+
+HTTP_MCTC = config_tools.HTTP_MCP_ClientToolsetConfig(
+    url="https://example.com/mcp",
+)
+HTTP_TOOL = mcp_client.HTTP_MCP_Client_Toolset(
+    url="https://example.com/mcp",
+    headers={},
+)
+
+
+def test_tool():
+    """This is a test"""
+
+
+@pytest.fixture(
+    scope="module",
+    params=[
+        None,
+        TC_TOOL_CONFIG,
+    ],
+)
+def tool_configs_tools(request):
+    # Ensure that 'soliplex.tools.test_tool' can be found.
+    with mock.patch.dict(tools.__dict__, test_tool=test_tool):
+        if request.param is None:
+            yield []
+        else:
+            tc = request.param
+            ai_tool = ai_tools.Tool(tc.tool_with_config, name=tc.tool_id)
+            yield [(tc, ai_tool)]
+
+
+@pytest.fixture(
+    scope="module",
+    params=[
+        [],
+        [(STDIO_MCTC, STDIO_TOOL)],
+        [(HTTP_MCTC, HTTP_TOOL)],
+    ],
+)
+def mcp_ct_configs_tools(request):
+    return request.param
+
+
+@pytest.mark.parametrize(
+    "w_aitp, exp_aitp",
+    [
+        ({}, {"name": "test_tool"}),
+        ({"takes_ctx": True}, {"name": "test_tool", "takes_ctx": True}),
+        (
+            {"name": AI_TOOL_PARAM_NAME},
+            {"name": AI_TOOL_PARAM_NAME},
+        ),
+    ],
+)
+def test_make_ai_tool(w_aitp, exp_aitp):
+    if w_aitp:
+        tool_config = dataclasses.replace(
+            TC_TOOL_CONFIG,
+            _ai_tool_params=config_tools.AIToolParams(**w_aitp),
+        )
+    else:
+        tool_config = TC_TOOL_CONFIG
+
+    with mock.patch.dict(tools.__dict__, test_tool=test_tool):
+        found = agents.make_ai_tool(tool_config)
+
+    assert isinstance(found, ai_tools.Tool)
+
+    for key, e_value in exp_aitp.items():
+        f_value = getattr(found, key)
+        assert f_value == e_value
+
+
+@pytest.mark.parametrize(
+    "mcp_toolset_config, expected",
+    [
+        (STDIO_MCTC, STDIO_TOOL),
+        (HTTP_MCTC, HTTP_TOOL),
+    ],
+)
+def test_make_mcp_client_toolset(mcp_toolset_config, expected):
+    found = agents.make_mcp_client_toolset(mcp_toolset_config)
+
+    assert found == expected
 
 
 @pytest.mark.parametrize("w_model_settings", [None, MODEL_SETTINGS])
@@ -125,59 +224,6 @@ def test_get_model_from_config(
         oai_provider_klass.assert_not_called()
         google_model_klass.assert_not_called()
         google_provider_klass.assert_not_called()
-
-
-def test_tool():
-    """This is a test"""
-
-
-@pytest.fixture(
-    scope="module",
-    params=[
-        None,
-        TC_TOOL_CONFIG,
-    ],
-)
-def tool_configs_tools(request):
-    # Ensure that 'soliplex.tools.test_tool' can be found.
-    with mock.patch.dict(tools.__dict__, test_tool=test_tool):
-        if request.param is None:
-            yield []
-        else:
-            tc = request.param
-            ai_tool = ai_tools.Tool(tc.tool_with_config, name=tc.tool_id)
-            yield [(tc, ai_tool)]
-
-
-STDIO_MCTC = config_tools.Stdio_MCP_ClientToolsetConfig(
-    command="cat",
-    args=["-"],
-)
-STDIO_TOOL = mcp_client.Stdio_MCP_Client_Toolset(
-    command="cat",
-    args=["-"],
-    env={},
-)
-
-HTTP_MCTC = config_tools.HTTP_MCP_ClientToolsetConfig(
-    url="https://example.com/mcp",
-)
-HTTP_TOOL = mcp_client.HTTP_MCP_Client_Toolset(
-    url="https://example.com/mcp",
-    headers={},
-)
-
-
-@pytest.fixture(
-    scope="module",
-    params=[
-        [],
-        [(STDIO_MCTC, STDIO_TOOL)],
-        [(HTTP_MCTC, HTTP_TOOL)],
-    ],
-)
-def mcp_ct_configs_tools(request):
-    return request.param
 
 
 @pytest.mark.parametrize("w_room_skills", [False, True])

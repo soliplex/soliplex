@@ -67,10 +67,12 @@ _agent_cache: dict[str, pydantic_ai.Agent] = {}
 def make_ai_tool(tool_config: config_tools.ToolConfig) -> ai_tools.Tool:
     tool_func = tool_config.tool_with_config
 
-    return ai_tools.Tool(
-        tool_func,
-        name=tool_config.tool_id,
-    )
+    ai_tool_params = tool_config.ai_tool_params
+
+    if "name" not in ai_tool_params:
+        ai_tool_params["name"] = tool_config.tool_id
+
+    return ai_tools.Tool(tool_func, **ai_tool_params)
 
 
 def make_mcp_client_toolset(

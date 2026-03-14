@@ -1,3 +1,5 @@
+import copy
+import dataclasses
 import functools
 import inspect
 from unittest import mock
@@ -15,6 +17,129 @@ HTTP_MCP_URL = "https://example.com/services/baz/mcp"
 HTTP_MCP_QP_KEY = "frob"
 HTTP_MCP_QP_VALUE = "secret:BAZQUYTH"
 HTTP_MCP_QUERY_PARAMS = {HTTP_MCP_QP_KEY: HTTP_MCP_QP_VALUE}
+
+
+async def _ai_tools_prepare(_ctx, tool_def):
+    return tool_def
+
+
+async def _ai_tools_args_validator(_ctx, _tool_params):
+    pass
+
+
+class _AI_Tools_SchemaGenerator:
+    pass
+
+
+class _AI_Tools_FunctionSchema:
+    pass
+
+
+AITP_MAX_RETRIES = 7
+AITP_NAME = "test_aitool_params_name"
+AITP_DESC = "test aitool_params description"
+AITP_DOCSTRING_FORMAT = "sphinx"
+AITP_META_KEY = "foo"
+AITP_META_VALUE = "bar"
+AITP_TIMEOUT = 3.1415
+AITP_PREPARE_NAME = "test_prepare"
+AITP_ARGS_VALIDATOR_NAME = "test_args_validator"
+AITP_SCHEMA_GENERATOR_NAME = "TestSchemaGeneratorKlass"
+AITP_FUNCTION_SCHEMA_NAME = "TestFunctionSchemaKlass"
+
+# This one raises
+BOGUS_AI_TOOL_PARAMS_YAML = ""
+
+BARE_AI_TOOL_PARAMS_KW = {
+    "takes_ctx": False,
+}
+BARE_AI_TOOL_PARAMS_YAML = """
+    takes_ctx: false
+"""
+
+FULL_AI_TOOL_PARAMS_KW = {
+    "takes_ctx": True,
+    "max_retries": AITP_MAX_RETRIES,
+    "name": AITP_NAME,
+    "description": AITP_DESC,
+    "docstring_format": AITP_DOCSTRING_FORMAT,
+    "require_parameter_descriptions": True,
+    "strict": True,
+    "sequential": True,
+    "requires_approval": True,
+    "metadata": {
+        AITP_META_KEY: AITP_META_VALUE,
+    },
+    "timeout": AITP_TIMEOUT,
+    "_prepare": f"soliplex.tools.{AITP_PREPARE_NAME}",
+    "_args_validator": f"soliplex.tools.{AITP_ARGS_VALIDATOR_NAME}",
+    "_schema_generator": f"soliplex.tools.{AITP_SCHEMA_GENERATOR_NAME}",
+    "_function_schema": f"soliplex.tools.{AITP_FUNCTION_SCHEMA_NAME}",
+}
+FULL_AI_TOOL_PARAMS_YAML = f"""
+    takes_ctx: true
+    max_retries: {AITP_MAX_RETRIES}
+    name: "{AITP_NAME}"
+    description: "{AITP_DESC}"
+    docstring_format: "{AITP_DOCSTRING_FORMAT}"
+    require_parameter_descriptions: true
+    strict: true
+    sequential: true
+    requires_approval: true
+    metadata:
+        {AITP_META_KEY}: "{AITP_META_VALUE}"
+    timeout: {AITP_TIMEOUT}
+    prepare: "soliplex.tools.{AITP_PREPARE_NAME}"
+    args_validator: "soliplex.tools.{AITP_ARGS_VALIDATOR_NAME}"
+    schema_generator: "soliplex.tools.{AITP_SCHEMA_GENERATOR_NAME}"
+    function_schema: "soliplex.tools.{AITP_FUNCTION_SCHEMA_NAME}"
+"""
+
+TOOL_NAME = "test-tool-name"
+TOOL_AGUI_FEATURE_NAME = "test-tool-agui-feature-name"
+TOOL_AITP_KWARGS = {"takes_ctx": True}
+
+# This one raises
+EMPTY_TOOL_CONFIG_PARAMS_YAML = ""
+
+BOGUS_TOOL_CONFIG_PARAMS_YAML = """
+    tool_name: tool_name
+    allow_mcp: True
+    nonesuch: "BOGUS"
+"""
+
+BARE_TOOL_CONFIG_PARAMS_KW = {
+    "tool_name": TOOL_NAME,
+    "allow_mcp": True,
+}
+BARE_TOOL_CONFIG_PARAMS_YAML = f"""
+    tool_name: {TOOL_NAME}
+    allow_mcp: true
+"""
+
+W_AGUI_FEATURE_NAME_TOOL_CONFIG_PARAMS_KW = {
+    "tool_name": TOOL_NAME,
+    "allow_mcp": True,
+    "agui_feature_names": (TOOL_AGUI_FEATURE_NAME,),
+}
+W_AGUI_FEATURE_NAME_TOOL_CONFIG_PARAMS_YAML = f"""
+    tool_name: {TOOL_NAME}
+    allow_mcp: true
+    agui_feature_names:
+      - {TOOL_AGUI_FEATURE_NAME}
+"""
+
+W_AI_TOOL_PARAMS_TOOL_CONFIG_PARAMS_KW = {
+    "tool_name": TOOL_NAME,
+    "allow_mcp": True,
+    "_ai_tool_params": config_tools.AIToolParams(**TOOL_AITP_KWARGS),
+}
+W_AI_TOOL_PARAMS_TOOL_CONFIG_PARAMS_YAML = f"""
+    tool_name: {TOOL_NAME}
+    allow_mcp: true
+    ai_tool_params:
+        takes_ctx: true
+"""
 
 # This one raises
 BOGUS_STDIO_MCTC_CONFIG_YAML = ""
@@ -79,63 +204,187 @@ FULL_HTTP_MCTC_CONFIG_YAML = """
 """
 
 
-def test_toolconfig_from_yaml_w_error(temp_dir, installation_config):
-    tool_name = "soliplex.tools.test_tool"
-    config_path = temp_dir / "thing_config.yaml"
-
-    with pytest.raises(config_exc.FromYamlException) as exc_info:
-        config_tools.ToolConfig.from_yaml(
-            installation_config=installation_config,
-            config_path=config_path,
-            config_dict={
-                "tool_name": tool_name,
-                "allow_mcp": True,
-                "nonesuch": "BOGUS",
-            },
-        )
-
-    assert exc_info.value._config_path == config_path
+@pytest.fixture
+def patched_soliplex_tools():
+    to_patch = {
+        AITP_PREPARE_NAME: _ai_tools_prepare,
+        AITP_ARGS_VALIDATOR_NAME: _ai_tools_args_validator,
+        AITP_SCHEMA_GENERATOR_NAME: _AI_Tools_SchemaGenerator,
+        AITP_FUNCTION_SCHEMA_NAME: _AI_Tools_FunctionSchema,
+    }
+    with mock.patch.dict("soliplex.tools.__dict__", **to_patch) as patched:
+        yield patched
 
 
 @pytest.mark.parametrize(
-    "w_feature_names, exp_feature_names",
+    "config_yaml, exp_config",
     [
-        (None, ()),
-        (["foo"], ("foo",)),
+        (BOGUS_AI_TOOL_PARAMS_YAML, None),
+        (BARE_AI_TOOL_PARAMS_YAML, BARE_AI_TOOL_PARAMS_KW),
+        (FULL_AI_TOOL_PARAMS_YAML, FULL_AI_TOOL_PARAMS_KW),
+    ],
+)
+def test_aitp_from_yaml(
+    temp_dir,
+    config_yaml,
+    exp_config,
+):
+    config_dir = temp_dir / "rooms" / "test_room"
+    config_dir.mkdir(parents=True)
+
+    config_path = config_dir / "room_config.yaml"
+    config_path.write_text(config_yaml)
+
+    with config_path.open() as stream:
+        config_dict = yaml.safe_load(stream)
+
+    if exp_config is None:
+        with pytest.raises(config_exc.FromYamlException) as exc:
+            config_tools.AIToolParams.from_yaml(
+                config_path=config_path,
+                config_dict=config_dict,
+            )
+
+        assert exc.value._config_path == config_path
+
+    else:
+        aitp = config_tools.AIToolParams.from_yaml(
+            config_path=config_path,
+            config_dict=config_dict,
+        )
+        expected = config_tools.AIToolParams(
+            _config_path=config_path,
+            **exp_config,
+        )
+        assert aitp == expected
+
+
+@pytest.mark.parametrize(
+    "ctor_kwargs",
+    [
+        BARE_AI_TOOL_PARAMS_KW,
+        FULL_AI_TOOL_PARAMS_KW,
+    ],
+)
+def test_aitp_as_yaml(ctor_kwargs):
+    expected = copy.deepcopy(ctor_kwargs)
+
+    _prepare = expected.pop("_prepare", None)
+    if _prepare is not None:
+        expected["prepare"] = _prepare
+
+    _args_validator = expected.pop("_args_validator", None)
+    if _args_validator is not None:
+        expected["args_validator"] = _args_validator
+
+    _schema_generator = expected.pop("_schema_generator", None)
+    if _schema_generator is not None:
+        expected["schema_generator"] = _schema_generator
+
+    _function_schema = expected.pop("_function_schema", None)
+    if _function_schema is not None:
+        expected["function_schema"] = _function_schema
+
+    aitp = config_tools.AIToolParams(**ctor_kwargs)
+
+    found = aitp.as_yaml
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "ctor_kwargs",
+    [
+        BARE_AI_TOOL_PARAMS_KW,
+        FULL_AI_TOOL_PARAMS_KW,
+    ],
+)
+def test_aitp_as_aitool_ctor_kwargs(patched_soliplex_tools, ctor_kwargs):
+    expected = copy.deepcopy(ctor_kwargs)
+
+    _prepare = expected.pop("_prepare", None)
+    if _prepare is not None:
+        expected["prepare"] = _ai_tools_prepare
+
+    _args_validator = expected.pop("_args_validator", None)
+    if _args_validator is not None:
+        expected["args_validator"] = _ai_tools_args_validator
+
+    _schema_generator = expected.pop("_schema_generator", None)
+    if _schema_generator is not None:
+        expected["schema_generator"] = _AI_Tools_SchemaGenerator
+
+    _function_schema = expected.pop("_function_schema", None)
+    if _function_schema is not None:
+        expected["function_schema"] = _AI_Tools_FunctionSchema
+
+    aitp = config_tools.AIToolParams(**ctor_kwargs)
+
+    found = aitp.as_aitool_ctor_kwargs
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "config_yaml, exp_config",
+    [
+        (EMPTY_TOOL_CONFIG_PARAMS_YAML, None),
+        (BOGUS_TOOL_CONFIG_PARAMS_YAML, None),
+        (BARE_TOOL_CONFIG_PARAMS_YAML, BARE_TOOL_CONFIG_PARAMS_KW),
+        (
+            W_AGUI_FEATURE_NAME_TOOL_CONFIG_PARAMS_YAML,
+            W_AGUI_FEATURE_NAME_TOOL_CONFIG_PARAMS_KW,
+        ),
+        (
+            W_AI_TOOL_PARAMS_TOOL_CONFIG_PARAMS_YAML,
+            W_AI_TOOL_PARAMS_TOOL_CONFIG_PARAMS_KW,
+        ),
     ],
 )
 def test_toolconfig_from_yaml(
-    installation_config,
     temp_dir,
-    w_feature_names,
-    exp_feature_names,
+    installation_config,
+    config_yaml,
+    exp_config,
 ):
-    tool_name = "soliplex.tools.test_tool"
-    config_path = temp_dir / "thing_config.yaml"
+    config_dir = temp_dir / "rooms" / "test_room"
+    config_dir.mkdir(parents=True)
 
-    expected = config_tools.ToolConfig(
-        _installation_config=installation_config,
-        _config_path=config_path,
-        tool_name=tool_name,
-        allow_mcp=True,
-        agui_feature_names=exp_feature_names,
-    )
+    config_path = config_dir / "room_config.yaml"
+    config_path.write_text(config_yaml)
 
-    config_dict = {
-        "tool_name": tool_name,
-        "allow_mcp": True,
-    }
+    with config_path.open() as stream:
+        config_dict = yaml.safe_load(stream)
 
-    if w_feature_names is not None:
-        config_dict["agui_feature_names"] = w_feature_names
+    if exp_config is None:
+        with pytest.raises(config_exc.FromYamlException) as exc:
+            config_tools.ToolConfig.from_yaml(
+                installation_config=installation_config,
+                config_path=config_path,
+                config_dict=config_dict,
+            )
 
-    tool_config = config_tools.ToolConfig.from_yaml(
-        installation_config=installation_config,
-        config_path=config_path,
-        config_dict=config_dict,
-    )
+        assert exc.value._config_path == config_path
 
-    assert tool_config == expected
+    else:
+        found = config_tools.ToolConfig.from_yaml(
+            installation_config=installation_config,
+            config_path=config_path,
+            config_dict=config_dict,
+        )
+
+        aitp = exp_config.pop("_ai_tool_params", None)
+        if aitp is not None:
+            exp_config["_ai_tool_params"] = dataclasses.replace(
+                aitp,
+                _config_path=config_path,
+            )
+
+        expected = config_tools.ToolConfig(
+            _config_path=config_path,
+            **exp_config,
+        )
+        assert found == expected
 
 
 def test_toolconfig_kind():
@@ -155,12 +404,14 @@ def test_toolconfig_tool_id():
 
 
 @pytest.mark.parametrize("w_existing", [False, True])
-def test_toolconfig_tool(w_existing):
+def test_toolconfig_tool(patched_soliplex_tools, w_existing):
     def existing():  # pragma: NO COVER
         pass
 
     def test_tool(ctx, tool_config=None):
         "This is a test"
+
+    patched_soliplex_tools["test_tool"] = test_tool
 
     if w_existing:
         tool_config = config_tools.ToolConfig(
@@ -172,8 +423,7 @@ def test_toolconfig_tool(w_existing):
             tool_name="soliplex.tools.test_tool",
         )
 
-    with mock.patch.dict("soliplex.tools.__dict__", test_tool=test_tool):
-        found = tool_config.tool
+    found = tool_config.tool
 
     if w_existing:
         assert found is existing
@@ -240,14 +490,17 @@ def TEST_TOOL_WO_CTX_W_PARAM_W_TC(
         TEST_TOOL_W_CTX_W_PARAM_W_TC,
     ],
 )
-def test_toolconfig_tool_requires_w_conflict(test_tool):
+def test_toolconfig_tool_requires_w_conflict(
+    patched_soliplex_tools, test_tool
+):
+    patched_soliplex_tools["test_tool"] = test_tool
+
     tool_config = config_tools.ToolConfig(
         tool_name="soliplex.tools.test_tool",
     )
 
-    with mock.patch.dict("soliplex.tools.__dict__", test_tool=test_tool):
-        with pytest.raises(config_tools.ToolRequirementConflict):
-            _ = tool_config.tool_requires
+    with pytest.raises(config_tools.ToolRequirementConflict):
+        _ = tool_config.tool_requires
 
 
 @pytest.mark.parametrize(
@@ -261,13 +514,14 @@ def test_toolconfig_tool_requires_w_conflict(test_tool):
         TEST_TOOL_WO_CTX_W_PARAM_W_TC,
     ],
 )
-def test_toolconfig_tool_description(test_tool):
+def test_toolconfig_tool_description(patched_soliplex_tools, test_tool):
+    patched_soliplex_tools["test_tool"] = test_tool
+
     tool_config = config_tools.ToolConfig(
         tool_name="soliplex.tools.test_tool",
     )
 
-    with mock.patch.dict("soliplex.tools.__dict__", test_tool=test_tool):
-        found = tool_config.tool_description
+    found = tool_config.tool_description
 
     assert found == test_tool.__doc__.strip()
 
@@ -292,13 +546,29 @@ def test_toolconfig_tool_description(test_tool):
         (TEST_TOOL_WO_CTX_W_PARAM_W_TC, config_tools.ToolRequires.TOOL_CONFIG),
     ],
 )
-def test_toolconfig_tool_requires(test_tool, expected):
+def test_toolconfig_tool_requires(patched_soliplex_tools, test_tool, expected):
+    patched_soliplex_tools["test_tool"] = test_tool
+
     tool_config = config_tools.ToolConfig(
         tool_name="soliplex.tools.test_tool",
     )
 
-    with mock.patch.dict("soliplex.tools.__dict__", test_tool=test_tool):
-        found = tool_config.tool_requires
+    found = tool_config.tool_requires
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "ctor_kwargs, expected",
+    [
+        (BARE_TOOL_CONFIG_PARAMS_KW, {}),
+        (W_AI_TOOL_PARAMS_TOOL_CONFIG_PARAMS_KW, TOOL_AITP_KWARGS),
+    ],
+)
+def test_toolconfig_ai_tool_params(ctor_kwargs, expected):
+    tool_config = config_tools.ToolConfig(**ctor_kwargs)
+
+    found = tool_config.ai_tool_params
 
     assert found == expected
 
@@ -314,13 +584,18 @@ def test_toolconfig_tool_requires(test_tool, expected):
         (TEST_TOOL_WO_CTX_W_PARAM_W_TC, True),
     ],
 )
-def test_toolconfig_tool_with_config(test_tool, exp_wrapped):
+def test_toolconfig_tool_with_config(
+    patched_soliplex_tools,
+    test_tool,
+    exp_wrapped,
+):
+    patched_soliplex_tools["test_tool"] = test_tool
+
     tool_config = config_tools.ToolConfig(
         tool_name="soliplex.tools.test_tool",
     )
 
-    with mock.patch.dict("soliplex.tools.__dict__", test_tool=test_tool):
-        found = tool_config.tool_with_config
+    found = tool_config.tool_with_config
 
     if exp_wrapped:
         assert isinstance(found, functools.partial)

@@ -9,6 +9,8 @@ import typing
 from collections import abc
 from urllib import parse as url_parse
 
+from pydantic_ai import tools as ai_tools
+
 from . import _utils
 from . import exceptions as config_exc
 
@@ -33,11 +35,158 @@ class ToolRequires(enum.StrEnum):
     BARE = "bare"
 
 
+DottedName = str  # for use in the 'importlib' dance
+FunctionSchema = ai_tools._function_schema.FunctionSchema
+
+
+@dataclasses.dataclass(kw_only=True)
+class AIToolParams:
+    """Parameters to be passed to 'pydantic_ai.tools.Tool' ctor
+
+    See its docstring for semantics.
+    """
+
+    takes_ctx: bool | None = None
+    max_retries: int | None = None
+    name: str | None = None
+    description: str | None = None
+    docstring_format: ai_tools.DocstringFormat = None
+    require_parameter_descriptions: bool = None
+    strict: bool | None = None
+    sequential: bool = None
+    requires_approval: bool = None
+    metadata: dict[str, typing.Any] | None = None
+    timeout: float | None = None
+
+    # Set via 'from_yaml'
+    _config_path: pathlib.Path = None
+    _prepare: DottedName | None = None
+    _args_validator: DottedName | None = None
+    _schema_generator: DottedName | None = None
+    _function_schema: DottedName | None = None
+
+    @classmethod
+    def from_yaml(
+        cls,
+        config_path: pathlib.Path,
+        config_dict: dict[str, typing.Any],
+    ):
+        try:
+            config_dict["_config_path"] = config_path
+
+            prepare = config_dict.pop("prepare", None)
+            if prepare is not None:
+                config_dict["_prepare"] = prepare
+
+            args_validator = config_dict.pop("args_validator", None)
+            if args_validator is not None:
+                config_dict["_args_validator"] = args_validator
+
+            schema_generator = config_dict.pop("schema_generator", None)
+            if schema_generator is not None:
+                config_dict["_schema_generator"] = schema_generator
+
+            function_schema = config_dict.pop("function_schema", None)
+            if function_schema is not None:
+                config_dict["_function_schema"] = function_schema
+
+            return cls(**config_dict)
+        except Exception as exc:
+            raise config_exc.FromYamlException(
+                config_path, "aitoolparams", config_dict
+            ) from exc
+
+    @property
+    def prepare(self) -> ai_tools.ToolPrepareFunc | None:
+        if self._prepare is not None:
+            return _utils._from_dotted_name(self._prepare)
+        else:
+            return None
+
+    @property
+    def args_validator(self) -> ai_tools.ArgsValidatorFunc | None:
+        if self._args_validator is not None:
+            return _utils._from_dotted_name(self._args_validator)
+        else:
+            return None
+
+    @property
+    def schema_generator(self) -> type[ai_tools.GenerateJsonSchema] | None:
+        if self._schema_generator is not None:
+            return _utils._from_dotted_name(self._schema_generator)
+        else:
+            return None
+
+    @property
+    def function_schema(self) -> FunctionSchema | None:
+        if self._function_schema is not None:
+            return _utils._from_dotted_name(self._function_schema)
+        else:
+            return None
+
+    @property
+    def as_yaml(self) -> dict:
+        candidates = {
+            "takes_ctx": self.takes_ctx,
+            "max_retries": self.max_retries,
+            "name": self.name,
+            "description": self.description,
+            "docstring_format": self.docstring_format,
+            "require_parameter_descriptions": (
+                self.require_parameter_descriptions
+            ),
+            "strict": self.strict,
+            "sequential": self.sequential,
+            "requires_approval": self.requires_approval,
+            "metadata": self.metadata,
+            "timeout": self.timeout,
+            "prepare": self._prepare,
+            "args_validator": self._args_validator,
+            "schema_generator": self._schema_generator,
+            "function_schema": self._function_schema,
+        }
+
+        return {
+            key: value
+            for key, value in candidates.items()
+            if value is not None
+        }
+
+    @property
+    def as_aitool_ctor_kwargs(self) -> dict[str, typing.Any]:
+        candidates = {
+            "takes_ctx": self.takes_ctx,
+            "max_retries": self.max_retries,
+            "name": self.name,
+            "description": self.description,
+            "docstring_format": self.docstring_format,
+            "require_parameter_descriptions": (
+                self.require_parameter_descriptions
+            ),
+            "strict": self.strict,
+            "sequential": self.sequential,
+            "requires_approval": self.requires_approval,
+            "metadata": self.metadata,
+            "timeout": self.timeout,
+            "prepare": self.prepare,
+            "args_validator": self.args_validator,
+            "schema_generator": self.schema_generator,
+            "function_schema": self.function_schema,
+        }
+
+        return {
+            key: value
+            for key, value in candidates.items()
+            if value is not None
+        }
+
+
 @dataclasses.dataclass(kw_only=True)
 class ToolConfig:
     tool_name: _utils.DottedName
     allow_mcp: bool = False
     agui_feature_names: tuple[str] = ()
+    _ai_tool_params: AIToolParams | None = None
 
     _tool: abc.Callable[..., typing.Any] = None
 
@@ -54,13 +203,20 @@ class ToolConfig:
         config_path: pathlib.Path,
         config_dict: dict[str, typing.Any],
     ):
-        config_dict["_installation_config"] = installation_config
-        config_dict["_config_path"] = config_path
-
-        agui_feature_names = config_dict.pop("agui_feature_names", ())
-        config_dict["agui_feature_names"] = tuple(agui_feature_names)
-
         try:
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
+
+            agui_feature_names = config_dict.pop("agui_feature_names", ())
+            config_dict["agui_feature_names"] = tuple(agui_feature_names)
+
+            ai_tool_params = config_dict.pop("ai_tool_params", None)
+            if ai_tool_params is not None:
+                config_dict["_ai_tool_params"] = AIToolParams.from_yaml(
+                    config_path=config_path,
+                    config_dict=ai_tool_params,
+                )
+
             return cls(**config_dict)
         except Exception as exc:
             raise config_exc.FromYamlException(
@@ -100,6 +256,13 @@ class ToolConfig:
             return ToolRequires.TOOL_CONFIG
         else:
             return ToolRequires.BARE
+
+    @property
+    def ai_tool_params(self) -> dict[str, typing.Any]:
+        if self._ai_tool_params is not None:
+            return self._ai_tool_params.as_aitool_ctor_kwargs
+        else:
+            return {}
 
     @property
     def tool_with_config(self) -> abc.Callable[..., typing.Any]:
@@ -144,9 +307,9 @@ def extract_tool_configs(
         tc_class = TOOL_CONFIG_CLASSES_BY_TOOL_NAME.get(tool_name, ToolConfig)
 
         tool_config = tc_class.from_yaml(
-            installation_config,
-            config_path,
-            t_config,
+            installation_config=installation_config,
+            config_path=config_path,
+            config_dict=t_config,
         )
         tool_configs[tool_config.kind] = tool_config
 
