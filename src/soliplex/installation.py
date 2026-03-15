@@ -60,6 +60,9 @@ class Installation:
     def resolve_environment(self):
         self._config.resolve_environment()
 
+    def resolve_app_routers(self):
+        self._config.resolve_app_routers()
+
     @property
     def haiku_rag_config(self) -> hr_config.AppConfig:
         return self._config.haiku_rag_config
@@ -440,6 +443,7 @@ async def lifespan(
     the_installation = Installation(i_config)
     the_installation.resolve_secrets()
     the_installation.resolve_environment()
+    the_installation.resolve_app_routers()
 
     if log_config_file is not None:
         log_config_file = pathlib.Path(log_config_file)

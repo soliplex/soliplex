@@ -168,6 +168,16 @@ def test_installation_resolve_environment(w_raise):
             the_installation.resolve_environment()
     else:
         the_installation.resolve_environment()
+        i_config.resolve_environment.assert_called_once_with()
+
+
+def test_installation_resolve_app_routers():
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    the_installation.resolve_app_routers()
+
+    i_config.resolve_app_routers.assert_called_once_with()
 
 
 def test_installation_haiku_rag_config():
@@ -1363,6 +1373,8 @@ root:
     assert i_config.oidc_paths == exp_oidc_paths
 
     i_config.reload_configurations.assert_called_once_with()
+    i_config.resolve_environment.assert_called_once_with()
+    i_config.resolve_app_routers.assert_called_once_with()
 
     load_installation.assert_called_once_with(INSTALLATION_PATH)
 

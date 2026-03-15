@@ -41,7 +41,7 @@ meta:
 """
 
 AGUI_FEATURE_NAME_FOR_META = "test-agui-feature-for-meta"
-W_AGUI_FEATURES_ICMETA_KW = {
+W_AGUI_FEATURES_ICMETA_KW = BARE_ICMETA_KW | {
     "agui_features": [
         config_meta.AGUI_FeatureConfigMeta(
             name=AGUI_FEATURE_NAME_FOR_META,
@@ -49,12 +49,6 @@ W_AGUI_FEATURES_ICMETA_KW = {
             source="server",
         ),
     ],
-    "tool_configs": [],
-    "mcp_toolset_configs": [],
-    "skill_configs": [],
-    "mcp_server_tool_wrappers": [],
-    "agent_configs": [],
-    "secret_sources": [],
 }
 W_AGUI_FEATURES_ICMETA_YAML = f"""\
 meta:
@@ -65,21 +59,16 @@ meta:
 """
 
 
-W_TOOL_CONFIGS_ICMETA_KW = {
-    "agui_features": [],
+W_TOOL_CONFIGS_ICMETA_KW = BARE_ICMETA_KW | {
     "tool_configs": [
         config_meta.ConfigMeta(config_klass=FauxToolConfig),
     ],
-    "mcp_toolset_configs": [],
     "mcp_server_tool_wrappers": [
         config_meta.ConfigMeta(
             config_klass=FauxToolConfig,
             wrapper_klass=config_tools.NoArgsMCPWrapper,
         ),
     ],
-    "skill_configs": [],
-    "agent_configs": [],
-    "secret_sources": [],
 }
 W_TOOL_CONFIGS_ICMETA_YAML = """\
 meta:
@@ -91,18 +80,12 @@ meta:
 """
 
 
-W_MCP_TOOLSET_CONFIGS_ICMETA_KW = {
-    "agui_features": [],
-    "tool_configs": [],
+W_MCP_TOOLSET_CONFIGS_ICMETA_KW = BARE_ICMETA_KW | {
     "mcp_toolset_configs": [
         config_meta.ConfigMeta(
             config_klass=config_tools.Stdio_MCP_ClientToolsetConfig,
         )
     ],
-    "mcp_server_tool_wrappers": [],
-    "skill_configs": [],
-    "agent_configs": [],
-    "secret_sources": [],
 }
 W_MCP_TOOLSET_CONFIGS_ICMETA_YAML = """\
 meta:
@@ -111,16 +94,10 @@ meta:
 """
 
 
-W_SKILL_CONFIGS_ICMETA_KW = {
-    "agui_features": [],
-    "tool_configs": [],
-    "mcp_toolset_configs": [],
+W_SKILL_CONFIGS_ICMETA_KW = BARE_ICMETA_KW | {
     "skill_configs": [
         config_meta.ConfigMeta(config_klass=config_skills.HR_RAG_SkillConfig),
     ],
-    "mcp_server_tool_wrappers": [],
-    "agent_configs": [],
-    "secret_sources": [],
 }
 W_SKILL_CONFIGS_ICMETA_YAML = """\
 meta:
@@ -129,17 +106,11 @@ meta:
 """
 
 
-W_AGENT_CONFIGS_ICMETA_KW = {
-    "agui_features": [],
-    "tool_configs": [],
-    "mcp_toolset_configs": [],
-    "mcp_server_tool_wrappers": [],
-    "skill_configs": [],
+W_AGENT_CONFIGS_ICMETA_KW = BARE_ICMETA_KW | {
     "agent_configs": [
         config_meta.ConfigMeta(config_klass=config_agents.AgentConfig),
         config_meta.ConfigMeta(config_klass=config_agents.FactoryAgentConfig),
     ],
-    "secret_sources": [],
 }
 W_AGENT_CONFIGS_ICMETA_YAML = """\
 meta:
@@ -149,13 +120,7 @@ meta:
 """
 
 SECRET_SOURCE_FUNC = lambda source: "SEEKRIT"  # noqa E731
-W_SECRET_SOURCE_ICMETA_KW = {
-    "agui_features": [],
-    "tool_configs": [],
-    "mcp_toolset_configs": [],
-    "mcp_server_tool_wrappers": [],
-    "skill_configs": [],
-    "agent_configs": [],
+W_SECRET_SOURCE_ICMETA_KW = BARE_ICMETA_KW | {
     "secret_sources": [
         config_meta.ConfigMeta(
             config_klass=config_secrets.EnvVarSecretSource,
@@ -179,7 +144,9 @@ FULL_ICMETA_KW = {
             source="server",
         ),
     ],
-    "tool_configs": [],
+    "tool_configs": [
+        config_meta.ConfigMeta(config_klass=FauxToolConfig),
+    ],
     "mcp_toolset_configs": [
         config_meta.ConfigMeta(
             config_klass=config_tools.Stdio_MCP_ClientToolsetConfig
@@ -188,7 +155,12 @@ FULL_ICMETA_KW = {
             config_klass=config_tools.HTTP_MCP_ClientToolsetConfig
         ),
     ],
-    "mcp_server_tool_wrappers": [],
+    "mcp_server_tool_wrappers": [
+        config_meta.ConfigMeta(
+            config_klass=FauxToolConfig,
+            wrapper_klass=config_tools.NoArgsMCPWrapper,
+        ),
+    ],
     "skill_configs": [
         config_meta.ConfigMeta(config_klass=config_skills.HR_RAG_SkillConfig),
         config_meta.ConfigMeta(config_klass=config_skills.HR_RLM_SkillConfig),
@@ -210,9 +182,14 @@ meta:
       - name: "{AGUI_FEATURE_NAME_FOR_META}"
         model_klass: "soliplex.agui.features.EmptyFeatureModel"
         source: "server"
+  tool_configs:
+    - "test_config_meta.FauxToolConfig"
   mcp_toolset_configs:
       - "soliplex.config.tools.Stdio_MCP_ClientToolsetConfig"
       - "soliplex.config.tools.HTTP_MCP_ClientToolsetConfig"
+  mcp_server_tool_wrappers:
+    - config_klass: "test_config_meta.FauxToolConfig"
+      wrapper_klass: "soliplex.config.tools.NoArgsMCPWrapper"
   skill_configs:
       - "soliplex.config.skills.HR_RAG_SkillConfig"
       - "soliplex.config.skills.HR_RLM_SkillConfig"
@@ -302,6 +279,7 @@ def test_installationconfigmeta_from_yaml(
     patched_agent_configs,
     patched_secret_getters,
     patched_agui_features,
+    patched_app_routers,
     patched_tool_configs,
     patched_mcp_toolset_configs,
     patched_mcp_tool_wrappers,
@@ -317,7 +295,7 @@ def test_installationconfigmeta_from_yaml(
     with yaml_file.open() as fp:
         config_dict = yaml.safe_load(fp)
 
-    config_dict_meta = config_dict["meta"]
+    config_dict_meta = copy.deepcopy(config_dict["meta"])
 
     if expected_kw is None:
         with pytest.raises(config_exc.FromYamlException) as exc:
@@ -332,6 +310,9 @@ def test_installationconfigmeta_from_yaml(
             _config_path=yaml_file,
             **expected_kw,
         )
+
+        # ICMeta c'tor loads defaults
+        patched_app_routers.clear()
 
         ic_meta = config_meta.InstallationConfigMeta.from_yaml(
             yaml_file,
@@ -411,6 +392,7 @@ def test_installationconfigmeta_as_yaml(
     patched_skill_configs,
     patched_secret_getters,
     patched_agui_features,
+    patched_app_routers,
     patched_tool_configs,
     patched_mcp_tool_wrappers,
     patched_mcp_toolset_configs,
@@ -422,19 +404,17 @@ def test_installationconfigmeta_as_yaml(
 ):
     patched_soliplex_config["test_secret_func"] = SECRET_SOURCE_FUNC
 
-    icmeta_kw = {}
-    expected_dict = copy.deepcopy(BARE_ICMETA_KW)
-    icmeta_kw = icmeta_kw.copy()
+    expected = copy.deepcopy(BARE_ICMETA_KW)
 
     if w_tools:
         klass = FauxToolConfig
         patched_tool_configs[klass.tool_name] = klass
-        expected_dict["tool_configs"].append(
+        expected["tool_configs"].append(
             "test_config_meta.FauxToolConfig",
         )
         wrapper_klass = config_tools.NoArgsMCPWrapper
         patched_mcp_tool_wrappers[klass.tool_name] = wrapper_klass
-        expected_dict["mcp_server_tool_wrappers"].append(
+        expected["mcp_server_tool_wrappers"].append(
             {
                 "config_klass": "test_config_meta.FauxToolConfig",
                 "wrapper_klass": "soliplex.config.tools.NoArgsMCPWrapper",
@@ -444,21 +424,21 @@ def test_installationconfigmeta_as_yaml(
     if w_mcp_toolsets:
         klass = config_tools.Stdio_MCP_ClientToolsetConfig
         patched_mcp_toolset_configs[klass.kind] = klass
-        expected_dict["mcp_toolset_configs"].append(
+        expected["mcp_toolset_configs"].append(
             "soliplex.config.tools.Stdio_MCP_ClientToolsetConfig",
         )
 
     if w_skills:
         klass = config_skills.HR_RAG_SkillConfig
         patched_skill_configs[klass.kind] = klass
-        expected_dict["skill_configs"].append(
+        expected["skill_configs"].append(
             "soliplex.config.skills.HR_RAG_SkillConfig",
         )
 
     if w_agent:
         klass = config_agents.AgentConfig
         patched_agent_configs[klass.kind] = klass
-        expected_dict["agent_configs"].append(
+        expected["agent_configs"].append(
             "soliplex.config.agents.AgentConfig",
         )
 
@@ -466,18 +446,18 @@ def test_installationconfigmeta_as_yaml(
         klass = config_secrets.EnvVarSecretSource
         registered_func = secrets.get_env_var_secret
         patched_secret_getters[klass.kind] = registered_func
-        expected_dict["secret_sources"].append(
+        expected["secret_sources"].append(
             {
                 "config_klass": "soliplex.config.secrets.EnvVarSecretSource",
                 "registered_func": "soliplex.secrets.get_env_var_secret",
             }
         )
 
-    icmeta = config_meta.InstallationConfigMeta(**icmeta_kw)
+    icmeta = config_meta.InstallationConfigMeta()
 
     found = icmeta.as_yaml
 
-    assert found == expected_dict
+    assert found == expected
 
 
 def test_installationconfigmeta_postinit_registers_tool_configs(

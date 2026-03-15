@@ -26,6 +26,7 @@ from . import exceptions as config_exc
 from . import logfire as config_logfire
 from . import meta as config_meta
 from . import rooms as config_rooms
+from . import routing as config_routing
 from . import secrets as config_secrets
 from . import skills as config_skills
 
@@ -240,6 +241,18 @@ class InstallationConfig:
     id: str
 
     meta: config_meta.InstallationConfigMeta = None
+
+    #
+    # FastAPI routers to be configured during app startup
+    #
+    app_router_operations: list[config_routing.AppRouterOperations] = (
+        _utils._default_list_field()
+    )
+
+    def resolve_app_routers(self):
+        config_routing.register_default_routers()
+        for ar_meta in self.app_router_operations:
+            ar_meta.apply()
 
     #
     # AG-UI features defined via metaconfig / defaults
@@ -645,6 +658,14 @@ class InstallationConfig:
                 meta,
             )
 
+            config_dict["app_router_operations"] = [
+                config_routing.app_router_operation_from_yaml(
+                    config_path,
+                    ar_yaml,
+                )
+                for ar_yaml in config_dict.get("app_router_operations", ())
+            ]
+
             secret_configs = [
                 config_secrets.SecretConfig.from_yaml(
                     config_path,
@@ -877,6 +898,11 @@ class InstallationConfig:
 
         if self.logfire_config is not None:
             result["logfire_config"] = self.logfire_config.as_yaml
+
+        if self.app_router_operations:
+            result["app_router_operations"] = [
+                aro.as_yaml for aro in self.app_router_operations
+            ]
 
         return result
 

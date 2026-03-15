@@ -8,14 +8,6 @@ from fastapi.middleware import cors as fastapi_mw_cors
 from starlette.middleware import sessions as starlette_mw_sessions
 
 from soliplex import main
-from soliplex.views import agui as agui_views
-from soliplex.views import authn as authn_views
-from soliplex.views import authz as authz_views
-from soliplex.views import completions as completions_views
-from soliplex.views import installation as installation_views
-from soliplex.views import log_ingest as log_ingest_views
-from soliplex.views import quizzes as quizzes_views
-from soliplex.views import rooms as rooms_views
 
 ADMIN_USER_EMAIL = "admin@example.com"
 LOG_CONFIG_FILE_PATH = "/path/to/logging.yaml"
@@ -184,24 +176,6 @@ def test_app_with_git_hash():
     assert mw_func is main.add_custom_header
 
 
-def test_app_with_soliplex_routers():
-    app = mock.Mock(spec_set=["include_router"])
-
-    found = main.app_with_soliplex_routers(app)
-
-    assert found is app
-
-    air_calls = app.include_router.mock_calls
-    assert mock.call(agui_views.router, prefix="/api") in air_calls
-    assert mock.call(authn_views.router, prefix="/api") in air_calls
-    assert mock.call(authz_views.router, prefix="/api") in air_calls
-    assert mock.call(completions_views.router, prefix="/api") in air_calls
-    assert mock.call(installation_views.router, prefix="/api") in air_calls
-    assert mock.call(quizzes_views.router, prefix="/api") in air_calls
-    assert mock.call(log_ingest_views.router, prefix="/api") in air_calls
-    assert mock.call(rooms_views.router, prefix="/api") in air_calls
-
-
 @pytest.fixture
 def installation_w_session_token(explicit_inst_dir):
     secret_file = explicit_inst_dir / "session_secret.txt"
@@ -235,31 +209,24 @@ def test_create_app_with_explicit_overrides(
     if w_log_config_file is not None:
         kwargs["log_config_file"] = w_log_config_file
 
-    register_metaconfigs = mock.Mock(spec_set=())
     curry_lifespan = mock.Mock(spec_set=())
     app_with_lifespan = mock.Mock(spec_set=())
     app_with_cors = mock.Mock(spec_set=())
     app_with_session = mock.Mock(spec_set=())
     app_with_git_hash = mock.Mock(spec_set=())
-    app_with_soliplex_routers = mock.Mock(spec_set=())
 
     found = main.create_app(
         installation_path=installation_w_session_token,
         no_auth_mode=w_no_auth_mode,
-        register_metaconfigs=register_metaconfigs,
         curry_lifespan=curry_lifespan,
         app_with_lifespan=app_with_lifespan,
         app_with_cors=app_with_cors,
         app_with_session=app_with_session,
         app_with_git_hash=app_with_git_hash,
-        app_with_soliplex_routers=app_with_soliplex_routers,
         **kwargs,
     )
 
-    assert found is app_with_soliplex_routers.return_value
-    app_with_soliplex_routers.assert_called_once_with(
-        app_with_git_hash.return_value,
-    )
+    assert found is app_with_git_hash.return_value
     app_with_git_hash.assert_called_once_with(
         app_with_session.return_value,
     )
@@ -279,7 +246,6 @@ def test_create_app_with_explicit_overrides(
         add_admin_user=w_add_admin_user,
         log_config_file=w_log_config_file,
     )
-    register_metaconfigs.assert_called_once_with()
 
 
 @pytest.mark.parametrize("w_log_config_file", [None, LOG_CONFIG_FILE_PATH])
@@ -304,7 +270,6 @@ def test_create_app_wo_explicit_overrides(
     app_with_cors = mock.Mock(spec_set=())
     app_with_session = mock.Mock(spec_set=())
     app_with_git_hash = mock.Mock(spec_set=())
-    app_with_soliplex_routers = mock.Mock(spec_set=())
 
     with mock.patch.multiple(
         "soliplex.main",
@@ -313,7 +278,6 @@ def test_create_app_wo_explicit_overrides(
         app_with_cors=app_with_cors,
         app_with_session=app_with_session,
         app_with_git_hash=app_with_git_hash,
-        app_with_soliplex_routers=app_with_soliplex_routers,
     ):
         found = main.create_app(
             installation_path=installation_w_session_token,
@@ -321,11 +285,7 @@ def test_create_app_wo_explicit_overrides(
             **kwargs,
         )
 
-    assert found is app_with_soliplex_routers.return_value
-
-    app_with_soliplex_routers.assert_called_once_with(
-        app_with_session.return_value,
-    )
+    assert found is app_with_session.return_value
 
     app_with_git_hash.assert_not_called()
 

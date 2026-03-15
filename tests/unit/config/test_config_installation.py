@@ -17,8 +17,10 @@ from soliplex.config import exceptions as config_exc
 from soliplex.config import installation as config_installation
 from soliplex.config import logfire as config_logfire
 from soliplex.config import meta as config_meta
+from soliplex.config import routing as config_routing
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
+from soliplex.config import tools as config_tools
 from tests.unit.config import test_config_agents as test_agents
 from tests.unit.config import test_config_authsystem as test_authsystem
 from tests.unit.config import test_config_completions as test_completions
@@ -28,6 +30,11 @@ from tests.unit.config import test_config_rooms as test_rooms
 from tests.unit.config import test_config_skills as test_skills
 
 NoRaise = contextlib.nullcontext()
+
+
+class FauxToolConfig:
+    tool_name = "faux"
+
 
 BARE_INSTALLATION_CONFIG_ENVIRONMENT = {
     "OLLAMA_BASE_URL": test_agents.PROVIDER_BASE_URL,
@@ -57,11 +64,98 @@ meta:
 
 W_FULL_META_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "meta": test_meta.FULL_ICMETA_KW,
+    "meta": {
+        "agui_features": [
+            config_meta.AGUI_FeatureConfigMeta(
+                name=test_meta.AGUI_FEATURE_NAME_FOR_META,
+                model_klass=agui_features.EmptyFeatureModel,
+                source="server",
+            ),
+        ],
+        "tool_configs": [
+            config_meta.ConfigMeta(config_klass=FauxToolConfig),
+        ],
+        "mcp_toolset_configs": [
+            config_meta.ConfigMeta(
+                config_klass=config_tools.Stdio_MCP_ClientToolsetConfig
+            ),
+            config_meta.ConfigMeta(
+                config_klass=config_tools.HTTP_MCP_ClientToolsetConfig
+            ),
+        ],
+        "mcp_server_tool_wrappers": [
+            config_meta.ConfigMeta(
+                config_klass=FauxToolConfig,
+                wrapper_klass=config_tools.NoArgsMCPWrapper,
+            ),
+        ],
+        "skill_configs": [
+            config_meta.ConfigMeta(
+                config_klass=config_skills.HR_RAG_SkillConfig
+            ),
+            config_meta.ConfigMeta(
+                config_klass=config_skills.HR_RLM_SkillConfig
+            ),
+        ],
+        "agent_configs": [
+            config_meta.ConfigMeta(config_klass=config_agents.AgentConfig),
+            config_meta.ConfigMeta(
+                config_klass=config_agents.FactoryAgentConfig
+            ),
+        ],
+        "secret_sources": [
+            config_meta.ConfigMeta(
+                config_klass=config_secrets.EnvVarSecretSource,
+                registered_func=test_meta.SECRET_SOURCE_FUNC,
+            ),
+        ],
+    },
 }
 W_FULL_META_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
-{test_meta.FULL_ICMETA_YAML}
+meta:
+  agui_features:
+      - name: "{test_meta.AGUI_FEATURE_NAME_FOR_META}"
+        model_klass: "soliplex.agui.features.EmptyFeatureModel"
+        source: "server"
+  tool_configs:
+    - "test_config_installation.FauxToolConfig"
+  mcp_toolset_configs:
+      - "soliplex.config.tools.Stdio_MCP_ClientToolsetConfig"
+      - "soliplex.config.tools.HTTP_MCP_ClientToolsetConfig"
+  mcp_server_tool_wrappers:
+    - config_klass: "test_config_installation.FauxToolConfig"
+      wrapper_klass: "soliplex.config.tools.NoArgsMCPWrapper"
+  skill_configs:
+      - "soliplex.config.skills.HR_RAG_SkillConfig"
+      - "soliplex.config.skills.HR_RLM_SkillConfig"
+  agent_configs:
+      - "soliplex.config.agents.AgentConfig"
+      - "soliplex.config.agents.FactoryAgentConfig"
+  secret_sources:
+    - "config_klass": "soliplex.config.secrets.EnvVarSecretSource"
+      "registered_func": "soliplex.config.test_secret_func"
+"""
+
+W_APP_ROUTER_OPERATIONS_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "app_router_operations": [
+        config_routing.ClearAppRouters(),
+        config_routing.AddAppRouter(
+            group_name="streaming",
+            router_name="soliplex.views.streaming.router",
+            prefix="/api",
+        ),
+    ],
+}
+W_APP_ROUTER_OPERATIONS_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+app_router_operations:
+    - kind: "clear"
+    - kind: "add"
+      group_name: "streaming"
+      router_name: "soliplex.views.streaming.router"
+      prefix: "/api"
 """
 
 SECRET_NAME_1 = "TEST_SECRET_ONE"
@@ -993,6 +1087,25 @@ def test_installationconfig_logging_claims_map(temp_dir, w_map):
         assert logging_claims_map == {}
 
 
+@pytest.mark.parametrize("w_aro", [False, True])
+@mock.patch("soliplex.config.routing.register_default_routers")
+def test_installationconfig_resolve_app_routers(rdr, w_aro):
+    i_config = config_installation.InstallationConfig(id="test-ic")
+    add_op = mock.create_autospec(config_routing.AddAppRouter)
+
+    if w_aro:
+        i_config.app_router_operations.append(add_op)
+
+    i_config.resolve_app_routers()
+
+    rdr.assert_called_once_with()
+
+    if w_aro:
+        add_op.apply.assert_called_once_with()
+    else:
+        add_op.apply.assert_not_called()
+
+
 def test_installationconfig_agui_features(
     patched_agui_features,
     the_agui_feature,
@@ -1110,6 +1223,10 @@ def test_installationconfig_authorization_dburi_async(w_kw, expected):
         (
             W_FULL_META_INSTALLATION_CONFIG_YAML,
             W_FULL_META_INSTALLATION_CONFIG_KW.copy(),
+        ),
+        (
+            W_APP_ROUTER_OPERATIONS_INSTALLATION_CONFIG_YAML,
+            W_APP_ROUTER_OPERATIONS_INSTALLATION_CONFIG_KW.copy(),
         ),
         (
             W_SECRETS_INSTALLATION_CONFIG_YAML,
@@ -1333,6 +1450,7 @@ def test_installationconfig_from_yaml(
             expected.logfire_config._installation_config = found
             expected.logfire_config._config_path = config_path
 
+        assert found.meta == expected.meta
         assert found == expected
 
 
@@ -1400,8 +1518,13 @@ def test_installationconfig_from_yaml_environ_wo_value(temp_dir, config_yaml):
     assert found == expected
 
 
+@pytest.mark.parametrize("w_aro", [False, True])
 @pytest.mark.parametrize("w_logfire_config", [False, True])
-def test_installationconfig_as_yaml(w_logfire_config):
+def test_installationconfig_as_yaml(
+    patched_app_routers,
+    w_logfire_config,
+    w_aro,
+):
     meta = mock.create_autospec(config_meta.InstallationConfigMeta)
     secret_1 = config_secrets.SecretConfig(secret_name="SECRET_ONE")
     secret_2 = config_secrets.SecretConfig(secret_name="SECRET_TWO")
@@ -1418,6 +1541,15 @@ def test_installationconfig_as_yaml(w_logfire_config):
         kwargs["logfire_config"] = config_logfire.LogfireConfig(
             token="secret:LOGFIRE_TOKEN",
         )
+
+    if w_aro:
+        kwargs["app_router_operations"] = [
+            config_routing.AddAppRouter(
+                group_name="test-group",
+                router_name="my.package.router",
+                prefix="/prefix",
+            )
+        ]
 
     installation_config = config_installation.InstallationConfig(
         id=INSTALLATION_ID,
@@ -1466,6 +1598,17 @@ def test_installationconfig_as_yaml(w_logfire_config):
         expected["logfire_config"] = (
             test_logfire.W_TOKEN_ONLY_LOGFIRE_CONFIG_AS_YAML
         )
+
+    if w_aro:
+        expected["app_router_operations"] = [
+            {
+                "kind": "add",
+                "group_name": "test-group",
+                "router_name": "my.package.router",
+                "prefix": "/prefix",
+                "replace_existing": False,
+            }
+        ]
 
     found = installation_config.as_yaml
 

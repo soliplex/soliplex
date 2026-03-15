@@ -105,6 +105,52 @@ meta:
   #------------------------------------------------------------------------
 
 #==========================================================================
+# FastAPI routers
+#==========================================================================
+# Routers from these Soliplex view modules are registered by default,
+#
+# - 'soliplex.views'
+# - 'soliplex.views.agui'
+# - 'soliplex.views.authn'
+# - 'soliplex.views.authz'
+# - 'soliplex.views.completions'
+# - 'soliplex.views.installation'
+# - 'soliplex.views.log_ingest'
+# - 'soliplex.views.quizzes'
+# - 'soliplex.views.rooms'
+#
+# just as if we configured here:
+#
+# app_router_operations:
+#    - kind: "clear"
+#    - kind: "add"
+#      group_name: "views"
+#      router_name: 'soliplex.views.router'
+#      prefix: "/api"
+#    ...
+#    - kind: "add"
+#      grouop_name: "rooms"
+#      router_name: 'soliplex.views.agui.router'
+#      prefix: "/api"
+#
+# To add a new router without clearing the defaults, e.g. the router
+# from 'soliplex.views.streaming', which is not configured by default:
+#
+# app_router_operations:
+#    - kind: "add"
+#      group_name: "streaming"
+#      router_name: 'soliplex.views.streaming.router'
+#      prefix: "/api"
+#
+# To remove a router which is configured by, e.g. the router
+# from 'soliplex.views.completions':
+#
+# app_router_operations:
+#    - kind: "delete"
+#      group_name: "completions"
+#==========================================================================
+
+#==========================================================================
 # Secrets
 #==========================================================================
 # See: https://soliplex.github.io/soliplex/config/secrets/

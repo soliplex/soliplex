@@ -10,9 +10,6 @@ from . import _utils
 from . import agents as config_agents
 from . import agui as config_agui
 from . import exceptions as config_exc
-
-# from . import quizzes as config_quizzes
-# from . import rag as config_rag
 from . import secrets as config_secrets
 from . import skills as config_skills
 from . import tools as config_tools
