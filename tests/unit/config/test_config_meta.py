@@ -226,7 +226,7 @@ meta:
 
 
 @mock.patch("importlib.import_module")
-def test_configmeta_from_yaml_w_dotted_name(im):
+def test_configmeta_from_yaml_w_importable_name(im):
     config_yaml = "somemodule.SomeClass"
 
     faux_module = im.return_value = mock.Mock()
@@ -276,17 +276,6 @@ def test_configmeta_from_yaml_w_dict_w_names(w_wrapper):
         assert meta.wrapper_klass is wrapper_klass
     else:
         assert meta.wrapper_klass is None
-
-
-def test_configmeta_dottedname():
-    config_klass = mock.create_autospec(
-        type,
-        __module__="some.module",
-        __name__="some_config",
-    )
-    meta = config_meta.ConfigMeta(config_klass=config_klass)
-
-    assert meta.dotted_name == "some.module.some_config"
 
 
 @pytest.mark.parametrize(

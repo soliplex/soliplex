@@ -35,7 +35,7 @@ class ToolRequires(enum.StrEnum):
 
 @dataclasses.dataclass(kw_only=True)
 class ToolConfig:
-    tool_name: str
+    tool_name: _utils.DottedName
     allow_mcp: bool = False
     agui_feature_names: tuple[str] = ()
 

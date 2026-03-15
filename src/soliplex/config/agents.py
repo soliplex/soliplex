@@ -220,7 +220,7 @@ AgentFactory = abc.Callable[[], ai_ag_abstract.AbstractAgent]
 @dataclasses.dataclass(kw_only=True)
 class FactoryAgentConfig:
     id: str
-    factory_name: str  # dotted name for import
+    factory_name: _utils.DottedName
     kind: typing.ClassVar[str] = "factory"
     with_agent_config: bool = False
     extra_config: dict[str, typing.Any] = _default_dict_field()

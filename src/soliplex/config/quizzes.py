@@ -12,11 +12,7 @@ from . import _utils
 from . import agents
 from . import exceptions
 
-_dotted_name = _utils._dotted_name
-_no_repr = _utils._no_repr
-_no_repr_no_compare = _utils._no_repr_no_compare
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
-_no_repr_no_compare_dict = _utils._no_repr_no_compare_dict
 _default_list_field = _utils._default_list_field
 _default_dict_field = _utils._default_dict_field
 

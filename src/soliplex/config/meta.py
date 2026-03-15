@@ -43,7 +43,7 @@ class AGUI_FeatureConfigMeta:
     source: config_agui.AGUI_FeatureSource = "either"
 
     @classmethod
-    def from_yaml(cls, yaml_config: str | dict):
+    def from_yaml(cls, yaml_config: dict):
         model_klass = yaml_config["model_klass"]
         yaml_config["model_klass"] = _utils._from_dotted_name(model_klass)
         return cls(**yaml_config)
@@ -71,24 +71,24 @@ class ConfigMeta:
     registered_func: typing.Any = None
 
     @classmethod
-    def from_yaml(cls, yaml_config: str | dict):
-        if isinstance(yaml_config, str):
+    def from_yaml(cls, yaml_config: _utils.DottedName | dict):
+        if isinstance(yaml_config, _utils.DottedName):
             config_klass = _utils._from_dotted_name(yaml_config)
             return cls(config_klass=config_klass)
         else:
             config_klass = yaml_config["config_klass"]
 
-            if isinstance(config_klass, str):
+            if isinstance(config_klass, _utils.DottedName):
                 config_klass = _utils._from_dotted_name(config_klass)
 
             wrapper_klass = yaml_config.get("wrapper_klass")
 
-            if isinstance(wrapper_klass, str):
+            if isinstance(wrapper_klass, _utils.DottedName):
                 wrapper_klass = _utils._from_dotted_name(wrapper_klass)
 
             registered_func = yaml_config.get("registered_func")
 
-            if isinstance(registered_func, str):
+            if isinstance(registered_func, _utils.DottedName):
                 registered_func = _utils._from_dotted_name(registered_func)
 
             return cls(
@@ -96,11 +96,6 @@ class ConfigMeta:
                 wrapper_klass=wrapper_klass,
                 registered_func=registered_func,
             )
-
-    @property
-    def dotted_name(self):
-        klass = self.config_klass
-        return f"{klass.__module__}.{klass.__name__}"
 
 
 @dataclasses.dataclass(kw_only=True)
