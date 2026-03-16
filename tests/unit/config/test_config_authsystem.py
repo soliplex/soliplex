@@ -165,7 +165,7 @@ def test_authsystem_from_yaml(
     if oidc_client_pem_path is not None:
         expected = dataclasses.replace(
             expected,
-            oidc_client_pem_path=pathlib.Path(oidc_client_pem_path),
+            oidc_client_pem_path=config_path.parent / oidc_client_pem_path,
         )
 
     expected._config_path = config_path

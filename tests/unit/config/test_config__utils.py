@@ -1,4 +1,5 @@
 import contextlib
+import pathlib
 from unittest import mock
 
 import pytest
@@ -117,7 +118,9 @@ def test_resolve_file_prefix(temp_dir, config_value, expected):
     config_path = temp_dir / "config.yaml"
 
     if isinstance(expected, str):
-        expected = expected.format(temp_dir=temp_dir.resolve())
+        expected = str(
+            pathlib.Path(expected.format(temp_dir=temp_dir.resolve()))
+        )
 
     found = config_installation.resolve_file_prefix(config_value, config_path)
 

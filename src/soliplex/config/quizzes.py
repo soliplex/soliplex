@@ -3,6 +3,7 @@ from __future__ import annotations  # forward refs in typing decls
 import dataclasses
 import enum
 import json
+import os
 import pathlib
 import random
 
@@ -126,7 +127,7 @@ class QuizConfig:
 
     def __post_init__(self, question_file):
         if question_file is not None:
-            if "/" in question_file:
+            if os.sep in question_file or "/" in question_file:
                 self._question_file_path_override = question_file
             else:
                 if question_file.endswith(".json"):
