@@ -1291,11 +1291,13 @@ def mcp_apps():
 @mock.patch("soliplex.installation.apply_logfire_configuration")
 @mock.patch("soliplex.secrets.resolve_secrets")
 @mock.patch("soliplex.mcp_server.setup_mcp_for_rooms")
+@mock.patch("soliplex.config.routing.add_registered_routers")
 @mock.patch("soliplex.config.installation.load_installation")
 @mock.patch("logging.config.dictConfig")
 async def test_lifespan(
     lcdc,
     load_installation,
+    arr,
     smfr,
     srs,
     alc,
@@ -1363,6 +1365,8 @@ root:
     assert i_config.oidc_paths == exp_oidc_paths
 
     i_config.reload_configurations.assert_called_once_with()
+
+    arr.assert_called_once_with(app)
 
     load_installation.assert_called_once_with(INSTALLATION_PATH)
 
