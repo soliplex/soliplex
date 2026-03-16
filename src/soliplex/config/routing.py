@@ -182,15 +182,15 @@ _DEFAULT_KWARGS = APIRouterKwargs().router_kwargs
 
 
 _DEFAULT_ROUTER_NAMES = {
-    "views": "soliplex.views.routers",
-    "agui": "soliplex.views.agui.routers",
-    "authn": "soliplex.views.authn.routers",
-    "authz": "soliplex.views.authz.routers",
-    "completions": "soliplex.views.completions.routers",
-    "installation": "soliplex.views.installation.routers",
-    "log_ingest": "soliplex.views.log_ingest.routers",
-    "quizzes": "soliplex.views.quizzes.routers",
-    "rooms": "soliplex.views.rooms.routers",
+    "views": "soliplex.views.router",
+    "agui": "soliplex.views.agui.router",
+    "authn": "soliplex.views.authn.router",
+    "authz": "soliplex.views.authz.router",
+    "completions": "soliplex.views.completions.router",
+    "installation": "soliplex.views.installation.router",
+    "log_ingest": "soliplex.views.log_ingest.router",
+    "quizzes": "soliplex.views.quizzes.router",
+    "rooms": "soliplex.views.rooms.router",
 }
 
 
