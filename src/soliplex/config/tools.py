@@ -19,6 +19,9 @@ from . import exceptions as config_exc
 # ============================================================================
 
 
+FunctionSchema = ai_tools._function_schema.FunctionSchema
+
+
 class ToolRequirementConflict(ValueError):
     def __init__(self, tool_name, _config_path):
         self.tool_name = tool_name
@@ -33,10 +36,6 @@ class ToolRequires(enum.StrEnum):
     FASTAPI_CONTEXT = "fastapi_context"
     TOOL_CONFIG = "tool_config"
     BARE = "bare"
-
-
-DottedName = str  # for use in the 'importlib' dance
-FunctionSchema = ai_tools._function_schema.FunctionSchema
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -60,10 +59,12 @@ class AIToolParams:
 
     # Set via 'from_yaml'
     _config_path: pathlib.Path = None
-    _prepare: DottedName | None = None
-    _args_validator: DottedName | None = None
-    _schema_generator: DottedName | None = None
-    _function_schema: DottedName | None = None
+
+    # These dotted names are resolved inside 'as_aitool_ctor_kwargs'
+    _prepare: _utils.DottedName | None = None
+    _args_validator: _utils.DottedName | None = None
+    _schema_generator: _utils.DottedName | None = None
+    _function_schema: _utils.DottedName | None = None
 
     @classmethod
     def from_yaml(
