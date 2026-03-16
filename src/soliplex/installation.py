@@ -25,6 +25,7 @@ from soliplex.config import completions as config_completions
 from soliplex.config import installation as config_installation
 from soliplex.config import logfire as config_logfire
 from soliplex.config import rooms as config_rooms
+from soliplex.config import routing as config_routing
 
 ProviderURL = str | None
 ProviderModelNames = set[str]
@@ -444,6 +445,8 @@ async def lifespan(
     the_installation.resolve_secrets()
     the_installation.resolve_environment()
     the_installation.resolve_app_routers()
+
+    config_routing.add_registered_routers(app)
 
     if log_config_file is not None:
         log_config_file = pathlib.Path(log_config_file)
