@@ -31,6 +31,7 @@ from soliplex import agents
 from soliplex import main
 from soliplex import models
 from soliplex.config import installation as config_installation
+from soliplex.config import routing as config_routing
 
 HAS_GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
@@ -128,10 +129,10 @@ async def reset_gemini_client():
 def gemini_room_config():
     """Load the gemini_flash room configuration directly."""
     installation_path = pathlib.Path("example/installation.yaml")
-    main.register_metaconfigs()  # 'haiku.rag.chat' agent config support
     installation_config = config_installation.load_installation(
         installation_path,
     )
+    installation_config.resolve_app_routers()
     return installation_config.room_configs["gemini_flash"]
 
 
@@ -439,11 +440,18 @@ async def test_gemini_safety_filter(gemini_room_config):
 
 
 @pytest.fixture
-def gemini_client():
+def gemini_app():
+    config_routing.register_default_routers()
+    app = main.create_app("example/installation.yaml", no_auth_mode=True)
+    config_routing.add_registered_routers(app)
+
+    return app
+
+
+@pytest.fixture
+def gemini_client(gemini_app):
     """Test client with main installation that includes gemini_flash room."""
-    with testclient.TestClient(
-        main.create_app("example/installation.yaml", no_auth_mode=True)
-    ) as client:
+    with testclient.TestClient(gemini_app) as client:
         yield client
 
 
