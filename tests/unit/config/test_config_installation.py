@@ -853,7 +853,14 @@ environment: production
     else:
         exp_obu = "http://localhost:11434"
 
-    with mock.patch.dict("os.environ", clear=True):
+    import os
+
+    home_vars = {
+        k: v
+        for k, v in os.environ.items()
+        if k in ("HOME", "HOMEDRIVE", "HOMEPATH", "USERPROFILE")
+    }
+    with mock.patch.dict("os.environ", home_vars, clear=True):
         hr_config = i_config.haiku_rag_config
 
     assert isinstance(hr_config, hr_config_module.AppConfig)
@@ -1247,6 +1254,11 @@ def test_installationconfig_from_yaml(
             expected_kw["_haiku_rag_config_file"] = (
                 config_path.parent / "haiku.rag.yaml"
             )
+        else:
+            # Match from_yaml: config_path.parent / hr_config_file
+            expected_kw["_haiku_rag_config_file"] = (
+                config_path.parent / expected_kw["_haiku_rag_config_file"]
+            )
 
         lfssc = mock.Mock(spec_set=())
         fs_skill_config = mock.create_autospec(
@@ -1450,16 +1462,19 @@ def test_installationconfig_as_yaml(w_logfire_config):
         "environment": {
             "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
         },
-        "haiku_rag_config_file": HAIKU_RAG_CONFIG_FILE,
+        "haiku_rag_config_file": str(pathlib.Path(HAIKU_RAG_CONFIG_FILE)),
         "agent_configs": [
             agent_config.as_yaml,
         ],
-        "logging_config_file": LOGGING_CONFIG_FILE,
-        "oidc_paths": ["oidc-test"],
-        "room_paths": ["/path/to/rooms", "other/rooms"],
-        "completion_paths": ["/path/to/completions"],
-        "quizzes_paths": ["other/quizzes"],
-        "filesystem_skills_paths": ["other/skills"],
+        "logging_config_file": str(pathlib.Path(LOGGING_CONFIG_FILE)),
+        "oidc_paths": [str(pathlib.Path("oidc-test"))],
+        "room_paths": [
+            str(pathlib.Path("/path/to/rooms")),
+            str(pathlib.Path("other/rooms")),
+        ],
+        "completion_paths": [str(pathlib.Path("/path/to/completions"))],
+        "quizzes_paths": [str(pathlib.Path("other/quizzes"))],
+        "filesystem_skills_paths": [str(pathlib.Path("other/skills"))],
     }
 
     if w_logfire_config:
@@ -1487,10 +1502,9 @@ def test_installationconfig_oidc_auth_system_configs_wo_existing(
     w_pem,
     w_pem_path,
 ):
-    if w_pem_path.startswith("."):
-        exp_oidc_client_pem_path = temp_dir / "oidc_bare" / w_pem_path
-    else:
-        exp_oidc_client_pem_path = pathlib.Path(w_pem_path)
+    oidc_bare_path = temp_dir / "oidc_bare"
+    # Match source: oidc_path / pem_path
+    exp_oidc_client_pem_path = oidc_bare_path / w_pem_path
 
     bare_config_yaml = {
         "auth_systems": [test_authsystem.BARE_AUTHSYSTEM_CONFIG_KW.copy()],
