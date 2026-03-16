@@ -701,6 +701,7 @@ async def post_room_agui_thread_id_run_id(
         run_agent_input=agui_adapter.run_input,
         the_logger=the_logger,
     )
+    agent_deps.the_threads = the_threads
 
     agent_stream = agui_adapter.run_stream(
         deps=agent_deps,

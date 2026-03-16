@@ -291,6 +291,9 @@ skill_configs:
   - skill_name: "bare-bones"
     kind: "filesystem"
 
+  - skill_name: "agui-run-feedback"
+    kind: "entrypoint"
+
 # Requires installing 'haiku-skills-image-generation'
 # - skill_name: "image-generation"
 #   kind: "entrypoint"
@@ -313,6 +316,7 @@ room_paths:
   - "./rooms/skillstest"
   - "./rooms/multi_arg"
   - "./rooms/title_only"
+  - "./rooms/feedback"
 
 #==========================================================================
 # Completions configuration

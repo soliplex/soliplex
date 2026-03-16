@@ -41,6 +41,9 @@ soliplex-cli = "soliplex.cli:the_cli"
 soliplex-tui = "soliplex.tui.cli:the_cli"
 soliplex-tui-serve = "soliplex.tui.serve:main"
 
+[project.entry-points."haiku.skills"]
+agui-run-feedback = "soliplex.skills.agui_run_feedback:create_skill"
+
 [dependency-groups]
 dev = [
     "anyio",

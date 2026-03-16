@@ -1,0 +1,17 @@
+id: "feedback"
+name: "AGUI Run Feedback"
+description: "Test feedback skill."
+suggestions:
+- "List ten most recent AGUI feedback runs"
+
+
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You are a friendly agent.  Use the supplied skills as needed when
+    replying to the user's prompts.
+
+skills:
+  installation_skill_names:
+    - "agui-run-feedback"
+

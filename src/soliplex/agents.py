@@ -42,6 +42,7 @@ class AgentDependencies:
     """
 
     the_installation: typing.Any  # installation.Installation
+    the_threads: typing.Any  # agui.ThreadStorage
     user: models.UserProfile = None  # TBD make required
     tool_configs: ToolConfigMap = None
     thread_id: str | None = None
