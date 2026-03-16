@@ -281,3 +281,20 @@ def faux_agent_factory(
         mcp_client_toolset_configs=mcp_client_toolset_configs,
         skill_toolset_config=skill_toolset_config,
     )
+
+
+def multi_arg_template(
+    name: str,
+    description: str | None,
+):
+    """Return a markdown document with the supplied arguments"""
+    if description is None:
+        return f"""
+# Title: {name}
+
+The user did not provide a description"""
+    else:
+        return f"""
+# Title: {name}
+
+{description}"""

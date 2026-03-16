@@ -281,6 +281,8 @@ room_paths:
   - "./rooms/faux"
   - "./rooms/quiztest"
   - "./rooms/skillstest"
+  - "./rooms/multi_arg"
+  - "./rooms/title_only"
 
 #==========================================================================
 # Completions configuration

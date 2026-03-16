@@ -1,0 +1,28 @@
+id: "multi_arg"
+name: "Multi-Argument Tools"
+description: "Demonstrate multi-argument tools."
+suggestions:
+- "Generate a document using the 'template' tool"
+
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You are a friendly agent.  Use the supplied tools as needed when
+    replying to the user's prompts.  Prompt the user for any input
+    needed by the tools.
+
+tools:
+  - tool_name: "soliplex.examples.multi_arg_template"
+    ai_tool_params:
+
+      # Note that we are overriding the tool's name here
+      name: "template"
+
+      # Note that we are overriding the fact that 'description' is
+      # optional in the tool's funcion signature.
+      description: |
+        Generate a Markdown response from user input
+
+        'name' (str, required) is the name to be used in the title
+
+        'description' (str, required) is the value to be used for the body

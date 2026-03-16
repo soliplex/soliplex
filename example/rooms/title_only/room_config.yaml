@@ -1,0 +1,29 @@
+id: "title_only"
+name: "Demo Overriding Multi-Argument Tool"
+description: "Demonstrate overriding multi-argument tools."
+suggestions:
+- "Generate a document using the 'title_only' tool"
+
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You are a friendly agent.  Use the supplied tools as needed when
+    replying to the user's prompts.  Prompt the user for any input
+    needed by the tools.
+
+tools:
+  - tool_name: "soliplex.examples.multi_arg_template"
+    ai_tool_params:
+
+      # Note that we are overriding the tool's name here
+      name: "title_only"
+
+      # Note that we are overriding the fact that 'description' is
+      # optional in the tool's funcion signature.
+      description: |
+        Generate a Markdown response from user input
+
+        'name' (str, required) is the name to be used in the title
+
+        'description':  DEPRECATED:  do not use this argument.
+
