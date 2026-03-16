@@ -651,6 +651,19 @@ tool_call_nonesuch = pytest.raises(agui_parser.ToolCallDoesNotExist)
             W_PARENT_E_TOOL_CALL_START,
             no_error(None),
         ),
+        # Parent exists but tool_calls is None
+        (
+            RUNNING,
+            [
+                agui_core.AssistantMessage(
+                    id=TOOL_CALL_PARENT_MESSAGE_ID,
+                    content="",
+                )
+            ],
+            {},
+            W_PARENT_E_TOOL_CALL_START,
+            no_error(None),
+        ),
         (RUNNING, [], {}, W_PARENT_E_TOOL_CALL_START, no_error(None)),
         (FINISHED, [], {}, E_TOOL_CALL_START, not_running),
         (ERROR, [], {}, E_TOOL_CALL_START, not_running),
@@ -773,6 +786,21 @@ def test_esp_call_w_tool_call_args(
                 TOOL_CALL_ID: (
                     TOOL_CALL,
                     TOOL_CALL_PARENT_MESSAGE.model_copy(deep=True),
+                )
+            },
+            E_TOOL_CALL_END,
+            no_error(None),
+        ),
+        # Parent created by TEXT_MESSAGE_START has tool_calls=None
+        (
+            RUNNING,
+            {
+                TOOL_CALL_ID: (
+                    TOOL_CALL,
+                    agui_core.AssistantMessage(
+                        id=TOOL_CALL_PARENT_MESSAGE_ID,
+                        content="",
+                    ),
                 )
             },
             E_TOOL_CALL_END,

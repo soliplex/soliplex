@@ -407,6 +407,9 @@ class EventStreamParser:
                         )
                         self._add_message(parent_message)
 
+                    elif parent_message.tool_calls is None:
+                        parent_message.tool_calls = []
+
                 else:
                     parent_message = None
 
@@ -444,6 +447,8 @@ class EventStreamParser:
                 self.completed_tool_calls.add(event.tool_call_id)
 
                 if parent is not None:
+                    if parent.tool_calls is None:
+                        parent.tool_calls = []
                     parent.tool_calls.append(tool_call)
 
             case agui_core.EventType.TOOL_CALL_RESULT:
