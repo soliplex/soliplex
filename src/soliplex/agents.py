@@ -10,6 +10,7 @@ from haiku.skills import prompts as hs_prompts
 from pydantic_ai import agent as ai_agent
 from pydantic_ai import mcp as ai_mcp
 from pydantic_ai import models as ai_models
+from pydantic_ai import settings as ai_settings
 from pydantic_ai import tools as ai_tools
 from pydantic_ai.models import google as google_models
 from pydantic_ai.models import openai as openai_models
@@ -91,7 +92,9 @@ def get_model_from_config(
     model_settings_kw = {}
 
     if agent_config.model_settings:
-        model_settings_kw["model_settings"] = agent_config.model_settings
+        model_settings_kw["settings"] = ai_settings.ModelSettings(
+            **agent_config.model_settings,
+        )
 
     if agent_config.provider_type == config_agents.LLMProviderType.GOOGLE:
         provider = google_providers.GoogleProvider(**provider_kw)

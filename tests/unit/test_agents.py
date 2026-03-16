@@ -173,7 +173,7 @@ def test_get_model_from_config(
         if w_model_settings:
             google_model_klass.assert_called_once_with(
                 model_name=MODEL,
-                model_settings=w_model_settings,
+                settings=w_model_settings,
                 provider=google_provider_klass.return_value,
             )
         else:
@@ -192,7 +192,7 @@ def test_get_model_from_config(
         if w_model_settings:
             oai_model_klass.assert_called_once_with(
                 model_name=MODEL,
-                model_settings=w_model_settings,
+                settings=w_model_settings,
                 provider=oai_provider_klass.return_value,
             )
         else:
@@ -211,7 +211,7 @@ def test_get_model_from_config(
         if w_model_settings:
             oai_model_klass.assert_called_once_with(
                 model_name=MODEL,
-                model_settings=w_model_settings,
+                settings=w_model_settings,
                 provider=oll_provider_klass.return_value,
             )
         else:
