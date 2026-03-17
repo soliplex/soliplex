@@ -313,6 +313,7 @@ room_paths:
   - "./rooms/skillstest"
   - "./rooms/multi_arg"
   - "./rooms/title_only"
+  - "./rooms/feedback"
 
 #==========================================================================
 # Completions configuration
