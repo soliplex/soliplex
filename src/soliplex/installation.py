@@ -38,6 +38,9 @@ NO_AUTH_MODE_USER_TOKEN = {
     "email": "phreddy@example.com",
 }
 
+_THE_AGUI_ENGINE = None
+_THE_AUTHZ_ENGINE = None
+
 
 @dataclasses.dataclass
 class Installation:
@@ -435,6 +438,9 @@ async def lifespan(
     log_config_file: str = None,
     add_admin_user: str = None,
 ):
+    global _THE_AGUI_ENGINE
+    global _THE_AUTHZ_ENGINE
+
     i_config = config_installation.load_installation(installation_path)
 
     if no_auth_mode:
@@ -464,7 +470,7 @@ async def lifespan(
 
     apply_logfire_configuration(app, the_installation, disable_logfire_console)
 
-    agui_engine = sqla_asyncio.create_async_engine(
+    agui_engine = _THE_AGUI_ENGINE = sqla_asyncio.create_async_engine(
         the_installation.thread_persistence_dburi_async,
         json_serializer=util.serialize_sqla_json,
         pool_pre_ping=True,
@@ -474,7 +480,7 @@ async def lifespan(
             agui_schema.Base.metadata.create_all,
         )
 
-    authz_engine = sqla_asyncio.create_async_engine(
+    authz_engine = _THE_AUTHZ_ENGINE = sqla_asyncio.create_async_engine(
         the_installation.authorization_dburi_async,
         json_serializer=util.serialize_sqla_json,
         pool_pre_ping=True,
@@ -510,4 +516,6 @@ async def lifespan(
         yield context
 
     await agui_engine.dispose()
+    _THE_AGUI_ENGINE = None
     await authz_engine.dispose()
+    _THE_AUTHZ_ENGINE = None
