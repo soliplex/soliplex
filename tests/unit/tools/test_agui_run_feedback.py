@@ -339,15 +339,6 @@ async def test__do_review_feedback(
     )
 
 
-@pytest.fixture
-def recent_feedback_entries(run_feedback_entry):
-    return arf_tools.RecentRunFeedbackEntries(
-        opened=[run_feedback_entry],
-        reviewed=[],
-        resolved=[],
-    )
-
-
 @pytest.mark.anyio
 @pytest.mark.parametrize(
     "w_run_id, expectation",
