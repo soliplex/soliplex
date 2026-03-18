@@ -228,10 +228,9 @@ async def query_recent_feedback(
         our_state = RecentRunFeedback.model_validate(our_state)
         before_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}
 
-    if query != our_state.query:
-        entries = await _do_query(ctx, query)
-        our_state.query = query
-        our_state.entries = entries
+    entries = await _do_query(ctx, query)
+    our_state.query = query
+    our_state.entries = entries
 
     after_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}
     metadata = _response_metadata(before_state, after_state)
