@@ -699,6 +699,7 @@ async def post_room_agui_thread_id_run_id(
         room_id=room_id,
         user=user,
         run_agent_input=agui_adapter.run_input,
+        the_threads=the_threads,
         the_logger=the_logger,
     )
 

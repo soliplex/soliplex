@@ -1320,6 +1320,7 @@ async def test_post_room_agui_thread_id_run_id_streaming(
             room_id=TEST_ROOM_ID,
             user=USER_PROFILE,
             run_agent_input=exp_adapter.run_input,
+            the_threads=the_threads,
             the_logger=the_logger,
         )
 

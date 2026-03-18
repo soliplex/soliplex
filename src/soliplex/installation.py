@@ -12,6 +12,7 @@ from sqlalchemy import sql as sqla_sql
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
+from soliplex import agui as agui_package
 from soliplex import authz as authz_package
 from soliplex import loggers
 from soliplex import mcp_server
@@ -310,6 +311,7 @@ class Installation:
         *,
         room_id: str,
         user: dict,
+        the_threads: agui_package.ThreadStorage = None,
         the_authz_policy: authz_package.AuthorizationPolicy = None,
         run_agent_input: agui_core.RunAgentInput = None,
         the_logger: loggers.LogWrapper = None,
@@ -326,6 +328,9 @@ class Installation:
         thread_id = None
         if run_agent_input is not None:
             thread_id = run_agent_input.thread_id
+
+        if the_threads is not None:
+            kwargs["the_threads"] = the_threads
 
         return agents.AgentDependencies(
             the_installation=self,

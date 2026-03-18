@@ -18,7 +18,7 @@ from pydantic_ai.providers import google as google_providers
 from pydantic_ai.providers import ollama as ollama_providers
 from pydantic_ai.providers import openai as openai_providers
 
-from soliplex import agui
+from soliplex import agui as agui_package
 from soliplex import mcp_client
 from soliplex import models
 from soliplex.config import agents as config_agents
@@ -42,10 +42,11 @@ class AgentDependencies:
     """
 
     the_installation: typing.Any  # installation.Installation
+    the_threads: agui_package.ThreadStorage = None
+    state: agui_package.AGUI_State = dataclasses.field(default_factory=dict)
+    thread_id: str | None = None
     user: models.UserProfile = None  # TBD make required
     tool_configs: ToolConfigMap = None
-    thread_id: str | None = None
-    state: agui.AGUI_State = dataclasses.field(default_factory=dict)
 
 
 SoliplexAgent = ai_agent.AbstractAgent[AgentDependencies, typing.Any]

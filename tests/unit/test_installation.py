@@ -9,6 +9,7 @@ from ag_ui import core as agui_core
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
+from soliplex import agui as agui_package
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -999,6 +1000,7 @@ async def test_installation_get_agent_for_completion(
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_the_logger", [False, True])
+@pytest.mark.parametrize("w_the_threads", [False, True])
 @pytest.mark.parametrize("w_run_agent_input", [False, True])
 @pytest.mark.parametrize(
     "w_room_id, raises", [("room_id", False), ("nonesuch", True)]
@@ -1012,6 +1014,7 @@ async def test_installation_get_agent_deps_for_room(
     w_room_id,
     raises,
     w_run_agent_input,
+    w_the_threads,
     w_the_logger,
 ):
     tc_config = mock.create_autospec(config_tools.ToolConfig)
@@ -1037,6 +1040,10 @@ async def test_installation_get_agent_deps_for_room(
     kw = {}
     if w_run_agent_input:
         kw["run_agent_input"] = RUN_AGENT_INPUT
+
+    the_threads = mock.create_autospec(agui_package.ThreadStorage)
+    if w_the_threads:
+        kw["the_threads"] = the_threads
 
     if w_the_logger:
         kw["the_logger"] = the_logger
@@ -1071,6 +1078,11 @@ async def test_installation_get_agent_deps_for_room(
             assert found.the_installation is the_installation
             assert found.user == test_user
             assert found.tool_configs == t_configs
+
+            if w_the_threads:
+                assert found.the_threads is the_threads
+            else:
+                assert found.the_threads is None
 
     if w_the_logger:
         the_logger.bind.assert_called_once_with(
