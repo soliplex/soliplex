@@ -486,10 +486,6 @@ class RunFeedback(Base):
         sqla_sqltypes.TIMESTAMP(timezone=True),
         default=agui_util._timestamp,
     )
-    updated: Mapped[datetime.datetime | None] = mapped_column(
-        sqla_sqltypes.TIMESTAMP(timezone=True),
-        default=None,
-    )
 
     run_id_: Mapped[int] = mapped_column(
         ForeignKey("run.id_", ondelete="CASCADE"),
