@@ -299,6 +299,8 @@ async def review_recent_feedback(
 
     await _do_review_feedback(to_review, note=review.note)
 
+    to_review.status = FRS.REVIEWED
+    to_review.note = review.note
     our_state.entries.opened.remove(to_review)
     our_state.entries.reviewed.insert(0, to_review)
 
@@ -356,6 +358,8 @@ async def resolve_recent_feedback(
 
     await _do_resolve_feedback(to_resolve, note=resolution.note)
 
+    to_resolve.status = FRS.RESOLVED
+    to_resolve.note = resolution.note
     found_in.remove(to_resolve)
     our_state.entries.resolved.insert(0, to_resolve)
 

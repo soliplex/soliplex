@@ -358,14 +358,21 @@ async def test_review_recent_feedback(
     before_entries = arf_tools.RecentRunFeedbackEntries(
         opened=[run_feedback_entry],
     )
+    before_state = arf_tools.RecentRunFeedback(entries=before_entries)
+
+    exp_after_entry = run_feedback_entry.model_copy(
+        update={
+            "status": FRS.REVIEWED,
+            "note": REVIEWED_NOTE,
+        },
+    )
     exp_after_entries = before_entries.model_copy(
         update={
             "opened": [],
-            "reviewed": [run_feedback_entry],
+            "reviewed": [exp_after_entry],
             "resolved": [],
         },
     )
-    before_state = arf_tools.RecentRunFeedback(entries=before_entries)
     exp_state = arf_tools.RecentRunFeedback(entries=exp_after_entries)
 
     deps = ctx_w_deps.deps
@@ -382,15 +389,22 @@ async def test_review_recent_feedback(
         assert after_state == exp_state
 
         events = found.metadata
+
         (event,) = events
-        (delta,) = event.delta
-        assert delta["op"] == "move"
-        assert delta["from"] == (
-            f"/{arf_tools.STATE_NAMESPACE}/entries/opened/0"
-        )
-        assert delta["path"] == (
-            f"/{arf_tools.STATE_NAMESPACE}/entries/reviewed/0"
-        )
+        assert len(event.delta) == 2
+
+        d_remove = {
+            "op": "remove",
+            "path": f"/{arf_tools.STATE_NAMESPACE}/entries/opened/0",
+        }
+        assert d_remove in event.delta
+
+        d_add = {
+            "op": "add",
+            "path": f"/{arf_tools.STATE_NAMESPACE}/entries/reviewed/0",
+            "value": exp_after_entry.model_dump(mode="json"),
+        }
+        assert d_add in event.delta
 
         do_review.assert_called_once_with(
             run_feedback_entry,
@@ -453,15 +467,21 @@ async def test_resolve_recent_feedback(
         before_entries = arf_tools.RecentRunFeedbackEntries(
             opened=[run_feedback_entry],
         )
+    before_state = arf_tools.RecentRunFeedback(entries=before_entries)
 
+    exp_after_entry = run_feedback_entry.model_copy(
+        update={
+            "status": FRS.RESOLVED,
+            "note": RESOLVED_NOTE,
+        },
+    )
     exp_after_entries = before_entries.model_copy(
         update={
             "opened": [],
             "reviewed": [],
-            "resolved": [run_feedback_entry],
+            "resolved": [exp_after_entry],
         },
     )
-    before_state = arf_tools.RecentRunFeedback(entries=before_entries)
     exp_state = arf_tools.RecentRunFeedback(entries=exp_after_entries)
 
     deps = ctx_w_deps.deps
@@ -488,15 +508,23 @@ async def test_resolve_recent_feedback(
 
         events = found.metadata
         (event,) = events
-        (delta,) = event.delta
-        assert delta["op"] == "move"
-        assert delta["from"] == (
-            f"/{arf_tools.STATE_NAMESPACE}/entries/"
-            f"{'reviewed' if w_reviewed else 'opened'}/0"
-        )
-        assert delta["path"] == (
-            f"/{arf_tools.STATE_NAMESPACE}/entries/resolved/0"
-        )
+        assert len(event.delta) == 2
+
+        d_remove = {
+            "op": "remove",
+            "path": (
+                f"/{arf_tools.STATE_NAMESPACE}/entries/"
+                f"{'reviewed' if w_reviewed else 'opened'}/0"
+            ),
+        }
+        assert d_remove in event.delta
+
+        d_add = {
+            "op": "add",
+            "path": f"/{arf_tools.STATE_NAMESPACE}/entries/resolved/0",
+            "value": exp_after_entry.model_dump(mode="json"),
+        }
+        assert d_add in event.delta
 
         do_resolve.assert_called_once_with(
             run_feedback_entry,
