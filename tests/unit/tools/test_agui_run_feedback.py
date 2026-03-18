@@ -407,7 +407,7 @@ async def test__do_resolve_feedback(
     run_feedback_entry,
 ):
     _getter, mock_threads = the_threads_getter
-    rvw_rf = mock_threads.review_run_feedback
+    rsv_rf = mock_threads.resolve_run_feedback
 
     with mock.patch(
         "soliplex.tools.agui_run_feedback._get_the_threads",
@@ -418,7 +418,7 @@ async def test__do_resolve_feedback(
             note=RESOLVED_NOTE,
         )
 
-    rvw_rf.assert_called_once_with(
+    rsv_rf.assert_called_once_with(
         note=RESOLVED_NOTE,
         user_name=USER_NAME,
         room_id=ROOM_ID,

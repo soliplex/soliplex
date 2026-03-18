@@ -314,7 +314,7 @@ async def _do_resolve_feedback(
     note: str | None,
 ):
     async with _get_the_threads() as the_threads:
-        await the_threads.review_run_feedback(
+        await the_threads.resolve_run_feedback(
             note=note,
             user_name=run_entry.user_name,
             room_id=run_entry.room_id,
