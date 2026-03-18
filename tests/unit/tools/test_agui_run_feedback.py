@@ -250,11 +250,11 @@ async def test_query_recent_feedback(do_query, ctx_w_deps, rf_query, w_state):
     assert found.return_value == query_result
     assert deps.state[arf_tools.STATE_NAMESPACE] == exp_state
 
+    do_query.assert_called_once_with(ctx_w_deps, rf_query)
+
     if w_state == "same_query":
-        do_query.assert_not_called()
         assert len(deltas) == 0
     else:
-        do_query.assert_called_once_with(ctx_w_deps, rf_query)
         assert len(deltas) == 1
 
 
