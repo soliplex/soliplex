@@ -29,43 +29,15 @@ NOTES_BY_STATUS = {
 }
 
 
-@pytest.mark.anyio
-@pytest.mark.parametrize(
-    "w_engine, expectation",
-    [
-        (None, pytest.raises(arf_tools.No_AGUI_Engine)),
-        (object(), contextlib.nullcontext()),
-    ],
-)
-@mock.patch("soliplex.tools.agui_run_feedback.sqla_asyncio")
-@mock.patch("soliplex.tools.agui_run_feedback.installation")
-async def test__get_the_threads(
-    inst_module,
-    sqla_asyncio,
-    w_engine,
-    expectation,
-):
-    a_session_klass = sqla_asyncio.AsyncSession
-    a_session_factory = a_session_klass.return_value
-    a_session = a_session_factory.__aenter__.return_value
-
-    inst_module._THE_AGUI_ENGINE = w_engine
-
-    with expectation:
-        async with arf_tools._get_the_threads() as found:
-            assert isinstance(found, agui_persistence.ThreadStorage)
-            assert found._session is a_session
-
-
 @pytest.fixture
-def the_threads_getter():
-    mock_threads = mock.create_autospec(agui_persistence.ThreadStorage)
-
-    @contextlib.asynccontextmanager
-    async def _getter():
-        yield mock_threads
-
-    return _getter, mock_threads
+def ctx_w_deps():
+    ctx = mock.Mock(spec_set=["deps"])
+    ctx.deps = mock.Mock(
+        spec_set=["state", "the_threads"],
+        state={},
+        the_threads=mock.create_autospec(agui_persistence.ThreadStorage),
+    )
+    return ctx
 
 
 def _awaitable(name, value):
@@ -155,25 +127,20 @@ def the_run(request, the_thread, the_run_feedback):
 
 @pytest.mark.anyio
 async def test__do_query(
-    the_threads_getter,
     the_run,
     the_thread,
     the_run_feedback,
     the_review_entries,
+    ctx_w_deps,
 ):
-    _getter, mock_threads = the_threads_getter
-    lrrf = mock_threads.list_recent_run_feedback
+    lrrf = ctx_w_deps.deps.the_threads.list_recent_run_feedback
     lrrf.return_value = [the_run] if the_run else []
 
     review_entries, exp_status = the_review_entries
 
     query = arf_tools.RecentRunFeedbackQuery()
 
-    with mock.patch(
-        "soliplex.tools.agui_run_feedback._get_the_threads",
-        _getter,
-    ):
-        found = await arf_tools._do_query(query)
+    found = await arf_tools._do_query(ctx_w_deps, query)
 
     if exp_status == FRS.RESOLVED:
         if the_run:
@@ -218,13 +185,6 @@ async def test__do_query(
         for review_entry in review_entries:
             await review_entry.awaitable_attrs.status
             await review_entry.awaitable_attrs.note
-
-
-@pytest.fixture
-def ctx_w_deps():
-    ctx = mock.Mock(spec_set=["deps"])
-    ctx.deps = mock.Mock(spec_set=["state"], state={})
-    return ctx
 
 
 @pytest.fixture
@@ -294,7 +254,7 @@ async def test_query_recent_feedback(do_query, ctx_w_deps, rf_query, w_state):
         do_query.assert_not_called()
         assert len(deltas) == 0
     else:
-        do_query.assert_called_once_with(rf_query)
+        do_query.assert_called_once_with(ctx_w_deps, rf_query)
         assert len(deltas) == 1
 
 
@@ -315,20 +275,16 @@ def run_feedback_entry():
 
 @pytest.mark.anyio
 async def test__do_review_feedback(
-    the_threads_getter,
     run_feedback_entry,
+    ctx_w_deps,
 ):
-    _getter, mock_threads = the_threads_getter
-    rvw_rf = mock_threads.review_run_feedback
+    rvw_rf = ctx_w_deps.deps.the_threads.review_run_feedback
 
-    with mock.patch(
-        "soliplex.tools.agui_run_feedback._get_the_threads",
-        _getter,
-    ):
-        await arf_tools._do_review_feedback(
-            run_feedback_entry,
-            note=REVIEWED_NOTE,
-        )
+    await arf_tools._do_review_feedback(
+        ctx_w_deps,
+        run_feedback_entry,
+        note=REVIEWED_NOTE,
+    )
 
     rvw_rf.assert_called_once_with(
         note=REVIEWED_NOTE,
@@ -407,6 +363,7 @@ async def test_review_recent_feedback(
         assert d_add in event.delta
 
         do_review.assert_called_once_with(
+            ctx_w_deps,
             run_feedback_entry,
             note=REVIEWED_NOTE,
         )
@@ -417,20 +374,16 @@ async def test_review_recent_feedback(
 
 @pytest.mark.anyio
 async def test__do_resolve_feedback(
-    the_threads_getter,
     run_feedback_entry,
+    ctx_w_deps,
 ):
-    _getter, mock_threads = the_threads_getter
-    rsv_rf = mock_threads.resolve_run_feedback
+    rsv_rf = ctx_w_deps.deps.the_threads.resolve_run_feedback
 
-    with mock.patch(
-        "soliplex.tools.agui_run_feedback._get_the_threads",
-        _getter,
-    ):
-        await arf_tools._do_resolve_feedback(
-            run_feedback_entry,
-            note=RESOLVED_NOTE,
-        )
+    await arf_tools._do_resolve_feedback(
+        ctx_w_deps,
+        run_feedback_entry,
+        note=RESOLVED_NOTE,
+    )
 
     rsv_rf.assert_called_once_with(
         note=RESOLVED_NOTE,
@@ -527,6 +480,7 @@ async def test_resolve_recent_feedback(
         assert d_add in event.delta
 
         do_resolve.assert_called_once_with(
+            ctx_w_deps,
             run_feedback_entry,
             note=RESOLVED_NOTE,
         )

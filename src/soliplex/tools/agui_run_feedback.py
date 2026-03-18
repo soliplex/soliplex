@@ -4,46 +4,24 @@
 - Allow privileged users to mark feedback a as "reviewed", "resolved".
 """
 
-import contextlib
 import datetime
 
 import jsonpatch
 import pydantic
 import pydantic_ai
 from ag_ui import core as agui_core
-from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
 from soliplex import agui as agui_package
-from soliplex import installation
-from soliplex.agui import persistence as agui_persistence
 
 FRS = agui_package.FeedbackReviewStatus
 STATE_NAMESPACE = "soliplex-agui-run-feedback"
-
-
-class No_AGUI_Engine(ValueError):
-    def __init__(self):
-        super().__init__(
-            "'soliplex.installation._THE_AGUI_ENGINE' not configured"
-        )
 
 
 class UnknownFeedback(KeyError):
     def __init__(self, run_id: str):
         self.run_id = run_id
         super().__init__(f"Uknown feedback entry for run id {run_id}")
-
-
-@contextlib.asynccontextmanager
-async def _get_the_threads() -> agui_package.ThreadStorage:
-    engine = installation._THE_AGUI_ENGINE
-
-    if engine is None:
-        raise No_AGUI_Engine()
-
-    async with sqla_asyncio.AsyncSession(bind=engine) as session:
-        yield agui_persistence.ThreadStorage(session)
 
 
 class RunFeedbackEntry(pydantic.BaseModel):
@@ -158,57 +136,60 @@ class FeedbackResolution(pydantic.BaseModel):
     note: str | None = None
 
 
-async def _do_query(query: RecentRunFeedbackQuery) -> RecentRunFeedback:
-    async with _get_the_threads() as the_threads:
-        runs_w_recent_fb = await the_threads.list_recent_run_feedback(
-            user_name=query.user_name,
-            room_id=query.room_id,
-            limit=query.limit,
-            since=query.since,
+async def _do_query(
+    ctx: pydantic_ai.RunContext[agents.AgentDependencies],
+    query: RecentRunFeedbackQuery,
+) -> RecentRunFeedback:
+    the_threads = ctx.deps.the_threads
+    runs_w_recent_fb = await the_threads.list_recent_run_feedback(
+        user_name=query.user_name,
+        room_id=query.room_id,
+        limit=query.limit,
+        since=query.since,
+    )
+
+    entries = RecentRunFeedbackEntries()
+
+    for run in runs_w_recent_fb:
+        thread = await run.awaitable_attrs.thread
+        run_feedback = await run.awaitable_attrs.run_feedback
+        history = await run_feedback.awaitable_attrs.review_history
+        status_notes = [
+            (
+                await entry.awaitable_attrs.status,
+                await entry.awaitable_attrs.note,
+            )
+            for entry in history
+        ]
+
+        if len(status_notes) > 0:
+            status, note = status_notes[0]
+        else:
+            status = note = None
+
+        entry = RunFeedbackEntry(
+            user_name=await thread.awaitable_attrs.user_name,
+            room_id=await thread.awaitable_attrs.room_id,
+            thread_id=await thread.awaitable_attrs.thread_id,
+            run_id=await run.awaitable_attrs.run_id,
+            feedback=await run_feedback.awaitable_attrs.feedback,
+            reason=await run_feedback.awaitable_attrs.reason,
+            created=await run_feedback.awaitable_attrs.created,
+            status=status,
+            note=note,
         )
 
-        entries = RecentRunFeedbackEntries()
+        if status == FRS.RESOLVED:
+            entries.resolved.insert(0, entry)
 
-        for run in runs_w_recent_fb:
-            thread = await run.awaitable_attrs.thread
-            run_feedback = await run.awaitable_attrs.run_feedback
-            history = await run_feedback.awaitable_attrs.review_history
-            status_notes = [
-                (
-                    await entry.awaitable_attrs.status,
-                    await entry.awaitable_attrs.note,
-                )
-                for entry in history
-            ]
+        elif status == FRS.REVIEWED:
+            entries.reviewed.insert(0, entry)
 
-            if len(status_notes) > 0:
-                status, note = status_notes[0]
-            else:
-                status = note = None
+        else:
+            assert entry.status is None
+            entries.opened.insert(0, entry)
 
-            entry = RunFeedbackEntry(
-                user_name=await thread.awaitable_attrs.user_name,
-                room_id=await thread.awaitable_attrs.room_id,
-                thread_id=await thread.awaitable_attrs.thread_id,
-                run_id=await run.awaitable_attrs.run_id,
-                feedback=await run_feedback.awaitable_attrs.feedback,
-                reason=await run_feedback.awaitable_attrs.reason,
-                created=await run_feedback.awaitable_attrs.created,
-                status=status,
-                note=note,
-            )
-
-            if status == FRS.RESOLVED:
-                entries.resolved.insert(0, entry)
-
-            elif status == FRS.REVIEWED:
-                entries.reviewed.insert(0, entry)
-
-            else:
-                assert entry.status is None
-                entries.opened.insert(0, entry)
-
-        return entries
+    return entries
 
 
 def _response_metadata(before, after) -> list[agui_core.Event]:
@@ -248,7 +229,7 @@ async def query_recent_feedback(
         before_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}
 
     if query != our_state.query:
-        entries = await _do_query(query)
+        entries = await _do_query(ctx, query)
         our_state.query = query
         our_state.entries = entries
 
@@ -261,18 +242,19 @@ async def query_recent_feedback(
 
 
 async def _do_review_feedback(
+    ctx: pydantic_ai.RunContext[agents.AgentDependencies],
     run_entry: RunFeedbackEntry,
     *,
     note: str | None,
 ):
-    async with _get_the_threads() as the_threads:
-        await the_threads.review_run_feedback(
-            note=note,
-            user_name=run_entry.user_name,
-            room_id=run_entry.room_id,
-            thread_id=run_entry.thread_id,
-            run_id=run_entry.run_id,
-        )
+    the_threads = ctx.deps.the_threads
+    await the_threads.review_run_feedback(
+        note=note,
+        user_name=run_entry.user_name,
+        room_id=run_entry.room_id,
+        thread_id=run_entry.thread_id,
+        run_id=run_entry.run_id,
+    )
 
 
 async def review_recent_feedback(
@@ -297,7 +279,7 @@ async def review_recent_feedback(
 
     before_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}
 
-    await _do_review_feedback(to_review, note=review.note)
+    await _do_review_feedback(ctx, to_review, note=review.note)
 
     to_review.status = FRS.REVIEWED
     to_review.note = review.note
@@ -311,18 +293,19 @@ async def review_recent_feedback(
 
 
 async def _do_resolve_feedback(
+    ctx: pydantic_ai.RunContext[agents.AgentDependencies],
     run_entry: RunFeedbackEntry,
     *,
     note: str | None,
 ):
-    async with _get_the_threads() as the_threads:
-        await the_threads.resolve_run_feedback(
-            note=note,
-            user_name=run_entry.user_name,
-            room_id=run_entry.room_id,
-            thread_id=run_entry.thread_id,
-            run_id=run_entry.run_id,
-        )
+    the_threads = ctx.deps.the_threads
+    await the_threads.resolve_run_feedback(
+        note=note,
+        user_name=run_entry.user_name,
+        room_id=run_entry.room_id,
+        thread_id=run_entry.thread_id,
+        run_id=run_entry.run_id,
+    )
 
 
 async def resolve_recent_feedback(
@@ -356,7 +339,7 @@ async def resolve_recent_feedback(
 
     before_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}
 
-    await _do_resolve_feedback(to_resolve, note=resolution.note)
+    await _do_resolve_feedback(ctx, to_resolve, note=resolution.note)
 
     to_resolve.status = FRS.RESOLVED
     to_resolve.note = resolution.note
