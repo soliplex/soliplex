@@ -12,6 +12,9 @@ from soliplex.moodle.client import MoodleClient
 from soliplex.moodle.models import ActivityCompletionStatus
 from soliplex.moodle.models import AssignmentGrade
 from soliplex.moodle.models import CalendarEvent
+from soliplex.moodle.models import Certification
+from soliplex.moodle.models import CertificationAllocation
+from soliplex.moodle.models import CertificationLogEntry
 from soliplex.moodle.models import Cohort
 from soliplex.moodle.models import CohortMembers
 from soliplex.moodle.models import CourseModule
@@ -21,11 +24,17 @@ from soliplex.moodle.models import GradeItem
 from soliplex.moodle.models import Group
 from soliplex.moodle.models import GroupMembers
 from soliplex.moodle.models import MessageRequest
+from soliplex.moodle.models import Program
+from soliplex.moodle.models import ProgramCourse
+from soliplex.moodle.models import Tenant
 
 __all__ = [
     "ActivityCompletionStatus",
     "AssignmentGrade",
     "CalendarEvent",
+    "Certification",
+    "CertificationAllocation",
+    "CertificationLogEntry",
     "Cohort",
     "CohortMembers",
     "CourseModule",
@@ -37,5 +46,8 @@ __all__ = [
     "MessageRequest",
     "MoodleAPIError",
     "MoodleClient",
+    "Program",
+    "ProgramCourse",
+    "Tenant",
     "moodle_tools_agent_factory",
 ]

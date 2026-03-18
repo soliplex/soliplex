@@ -8,6 +8,9 @@ import httpx
 
 from soliplex.moodle.models import ActivityCompletionStatus
 from soliplex.moodle.models import CalendarEvent
+from soliplex.moodle.models import Certification
+from soliplex.moodle.models import CertificationAllocation
+from soliplex.moodle.models import CertificationLogEntry
 from soliplex.moodle.models import Cohort
 from soliplex.moodle.models import CohortMembers
 from soliplex.moodle.models import CompletionStatus
@@ -16,6 +19,9 @@ from soliplex.moodle.models import CourseSection
 from soliplex.moodle.models import EnrolledUser
 from soliplex.moodle.models import Group
 from soliplex.moodle.models import GroupMembers
+from soliplex.moodle.models import Program
+from soliplex.moodle.models import ProgramCourse
+from soliplex.moodle.models import Tenant
 from soliplex.moodle.models import UserProfile
 
 # Upper bound on results returned by list endpoints.
@@ -307,3 +313,122 @@ class MoodleClient:
             "core_message_send_instant_messages", **params
         )
         return raw if isinstance(raw, list) else []
+
+    # ---------------------------------------------------------------
+    # Certifications (Workplace)
+    # ---------------------------------------------------------------
+
+    async def get_certifications(
+        self, tenantid: int = 0
+    ) -> list[Certification]:
+        """List certifications via ``tool_certification_get_certifications``."""
+        raw = await self._call(
+            "tool_certification_get_certifications",
+            tenantid=tenantid,
+            showall=1,
+        )
+        return [Certification.model_validate(c) for c in raw][:MAX_RESULTS]
+
+    async def get_certification_allocations(
+        self, certificationid: int
+    ) -> list[CertificationAllocation]:
+        """Get allocated users via ``tool_certification_get_certification_allocations``."""
+        raw = await self._call(
+            "tool_certification_get_certification_allocations",
+            certificationid=certificationid,
+        )
+        return [
+            CertificationAllocation.model_validate(a) for a in raw
+        ][:MAX_RESULTS]
+
+    async def get_user_certification_allocations(
+        self, userid: int
+    ) -> list[CertificationAllocation]:
+        """Get user's certs via ``tool_certification_get_user_certification_allocations``."""
+        raw = await self._call(
+            "tool_certification_get_user_certification_allocations",
+            userid=userid,
+        )
+        return [
+            CertificationAllocation.model_validate(a) for a in raw
+        ][:MAX_RESULTS]
+
+    async def get_certification_user_log(
+        self, certificationid: int, userid: int
+    ) -> list[CertificationLogEntry]:
+        """Get cert history via ``tool_certification_get_certification_user_log``."""
+        raw = await self._call(
+            "tool_certification_get_certification_user_log",
+            certificationid=certificationid,
+            userid=userid,
+        )
+        entries = raw if isinstance(raw, list) else []
+        return [
+            CertificationLogEntry.model_validate(e) for e in entries
+        ][:MAX_RESULTS]
+
+    async def certify_user(
+        self, certificationid: int, userid: int
+    ) -> dict:
+        """Certify user via ``tool_certification_certify_user``."""
+        raw = await self._call(
+            "tool_certification_certify_user",
+            certificationid=certificationid,
+            userid=userid,
+        )
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def revoke_certification(
+        self, certificationid: int, userid: int
+    ) -> dict:
+        """Revoke cert via ``tool_certification_revoke_certification``."""
+        raw = await self._call(
+            "tool_certification_revoke_certification",
+            certificationid=certificationid,
+            userid=userid,
+        )
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    # ---------------------------------------------------------------
+    # Programs / Learning Paths (Workplace)
+    # ---------------------------------------------------------------
+
+    async def search_programs(self, search: str = "") -> list[Program]:
+        """Search programs via ``tool_program_potential_program_selector``."""
+        raw = await self._call(
+            "tool_program_potential_program_selector", search=search
+        )
+        programs = raw if isinstance(raw, list) else []
+        return [Program.model_validate(p) for p in programs][:MAX_RESULTS]
+
+    async def get_user_program_courses(
+        self, userid: int
+    ) -> list[ProgramCourse]:
+        """Get user's program courses via ``tool_program_get_users_courses``."""
+        raw = await self._call(
+            "tool_program_get_users_courses", userid=userid
+        )
+        courses = raw if isinstance(raw, list) else []
+        return [
+            ProgramCourse.model_validate(c) for c in courses
+        ][:MAX_RESULTS]
+
+    async def allocate_users_to_program(
+        self, programid: int, userids: list[int]
+    ) -> dict:
+        """Allocate users via ``tool_program_allocate_users``."""
+        params: dict[str, str | int] = {"programid": programid}
+        for i, uid in enumerate(userids):
+            params[f"userids[{i}]"] = uid
+        raw = await self._call("tool_program_allocate_users", **params)
+        return raw if isinstance(raw, dict) else {"result": []}
+
+    # ---------------------------------------------------------------
+    # Tenants (Workplace)
+    # ---------------------------------------------------------------
+
+    async def get_tenants(self) -> list[Tenant]:
+        """List tenants via ``tool_tenant_get_tenants``."""
+        raw = await self._call("tool_tenant_get_tenants")
+        tenants = raw if isinstance(raw, list) else []
+        return [Tenant.model_validate(t) for t in tenants][:MAX_RESULTS]

@@ -283,6 +283,22 @@ def test_client_strips_trailing_slash():
     assert c.base_url == "http://moodle.test"
 
 
+@pytest.mark.asyncio
+async def test_client_passes_verify_to_httpx():
+    c = MoodleClient(base_url=BASE_URL, token=TOKEN, verify=False)
+    resp = _mock_response([])
+    mock_client = mock.AsyncMock()
+    mock_client.post.return_value = resp
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ) as async_client_cls:
+        await c.get_courses()
+    async_client_cls.assert_called_once_with(verify=False)
+
+
 # ---------------------------------------------------------------
 # MoodleAPIError attributes
 # ---------------------------------------------------------------
@@ -587,6 +603,29 @@ async def test_enrol_users(client):
 
 
 @pytest.mark.asyncio
+async def test_enrol_users_returns_dict(client):
+    resp = _mock_response({"warnings": [{"message": "already enrolled"}]})
+    with _patch_httpx(resp):
+        result = await client.enrol_users(
+            [{"userid": 3, "courseid": 2, "roleid": 5}]
+        )
+
+    assert result == {"warnings": [{"message": "already enrolled"}]}
+
+
+@pytest.mark.asyncio
+async def test_enrol_users_returns_non_dict(client):
+    # When the API returns a non-dict (e.g. a list), fall back to empty warnings
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        result = await client.enrol_users(
+            [{"userid": 3, "courseid": 2, "roleid": 5}]
+        )
+
+    assert result == {"warnings": []}
+
+
+@pytest.mark.asyncio
 async def test_send_messages(client):
     resp = _mock_response(
         [{"msgid": 1, "text": "Hello"}]
@@ -598,3 +637,244 @@ async def test_send_messages(client):
 
     assert len(result) == 1
     assert result[0]["msgid"] == 1
+
+
+# ---------------------------------------------------------------
+# Certifications (Workplace)
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_certifications(client):
+    resp = _mock_response(
+        [
+            {
+                "id": 1,
+                "fullname": "Workplace Safety",
+                "idnumber": "WS01",
+                "status": 0,
+                "timecreated": 1700000000,
+                "timemodified": 1700000000,
+            },
+            {
+                "id": 2,
+                "fullname": "Data Privacy",
+                "idnumber": "DP01",
+                "status": 0,
+                "timecreated": 1700000000,
+                "timemodified": 1700000000,
+            },
+        ]
+    )
+    with _patch_httpx(resp):
+        certs = await client.get_certifications()
+
+    assert len(certs) == 2
+    assert certs[0].fullname == "Workplace Safety"
+    assert certs[1].idnumber == "DP01"
+
+
+@pytest.mark.asyncio
+async def test_get_certification_allocations(client):
+    resp = _mock_response(
+        [
+            {
+                "id": 10,
+                "userid": 3,
+                "certificationid": 1,
+                "userfullname": "Alice Johnson",
+                "certificationfullname": "Workplace Safety",
+                "timeallocated": 1700000000,
+                "timecreated": 1700000000,
+                "timemodified": 1700000000,
+            },
+        ]
+    )
+    with _patch_httpx(resp):
+        allocs = await client.get_certification_allocations(certificationid=1)
+
+    assert len(allocs) == 1
+    assert allocs[0].userid == 3
+    assert allocs[0].userfullname == "Alice Johnson"
+
+
+@pytest.mark.asyncio
+async def test_get_user_certification_allocations(client):
+    resp = _mock_response(
+        [
+            {
+                "id": 10,
+                "userid": 3,
+                "certificationid": 1,
+                "userfullname": "Alice Johnson",
+                "certificationfullname": "Workplace Safety",
+                "timeallocated": 1700000000,
+                "timecreated": 1700000000,
+                "timemodified": 1700000000,
+            },
+            {
+                "id": 11,
+                "userid": 3,
+                "certificationid": 2,
+                "userfullname": "Alice Johnson",
+                "certificationfullname": "Data Privacy",
+                "timeallocated": 1700000000,
+                "timecreated": 1700000000,
+                "timemodified": 1700000000,
+            },
+        ]
+    )
+    with _patch_httpx(resp):
+        allocs = await client.get_user_certification_allocations(userid=3)
+
+    assert len(allocs) == 2
+    assert allocs[0].certificationfullname == "Workplace Safety"
+    assert allocs[1].certificationfullname == "Data Privacy"
+
+
+@pytest.mark.asyncio
+async def test_get_certification_user_log(client):
+    resp = _mock_response(
+        [
+            {"id": 1, "action": "allocated", "timecreated": 1700000000},
+            {"id": 2, "action": "certified", "timecreated": 1700001000},
+        ]
+    )
+    with _patch_httpx(resp):
+        entries = await client.get_certification_user_log(
+            certificationid=1, userid=3
+        )
+
+    assert len(entries) == 2
+    assert entries[0].action == "allocated"
+    assert entries[1].action == "certified"
+
+
+@pytest.mark.asyncio
+async def test_get_certification_user_log_non_list(client):
+    resp = _mock_response({"error": "unexpected"})
+    with _patch_httpx(resp):
+        entries = await client.get_certification_user_log(
+            certificationid=1, userid=3
+        )
+
+    assert entries == []
+
+
+@pytest.mark.asyncio
+async def test_certify_user(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.certify_user(certificationid=1, userid=3)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_certify_user_non_dict(client):
+    resp = _mock_response(True)
+    with _patch_httpx(resp):
+        result = await client.certify_user(certificationid=1, userid=3)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_revoke_certification(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.revoke_certification(
+            certificationid=1, userid=3
+        )
+
+    assert result == {"result": True}
+
+
+# ---------------------------------------------------------------
+# Programs (Workplace)
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_search_programs(client):
+    resp = _mock_response(
+        [
+            {"id": 1, "fullname": "Onboarding Program"},
+            {"id": 2, "fullname": "Leadership Track"},
+        ]
+    )
+    with _patch_httpx(resp):
+        programs = await client.search_programs()
+
+    assert len(programs) == 2
+    assert programs[0].fullname == "Onboarding Program"
+
+
+@pytest.mark.asyncio
+async def test_get_user_program_courses(client):
+    resp = _mock_response(
+        [
+            {
+                "id": 2,
+                "shortname": "safety101",
+                "fullname": "Safety Fundamentals",
+                "completed": True,
+            },
+            {
+                "id": 3,
+                "shortname": "cyber101",
+                "fullname": "Cybersecurity Basics",
+                "completed": False,
+            },
+        ]
+    )
+    with _patch_httpx(resp):
+        courses = await client.get_user_program_courses(userid=3)
+
+    assert len(courses) == 2
+    assert courses[0].completed is True
+    assert courses[1].completed is False
+
+
+@pytest.mark.asyncio
+async def test_allocate_users_to_program(client):
+    resp = _mock_response({"result": []})
+    with _patch_httpx(resp):
+        result = await client.allocate_users_to_program(
+            programid=1, userids=[3, 4, 5]
+        )
+
+    assert result == {"result": []}
+
+
+# ---------------------------------------------------------------
+# Tenants (Workplace)
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_tenants(client):
+    resp = _mock_response(
+        [
+            {
+                "id": 1,
+                "name": "Default",
+                "sitename": "Moodle Workplace",
+                "idnumber": "",
+                "isdefault": True,
+            },
+            {
+                "id": 2,
+                "name": "Regional Office",
+                "sitename": "Regional",
+                "idnumber": "REG01",
+                "isdefault": False,
+            },
+        ]
+    )
+    with _patch_httpx(resp):
+        tenants = await client.get_tenants()
+
+    assert len(tenants) == 2
+    assert tenants[0].isdefault is True
+    assert tenants[1].name == "Regional Office"

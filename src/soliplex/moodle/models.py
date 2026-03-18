@@ -229,3 +229,77 @@ class MessageRequest(BaseModel):
     touserid: int
     text: str
     textformat: int = 0
+
+
+# ---------------------------------------------------------------
+# Feature 8: Certifications (Workplace)
+# ---------------------------------------------------------------
+
+
+class Certification(BaseModel):
+    """Certification from ``tool_certification_get_certifications``."""
+
+    id: int
+    fullname: str = ""
+    idnumber: str | None = ""
+    description: str | None = ""
+    status: int = 0
+    timecreated: int = 0
+    timemodified: int = 0
+
+
+class CertificationAllocation(BaseModel):
+    """User allocation from ``tool_certification_get_certification_allocations``."""
+
+    id: int
+    userid: int = 0
+    certificationid: int = 0
+    userfullname: str = ""
+    certificationfullname: str = ""
+    timeallocated: int = 0
+    timecreated: int = 0
+    timemodified: int = 0
+
+
+class CertificationLogEntry(BaseModel):
+    """Log entry from ``tool_certification_get_certification_user_log``."""
+
+    id: int = 0
+    action: str = ""
+    timecreated: int = 0
+
+
+# ---------------------------------------------------------------
+# Feature 9: Programs / Learning Paths (Workplace)
+# ---------------------------------------------------------------
+
+
+class Program(BaseModel):
+    """Program from ``tool_program_potential_program_selector``."""
+
+    id: int
+    fullname: str = ""
+
+
+class ProgramCourse(BaseModel):
+    """Course within a program from ``tool_program_get_users_courses``."""
+
+    id: int
+    shortname: str = ""
+    fullname: str = ""
+    completed: bool = False
+
+
+# ---------------------------------------------------------------
+# Feature 10: Tenants (Workplace)
+# ---------------------------------------------------------------
+
+
+class Tenant(BaseModel):
+    """Tenant from ``tool_tenant_get_tenants``."""
+
+    id: int
+    name: str = ""
+    sitename: str | None = ""
+    idnumber: str | None = ""
+    isdefault: bool = False

@@ -8,6 +8,10 @@ suggestions:
   - "Show me upcoming training deadlines"
   - "What groups are in Course X?"
   - "What grades does testuser1 have?"
+  - "What certifications exist in the system?"
+  - "Who is allocated to the Workplace Safety Certification?"
+  - "What programs are available?"
+  - "What tenants exist?"
 
 agent:
   kind: "factory"

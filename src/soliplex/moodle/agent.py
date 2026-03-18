@@ -43,14 +43,26 @@ whole course
 - list_course_groups / get_group_members — course groups
 - list_cohorts / get_cohort_members — organizational cohorts
 
+## Workplace Tools (Certifications, Programs, Tenants)
+- list_certifications — list all certifications in the system
+- get_certification_allocations — who holds a specific certification
+- get_user_certifications — all certifications for a specific user
+- get_certification_history — audit trail for a user's certification
+- search_programs — find learning paths/programs by name
+- get_user_program_courses — courses in a user's program with progress
+- list_tenants — list organizational tenants
+
 ## Write Tools (REQUIRE CONFIRMATION)
 - enrol_users — enrol users into a course
 - send_message — send messages to users
+- certify_user — mark a user as certified
+- revoke_certification — revoke a user's certification
+- allocate_users_to_program — assign users to a learning path
 
-WRITE OPERATIONS: For enrol_users and send_message, you MUST \
-first call the tool WITHOUT confirmed=True to generate a preview. \
-Present the preview to the user and ask "Should I proceed?" Only \
-call the tool with confirmed=True after the user explicitly approves.
+WRITE OPERATIONS: For all write tools, you MUST first call the \
+tool WITHOUT confirmed=True to generate a preview. Present the \
+preview to the user and ask "Should I proceed?" Only call the \
+tool with confirmed=True after the user explicitly approves.
 
 Workflow:
 1. ALWAYS start with list_courses to discover available courses \
@@ -60,6 +72,12 @@ course does not exist without checking.
 2. Use find_user to look up a user by username or email and get \
 their user ID.
 3. Use the appropriate tool for the user's question.
+4. For certification/compliance questions, start with \
+list_certifications to discover certifications and their IDs, \
+then use get_certification_allocations or get_user_certifications \
+for details.
+5. For learning path questions, use search_programs to find \
+programs, then get_user_program_courses for progress details.
 
 Present data in clear tables when appropriate.
 """
@@ -678,6 +696,337 @@ def moodle_tools_agent_factory(
                 "sent": len(user_list),
                 "results": result,
             }
+        )
+
+    # ---------------------------------------------------------------
+    # Feature 8: Certifications (Workplace)
+    # ---------------------------------------------------------------
+
+    @agent.tool_plain
+    async def list_certifications(tenantid: int = 0) -> str:
+        """List all certifications in the system.
+
+        Args:
+            tenantid: Optional tenant ID to filter by
+                      (default 0 = all tenants).
+        """
+        try:
+            certs = await client.get_certifications(tenantid)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            [
+                {
+                    "id": c.id,
+                    "fullname": c.fullname,
+                    "idnumber": c.idnumber,
+                    "status": c.status,
+                }
+                for c in certs
+            ]
+        )
+
+    @agent.tool_plain
+    async def get_certification_allocations(
+        certificationid: int,
+    ) -> str:
+        """List users allocated to a specific certification.
+
+        Args:
+            certificationid: The certification ID.
+        """
+        try:
+            allocs = await client.get_certification_allocations(
+                certificationid
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            [
+                {
+                    "id": a.id,
+                    "userid": a.userid,
+                    "userfullname": a.userfullname,
+                    "certificationfullname": a.certificationfullname,
+                    "timeallocated": a.timeallocated,
+                }
+                for a in allocs
+            ]
+        )
+
+    @agent.tool_plain
+    async def get_user_certifications(userid: int) -> str:
+        """Get all certifications for a specific user.
+
+        Args:
+            userid: The Moodle user ID.
+        """
+        try:
+            allocs = await client.get_user_certification_allocations(
+                userid
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            [
+                {
+                    "id": a.id,
+                    "certificationid": a.certificationid,
+                    "certificationfullname": a.certificationfullname,
+                    "timeallocated": a.timeallocated,
+                }
+                for a in allocs
+            ]
+        )
+
+    @agent.tool_plain
+    async def get_certification_history(
+        certificationid: int,
+        userid: int,
+    ) -> str:
+        """Get the audit trail for a user's certification.
+
+        Args:
+            certificationid: The certification ID.
+            userid: The Moodle user ID.
+        """
+        try:
+            entries = await client.get_certification_user_log(
+                certificationid, userid
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            [
+                {
+                    "id": e.id,
+                    "action": e.action,
+                    "timecreated": e.timecreated,
+                }
+                for e in entries
+            ]
+        )
+
+    @agent.tool_plain
+    async def certify_user(
+        userid: str,
+        certificationid: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Mark a user as certified.
+
+        Pass confirmed=True only after the user has reviewed
+        and approved the action.
+
+        Args:
+            userid: The Moodle user ID (as string).
+            certificationid: The certification ID.
+            confirmed: Set True only after user approval.
+        """
+        uid = int(userid)
+        if not confirmed:
+            return json.dumps(
+                {
+                    "action": "certify_user",
+                    "preview": (
+                        f"Will certify user {uid} for "
+                        f"certification {certificationid}"
+                    ),
+                    "userid": uid,
+                    "certificationid": certificationid,
+                    "instructions": (
+                        "Present this to the user and ask for "
+                        "confirmation. If confirmed, call this "
+                        "tool again with confirmed=True"
+                    ),
+                }
+            )
+        try:
+            result = await client.certify_user(certificationid, uid)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {
+                "success": True,
+                "userid": uid,
+                "certificationid": certificationid,
+                "result": result,
+            }
+        )
+
+    @agent.tool_plain
+    async def revoke_certification(
+        userid: str,
+        certificationid: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Revoke a user's certification.
+
+        Pass confirmed=True only after the user has reviewed
+        and approved the action.
+
+        Args:
+            userid: The Moodle user ID (as string).
+            certificationid: The certification ID.
+            confirmed: Set True only after user approval.
+        """
+        uid = int(userid)
+        if not confirmed:
+            return json.dumps(
+                {
+                    "action": "revoke_certification",
+                    "preview": (
+                        f"Will revoke certification "
+                        f"{certificationid} from user {uid}"
+                    ),
+                    "userid": uid,
+                    "certificationid": certificationid,
+                    "instructions": (
+                        "Present this to the user and ask for "
+                        "confirmation. If confirmed, call this "
+                        "tool again with confirmed=True"
+                    ),
+                }
+            )
+        try:
+            result = await client.revoke_certification(
+                certificationid, uid
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {
+                "success": True,
+                "userid": uid,
+                "certificationid": certificationid,
+                "result": result,
+            }
+        )
+
+    # ---------------------------------------------------------------
+    # Feature 9: Programs / Learning Paths (Workplace)
+    # ---------------------------------------------------------------
+
+    @agent.tool_plain
+    async def search_programs(search: str = "") -> str:
+        """Search for learning programs by name.
+
+        Args:
+            search: Optional search string to filter
+                    programs (default "" = all).
+        """
+        try:
+            programs = await client.search_programs(search)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            [
+                {
+                    "id": p.id,
+                    "fullname": p.fullname,
+                }
+                for p in programs
+            ]
+        )
+
+    @agent.tool_plain
+    async def get_user_program_courses(userid: int) -> str:
+        """Get courses in a user's assigned programs with progress.
+
+        Args:
+            userid: The Moodle user ID.
+        """
+        try:
+            courses = await client.get_user_program_courses(userid)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            [
+                {
+                    "id": c.id,
+                    "shortname": c.shortname,
+                    "fullname": c.fullname,
+                    "completed": c.completed,
+                }
+                for c in courses
+            ]
+        )
+
+    @agent.tool_plain
+    async def allocate_users_to_program(
+        userids: str,
+        programid: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Assign users to a learning program.
+
+        Pass confirmed=True only after the user has reviewed
+        and approved the action.
+
+        Args:
+            userids: Comma-separated user IDs.
+            programid: The program ID.
+            confirmed: Set True only after user approval.
+        """
+        user_list = [
+            int(uid.strip())
+            for uid in userids.split(",")
+            if uid.strip()
+        ]
+        if not confirmed:
+            return json.dumps(
+                {
+                    "action": "allocate_users_to_program",
+                    "preview": (
+                        f"Will allocate {len(user_list)} user(s) "
+                        f"to program {programid}"
+                    ),
+                    "user_ids": user_list,
+                    "programid": programid,
+                    "instructions": (
+                        "Present this to the user and ask for "
+                        "confirmation. If confirmed, call this "
+                        "tool again with confirmed=True"
+                    ),
+                }
+            )
+        try:
+            result = await client.allocate_users_to_program(
+                programid, user_list
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {
+                "success": True,
+                "allocated": len(user_list),
+                "programid": programid,
+                "result": result,
+            }
+        )
+
+    # ---------------------------------------------------------------
+    # Feature 10: Tenants (Workplace)
+    # ---------------------------------------------------------------
+
+    @agent.tool_plain
+    async def list_tenants() -> str:
+        """List all organizational tenants."""
+        try:
+            tenants = await client.get_tenants()
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            [
+                {
+                    "id": t.id,
+                    "name": t.name,
+                    "sitename": t.sitename,
+                    "idnumber": t.idnumber,
+                    "isdefault": t.isdefault,
+                }
+                for t in tenants
+            ]
         )
 
     return agent
