@@ -13,6 +13,7 @@ from pydantic_ai import tools as ai_tools
 
 from . import _utils
 from . import exceptions as config_exc
+from . import rag as config_rag
 
 # ============================================================================
 #   Tool configuration types
@@ -293,7 +294,55 @@ class ToolConfig:
         return {}
 
 
-TOOL_CONFIG_CLASSES_BY_TOOL_NAME = {}
+SDTC_TOOL_NAME = "soliplex.tools.rag.search_documents"
+_, SDTC_TOOL_KIND = SDTC_TOOL_NAME.rsplit(".", 1)
+
+
+@dataclasses.dataclass(kw_only=True)
+class SearchDocumentsToolConfig(ToolConfig, config_rag._RAGConfigBase):
+    kind: str = SDTC_TOOL_KIND
+    tool_name: str = SDTC_TOOL_NAME
+
+    search_documents_limit: int = 5
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,  # noqa F821 cycle
+        config_path: pathlib.Path,
+        config_dict: dict[str, typing.Any],
+    ):
+        try:
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
+
+            instance = cls(**config_dict)
+        except Exception as exc:
+            raise config_exc.FromYamlException(
+                config_path,
+                "sdtc",
+                config_dict,
+            ) from exc
+
+        return instance
+
+    def get_extra_parameters(self) -> dict:
+        local = {
+            "search_documents_limit": self.search_documents_limit,
+        }
+        return (
+            super().get_extra_parameters()
+            | config_rag._RAGConfigBase.get_extra_parameters(self)
+            | local
+        )
+
+
+TOOL_CONFIG_CLASSES_BY_TOOL_NAME = {
+    klass.tool_name: klass
+    for klass in [
+        SearchDocumentsToolConfig,
+    ]
+}
 
 
 ToolConfigMap = dict[str, ToolConfig]
