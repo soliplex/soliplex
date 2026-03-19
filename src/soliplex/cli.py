@@ -452,9 +452,11 @@ def check_config(
                         the_console.print("  OK")
                     the_console.line()
 
-        for tool_config in room_config.tool_configs:
+        for tool_config in room_config.tool_configs.values():
             if isinstance(tool_config, config_rag._RAGConfigBase):
-                the_console.print("- Checking tool RAG DB: {tool_config.id}")
+                the_console.print(
+                    f"- Checking tool RAG DB: {tool_config.tool_name}"
+                )
                 try:
                     tool_config.rag_lancedb_path  # noqa B018
                 except Exception as exc:

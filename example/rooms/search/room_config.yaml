@@ -8,15 +8,13 @@ suggestions:
 
 agent:
   template_id: "default_chat"
-  system_prompt: |
-    You are a knowledgeable assistant that answers questions using a document knowledge base.
-    Use search to find relevant information, then synthesize a comprehensive answer.
+  system_prompt: "./prompt.txt"
 
-skills:
-  skill_configs:
-    - kind: "haiku.rag.skills.rag"
-      rag_lancedb_stem: "rag"
-      tool_names:
-        - "search"
+tools:
+  - tool_name: "soliplex.tools.rag.search_documents"
+    rag_lancedb_stem: "rag"
+    search_documents_limit: 7
+    # Apply HR config overrides local to this room
+    #haiku_rag_config: "./haiku.rag.yaml"
 
 allow_mcp: false

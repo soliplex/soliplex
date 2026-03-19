@@ -141,6 +141,32 @@ W_AI_TOOL_PARAMS_TOOL_CONFIG_PARAMS_YAML = f"""
         takes_ctx: true
 """
 
+
+# This one raises
+BOGUS_SDTC_CONFIG_YAML = """
+    #rag_lancedb_stem: "rag"
+    #rag_lancedb_override_path: "/path/to/rag.lancedb"
+"""
+
+W_STEM_SDTC_CONFIG_KW = {
+    "rag_lancedb_stem": "rag",
+    "search_documents_limit": 7,
+    "allow_mcp": True,
+}
+W_STEM_SDTC_CONFIG_YAML = """
+    rag_lancedb_stem: "rag"
+    search_documents_limit: 7
+    allow_mcp: true
+"""
+
+
+W_OVERRIDE_SDTC_CONFIG_KW = {
+    "rag_lancedb_override_path": "/path/to/rag.lancedb",
+}
+W_OVERRIDE_SDTC_CONFIG_YAML = """
+    rag_lancedb_override_path: "/path/to/rag.lancedb"
+"""
+
 # This one raises
 BOGUS_STDIO_MCTC_CONFIG_YAML = ""
 
@@ -618,6 +644,134 @@ def test_toolconfig_get_extra_parameters():
     )
 
     assert tool_config.get_extra_parameters() == {}
+
+
+def test_sdtc_ctor(installation_config, temp_dir):
+    db_rag_path = temp_dir / "db" / "rag"
+    db_rag_path.mkdir(parents=True)
+
+    from_stem = db_rag_path / "stem.lancedb"
+    from_stem.mkdir()
+
+    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_path)}
+    installation_config.get_environment = ic_environ.get
+
+    config_path = temp_dir / "rooms" / "test" / "room_config.yaml"
+
+    sdt_config = config_tools.SearchDocumentsToolConfig(
+        _installation_config=installation_config,
+        _config_path=config_path,
+        rag_lancedb_stem="stem",
+    )
+
+    assert sdt_config._installation_config is installation_config
+    assert sdt_config._config_path == config_path
+
+    found = sdt_config.rag_lancedb_path
+    assert found.resolve() == from_stem.resolve()
+
+    expected_ep = {
+        "rag_lancedb_path": from_stem.resolve(),
+        "search_documents_limit": 5,
+    }
+
+    assert sdt_config.get_extra_parameters() == expected_ep
+
+
+@pytest.mark.parametrize(
+    "config_yaml, exp_config",
+    [
+        (BOGUS_SDTC_CONFIG_YAML, None),
+        (W_STEM_SDTC_CONFIG_YAML, W_STEM_SDTC_CONFIG_KW),
+        (W_OVERRIDE_SDTC_CONFIG_YAML, W_OVERRIDE_SDTC_CONFIG_KW),
+    ],
+)
+def test_sdtc_from_yaml(
+    installation_config,
+    temp_dir,
+    config_yaml,
+    exp_config,
+):
+    db_rag_dir = temp_dir / "db" / "rag"
+    db_rag_dir.mkdir(parents=True)
+
+    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_dir)}
+    installation_config.get_environment = ic_environ.get
+
+    config_dir = temp_dir / "rooms" / "test_room"
+    config_dir.mkdir(parents=True)
+
+    config_path = config_dir / "room_config.yaml"
+    config_path.write_text(config_yaml)
+
+    with config_path.open() as stream:
+        config_dict = yaml.safe_load(stream)
+
+    if exp_config is None:
+        with pytest.raises(config_exc.FromYamlException) as exc:
+            config_tools.SearchDocumentsToolConfig.from_yaml(
+                installation_config=installation_config,
+                config_path=config_path,
+                config_dict=config_dict,
+            )
+
+        assert exc.value._config_path == config_path
+
+    else:
+        sdt_config = config_tools.SearchDocumentsToolConfig.from_yaml(
+            installation_config=installation_config,
+            config_path=config_path,
+            config_dict=config_dict,
+        )
+        expected = config_tools.SearchDocumentsToolConfig(
+            _installation_config=installation_config,
+            _config_path=config_path,
+            **exp_config,
+        )
+        assert sdt_config == expected
+
+
+@pytest.mark.parametrize(
+    "stem, override, which",
+    [
+        ("testing", None, "stem"),
+        (None, "./override", "override"),
+    ],
+)
+def test_sdtc_get_extra_parameters_w_missing_file(
+    installation_config,
+    temp_dir,
+    stem,
+    override,
+    which,
+):
+    db_rag_path = temp_dir / "db" / "rag"
+    db_rag_path.mkdir(parents=True)
+
+    if which == "stem":
+        exp_filename = db_rag_path / f"{stem}.lancedb"
+    else:
+        exp_filename = temp_dir / override
+
+    ic_environ = {"RAG_LANCE_DB_PATH": str(db_rag_path)}
+    installation_config.get_environment = ic_environ.get
+
+    kw = {
+        "_installation_config": installation_config,
+        "_config_path": temp_dir / "room_config.yaml",
+    }
+
+    if stem is not None:
+        kw["rag_lancedb_stem"] = stem
+
+    if override is not None:
+        kw["rag_lancedb_override_path"] = override
+
+    sdt_config = config_tools.SearchDocumentsToolConfig(**kw)
+
+    ep = sdt_config.get_extra_parameters()
+
+    assert ep["rag_lancedb_path"] == f"MISSING: {exp_filename.resolve()}"
 
 
 @pytest.mark.parametrize(
