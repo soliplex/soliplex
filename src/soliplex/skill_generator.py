@@ -1,4 +1,5 @@
 import pathlib
+import shutil
 
 from cookiecutter.main import cookiecutter
 from haiku.skills import SkillMetadata
@@ -89,3 +90,32 @@ def render_template(
             script.unlink()
 
     return result_path
+
+
+def generate_skill(
+    db_path: pathlib.Path,
+    output_dir: pathlib.Path,
+    name: str,
+    description: str,
+    tool_names: list[str],
+    rag_config: pathlib.Path | None = None,
+) -> pathlib.Path:
+    validate_metadata(name, description)
+    validate_tools(tool_names)
+    validate_db_path(db_path)
+    validate_output_dir(output_dir, name)
+
+    result = render_template(
+        output_dir=output_dir,
+        name=name,
+        description=description,
+        tool_names=tool_names,
+    )
+
+    assets_dir = result / f"soliplex_skill_{name}" / name / "assets"
+    shutil.copytree(db_path, assets_dir / f"{name}.lancedb")
+
+    if rag_config is not None:
+        shutil.copy2(rag_config, assets_dir / "haiku.rag.yaml")
+
+    return result

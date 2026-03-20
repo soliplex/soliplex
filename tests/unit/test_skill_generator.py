@@ -255,3 +255,105 @@ class TestRenderTemplate:
         )
         errors = validator.validate(skill_dir)
         assert errors == []
+
+
+def _make_fake_lancedb(path):
+    path.mkdir()
+    (path / "data.lance").touch()
+    return path
+
+
+class TestGenerateSkill:
+    def test_end_to_end(self, temp_dir):
+        db_path = _make_fake_lancedb(temp_dir / "test.lancedb")
+        result = skill_generator.generate_skill(
+            db_path=db_path,
+            output_dir=temp_dir,
+            name="recipes",
+            description="A recipe skill.",
+            tool_names=["search", "ask"],
+        )
+        assert result == temp_dir / "soliplex-skill-recipes"
+        # lancedb copied into assets
+        assets = result / "soliplex_skill_recipes" / "recipes" / "assets"
+        assert (assets / "recipes.lancedb").is_dir()
+        assert (assets / "recipes.lancedb" / "data.lance").is_file()
+        # no haiku.rag.yaml
+        assert not (assets / "haiku.rag.yaml").exists()
+
+    def test_with_rag_config(self, temp_dir):
+        db_path = _make_fake_lancedb(temp_dir / "test.lancedb")
+        rag_config = temp_dir / "haiku.rag.yaml"
+        rag_config.write_text("storage:\n  data_dir: /tmp\n")
+        result = skill_generator.generate_skill(
+            db_path=db_path,
+            output_dir=temp_dir,
+            name="recipes",
+            description="A recipe skill.",
+            tool_names=["search"],
+            rag_config=rag_config,
+        )
+        assets = result / "soliplex_skill_recipes" / "recipes" / "assets"
+        assert (assets / "haiku.rag.yaml").is_file()
+        assert (assets / "haiku.rag.yaml").read_text() == (
+            "storage:\n  data_dir: /tmp\n"
+        )
+
+    def test_rejects_invalid_name(self, temp_dir):
+        db_path = _make_fake_lancedb(temp_dir / "test.lancedb")
+        with pytest.raises(ValueError, match="name"):
+            skill_generator.generate_skill(
+                db_path=db_path,
+                output_dir=temp_dir,
+                name="Bad-Name",
+                description="A skill.",
+                tool_names=["search"],
+            )
+
+    def test_rejects_invalid_tools(self, temp_dir):
+        db_path = _make_fake_lancedb(temp_dir / "test.lancedb")
+        with pytest.raises(ValueError, match="Unknown"):
+            skill_generator.generate_skill(
+                db_path=db_path,
+                output_dir=temp_dir,
+                name="recipes",
+                description="A skill.",
+                tool_names=["bogus"],
+            )
+
+    def test_rejects_nonexistent_db(self, temp_dir):
+        with pytest.raises(ValueError, match="does not exist"):
+            skill_generator.generate_skill(
+                db_path=temp_dir / "nope.lancedb",
+                output_dir=temp_dir,
+                name="recipes",
+                description="A skill.",
+                tool_names=["search"],
+            )
+
+    def test_rejects_existing_target(self, temp_dir):
+        db_path = _make_fake_lancedb(temp_dir / "test.lancedb")
+        (temp_dir / "soliplex-skill-recipes").mkdir()
+        with pytest.raises(ValueError, match="already exists"):
+            skill_generator.generate_skill(
+                db_path=db_path,
+                output_dir=temp_dir,
+                name="recipes",
+                description="A skill.",
+                tool_names=["search"],
+            )
+
+    def test_skills_ref_validates(self, temp_dir):
+        from skills_ref import validator
+
+        db_path = _make_fake_lancedb(temp_dir / "test.lancedb")
+        result = skill_generator.generate_skill(
+            db_path=db_path,
+            output_dir=temp_dir,
+            name="recipes",
+            description="A recipe skill.",
+            tool_names=["list_documents", "search", "ask"],
+        )
+        skill_dir = result / "soliplex_skill_recipes" / "recipes"
+        errors = validator.validate(skill_dir)
+        assert errors == []

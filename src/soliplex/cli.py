@@ -1167,5 +1167,60 @@ def pull_models(
                 the_console.line()
 
 
+@the_cli.command(
+    "generate-skill",
+)
+def generate_skill(
+    ctx: typer.Context,
+    output_dir: pathlib.Path = typer.Argument(
+        help="Parent directory where the package dir is created",
+    ),
+    db_path: pathlib.Path = typer.Option(
+        ...,
+        "--db",
+        help="Path to existing lancedb directory",
+    ),
+    name: str = typer.Option(
+        ...,
+        "--name",
+        help="Skill name (lowercase alphanumeric, no hyphens)",
+    ),
+    description: str = typer.Option(
+        ...,
+        "--description",
+        help="Skill description (1-1024 chars)",
+    ),
+    tools: list[str] = typer.Option(
+        ...,
+        "--tool",
+        help="Tool to include (repeat for multiple)",
+    ),
+    rag_config: pathlib.Path = typer.Option(
+        None,
+        "--rag-config",
+        help="Path to haiku.rag.yaml to bundle",
+    ),
+):
+    """Generate a self-contained RAG skill package."""
+    from soliplex import skill_generator
+
+    try:
+        result = skill_generator.generate_skill(
+            db_path=db_path,
+            output_dir=output_dir,
+            name=name,
+            description=description,
+            tool_names=tools,
+            rag_config=rag_config,
+        )
+    except ValueError as exc:
+        the_console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    the_console.print(
+        f"[green]Generated skill package:[/green] {result}"
+    )
+
+
 if __name__ == "__main__":
     the_cli()
