@@ -43,14 +43,14 @@ soliplex-tui-serve = "soliplex.tui.serve:main"
 
 [dependency-groups]
 dev = [
-    "anyio",
-    "coverage",
-    "pytest",
-    "pytest-cov",
-    "pytest-asyncio",
-    "ruff",
+    "anyio >= 4.12.1, < 4.13",
+    "coverage >= 7.13.5, < 7.14",
+    "pytest >= 9.0.2, < 9.1",
+    "pytest-cov >= 7.0.0, < 7.1",
+    "pytest-asyncio >= 1.3.0, < 1.4",
+    "ruff >= 0.15.6, < 0.16",
     "skills-ref",
-    "trio",
+    "trio >= 0.33.0, < 0.34",
 ]
 docs = [
     "mkdocs>=1.6.1",
