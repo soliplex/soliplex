@@ -82,6 +82,9 @@ markers = [
     "needs_llm: functest requiring an LLM",
 ]
 
+[tool.setuptools.package-data]
+soliplex = ["templates/**/*"]
+
 [tool.coverage.run]
 omit = [
     "src/soliplex/cli.py",
@@ -95,6 +98,7 @@ show_missing = true
 [tool.ruff]
 line-length = 79
 exclude = [
+    "src/soliplex/templates",
 ]
 target-version = "py313"
 

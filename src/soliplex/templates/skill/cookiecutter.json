@@ -1,0 +1,5 @@
+{
+    "name": "myskill",
+    "description": "A RAG skill.",
+    "tool_names": "list_documents get_document search ask"
+}
