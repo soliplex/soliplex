@@ -1217,9 +1217,7 @@ def generate_skill(
         the_console.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(1) from exc
 
-    the_console.print(
-        f"[green]Generated skill package:[/green] {result}"
-    )
+    the_console.print(f"[green]Generated skill package:[/green] {result}")
 
 
 if __name__ == "__main__":
