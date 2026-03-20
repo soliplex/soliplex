@@ -17,6 +17,7 @@ dependencies = [
     "ag-ui-protocol >= 0.1.10",
     "aiosqlite",
     "authlib",
+    "cookiecutter",
     "fastapi",
     "fastmcp >= 2.14.0, < 2.15",
     "greenlet",
