@@ -11,27 +11,29 @@ _DB_PATH = (
     / "assets"
     / "{{ cookiecutter.name }}.lancedb"
 )
+_CONFIG_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "assets"
+    / "haiku.rag.yaml"
+)
 
 
-def _get_config():
-    config_path = (
-        Path(__file__).resolve().parent.parent
-        / "assets"
-        / "haiku.rag.yaml"
-    )
-    if config_path.exists():
+def _rag_kw():
+    from haiku.rag.config import get_config
+
+    if _CONFIG_PATH.exists():
         from haiku.rag.config import AppConfig
 
-        return AppConfig.from_yaml(config_path)
-    return None
+        config = AppConfig.from_yaml(_CONFIG_PATH)
+    else:
+        config = get_config()
+    return {"db_path": _DB_PATH, "config": config, "read_only": True}
 
 
 async def _research(question):
     from haiku.rag.client import HaikuRAG
 
-    async with HaikuRAG(
-        _DB_PATH, config=_get_config(), read_only=True
-    ) as rag:
+    async with HaikuRAG(**_rag_kw()) as rag:
         report = await rag.research(question)
 
     parts = [

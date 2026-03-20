@@ -8,16 +8,6 @@ from pydantic_ai import RunContext
 
 _TOOL_NAMES = {{ cookiecutter.tool_names.split()|tojson }}
 _SKILL_DIR = Path(__file__).parent / "{{ cookiecutter.name }}"
-_DB_PATH = _SKILL_DIR / "assets" / "{{ cookiecutter.name }}.lancedb"
-
-
-def _get_config():
-    config_path = _SKILL_DIR / "assets" / "haiku.rag.yaml"
-    if config_path.exists():
-        from haiku.rag.config import AppConfig
-
-        return AppConfig.from_yaml(config_path)
-    return None
 
 {% if "list_documents" in cookiecutter.tool_names %}
 async def list_documents(
