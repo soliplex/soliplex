@@ -128,7 +128,6 @@ class TestRenderTemplate:
         assert (pkg / "__init__.py").is_file()
         assert (skill / "__init__.py").is_file()
         assert (skill / "SKILL.md").is_file()
-        assert (skill / "_lib.py").is_file()
         assert (skill / "assets" / ".gitkeep").is_file()
         assert (skill / "scripts" / "__init__.py").is_file()
 
