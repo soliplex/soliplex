@@ -4,10 +4,13 @@ from unittest import mock
 
 import pydantic_ai
 import pytest
+from ag_ui import core as agui_core
 
 from soliplex import agui as agui_package
 from soliplex.agui import persistence as agui_persistence
+from soliplex.agui import schema as agui_schema
 from soliplex.tools import agui_run_feedback as arf_tools
+from tests.unit.agui import agui_constants
 
 FRS = agui_package.FeedbackReviewStatus
 
@@ -27,6 +30,15 @@ NOTES_BY_STATUS = {
     FRS.REVIEWED: REVIEWED_NOTE,
     FRS.RESOLVED: RESOLVED_NOTE,
 }
+
+EARLIER_USER_PROMPT_MESSAGE_ID = "message-1234"
+EARLIER_USER_PROMPT = "test earlier user prompt"
+EARLIER_RESPONSE_MESSAGE_ID = "message-2345"
+EARLIER_RESPONSE_MESSAGE = "test earlier response message"
+USER_PROMPT_MESSAGE_ID = "message-3456"
+USER_PROMPT = "test user prompt"
+RESPONSE_MESSAGE_ID = "message-4567"
+RESPONSE_MESSAGE = "test response message"
 
 
 @pytest.fixture
@@ -271,6 +283,149 @@ def run_feedback_entry():
         status=None,
         note=None,
     )
+
+
+@pytest.mark.parametrize(
+    "which, fwa_kw, expectation",
+    [
+        (None, {}, pytest.raises(arf_tools.UnknownFeedback)),
+        (
+            "resolved",
+            {"from_which_attrs": ["opened", "reviewed"]},
+            pytest.raises(arf_tools.UnknownFeedback),
+        ),
+        (
+            "opened",
+            {"from_which_attrs": ["opened", "reviewed"]},
+            contextlib.nullcontext(),
+        ),
+        ("reviewed", {}, contextlib.nullcontext()),
+    ],
+)
+def test__find_feedback_by_run_id(
+    run_feedback_entry,
+    which,
+    fwa_kw,
+    expectation,
+):
+    opened = [run_feedback_entry] if which == "opened" else []
+    reviewed = [run_feedback_entry] if which == "reviewed" else []
+    resolved = [run_feedback_entry] if which == "resolved" else []
+
+    our_state = arf_tools.RecentRunFeedback(
+        entries=arf_tools.RecentRunFeedbackEntries(
+            opened=opened,
+            reviewed=reviewed,
+            resolved=resolved,
+        ),
+    )
+
+    with expectation as expected:
+        fb, whence = arf_tools._find_feedback_by_run_id(
+            our_state,
+            RUN_ID,
+            **fwa_kw,
+        )
+
+    if expected is None:
+        assert fb is run_feedback_entry
+        assert whence is getattr(our_state.entries, which)
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.agui.parser.EventStreamParser")
+async def test_get_feedback_run_info(
+    esp,
+    run_feedback_entry,
+    ctx_w_deps,
+):
+    get_run = ctx_w_deps.deps.the_threads.get_run
+
+    rai = agui_constants.FULL_RUN_AGENT_INPUT.model_copy()
+    start_event = agui_core.events.RunStartedEvent(
+        thread_id=THREAD_ID,
+        run_id=RUN_ID,
+    )
+    response_start_event = agui_core.events.TextMessageStartEvent(
+        message_id=RESPONSE_MESSAGE_ID,
+    )
+    response_content_event = agui_core.events.TextMessageContentEvent(
+        message_id=RESPONSE_MESSAGE_ID,
+        delta=RESPONSE_MESSAGE,
+    )
+    response_end_event = agui_core.events.TextMessageEndEvent(
+        message_id=RESPONSE_MESSAGE_ID,
+    )
+    end_event = agui_core.events.RunFinishedEvent(
+        thread_id=THREAD_ID,
+        run_id=RUN_ID,
+    )
+    agui_events = [
+        start_event,
+        response_start_event,
+        response_content_event,
+        response_end_event,
+        end_event,
+    ]
+
+    esp.return_value.messages = [
+        agui_core.types.UserMessage(
+            id=EARLIER_USER_PROMPT_MESSAGE_ID,
+            content=EARLIER_USER_PROMPT,
+        ),
+        agui_core.types.AssistantMessage(
+            id=EARLIER_RESPONSE_MESSAGE_ID,
+            content=EARLIER_RESPONSE_MESSAGE,
+        ),
+        agui_core.types.UserMessage(
+            id=USER_PROMPT_MESSAGE_ID,
+            content=USER_PROMPT,
+        ),
+        agui_core.types.AssistantMessage(
+            id=RESPONSE_MESSAGE_ID,
+            content=RESPONSE_MESSAGE,
+        ),
+    ]
+
+    db_events = []
+    for agui_event in agui_events:
+        db_event = mock.create_autospec(agui_schema.RunEvent)
+        db_event.to_agui_model.return_value = agui_event
+        db_events.append(db_event)
+
+    run = mock.create_autospec(
+        agui_package.Run,
+        awaitable_attrs=mock.AsyncMock(),
+    )
+    run.awaitable_attrs.run_agent_input = _awaitable("run_agent_input", rai)
+    run.awaitable_attrs.events = _awaitable("events", db_events)
+    get_run.return_value = run
+
+    entries = arf_tools.RecentRunFeedbackEntries(
+        opened=[run_feedback_entry],
+    )
+    our_state = arf_tools.RecentRunFeedback(entries=entries)
+
+    deps = ctx_w_deps.deps
+    deps.state[arf_tools.STATE_NAMESPACE] = our_state
+
+    found = await arf_tools.get_feedback_run_info(ctx_w_deps, RUN_ID)
+
+    assert isinstance(found, arf_tools.RunFeedbackInfo)
+
+    assert found.user_name == USER_NAME
+    assert found.room_id == ROOM_ID
+    assert found.thread_id == THREAD_ID
+    assert found.run_id == RUN_ID
+    assert found.user_prompt == USER_PROMPT
+    assert found.agent_response == RESPONSE_MESSAGE
+
+    for agui_event, esp_call in zip(
+        agui_events,
+        esp.return_value.call_args_list,
+        strict=True,
+    ):
+        assert esp_call == mock.call(agui_event)
 
 
 @pytest.mark.anyio

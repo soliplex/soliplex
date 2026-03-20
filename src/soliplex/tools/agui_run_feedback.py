@@ -5,6 +5,8 @@
 """
 
 import datetime
+import enum
+import typing
 
 import jsonpatch
 import pydantic
@@ -13,6 +15,7 @@ from ag_ui import core as agui_core
 
 from soliplex import agents
 from soliplex import agui as agui_package
+from soliplex.agui import parser as agui_parser
 
 FRS = agui_package.FeedbackReviewStatus
 STATE_NAMESPACE = "soliplex-agui-run-feedback"
@@ -59,6 +62,17 @@ class RunFeedbackEntry(pydantic.BaseModel):
     reason: str | None
     status: agui_package.FeedbackReviewStatus | None
     note: str | None
+
+
+class RunFeedbackInfo(pydantic.BaseModel):
+    """Information about the run which was the target of feedback"""
+
+    user_name: str
+    room_id: str
+    thread_id: str
+    run_id: str
+    user_prompt: str
+    agent_response: str
 
 
 class RecentRunFeedbackQuery(pydantic.BaseModel):
@@ -240,6 +254,87 @@ async def query_recent_feedback(
     return pydantic_ai.ToolReturn(our_state.entries, metadata=metadata)
 
 
+class FromWhichAttrs(enum.StrEnum):
+    OPENED = "opened"
+    REVIEWED = "reviewed"
+    RESOLVED = "resolved"
+
+
+_ALL_FROM_WHICH_ATTRS = tuple(FromWhichAttrs)
+
+
+def _find_feedback_by_run_id(
+    our_state: RecentRunFeedback,
+    run_id: str,
+    from_which_attrs: typing.Sequence[FromWhichAttrs] = _ALL_FROM_WHICH_ATTRS,
+) -> tuple[RunFeedbackEntry, list[RunFeedbackEntry]]:
+    """Find a feedback entry based on its run ID
+
+    Search state's entries using the given attribute names
+    """
+    for attr in from_which_attrs:
+        candidates = getattr(our_state.entries, attr)
+        for candidate in candidates:
+            if candidate.run_id == run_id:
+                return candidate, candidates
+
+    raise UnknownFeedback(run_id)
+
+
+async def get_feedback_run_info(
+    ctx: pydantic_ai.RunContext[agents.AgentDependencies],
+    run_id: str,
+) -> RunFeedbackInfo:
+    """Return information about the run which was the subject of the feedback"""
+    agui_state = ctx.deps.state
+
+    our_state = RecentRunFeedback.model_validate(
+        agui_state.get(STATE_NAMESPACE, {}),
+    )
+
+    to_query, _ = _find_feedback_by_run_id(our_state, run_id)
+
+    the_threads = ctx.deps.the_threads
+    run = await the_threads.get_run(
+        user_name=to_query.user_name,
+        room_id=to_query.room_id,
+        thread_id=to_query.thread_id,
+        run_id=to_query.run_id,
+    )
+
+    run_input = await run.awaitable_attrs.run_agent_input
+    events = await run.awaitable_attrs.events
+
+    esp = agui_parser.EventStreamParser(run_input)
+
+    for event in events:
+        try:
+            e_model = event.to_agui_model()
+        # agui_core.events.Event is not all-inclusive :<
+        except pydantic.ValidationError:  # pragma: NO COVER
+            continue
+        esp(e_model)
+
+    user_prompts = [
+        message.content for message in esp.messages if message.role == "user"
+    ]
+
+    agent_responses = [
+        message.content
+        for message in esp.messages
+        if message.role == "assistant" and message.content is not None
+    ]
+
+    return RunFeedbackInfo(
+        user_name=to_query.user_name,
+        room_id=to_query.room_id,
+        thread_id=to_query.thread_id,
+        run_id=run_id,
+        user_prompt=user_prompts[-1],
+        agent_response=agent_responses[-1],
+    )
+
+
 async def _do_review_feedback(
     ctx: pydantic_ai.RunContext[agents.AgentDependencies],
     run_entry: RunFeedbackEntry,
@@ -268,13 +363,9 @@ async def review_recent_feedback(
         agui_state.get(STATE_NAMESPACE, {}),
     )
 
-    for candidate in our_state.entries.opened:
-        if candidate.run_id == review.run_id:
-            to_review = candidate
-            break
-
-    if to_review is None:
-        raise UnknownFeedback(review.run_id)
+    to_review, _ = _find_feedback_by_run_id(
+        our_state, review.run_id, ["opened"]
+    )
 
     before_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}
 
@@ -313,28 +404,14 @@ async def resolve_recent_feedback(
 ) -> pydantic_ai.ToolReturn:
     """Add a user's resolution of a feedback entry for an AGUI run."""
     agui_state = ctx.deps.state
-    to_resolve = None
-    found_in = None
 
     our_state = RecentRunFeedback.model_validate(
         agui_state.get(STATE_NAMESPACE, {}),
     )
 
-    for candidate in our_state.entries.opened:
-        if candidate.run_id == resolution.run_id:
-            to_resolve = candidate
-            found_in = our_state.entries.opened
-            break
-
-    if to_resolve is None:
-        for candidate in our_state.entries.reviewed:
-            if candidate.run_id == resolution.run_id:
-                to_resolve = candidate
-                found_in = our_state.entries.reviewed
-                break
-
-    if to_resolve is None:
-        raise UnknownFeedback(resolution.run_id)
+    to_resolve, from_which = _find_feedback_by_run_id(
+        our_state, resolution.run_id, ["opened", "reviewed"]
+    )
 
     before_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}
 
@@ -342,7 +419,7 @@ async def resolve_recent_feedback(
 
     to_resolve.status = FRS.RESOLVED
     to_resolve.note = resolution.note
-    found_in.remove(to_resolve)
+    from_which.remove(to_resolve)
     our_state.entries.resolved.insert(0, to_resolve)
 
     after_state = {STATE_NAMESPACE: our_state.model_dump(mode="json")}

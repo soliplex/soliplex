@@ -2,7 +2,9 @@ id: "feedback"
 name: "AGUI Run Feedback"
 description: "Test feedback skill."
 suggestions:
+- "What kind of queries can I make about recent feedback?"
 - "List ten most recent AGUI feedback runs"
+- "Show run info for third feedback entry in 'opened' state"
 
 
 agent:
@@ -14,5 +16,6 @@ agent:
 tools:
   - tool_name: "soliplex.tools.get_current_datetime"
   - tool_name: "soliplex.tools.agui_run_feedback.query_recent_feedback"
+  - tool_name: "soliplex.tools.agui_run_feedback.get_feedback_run_info"
   - tool_name: "soliplex.tools.agui_run_feedback.review_recent_feedback"
   - tool_name: "soliplex.tools.agui_run_feedback.resolve_recent_feedback"
