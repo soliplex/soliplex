@@ -20,6 +20,8 @@ from soliplex.config import rooms as config_rooms
 from soliplex.views import agui as agui_views
 from soliplex.views import streaming as streaming_views
 
+FRS = agui_package.FeedbackReviewStatus
+
 NOW = datetime.datetime.now(datetime.UTC)
 USER_NAME = "phreddy"
 GIVEN_NAME = "Phred"
@@ -52,6 +54,7 @@ TEST_RUN_ID = "test-run-456"
 TEST_RUN_LABEL = "My test run #456"
 TEST_RUN_FEEDBACK = "test-feedback"
 TEST_RUN_FEEDBACK_REASON = "Just because"
+REVIEWED_NOTE = "test feedback reviewed note"
 
 EMPTY_FEATURE_NAME = "test-empty-feature"
 EMPTY_FEATURE = config_agui.AGUI_Feature(
@@ -1601,10 +1604,10 @@ async def test_post_agui_recent_feedback(
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
+    tslrrf = the_threads.list_recent_run_feedback = mock.AsyncMock()
+
     if tslrrf_side_effect is None:
-        the_threads.list_recent_run_feedback.return_value = [
-            test_run_feedback,
-        ]
+        tslrrf.return_value = [test_run_feedback]
         expected_rf_models = [
             models.AGUI_RunFeedback(
                 feedback=TEST_RUN_FEEDBACK,
@@ -1612,7 +1615,7 @@ async def test_post_agui_recent_feedback(
             )
         ]
     else:  # pragma NO COVER XXX error conditions?
-        the_threads.list_recent_run_feedback.side_effect = tslrrf_side_effect
+        tslrrf.side_effect = tslrrf_side_effect
 
     with expectation as expected:
         found = await agui_views.post_agui_recent_feedback(
@@ -1668,10 +1671,10 @@ async def test_post_agui_recent_room_feedback(
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
+    tslrrf = the_threads.list_recent_run_feedback = mock.AsyncMock()
+
     if tslrrf_side_effect is None:
-        the_threads.list_recent_run_feedback.return_value = [
-            test_run_feedback,
-        ]
+        tslrrf.return_value = [test_run_feedback]
         expected_rf_models = [
             models.AGUI_RunFeedback(
                 feedback=TEST_RUN_FEEDBACK,
@@ -1679,7 +1682,7 @@ async def test_post_agui_recent_room_feedback(
             )
         ]
     else:  # pragma NO COVER XXX error conditions?
-        the_threads.list_recent_run_feedback.side_effect = tslrrf_side_effect
+        tslrrf.side_effect = tslrrf_side_effect
 
     with expectation as expected:
         found = await agui_views.post_agui_recent_room_feedback(
@@ -1737,10 +1740,10 @@ async def test_post_agui_recent_user_feedback(
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
+    tslrrf = the_threads.list_recent_run_feedback = mock.AsyncMock()
+
     if tslrrf_side_effect is None:
-        the_threads.list_recent_run_feedback.return_value = [
-            test_run_feedback,
-        ]
+        tslrrf.return_value = [test_run_feedback]
         expected_rf_models = [
             models.AGUI_RunFeedback(
                 feedback=TEST_RUN_FEEDBACK,
@@ -1748,7 +1751,7 @@ async def test_post_agui_recent_user_feedback(
             )
         ]
     else:  # pragma NO COVER XXX error conditions?
-        the_threads.list_recent_run_feedback.side_effect = tslrrf_side_effect
+        tslrrf.side_effect = tslrrf_side_effect
 
     with expectation as expected:
         found = await agui_views.post_agui_recent_user_feedback(
@@ -1774,4 +1777,158 @@ async def test_post_agui_recent_user_feedback(
     )
     the_logger.debug.assert_called_once_with(
         loggers.AGUI_POST_RECENT_USER_FEEDBACK,
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("limit_kw", [{}, {"limit": 5}])
+@pytest.mark.parametrize("since_kw", [{}, {"since": NOW}])
+@pytest.mark.parametrize(
+    "tsrvwrf_side_effect, expectation",
+    [
+        (None, no_error(None)),
+        # XXX error conditions?
+    ],
+)
+async def test_post_agui_review_recent_feedback(
+    the_threads,
+    test_run_feedback,
+    tsrvwrf_side_effect,
+    expectation,
+    limit_kw,
+    since_kw,
+):
+    request = fastapi.Request(scope={"type": "http"})
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    review_payload = models.AGUI_RunFeedbackReview(
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+        note=REVIEWED_NOTE,
+    )
+
+    tsrvwrf = the_threads.review_run_feedback = mock.AsyncMock()
+
+    if tsrvwrf_side_effect is None:
+        review_entry = mock.create_autospec(
+            agui_package.RunFeedbackReviewEntry,
+            status=FRS.REVIEWED,
+            note=REVIEWED_NOTE,
+            created=NOW,
+        )
+        tsrvwrf.return_value = review_entry
+        expected_rv_model = models.AGUI_RunFeedbackHistoryEntry(
+            status=FRS.REVIEWED,
+            note=REVIEWED_NOTE,
+        )
+    else:  # pragma NO COVER XXX error conditions?
+        tsrvwrf.side_effect = tsrvwrf_side_effect
+
+    with expectation as expected:
+        found = await agui_views.post_agui_review_recent_feedback(
+            request,
+            review=review_payload,
+            the_installation=the_installation,
+            the_threads=the_threads,
+            the_authz_policy=the_authz_policy,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    if expected is None:
+        assert found == expected_rv_model
+    else:  # pragma NO COVER XXX error conditions?
+        pass
+
+    the_threads.review_run_feedback.assert_called_once_with(
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+        note=REVIEWED_NOTE,
+    )
+    the_logger.debug.assert_called_once_with(
+        loggers.AGUI_POST_REVIEW_RECENT_FEEDBACK,
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("limit_kw", [{}, {"limit": 5}])
+@pytest.mark.parametrize("since_kw", [{}, {"since": NOW}])
+@pytest.mark.parametrize(
+    "tsrslvrf_side_effect, expectation",
+    [
+        (None, no_error(None)),
+        # XXX error conditions?
+    ],
+)
+async def test_post_agui_resolve_recent_feedback(
+    the_threads,
+    test_run_feedback,
+    tsrslvrf_side_effect,
+    expectation,
+    limit_kw,
+    since_kw,
+):
+    request = fastapi.Request(scope={"type": "http"})
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    resolution_payload = models.AGUI_RunFeedbackReview(
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+        note=REVIEWED_NOTE,
+    )
+
+    tsrslvrf = the_threads.resolve_run_feedback = mock.AsyncMock()
+
+    if tsrslvrf_side_effect is None:
+        review_entry = mock.create_autospec(
+            agui_package.RunFeedbackReviewEntry,
+            status=FRS.REVIEWED,
+            note=REVIEWED_NOTE,
+            created=NOW,
+        )
+        tsrslvrf.return_value = review_entry
+        expected_rv_model = models.AGUI_RunFeedbackHistoryEntry(
+            status=FRS.REVIEWED,
+            note=REVIEWED_NOTE,
+        )
+    else:  # pragma NO COVER XXX error conditions?
+        tsrslvrf.side_effect = tsrslvrf_side_effect
+
+    with expectation as expected:
+        found = await agui_views.post_agui_resolve_recent_feedback(
+            request,
+            resolution=resolution_payload,
+            the_installation=the_installation,
+            the_threads=the_threads,
+            the_authz_policy=the_authz_policy,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    if expected is None:
+        assert found == expected_rv_model
+    else:  # pragma NO COVER XXX error conditions?
+        pass
+
+    the_threads.resolve_run_feedback.assert_called_once_with(
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID,
+        run_id=TEST_RUN_ID,
+        note=REVIEWED_NOTE,
+    )
+    the_logger.debug.assert_called_once_with(
+        loggers.AGUI_POST_RESOLVE_RECENT_FEEDBACK,
     )

@@ -546,7 +546,7 @@ class ThreadStorage(agui_package.ThreadStorage):
     async def _record_run_feedback_history(
         self,
         session,
-        run_feedback: agui_persistence.RunFeedback,
+        run_feedback: agui_schema.RunFeedback,
         status: FeedbackReviewStatus,
         note: str | None,
     ):
@@ -564,7 +564,7 @@ class ThreadStorage(agui_package.ThreadStorage):
         self,
         note: str | None = None,
         *,
-        run_feedback: agui_persistence.RunFeedback,
+        run_feedback: agui_schema.RunFeedback,
     ) -> agui_schema.RunFeedbackReviewEntry: ...
 
     @typing.overload
@@ -582,7 +582,7 @@ class ThreadStorage(agui_package.ThreadStorage):
         self,
         note: str | None = None,
         *,
-        run_feedback: agui_persistence.RunFeedback | None = None,
+        run_feedback: agui_schema.RunFeedback | None = None,
         user_name: str | None = None,
         room_id: str | None = None,
         thread_id: str | None = None,

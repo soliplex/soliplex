@@ -589,6 +589,33 @@ class AGUI_RunMetadata(pydantic.BaseModel):
             )
 
 
+class AGUI_RunFeedbackReview(pydantic.BaseModel):
+    """Review payload for API endpoint"""
+
+    user_name: str = KW_ONLY
+    room_id: str = KW_ONLY
+    thread_id: str = KW_ONLY
+    run_id: str = KW_ONLY
+    note: str | None = KW_ONLY_NONE
+
+
+class AGUI_RunFeedbackResolution(pydantic.BaseModel):
+    """Resolution payload for API endpoint"""
+
+    user_name: str = KW_ONLY
+    room_id: str = KW_ONLY
+    thread_id: str = KW_ONLY
+    run_id: str = KW_ONLY
+    note: str | None = KW_ONLY_NONE
+
+
+class AGUI_RunFeedbackHistoryEntry(pydantic.BaseModel):
+    """Review / resolution record"""
+
+    status: agui_package.FeedbackReviewStatus = KW_ONLY
+    note: str | None = KW_ONLY_NONE
+
+
 class AGUI_RunFeedback(pydantic.BaseModel):
     """Feedback for a run"""
 

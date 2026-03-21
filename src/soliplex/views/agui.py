@@ -998,3 +998,59 @@ async def post_agui_recent_user_feedback(
         )
         for run_feedback in recent_feedback
     ]
+
+
+@util.logfire_span("POST /v1/agui/feedback/review")
+@router.post("/v1/agui/feedback/review")
+async def post_agui_review_recent_feedback(
+    request: fastapi.Request,
+    review: models.AGUI_RunFeedbackReview,
+    the_installation: installation.Installation = depend_the_installation,
+    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
+) -> models.AGUI_RunFeedbackHistoryEntry:
+    """Retrieve recent feedback for runs"""
+    the_logger.debug(loggers.AGUI_POST_REVIEW_RECENT_FEEDBACK)
+
+    review_entry = await the_threads.review_run_feedback(
+        user_name=review.user_name,
+        room_id=review.room_id,
+        thread_id=review.thread_id,
+        run_id=review.run_id,
+        note=review.note,
+    )
+
+    return models.AGUI_RunFeedbackHistoryEntry(
+        status=review_entry.status,
+        note=review_entry.note,
+    )
+
+
+@util.logfire_span("POST /v1/agui/feedback/resolve")
+@router.post("/v1/agui/feedback/resolve")
+async def post_agui_resolve_recent_feedback(
+    request: fastapi.Request,
+    resolution: models.AGUI_RunFeedbackReview,
+    the_installation: installation.Installation = depend_the_installation,
+    the_threads: agui_package.ThreadStorage = depend_the_threads,
+    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
+) -> models.AGUI_RunFeedbackHistoryEntry:
+    """Retrieve recent feedback for runs"""
+    the_logger.debug(loggers.AGUI_POST_RESOLVE_RECENT_FEEDBACK)
+
+    resolution_entry = await the_threads.resolve_run_feedback(
+        user_name=resolution.user_name,
+        room_id=resolution.room_id,
+        thread_id=resolution.thread_id,
+        run_id=resolution.run_id,
+        note=resolution.note,
+    )
+
+    return models.AGUI_RunFeedbackHistoryEntry(
+        status=resolution_entry.status,
+        note=resolution_entry.note,
+    )
