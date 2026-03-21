@@ -285,7 +285,12 @@ async def get_feedback_run_info(
     ctx: pydantic_ai.RunContext[agents.AgentDependencies],
     run_id: str,
 ) -> RunFeedbackInfo:
-    """Return information about the run which was the subject of the feedback"""
+    """Return information about the run against which the feedback was created
+
+    Args:
+
+      'run_id' is the UUID of the run.
+    """
     agui_state = ctx.deps.state
 
     our_state = RecentRunFeedback.model_validate(
