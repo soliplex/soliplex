@@ -7,6 +7,7 @@ import pytest
 from ag_ui import core as agui_core
 
 from soliplex import agui as agui_package
+from soliplex import models
 from soliplex.agui import persistence as agui_persistence
 from soliplex.agui import schema as agui_schema
 from soliplex.tools import agui_run_feedback as arf_tools
@@ -20,6 +21,10 @@ LIMIT = 7
 USER_NAME = "phreddy"
 EMAIL = "phreddy@example.com"
 OTHER_USER_NAME = "bharney@example.com"
+USER_NAME = "phreddy"
+EMAIL = "phreddy@example.com"
+OTHER_USER_NAME = "bharney"
+OTHER_EMAIL = "bharney@example.com"
 ROOM_ID = "test-room-id"
 THREAD_ID = "test-thread-id"
 RUN_ID = "test-run-id"
@@ -45,12 +50,22 @@ RESPONSE_MESSAGE = "test response message"
 
 
 @pytest.fixture
-def ctx_w_deps():
+def deps_user():
+    return mock.create_autospec(
+        models.UserProfile,
+        preferred_username=OTHER_USER_NAME,
+        email=OTHER_EMAIL,
+    )
+
+
+@pytest.fixture
+def ctx_w_deps(deps_user):
     ctx = mock.Mock(spec_set=["deps"])
     ctx.deps = mock.Mock(
-        spec_set=["state", "the_threads"],
+        spec_set=["state", "the_threads", "user"],
         state={},
         the_threads=mock.create_autospec(agui_persistence.ThreadStorage),
+        user=deps_user,
     )
     return ctx
 
@@ -466,6 +481,8 @@ async def test__do_review_feedback(
     )
 
     rvw_rf.assert_called_once_with(
+        reviewer_user_name=OTHER_USER_NAME,
+        reviewer_email=OTHER_EMAIL,
         note=REVIEWED_NOTE,
         user_name=USER_NAME,
         room_id=ROOM_ID,
@@ -565,6 +582,8 @@ async def test__do_resolve_feedback(
     )
 
     rsv_rf.assert_called_once_with(
+        resolver_user_name=OTHER_USER_NAME,
+        resolver_email=OTHER_EMAIL,
         note=RESOLVED_NOTE,
         user_name=USER_NAME,
         room_id=ROOM_ID,

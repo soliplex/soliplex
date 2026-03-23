@@ -372,7 +372,10 @@ async def _do_review_feedback(
     note: str | None,
 ):
     the_threads = ctx.deps.the_threads
+    user = ctx.deps.user
     await the_threads.review_run_feedback(
+        reviewer_user_name=user.preferred_username,
+        reviewer_email=user.email,
         note=note,
         user_name=run_entry.user_name,
         room_id=run_entry.room_id,
@@ -419,7 +422,10 @@ async def _do_resolve_feedback(
     note: str | None,
 ):
     the_threads = ctx.deps.the_threads
+    user = ctx.deps.user
     await the_threads.resolve_run_feedback(
+        resolver_user_name=user.preferred_username,
+        resolver_email=user.email,
         note=note,
         user_name=run_entry.user_name,
         room_id=run_entry.room_id,

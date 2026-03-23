@@ -555,11 +555,15 @@ class ThreadStorage(agui_package.ThreadStorage):
         session,
         run_feedback: agui_schema.RunFeedback,
         status: FeedbackReviewStatus,
+        user_name: str,
+        email: str,
         note: str | None,
     ):
         history_entry = agui_schema.RunFeedbackReviewEntry(
             run_feedback=run_feedback,
             status=status,
+            user_name=user_name,
+            email=email,
             note=note,
         )
         session.add(history_entry)
@@ -569,6 +573,8 @@ class ThreadStorage(agui_package.ThreadStorage):
     @typing.overload
     async def review_run_feedback(
         self,
+        reviewer_user_name: str,
+        reviewer_email: str,
         note: str | None = None,
         *,
         run_feedback: agui_schema.RunFeedback,
@@ -577,6 +583,8 @@ class ThreadStorage(agui_package.ThreadStorage):
     @typing.overload
     async def review_run_feedback(
         self,
+        reviewer_user_name: str,
+        reviewer_email: str,
         note: str | None = None,
         *,
         user_name: str,
@@ -587,6 +595,8 @@ class ThreadStorage(agui_package.ThreadStorage):
 
     async def review_run_feedback(
         self,
+        reviewer_user_name: str,
+        reviewer_email: str,
         note: str | None = None,
         *,
         run_feedback: agui_schema.RunFeedback | None = None,
@@ -614,6 +624,8 @@ class ThreadStorage(agui_package.ThreadStorage):
                 session,
                 run_feedback,
                 FeedbackReviewStatus.REVIEWED,
+                reviewer_user_name,
+                reviewer_email,
                 note,
             )
 
@@ -622,6 +634,8 @@ class ThreadStorage(agui_package.ThreadStorage):
     @typing.overload
     async def resolve_run_feedback(
         self,
+        resolver_user_name: str,
+        resolver_email: str,
         note: str | None = None,
         *,
         run_feedback: agui_persistence.RunFeedback,
@@ -630,6 +644,8 @@ class ThreadStorage(agui_package.ThreadStorage):
     @typing.overload
     async def resolve_run_feedback(
         self,
+        resolver_user_name: str,
+        resolver_email: str,
         note: str | None = None,
         *,
         user_name: str,
@@ -640,6 +656,8 @@ class ThreadStorage(agui_package.ThreadStorage):
 
     async def resolve_run_feedback(
         self,
+        resolver_user_name: str,
+        resolver_email: str,
         note: str | None = None,
         *,
         run_feedback: agui_persistence.RunFeedback | None = None,
@@ -667,6 +685,8 @@ class ThreadStorage(agui_package.ThreadStorage):
                 session,
                 run_feedback,
                 FeedbackReviewStatus.RESOLVED,
+                resolver_user_name,
+                resolver_email,
                 note,
             )
 

@@ -18,6 +18,10 @@ NOW = datetime.datetime.now(datetime.UTC)
 ROOM_ID = "test-room"
 USER_NAME = "phreddy"
 EMAIL = "phreddy@example.com"
+REVIEWER_USER_NAME = "bharney"
+REVIEWER_EMAIL = "bharney@example.com"
+RESOLVER_USER_NAME = "wylma"
+RESOLVER_EMAIL = "wylma@example.com"
 
 
 @pytest.fixture
@@ -747,6 +751,8 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     await the_async_session.commit()
 
     await ts.review_run_feedback(
+        reviewer_user_name=REVIEWER_USER_NAME,
+        reviewer_email=REVIEWER_EMAIL,
         note="reviewing feedback",
         run_feedback=tid_later_fb,
     )
@@ -764,6 +770,8 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     await the_async_session.commit()
 
     await ts.resolve_run_feedback(
+        resolver_user_name=RESOLVER_USER_NAME,
+        resolver_email=RESOLVER_EMAIL,
         note="resolving feedback",
         run_feedback=tid_later_fb,
     )
@@ -794,6 +802,8 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
 
     # Feedback review workflow using lookup
     await ts.review_run_feedback(
+        reviewer_user_name=REVIEWER_USER_NAME,
+        reviewer_email=REVIEWER_EMAIL,
         note="reviewing feedback",
         user_name=USER_NAME,
         room_id=ROOM_ID,
@@ -816,6 +826,8 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     await the_async_session.commit()
 
     await ts.resolve_run_feedback(
+        resolver_user_name=RESOLVER_USER_NAME,
+        resolver_email=RESOLVER_EMAIL,
         note="resolving feedback",
         run_feedback=tid_later_fb,
     )
@@ -844,6 +856,8 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     await the_async_session.commit()
 
     await ts.resolve_run_feedback(
+        resolver_user_name=RESOLVER_USER_NAME,
+        resolver_email=RESOLVER_EMAIL,
         note="resolving feedback",
         user_name=USER_NAME,
         room_id=ROOM_ID,
@@ -888,6 +902,8 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
 
     with pytest.raises(agui_persistence.NoFeedbackFound):
         await ts.review_run_feedback(
+            reviewer_user_name=REVIEWER_USER_NAME,
+            reviewer_email=REVIEWER_EMAIL,
             note="reviewing feedback",
             user_name=USER_NAME,
             room_id=ROOM_ID,
@@ -899,6 +915,8 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
 
     with pytest.raises(agui_persistence.NoFeedbackFound):
         await ts.resolve_run_feedback(
+            resolver_user_name=RESOLVER_USER_NAME,
+            resolver_email=RESOLVER_EMAIL,
             note="resolving feedback",
             user_name=USER_NAME,
             room_id=ROOM_ID,
@@ -934,6 +952,8 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     await the_async_session.commit()
 
     await ts.review_run_feedback(
+        reviewer_user_name=REVIEWER_USER_NAME,
+        reviewer_email=REVIEWER_EMAIL,
         note="reviewing feedback; no resolve",
         run_feedback=review_only_fb,
     )
@@ -967,6 +987,8 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     await the_async_session.commit()
 
     await ts.resolve_run_feedback(
+        resolver_user_name=RESOLVER_USER_NAME,
+        resolver_email=RESOLVER_EMAIL,
         note="resolving feedback; no view",
         run_feedback=resolve_only_fb,
     )

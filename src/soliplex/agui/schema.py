@@ -530,8 +530,9 @@ class RunFeedbackReviewEntry(Base):
     )
 
     status: Mapped[FeedbackReviewStatus | None] = mapped_column()
-
     note: Mapped[str | None] = mapped_column(default=None)
+    user_name: Mapped[str | None] = mapped_column(default=None)
+    email: Mapped[str | None] = mapped_column(default=None)
 
 
 def get_engine(
