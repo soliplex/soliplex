@@ -8,20 +8,28 @@ import httpx
 
 from soliplex.moodle.models import ActivityCompletionStatus
 from soliplex.moodle.models import CalendarEvent
+from soliplex.moodle.models import CatalogueItem
 from soliplex.moodle.models import Certification
 from soliplex.moodle.models import CertificationAllocation
 from soliplex.moodle.models import CertificationLogEntry
 from soliplex.moodle.models import Cohort
 from soliplex.moodle.models import CohortMembers
+from soliplex.moodle.models import CompetencyFramework
 from soliplex.moodle.models import CompletionStatus
 from soliplex.moodle.models import Course
 from soliplex.moodle.models import CourseSection
+from soliplex.moodle.models import Department
+from soliplex.moodle.models import DepartmentMember
 from soliplex.moodle.models import EnrolledUser
 from soliplex.moodle.models import Group
 from soliplex.moodle.models import GroupMembers
+from soliplex.moodle.models import LearningPlan
+from soliplex.moodle.models import Position
 from soliplex.moodle.models import Program
 from soliplex.moodle.models import ProgramCourse
+from soliplex.moodle.models import ProgramCourseOption
 from soliplex.moodle.models import Tenant
+from soliplex.moodle.models import UserCatalogueItem
 from soliplex.moodle.models import UserProfile
 
 # Upper bound on results returned by list endpoints.
@@ -135,6 +143,26 @@ class MoodleClient:
             params[f"values[{i}]"] = v
         raw = await self._call("core_user_get_users_by_field", **params)
         return [UserProfile.model_validate(u) for u in raw][:MAX_RESULTS]
+
+    async def search_users(
+        self,
+        criteria: list[tuple[str, str]],
+    ) -> list[UserProfile]:
+        """Search users via ``core_user_get_users``.
+
+        Each criterion is a ``(key, value)`` tuple where *key* is a
+        field like ``firstname`` or ``lastname`` and *value* is a
+        substring to match.
+
+        Results are truncated to ``MAX_RESULTS``.
+        """
+        params: dict[str, str] = {}
+        for i, (key, value) in enumerate(criteria):
+            params[f"criteria[{i}][key]"] = key
+            params[f"criteria[{i}][value]"] = value
+        raw = await self._call("core_user_get_users", **params)
+        users = raw.get("users", []) if isinstance(raw, dict) else []
+        return [UserProfile.model_validate(u) for u in users][:MAX_RESULTS]
 
     # ---------------------------------------------------------------
     # Enrolment functions
@@ -432,3 +460,356 @@ class MoodleClient:
         raw = await self._call("tool_tenant_get_tenants")
         tenants = raw if isinstance(raw, list) else []
         return [Tenant.model_validate(t) for t in tenants][:MAX_RESULTS]
+
+    async def allocate_users_to_tenant(
+        self, allocations: list[dict]
+    ) -> dict:
+        """Allocate users to a tenant via ``tool_tenant_allocate_users``.
+
+        Each allocation dict must have ``userid`` and ``tenantid``.
+        """
+        params: dict[str, str | int] = {}
+        for i, a in enumerate(allocations):
+            params[f"allocations[{i}][userid]"] = a["userid"]
+            params[f"allocations[{i}][tenantid]"] = a["tenantid"]
+        raw = await self._call("tool_tenant_allocate_users", **params)
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def suspend_tenant_users(
+        self, userids: list[int]
+    ) -> dict:
+        """Suspend users system-wide via ``tool_tenant_suspend_users``."""
+        params: dict[str, str | int] = {}
+        for i, uid in enumerate(userids):
+            params[f"userids[{i}]"] = uid
+        raw = await self._call("tool_tenant_suspend_users", **params)
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    # ---------------------------------------------------------------
+    # Catalogue (Workplace)
+    # ---------------------------------------------------------------
+
+    async def get_catalogue_page(
+        self, query: str = ""
+    ) -> list[CatalogueItem]:
+        """Search the course/program catalogue via ``tool_catalogue_get_catalogue_page``."""
+        params: dict[str, str | int] = {}
+        if query:
+            params["search"] = query
+        raw = await self._call(
+            "tool_catalogue_get_catalogue_page", **params
+        )
+        items = []
+        if isinstance(raw, dict):
+            contents = raw.get("contents", {})
+            if isinstance(contents, dict):
+                items = contents.get("catalogueitems", [])
+        return [CatalogueItem.model_validate(i) for i in items][:MAX_RESULTS]
+
+    async def get_user_catalogue(
+        self, userid: int = 0, search: str = ""
+    ) -> list[UserCatalogueItem]:
+        """Get user's learning catalogue via ``tool_catalogue_get_user_catalogue``."""
+        params: dict[str, str | int] = {}
+        if userid:
+            params["userid"] = userid
+        if search:
+            params["search"] = search
+        raw = await self._call(
+            "tool_catalogue_get_user_catalogue", **params
+        )
+        items = []
+        if isinstance(raw, dict):
+            catalogue = raw.get("catalogue", {})
+            if isinstance(catalogue, dict):
+                items = catalogue.get("listitems", [])
+        return [
+            UserCatalogueItem.model_validate(i) for i in items
+        ][:MAX_RESULTS]
+
+    async def get_program_content(
+        self, programid: int, userid: int = 0
+    ) -> dict:
+        """Get courses inside a program via ``tool_catalogue_get_user_catalogue_program_content``."""
+        params: dict[str, str | int] = {"programid": programid}
+        if userid:
+            params["userid"] = userid
+        raw = await self._call(
+            "tool_catalogue_get_user_catalogue_program_content",
+            **params,
+        )
+        return raw if isinstance(raw, dict) else {}
+
+    # ---------------------------------------------------------------
+    # Deeper Program Management (Workplace)
+    # ---------------------------------------------------------------
+
+    async def search_courses_for_program(
+        self, search: str = ""
+    ) -> list[ProgramCourseOption]:
+        """Search courses eligible for programs via ``tool_program_potential_courses_program_selector``."""
+        raw = await self._call(
+            "tool_program_potential_courses_program_selector",
+            search=search,
+        )
+        courses = raw if isinstance(raw, list) else []
+        return [
+            ProgramCourseOption.model_validate(c) for c in courses
+        ][:MAX_RESULTS]
+
+    async def deallocate_user_from_program(
+        self, programid: int, userid: int
+    ) -> dict:
+        """Remove a user from a program via ``tool_program_deallocate_user``."""
+        raw = await self._call(
+            "tool_program_deallocate_user",
+            programid=programid,
+            userid=userid,
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def reset_program_progress(
+        self, programuserid: int
+    ) -> dict:
+        """Reset program progress via ``tool_program_reset_program_progress``.
+
+        Takes the allocation ID (``programuserid``), not the user ID.
+        """
+        raw = await self._call(
+            "tool_program_reset_program_progress",
+            programuserid=programuserid,
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    # ---------------------------------------------------------------
+    # Deeper Certification Management (Workplace)
+    # ---------------------------------------------------------------
+
+    async def get_certification_user_allocation(
+        self, certificationid: int, userid: int
+    ) -> dict:
+        """Get detailed user+cert allocation via ``tool_certification_get_certification_user_allocation``."""
+        raw = await self._call(
+            "tool_certification_get_certification_user_allocation",
+            certificationid=certificationid,
+            userid=userid,
+        )
+        return raw if isinstance(raw, dict) else {}
+
+    async def deallocate_user_from_certification(
+        self, certificationid: int, userid: int
+    ) -> dict:
+        """Remove a user from a certification via ``tool_certification_deallocate_user``."""
+        raw = await self._call(
+            "tool_certification_deallocate_user",
+            certificationid=certificationid,
+            userid=userid,
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def archive_certification(
+        self, certificationid: int
+    ) -> dict:
+        """Archive a certification via ``tool_certification_archive_certification``."""
+        raw = await self._call(
+            "tool_certification_archive_certification",
+            certificationid=certificationid,
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    # ---------------------------------------------------------------
+    # Organisation Structure (Workplace)
+    # ---------------------------------------------------------------
+
+    async def get_departments(
+        self, search: str = ""
+    ) -> list[Department]:
+        """List departments via ``tool_organisation_get_teams_tab_filters``."""
+        raw = await self._call(
+            "tool_organisation_get_teams_tab_filters",
+        )
+        depts = []
+        if isinstance(raw, dict):
+            depts = raw.get("departments", [])
+        if search:
+            search_lower = search.lower()
+            depts = [
+                d for d in depts
+                if search_lower in d.get("name", "").lower()
+            ]
+        return [Department.model_validate(d) for d in depts][:MAX_RESULTS]
+
+    async def get_positions(
+        self, search: str = ""
+    ) -> list[Position]:
+        """List positions via ``tool_organisation_get_teams_tab_filters``."""
+        raw = await self._call(
+            "tool_organisation_get_teams_tab_filters",
+        )
+        positions = []
+        if isinstance(raw, dict):
+            positions = raw.get("positions", [])
+        if search:
+            search_lower = search.lower()
+            positions = [
+                p for p in positions
+                if search_lower in p.get("name", "").lower()
+            ]
+        return [Position.model_validate(p) for p in positions][:MAX_RESULTS]
+
+    async def get_department_members(
+        self,
+        departmentid: int = 0,
+        positionid: int = 0,
+        search: str = "",
+    ) -> list[DepartmentMember]:
+        """Get users by department/position via ``local_soliplex_get_department_members``.
+
+        Unlike ``get_managed_users``, results are not scoped to the
+        token owner's direct reports — all matching users are returned.
+        Requires the ``local_soliplex`` plugin to be installed.
+        """
+        params: dict[str, str | int] = {}
+        if departmentid:
+            params["departmentid"] = departmentid
+        if positionid:
+            params["positionid"] = positionid
+        if search:
+            params["search"] = search
+        raw = await self._call(
+            "local_soliplex_get_department_members", **params
+        )
+        members = raw if isinstance(raw, list) else []
+        return [
+            DepartmentMember.model_validate(m) for m in members
+        ][:MAX_RESULTS]
+
+    async def get_managed_users(
+        self,
+        departmentid: int = 0,
+        positionid: int = 0,
+        search: str = "",
+    ) -> list[dict]:
+        """Get managed users via ``tool_organisation_get_managed_users``.
+
+        Results are scoped to the API token owner's direct reports.
+        Admin accounts with no direct reports will see an empty list.
+
+        .. deprecated::
+            This endpoint is deprecated (moved to ``block_myteams``)
+            but still works in Moodle Workplace 5.0.2.
+        """
+        params: dict[str, str | int] = {}
+        if departmentid:
+            params["departmentid"] = departmentid
+        if positionid:
+            params["positionid"] = positionid
+        if search:
+            params["search"] = search
+        raw = await self._call(
+            "tool_organisation_get_managed_users", **params
+        )
+        users = []
+        if isinstance(raw, dict):
+            users = raw.get("managedusers", [])
+        elif isinstance(raw, list):
+            users = raw
+        return users[:MAX_RESULTS]
+
+    async def create_job(
+        self,
+        userid: int,
+        department_idnumber: str,
+        position_idnumber: str,
+    ) -> dict:
+        """Create a job assignment via ``tool_organisation_create_job``."""
+        raw = await self._call(
+            "tool_organisation_create_job",
+            userid=userid,
+            departmentidnumber=department_idnumber,
+            positionidnumber=position_idnumber,
+        )
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def assign_managers(
+        self, user_ids: list[int], manager_ids: list[int]
+    ) -> dict:
+        """Assign managers via ``tool_organisation_assign_managers``."""
+        params: dict[str, str | int] = {}
+        for i, uid in enumerate(user_ids):
+            params[f"userids[{i}]"] = uid
+        for i, mid in enumerate(manager_ids):
+            params[f"managerids[{i}]"] = mid
+        raw = await self._call(
+            "tool_organisation_assign_managers", **params
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    # ---------------------------------------------------------------
+    # Competencies & Learning Plans
+    # ---------------------------------------------------------------
+
+    async def get_competency_frameworks(self) -> list[CompetencyFramework]:
+        """List competency frameworks via ``tool_lp_data_for_competency_frameworks_manage_page``."""
+        raw = await self._call(
+            "tool_lp_data_for_competency_frameworks_manage_page",
+            **{"pagecontext[contextid]": 1},
+        )
+        frameworks = []
+        if isinstance(raw, dict):
+            frameworks = raw.get(
+                "competencyframeworks", raw.get("frameworks", [])
+            )
+        return [
+            CompetencyFramework.model_validate(f) for f in frameworks
+        ][:MAX_RESULTS]
+
+    async def get_user_learning_plans(
+        self, userid: int
+    ) -> list[LearningPlan]:
+        """Get user's learning plans via ``tool_lp_data_for_plans_page``."""
+        raw = await self._call(
+            "tool_lp_data_for_plans_page", userid=userid
+        )
+        plans = []
+        if isinstance(raw, dict):
+            plans = raw.get("plans", [])
+        return [LearningPlan.model_validate(p) for p in plans][:MAX_RESULTS]
+
+    async def get_user_competency_summary(
+        self, userid: int, competencyid: int
+    ) -> dict:
+        """Get user competency summary via ``tool_lp_data_for_user_competency_summary``."""
+        raw = await self._call(
+            "tool_lp_data_for_user_competency_summary",
+            userid=userid,
+            competencyid=competencyid,
+        )
+        return raw if isinstance(raw, dict) else {}
+
+    async def get_course_competencies(
+        self, courseid: int
+    ) -> list[dict]:
+        """Get course competencies via ``tool_lp_data_for_course_competencies_page``."""
+        raw = await self._call(
+            "tool_lp_data_for_course_competencies_page",
+            courseid=courseid,
+        )
+        competencies = []
+        if isinstance(raw, dict):
+            competencies = raw.get("competencies", [])
+        return competencies[:MAX_RESULTS]

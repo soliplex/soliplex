@@ -878,3 +878,777 @@ async def test_get_tenants(client):
     assert len(tenants) == 2
     assert tenants[0].isdefault is True
     assert tenants[1].name == "Regional Office"
+
+
+# ---------------------------------------------------------------
+# Tenant Write Operations
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_allocate_users_to_tenant(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.allocate_users_to_tenant(
+            allocations=[{"userid": 3, "tenantid": 2}]
+        )
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_allocate_users_to_tenant_returns_dict(client):
+    resp = _mock_response({"warnings": []})
+    with _patch_httpx(resp):
+        result = await client.allocate_users_to_tenant(
+            allocations=[{"userid": 3, "tenantid": 2}]
+        )
+
+    assert result == {"warnings": []}
+
+
+@pytest.mark.asyncio
+async def test_suspend_tenant_users(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.suspend_tenant_users(userids=[3, 4])
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_suspend_tenant_users_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.suspend_tenant_users(userids=[3, 4])
+
+    assert result == {"result": True}
+
+
+# ---------------------------------------------------------------
+# Catalogue
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_catalogue_page(client):
+    resp = _mock_response(
+        {
+            "contents": {
+                "catalogueitems": [
+                    {"id": 1, "title": "Safety 101", "url": "/course/1"}
+                ]
+            }
+        }
+    )
+    with _patch_httpx(resp):
+        items = await client.get_catalogue_page()
+
+    assert len(items) == 1
+    assert items[0].title == "Safety 101"
+
+
+@pytest.mark.asyncio
+async def test_get_catalogue_page_empty(client):
+    resp = _mock_response({"contents": {"catalogueitems": []}})
+    with _patch_httpx(resp):
+        items = await client.get_catalogue_page()
+
+    assert items == []
+
+
+@pytest.mark.asyncio
+async def test_get_catalogue_page_missing_keys(client):
+    resp = _mock_response({})
+    with _patch_httpx(resp):
+        items = await client.get_catalogue_page()
+
+    assert items == []
+
+
+@pytest.mark.asyncio
+async def test_get_user_catalogue(client):
+    resp = _mock_response(
+        {
+            "catalogue": {
+                "listitems": [
+                    {
+                        "itemid": 1,
+                        "fullname": "Safety",
+                        "numcourses": 2,
+                        "progress": 50,
+                        "duedate": 0,
+                        "isprogram": False,
+                        "categoryname": "Training",
+                    }
+                ]
+            }
+        }
+    )
+    with _patch_httpx(resp):
+        items = await client.get_user_catalogue(userid=3)
+
+    assert len(items) == 1
+    assert items[0].fullname == "Safety"
+
+
+@pytest.mark.asyncio
+async def test_get_user_catalogue_empty(client):
+    resp = _mock_response({"catalogue": {"listitems": []}})
+    with _patch_httpx(resp):
+        items = await client.get_user_catalogue(userid=3)
+
+    assert items == []
+
+
+@pytest.mark.asyncio
+async def test_get_program_content(client):
+    resp = _mock_response(
+        {"sets": [{"name": "Core"}], "courses": [{"id": 2}], "warnings": []}
+    )
+    with _patch_httpx(resp):
+        result = await client.get_program_content(programid=1)
+
+    assert result["sets"][0]["name"] == "Core"
+    assert result["courses"][0]["id"] == 2
+    assert result["warnings"] == []
+
+
+# ---------------------------------------------------------------
+# Deeper Program Management
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_search_courses_for_program(client):
+    resp = _mock_response(
+        [{"id": 2, "fullname": "Safety Fundamentals"}]
+    )
+    with _patch_httpx(resp):
+        courses = await client.search_courses_for_program()
+
+    assert len(courses) == 1
+    assert courses[0].fullname == "Safety Fundamentals"
+
+
+@pytest.mark.asyncio
+async def test_search_courses_for_program_non_list(client):
+    resp = _mock_response({"error": "unexpected"})
+    with _patch_httpx(resp):
+        courses = await client.search_courses_for_program()
+
+    assert courses == []
+
+
+@pytest.mark.asyncio
+async def test_deallocate_user_from_program(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.deallocate_user_from_program(
+            programid=1, userid=3
+        )
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_deallocate_user_from_program_returns_dict(client):
+    resp = _mock_response({"warnings": []})
+    with _patch_httpx(resp):
+        result = await client.deallocate_user_from_program(
+            programid=1, userid=3
+        )
+
+    assert result == {"warnings": []}
+
+
+@pytest.mark.asyncio
+async def test_reset_program_progress(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.reset_program_progress(programuserid=10)
+
+    assert result == {"result": True}
+
+
+# ---------------------------------------------------------------
+# Deeper Certification Management
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_certification_user_allocation(client):
+    resp = _mock_response(
+        {
+            "id": 10,
+            "userid": 3,
+            "certificationid": 1,
+            "status": "certified",
+        }
+    )
+    with _patch_httpx(resp):
+        result = await client.get_certification_user_allocation(
+            certificationid=1, userid=3
+        )
+
+    assert result["id"] == 10
+    assert result["userid"] == 3
+    assert result["status"] == "certified"
+
+
+@pytest.mark.asyncio
+async def test_get_certification_user_allocation_non_dict(client):
+    resp = _mock_response(True)
+    with _patch_httpx(resp):
+        result = await client.get_certification_user_allocation(
+            certificationid=1, userid=3
+        )
+
+    assert result == {}
+
+
+@pytest.mark.asyncio
+async def test_deallocate_user_from_certification(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.deallocate_user_from_certification(
+            certificationid=1, userid=3
+        )
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_archive_certification(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.archive_certification(certificationid=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_archive_certification_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.archive_certification(certificationid=1)
+
+    assert result == {"result": True}
+
+
+# ---------------------------------------------------------------
+# Organisation Structure
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_departments(client):
+    resp = _mock_response(
+        {"departments": [{"id": 1, "name": "Engineering"}], "positions": []}
+    )
+    with _patch_httpx(resp):
+        depts = await client.get_departments()
+
+    assert len(depts) == 1
+    assert depts[0].name == "Engineering"
+
+
+@pytest.mark.asyncio
+async def test_get_departments_non_dict(client):
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        depts = await client.get_departments()
+
+    assert depts == []
+
+
+@pytest.mark.asyncio
+async def test_get_departments_with_search(client):
+    resp = _mock_response(
+        {"departments": [{"id": 1, "name": "Engineering"}, {"id": 2, "name": "Operations"}]}
+    )
+    with _patch_httpx(resp):
+        depts = await client.get_departments(search="eng")
+
+    assert len(depts) == 1
+    assert depts[0].name == "Engineering"
+
+
+@pytest.mark.asyncio
+async def test_get_positions(client):
+    resp = _mock_response(
+        {"departments": [], "positions": [{"id": 1, "name": "Manager"}]}
+    )
+    with _patch_httpx(resp):
+        positions = await client.get_positions()
+
+    assert len(positions) == 1
+    assert positions[0].name == "Manager"
+
+
+@pytest.mark.asyncio
+async def test_get_positions_with_search(client):
+    resp = _mock_response(
+        {"positions": [{"id": 1, "name": "Manager"}, {"id": 2, "name": "Engineer"}]}
+    )
+    with _patch_httpx(resp):
+        positions = await client.get_positions(search="eng")
+
+    assert len(positions) == 1
+    assert positions[0].name == "Engineer"
+
+
+@pytest.mark.asyncio
+async def test_get_positions_non_dict(client):
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        positions = await client.get_positions()
+
+    assert positions == []
+
+
+@pytest.mark.asyncio
+async def test_get_managed_users(client):
+    resp = _mock_response(
+        {"managedusers": [{"id": 3, "fullname": "Alice Johnson"}], "totalcount": 1}
+    )
+    with _patch_httpx(resp):
+        users = await client.get_managed_users()
+
+    assert len(users) == 1
+    assert users[0]["fullname"] == "Alice Johnson"
+
+
+@pytest.mark.asyncio
+async def test_get_managed_users_empty_dict(client):
+    resp = _mock_response({"managedusers": [], "totalcount": 0})
+    with _patch_httpx(resp):
+        users = await client.get_managed_users()
+
+    assert users == []
+
+
+@pytest.mark.asyncio
+async def test_get_managed_users_legacy_list(client):
+    """Backward compat: plain list response still works."""
+    resp = _mock_response([{"id": 3, "fullname": "Alice Johnson"}])
+    with _patch_httpx(resp):
+        users = await client.get_managed_users()
+
+    assert len(users) == 1
+    assert users[0]["fullname"] == "Alice Johnson"
+
+
+@pytest.mark.asyncio
+async def test_get_managed_users_unexpected_type(client):
+    """Returns empty list when response is neither dict nor list."""
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        users = await client.get_managed_users()
+
+    assert users == []
+
+
+@pytest.mark.asyncio
+async def test_create_job(client):
+    resp = _mock_response({"id": 1, "userid": 3})
+    with _patch_httpx(resp):
+        result = await client.create_job(
+            userid=3,
+            department_idnumber="ENG",
+            position_idnumber="MGR",
+        )
+
+    assert result["id"] == 1
+    assert result["userid"] == 3
+
+
+@pytest.mark.asyncio
+async def test_assign_managers(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.assign_managers(
+            user_ids=[3], manager_ids=[2]
+        )
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_assign_managers_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.assign_managers(
+            user_ids=[3], manager_ids=[2]
+        )
+
+    assert result == {"result": True}
+
+
+# ---------------------------------------------------------------
+# Competencies & Learning Plans
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_competency_frameworks(client):
+    resp = _mock_response(
+        {
+            "frameworks": [
+                {
+                    "id": 1,
+                    "shortname": "Core",
+                    "idnumber": "CORE01",
+                    "description": "Core skills",
+                    "competencycount": 3,
+                }
+            ]
+        }
+    )
+    with _patch_httpx(resp):
+        frameworks = await client.get_competency_frameworks()
+
+    assert len(frameworks) == 1
+    assert frameworks[0].shortname == "Core"
+
+
+@pytest.mark.asyncio
+async def test_get_competency_frameworks_empty(client):
+    resp = _mock_response({"frameworks": []})
+    with _patch_httpx(resp):
+        frameworks = await client.get_competency_frameworks()
+
+    assert frameworks == []
+
+
+@pytest.mark.asyncio
+async def test_get_competency_frameworks_non_dict(client):
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        frameworks = await client.get_competency_frameworks()
+
+    assert frameworks == []
+
+
+@pytest.mark.asyncio
+async def test_get_user_learning_plans(client):
+    resp = _mock_response(
+        {
+            "plans": [
+                {
+                    "id": 1,
+                    "name": "Alice's Plan",
+                    "description": "Development plan",
+                    "statusname": "Active",
+                    "userid": 3,
+                }
+            ]
+        }
+    )
+    with _patch_httpx(resp):
+        plans = await client.get_user_learning_plans(userid=3)
+
+    assert len(plans) == 1
+    assert plans[0].name == "Alice's Plan"
+
+
+@pytest.mark.asyncio
+async def test_get_user_learning_plans_empty(client):
+    resp = _mock_response({"plans": []})
+    with _patch_httpx(resp):
+        plans = await client.get_user_learning_plans(userid=3)
+
+    assert plans == []
+
+
+@pytest.mark.asyncio
+async def test_get_user_competency_summary(client):
+    resp = _mock_response(
+        {
+            "usercompetency": {
+                "userid": 3,
+                "competencyid": 1,
+                "grade": "B",
+            }
+        }
+    )
+    with _patch_httpx(resp):
+        result = await client.get_user_competency_summary(
+            userid=3, competencyid=1
+        )
+
+    assert result["usercompetency"]["userid"] == 3
+    assert result["usercompetency"]["grade"] == "B"
+
+
+@pytest.mark.asyncio
+async def test_get_user_competency_summary_non_dict(client):
+    resp = _mock_response(True)
+    with _patch_httpx(resp):
+        result = await client.get_user_competency_summary(
+            userid=3, competencyid=1
+        )
+
+    assert result == {}
+
+
+@pytest.mark.asyncio
+async def test_get_course_competencies(client):
+    resp = _mock_response(
+        {
+            "competencies": [
+                {"competency": {"id": 1, "shortname": "Communication"}}
+            ]
+        }
+    )
+    with _patch_httpx(resp):
+        competencies = await client.get_course_competencies(courseid=2)
+
+    assert len(competencies) == 1
+    assert competencies[0]["competency"]["shortname"] == "Communication"
+
+
+@pytest.mark.asyncio
+async def test_get_course_competencies_empty(client):
+    resp = _mock_response({"competencies": []})
+    with _patch_httpx(resp):
+        competencies = await client.get_course_competencies(courseid=2)
+
+    assert competencies == []
+
+
+# ---------------------------------------------------------------
+# Branch coverage: additional edge cases
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_catalogue_page_with_query(client):
+    resp = _mock_response(
+        {"contents": {"catalogueitems": [{"id": 1, "title": "Safety", "url": "/c/1"}]}}
+    )
+    with _patch_httpx(resp):
+        items = await client.get_catalogue_page(query="safety")
+
+    assert len(items) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_catalogue_page_non_dict_contents(client):
+    resp = _mock_response({"contents": "not a dict"})
+    with _patch_httpx(resp):
+        items = await client.get_catalogue_page()
+
+    assert items == []
+
+
+@pytest.mark.asyncio
+async def test_get_catalogue_page_non_dict_response(client):
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        items = await client.get_catalogue_page()
+
+    assert items == []
+
+
+@pytest.mark.asyncio
+async def test_get_user_catalogue_with_search(client):
+    resp = _mock_response(
+        {"catalogue": {"listitems": [{"itemid": 1, "fullname": "Safety"}]}}
+    )
+    with _patch_httpx(resp):
+        items = await client.get_user_catalogue(search="safety")
+
+    assert len(items) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_user_catalogue_non_dict_catalogue(client):
+    resp = _mock_response({"catalogue": "not a dict"})
+    with _patch_httpx(resp):
+        items = await client.get_user_catalogue(userid=3)
+
+    assert items == []
+
+
+@pytest.mark.asyncio
+async def test_get_user_catalogue_non_dict_response(client):
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        items = await client.get_user_catalogue()
+
+    assert items == []
+
+
+@pytest.mark.asyncio
+async def test_get_program_content_with_userid(client):
+    resp = _mock_response({"sets": [], "courses": []})
+    with _patch_httpx(resp):
+        result = await client.get_program_content(programid=1, userid=3)
+
+    assert result == {"sets": [], "courses": []}
+
+
+@pytest.mark.asyncio
+async def test_reset_program_progress_non_dict(client):
+    resp = _mock_response(True)
+    with _patch_httpx(resp):
+        result = await client.reset_program_progress(programuserid=10)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_deallocate_user_from_certification_non_dict(client):
+    resp = _mock_response(True)
+    with _patch_httpx(resp):
+        result = await client.deallocate_user_from_certification(
+            certificationid=1, userid=3
+        )
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_get_managed_users_with_all_params(client):
+    resp = _mock_response(
+        {"managedusers": [{"id": 3, "fullname": "Alice Johnson"}], "totalcount": 1}
+    )
+    with _patch_httpx(resp):
+        users = await client.get_managed_users(
+            departmentid=1, positionid=2, search="Alice"
+        )
+
+    assert len(users) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_user_learning_plans_non_dict(client):
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        plans = await client.get_user_learning_plans(userid=3)
+
+    assert plans == []
+
+
+@pytest.mark.asyncio
+async def test_get_course_competencies_non_dict(client):
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        competencies = await client.get_course_competencies(courseid=2)
+
+    assert competencies == []
+
+
+# ---------------------------------------------------------------
+# get_department_members (local_soliplex plugin)
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_department_members(client):
+    resp = _mock_response([
+        {
+            "userid": 3,
+            "username": "alice",
+            "firstname": "Alice",
+            "lastname": "Johnson",
+            "fullname": "Alice Johnson",
+            "email": "alice@example.com",
+            "departmentid": 1,
+            "departmentname": "Engineering",
+            "positionid": 1,
+            "positionname": "Manager",
+        },
+    ])
+    with _patch_httpx(resp):
+        members = await client.get_department_members()
+
+    assert len(members) == 1
+    assert members[0].userid == 3
+    assert members[0].fullname == "Alice Johnson"
+    assert members[0].departmentname == "Engineering"
+    assert members[0].positionname == "Manager"
+
+
+@pytest.mark.asyncio
+async def test_get_department_members_empty(client):
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        members = await client.get_department_members()
+
+    assert members == []
+
+
+@pytest.mark.asyncio
+async def test_get_department_members_with_filters(client):
+    resp = _mock_response([
+        {
+            "userid": 4,
+            "username": "bob",
+            "firstname": "Bob",
+            "lastname": "Smith",
+            "fullname": "Bob Smith",
+            "email": "bob@example.com",
+            "departmentid": 1,
+            "departmentname": "Engineering",
+            "positionid": 2,
+            "positionname": "Senior Engineer",
+        },
+    ])
+    with _patch_httpx(resp):
+        members = await client.get_department_members(
+            departmentid=1, positionid=2, search="Bob"
+        )
+
+    assert len(members) == 1
+    assert members[0].username == "bob"
+
+
+@pytest.mark.asyncio
+async def test_get_department_members_non_list(client):
+    """Returns empty list when response is not a list."""
+    resp = _mock_response({"unexpected": "format"})
+    with _patch_httpx(resp):
+        members = await client.get_department_members()
+
+    assert members == []
+
+
+# ---------------------------------------------------------------
+# search_users
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_search_users(client):
+    resp = _mock_response(
+        {
+            "users": [
+                {
+                    "id": 3,
+                    "username": "testuser1",
+                    "firstname": "Alice",
+                    "lastname": "Johnson",
+                    "fullname": "Alice Johnson",
+                    "email": "alice@example.com",
+                }
+            ]
+        }
+    )
+    with _patch_httpx(resp):
+        users = await client.search_users([("firstname", "Alice")])
+
+    assert len(users) == 1
+    assert users[0].username == "testuser1"
+    assert users[0].fullname == "Alice Johnson"
+
+
+@pytest.mark.asyncio
+async def test_search_users_non_dict(client):
+    """Returns empty list when response is not a dict."""
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        users = await client.search_users([("firstname", "Nobody")])
+
+    assert users == []

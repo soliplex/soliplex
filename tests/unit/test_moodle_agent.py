@@ -129,6 +129,26 @@ def test_factory_agent_has_expected_tools():
         "get_user_program_courses",
         "allocate_users_to_program",
         "list_tenants",
+        # Phase A & B tools
+        "browse_catalogue",
+        "get_user_learning_catalogue",
+        "get_program_content",
+        "search_courses_for_program",
+        "deallocate_user_from_program",
+        "get_certification_user_details",
+        "deallocate_user_from_certification",
+        "archive_certification",
+        "allocate_users_to_tenant",
+        "suspend_users",
+        "list_departments",
+        "list_positions",
+        "get_team_members",
+        "assign_job",
+        "assign_manager",
+        "list_competency_frameworks",
+        "get_user_learning_plans",
+        "get_user_competency",
+        "get_course_competencies",
     }
 
 
@@ -1505,5 +1525,1024 @@ async def test_list_tenants_tool_error():
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
+
+    assert "error" in result
+
+
+# -----------------------------------------------------------------
+# Feature 11: Catalogue tools
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_browse_catalogue_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "browse_catalogue")
+
+    resp = _mock_response(
+        {
+            "contents": {
+                "catalogueitems": [
+                    {"id": 1, "title": "Safety 101", "url": "/course/1"}
+                ]
+            }
+        }
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert len(result) == 1
+    assert result[0]["title"] == "Safety 101"
+
+
+@pytest.mark.asyncio
+async def test_browse_catalogue_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "browse_catalogue")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_user_learning_catalogue_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_user_learning_catalogue")
+
+    resp = _mock_response(
+        {
+            "catalogue": {
+                "listitems": [
+                    {
+                        "itemid": 1,
+                        "fullname": "Safety",
+                        "numcourses": 2,
+                        "progress": 50,
+                        "duedate": 0,
+                        "isprogram": False,
+                        "categoryname": "Training",
+                    }
+                ]
+            }
+        }
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(3))
+
+    assert len(result) == 1
+    assert result[0]["fullname"] == "Safety"
+    assert result[0]["progress"] == 50
+
+
+@pytest.mark.asyncio
+async def test_get_user_learning_catalogue_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_user_learning_catalogue")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(3))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_program_content_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_program_content")
+
+    resp = _mock_response(
+        {"sets": [{"name": "Core"}], "courses": [{"id": 2}], "warnings": []}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(1))
+
+    assert "sets" in result
+    assert "courses" in result
+
+
+@pytest.mark.asyncio
+async def test_get_program_content_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_program_content")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(1))
+
+    assert "error" in result
+
+
+# -----------------------------------------------------------------
+# Feature 12: Deeper Program Management tools
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_search_courses_for_program_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "search_courses_for_program")
+
+    resp = _mock_response(
+        [{"id": 2, "fullname": "Safety Fundamentals"}]
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert len(result) == 1
+    assert result[0]["fullname"] == "Safety Fundamentals"
+
+
+@pytest.mark.asyncio
+async def test_search_courses_for_program_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "search_courses_for_program")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_deallocate_user_from_program_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "deallocate_user_from_program")
+
+    result = json.loads(await fn(3, 1, False))
+
+    assert result["action"] == "deallocate_user_from_program"
+    assert "preview" in result
+    assert "instructions" in result
+
+
+@pytest.mark.asyncio
+async def test_deallocate_user_from_program_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "deallocate_user_from_program")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(3, 1, True))
+
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_deallocate_user_from_program_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "deallocate_user_from_program")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(3, 1, True))
+
+    assert "error" in result
+
+
+# -----------------------------------------------------------------
+# Feature 13: Deeper Certification Management tools
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_certification_user_details_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_certification_user_details")
+
+    resp = _mock_response(
+        {"id": 10, "userid": 3, "status": "certified"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(1, 3))
+
+    assert result["id"] == 10
+    assert result["userid"] == 3
+    assert result["status"] == "certified"
+
+
+@pytest.mark.asyncio
+async def test_get_certification_user_details_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_certification_user_details")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(1, 3))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_deallocate_user_from_certification_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "deallocate_user_from_certification")
+
+    result = json.loads(await fn(3, 1, False))
+
+    assert result["action"] == "deallocate_user_from_certification"
+    assert "preview" in result
+
+
+@pytest.mark.asyncio
+async def test_deallocate_user_from_certification_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "deallocate_user_from_certification")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(3, 1, True))
+
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_deallocate_user_from_certification_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "deallocate_user_from_certification")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(3, 1, True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_archive_certification_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "archive_certification")
+
+    result = json.loads(await fn(1, False))
+
+    assert result["action"] == "archive_certification"
+    assert "preview" in result
+
+
+@pytest.mark.asyncio
+async def test_archive_certification_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "archive_certification")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(1, True))
+
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_archive_certification_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "archive_certification")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(1, True))
+
+    assert "error" in result
+
+
+# -----------------------------------------------------------------
+# Tenant write tools (allocate_users_to_tenant, suspend_users)
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_allocate_users_to_tenant_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "allocate_users_to_tenant")
+
+    result = json.loads(await fn("3,4", 2, False))
+
+    assert result["action"] == "allocate_users_to_tenant"
+    assert "preview" in result
+    assert result["user_ids"] == [3, 4]
+    assert result["tenantid"] == 2
+
+
+@pytest.mark.asyncio
+async def test_allocate_users_to_tenant_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "allocate_users_to_tenant")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn("3,4", 2, True))
+
+    assert result["success"] is True
+    assert result["allocated"] == 2
+
+
+@pytest.mark.asyncio
+async def test_allocate_users_to_tenant_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "allocate_users_to_tenant")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn("3,4", 2, True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_suspend_users_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "suspend_users")
+
+    result = json.loads(await fn("3,4", False))
+
+    assert result["action"] == "suspend_users"
+    assert "preview" in result
+    assert "WARNING" in result["preview"]
+    assert result["user_ids"] == [3, 4]
+
+
+@pytest.mark.asyncio
+async def test_suspend_users_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "suspend_users")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn("3,4", True))
+
+    assert result["success"] is True
+    assert result["suspended"] == 2
+
+
+@pytest.mark.asyncio
+async def test_suspend_users_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "suspend_users")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn("3,4", True))
+
+    assert "error" in result
+
+
+# -----------------------------------------------------------------
+# Feature 14: Organisation Structure tools
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_departments_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "list_departments")
+
+    resp = _mock_response(
+        {"departments": [{"id": 1, "name": "Engineering"}], "positions": []}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert len(result) == 1
+    assert result[0]["name"] == "Engineering"
+
+
+@pytest.mark.asyncio
+async def test_list_departments_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "list_departments")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_list_positions_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "list_positions")
+
+    resp = _mock_response(
+        {"departments": [], "positions": [{"id": 1, "name": "Manager"}]}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert len(result) == 1
+    assert result[0]["name"] == "Manager"
+
+
+@pytest.mark.asyncio
+async def test_list_positions_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "list_positions")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_team_members_tool():
+    """Primary path: custom plugin returns department members."""
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_team_members")
+
+    resp = _mock_response([
+        {
+            "userid": 3,
+            "username": "alice",
+            "firstname": "Alice",
+            "lastname": "Johnson",
+            "fullname": "Alice Johnson",
+            "email": "alice@example.com",
+            "departmentid": 1,
+            "departmentname": "Engineering",
+            "positionid": 1,
+            "positionname": "Manager",
+        },
+    ])
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert len(result) == 1
+    assert result[0]["fullname"] == "Alice Johnson"
+    assert result[0]["departmentname"] == "Engineering"
+    assert result[0]["positionname"] == "Manager"
+
+
+@pytest.mark.asyncio
+async def test_get_team_members_tool_fallback():
+    """Falls back to managed_users when plugin not installed."""
+    from soliplex.moodle.client import MoodleAPIError
+
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_team_members")
+
+    managed_resp = _mock_response(
+        {"managedusers": [{"id": 3, "fullname": "Alice Johnson"}], "totalcount": 1}
+    )
+
+    call_count = 0
+
+    async def _side_effect(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            # First call: plugin endpoint returns error
+            error_resp = _mock_response(
+                {"exception": "moodle_exception", "errorcode": "invalidfunction", "message": "not found"}
+            )
+            return error_resp
+        # Second call: managed_users returns data
+        return managed_resp
+
+    mock_client = mock.AsyncMock()
+    mock_client.post.side_effect = _side_effect
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn())
+
+    assert len(result) == 1
+    assert result[0]["fullname"] == "Alice Johnson"
+
+
+@pytest.mark.asyncio
+async def test_get_team_members_tool_fallback_empty():
+    """Fallback returns helpful note when legacy endpoint is also empty."""
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_team_members")
+
+    call_count = 0
+
+    async def _side_effect(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return _mock_response(
+                {"exception": "moodle_exception", "errorcode": "invalidfunction", "message": "not found"}
+            )
+        return _mock_response({"managedusers": [], "totalcount": 0})
+
+    mock_client = mock.AsyncMock()
+    mock_client.post.side_effect = _side_effect
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn())
+
+    assert result["users"] == []
+    assert "local_soliplex" in result["note"]
+
+
+@pytest.mark.asyncio
+async def test_get_team_members_tool_fallback_error():
+    """Error on both primary and fallback endpoints returns error."""
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_team_members")
+
+    call_count = 0
+
+    async def _side_effect(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return _mock_response(
+                {"exception": "moodle_exception", "errorcode": "invalidfunction", "message": "not found"}
+            )
+        return _mock_response(
+            {"exception": "moodle_exception", "errorcode": "err", "message": "fallback fail"}
+        )
+
+    mock_client = mock.AsyncMock()
+    mock_client.post.side_effect = _side_effect
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn())
+
+    assert "error" in result
+    assert "fallback fail" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_team_members_tool_error():
+    """HTTP error on primary endpoint is returned directly."""
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_team_members")
+
+    mock_client = mock.AsyncMock()
+    mock_client.post.side_effect = httpx.ConnectError("connection refused")
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn())
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_assign_job_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "assign_job")
+
+    result = json.loads(await fn(3, "ENG", "MGR", False))
+
+    assert result["action"] == "assign_job"
+    assert "preview" in result
+
+
+@pytest.mark.asyncio
+async def test_assign_job_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "assign_job")
+
+    resp = _mock_response({"id": 1})
+    with _patch_httpx(resp):
+        result = json.loads(await fn(3, "ENG", "MGR", True))
+
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_assign_job_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "assign_job")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(3, "ENG", "MGR", True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_assign_manager_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "assign_manager")
+
+    result = json.loads(await fn("4", "3", False))
+
+    assert result["action"] == "assign_manager"
+    assert "preview" in result
+    assert result["user_ids"] == [4]
+    assert result["manager_ids"] == [3]
+
+
+@pytest.mark.asyncio
+async def test_assign_manager_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "assign_manager")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn("4", "3", True))
+
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_assign_manager_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "assign_manager")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn("4", "3", True))
+
+    assert "error" in result
+
+
+# -----------------------------------------------------------------
+# Feature 15: Competency tools
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_competency_frameworks_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "list_competency_frameworks")
+
+    resp = _mock_response(
+        {
+            "frameworks": [
+                {
+                    "id": 1,
+                    "shortname": "Core",
+                    "idnumber": "CORE01",
+                    "description": "Core skills",
+                    "competencycount": 3,
+                }
+            ]
+        }
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert len(result) == 1
+    assert result[0]["shortname"] == "Core"
+
+
+@pytest.mark.asyncio
+async def test_list_competency_frameworks_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "list_competency_frameworks")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_user_learning_plans_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_user_learning_plans")
+
+    resp = _mock_response(
+        {
+            "plans": [
+                {
+                    "id": 1,
+                    "name": "Alice's Plan",
+                    "description": "Dev plan",
+                    "statusname": "Active",
+                    "userid": 3,
+                }
+            ]
+        }
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(3))
+
+    assert len(result) == 1
+    assert result[0]["name"] == "Alice's Plan"
+
+
+@pytest.mark.asyncio
+async def test_get_user_learning_plans_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_user_learning_plans")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(3))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_user_competency_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_user_competency")
+
+    resp = _mock_response(
+        {"usercompetency": {"userid": 3, "competencyid": 1}}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(3, 1))
+
+    assert "usercompetency" in result
+    assert result["usercompetency"]["userid"] == 3
+
+
+@pytest.mark.asyncio
+async def test_get_user_competency_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_user_competency")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(3, 1))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_course_competencies_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_course_competencies")
+
+    resp = _mock_response(
+        {
+            "competencies": [
+                {"competency": {"id": 1, "shortname": "Communication"}}
+            ]
+        }
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(2))
+
+    assert len(result) == 1
+    assert result[0]["competency"]["shortname"] == "Communication"
+
+
+@pytest.mark.asyncio
+async def test_get_course_competencies_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_course_competencies")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(2))
+
+    assert "error" in result
+
+
+# -----------------------------------------------------------------
+# Non-numeric ID validation tests
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_enrol_users_tool_non_numeric():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "enrol_users")
+
+    result = json.loads(await fn("alice,bob", 2, 5, False))
+
+    assert "error" in result
+    assert "alice" in result["error"]
+    assert "find_user" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_certify_user_tool_non_numeric():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "certify_user")
+
+    result = json.loads(await fn("alice", 1, False))
+
+    assert "error" in result
+    assert "alice" in result["error"]
+    assert "find_user" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_assign_manager_tool_non_numeric():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "assign_manager")
+
+    result = json.loads(await fn("alice", "3", False))
+
+    assert "error" in result
+    assert "alice" in result["error"]
+    assert "find_user" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_assign_manager_tool_non_numeric_manager():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "assign_manager")
+
+    result = json.loads(await fn("4", "bob", False))
+
+    assert "error" in result
+    assert "bob" in result["error"]
+    assert "find_user" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_send_message_tool_non_numeric():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "send_message")
+
+    result = json.loads(await fn("alice", "Hello!", False))
+
+    assert "error" in result
+    assert "alice" in result["error"]
+    assert "find_user" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_revoke_certification_tool_non_numeric():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "revoke_certification")
+
+    result = json.loads(await fn("alice", 1, False))
+
+    assert "error" in result
+    assert "alice" in result["error"]
+    assert "find_user" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_allocate_users_to_program_tool_non_numeric():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "allocate_users_to_program")
+
+    result = json.loads(await fn("alice", 1, False))
+
+    assert "error" in result
+    assert "alice" in result["error"]
+    assert "find_user" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_allocate_users_to_tenant_tool_non_numeric():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "allocate_users_to_tenant")
+
+    result = json.loads(await fn("alice", 1, False))
+
+    assert "error" in result
+    assert "alice" in result["error"]
+    assert "find_user" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_suspend_users_tool_non_numeric():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "suspend_users")
+
+    result = json.loads(await fn("alice", False))
+
+    assert "error" in result
+    assert "alice" in result["error"]
+    assert "find_user" in result["error"]
+
+
+# -----------------------------------------------------------------
+# Name-based find_user tests
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_find_user_by_name():
+    """find_user with field='name' splits into firstname+lastname criteria."""
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "find_user")
+
+    resp = _mock_response(
+        {
+            "users": [
+                {
+                    "id": 3,
+                    "username": "testuser1",
+                    "firstname": "Alice",
+                    "lastname": "Johnson",
+                    "fullname": "Alice Johnson",
+                    "email": "alice@example.com",
+                }
+            ]
+        }
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn("name", "Alice Johnson"))
+
+    assert len(result) == 1
+    assert result[0]["id"] == 3
+    assert result[0]["fullname"] == "Alice Johnson"
+
+
+@pytest.mark.asyncio
+async def test_find_user_by_firstname():
+    """find_user with field='firstname' uses search_users."""
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "find_user")
+
+    resp = _mock_response(
+        {
+            "users": [
+                {
+                    "id": 3,
+                    "username": "testuser1",
+                    "firstname": "Alice",
+                    "lastname": "Johnson",
+                    "fullname": "Alice Johnson",
+                    "email": "alice@example.com",
+                }
+            ]
+        }
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn("firstname", "Alice"))
+
+    assert len(result) == 1
+    assert result[0]["fullname"] == "Alice Johnson"
+
+
+@pytest.mark.asyncio
+async def test_find_user_unsupported_field():
+    """find_user with an unsupported field returns an error."""
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "find_user")
+
+    result = json.loads(await fn("phone", "1234"))
+
+    assert "error" in result
+    assert "Unsupported field" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_find_user_by_name_error():
+    """find_user with field='name' returns error on API failure."""
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "find_user")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn("name", "Alice"))
 
     assert "error" in result

@@ -12,6 +12,11 @@ suggestions:
   - "Who is allocated to the Workplace Safety Certification?"
   - "What programs are available?"
   - "What tenants exist?"
+  - "What's in the Onboarding Program?"
+  - "Show me Alice's learning catalogue"
+  - "What departments exist?"
+  - "Who is in the Engineering department?"
+  - "What competency frameworks exist?"
 
 agent:
   kind: "factory"

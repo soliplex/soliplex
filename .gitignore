@@ -43,4 +43,6 @@ uploads/
 # example skill is unaffected; new skills generated here stay uncommitted.
 example/skills/
 sandbox/workdirs/
-.claude/
+
+# moodle docs (screenshots + local notes)
+docs/moodle/

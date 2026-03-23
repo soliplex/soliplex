@@ -108,8 +108,28 @@ Set `moodle_verify_ssl` to `false` (boolean) to disable TLS verification entirel
 
 Write tools (`enrol_users`, `send_message`) use a confirm-before-execute pattern. The LLM must first call the tool without `confirmed=True` to generate a preview, present it to the user, and only execute after explicit user approval.
 
+## Custom Plugin: `local_soliplex`
+
+The `get_team_members` tool queries department members using a custom Moodle plugin (`local_soliplex`). Without the plugin, the tool falls back to the standard `tool_organisation_get_managed_users` endpoint, which only returns direct reports of the API token owner (typically empty for admin accounts).
+
+### Installation
+
+The plugin lives in `moodle_sandbox/local/soliplex/` and provides a single web service function: `local_soliplex_get_department_members`. It queries the `tool_organisation_job` table joined with user and department/position data — no manager scoping.
+
+To install:
+
+```bash
+# Install the plugin
+docker compose exec -T webserver php admin/cli/upgrade.php --non-interactive
+
+# Re-seed to register the function on the external service
+docker compose exec -T webserver php local/seed_data.php
+```
+
+The `seed_data.php` script automatically registers `local_soliplex_get_department_members` on all "Soliplex API" external services.
+
 ## Limitations
 
 - **Result truncation** — List endpoints return at most 100 records (`MAX_RESULTS`). This is a client-side safeguard to keep LLM context bounded.
 - **Completion overview** — The `get_course_completion_overview` tool loops through enrolled users individually (no bulk API exists). It is capped at `MAX_RESULTS` users.
-- **Certifications & Programs** — Moodle Workplace certification (`tool_certify_*`) and program (`tool_program_*`) APIs are not available on standard Moodle. These will be added when a Workplace instance is available.
+- **Department members** — Without the `local_soliplex` plugin, the `get_team_members` tool falls back to `tool_organisation_get_managed_users` which only returns the token owner's direct reports.

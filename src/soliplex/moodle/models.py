@@ -303,3 +303,110 @@ class Tenant(BaseModel):
     sitename: str | None = ""
     idnumber: str | None = ""
     isdefault: bool = False
+
+
+# ---------------------------------------------------------------
+# Feature 11: Course Catalogue (Workplace)
+# ---------------------------------------------------------------
+
+
+class CatalogueItem(BaseModel):
+    """Item from ``tool_catalogue_get_catalogue_page``."""
+
+    id: int
+    title: str = ""
+    url: str = ""
+
+
+class UserCatalogueItem(BaseModel):
+    """User catalogue entry from ``tool_catalogue_get_user_catalogue``."""
+
+    itemid: int
+    fullname: str = ""
+    numcourses: int = 0
+    progress: int = 0
+    duedate: int = 0
+    isprogram: bool = False
+    categoryname: str = ""
+
+
+# ---------------------------------------------------------------
+# Feature 12: Deeper Program Management (Workplace)
+# ---------------------------------------------------------------
+
+
+class ProgramCourseOption(BaseModel):
+    """Course option for program management from ``tool_program_potential_courses_program_selector``."""
+
+    id: int
+    fullname: str = ""
+
+
+# ---------------------------------------------------------------
+# Feature 13: Organisation Structure (Workplace)
+# ---------------------------------------------------------------
+
+
+class Department(BaseModel):
+    """Department from ``tool_organisation_get_teams_tab_filters``."""
+
+    id: int
+    name: str = ""
+    parentid: int = 0
+
+
+class Position(BaseModel):
+    """Position from ``tool_organisation_get_teams_tab_filters``."""
+
+    id: int
+    name: str = ""
+    parentid: int = 0
+
+
+class Job(BaseModel):
+    """Job assignment from ``tool_organisation_create_job``."""
+
+    id: int
+    userid: int = 0
+    departmentid: int = 0
+    positionid: int = 0
+
+
+# ---------------------------------------------------------------
+# Feature 14: Competencies & Learning Plans
+# ---------------------------------------------------------------
+
+
+class CompetencyFramework(BaseModel):
+    """Competency framework from ``tool_lp_data_for_competency_frameworks_manage_page``."""
+
+    id: int
+    shortname: str = ""
+    idnumber: str = ""
+    description: str = ""
+    competencycount: int = 0
+
+
+class DepartmentMember(BaseModel):
+    """User with job assignment from ``local_soliplex_get_department_members``."""
+
+    userid: int
+    username: str = ""
+    firstname: str = ""
+    lastname: str = ""
+    fullname: str = ""
+    email: str = ""
+    departmentid: int = 0
+    departmentname: str = ""
+    positionid: int = 0
+    positionname: str = ""
+
+
+class LearningPlan(BaseModel):
+    """Learning plan from ``tool_lp_data_for_plans_page``."""
+
+    id: int
+    name: str = ""
+    description: str = ""
+    statusname: str = ""
+    userid: int = 0
