@@ -1,18 +1,13 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = ["haiku.rag-slim >= 0.34.0, < 0.35"]
-# ///
 """Ask a question and get an answer with citations."""
-import asyncio
 from pathlib import Path
 
 _DB_PATH = (
-    Path(__file__).resolve().parent.parent
+    Path(__file__).resolve().parent
     / "assets"
     / "{{ cookiecutter.name }}.lancedb"
 )
 _CONFIG_PATH = (
-    Path(__file__).resolve().parent.parent
+    Path(__file__).resolve().parent
     / "assets"
     / "haiku.rag.yaml"
 )
@@ -43,24 +38,3 @@ async def _ask(question):
     return answer
 
 
-def main(question: str):
-    """Ask a question and get an answer with citations from the knowledge base.
-
-    Args:
-        question: The question to ask.
-    """
-    print(asyncio.run(_ask(question)))
-
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        description="Ask a question and get an answer with citations."
-    )
-    parser.add_argument(
-        "--question", required=True,
-        help="The question to ask.",
-    )
-    args = parser.parse_args()
-    main(args.question)

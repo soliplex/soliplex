@@ -1,13 +1,12 @@
 from pathlib import Path
 
 from haiku.rag.skills.rag import RAGState
-from haiku.skills.models import Skill, SkillSource
+from haiku.skills.models import Skill
 from haiku.skills.parser import parse_skill_md
 from haiku.skills.state import SkillRunDeps
 from pydantic_ai import RunContext
 
 _TOOL_NAMES = {{ cookiecutter.tool_names.split()|tojson }}
-_SKILL_DIR = Path(__file__).parent / "{{ cookiecutter.name }}"
 
 {% if "list_documents" in cookiecutter.tool_names %}
 async def list_documents(
@@ -21,7 +20,7 @@ async def list_documents(
         limit: Maximum number of documents to return.
         offset: Number of documents to skip.
     """
-    from soliplex_skill_{{ cookiecutter.name }}.{{ cookiecutter.name }}.scripts.list_documents import (
+    from soliplex_skill_{{ cookiecutter.name }}._list_documents import (
         _list_documents,
     )
 
@@ -36,7 +35,7 @@ async def get_document(
     Args:
         query: Document ID, title, or URI to look up.
     """
-    from soliplex_skill_{{ cookiecutter.name }}.{{ cookiecutter.name }}.scripts.get_document import (
+    from soliplex_skill_{{ cookiecutter.name }}._get_document import (
         _get_document,
     )
 
@@ -52,7 +51,7 @@ async def search(
         query: The search query.
         limit: Maximum number of results.
     """
-    from soliplex_skill_{{ cookiecutter.name }}.{{ cookiecutter.name }}.scripts.search import (
+    from soliplex_skill_{{ cookiecutter.name }}._search import (
         _search,
     )
 
@@ -67,7 +66,7 @@ async def ask(
     Args:
         question: The question to ask.
     """
-    from soliplex_skill_{{ cookiecutter.name }}.{{ cookiecutter.name }}.scripts.ask import (
+    from soliplex_skill_{{ cookiecutter.name }}._ask import (
         _ask,
     )
 
@@ -82,7 +81,7 @@ async def research(
     Args:
         question: The research question to investigate.
     """
-    from soliplex_skill_{{ cookiecutter.name }}.{{ cookiecutter.name }}.scripts.research import (
+    from soliplex_skill_{{ cookiecutter.name }}._research import (
         _research,
     )
 
@@ -90,17 +89,13 @@ async def research(
 {% endif %}
 
 def create_skill() -> Skill:
-    metadata, instructions = parse_skill_md(
-        _SKILL_DIR / "SKILL.md"
-    )
+    metadata, instructions = parse_skill_md(Path(__file__).parent / "SKILL.md")
     tools = [
         v for k, v in globals().items()
         if k in _TOOL_NAMES and callable(v)
     ]
     return Skill(
         metadata=metadata,
-        source=SkillSource.ENTRYPOINT,
-        path=_SKILL_DIR,
         instructions=instructions,
         tools=tools,
         state_type=RAGState,

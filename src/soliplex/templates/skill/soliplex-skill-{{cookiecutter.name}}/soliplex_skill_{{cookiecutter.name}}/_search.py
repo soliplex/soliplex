@@ -1,18 +1,13 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = ["haiku.rag-slim >= 0.34.0, < 0.35"]
-# ///
 """Search the knowledge base."""
-import asyncio
 from pathlib import Path
 
 _DB_PATH = (
-    Path(__file__).resolve().parent.parent
+    Path(__file__).resolve().parent
     / "assets"
     / "{{ cookiecutter.name }}.lancedb"
 )
 _CONFIG_PATH = (
-    Path(__file__).resolve().parent.parent
+    Path(__file__).resolve().parent
     / "assets"
     / "haiku.rag.yaml"
 )
@@ -43,28 +38,3 @@ async def _search(query, limit):
     )
 
 
-def main(query: str, limit: int = 10):
-    """Search the knowledge base using hybrid search.
-
-    Args:
-        query: The search query.
-        limit: Maximum number of results.
-    """
-    print(asyncio.run(_search(query, limit)))
-
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        description="Search the knowledge base."
-    )
-    parser.add_argument(
-        "--query", required=True, help="The search query.",
-    )
-    parser.add_argument(
-        "--limit", type=int, default=10,
-        help="Maximum number of results.",
-    )
-    args = parser.parse_args()
-    main(args.query, args.limit)

@@ -81,13 +81,13 @@ def render_template(
     )
     result_path = pathlib.Path(result)
 
-    # Remove scripts not in the selected tool set
-    scripts_dir = result_path / f"soliplex_skill_{name}" / name / "scripts"
-    for script in scripts_dir.glob("*.py"):
-        if script.name == "__init__.py":
+    # Remove tool modules not in the selected tool set
+    pkg_dir = result_path / f"soliplex_skill_{name}"
+    for module in pkg_dir.glob("_*.py"):
+        if module.name == "__init__.py":
             continue
-        if script.stem not in tool_names:
-            script.unlink()
+        if module.stem.lstrip("_") not in tool_names:
+            module.unlink()
 
     return result_path
 
@@ -112,7 +112,7 @@ def generate_skill(
         tool_names=tool_names,
     )
 
-    assets_dir = result / f"soliplex_skill_{name}" / name / "assets"
+    assets_dir = result / f"soliplex_skill_{name}" / "assets"
     shutil.copytree(db_path, assets_dir / f"{name}.lancedb")
 
     if rag_config is not None:

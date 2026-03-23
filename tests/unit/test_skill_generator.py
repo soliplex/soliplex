@@ -64,7 +64,7 @@ class TestValidateTools:
 
     def test_valid_multiple_tools(self):
         skill_generator.validate_tools(
-            ["list_documents", "get_document", "ask"]
+            ["list_documents", "get_document", "search", "ask"]
         )
 
     def test_valid_all_tools(self):
@@ -124,32 +124,23 @@ class TestRenderTemplate:
         assert result == temp_dir / "soliplex-skill-recipes"
         assert result.is_dir()
         pkg = result / "soliplex_skill_recipes"
-        skill = pkg / "recipes"
         assert (pkg / "__init__.py").is_file()
-        assert (skill / "__init__.py").is_file()
-        assert (skill / "SKILL.md").is_file()
-        assert (skill / "assets" / ".gitkeep").is_file()
-        assert (skill / "scripts" / "__init__.py").is_file()
+        assert (pkg / "SKILL.md").is_file()
+        assert (pkg / "assets" / ".gitkeep").is_file()
 
-    def test_includes_selected_scripts(self, temp_dir):
+    def test_includes_selected_tools(self, temp_dir):
         skill_generator.render_template(
             output_dir=temp_dir,
             name="docs",
             description="A docs skill.",
             tool_names=["search", "ask"],
         )
-        scripts = (
-            temp_dir
-            / "soliplex-skill-docs"
-            / "soliplex_skill_docs"
-            / "docs"
-            / "scripts"
-        )
-        assert (scripts / "search.py").is_file()
-        assert (scripts / "ask.py").is_file()
-        assert not (scripts / "list_documents.py").exists()
-        assert not (scripts / "get_document.py").exists()
-        assert not (scripts / "research.py").exists()
+        pkg = temp_dir / "soliplex-skill-docs" / "soliplex_skill_docs"
+        assert (pkg / "_search.py").is_file()
+        assert (pkg / "_ask.py").is_file()
+        assert not (pkg / "_list_documents.py").exists()
+        assert not (pkg / "_get_document.py").exists()
+        assert not (pkg / "_research.py").exists()
 
     def test_all_tools(self, temp_dir):
         skill_generator.render_template(
@@ -158,15 +149,9 @@ class TestRenderTemplate:
             description="A docs skill.",
             tool_names=list(skill_generator.AVAILABLE_TOOLS),
         )
-        scripts = (
-            temp_dir
-            / "soliplex-skill-docs"
-            / "soliplex_skill_docs"
-            / "docs"
-            / "scripts"
-        )
+        pkg = temp_dir / "soliplex-skill-docs" / "soliplex_skill_docs"
         for tool in skill_generator.AVAILABLE_TOOLS:
-            assert (scripts / f"{tool}.py").is_file()
+            assert (pkg / f"_{tool}.py").is_file()
 
     def test_single_tool(self, temp_dir):
         skill_generator.render_template(
@@ -175,18 +160,12 @@ class TestRenderTemplate:
             description="A docs skill.",
             tool_names=["get_document"],
         )
-        scripts = (
-            temp_dir
-            / "soliplex-skill-docs"
-            / "soliplex_skill_docs"
-            / "docs"
-            / "scripts"
-        )
-        assert (scripts / "get_document.py").is_file()
+        pkg = temp_dir / "soliplex-skill-docs" / "soliplex_skill_docs"
+        assert (pkg / "_get_document.py").is_file()
         remaining = {
-            p.name for p in scripts.glob("*.py") if p.name != "__init__.py"
+            p.name for p in pkg.glob("_*.py") if p.name != "__init__.py"
         }
-        assert remaining == {"get_document.py"}
+        assert remaining == {"_get_document.py"}
 
     def test_tool_names_in_init(self, temp_dir):
         skill_generator.render_template(
@@ -228,7 +207,6 @@ class TestRenderTemplate:
             temp_dir
             / "soliplex-skill-docs"
             / "soliplex_skill_docs"
-            / "docs"
             / "SKILL.md"
         )
         content = skill_md.read_text()
@@ -236,24 +214,6 @@ class TestRenderTemplate:
         assert "**ask**" not in content
         assert "**list_documents**" not in content
         assert "**research**" not in content
-
-    def test_skills_ref_validates(self, temp_dir):
-        from skills_ref import validator
-
-        skill_generator.render_template(
-            output_dir=temp_dir,
-            name="recipes",
-            description="A recipe skill.",
-            tool_names=["list_documents", "search", "ask"],
-        )
-        skill_dir = (
-            temp_dir
-            / "soliplex-skill-recipes"
-            / "soliplex_skill_recipes"
-            / "recipes"
-        )
-        errors = validator.validate(skill_dir)
-        assert errors == []
 
 
 def _make_fake_lancedb(path):
@@ -274,7 +234,7 @@ class TestGenerateSkill:
         )
         assert result == temp_dir / "soliplex-skill-recipes"
         # lancedb copied into assets
-        assets = result / "soliplex_skill_recipes" / "recipes" / "assets"
+        assets = result / "soliplex_skill_recipes" / "assets"
         assert (assets / "recipes.lancedb").is_dir()
         assert (assets / "recipes.lancedb" / "data.lance").is_file()
         # no haiku.rag.yaml
@@ -292,7 +252,7 @@ class TestGenerateSkill:
             tool_names=["search"],
             rag_config=rag_config,
         )
-        assets = result / "soliplex_skill_recipes" / "recipes" / "assets"
+        assets = result / "soliplex_skill_recipes" / "assets"
         assert (assets / "haiku.rag.yaml").is_file()
         assert (assets / "haiku.rag.yaml").read_text() == (
             "storage:\n  data_dir: /tmp\n"
@@ -341,18 +301,3 @@ class TestGenerateSkill:
                 description="A skill.",
                 tool_names=["search"],
             )
-
-    def test_skills_ref_validates(self, temp_dir):
-        from skills_ref import validator
-
-        db_path = _make_fake_lancedb(temp_dir / "test.lancedb")
-        result = skill_generator.generate_skill(
-            db_path=db_path,
-            output_dir=temp_dir,
-            name="recipes",
-            description="A recipe skill.",
-            tool_names=["list_documents", "search", "ask"],
-        )
-        skill_dir = result / "soliplex_skill_recipes" / "recipes"
-        errors = validator.validate(skill_dir)
-        assert errors == []

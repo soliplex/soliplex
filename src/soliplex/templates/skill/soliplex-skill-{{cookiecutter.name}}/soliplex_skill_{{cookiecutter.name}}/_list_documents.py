@@ -1,0 +1,43 @@
+"""List documents in the knowledge base."""
+import json
+from pathlib import Path
+
+_DB_PATH = (
+    Path(__file__).resolve().parent
+    / "assets"
+    / "{{ cookiecutter.name }}.lancedb"
+)
+_CONFIG_PATH = (
+    Path(__file__).resolve().parent
+    / "assets"
+    / "haiku.rag.yaml"
+)
+
+
+def _rag_kw():
+    from haiku.rag.config import get_config
+
+    if _CONFIG_PATH.exists():
+        from haiku.rag.config import AppConfig
+
+        config = AppConfig.from_yaml(_CONFIG_PATH)
+    else:
+        config = get_config()
+    return {"db_path": _DB_PATH, "config": config, "read_only": True}
+
+
+async def _list_documents(limit, offset):
+    from haiku.rag.client import HaikuRAG
+
+    async with HaikuRAG(**_rag_kw()) as rag:
+        documents = await rag.list_documents(limit, offset)
+        return [
+            {
+                "id": doc.id,
+                "title": doc.title,
+                "uri": doc.uri,
+            }
+            for doc in documents
+        ]
+
+

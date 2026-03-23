@@ -1,18 +1,13 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = ["haiku.rag-slim >= 0.34.0, < 0.35"]
-# ///
 """Conduct deep multi-agent research on a question."""
-import asyncio
 from pathlib import Path
 
 _DB_PATH = (
-    Path(__file__).resolve().parent.parent
+    Path(__file__).resolve().parent
     / "assets"
     / "{{ cookiecutter.name }}.lancedb"
 )
 _CONFIG_PATH = (
-    Path(__file__).resolve().parent.parent
+    Path(__file__).resolve().parent
     / "assets"
     / "haiku.rag.yaml"
 )
@@ -56,24 +51,3 @@ async def _research(question):
     return "\n".join(parts)
 
 
-def main(question: str):
-    """Conduct deep multi-agent research on a question.
-
-    Args:
-        question: The research question to investigate.
-    """
-    print(asyncio.run(_research(question)))
-
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        description="Conduct deep multi-agent research."
-    )
-    parser.add_argument(
-        "--question", required=True,
-        help="The research question to investigate.",
-    )
-    args = parser.parse_args()
-    main(args.question)

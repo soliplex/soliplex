@@ -1,19 +1,14 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = ["haiku.rag-slim >= 0.34.0, < 0.35"]
-# ///
 """Retrieve a document by ID, title, or URI."""
-import asyncio
 import json
 from pathlib import Path
 
 _DB_PATH = (
-    Path(__file__).resolve().parent.parent
+    Path(__file__).resolve().parent
     / "assets"
     / "{{ cookiecutter.name }}.lancedb"
 )
 _CONFIG_PATH = (
-    Path(__file__).resolve().parent.parent
+    Path(__file__).resolve().parent
     / "assets"
     / "haiku.rag.yaml"
 )
@@ -46,25 +41,3 @@ async def _get_document(query):
         }
 
 
-def main(query: str):
-    """Retrieve a document by ID, title, or URI.
-
-    Args:
-        query: Document ID, title, or URI to look up.
-    """
-    result = asyncio.run(_get_document(query))
-    print(json.dumps(result, indent=2, default=str))
-
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        description="Retrieve a document by ID, title, or URI."
-    )
-    parser.add_argument(
-        "--query", required=True,
-        help="Document ID, title, or URI to look up.",
-    )
-    args = parser.parse_args()
-    main(args.query)
