@@ -13,9 +13,6 @@ skills:
   skill_configs:
     - kind: "haiku.rag.skills.rag"
       rag_lancedb_stem: "rag"
-      tool_names:
-        - "search"
-# The 'analysis' feature has been replaced by this new skill:
     - kind: "haiku.rag.skills.rlm"
       rag_lancedb_stem: "rag"
 

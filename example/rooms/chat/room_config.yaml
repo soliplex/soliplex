@@ -19,22 +19,5 @@ skills:
   skill_configs:
     - kind: "haiku.rag.skills.rag"
       rag_lancedb_stem: "rag"
-      tool_names:
-        - "search"
-        - "list_documents"
-        - "get_document"
-        - "ask"
-#
-#     background_context: |
-#       **Soliplex** is an AI-powered Retrieval-Augmented Generation (RAG) platform.
-#      It lets users:
-#
-#      * **Index** documents (text, PDFs, etc.) in a vector store (via LanceDB).
-#      * **Search** that content quickly with a full-text + vector engine.
-#      * **Generate** answers that are grounded in the indexed material by calling the OpenAI API or running local Ollama models.
-#      * **Interact** through a WebSocket-driven chat interface, with a FastAPI backend managing routing to the vector store and language model.
-#      * **Securely authenticate** users with OIDC.
-#
-#      Soliplex is built on the haiku-rag library and is ideal for applications such as internal knowledge bases, legal compliance, onboarding, customer support, and research assistance.
 
 allow_mcp: false
