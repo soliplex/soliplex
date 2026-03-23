@@ -11,6 +11,7 @@ from tests.unit.agui import agui_constants
 
 ROOM_ID = "test-room"
 USER_NAME = "phreddy"
+EMAIL = "phreddy@example.com"
 
 
 def _mock_run(run_id, thread):
@@ -189,13 +190,27 @@ def test_runevent_from_agui_event(agui_event):
     assert found.type == agui_event.type
 
 
-def test_thread_ctor(the_session):
+@pytest.mark.parametrize(
+    "email_kwargs, exp_email",
+    [
+        ({}, None),
+        ({"email": EMAIL}, EMAIL),
+    ],
+)
+def test_thread_ctor(the_session, email_kwargs, exp_email):
     thread = agui_schema.Thread(
         room_id=ROOM_ID,
         user_name=USER_NAME,
+        **email_kwargs,
     )
     the_session.add(thread)
     the_session.commit()
+
+    after = the_session.query(agui_schema.Thread).first()
+
+    assert after.room_id == ROOM_ID
+    assert after.user_name == USER_NAME
+    assert after.email == exp_email
 
 
 @pytest.mark.parametrize(

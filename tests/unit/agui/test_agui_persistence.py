@@ -17,6 +17,7 @@ NOW = datetime.datetime.now(datetime.UTC)
 
 ROOM_ID = "test-room"
 USER_NAME = "phreddy"
+EMAIL = "phreddy@example.com"
 
 
 @pytest.fixture
@@ -80,7 +81,11 @@ async def test_threadstorage_thread_crud(the_async_session):
             thread_id="NONESUCH",
         )
 
-    thread = await ts.new_thread(user_name=USER_NAME, room_id=ROOM_ID)
+    thread = await ts.new_thread(
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+    )
 
     thread_id = await thread.awaitable_attrs.thread_id
 
@@ -232,6 +237,7 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     w_md_dict = await ts.new_thread(
         user_name=USER_NAME,
+        email=EMAIL,
         room_id=ROOM_ID,
         thread_metadata={
             "name": "w_md_dict",
@@ -251,6 +257,7 @@ async def test_threadstorage_thread_crud(the_async_session):
 
     w_md_obj = await ts.new_thread(
         user_name=USER_NAME,
+        email=EMAIL,
         room_id=ROOM_ID,
         thread_metadata=agui_schema.ThreadMetadata(
             name="w_md_obj",
@@ -273,7 +280,11 @@ async def test_threadstorage_thread_crud(the_async_session):
 async def test_threadstorage_thread_run_cru(the_async_session):
     ts = agui_persistence.ThreadStorage(the_async_session)
 
-    thread = await ts.new_thread(user_name=USER_NAME, room_id=ROOM_ID)
+    thread = await ts.new_thread(
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+    )
 
     thread_id = await thread.awaitable_attrs.thread_id
 
@@ -509,7 +520,11 @@ async def test_threadstorage_thread_run_cru(the_async_session):
 async def test_threadstorage_thread_run_feedback(the_async_session):
     ts = agui_persistence.ThreadStorage(the_async_session)
 
-    thread = await ts.new_thread(user_name=USER_NAME, room_id=ROOM_ID)
+    thread = await ts.new_thread(
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+    )
     thread_id = await thread.awaitable_attrs.thread_id
 
     runs = await thread.list_runs()
@@ -652,6 +667,24 @@ async def test_threadstorage_thread_run_feedback(the_async_session):
     uname_earlier_fb = await uname_earlier.awaitable_attrs.run_feedback
     assert await uname_earlier_fb.awaitable_attrs.feedback == "thumbs_down"
     assert await uname_earlier_fb.awaitable_attrs.reason == "dithering"
+
+    # Query with email
+    email_miss = await ts.list_recent_run_feedback(
+        email="BOGUS",
+    )
+    assert email_miss == []
+
+    email_later, email_earlier = await ts.list_recent_run_feedback(
+        email=EMAIL,
+    )
+
+    email_later_fb = await email_later.awaitable_attrs.run_feedback
+    assert await email_later_fb.awaitable_attrs.feedback == "thumbs_up"
+    assert await email_later_fb.awaitable_attrs.reason == "fresh"
+
+    email_earlier_fb = await email_earlier.awaitable_attrs.run_feedback
+    assert await email_earlier_fb.awaitable_attrs.feedback == "thumbs_down"
+    assert await email_earlier_fb.awaitable_attrs.reason == "dithering"
 
     # Query with thread_id
     tid_miss = await ts.list_recent_run_feedback(
@@ -976,7 +1009,11 @@ async def test_threadstorage_save_run_events(
 
     ts = agui_persistence.ThreadStorage(the_async_session)
 
-    thread = await ts.new_thread(user_name=USER_NAME, room_id=ROOM_ID)
+    thread = await ts.new_thread(
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+    )
 
     thread_id = await thread.awaitable_attrs.thread_id
 

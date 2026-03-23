@@ -32,7 +32,9 @@ class RunFeedbackEntry(pydantic.BaseModel):
 
     Args:
 
-      'user_name' (string):  email-address of reporting user
+      'user_name' (string):  preferred username of reporting user
+
+      'email' (string):  email-address of reporting user
 
       'room_id' (string): ID of the room in which the AGUI run originated.
 
@@ -54,6 +56,7 @@ class RunFeedbackEntry(pydantic.BaseModel):
     """
 
     user_name: str
+    email: str
     room_id: str
     thread_id: str
     run_id: str
@@ -68,6 +71,7 @@ class RunFeedbackInfo(pydantic.BaseModel):
     """Information about the run which was the target of feedback"""
 
     user_name: str
+    email: str
     room_id: str
     thread_id: str
     run_id: str
@@ -80,8 +84,12 @@ class RecentRunFeedbackQuery(pydantic.BaseModel):
 
     Args:
 
-      'user_name' (string, default None):  email-address of reporting user
+      'user_name' (string, default None):  user name of reporting user
         If passed, include feedback only from the user whose username
+        matches this value.
+
+      'email' (string, default None):  email of reporting user
+        If passed, include feedback only from the user whose email
         matches this value.
 
       'room_id' (string, default None): ID of the room in which the
@@ -97,9 +105,25 @@ class RecentRunFeedbackQuery(pydantic.BaseModel):
     """
 
     user_name: str | None = None
+    email: str | None = None
     room_id: str | None = None
     limit: int | None = None
     since: datetime.datetime | None = None
+
+    @property
+    def as_kwargs(self) -> dict[str, typing.Any]:
+        candidates = {
+            "user_name": self.user_name,
+            "email": self.email,
+            "room_id": self.room_id,
+            "limit": self.limit,
+            "since": self.since,
+        }
+        return {
+            key: value
+            for key, value in candidates.items()
+            if value is not None
+        }
 
 
 class RecentRunFeedbackEntries(pydantic.BaseModel):
@@ -156,10 +180,7 @@ async def _do_query(
 ) -> RecentRunFeedback:
     the_threads = ctx.deps.the_threads
     runs_w_recent_fb = await the_threads.list_recent_run_feedback(
-        user_name=query.user_name,
-        room_id=query.room_id,
-        limit=query.limit,
-        since=query.since,
+        **query.as_kwargs,
     )
 
     entries = RecentRunFeedbackEntries()
@@ -183,6 +204,7 @@ async def _do_query(
 
         entry = RunFeedbackEntry(
             user_name=await thread.awaitable_attrs.user_name,
+            email=await thread.awaitable_attrs.email,
             room_id=await thread.awaitable_attrs.room_id,
             thread_id=await thread.awaitable_attrs.thread_id,
             run_id=await run.awaitable_attrs.run_id,
@@ -307,6 +329,8 @@ async def get_feedback_run_info(
         run_id=to_query.run_id,
     )
 
+    thread = await run.awaitable_attrs.thread
+    email = await thread.awaitable_attrs.email
     run_input = await run.awaitable_attrs.run_agent_input
     events = await run.awaitable_attrs.events
 
@@ -332,6 +356,7 @@ async def get_feedback_run_info(
 
     return RunFeedbackInfo(
         user_name=to_query.user_name,
+        email=email,
         room_id=to_query.room_id,
         thread_id=to_query.thread_id,
         run_id=run_id,

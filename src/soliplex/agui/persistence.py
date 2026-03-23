@@ -118,6 +118,7 @@ class ThreadStorage(agui_package.ThreadStorage):
         self,
         *,
         user_name: str,
+        email: str,
         room_id: str,
         thread_metadata: agui_schema.ThreadMetadata | dict = None,
         initial_run: bool = True,
@@ -125,7 +126,9 @@ class ThreadStorage(agui_package.ThreadStorage):
         async with self.session as session:
             async with session.begin_nested():
                 thread = agui_schema.Thread(
-                    user_name=user_name, room_id=room_id
+                    user_name=user_name,
+                    email=email,
+                    room_id=room_id,
                 )
                 session.add(thread)
 
@@ -462,6 +465,7 @@ class ThreadStorage(agui_package.ThreadStorage):
         self,
         *,
         user_name: str | None = None,
+        email: str | None = None,
         room_id: str | None = None,
         thread_id: str | None = None,
         limit: int | None = None,
@@ -509,6 +513,9 @@ class ThreadStorage(agui_package.ThreadStorage):
 
             if user_name is not None:
                 query = query.where(agui_schema.Thread.user_name == user_name)
+
+            if email is not None:
+                query = query.where(agui_schema.Thread.email == email)
 
             if thread_id is not None:
                 query = query.where(agui_schema.Thread.thread_id == thread_id)

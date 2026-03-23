@@ -211,6 +211,15 @@ class Thread(abc.ABC):
     room_id: str
     """ID for room in which the thread was created"""
 
+    user_name: str
+    """'preferred_username' claim for user who created the thread"""
+
+    email: str | None
+    """'email' claim for user who created the thread
+
+    Optional only for forward-compatibility of existing data.
+    """
+
     thread_metadata: ThreadMetadata | None
     """Optional thread metadata"""
 
@@ -254,6 +263,7 @@ class ThreadStorage(abc.ABC):
         self,
         *,
         user_name: str,
+        email: str,
         room_id: str,
         thread_metadata: ThreadMetadata | dict = None,
         initial_run: bool = True,
@@ -405,6 +415,7 @@ class ThreadStorage(abc.ABC):
         self,
         *,
         user_name: str | None = None,
+        email: str | None = None,
         room_id: str | None = None,
         thread_id: str | None = None,
         limit: int | None = None,

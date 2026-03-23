@@ -15,7 +15,10 @@ from tests.unit.agui import agui_constants
 FRS = agui_package.FeedbackReviewStatus
 
 NOW = datetime.datetime.now(datetime.UTC)
-USER_NAME = "phreddy@example.com"
+SINCE = NOW - datetime.timedelta(days=1)
+LIMIT = 7
+USER_NAME = "phreddy"
+EMAIL = "phreddy@example.com"
 OTHER_USER_NAME = "bharney@example.com"
 ROOM_ID = "test-room-id"
 THREAD_ID = "test-thread-id"
@@ -113,6 +116,7 @@ def the_thread():
         awaitable_attrs=mock.AsyncMock(),
     )
     thread.awaitable_attrs.user_name = _awaitable("user_name", USER_NAME)
+    thread.awaitable_attrs.email = _awaitable("email", EMAIL)
     thread.awaitable_attrs.room_id = _awaitable("room_id", ROOM_ID)
     thread.awaitable_attrs.thread_id = _awaitable("thread_id", THREAD_ID)
 
@@ -137,6 +141,20 @@ def the_run(request, the_thread, the_run_feedback):
         return None
 
 
+@pytest.fixture(
+    params=[
+        {},
+        {"user_name": USER_NAME},
+        {"email": EMAIL},
+        {"room_id": ROOM_ID},
+        {"limit": LIMIT},
+        {"since": SINCE},
+    ],
+)
+def rf_query(request) -> arf_tools.RecentRunFeedbackQuery:
+    return arf_tools.RecentRunFeedbackQuery(**request.param)
+
+
 @pytest.mark.anyio
 async def test__do_query(
     the_run,
@@ -144,15 +162,14 @@ async def test__do_query(
     the_run_feedback,
     the_review_entries,
     ctx_w_deps,
+    rf_query,
 ):
     lrrf = ctx_w_deps.deps.the_threads.list_recent_run_feedback
     lrrf.return_value = [the_run] if the_run else []
 
     review_entries, exp_status = the_review_entries
 
-    query = arf_tools.RecentRunFeedbackQuery()
-
-    found = await arf_tools._do_query(ctx_w_deps, query)
+    found = await arf_tools._do_query(ctx_w_deps, rf_query)
 
     if exp_status == FRS.RESOLVED:
         if the_run:
@@ -184,8 +201,11 @@ async def test__do_query(
         assert len(found.resolved) == 0
         assert len(found.reviewed) == 0
 
+    lrrf.assert_called_once_with(**rf_query.as_kwargs)
+
     if not the_run:  # silence resource warnings for unused fixtures
         await the_thread.awaitable_attrs.user_name
+        await the_thread.awaitable_attrs.email
         await the_thread.awaitable_attrs.room_id
         await the_thread.awaitable_attrs.thread_id
 
@@ -197,11 +217,6 @@ async def test__do_query(
         for review_entry in review_entries:
             await review_entry.awaitable_attrs.status
             await review_entry.awaitable_attrs.note
-
-
-@pytest.fixture
-def rf_query() -> arf_tools.RecentRunFeedbackQuery:
-    return arf_tools.RecentRunFeedbackQuery(user_name=USER_NAME)
 
 
 @pytest.mark.anyio
@@ -220,6 +235,7 @@ async def test_query_recent_feedback(do_query, ctx_w_deps, rf_query, w_state):
         opened=[
             arf_tools.RunFeedbackEntry(
                 user_name=USER_NAME,
+                email=EMAIL,
                 room_id=ROOM_ID,
                 thread_id=THREAD_ID,
                 run_id=RUN_ID,
@@ -274,6 +290,7 @@ async def test_query_recent_feedback(do_query, ctx_w_deps, rf_query, w_state):
 def run_feedback_entry():
     return arf_tools.RunFeedbackEntry(
         user_name=USER_NAME,
+        email=EMAIL,
         room_id=ROOM_ID,
         thread_id=THREAD_ID,
         run_id=RUN_ID,
@@ -338,6 +355,7 @@ async def test_get_feedback_run_info(
     esp,
     run_feedback_entry,
     ctx_w_deps,
+    the_thread,
 ):
     get_run = ctx_w_deps.deps.the_threads.get_run
 
@@ -397,6 +415,7 @@ async def test_get_feedback_run_info(
         agui_package.Run,
         awaitable_attrs=mock.AsyncMock(),
     )
+    run.awaitable_attrs.thread = _awaitable("thread", the_thread)
     run.awaitable_attrs.run_agent_input = _awaitable("run_agent_input", rai)
     run.awaitable_attrs.events = _awaitable("events", db_events)
     get_run.return_value = run
@@ -426,6 +445,11 @@ async def test_get_feedback_run_info(
         strict=True,
     ):
         assert esp_call == mock.call(agui_event)
+
+    # silence resource warnings for unused fixtures
+    await the_thread.awaitable_attrs.user_name
+    await the_thread.awaitable_attrs.room_id
+    await the_thread.awaitable_attrs.thread_id
 
 
 @pytest.mark.anyio

@@ -275,6 +275,7 @@ async def post_room_agui(
     the_logger.debug(loggers.AGUI_POST_ROOM)
 
     user_name = the_user_claims.get("preferred_username", "<unknown>")
+    email = the_user_claims.get("email", "<unknown>")
     room_config = await _check_user_in_room(
         room_id=room_id,
         the_installation=the_installation,
@@ -291,6 +292,7 @@ async def post_room_agui(
     thread = await the_threads.new_thread(
         room_id=room_id,
         user_name=user_name,
+        email=email,
         thread_metadata=t_metadata,
         initial_run=True,
     )

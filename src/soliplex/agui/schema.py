@@ -93,6 +93,7 @@ class Thread(Base):
     #   Not part of the generic 'soliplex.agui.Thread' contract
     #
     user_name: Mapped[str] = mapped_column(index=True)
+    email: Mapped[str | None] = mapped_column(index=True)
     runs: Mapped[list[Run]] = relationship(
         back_populates="thread",
         order_by="Run.created",

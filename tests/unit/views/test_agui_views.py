@@ -28,7 +28,7 @@ GIVEN_NAME = "Phred"
 FAMILY_NAME = "Phlyntstone"
 EMAIL = "phreddy@example.com"
 
-THE_USER_CLAIMS = {"preferred_username": USER_NAME}
+THE_USER_CLAIMS = {"preferred_username": USER_NAME, "email": EMAIL}
 
 AUTH_USER = {
     "preferred_username": USER_NAME,
@@ -704,6 +704,7 @@ async def test_post_room_agui_only(
     the_threads.new_thread.assert_called_once_with(
         room_id=TEST_ROOM_ID,
         user_name=USER_NAME,
+        email=EMAIL,
         thread_metadata=exp_meta,
         initial_run=True,
     )
