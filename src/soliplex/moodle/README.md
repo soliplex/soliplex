@@ -22,6 +22,12 @@ The `soliplex.moodle` package provides:
 - `list_course_groups` / `get_group_members` — course groups
 - `list_cohorts` / `get_cohort_members` — organizational cohorts
 
+**Reporting Tools:**
+- `list_reports` — list all custom Report Builder reports
+- `get_report_data` — retrieve data from a Report Builder report
+- `get_utm_report` — UTM completion report for a course by department
+- `get_adv_comp_report` — Advanced completion report for a course
+
 **Write Tools (require user confirmation):**
 - `enrol_users` — enrol users into a course
 - `send_message` — send messages to users
@@ -51,6 +57,8 @@ The `soliplex.moodle` package provides:
    - `core_calendar_get_calendar_events`
    - `enrol_manual_enrol_users`
    - `core_message_send_instant_messages`
+   - `core_reportbuilder_list_reports`
+   - `core_reportbuilder_retrieve_report`
 3. Under **Site administration > Server > Web services > Manage tokens**, create a token for the service account.
 4. Copy the token value — you will need it for Soliplex configuration.
 
@@ -114,7 +122,11 @@ The `get_team_members` tool queries department members using a custom Moodle plu
 
 ### Installation
 
-The plugin lives in `moodle_sandbox/local/soliplex/` and provides a single web service function: `local_soliplex_get_department_members`. It queries the `tool_organisation_job` table joined with user and department/position data — no manager scoping.
+The plugin lives in `moodle_sandbox/local/soliplex/` and provides these web service functions:
+
+- `local_soliplex_get_department_members` — queries `tool_organisation_job` joined with user and department/position data (no manager scoping)
+- `local_soliplex_get_utm_report` — queries `report_utm_results` for UTM completion report data
+- `local_soliplex_get_adv_comp_report` — queries `report_adv_comp_results` for Advanced Completion report data
 
 To install:
 
@@ -126,7 +138,9 @@ docker compose exec -T webserver php admin/cli/upgrade.php --non-interactive
 docker compose exec -T webserver php local/seed_data.php
 ```
 
-The `seed_data.php` script automatically registers `local_soliplex_get_department_members` on all "Soliplex API" external services.
+The `seed_data.php` script automatically registers all `local_soliplex_*` functions on "Soliplex API" external services.
+
+> **Note:** The UTM and Advanced Completion report functions require the `report_utm` and `report_adv_comp` plugins to be installed. The Report Builder tools (`list_reports`, `get_report_data`) require `moodle/reportbuilder:view` or `moodle/reportbuilder:viewall` capability on the API token user.
 
 ## Limitations
 

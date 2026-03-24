@@ -17,6 +17,9 @@ suggestions:
   - "What departments exist?"
   - "Who is in the Engineering department?"
   - "What competency frameworks exist?"
+  - "What custom reports are available?"
+  - "Show me the UTM report for Safety Fundamentals"
+  - "Who hasn't completed Cybersecurity Basics in Engineering?"
 
 agent:
   kind: "factory"

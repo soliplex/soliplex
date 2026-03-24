@@ -1652,3 +1652,168 @@ async def test_search_users_non_dict(client):
         users = await client.search_users([("firstname", "Nobody")])
 
     assert users == []
+
+
+# ---------------------------------------------------------------
+# Report Builder
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_reports(client):
+    resp = _mock_response(
+        {
+            "reports": [
+                {
+                    "id": 1,
+                    "name": "Course Completion Summary",
+                    "source": "core_course\\reportbuilder\\datasource\\courses",
+                    "sourcename": "Courses",
+                    "type": 0,
+                    "timecreated": 1700000000,
+                    "timemodified": 1700000000,
+                }
+            ],
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(resp):
+        reports = await client.list_reports()
+
+    assert len(reports) == 1
+    assert reports[0].name == "Course Completion Summary"
+    assert reports[0].sourcename == "Courses"
+
+
+@pytest.mark.asyncio
+async def test_list_reports_empty(client):
+    resp = _mock_response({"reports": [], "warnings": []})
+    with _patch_httpx(resp):
+        reports = await client.list_reports()
+
+    assert reports == []
+
+
+@pytest.mark.asyncio
+async def test_list_reports_non_dict(client):
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        reports = await client.list_reports()
+
+    assert reports == []
+
+
+@pytest.mark.asyncio
+async def test_retrieve_report(client):
+    resp = _mock_response(
+        {
+            "details": {
+                "id": 1,
+                "name": "Course Completion Summary",
+                "source": "core_course\\...",
+                "sourcename": "Courses",
+                "type": 0,
+                "timecreated": 1700000000,
+                "timemodified": 1700000000,
+            },
+            "data": {
+                "headers": ["Course Name", "Enrolled", "Completed"],
+                "rows": [
+                    {"columns": ["Safety 101", "25", "20"]},
+                    {"columns": ["Cyber 101", "30", "15"]},
+                ],
+                "totalrowcount": 2,
+            },
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(resp):
+        details, data = await client.retrieve_report(1)
+
+    assert details.name == "Course Completion Summary"
+    assert data.headers == ["Course Name", "Enrolled", "Completed"]
+    assert len(data.rows) == 2
+    assert data.rows[0].columns == ["Safety 101", "25", "20"]
+    assert data.totalrowcount == 2
+
+
+# ---------------------------------------------------------------
+# Custom Completion Reports (UTM / adv_comp)
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_utm_report(client):
+    resp = _mock_response(
+        {
+            "rows": [
+                {
+                    "userid": 3,
+                    "username": "testuser1",
+                    "firstname": "Alice",
+                    "lastname": "Johnson",
+                    "email": "alice@example.com",
+                    "department": "Engineering",
+                    "starttime": 1700000000,
+                    "completedtime": 1700100000,
+                }
+            ],
+            "totalcount": 1,
+        }
+    )
+    with _patch_httpx(resp):
+        rows, totalcount = await client.get_utm_report(2)
+
+    assert len(rows) == 1
+    assert rows[0].username == "testuser1"
+    assert rows[0].department == "Engineering"
+    assert rows[0].completedtime == 1700100000
+    assert totalcount == 1
+
+
+@pytest.mark.asyncio
+async def test_get_utm_report_empty(client):
+    resp = _mock_response({"rows": [], "totalcount": 0})
+    with _patch_httpx(resp):
+        rows, totalcount = await client.get_utm_report(2)
+
+    assert rows == []
+    assert totalcount == 0
+
+
+@pytest.mark.asyncio
+async def test_get_adv_comp_report(client):
+    resp = _mock_response(
+        {
+            "rows": [
+                {
+                    "userid": 4,
+                    "username": "testuser2",
+                    "firstname": "Bob",
+                    "lastname": "Smith",
+                    "email": "bob@example.com",
+                    "department": "Operations",
+                    "starttime": 1700000000,
+                    "completedtime": None,
+                }
+            ],
+            "totalcount": 1,
+        }
+    )
+    with _patch_httpx(resp):
+        rows, totalcount = await client.get_adv_comp_report(2)
+
+    assert len(rows) == 1
+    assert rows[0].username == "testuser2"
+    assert rows[0].completedtime is None
+    assert totalcount == 1
+
+
+@pytest.mark.asyncio
+async def test_get_adv_comp_report_non_dict(client):
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        rows, totalcount = await client.get_adv_comp_report(2)
+
+    assert rows == []
+    assert totalcount == 0

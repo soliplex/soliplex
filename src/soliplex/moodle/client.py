@@ -7,6 +7,7 @@ import os
 import httpx
 
 from soliplex.moodle.models import ActivityCompletionStatus
+from soliplex.moodle.models import CompletionReportRow
 from soliplex.moodle.models import CalendarEvent
 from soliplex.moodle.models import CatalogueItem
 from soliplex.moodle.models import Certification
@@ -28,6 +29,9 @@ from soliplex.moodle.models import Position
 from soliplex.moodle.models import Program
 from soliplex.moodle.models import ProgramCourse
 from soliplex.moodle.models import ProgramCourseOption
+from soliplex.moodle.models import ReportData
+from soliplex.moodle.models import ReportRow
+from soliplex.moodle.models import ReportSummary
 from soliplex.moodle.models import Tenant
 from soliplex.moodle.models import UserCatalogueItem
 from soliplex.moodle.models import UserProfile
@@ -813,3 +817,108 @@ class MoodleClient:
         if isinstance(raw, dict):
             competencies = raw.get("competencies", [])
         return competencies[:MAX_RESULTS]
+
+    # ---------------------------------------------------------------
+    # Report Builder
+    # ---------------------------------------------------------------
+
+    async def list_reports(
+        self, page: int = 0, perpage: int = 0
+    ) -> list[ReportSummary]:
+        """List custom reports via ``core_reportbuilder_list_reports``."""
+        params: dict[str, str | int] = {
+            "page": page,
+            "perpage": perpage or MAX_RESULTS,
+        }
+        raw = await self._call(
+            "core_reportbuilder_list_reports", **params
+        )
+        reports = raw.get("reports", []) if isinstance(raw, dict) else []
+        return [
+            ReportSummary.model_validate(r) for r in reports
+        ][:MAX_RESULTS]
+
+    async def retrieve_report(
+        self,
+        reportid: int,
+        page: int = 0,
+        perpage: int = 0,
+    ) -> tuple[ReportSummary, ReportData]:
+        """Retrieve report content via ``core_reportbuilder_retrieve_report``."""
+        params: dict[str, str | int] = {
+            "reportid": reportid,
+            "page": page,
+            "perpage": min(perpage or MAX_RESULTS, MAX_RESULTS),
+        }
+        raw = await self._call(
+            "core_reportbuilder_retrieve_report", **params
+        )
+        details = ReportSummary.model_validate(raw.get("details", {}))
+        data_raw = raw.get("data", {})
+        rows = [
+            ReportRow.model_validate(r)
+            for r in data_raw.get("rows", [])
+        ][:MAX_RESULTS]
+        data = ReportData(
+            headers=data_raw.get("headers", []),
+            rows=rows,
+            totalrowcount=data_raw.get("totalrowcount", 0),
+        )
+        return details, data
+
+    # ---------------------------------------------------------------
+    # Custom Completion Reports (adv_comp / utm)
+    # ---------------------------------------------------------------
+
+    async def get_utm_report(
+        self,
+        courseid: int,
+        departmentid: int = 0,
+        completionstatus: int = 0,
+        page: int = 0,
+        perpage: int = 0,
+    ) -> tuple[list[CompletionReportRow], int]:
+        """Get UTM completion report via ``local_soliplex_get_utm_report``."""
+        params: dict[str, str | int] = {
+            "courseid": courseid,
+            "page": page,
+            "perpage": perpage or MAX_RESULTS,
+        }
+        if departmentid:
+            params["departmentid"] = departmentid
+        if completionstatus:
+            params["completionstatus"] = completionstatus
+        raw = await self._call(
+            "local_soliplex_get_utm_report", **params
+        )
+        rows_raw = raw.get("rows", []) if isinstance(raw, dict) else []
+        totalcount = raw.get("totalcount", 0) if isinstance(raw, dict) else 0
+        rows = [
+            CompletionReportRow.model_validate(r) for r in rows_raw
+        ][:MAX_RESULTS]
+        return rows, totalcount
+
+    async def get_adv_comp_report(
+        self,
+        courseid: int,
+        completionstatus: int = 0,
+        page: int = 0,
+        perpage: int = 0,
+    ) -> tuple[list[CompletionReportRow], int]:
+        """Get Advanced Completion report via ``local_soliplex_get_adv_comp_report``."""
+        params: dict[str, str | int] = {
+            "courseid": courseid,
+            "page": page,
+            "perpage": perpage or MAX_RESULTS,
+        }
+        if completionstatus:
+            params["completionstatus"] = completionstatus
+        raw = await self._call(
+            "local_soliplex_get_adv_comp_report", **params
+        )
+        rows_raw = raw.get("rows", []) if isinstance(raw, dict) else []
+        totalcount = raw.get("totalcount", 0) if isinstance(raw, dict) else 0
+        rows = [
+            CompletionReportRow.model_validate(r) for r in rows_raw
+        ][:MAX_RESULTS]
+        return rows, totalcount

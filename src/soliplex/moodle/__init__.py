@@ -30,10 +30,14 @@ from soliplex.moodle.models import GroupMembers
 from soliplex.moodle.models import Job
 from soliplex.moodle.models import LearningPlan
 from soliplex.moodle.models import MessageRequest
+from soliplex.moodle.models import CompletionReportRow
 from soliplex.moodle.models import Position
 from soliplex.moodle.models import Program
 from soliplex.moodle.models import ProgramCourse
 from soliplex.moodle.models import ProgramCourseOption
+from soliplex.moodle.models import ReportData
+from soliplex.moodle.models import ReportRow
+from soliplex.moodle.models import ReportSummary
 from soliplex.moodle.models import Tenant
 from soliplex.moodle.models import UserCatalogueItem
 
@@ -46,6 +50,7 @@ __all__ = [
     "CertificationAllocation",
     "CertificationLogEntry",
     "Cohort",
+    "CompletionReportRow",
     "CohortMembers",
     "CompetencyFramework",
     "CourseModule",
@@ -65,6 +70,9 @@ __all__ = [
     "Program",
     "ProgramCourse",
     "ProgramCourseOption",
+    "ReportData",
+    "ReportRow",
+    "ReportSummary",
     "Tenant",
     "UserCatalogueItem",
     "moodle_tools_agent_factory",

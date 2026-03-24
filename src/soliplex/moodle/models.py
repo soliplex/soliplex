@@ -410,3 +410,51 @@ class LearningPlan(BaseModel):
     description: str = ""
     statusname: str = ""
     userid: int = 0
+
+
+# ---------------------------------------------------------------
+# Feature 15: Report Builder
+# ---------------------------------------------------------------
+
+
+class ReportSummary(BaseModel):
+    """Report metadata from ``core_reportbuilder_list_reports``."""
+
+    id: int
+    name: str = ""
+    source: str = ""
+    sourcename: str | None = ""
+    timecreated: int = 0
+    timemodified: int = 0
+
+
+class ReportRow(BaseModel):
+    """Single data row from ``core_reportbuilder_retrieve_report``."""
+
+    columns: list[str | None] = Field(default_factory=list)
+
+
+class ReportData(BaseModel):
+    """Report data from ``core_reportbuilder_retrieve_report``."""
+
+    headers: list[str] = Field(default_factory=list)
+    rows: list[ReportRow] = Field(default_factory=list)
+    totalrowcount: int = 0
+
+
+# ---------------------------------------------------------------
+# Feature 16: Custom Completion Reports (adv_comp / utm)
+# ---------------------------------------------------------------
+
+
+class CompletionReportRow(BaseModel):
+    """Row from ``local_soliplex_get_utm_report`` or ``local_soliplex_get_adv_comp_report``."""
+
+    userid: int
+    username: str = ""
+    firstname: str = ""
+    lastname: str = ""
+    email: str = ""
+    department: str | None = None
+    starttime: int | None = None
+    completedtime: int | None = None

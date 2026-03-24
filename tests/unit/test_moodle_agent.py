@@ -149,6 +149,11 @@ def test_factory_agent_has_expected_tools():
         "get_user_learning_plans",
         "get_user_competency",
         "get_course_competencies",
+        # Reporting tools
+        "list_reports",
+        "get_report_data",
+        "get_utm_report",
+        "get_adv_comp_report",
     }
 
 
@@ -2544,5 +2549,187 @@ async def test_find_user_by_name_error():
     )
     with _patch_httpx(resp):
         result = json.loads(await fn("name", "Alice"))
+
+    assert "error" in result
+
+
+# -----------------------------------------------------------------
+# Reporting tools
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_reports_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "list_reports")
+
+    resp = _mock_response(
+        {
+            "reports": [
+                {
+                    "id": 1,
+                    "name": "Test Report",
+                    "source": "...",
+                    "sourcename": "Users",
+                    "type": 0,
+                    "timecreated": 0,
+                    "timemodified": 0,
+                }
+            ],
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert len(result) == 1
+    assert result[0]["name"] == "Test Report"
+
+
+@pytest.mark.asyncio
+async def test_list_reports_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "list_reports")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_report_data_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_report_data")
+
+    resp = _mock_response(
+        {
+            "details": {
+                "id": 1,
+                "name": "Test Report",
+                "source": "...",
+                "sourcename": "Users",
+                "type": 0,
+            },
+            "data": {
+                "headers": ["Name", "Email"],
+                "rows": [
+                    {"columns": ["<a href='#'>Alice</a>", "alice@example.com"]}
+                ],
+                "totalrowcount": 1,
+            },
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(reportid=1))
+
+    assert result["headers"] == ["Name", "Email"]
+    assert result["rows"][0] == ["Alice", "alice@example.com"]
+    assert result["total_rows"] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_report_data_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_report_data")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(reportid=9999))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_utm_report_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_utm_report")
+
+    resp = _mock_response(
+        {
+            "rows": [
+                {
+                    "userid": 3,
+                    "username": "testuser1",
+                    "firstname": "Alice",
+                    "lastname": "Johnson",
+                    "email": "alice@example.com",
+                    "department": "Engineering",
+                    "starttime": 1700000000,
+                    "completedtime": 1700100000,
+                }
+            ],
+            "totalcount": 1,
+        }
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(courseid=2))
+
+    assert len(result["rows"]) == 1
+    assert result["rows"][0]["name"] == "Alice Johnson"
+    assert result["total_rows"] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_utm_report_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_utm_report")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(courseid=2))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_adv_comp_report_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_adv_comp_report")
+
+    resp = _mock_response(
+        {
+            "rows": [
+                {
+                    "userid": 4,
+                    "username": "testuser2",
+                    "firstname": "Bob",
+                    "lastname": "Smith",
+                    "email": "bob@example.com",
+                    "department": "Operations",
+                    "starttime": 1700000000,
+                    "completedtime": None,
+                }
+            ],
+            "totalcount": 1,
+        }
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(courseid=2))
+
+    assert len(result["rows"]) == 1
+    assert result["rows"][0]["name"] == "Bob Smith"
+    assert result["rows"][0]["completedtime"] is None
+    assert result["total_rows"] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_adv_comp_report_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_adv_comp_report")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(courseid=2))
 
     assert "error" in result

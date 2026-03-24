@@ -9,6 +9,7 @@ which tools to call.
 from __future__ import annotations
 
 import json
+import re
 import time
 
 import httpx
@@ -115,6 +116,12 @@ whole course
 - get_user_competency — user competency summary
 - get_course_competencies — competencies linked to a course
 
+## Reporting Tools
+- list_reports — list all custom Report Builder reports
+- get_report_data — retrieve data from a Report Builder report (paginated)
+- get_utm_report — UTM completion report for a course by department
+- get_adv_comp_report — Advanced completion report for a course
+
 ## Write Tools (REQUIRE CONFIRMATION)
 - enrol_users — enrol users into a course
 - send_message — send messages to users
@@ -156,6 +163,10 @@ list_positions to discover structure, then get_team_members.
 8. For competency questions, use list_competency_frameworks to \
 discover frameworks, then get_user_learning_plans or \
 get_user_competency for details.
+9. For report/analytics questions, use list_reports to discover \
+available custom reports and their IDs, then get_report_data to \
+retrieve actual data. For completion reports by department, use \
+get_utm_report or get_adv_comp_report directly.
 
 Present data in clear tables when appropriate.
 """
@@ -1778,5 +1789,159 @@ def moodle_tools_agent_factory(
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(competencies)
+
+    # ---------------------------------------------------------------
+    # Reporting tools
+    # ---------------------------------------------------------------
+
+    def _strip_html(value: str | None) -> str:
+        """Strip HTML tags from a report cell value."""
+        if value is None:
+            return ""
+        return re.sub(r"<[^>]+>", "", value).strip()
+
+    @agent.tool_plain
+    async def list_reports() -> str:
+        """List all custom reports available in Report Builder.
+
+        Returns JSON with id, name, source type, and
+        modification time for each report. Use the report
+        id in get_report_data to retrieve actual data.
+        """
+        try:
+            reports = await client.list_reports()
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            [
+                {
+                    "id": r.id,
+                    "name": r.name,
+                    "sourcename": r.sourcename,
+                    "timemodified": r.timemodified,
+                }
+                for r in reports
+            ]
+        )
+
+    @agent.tool_plain
+    async def get_report_data(
+        reportid: int,
+        page: int = 0,
+        perpage: int = 50,
+    ) -> str:
+        """Retrieve data from a custom report in Report Builder.
+
+        Returns JSON with column headers and data rows.
+        Each row is a list of cell values aligned with the
+        headers. Use list_reports first to discover report
+        IDs.
+
+        Args:
+            reportid: The report ID (from list_reports).
+            page: Page number for pagination (default 0).
+            perpage: Rows per page (default 50, max 100).
+        """
+        try:
+            details, data = await client.retrieve_report(
+                reportid, page=page, perpage=perpage
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {
+                "report_name": details.name,
+                "source": details.sourcename,
+                "headers": data.headers,
+                "rows": [
+                    [_strip_html(c) for c in row.columns]
+                    for row in data.rows
+                ],
+                "total_rows": data.totalrowcount,
+                "page": page,
+                "perpage": perpage,
+            }
+        )
+
+    @agent.tool_plain
+    async def get_utm_report(
+        courseid: int,
+        departmentid: int = 0,
+        completionstatus: int = 0,
+    ) -> str:
+        """Get UTM completion report for a course.
+
+        Returns JSON with user completion data including
+        department, start time, and completion time.
+
+        Args:
+            courseid: The Moodle course ID.
+            departmentid: Optional department ID to filter by.
+            completionstatus: 0=all, 1=completed, 2=not completed.
+        """
+        try:
+            rows, totalcount = await client.get_utm_report(
+                courseid,
+                departmentid=departmentid,
+                completionstatus=completionstatus,
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {
+                "rows": [
+                    {
+                        "userid": r.userid,
+                        "username": r.username,
+                        "name": f"{r.firstname} {r.lastname}",
+                        "email": r.email,
+                        "department": r.department,
+                        "starttime": r.starttime,
+                        "completedtime": r.completedtime,
+                    }
+                    for r in rows
+                ],
+                "total_rows": totalcount,
+            }
+        )
+
+    @agent.tool_plain
+    async def get_adv_comp_report(
+        courseid: int,
+        completionstatus: int = 0,
+    ) -> str:
+        """Get Advanced Completion report for a course.
+
+        Returns JSON with user completion data including
+        department, start time, and completion time.
+
+        Args:
+            courseid: The Moodle course ID.
+            completionstatus: 0=all, 1=completed, 2=not completed.
+        """
+        try:
+            rows, totalcount = await client.get_adv_comp_report(
+                courseid,
+                completionstatus=completionstatus,
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {
+                "rows": [
+                    {
+                        "userid": r.userid,
+                        "username": r.username,
+                        "name": f"{r.firstname} {r.lastname}",
+                        "email": r.email,
+                        "department": r.department,
+                        "starttime": r.starttime,
+                        "completedtime": r.completedtime,
+                    }
+                    for r in rows
+                ],
+                "total_rows": totalcount,
+            }
+        )
 
     return agent
