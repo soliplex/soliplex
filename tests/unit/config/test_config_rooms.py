@@ -1,5 +1,6 @@
 import contextlib
 import dataclasses
+import warnings
 from unittest import mock
 
 import pytest
@@ -223,23 +224,38 @@ allow_mcp: true
 
 
 @pytest.mark.parametrize(
-    "config_yaml, expectation",
+    "config_yaml, expectation, w_depr",
     [
-        (BOGUS_ROOM_CONFIG_YAML, pytest.raises(config_exc.FromYamlException)),
-        (BARE_ROOM_CONFIG_YAML, contextlib.nullcontext(BARE_ROOM_CONFIG_KW)),
+        (
+            BOGUS_ROOM_CONFIG_YAML,
+            pytest.raises(config_exc.FromYamlException),
+            None,
+        ),
+        (
+            BARE_ROOM_CONFIG_YAML,
+            contextlib.nullcontext(BARE_ROOM_CONFIG_KW),
+            False,
+        ),
         (
             W_NON_HR_SKILLS_ROOM_CONFIG_YAML,
             contextlib.nullcontext(W_NON_HR_SKILLS_ROOM_CONFIG_KW),
+            False,
         ),
         (
             W_HR_SKILLS_ROOM_CONFIG_YAML,
             contextlib.nullcontext(W_HR_SKILLS_ROOM_CONFIG_KW),
+            True,
         ),
         (
             W_NON_HR_TOOLS_ROOM_CONFIG_YAML,
             contextlib.nullcontext(W_NON_HR_TOOLS_ROOM_CONFIG_KW),
+            False,
         ),
-        (FULL_ROOM_CONFIG_YAML, contextlib.nullcontext(FULL_ROOM_CONFIG_KW)),
+        (
+            FULL_ROOM_CONFIG_YAML,
+            contextlib.nullcontext(FULL_ROOM_CONFIG_KW),
+            False,
+        ),
     ],
 )
 def test_roomconfig_from_yaml(
@@ -247,6 +263,7 @@ def test_roomconfig_from_yaml(
     temp_dir,
     config_yaml,
     expectation,
+    w_depr,
 ):
     skill = mock.create_autospec(hs_models.Skill)
     skill_config = mock.create_autospec(
@@ -265,7 +282,10 @@ def test_roomconfig_from_yaml(
     with yaml_file.open() as stream:
         config_dict = yaml.safe_load(stream)
 
-    with expectation as expected:
+    with (
+        warnings.catch_warnings(record=True) as warned,
+        expectation as expected,
+    ):
         found = config_rooms.RoomConfig.from_yaml(
             installation_config,
             yaml_file,
@@ -330,6 +350,12 @@ def test_roomconfig_from_yaml(
             ]
 
         assert found == expected
+
+        if w_depr:
+            (depr,) = warned
+            assert depr.category is DeprecationWarning
+        else:
+            assert len(warned) == 0
 
 
 @pytest.mark.parametrize("w_order", [False, True])

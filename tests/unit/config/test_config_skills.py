@@ -708,17 +708,17 @@ def test_hr_rag_skillconfig_metadata(
             {"not_a_valid_key": "FAIL"},
             pytest.raises(config_exc.FromYamlException),
         ),
-        ({}, contextlib.nullcontext(0)),
+        ({}, contextlib.nullcontext(1)),
         (
             {"tool_names": ["get_document", "list_documents"]},
-            contextlib.nullcontext(1),
+            contextlib.nullcontext(2),
         ),
-        ({"rag_features": ["search"]}, contextlib.nullcontext(1)),
-        ({"rag_features": ["bogus"]}, contextlib.nullcontext(1)),
-        ({"rag_features": ["analysis"]}, contextlib.nullcontext(1)),
+        ({"rag_features": ["search"]}, contextlib.nullcontext(2)),
+        ({"rag_features": ["bogus"]}, contextlib.nullcontext(2)),
+        ({"rag_features": ["analysis"]}, contextlib.nullcontext(2)),
         (
             {"tool_names": ["ask"], "rag_features": ["search"]},
-            contextlib.nullcontext(2),
+            contextlib.nullcontext(3),
         ),
     ],
 )
@@ -799,9 +799,53 @@ def test_hr_rlm_skillconfig_skill(temp_dir, installation_config):
 
 
 @pytest.mark.parametrize(
+    "w_config, expectation",
+    [
+        # kwargs, expected_warning_count or exception type
+        (
+            {"not_a_valid_key": "FAIL"},
+            pytest.raises(config_exc.FromYamlException),
+        ),
+        ({}, contextlib.nullcontext(1)),
+    ],
+)
+def test_hr_rlg_skillconfig_from_yaml(
+    temp_dir,
+    installation_config,
+    w_config,
+    expectation,
+):
+    config_path = temp_dir / "config_file.yaml"
+    lancedb = temp_dir / "rag.lancedb"
+    lancedb.mkdir()
+
+    config_dict = {
+        "rag_lancedb_override_path": lancedb,
+    } | w_config
+
+    with (
+        warnings.catch_warnings(record=True) as warned,
+        expectation as expected,
+    ):
+        inst = config_skills.HR_RLM_SkillConfig.from_yaml(
+            installation_config=installation_config,
+            config_path=config_path,
+            config_dict=config_dict,
+        )
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert len(warned) == expected
+        for warning in warned:
+            assert warning.category is DeprecationWarning
+
+        assert inst.rag_lancedb_path == lancedb
+        assert inst.haiku_rag_config is installation_config.haiku_rag_config
+
+
+@pytest.mark.parametrize(
     "w_error, expectation",
     [
-        (False, contextlib.nullcontext()),
+        (False, contextlib.nullcontext(1)),
         (True, pytest.raises(config_exc.FromYamlException)),
     ],
 )
@@ -821,14 +865,20 @@ def test_hr_rlm_skillconfig_from_yaml(
     if w_error:
         config_dict["not_a_valid_key"] = "FAIL"
 
-    with expectation as expected:
+    with (
+        warnings.catch_warnings(record=True) as warned,
+        expectation as expected,
+    ):
         inst = config_skills.HR_RLM_SkillConfig.from_yaml(
             installation_config=installation_config,
             config_path=config_path,
             config_dict=config_dict,
         )
 
-    if expected is None:
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert len(warned) == expected
+        for warning in warned:
+            assert warning.category is DeprecationWarning
         assert inst.rag_lancedb_path == lancedb
         assert inst.haiku_rag_config is installation_config.haiku_rag_config
 
@@ -836,7 +886,7 @@ def test_hr_rlm_skillconfig_from_yaml(
 @pytest.mark.parametrize(
     "w_invalid_kind, expectation",
     [
-        (False, contextlib.nullcontext()),
+        (False, contextlib.nullcontext(2)),
         (True, pytest.raises(config_skills.InvalidSkillKind)),
     ],
 )
@@ -867,14 +917,21 @@ def test_extractskillconfigs(
             }
         )
 
-    with expectation as expected:
+    with (
+        warnings.catch_warnings(record=True) as warned,
+        expectation as expected,
+    ):
         found = config_skills.extract_skill_configs(
             installation_config=installation_config,
             config_path=config_path,
             config_dict=config_dict,
         )
 
-    if expected is None:
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert len(warned) == expected
+        for warning in warned:
+            assert warning.category is DeprecationWarning
+
         assert isinstance(found["rag"], config_skills.HR_RAG_SkillConfig)
         assert found["rag"].rag_lancedb_stem == "test-foo"
 
