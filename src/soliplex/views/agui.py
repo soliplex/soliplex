@@ -583,7 +583,8 @@ async def drive_llm_stream(
     Always runs to completion.
     """
     with logfire.span(
-        "AG-UI event stream: {thread_id}/{run_id}",
+        "AG-UI event stream: {room_id}/{thread_id}/{run_id}",
+        room_id=room_id,
         thread_id=thread_id,
         run_id=run_id,
     ):

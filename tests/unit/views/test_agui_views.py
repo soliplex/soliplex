@@ -1113,7 +1113,8 @@ async def test_drive_llm_stream(
         )
 
     logfire.span.assert_called_once_with(
-        "AG-UI event stream: {thread_id}/{run_id}",
+        "AG-UI event stream: {room_id}/{thread_id}/{run_id}",
+        room_id=TEST_ROOM_ID,
         thread_id=TEST_THREAD_ID,
         run_id=TEST_RUN_ID,
     )
