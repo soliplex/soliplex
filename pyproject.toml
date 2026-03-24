@@ -20,7 +20,7 @@ dependencies = [
     "fastapi",
     "fastmcp >= 2.14.0, < 2.15",
     "greenlet",
-    "haiku.rag-slim >= 0.34.0, < 0.35",
+    "haiku.rag-slim >= 0.35.1, < 0.36",
     "haiku-skills >= 0.10.0, < 0.11",
     "itsdangerous",
     "jsonpatch",
