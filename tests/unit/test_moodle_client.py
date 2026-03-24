@@ -1772,6 +1772,18 @@ async def test_get_utm_report(client):
 
 
 @pytest.mark.asyncio
+async def test_get_utm_report_with_filters(client):
+    resp = _mock_response({"rows": [], "totalcount": 0})
+    with _patch_httpx(resp):
+        rows, totalcount = await client.get_utm_report(
+            2, departmentid=5, completionstatus=1
+        )
+
+    assert rows == []
+    assert totalcount == 0
+
+
+@pytest.mark.asyncio
 async def test_get_utm_report_empty(client):
     resp = _mock_response({"rows": [], "totalcount": 0})
     with _patch_httpx(resp):
@@ -1807,6 +1819,18 @@ async def test_get_adv_comp_report(client):
     assert rows[0].username == "testuser2"
     assert rows[0].completedtime is None
     assert totalcount == 1
+
+
+@pytest.mark.asyncio
+async def test_get_adv_comp_report_with_completionstatus(client):
+    resp = _mock_response({"rows": [], "totalcount": 0})
+    with _patch_httpx(resp):
+        rows, totalcount = await client.get_adv_comp_report(
+            2, completionstatus=2
+        )
+
+    assert rows == []
+    assert totalcount == 0
 
 
 @pytest.mark.asyncio

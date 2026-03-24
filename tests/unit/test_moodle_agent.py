@@ -2633,6 +2633,34 @@ async def test_get_report_data_tool():
 
 
 @pytest.mark.asyncio
+async def test_get_report_data_tool_strips_none_values():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_report_data")
+
+    resp = _mock_response(
+        {
+            "details": {
+                "id": 1,
+                "name": "Test Report",
+                "source": "...",
+                "sourcename": "Users",
+                "type": 0,
+            },
+            "data": {
+                "headers": ["Name", "Email"],
+                "rows": [{"columns": [None, "alice@example.com"]}],
+                "totalrowcount": 1,
+            },
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(reportid=1))
+
+    assert result["rows"][0] == ["", "alice@example.com"]
+
+
+@pytest.mark.asyncio
 async def test_get_report_data_tool_error():
     agent = _build_agent()
     fn = _get_tool_fn(agent, "get_report_data")
