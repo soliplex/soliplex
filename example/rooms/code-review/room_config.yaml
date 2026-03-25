@@ -1,0 +1,34 @@
+id: "code-review"
+name: "Multi-Agent Code Review"
+description: "A collaborative code review by a team of specialist AI agents."
+
+welcome_message: |
+  Welcome to the Multi-Agent Code Review Room!
+
+  Please paste your code snippet below.
+  Our team of AI specialists will review it from different perspectives:
+  - **Linter**: Code style and formatting.
+  - **Security Reviewer**: Security vulnerabilities.
+  - **Architecture Reviewer**: Design patterns and maintainability.
+
+suggestions:
+  - "Review this Python function for security issues."
+  - "Check the architecture of this JavaScript module."
+  - "Lint this code snippet."
+
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You are a principal software engineer leading a code review.
+    Your team consists of three specialists: a linter, a security reviewer, and an architecture reviewer.
+
+    When a user submits code, you must analyze it from all three perspectives.
+    Consult the `code-review` skill for detailed rules and scoring criteria.
+
+    Provide a consolidated review that summarizes the findings from each specialist.
+    Format the output clearly, with separate sections for each perspective and a final overall score.
+
+skills:
+  skill_configs:
+    - skill_name: "code-review"
+      kind: "filesystem"
