@@ -1841,3 +1841,328 @@ async def test_get_adv_comp_report_non_dict(client):
 
     assert rows == []
     assert totalcount == 0
+
+
+# ---------------------------------------------------------------
+# Organisation CRUD
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_departments(client):
+    resp = _mock_response(
+        {
+            "result": [{"id": 10, "name": "Finance", "idnumber": "FIN"}],
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(resp):
+        created, warnings = await client.create_departments(
+            [{"name": "Finance", "idnumber": "FIN"}]
+        )
+
+    assert len(created) == 1
+    assert created[0].name == "Finance"
+    assert created[0].idnumber == "FIN"
+    assert warnings == []
+
+
+@pytest.mark.asyncio
+async def test_create_departments_non_dict(client):
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        created, warnings = await client.create_departments(
+            [{"name": "X"}]
+        )
+
+    assert created == []
+    assert warnings == []
+
+
+@pytest.mark.asyncio
+async def test_create_departments_with_optional_fields(client):
+    resp = _mock_response(
+        {"result": [{"id": 11, "name": "HR", "idnumber": "HR01"}], "warnings": []}
+    )
+    with _patch_httpx(resp):
+        created, warnings = await client.create_departments(
+            [{"name": "HR", "idnumber": "HR01", "parent": "ROOT", "description": "Human Resources"}]
+        )
+
+    assert len(created) == 1
+    assert created[0].idnumber == "HR01"
+
+
+@pytest.mark.asyncio
+async def test_update_departments(client):
+    resp = _mock_response(
+        {
+            "result": [{"id": 10, "idnumber": "FIN"}],
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(resp):
+        updated, warnings = await client.update_departments(
+            [{"idnumber": "FIN", "name": "Finance Dept"}]
+        )
+
+    assert len(updated) == 1
+    assert updated[0].idnumber == "FIN"
+    assert warnings == []
+
+
+@pytest.mark.asyncio
+async def test_update_departments_non_dict(client):
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        updated, warnings = await client.update_departments(
+            [{"idnumber": "X"}]
+        )
+
+    assert updated == []
+    assert warnings == []
+
+
+@pytest.mark.asyncio
+async def test_update_departments_with_parent(client):
+    resp = _mock_response(
+        {"result": [{"id": 10, "idnumber": "FIN"}], "warnings": []}
+    )
+    with _patch_httpx(resp):
+        updated, warnings = await client.update_departments(
+            [{"idnumber": "FIN", "parent": "ROOT", "description": "Updated"}]
+        )
+
+    assert len(updated) == 1
+
+
+@pytest.mark.asyncio
+async def test_delete_department(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.delete_department(10)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_department_returns_dict(client):
+    resp = _mock_response({"status": True})
+    with _patch_httpx(resp):
+        result = await client.delete_department(10)
+
+    assert result == {"status": True}
+
+
+@pytest.mark.asyncio
+async def test_get_potential_parent_departments(client):
+    resp = _mock_response(
+        [{"id": 1, "name": "Root", "path": "/Root", "locked": 0}]
+    )
+    with _patch_httpx(resp):
+        parents = await client.get_potential_parent_departments(
+            search="Root", departmentid=0
+        )
+
+    assert len(parents) == 1
+    assert parents[0].name == "Root"
+
+
+@pytest.mark.asyncio
+async def test_get_potential_parent_departments_non_list(client):
+    resp = _mock_response({"error": "fail"})
+    with _patch_httpx(resp):
+        parents = await client.get_potential_parent_departments()
+
+    assert parents == []
+
+
+@pytest.mark.asyncio
+async def test_create_positions(client):
+    resp = _mock_response(
+        {
+            "result": [{"id": 5, "name": "Engineer", "idnumber": "ENG"}],
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(resp):
+        created, warnings = await client.create_positions(
+            [{"name": "Engineer", "idnumber": "ENG"}]
+        )
+
+    assert len(created) == 1
+    assert created[0].name == "Engineer"
+    assert warnings == []
+
+
+@pytest.mark.asyncio
+async def test_create_positions_with_manager_flags(client):
+    resp = _mock_response(
+        {"result": [{"id": 6, "name": "Lead", "idnumber": "LEAD"}], "warnings": []}
+    )
+    with _patch_httpx(resp):
+        created, warnings = await client.create_positions(
+            [{"name": "Lead", "idnumber": "LEAD", "departmentmanager": True, "globalmanager": True}]
+        )
+
+    assert len(created) == 1
+
+
+@pytest.mark.asyncio
+async def test_create_positions_non_dict(client):
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        created, warnings = await client.create_positions([{"name": "X"}])
+
+    assert created == []
+    assert warnings == []
+
+
+@pytest.mark.asyncio
+async def test_update_positions(client):
+    resp = _mock_response(
+        {"result": [{"id": 5, "idnumber": "ENG"}], "warnings": []}
+    )
+    with _patch_httpx(resp):
+        updated, warnings = await client.update_positions(
+            [{"idnumber": "ENG", "name": "Senior Engineer"}]
+        )
+
+    assert len(updated) == 1
+    assert updated[0].idnumber == "ENG"
+
+
+@pytest.mark.asyncio
+async def test_update_positions_with_flags(client):
+    resp = _mock_response(
+        {"result": [{"id": 5, "idnumber": "ENG"}], "warnings": []}
+    )
+    with _patch_httpx(resp):
+        updated, _ = await client.update_positions(
+            [{"idnumber": "ENG", "departmentmanager": False, "globalmanager": True}]
+        )
+
+    assert len(updated) == 1
+
+
+@pytest.mark.asyncio
+async def test_update_positions_non_dict(client):
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        updated, warnings = await client.update_positions(
+            [{"idnumber": "X"}]
+        )
+
+    assert updated == []
+    assert warnings == []
+
+
+@pytest.mark.asyncio
+async def test_delete_position(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.delete_position(5)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_position_returns_dict(client):
+    resp = _mock_response({"status": True})
+    with _patch_httpx(resp):
+        result = await client.delete_position(5)
+
+    assert result == {"status": True}
+
+
+@pytest.mark.asyncio
+async def test_get_potential_parent_positions(client):
+    resp = _mock_response(
+        [{"id": 1, "name": "Management", "path": "/Management", "locked": 0}]
+    )
+    with _patch_httpx(resp):
+        parents = await client.get_potential_parent_positions(
+            search="Mgmt", positionid=0
+        )
+
+    assert len(parents) == 1
+    assert parents[0].name == "Management"
+
+
+@pytest.mark.asyncio
+async def test_get_potential_parent_positions_non_list(client):
+    resp = _mock_response({"error": "fail"})
+    with _patch_httpx(resp):
+        parents = await client.get_potential_parent_positions()
+
+    assert parents == []
+
+
+@pytest.mark.asyncio
+async def test_update_job(client):
+    resp = _mock_response({"status": True})
+    with _patch_httpx(resp):
+        result = await client.update_job(3, "ENG", "DEV", startdate=1000, enddate=2000)
+
+    assert result == {"status": True}
+
+
+@pytest.mark.asyncio
+async def test_update_job_non_dict(client):
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        result = await client.update_job(3, "ENG", "DEV")
+
+    assert result == {"status": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_job(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.delete_job(42)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_job_returns_dict(client):
+    resp = _mock_response({"status": True})
+    with _patch_httpx(resp):
+        result = await client.delete_job(42)
+
+    assert result == {"status": True}
+
+
+@pytest.mark.asyncio
+async def test_unassign_managers(client):
+    resp = _mock_response(
+        {
+            "warnings": [],
+            "unassignedmanagers": [
+                {"itemid": 1, "userid": 3, "managerid": 5}
+            ],
+        }
+    )
+    with _patch_httpx(resp):
+        result = await client.unassign_managers([3], [5])
+
+    assert len(result["unassignedmanagers"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_unassign_managers_with_unassign_all(client):
+    resp = _mock_response({"warnings": [], "unassignedmanagers": []})
+    with _patch_httpx(resp):
+        result = await client.unassign_managers([3], [5], unassign_all=True)
+
+    assert result["unassignedmanagers"] == []
+
+
+@pytest.mark.asyncio
+async def test_unassign_managers_null_response(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.unassign_managers([3], [5])
+
+    assert result == {"result": True}

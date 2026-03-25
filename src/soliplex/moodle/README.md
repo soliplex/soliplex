@@ -28,6 +28,15 @@ The `soliplex.moodle` package provides:
 - `get_utm_report` — UTM completion report for a course by department
 - `get_adv_comp_report` — Advanced completion report for a course
 
+**Organisation Management Tools:**
+- `list_departments` / `list_positions` — list org structure
+- `get_team_members` — find users by department/position
+- `get_potential_parent_departments` / `get_potential_parent_positions` — hierarchy parents
+- `create_department` / `update_department` / `delete_department` — department CRUD
+- `create_position` / `update_position` / `delete_position` — position CRUD
+- `assign_job` / `delete_job` — job assignment management
+- `assign_manager` / `unassign_manager` — manager relationships
+
 **Write Tools (require user confirmation):**
 - `enrol_users` — enrol users into a course
 - `send_message` — send messages to users
@@ -59,6 +68,17 @@ The `soliplex.moodle` package provides:
    - `core_message_send_instant_messages`
    - `core_reportbuilder_list_reports`
    - `core_reportbuilder_retrieve_report`
+   - `tool_organisation_create_departments`
+   - `tool_organisation_update_departments`
+   - `tool_organisation_department_delete`
+   - `tool_organisation_get_potential_parent_departments`
+   - `tool_organisation_create_positions`
+   - `tool_organisation_update_positions`
+   - `tool_organisation_position_delete`
+   - `tool_organisation_get_potential_parent_positions`
+   - `tool_organisation_update_job`
+   - `tool_organisation_job_delete`
+   - `tool_organisation_unassign_managers`
 3. Under **Site administration > Server > Web services > Manage tokens**, create a token for the service account.
 4. Copy the token value — you will need it for Soliplex configuration.
 

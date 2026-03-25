@@ -19,8 +19,10 @@ from soliplex.moodle.models import CertificationLogEntry
 from soliplex.moodle.models import Cohort
 from soliplex.moodle.models import CohortMembers
 from soliplex.moodle.models import CompetencyFramework
+from soliplex.moodle.models import CompletionReportRow
 from soliplex.moodle.models import CourseModule
 from soliplex.moodle.models import CourseSection
+from soliplex.moodle.models import CreatedEntity
 from soliplex.moodle.models import Department
 from soliplex.moodle.models import DepartmentMember
 from soliplex.moodle.models import EnrolmentRequest
@@ -30,8 +32,8 @@ from soliplex.moodle.models import GroupMembers
 from soliplex.moodle.models import Job
 from soliplex.moodle.models import LearningPlan
 from soliplex.moodle.models import MessageRequest
-from soliplex.moodle.models import CompletionReportRow
 from soliplex.moodle.models import Position
+from soliplex.moodle.models import PotentialParent
 from soliplex.moodle.models import Program
 from soliplex.moodle.models import ProgramCourse
 from soliplex.moodle.models import ProgramCourseOption
@@ -39,6 +41,8 @@ from soliplex.moodle.models import ReportData
 from soliplex.moodle.models import ReportRow
 from soliplex.moodle.models import ReportSummary
 from soliplex.moodle.models import Tenant
+from soliplex.moodle.models import UnassignedManager
+from soliplex.moodle.models import UpdatedEntity
 from soliplex.moodle.models import UserCatalogueItem
 
 __all__ = [
@@ -51,6 +55,7 @@ __all__ = [
     "CertificationLogEntry",
     "Cohort",
     "CompletionReportRow",
+    "CreatedEntity",
     "CohortMembers",
     "CompetencyFramework",
     "CourseModule",
@@ -67,6 +72,7 @@ __all__ = [
     "MoodleAPIError",
     "MoodleClient",
     "Position",
+    "PotentialParent",
     "Program",
     "ProgramCourse",
     "ProgramCourseOption",
@@ -74,6 +80,8 @@ __all__ = [
     "ReportRow",
     "ReportSummary",
     "Tenant",
+    "UnassignedManager",
+    "UpdatedEntity",
     "UserCatalogueItem",
     "moodle_tools_agent_factory",
 ]

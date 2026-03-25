@@ -17,6 +17,8 @@ suggestions:
   - "What departments exist?"
   - "Who is in the Engineering department?"
   - "What competency frameworks exist?"
+  - "Create a new department called 'Security' under Engineering"
+  - "Create a 'Team Lead' position with department manager permissions"
   - "What custom reports are available?"
   - "Show me the UTM report for Safety Fundamentals"
   - "Who hasn't completed Cybersecurity Basics in Engineering?"

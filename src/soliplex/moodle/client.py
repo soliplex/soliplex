@@ -7,7 +7,6 @@ import os
 import httpx
 
 from soliplex.moodle.models import ActivityCompletionStatus
-from soliplex.moodle.models import CompletionReportRow
 from soliplex.moodle.models import CalendarEvent
 from soliplex.moodle.models import CatalogueItem
 from soliplex.moodle.models import Certification
@@ -16,9 +15,11 @@ from soliplex.moodle.models import CertificationLogEntry
 from soliplex.moodle.models import Cohort
 from soliplex.moodle.models import CohortMembers
 from soliplex.moodle.models import CompetencyFramework
+from soliplex.moodle.models import CompletionReportRow
 from soliplex.moodle.models import CompletionStatus
 from soliplex.moodle.models import Course
 from soliplex.moodle.models import CourseSection
+from soliplex.moodle.models import CreatedEntity
 from soliplex.moodle.models import Department
 from soliplex.moodle.models import DepartmentMember
 from soliplex.moodle.models import EnrolledUser
@@ -26,6 +27,7 @@ from soliplex.moodle.models import Group
 from soliplex.moodle.models import GroupMembers
 from soliplex.moodle.models import LearningPlan
 from soliplex.moodle.models import Position
+from soliplex.moodle.models import PotentialParent
 from soliplex.moodle.models import Program
 from soliplex.moodle.models import ProgramCourse
 from soliplex.moodle.models import ProgramCourseOption
@@ -33,6 +35,7 @@ from soliplex.moodle.models import ReportData
 from soliplex.moodle.models import ReportRow
 from soliplex.moodle.models import ReportSummary
 from soliplex.moodle.models import Tenant
+from soliplex.moodle.models import UpdatedEntity
 from soliplex.moodle.models import UserCatalogueItem
 from soliplex.moodle.models import UserProfile
 
@@ -742,8 +745,8 @@ class MoodleClient:
         raw = await self._call(
             "tool_organisation_create_job",
             userid=userid,
-            departmentidnumber=department_idnumber,
-            positionidnumber=position_idnumber,
+            jobdepartment=department_idnumber,
+            jobposition=position_idnumber,
         )
         return raw if isinstance(raw, dict) else {"result": True}
 
@@ -753,11 +756,226 @@ class MoodleClient:
         """Assign managers via ``tool_organisation_assign_managers``."""
         params: dict[str, str | int] = {}
         for i, uid in enumerate(user_ids):
-            params[f"userids[{i}]"] = uid
+            params[f"users[{i}][id]"] = uid
         for i, mid in enumerate(manager_ids):
-            params[f"managerids[{i}]"] = mid
+            params[f"managers[{i}][id]"] = mid
         raw = await self._call(
             "tool_organisation_assign_managers", **params
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    # -- Department CRUD --
+
+    async def create_departments(
+        self, departments: list[dict]
+    ) -> tuple[list[CreatedEntity], list[dict]]:
+        """Create departments via ``tool_organisation_create_departments``."""
+        params: dict[str, str | int] = {}
+        for i, d in enumerate(departments):
+            params[f"departments[{i}][name]"] = d["name"]
+            for key in ("idnumber", "parent", "description"):
+                if key in d:
+                    params[f"departments[{i}][{key}]"] = d[key]
+        raw = await self._call(
+            "tool_organisation_create_departments", **params
+        )
+        if not isinstance(raw, dict):
+            return [], []
+        result = [
+            CreatedEntity.model_validate(r)
+            for r in raw.get("result", [])
+        ]
+        return result, raw.get("warnings", [])
+
+    async def update_departments(
+        self, departments: list[dict]
+    ) -> tuple[list[UpdatedEntity], list[dict]]:
+        """Update departments via ``tool_organisation_update_departments``."""
+        params: dict[str, str | int] = {}
+        for i, d in enumerate(departments):
+            params[f"departments[{i}][idnumber]"] = d["idnumber"]
+            for key in ("name", "parent", "description"):
+                if key in d:
+                    params[f"departments[{i}][{key}]"] = d[key]
+        raw = await self._call(
+            "tool_organisation_update_departments", **params
+        )
+        if not isinstance(raw, dict):
+            return [], []
+        result = [
+            UpdatedEntity.model_validate(r)
+            for r in raw.get("result", [])
+        ]
+        return result, raw.get("warnings", [])
+
+    async def delete_department(self, department_id: int) -> dict:
+        """Delete a department via ``tool_organisation_department_delete``."""
+        raw = await self._call(
+            "tool_organisation_department_delete", id=department_id
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def get_potential_parent_departments(
+        self,
+        search: str = "",
+        departmentid: int = 0,
+        frameworkid: int = 0,
+        tenantid: int = 0,
+    ) -> list[PotentialParent]:
+        """Get valid parent departments.
+
+        Uses ``tool_organisation_get_potential_parent_departments``.
+        """
+        raw = await self._call(
+            "tool_organisation_get_potential_parent_departments",
+            search=search,
+            departmentid=departmentid,
+            frameworkid=frameworkid,
+            tenantid=tenantid,
+        )
+        items = raw if isinstance(raw, list) else []
+        return [
+            PotentialParent.model_validate(p) for p in items
+        ][:MAX_RESULTS]
+
+    # -- Position CRUD --
+
+    async def create_positions(
+        self, positions: list[dict]
+    ) -> tuple[list[CreatedEntity], list[dict]]:
+        """Create positions via ``tool_organisation_create_positions``."""
+        params: dict[str, str | int] = {}
+        for i, p in enumerate(positions):
+            params[f"positions[{i}][name]"] = p["name"]
+            for key in ("idnumber", "parent", "description"):
+                if key in p:
+                    params[f"positions[{i}][{key}]"] = p[key]
+            if p.get("departmentmanager"):
+                params[f"positions[{i}][departmentmanager]"] = 1
+            if p.get("globalmanager"):
+                params[f"positions[{i}][globalmanager]"] = 1
+        raw = await self._call(
+            "tool_organisation_create_positions", **params
+        )
+        if not isinstance(raw, dict):
+            return [], []
+        result = [
+            CreatedEntity.model_validate(r)
+            for r in raw.get("result", [])
+        ]
+        return result, raw.get("warnings", [])
+
+    async def update_positions(
+        self, positions: list[dict]
+    ) -> tuple[list[UpdatedEntity], list[dict]]:
+        """Update positions via ``tool_organisation_update_positions``."""
+        params: dict[str, str | int] = {}
+        for i, p in enumerate(positions):
+            params[f"positions[{i}][idnumber]"] = p["idnumber"]
+            for key in ("name", "parent", "description"):
+                if key in p:
+                    params[f"positions[{i}][{key}]"] = p[key]
+            if "departmentmanager" in p:
+                params[f"positions[{i}][departmentmanager]"] = (
+                    1 if p["departmentmanager"] else 0
+                )
+            if "globalmanager" in p:
+                params[f"positions[{i}][globalmanager]"] = (
+                    1 if p["globalmanager"] else 0
+                )
+        raw = await self._call(
+            "tool_organisation_update_positions", **params
+        )
+        if not isinstance(raw, dict):
+            return [], []
+        result = [
+            UpdatedEntity.model_validate(r)
+            for r in raw.get("result", [])
+        ]
+        return result, raw.get("warnings", [])
+
+    async def delete_position(self, position_id: int) -> dict:
+        """Delete a position via ``tool_organisation_position_delete``."""
+        raw = await self._call(
+            "tool_organisation_position_delete", id=position_id
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def get_potential_parent_positions(
+        self,
+        search: str = "",
+        positionid: int = 0,
+        frameworkid: int = 0,
+        tenantid: int = 0,
+    ) -> list[PotentialParent]:
+        """Get valid parent positions.
+
+        Uses ``tool_organisation_get_potential_parent_positions``.
+        """
+        raw = await self._call(
+            "tool_organisation_get_potential_parent_positions",
+            search=search,
+            positionid=positionid,
+            frameworkid=frameworkid,
+            tenantid=tenantid,
+        )
+        items = raw if isinstance(raw, list) else []
+        return [
+            PotentialParent.model_validate(p) for p in items
+        ][:MAX_RESULTS]
+
+    # -- Job & Manager Management --
+
+    async def update_job(
+        self,
+        userid: int,
+        department_idnumber: str,
+        position_idnumber: str,
+        startdate: int = 0,
+        enddate: int = 0,
+    ) -> dict:
+        """Update a job assignment via ``tool_organisation_update_job``."""
+        raw = await self._call(
+            "tool_organisation_update_job",
+            userid=userid,
+            jobdepartment=department_idnumber,
+            jobposition=position_idnumber,
+            startdate=startdate,
+            enddate=enddate,
+        )
+        return raw if isinstance(raw, dict) else {"status": True}
+
+    async def delete_job(self, job_id: int) -> dict:
+        """Delete a job assignment via ``tool_organisation_job_delete``."""
+        raw = await self._call(
+            "tool_organisation_job_delete", id=job_id
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def unassign_managers(
+        self,
+        user_ids: list[int],
+        manager_ids: list[int],
+        unassign_all: bool = False,
+    ) -> dict:
+        """Unassign managers via ``tool_organisation_unassign_managers``."""
+        params: dict[str, str | int] = {}
+        for i, uid in enumerate(user_ids):
+            params[f"users[{i}][id]"] = uid
+        for i, mid in enumerate(manager_ids):
+            params[f"managers[{i}][id]"] = mid
+        if unassign_all:
+            params["unassignall"] = 1
+        raw = await self._call(
+            "tool_organisation_unassign_managers", **params
         )
         if raw is None:
             return {"result": True}

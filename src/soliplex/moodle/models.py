@@ -353,6 +353,7 @@ class Department(BaseModel):
     id: int
     name: str = ""
     parentid: int = 0
+    idnumber: str = ""
 
 
 class Position(BaseModel):
@@ -361,6 +362,7 @@ class Position(BaseModel):
     id: int
     name: str = ""
     parentid: int = 0
+    idnumber: str = ""
 
 
 class Job(BaseModel):
@@ -370,6 +372,38 @@ class Job(BaseModel):
     userid: int = 0
     departmentid: int = 0
     positionid: int = 0
+
+
+class PotentialParent(BaseModel):
+    """Valid parent for department/position hierarchy."""
+
+    id: int
+    name: str = ""
+    path: str = ""
+    locked: int = 0
+
+
+class CreatedEntity(BaseModel):
+    """Result from creating a department or position."""
+
+    id: int
+    name: str = ""
+    idnumber: str = ""
+
+
+class UpdatedEntity(BaseModel):
+    """Result from updating a department or position."""
+
+    id: int
+    idnumber: str = ""
+
+
+class UnassignedManager(BaseModel):
+    """Record from ``tool_organisation_unassign_managers``."""
+
+    itemid: int = 0
+    userid: int = 0
+    managerid: int = 0
 
 
 # ---------------------------------------------------------------

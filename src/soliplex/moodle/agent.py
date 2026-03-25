@@ -22,6 +22,7 @@ from soliplex.moodle.client import MAX_RESULTS
 from soliplex.moodle.client import MoodleAPIError
 from soliplex.moodle.client import MoodleClient
 
+
 def _parse_ids(csv_string: str, param_name: str = "IDs") -> list[int] | str:
     """Parse comma-separated numeric IDs.
 
@@ -107,6 +108,8 @@ whole course
 - list_departments — list organisational departments
 - list_positions — list organisational positions
 - get_team_members — find users by department/position
+- get_potential_parent_departments — find valid parents for dept hierarchy
+- get_potential_parent_positions — find valid parents for position hierarchy
 - assign_job — assign a user to a department and position
 - assign_manager — set manager relationships
 
@@ -135,6 +138,14 @@ whole course
 - suspend_users — suspend user accounts (system-wide)
 - assign_job — assign a user to a department and position
 - assign_manager — set manager relationships
+- create_department — create a new department
+- update_department — update or move a department (by idnumber)
+- delete_department — delete a department
+- create_position — create a new position
+- update_position — update or move a position (by idnumber)
+- delete_position — delete a position
+- delete_job — delete a job assignment
+- unassign_manager — remove manager relationships
 
 WRITE OPERATIONS: For all write tools, you MUST first call the \
 tool WITHOUT confirmed=True to generate a preview. Present the \
@@ -159,7 +170,11 @@ programs, then get_user_program_courses for progress details.
 6. For browsing available content, use browse_catalogue. For \
 program course details, use get_program_content.
 7. For org structure questions, use list_departments and \
-list_positions to discover structure, then get_team_members.
+list_positions to discover structure, then get_team_members. \
+For org modifications, use get_potential_parent_departments or \
+get_potential_parent_positions to find valid hierarchy parents \
+before creating or moving. When creating departments/positions, \
+always set an idnumber so you can reference them for updates.
 8. For competency questions, use list_competency_frameworks to \
 discover frameworks, then get_user_learning_plans or \
 get_user_competency for details.
@@ -1520,7 +1535,12 @@ def moodle_tools_agent_factory(
             return json.dumps({"error": str(exc)})
         return json.dumps(
             [
-                {"id": d.id, "name": d.name, "parentid": d.parentid}
+                {
+                    "id": d.id,
+                    "name": d.name,
+                    "parentid": d.parentid,
+                    "idnumber": d.idnumber,
+                }
                 for d in depts
             ]
         )
@@ -1538,7 +1558,12 @@ def moodle_tools_agent_factory(
             return json.dumps({"error": str(exc)})
         return json.dumps(
             [
-                {"id": p.id, "name": p.name, "parentid": p.parentid}
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "parentid": p.parentid,
+                    "idnumber": p.idnumber,
+                }
                 for p in positions
             ]
         )
@@ -1789,6 +1814,371 @@ def moodle_tools_agent_factory(
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(competencies)
+
+    # ---------------------------------------------------------------
+    # Organisation CRUD tools
+    # ---------------------------------------------------------------
+
+    @agent.tool_plain
+    async def get_potential_parent_departments(
+        search: str = "",
+        departmentid: int = 0,
+    ) -> str:
+        """Get valid parent departments for building hierarchy.
+
+        Use before creating or moving a department to find
+        valid parents.
+
+        Args:
+            search: Search string to filter results.
+            departmentid: Department ID being edited (0 for new).
+        """
+        try:
+            parents = await client.get_potential_parent_departments(
+                search=search, departmentid=departmentid
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            [
+                {"id": p.id, "name": p.name, "path": p.path}
+                for p in parents
+            ]
+        )
+
+    @agent.tool_plain
+    async def get_potential_parent_positions(
+        search: str = "",
+        positionid: int = 0,
+    ) -> str:
+        """Get valid parent positions for building hierarchy.
+
+        Use before creating or moving a position to find
+        valid parents.
+
+        Args:
+            search: Search string to filter results.
+            positionid: Position ID being edited (0 for new).
+        """
+        try:
+            parents = await client.get_potential_parent_positions(
+                search=search, positionid=positionid
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            [
+                {"id": p.id, "name": p.name, "path": p.path}
+                for p in parents
+            ]
+        )
+
+    @agent.tool_plain
+    async def create_department(
+        name: str,
+        idnumber: str = "",
+        parent: str = "",
+        description: str = "",
+        confirmed: bool = False,
+    ) -> str:
+        """Create a new department. REQUIRES USER CONFIRMATION.
+
+        Always set an idnumber so the department can be
+        referenced for later updates.
+
+        Args:
+            name: Department name (required).
+            idnumber: Unique identifier for the department.
+            parent: Parent department idnumber for hierarchy.
+            description: Optional description.
+            confirmed: Set True only after user approval.
+        """
+        dept: dict[str, str] = {"name": name}
+        if idnumber:
+            dept["idnumber"] = idnumber
+        if parent:
+            dept["parent"] = parent
+        if description:
+            dept["description"] = description
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Create department '{name}'", "department": dept}
+            )
+        try:
+            created, warnings = await client.create_departments([dept])
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {
+                "created": [
+                    {"id": c.id, "name": c.name, "idnumber": c.idnumber}
+                    for c in created
+                ],
+                "warnings": warnings,
+            }
+        )
+
+    @agent.tool_plain
+    async def update_department(
+        idnumber: str,
+        name: str = "",
+        parent: str = "",
+        description: str = "",
+        confirmed: bool = False,
+    ) -> str:
+        """Update or move a department. REQUIRES USER CONFIRMATION.
+
+        Identifies the department by idnumber. Set parent to
+        move the department to a new parent in the hierarchy.
+
+        Args:
+            idnumber: Department idnumber to update (required).
+            name: New name (optional).
+            parent: New parent idnumber to move (optional).
+            description: New description (optional).
+            confirmed: Set True only after user approval.
+        """
+        dept: dict[str, str] = {"idnumber": idnumber}
+        if name:
+            dept["name"] = name
+        if parent:
+            dept["parent"] = parent
+        if description:
+            dept["description"] = description
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Update department '{idnumber}'", "changes": dept}
+            )
+        try:
+            updated, warnings = await client.update_departments([dept])
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {
+                "updated": [
+                    {"id": u.id, "idnumber": u.idnumber}
+                    for u in updated
+                ],
+                "warnings": warnings,
+            }
+        )
+
+    @agent.tool_plain
+    async def delete_department(
+        department_id: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Delete a department. REQUIRES USER CONFIRMATION.
+
+        The department must not have any jobs in its hierarchy.
+
+        Args:
+            department_id: Moodle internal department ID.
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Delete department id={department_id}"}
+            )
+        try:
+            result = await client.delete_department(department_id)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def create_position(
+        name: str,
+        idnumber: str = "",
+        parent: str = "",
+        description: str = "",
+        department_manager: bool = False,
+        global_manager: bool = False,
+        confirmed: bool = False,
+    ) -> str:
+        """Create a new position. REQUIRES USER CONFIRMATION.
+
+        Always set an idnumber so the position can be
+        referenced for later updates.
+
+        Args:
+            name: Position name (required).
+            idnumber: Unique identifier for the position.
+            parent: Parent position idnumber for hierarchy.
+            description: Optional description.
+            department_manager: True if this is a department lead.
+            global_manager: True if this is a manager role.
+            confirmed: Set True only after user approval.
+        """
+        pos: dict[str, str | bool] = {"name": name}
+        if idnumber:
+            pos["idnumber"] = idnumber
+        if parent:
+            pos["parent"] = parent
+        if description:
+            pos["description"] = description
+        if department_manager:
+            pos["departmentmanager"] = True
+        if global_manager:
+            pos["globalmanager"] = True
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Create position '{name}'", "position": pos}
+            )
+        try:
+            created, warnings = await client.create_positions([pos])
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {
+                "created": [
+                    {"id": c.id, "name": c.name, "idnumber": c.idnumber}
+                    for c in created
+                ],
+                "warnings": warnings,
+            }
+        )
+
+    @agent.tool_plain
+    async def update_position(
+        idnumber: str,
+        name: str = "",
+        parent: str = "",
+        description: str = "",
+        department_manager: bool | None = None,
+        global_manager: bool | None = None,
+        confirmed: bool = False,
+    ) -> str:
+        """Update or move a position. REQUIRES USER CONFIRMATION.
+
+        Identifies the position by idnumber. Set parent to
+        move the position to a new parent in the hierarchy.
+
+        Args:
+            idnumber: Position idnumber to update (required).
+            name: New name (optional).
+            parent: New parent idnumber to move (optional).
+            description: New description (optional).
+            department_manager: Set department lead flag (optional).
+            global_manager: Set manager flag (optional).
+            confirmed: Set True only after user approval.
+        """
+        pos: dict[str, str | bool] = {"idnumber": idnumber}
+        if name:
+            pos["name"] = name
+        if parent:
+            pos["parent"] = parent
+        if description:
+            pos["description"] = description
+        if department_manager is not None:
+            pos["departmentmanager"] = department_manager
+        if global_manager is not None:
+            pos["globalmanager"] = global_manager
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Update position '{idnumber}'", "changes": pos}
+            )
+        try:
+            updated, warnings = await client.update_positions([pos])
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {
+                "updated": [
+                    {"id": u.id, "idnumber": u.idnumber}
+                    for u in updated
+                ],
+                "warnings": warnings,
+            }
+        )
+
+    @agent.tool_plain
+    async def delete_position(
+        position_id: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Delete a position. REQUIRES USER CONFIRMATION.
+
+        The position must not have any jobs assigned.
+
+        Args:
+            position_id: Moodle internal position ID.
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Delete position id={position_id}"}
+            )
+        try:
+            result = await client.delete_position(position_id)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def delete_job(
+        job_id: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Delete a job assignment. REQUIRES USER CONFIRMATION.
+
+        Args:
+            job_id: Internal Moodle job ID.
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Delete job id={job_id}"}
+            )
+        try:
+            result = await client.delete_job(job_id)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def unassign_manager(
+        userids: str,
+        managerids: str,
+        unassign_all: bool = False,
+        confirmed: bool = False,
+    ) -> str:
+        """Unassign manager relationships. REQUIRES USER CONFIRMATION.
+
+        When unassign_all is False, removes the specified managers
+        from the specified users. When True, removes ALL manager
+        relationships for the given users and managers.
+
+        Args:
+            userids: Comma-separated user IDs (subordinates).
+            managerids: Comma-separated manager user IDs.
+            unassign_all: If True, unassign all relationships.
+            confirmed: Set True only after user approval.
+        """
+        try:
+            uid_list = [int(x.strip()) for x in userids.split(",")]
+            mid_list = [int(x.strip()) for x in managerids.split(",")]
+        except ValueError:
+            return json.dumps(
+                {"error": "IDs must be comma-separated integers"}
+            )
+        if not confirmed:
+            return json.dumps(
+                {
+                    "preview": (
+                        f"Unassign managers {mid_list}"
+                        f" from users {uid_list}"
+                    ),
+                    "unassign_all": unassign_all,
+                }
+            )
+        try:
+            result = await client.unassign_managers(
+                uid_list, mid_list, unassign_all=unassign_all
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
 
     # ---------------------------------------------------------------
     # Reporting tools

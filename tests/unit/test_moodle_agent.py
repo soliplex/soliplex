@@ -145,6 +145,17 @@ def test_factory_agent_has_expected_tools():
         "get_team_members",
         "assign_job",
         "assign_manager",
+        # Organisation CRUD tools
+        "get_potential_parent_departments",
+        "get_potential_parent_positions",
+        "create_department",
+        "update_department",
+        "delete_department",
+        "create_position",
+        "update_position",
+        "delete_position",
+        "delete_job",
+        "unassign_manager",
         "list_competency_frameworks",
         "get_user_learning_plans",
         "get_user_competency",
@@ -2759,5 +2770,473 @@ async def test_get_adv_comp_report_tool_error():
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(courseid=2))
+
+    assert "error" in result
+
+
+# -----------------------------------------------------------------
+# Organisation CRUD tools
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_potential_parent_departments_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_potential_parent_departments")
+
+    resp = _mock_response(
+        [{"id": 1, "name": "Root", "path": "/Root", "locked": 0}]
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert len(result) == 1
+    assert result[0]["name"] == "Root"
+
+
+@pytest.mark.asyncio
+async def test_get_potential_parent_departments_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_potential_parent_departments")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_potential_parent_positions_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_potential_parent_positions")
+
+    resp = _mock_response(
+        [{"id": 1, "name": "Management", "path": "/Mgmt", "locked": 0}]
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert len(result) == 1
+    assert result[0]["name"] == "Management"
+
+
+@pytest.mark.asyncio
+async def test_get_potential_parent_positions_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_potential_parent_positions")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_create_department_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_department")
+
+    result = json.loads(await fn(name="Finance", idnumber="FIN"))
+
+    assert "preview" in result
+    assert result["department"]["name"] == "Finance"
+
+
+@pytest.mark.asyncio
+async def test_create_department_tool_preview_with_optional():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_department")
+
+    result = json.loads(
+        await fn(name="Security", parent="ENG", description="Sec team")
+    )
+
+    assert result["department"]["parent"] == "ENG"
+    assert result["department"]["description"] == "Sec team"
+
+
+@pytest.mark.asyncio
+async def test_create_department_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_department")
+
+    resp = _mock_response(
+        {"result": [{"id": 10, "name": "Finance", "idnumber": "FIN"}], "warnings": []}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(name="Finance", idnumber="FIN", confirmed=True))
+
+    assert len(result["created"]) == 1
+    assert result["created"][0]["idnumber"] == "FIN"
+
+
+@pytest.mark.asyncio
+async def test_create_department_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_department")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(name="X", confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_update_department_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_department")
+
+    result = json.loads(await fn(idnumber="FIN", name="Finance Dept"))
+
+    assert "preview" in result
+    assert result["changes"]["name"] == "Finance Dept"
+
+
+@pytest.mark.asyncio
+async def test_update_department_tool_preview_with_optional():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_department")
+
+    result = json.loads(
+        await fn(idnumber="FIN", parent="ROOT", description="Updated")
+    )
+
+    assert result["changes"]["parent"] == "ROOT"
+    assert result["changes"]["description"] == "Updated"
+
+
+@pytest.mark.asyncio
+async def test_update_department_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_department")
+
+    resp = _mock_response(
+        {"result": [{"id": 10, "idnumber": "FIN"}], "warnings": []}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(idnumber="FIN", name="Finance Dept", confirmed=True))
+
+    assert len(result["updated"]) == 1
+    assert result["updated"][0]["idnumber"] == "FIN"
+
+
+@pytest.mark.asyncio
+async def test_update_department_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_department")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(idnumber="X", confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_department_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_department")
+
+    result = json.loads(await fn(department_id=10))
+
+    assert "preview" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_department_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_department")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(department_id=10, confirmed=True))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_department_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_department")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(department_id=10, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_create_position_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_position")
+
+    result = json.loads(await fn(name="Engineer", idnumber="ENG"))
+
+    assert "preview" in result
+    assert result["position"]["name"] == "Engineer"
+
+
+@pytest.mark.asyncio
+async def test_create_position_tool_preview_with_optional():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_position")
+
+    result = json.loads(
+        await fn(name="Analyst", parent="MGMT", description="Data team")
+    )
+
+    assert result["position"]["parent"] == "MGMT"
+    assert result["position"]["description"] == "Data team"
+
+
+@pytest.mark.asyncio
+async def test_create_position_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_position")
+
+    resp = _mock_response(
+        {"result": [{"id": 5, "name": "Engineer", "idnumber": "ENG"}], "warnings": []}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(name="Engineer", idnumber="ENG", confirmed=True))
+
+    assert len(result["created"]) == 1
+    assert result["created"][0]["idnumber"] == "ENG"
+
+
+@pytest.mark.asyncio
+async def test_create_position_tool_with_flags():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_position")
+
+    resp = _mock_response(
+        {"result": [{"id": 6, "name": "Lead", "idnumber": "LEAD"}], "warnings": []}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(
+            await fn(
+                name="Lead",
+                idnumber="LEAD",
+                department_manager=True,
+                global_manager=True,
+                confirmed=True,
+            )
+        )
+
+    assert len(result["created"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_create_position_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_position")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(name="X", confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_update_position_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_position")
+
+    result = json.loads(await fn(idnumber="ENG", name="Senior Engineer"))
+
+    assert "preview" in result
+    assert result["changes"]["name"] == "Senior Engineer"
+
+
+@pytest.mark.asyncio
+async def test_update_position_tool_preview_with_optional():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_position")
+
+    result = json.loads(
+        await fn(idnumber="ENG", parent="MGMT", description="Updated")
+    )
+
+    assert result["changes"]["parent"] == "MGMT"
+    assert result["changes"]["description"] == "Updated"
+
+
+@pytest.mark.asyncio
+async def test_update_position_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_position")
+
+    resp = _mock_response(
+        {"result": [{"id": 5, "idnumber": "ENG"}], "warnings": []}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(idnumber="ENG", name="Senior Engineer", confirmed=True))
+
+    assert len(result["updated"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_update_position_tool_with_flags():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_position")
+
+    resp = _mock_response(
+        {"result": [{"id": 5, "idnumber": "ENG"}], "warnings": []}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(
+            await fn(idnumber="ENG", department_manager=True, global_manager=False, confirmed=True)
+        )
+
+    assert len(result["updated"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_update_position_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_position")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(idnumber="X", confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_position_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_position")
+
+    result = json.loads(await fn(position_id=5))
+
+    assert "preview" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_position_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_position")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(position_id=5, confirmed=True))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_position_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_position")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(position_id=5, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_job_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_job")
+
+    result = json.loads(await fn(job_id=42))
+
+    assert "preview" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_job_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_job")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(job_id=42, confirmed=True))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_job_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_job")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(job_id=42, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_unassign_manager_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "unassign_manager")
+
+    result = json.loads(await fn(userids="3", managerids="5"))
+
+    assert "preview" in result
+
+
+@pytest.mark.asyncio
+async def test_unassign_manager_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "unassign_manager")
+
+    resp = _mock_response(
+        {"warnings": [], "unassignedmanagers": [{"itemid": 1, "userid": 3, "managerid": 5}]}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(userids="3", managerids="5", confirmed=True))
+
+    assert len(result["unassignedmanagers"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_unassign_manager_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "unassign_manager")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(userids="3", managerids="5", confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_unassign_manager_tool_non_numeric():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "unassign_manager")
+
+    result = json.loads(await fn(userids="abc", managerids="5"))
 
     assert "error" in result
