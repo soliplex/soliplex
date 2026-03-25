@@ -14,6 +14,7 @@ import time
 
 import httpx
 import pydantic_ai
+from haiku.skills import prompts as hs_prompts
 
 from soliplex import agents
 from soliplex import config
@@ -225,10 +226,22 @@ def moodle_tools_agent_factory(
 
     model = config_agents.get_model_from_factory_config(agent_config)
 
+    toolsets: list = []
+    if skill_toolset_config is not None:
+        toolset = skill_toolset_config.skill_toolset
+        toolsets.append(toolset)
+        instructions = hs_prompts.build_system_prompt(
+            preamble=MOODLE_TOOLS_PROMPT,
+            skill_catalog=toolset.skill_catalog,
+        )
+    else:
+        instructions = MOODLE_TOOLS_PROMPT
+
     agent = pydantic_ai.Agent(
         model=model,
-        instructions=MOODLE_TOOLS_PROMPT,
+        instructions=instructions,
         deps_type=agents.AgentDependencies,
+        toolsets=toolsets or None,
     )
 
     # ---------------------------------------------------------------

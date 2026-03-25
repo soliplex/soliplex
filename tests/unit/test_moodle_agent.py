@@ -100,6 +100,44 @@ def test_factory_accepts_skill_toolset_config():
     assert isinstance(agent, pydantic_ai.Agent)
 
 
+def test_factory_wires_skill_toolset():
+    from haiku.skills.agent import SkillToolset
+    from haiku.skills.models import Skill
+    from haiku.skills.models import SkillMetadata
+    from haiku.skills.models import SkillSource
+
+    from soliplex.moodle.agent import MOODLE_TOOLS_PROMPT
+    from soliplex.moodle.agent import moodle_tools_agent_factory
+
+    skill = Skill(
+        metadata=SkillMetadata(
+            name="test-skill", description="A test skill"
+        ),
+        source=SkillSource.ENTRYPOINT,
+        instructions="Test instructions",
+    )
+    toolset = SkillToolset(skills=[skill])
+    stc = mock.MagicMock()
+    stc.skill_toolset = toolset
+
+    agent_config = _make_agent_config()
+    with mock.patch(
+        "soliplex.moodle.agent.agents.get_model_from_factory_config",
+        return_value=TestModel(),
+    ):
+        agent = moodle_tools_agent_factory(
+            agent_config, skill_toolset_config=stc
+        )
+
+    assert isinstance(agent, pydantic_ai.Agent)
+    # The skill toolset should be wired in
+    assert toolset in agent._user_toolsets
+    # System prompt should contain both the Moodle prompt and skill catalog
+    instructions = "\n".join(agent._instructions)
+    assert MOODLE_TOOLS_PROMPT in instructions
+    assert "test-skill" in instructions
+
+
 def test_factory_agent_has_expected_tools():
     agent = _build_agent()
     tool_names = set(agent._function_toolset.tools.keys())
