@@ -90,6 +90,24 @@ def _load_config_yaml(config_path: pathlib.Path) -> dict:
 
     return config_yaml
 
+def _deep_merge(base: dict, overlay: dict) -> dict:
+    """Recursively merge overlay into base, overriding values.
+
+    Args:
+        base: Original configuration dictionary.
+        overlay: Dictionary with overriding values.
+
+    Returns:
+        The merged dictionary (the same instance as ``base``).
+    """
+    for key, val in overlay.items():
+        if key in base and isinstance(base[key], dict) and isinstance(val, dict):
+            base[key] = _deep_merge(base[key], val)
+        else:
+            base[key] = val
+    return base
+
+
 
 def _find_configs_yaml(
     to_search: pathlib.Path,
@@ -1018,5 +1036,10 @@ def load_installation(config_path: pathlib.Path) -> InstallationConfig:
         config_path = config_path / "installation.yaml"
 
     config_yaml = _load_config_yaml(config_path)
+    # Load optional local overrides ("*.local.yaml") if present
+    local_path = config_path.with_name(f"{config_path.stem}.local.yaml")
+    if local_path.is_file():
+        local_yaml = _load_config_yaml(local_path)
+        config_yaml = _deep_merge(config_yaml, local_yaml)
 
     return InstallationConfig.from_yaml(config_path, config_yaml)

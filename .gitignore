@@ -28,6 +28,7 @@ tmp/
 build/
 dist/
 
+*.local.yaml
 # mkdocs artifacts
 site/
 
