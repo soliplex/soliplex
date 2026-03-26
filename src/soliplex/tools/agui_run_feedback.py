@@ -56,7 +56,7 @@ class RunFeedbackEntry(pydantic.BaseModel):
     """
 
     user_name: str
-    email: str
+    email: str | None
     room_id: str
     thread_id: str
     run_id: str
@@ -71,7 +71,7 @@ class RunFeedbackInfo(pydantic.BaseModel):
     """Information about the run which was the target of feedback"""
 
     user_name: str
-    email: str
+    email: str | None
     room_id: str
     thread_id: str
     run_id: str
