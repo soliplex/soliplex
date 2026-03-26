@@ -194,6 +194,19 @@ def test_factory_agent_has_expected_tools():
         "delete_position",
         "delete_job",
         "unassign_manager",
+        # Program lifecycle tools
+        "archive_program",
+        "restore_program",
+        "delete_program",
+        "duplicate_program",
+        "update_program_visibility",
+        "bulk_deallocate_program_users",
+        "bulk_reset_program_progress",
+        # Certification lifecycle tools
+        "delete_certification",
+        "restore_certification",
+        "search_certifications",
+        "bulk_deallocate_certification_users",
         "list_competency_frameworks",
         "get_user_learning_plans",
         "get_user_competency",
@@ -3276,5 +3289,455 @@ async def test_unassign_manager_tool_non_numeric():
     fn = _get_tool_fn(agent, "unassign_manager")
 
     result = json.loads(await fn(userids="abc", managerids="5"))
+
+    assert "error" in result
+
+
+# -----------------------------------------------------------------
+# Program & Certification Lifecycle tools
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_archive_program_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "archive_program")
+
+    result = json.loads(await fn(program_id=7))
+
+    assert "preview" in result
+    assert "Archive program" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_archive_program_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "archive_program")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(program_id=7, confirmed=True))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_archive_program_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "archive_program")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(program_id=7, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_restore_program_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "restore_program")
+
+    result = json.loads(await fn(program_id=7))
+
+    assert "preview" in result
+    assert "Restore program" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_restore_program_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "restore_program")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(program_id=7, confirmed=True))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_restore_program_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "restore_program")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(program_id=7, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_program_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_program")
+
+    result = json.loads(await fn(program_id=7))
+
+    assert "preview" in result
+    assert "DELETE program" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_delete_program_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_program")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(program_id=7, confirmed=True))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_program_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_program")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(program_id=7, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_duplicate_program_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "duplicate_program")
+
+    result = json.loads(await fn(program_id=7))
+
+    assert "preview" in result
+    assert "Duplicate program" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_duplicate_program_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "duplicate_program")
+
+    resp = _mock_response(
+        {"duplicatedprogramid": 99, "redirecturl": "/program/view.php?id=99"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(program_id=7, confirmed=True))
+
+    assert result["duplicatedprogramid"] == 99
+    assert result["redirecturl"] == "/program/view.php?id=99"
+
+
+@pytest.mark.asyncio
+async def test_duplicate_program_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "duplicate_program")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(program_id=7, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_update_program_visibility_tool_preview_visible():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_program_visibility")
+
+    result = json.loads(await fn(program_id=7, visible=1))
+
+    assert "preview" in result
+    assert "visible" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_update_program_visibility_tool_preview_hidden():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_program_visibility")
+
+    result = json.loads(await fn(program_id=7, visible=0))
+
+    assert "preview" in result
+    assert "hidden" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_update_program_visibility_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_program_visibility")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(program_id=7, visible=1, confirmed=True))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_update_program_visibility_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_program_visibility")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(program_id=7, visible=1, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_bulk_deallocate_program_users_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "bulk_deallocate_program_users")
+
+    result = json.loads(await fn(allocation_ids="10,20"))
+
+    assert "preview" in result
+    assert result["allocation_ids"] == [10, 20]
+
+
+@pytest.mark.asyncio
+async def test_bulk_deallocate_program_users_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "bulk_deallocate_program_users")
+
+    resp = _mock_response({"successcount": 2, "skippedcount": 0})
+    with _patch_httpx(resp):
+        result = json.loads(await fn(allocation_ids="10,20", confirmed=True))
+
+    assert result["successcount"] == 2
+    assert result["skippedcount"] == 0
+
+
+@pytest.mark.asyncio
+async def test_bulk_deallocate_program_users_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "bulk_deallocate_program_users")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(allocation_ids="10,20", confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_bulk_deallocate_program_users_tool_non_numeric():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "bulk_deallocate_program_users")
+
+    result = json.loads(await fn(allocation_ids="abc,20"))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_bulk_reset_program_progress_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "bulk_reset_program_progress")
+
+    result = json.loads(await fn(allocation_ids="10,20"))
+
+    assert "preview" in result
+    assert result["allocation_ids"] == [10, 20]
+
+
+@pytest.mark.asyncio
+async def test_bulk_reset_program_progress_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "bulk_reset_program_progress")
+
+    resp = _mock_response({"successcount": 2, "skippedcount": 0})
+    with _patch_httpx(resp):
+        result = json.loads(await fn(allocation_ids="10,20", confirmed=True))
+
+    assert result["successcount"] == 2
+    assert result["skippedcount"] == 0
+
+
+@pytest.mark.asyncio
+async def test_bulk_reset_program_progress_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "bulk_reset_program_progress")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(allocation_ids="10,20", confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_bulk_reset_program_progress_tool_non_numeric():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "bulk_reset_program_progress")
+
+    result = json.loads(await fn(allocation_ids="abc,20"))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_certification_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_certification")
+
+    result = json.loads(await fn(certification_id=3))
+
+    assert "preview" in result
+    assert "DELETE certification" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_delete_certification_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_certification")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(certification_id=3, confirmed=True))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_certification_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_certification")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(certification_id=3, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_restore_certification_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "restore_certification")
+
+    result = json.loads(await fn(certification_id=3))
+
+    assert "preview" in result
+    assert "Restore certification" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_restore_certification_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "restore_certification")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(certification_id=3, confirmed=True))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_restore_certification_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "restore_certification")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(certification_id=3, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_search_certifications_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "search_certifications")
+
+    resp = _mock_response([{"id": 1, "fullname": "Safety Cert"}])
+    with _patch_httpx(resp):
+        result = json.loads(await fn(search="Safety"))
+
+    assert len(result) == 1
+    assert result[0]["id"] == 1
+    assert result[0]["fullname"] == "Safety Cert"
+
+
+@pytest.mark.asyncio
+async def test_search_certifications_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "search_certifications")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(search="Safety"))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_bulk_deallocate_certification_users_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "bulk_deallocate_certification_users")
+
+    result = json.loads(await fn(allocation_ids="10,20"))
+
+    assert "preview" in result
+    assert result["allocation_ids"] == [10, 20]
+
+
+@pytest.mark.asyncio
+async def test_bulk_deallocate_certification_users_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "bulk_deallocate_certification_users")
+
+    resp = _mock_response({"successcount": 2, "skippedcount": 0})
+    with _patch_httpx(resp):
+        result = json.loads(await fn(allocation_ids="10,20", confirmed=True))
+
+    assert result["successcount"] == 2
+    assert result["skippedcount"] == 0
+
+
+@pytest.mark.asyncio
+async def test_bulk_deallocate_certification_users_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "bulk_deallocate_certification_users")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(allocation_ids="10,20", confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_bulk_deallocate_certification_users_tool_non_numeric():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "bulk_deallocate_certification_users")
+
+    result = json.loads(await fn(allocation_ids="abc,20"))
 
     assert "error" in result

@@ -290,6 +290,27 @@ class ProgramCourse(BaseModel):
     completed: bool = False
 
 
+class DuplicatedProgram(BaseModel):
+    """Result from ``tool_program_duplicate_program``."""
+
+    duplicatedprogramid: int = 0
+    redirecturl: str = ""
+
+
+class BulkOperationResult(BaseModel):
+    """Result from bulk program/certification operations."""
+
+    successcount: int = 0
+    skippedcount: int = 0
+
+
+class CertificationSearchResult(BaseModel):
+    """Item from ``tool_certification_potential_certification_selector``."""
+
+    id: int
+    fullname: str = ""
+
+
 # ---------------------------------------------------------------
 # Feature 10: Tenants (Workplace)
 # ---------------------------------------------------------------

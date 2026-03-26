@@ -90,6 +90,7 @@ whole course
 - get_certification_user_details — detailed user+cert allocation view
 - search_programs — find learning paths/programs by name
 - get_user_program_courses — courses in a user's program with progress
+- search_certifications — lightweight search for certifications by name
 - list_tenants — list organizational tenants
 
 ## Catalogue Tools
@@ -147,6 +148,16 @@ whole course
 - delete_position — delete a position
 - delete_job — delete a job assignment
 - unassign_manager — remove manager relationships
+- archive_program — archive a program (reversible)
+- restore_program — restore an archived program
+- delete_program — permanently delete a program
+- duplicate_program — clone a program (returns new ID)
+- update_program_visibility — show/hide a program
+- bulk_deallocate_program_users — remove multiple users from a program
+- bulk_reset_program_progress — reset progress for multiple users
+- delete_certification — permanently delete a certification
+- restore_certification — restore an archived certification
+- bulk_deallocate_certification_users — remove multiple users
 
 WRITE OPERATIONS: For all write tools, you MUST first call the \
 tool WITHOUT confirmed=True to generate a preview. Present the \
@@ -183,6 +194,14 @@ get_user_competency for details.
 available custom reports and their IDs, then get_report_data to \
 retrieve actual data. For completion reports by department, use \
 get_utm_report or get_adv_comp_report directly.
+10. For program/certification lifecycle: the state machine is \
+Active → archive → Archived → delete (permanent) or restore → Active. \
+You must archive before deleting. Use search_programs to find \
+programs first. Use duplicate_program to clone a program.
+11. Bulk operations (bulk_deallocate_program_users, \
+bulk_reset_program_progress, bulk_deallocate_certification_users) \
+take allocation IDs, NOT regular user IDs. Get allocation IDs \
+from get_user_program_courses or get_certification_allocations.
 
 Present data in clear tables when appropriate.
 """
@@ -1417,6 +1436,215 @@ def moodle_tools_agent_factory(
         )
 
     # ---------------------------------------------------------------
+    # Program Lifecycle tools
+    # ---------------------------------------------------------------
+
+    @agent.tool_plain
+    async def archive_program(
+        program_id: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Archive a program (reversible). REQUIRES USER CONFIRMATION.
+
+        Moves the program from active to archived state.
+        Archived programs can be restored or permanently deleted.
+
+        Args:
+            program_id: Moodle program ID.
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Archive program id={program_id}"}
+            )
+        try:
+            result = await client.archive_program(program_id)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def restore_program(
+        program_id: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Restore an archived program. REQUIRES USER CONFIRMATION.
+
+        The program must already be archived. Use
+        archive_program first if it is currently active.
+
+        Args:
+            program_id: Moodle program ID.
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Restore program id={program_id}"}
+            )
+        try:
+            result = await client.restore_program(program_id)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def delete_program(
+        program_id: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Permanently delete a program. REQUIRES USER CONFIRMATION.
+
+        The program must be archived first — use
+        archive_program before calling this. This cannot
+        be undone.
+
+        Args:
+            program_id: Moodle program ID.
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"DELETE program id={program_id}"}
+            )
+        try:
+            result = await client.delete_program(program_id)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def duplicate_program(
+        program_id: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Clone a program. REQUIRES USER CONFIRMATION.
+
+        Creates a copy of the program with its structure.
+        Returns the new program ID.
+
+        Args:
+            program_id: Moodle program ID to duplicate.
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Duplicate program id={program_id}"}
+            )
+        try:
+            dup = await client.duplicate_program(program_id)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {
+                "duplicatedprogramid": dup.duplicatedprogramid,
+                "redirecturl": dup.redirecturl,
+            }
+        )
+
+    @agent.tool_plain
+    async def update_program_visibility(
+        program_id: int,
+        visible: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Show or hide a program. REQUIRES USER CONFIRMATION.
+
+        Args:
+            program_id: Moodle program ID.
+            visible: 1 to show, 0 to hide.
+            confirmed: Set True only after user approval.
+        """
+        label = "visible" if visible else "hidden"
+        if not confirmed:
+            return json.dumps(
+                {
+                    "preview": (
+                        f"Set program id={program_id} "
+                        f"to {label}"
+                    ),
+                }
+            )
+        try:
+            result = await client.update_program_visibility(
+                program_id, visible
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def bulk_deallocate_program_users(
+        allocation_ids: str,
+        confirmed: bool = False,
+    ) -> str:
+        """Remove multiple users from a program.
+        REQUIRES USER CONFIRMATION.
+
+        Takes program-user allocation IDs (NOT user IDs).
+        Get allocation IDs from get_user_program_courses.
+
+        Args:
+            allocation_ids: Comma-separated allocation IDs.
+            confirmed: Set True only after user approval.
+        """
+        parsed = _parse_ids(allocation_ids, "allocation IDs")
+        if isinstance(parsed, str):
+            return parsed
+        if not confirmed:
+            return json.dumps(
+                {
+                    "preview": (
+                        f"Deallocate {len(parsed)} program "
+                        f"user(s)"
+                    ),
+                    "allocation_ids": parsed,
+                }
+            )
+        try:
+            result = await client.bulk_deallocate_program_users(
+                parsed
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result.model_dump())
+
+    @agent.tool_plain
+    async def bulk_reset_program_progress(
+        allocation_ids: str,
+        confirmed: bool = False,
+    ) -> str:
+        """Reset progress for multiple program users.
+        REQUIRES USER CONFIRMATION.
+
+        Takes program-user allocation IDs (NOT user IDs).
+        Get allocation IDs from get_user_program_courses.
+
+        Args:
+            allocation_ids: Comma-separated allocation IDs.
+            confirmed: Set True only after user approval.
+        """
+        parsed = _parse_ids(allocation_ids, "allocation IDs")
+        if isinstance(parsed, str):
+            return parsed
+        if not confirmed:
+            return json.dumps(
+                {
+                    "preview": (
+                        f"Reset progress for {len(parsed)} "
+                        f"program user(s)"
+                    ),
+                    "allocation_ids": parsed,
+                }
+            )
+        try:
+            result = await client.bulk_reset_program_progress(
+                parsed
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result.model_dump())
+
+    # ---------------------------------------------------------------
     # Feature 13: Deeper Certification Management (Workplace)
     # ---------------------------------------------------------------
 
@@ -1530,6 +1758,139 @@ def moodle_tools_agent_factory(
                 "result": result,
             }
         )
+
+    # ---------------------------------------------------------------
+    # Certification Lifecycle tools
+    # ---------------------------------------------------------------
+
+    @agent.tool_plain
+    async def delete_certification(
+        certification_id: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Permanently delete a certification.
+        REQUIRES USER CONFIRMATION.
+
+        The certification must be archived first — use
+        archive_certification before calling this. This
+        cannot be undone.
+
+        Args:
+            certification_id: Moodle certification ID.
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {
+                    "preview": (
+                        f"DELETE certification "
+                        f"id={certification_id}"
+                    ),
+                }
+            )
+        try:
+            result = await client.delete_certification(
+                certification_id
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def restore_certification(
+        certification_id: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Restore an archived certification.
+        REQUIRES USER CONFIRMATION.
+
+        The certification must already be archived. Use
+        archive_certification first if it is currently
+        active.
+
+        Args:
+            certification_id: Moodle certification ID.
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {
+                    "preview": (
+                        f"Restore certification "
+                        f"id={certification_id}"
+                    ),
+                }
+            )
+        try:
+            result = await client.restore_certification(
+                certification_id
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def search_certifications(
+        search: str = "",
+    ) -> str:
+        """Search certifications by name.
+
+        Lightweight search returning id and fullname.
+        Use list_certifications for full details.
+
+        Args:
+            search: Search term to filter by name.
+        """
+        try:
+            results = await client.search_certifications(
+                search=search
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            [
+                {"id": c.id, "fullname": c.fullname}
+                for c in results
+            ]
+        )
+
+    @agent.tool_plain
+    async def bulk_deallocate_certification_users(
+        allocation_ids: str,
+        confirmed: bool = False,
+    ) -> str:
+        """Remove multiple users from a certification.
+        REQUIRES USER CONFIRMATION.
+
+        Takes certification-user allocation IDs (NOT user IDs).
+        Get allocation IDs from get_certification_allocations.
+
+        Args:
+            allocation_ids: Comma-separated allocation IDs.
+            confirmed: Set True only after user approval.
+        """
+        parsed = _parse_ids(allocation_ids, "allocation IDs")
+        if isinstance(parsed, str):
+            return parsed
+        if not confirmed:
+            return json.dumps(
+                {
+                    "preview": (
+                        f"Deallocate {len(parsed)} "
+                        f"certification user(s)"
+                    ),
+                    "allocation_ids": parsed,
+                }
+            )
+        try:
+            result = (
+                await client.bulk_deallocate_certification_users(
+                    parsed
+                )
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result.model_dump())
 
     # ---------------------------------------------------------------
     # Feature 14: Organisation Structure (Workplace)

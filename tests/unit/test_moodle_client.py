@@ -2166,3 +2166,322 @@ async def test_unassign_managers_null_response(client):
         result = await client.unassign_managers([3], [5])
 
     assert result == {"result": True}
+
+
+# -----------------------------------------------------------------
+# Program & Certification Lifecycle
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_archive_program(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.archive_program(programid=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_archive_program_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.archive_program(programid=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_restore_program(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.restore_program(programid=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_restore_program_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.restore_program(programid=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_program(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.delete_program(programid=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_program_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.delete_program(programid=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_duplicate_program(client):
+    resp = _mock_response(
+        {"duplicatedprogramid": 42, "redirecturl": "/program/42"}
+    )
+    with _patch_httpx(resp):
+        result = await client.duplicate_program(programid=1)
+
+    assert result.duplicatedprogramid == 42
+    assert result.redirecturl == "/program/42"
+
+
+@pytest.mark.asyncio
+async def test_duplicate_program_non_dict(client):
+    resp = _mock_response(True)
+    with _patch_httpx(resp):
+        result = await client.duplicate_program(programid=1)
+
+    assert result.duplicatedprogramid == 0
+    assert result.redirecturl == ""
+
+
+@pytest.mark.asyncio
+async def test_update_program_visibility(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.update_program_visibility(
+            programid=1, visibility=1
+        )
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_update_program_visibility_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.update_program_visibility(
+            programid=1, visibility=0
+        )
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_enrol_user_to_program_course(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.enrol_user_to_program_course(
+            courseid=2, programid=1
+        )
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_enrol_user_to_program_course_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.enrol_user_to_program_course(
+            courseid=2, programid=1
+        )
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_program_set(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.delete_program_set(setid=5)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_program_set_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.delete_program_set(setid=5)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_program_course(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.delete_program_course(programcourseid=10)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_program_course_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.delete_program_course(programcourseid=10)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_bulk_deallocate_program_users(client):
+    resp = _mock_response({"successcount": 3, "skippedcount": 1})
+    with _patch_httpx(resp):
+        result = await client.bulk_deallocate_program_users(
+            programuserids=[10, 11, 12, 13]
+        )
+
+    assert result.successcount == 3
+    assert result.skippedcount == 1
+
+
+@pytest.mark.asyncio
+async def test_bulk_deallocate_program_users_non_dict(client):
+    resp = _mock_response(True)
+    with _patch_httpx(resp):
+        result = await client.bulk_deallocate_program_users(
+            programuserids=[10, 11]
+        )
+
+    assert result.successcount == 0
+    assert result.skippedcount == 0
+
+
+@pytest.mark.asyncio
+async def test_bulk_reset_program_progress(client):
+    resp = _mock_response({"successcount": 2, "skippedcount": 0})
+    with _patch_httpx(resp):
+        result = await client.bulk_reset_program_progress(
+            programuserids=[10, 11]
+        )
+
+    assert result.successcount == 2
+    assert result.skippedcount == 0
+
+
+@pytest.mark.asyncio
+async def test_bulk_reset_program_progress_non_dict(client):
+    resp = _mock_response(True)
+    with _patch_httpx(resp):
+        result = await client.bulk_reset_program_progress(
+            programuserids=[10]
+        )
+
+    assert result.successcount == 0
+    assert result.skippedcount == 0
+
+
+@pytest.mark.asyncio
+async def test_recalculate_program_completions(client):
+    resp = _mock_response({"successcount": 5, "skippedcount": 2})
+    with _patch_httpx(resp):
+        result = await client.recalculate_program_completions(
+            programuserids=[10, 11, 12, 13, 14, 15, 16]
+        )
+
+    assert result.successcount == 5
+    assert result.skippedcount == 2
+
+
+@pytest.mark.asyncio
+async def test_recalculate_program_completions_non_dict(client):
+    resp = _mock_response(True)
+    with _patch_httpx(resp):
+        result = await client.recalculate_program_completions(
+            programuserids=[10]
+        )
+
+    assert result.successcount == 0
+    assert result.skippedcount == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_certification(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.delete_certification(certificationid=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_certification_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.delete_certification(certificationid=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_restore_certification(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.restore_certification(certificationid=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_restore_certification_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.restore_certification(certificationid=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_search_certifications(client):
+    resp = _mock_response(
+        [
+            {"id": 1, "fullname": "Workplace Safety"},
+            {"id": 2, "fullname": "Data Privacy"},
+        ]
+    )
+    with _patch_httpx(resp):
+        certs = await client.search_certifications(search="safety")
+
+    assert len(certs) == 2
+    assert certs[0].id == 1
+    assert certs[0].fullname == "Workplace Safety"
+    assert certs[1].fullname == "Data Privacy"
+
+
+@pytest.mark.asyncio
+async def test_search_certifications_non_list(client):
+    resp = _mock_response({"error": "unexpected"})
+    with _patch_httpx(resp):
+        certs = await client.search_certifications(search="nothing")
+
+    assert certs == []
+
+
+@pytest.mark.asyncio
+async def test_bulk_deallocate_certification_users(client):
+    resp = _mock_response({"successcount": 4, "skippedcount": 1})
+    with _patch_httpx(resp):
+        result = await client.bulk_deallocate_certification_users(
+            certificationuserids=[20, 21, 22, 23, 24]
+        )
+
+    assert result.successcount == 4
+    assert result.skippedcount == 1
+
+
+@pytest.mark.asyncio
+async def test_bulk_deallocate_certification_users_non_dict(client):
+    resp = _mock_response(True)
+    with _patch_httpx(resp):
+        result = await client.bulk_deallocate_certification_users(
+            certificationuserids=[20]
+        )
+
+    assert result.successcount == 0
+    assert result.skippedcount == 0

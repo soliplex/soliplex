@@ -37,6 +37,15 @@ The `soliplex.moodle` package provides:
 - `assign_job` / `delete_job` — job assignment management
 - `assign_manager` / `unassign_manager` — manager relationships
 
+**Program & Certification Lifecycle Tools:**
+- `archive_program` / `restore_program` / `delete_program` — program lifecycle
+- `duplicate_program` — clone a program (returns new ID)
+- `update_program_visibility` — show/hide a program
+- `bulk_deallocate_program_users` / `bulk_reset_program_progress` — bulk program user ops
+- `delete_certification` / `restore_certification` — certification lifecycle
+- `search_certifications` — search certifications by name
+- `bulk_deallocate_certification_users` — bulk certification user removal
+
 **Write Tools (require user confirmation):**
 - `enrol_users` — enrol users into a course
 - `send_message` — send messages to users
@@ -79,6 +88,21 @@ The `soliplex.moodle` package provides:
    - `tool_organisation_update_job`
    - `tool_organisation_job_delete`
    - `tool_organisation_unassign_managers`
+   - `tool_program_archive_program`
+   - `tool_program_restore_program`
+   - `tool_program_delete_program`
+   - `tool_program_duplicate_program`
+   - `tool_program_update_program_visibility`
+   - `tool_program_enrol_user_to_course`
+   - `tool_program_delete_set`
+   - `tool_program_delete_course`
+   - `tool_program_bulk_deallocate_user`
+   - `tool_program_bulk_reset_program_progress`
+   - `tool_program_recalculate_program_user_completions`
+   - `tool_certification_delete_certification`
+   - `tool_certification_restore_certification`
+   - `tool_certification_potential_certification_selector`
+   - `tool_certification_bulk_deallocate_user`
 3. Under **Site administration > Server > Web services > Manage tokens**, create a token for the service account.
 4. Copy the token value — you will need it for Soliplex configuration.
 

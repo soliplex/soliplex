@@ -11,11 +11,13 @@ from soliplex.moodle.client import MoodleAPIError
 from soliplex.moodle.client import MoodleClient
 from soliplex.moodle.models import ActivityCompletionStatus
 from soliplex.moodle.models import AssignmentGrade
+from soliplex.moodle.models import BulkOperationResult
 from soliplex.moodle.models import CalendarEvent
 from soliplex.moodle.models import CatalogueItem
 from soliplex.moodle.models import Certification
 from soliplex.moodle.models import CertificationAllocation
 from soliplex.moodle.models import CertificationLogEntry
+from soliplex.moodle.models import CertificationSearchResult
 from soliplex.moodle.models import Cohort
 from soliplex.moodle.models import CohortMembers
 from soliplex.moodle.models import CompetencyFramework
@@ -25,6 +27,7 @@ from soliplex.moodle.models import CourseSection
 from soliplex.moodle.models import CreatedEntity
 from soliplex.moodle.models import Department
 from soliplex.moodle.models import DepartmentMember
+from soliplex.moodle.models import DuplicatedProgram
 from soliplex.moodle.models import EnrolmentRequest
 from soliplex.moodle.models import GradeItem
 from soliplex.moodle.models import Group
@@ -48,8 +51,10 @@ from soliplex.moodle.models import UserCatalogueItem
 __all__ = [
     "ActivityCompletionStatus",
     "AssignmentGrade",
+    "BulkOperationResult",
     "CalendarEvent",
     "CatalogueItem",
+    "CertificationSearchResult",
     "Certification",
     "CertificationAllocation",
     "CertificationLogEntry",
@@ -62,6 +67,7 @@ __all__ = [
     "CourseSection",
     "Department",
     "DepartmentMember",
+    "DuplicatedProgram",
     "EnrolmentRequest",
     "GradeItem",
     "Group",

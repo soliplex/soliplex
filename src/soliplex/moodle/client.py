@@ -7,11 +7,13 @@ import os
 import httpx
 
 from soliplex.moodle.models import ActivityCompletionStatus
+from soliplex.moodle.models import BulkOperationResult
 from soliplex.moodle.models import CalendarEvent
 from soliplex.moodle.models import CatalogueItem
 from soliplex.moodle.models import Certification
 from soliplex.moodle.models import CertificationAllocation
 from soliplex.moodle.models import CertificationLogEntry
+from soliplex.moodle.models import CertificationSearchResult
 from soliplex.moodle.models import Cohort
 from soliplex.moodle.models import CohortMembers
 from soliplex.moodle.models import CompetencyFramework
@@ -22,6 +24,7 @@ from soliplex.moodle.models import CourseSection
 from soliplex.moodle.models import CreatedEntity
 from soliplex.moodle.models import Department
 from soliplex.moodle.models import DepartmentMember
+from soliplex.moodle.models import DuplicatedProgram
 from soliplex.moodle.models import EnrolledUser
 from soliplex.moodle.models import Group
 from soliplex.moodle.models import GroupMembers
@@ -635,6 +638,192 @@ class MoodleClient:
         if raw is None:
             return {"result": True}
         return raw if isinstance(raw, dict) else {"result": True}
+
+    # ---------------------------------------------------------------
+    # Program & Certification Lifecycle (Workplace)
+    # ---------------------------------------------------------------
+
+    async def archive_program(self, programid: int) -> dict:
+        """Archive a program via ``tool_program_archive_program``."""
+        raw = await self._call(
+            "tool_program_archive_program", programid=programid
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def restore_program(self, programid: int) -> dict:
+        """Restore an archived program via ``tool_program_restore_program``."""
+        raw = await self._call(
+            "tool_program_restore_program", programid=programid
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def delete_program(self, programid: int) -> dict:
+        """Delete a program via ``tool_program_delete_program``."""
+        raw = await self._call(
+            "tool_program_delete_program", programid=programid
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def duplicate_program(
+        self, programid: int
+    ) -> DuplicatedProgram:
+        """Duplicate a program via ``tool_program_duplicate_program``."""
+        raw = await self._call(
+            "tool_program_duplicate_program",
+            programid=programid,
+        )
+        if isinstance(raw, dict):
+            return DuplicatedProgram.model_validate(raw)
+        return DuplicatedProgram()
+
+    async def update_program_visibility(
+        self, programid: int, visibility: int
+    ) -> dict:
+        """Toggle visibility via ``tool_program_update_program_visibility``."""
+        raw = await self._call(
+            "tool_program_update_program_visibility",
+            programid=programid,
+            visibility=visibility,
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def enrol_user_to_program_course(
+        self, courseid: int, programid: int
+    ) -> dict:
+        """Enrol user to course in program context via ``tool_program_enrol_user_to_course``."""
+        raw = await self._call(
+            "tool_program_enrol_user_to_course",
+            courseid=courseid,
+            programid=programid,
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def delete_program_set(self, setid: int) -> dict:
+        """Delete a course set via ``tool_program_delete_set``."""
+        raw = await self._call(
+            "tool_program_delete_set", setid=setid
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def delete_program_course(
+        self, programcourseid: int
+    ) -> dict:
+        """Remove a course from program via ``tool_program_delete_course``."""
+        raw = await self._call(
+            "tool_program_delete_course",
+            programcourseid=programcourseid,
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def bulk_deallocate_program_users(
+        self, programuserids: list[int]
+    ) -> BulkOperationResult:
+        """Bulk deallocate users via ``tool_program_bulk_deallocate_user``."""
+        params: dict[str, int] = {}
+        for i, pid in enumerate(programuserids):
+            params[f"programuserids[{i}]"] = pid
+        raw = await self._call(
+            "tool_program_bulk_deallocate_user", **params
+        )
+        if isinstance(raw, dict):
+            return BulkOperationResult.model_validate(raw)
+        return BulkOperationResult()
+
+    async def bulk_reset_program_progress(
+        self, programuserids: list[int]
+    ) -> BulkOperationResult:
+        """Bulk reset progress via ``tool_program_bulk_reset_program_progress``."""
+        params: dict[str, int] = {}
+        for i, pid in enumerate(programuserids):
+            params[f"programuserids[{i}]"] = pid
+        raw = await self._call(
+            "tool_program_bulk_reset_program_progress", **params
+        )
+        if isinstance(raw, dict):
+            return BulkOperationResult.model_validate(raw)
+        return BulkOperationResult()
+
+    async def recalculate_program_completions(
+        self, programuserids: list[int]
+    ) -> BulkOperationResult:
+        """Recalculate completions via ``tool_program_recalculate_program_user_completions``."""
+        params: dict[str, int] = {}
+        for i, pid in enumerate(programuserids):
+            params[f"programuserids[{i}]"] = pid
+        raw = await self._call(
+            "tool_program_recalculate_program_user_completions",
+            **params,
+        )
+        if isinstance(raw, dict):
+            return BulkOperationResult.model_validate(raw)
+        return BulkOperationResult()
+
+    async def delete_certification(
+        self, certificationid: int
+    ) -> dict:
+        """Delete a certification via ``tool_certification_delete_certification``."""
+        raw = await self._call(
+            "tool_certification_delete_certification",
+            certificationid=certificationid,
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def restore_certification(
+        self, certificationid: int
+    ) -> dict:
+        """Restore a certification via ``tool_certification_restore_certification``."""
+        raw = await self._call(
+            "tool_certification_restore_certification",
+            certificationid=certificationid,
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def search_certifications(
+        self, search: str = ""
+    ) -> list[CertificationSearchResult]:
+        """Search certifications via ``tool_certification_potential_certification_selector``."""
+        raw = await self._call(
+            "tool_certification_potential_certification_selector",
+            search=search,
+        )
+        if not isinstance(raw, list):
+            return []
+        return [
+            CertificationSearchResult.model_validate(c)
+            for c in raw
+        ][:MAX_RESULTS]
+
+    async def bulk_deallocate_certification_users(
+        self, certificationuserids: list[int]
+    ) -> BulkOperationResult:
+        """Bulk deallocate via ``tool_certification_bulk_deallocate_user``."""
+        params: dict[str, int] = {}
+        for i, cid in enumerate(certificationuserids):
+            params[f"certificationuserids[{i}]"] = cid
+        raw = await self._call(
+            "tool_certification_bulk_deallocate_user", **params
+        )
+        if isinstance(raw, dict):
+            return BulkOperationResult.model_validate(raw)
+        return BulkOperationResult()
 
     # ---------------------------------------------------------------
     # Organisation Structure (Workplace)

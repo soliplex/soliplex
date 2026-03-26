@@ -22,6 +22,8 @@ suggestions:
   - "What custom reports are available?"
   - "Show me the UTM report for Safety Fundamentals"
   - "Who hasn't completed Cybersecurity Basics in Engineering?"
+  - "Archive the Onboarding Program"
+  - "Duplicate the Leadership Track program"
 
 agent:
   kind: "factory"
