@@ -21,6 +21,8 @@ AGUI_POST_RECENT_USER_FEEDBACK = "post recent room user feedback"
 AGUI_POST_REVIEW_RECENT_FEEDBACK = "post review recent agui feedback"
 AGUI_POST_RESOLVE_RECENT_FEEDBACK = "post resolve recent agui feedback"
 
+UPLOADS_POST_ROOM_THREAD = "uploads post room thread"
+
 AUTHN_LOGGER_NAME = "soliplex.authn"
 AUTHN_NO_AUTH_MODE = "soliplex server in no-auth mode"
 AUTHN_JWT_INVALID = "JWT validation failed"
