@@ -10,6 +10,11 @@ suggestions:
 agent:
   template_id: "default_chat"
 
+tools:
+  - tool_name: "soliplex.tools.get_current_datetime"
+  - tool_name: "soliplex.tools.get_current_user"
+  - tool_name: "soliplex.tools.file_uploads.list_thread_file_uploads"
+
 skills:
 
 # Requires installing 'haiku-skills-image-generation'
