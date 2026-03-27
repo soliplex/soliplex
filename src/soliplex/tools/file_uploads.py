@@ -21,6 +21,12 @@ class UploadsPathNotADirectory(ValueError):
         super().__init__(f"Uploads path not a directory: {uploads_dir}")
 
 
+class UploadNotFound(ValueError):
+    def __init__(self, filename):
+        self.filename = filename
+        super().__init__(f"Upload not found in thread: {filename}")
+
+
 async def list_thread_file_uploads(
     ctx: pydantic_ai.RunContext[agents.AgentDependencies],
 ) -> list[str]:
@@ -40,3 +46,37 @@ async def list_thread_file_uploads(
     thread_dir = uploads_dir / thread_id
 
     return [sub.name for sub in thread_dir.glob("*") if sub.is_file()]
+
+
+async def get_thread_file_upload(
+    ctx: pydantic_ai.RunContext[agents.AgentDependencies],
+    filename: str,
+) -> bytes:
+    """Get contents of a files uploaded to the current thread
+
+    Args:
+      filename (str, required):
+        the name of the uploaded file whose content is to be returned.
+    """
+    the_installation = ctx.deps.the_installation
+    thread_id = ctx.deps.thread_id
+    uploads_dir = the_installation.get_environment("SOLIPLEX_UPLOADS_PATH")
+
+    if uploads_dir is None:
+        raise UploadsPathNotConfigured()
+
+    uploads_dir = pathlib.Path(uploads_dir)
+
+    if not uploads_dir.is_dir():
+        raise UploadsPathNotADirectory(uploads_dir)
+
+    thread_dir = uploads_dir / thread_id
+    file_path = thread_dir / filename
+
+    if not file_path.exists():
+        raise UploadNotFound(filename)
+
+    try:
+        return file_path.read_text(errors="strict")
+    except ValueError:
+        return file_path.read_bytes()

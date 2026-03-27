@@ -14,6 +14,7 @@ tools:
   - tool_name: "soliplex.tools.get_current_datetime"
   - tool_name: "soliplex.tools.get_current_user"
   - tool_name: "soliplex.tools.file_uploads.list_thread_file_uploads"
+  - tool_name: "soliplex.tools.file_uploads.get_thread_file_upload"
 
 skills:
 
