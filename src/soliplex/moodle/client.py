@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import html as html_mod
 import os
+import re
 
 import httpx
 
@@ -37,6 +39,7 @@ from soliplex.moodle.models import ProgramCourseOption
 from soliplex.moodle.models import ReportData
 from soliplex.moodle.models import ReportRow
 from soliplex.moodle.models import ReportSummary
+from soliplex.moodle.models import SelectorItem
 from soliplex.moodle.models import Tenant
 from soliplex.moodle.models import UpdatedEntity
 from soliplex.moodle.models import UserCatalogueItem
@@ -1329,3 +1332,190 @@ class MoodleClient:
             CompletionReportRow.model_validate(r) for r in rows_raw
         ][:MAX_RESULTS]
         return rows, totalcount
+
+    # ---------------------------------------------------------------
+    # Dynamic Rules (Workplace)
+    # ---------------------------------------------------------------
+
+    async def enable_rule(self, rule_id: int) -> dict:
+        """Enable a dynamic rule via ``tool_dynamicrule_enable_rule``."""
+        raw = await self._call(
+            "tool_dynamicrule_enable_rule", id=rule_id
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def disable_rule(self, rule_id: int) -> dict:
+        """Disable a dynamic rule via ``tool_dynamicrule_disable_rule``."""
+        raw = await self._call(
+            "tool_dynamicrule_disable_rule", id=rule_id
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def archive_rule(self, rule_id: int) -> dict:
+        """Archive a dynamic rule via ``tool_dynamicrule_archive_rule``."""
+        raw = await self._call(
+            "tool_dynamicrule_archive_rule", id=rule_id
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def unarchive_rule(self, rule_id: int) -> dict:
+        """Unarchive a dynamic rule via ``tool_dynamicrule_unarchive_rule``."""
+        raw = await self._call(
+            "tool_dynamicrule_unarchive_rule", id=rule_id
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def delete_rule(self, rule_id: int) -> dict:
+        """Delete a dynamic rule via ``tool_dynamicrule_delete_rule``."""
+        raw = await self._call(
+            "tool_dynamicrule_delete_rule", id=rule_id
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def duplicate_rule(self, rule_id: int) -> dict:
+        """Duplicate a dynamic rule via ``tool_dynamicrule_duplicate_rule``."""
+        raw = await self._call(
+            "tool_dynamicrule_duplicate_rule", id=rule_id
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def can_enable_rule(self, rule_id: int) -> dict:
+        """Check if a rule can be enabled via ``tool_dynamicrule_can_enable_rule``."""
+        raw = await self._call(
+            "tool_dynamicrule_can_enable_rule", id=rule_id
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def delete_condition(self, instanceid: int) -> dict:
+        """Delete a rule condition via ``tool_dynamicrule_delete_condition``."""
+        raw = await self._call(
+            "tool_dynamicrule_delete_condition", instanceid=instanceid
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def delete_outcome(self, instanceid: int) -> dict:
+        """Delete a rule outcome via ``tool_dynamicrule_delete_outcome``."""
+        raw = await self._call(
+            "tool_dynamicrule_delete_outcome", instanceid=instanceid
+        )
+        if raw is None:
+            return {"result": True}
+        return raw if isinstance(raw, dict) else {"result": True}
+
+    async def count_matching_users(self, rule_id: int) -> dict:
+        """Count users currently matching a rule via ``tool_dynamicrule_count_matching_users``."""
+        raw = await self._call(
+            "tool_dynamicrule_count_matching_users", id=rule_id
+        )
+        if raw is None:
+            return {"count": 0}
+        return raw if isinstance(raw, dict) else {"count": raw}
+
+    async def count_matched_users(self, rule_id: int) -> dict:
+        """Count users historically matched by a rule via ``tool_dynamicrule_count_matched_users``."""
+        raw = await self._call(
+            "tool_dynamicrule_count_matched_users", id=rule_id
+        )
+        if raw is None:
+            return {"count": 0}
+        return raw if isinstance(raw, dict) else {"count": raw}
+
+    async def search_cohorts_for_rule(
+        self, search: str, instancetype: str = "condition"
+    ) -> list[SelectorItem]:
+        """Search cohorts for rule conditions/outcomes via ``tool_dynamicrule_potential_cohort_selector``."""
+        raw = await self._call(
+            "tool_dynamicrule_potential_cohort_selector",
+            search=search,
+            instancetype=instancetype,
+        )
+        if not isinstance(raw, list):
+            return []
+        return [
+            SelectorItem.model_validate(c) for c in raw
+        ][:MAX_RESULTS]
+
+    async def search_competencies_for_rule(
+        self, search: str
+    ) -> list[SelectorItem]:
+        """Search competencies for rule conditions via ``tool_dynamicrule_potential_competency_selector``."""
+        raw = await self._call(
+            "tool_dynamicrule_potential_competency_selector",
+            search=search,
+        )
+        if not isinstance(raw, list):
+            return []
+        return [
+            SelectorItem.model_validate(c) for c in raw
+        ][:MAX_RESULTS]
+
+    async def list_dynamic_rules(self) -> list[dict]:
+        """List dynamic rules via the built-in system report.
+
+        Uses ``core_reportbuilder_retrieve_system_report`` with the
+        ``tool_dynamicrule`` rules report.  Parses the HTML columns
+        to extract rule id, name, enabled state, conditions and actions.
+        """
+        raw = await self._call(
+            "core_reportbuilder_retrieve_system_report",
+            **{
+                "source": (
+                    r"tool_dynamicrule\reportbuilder"
+                    r"\local\systemreports\rules"
+                ),
+                "context[contextid]": 1,
+                "page": 0,
+                "perpage": MAX_RESULTS,
+            },
+        )
+        if not isinstance(raw, dict):
+            return []
+        rows = raw.get("data", {}).get("rows", [])
+        _strip_html = re.compile(r"<[^>]+>")
+        results: list[dict] = []
+        for row in rows:
+            cols = row.get("columns", [])
+            if len(cols) < 2:
+                continue
+            toggle = cols[0]
+            name_col = cols[1]
+            m_id = re.search(r"rule-toggle-(\d+)", toggle)
+            if not m_id:
+                continue
+            rule_id = int(m_id.group(1))
+            enabled = "checked" in toggle
+            m_name = re.search(r'data-value="([^"]+)"', name_col)
+            name = html_mod.unescape(m_name.group(1)) if m_name else ""
+
+            def _li_texts(col: str) -> list[str]:
+                items = re.findall(r"<li[^>]*>(.*?)</li>", col, re.DOTALL)
+                return [_strip_html.sub("", t).strip() for t in items]
+
+            conditions = _li_texts(cols[3]) if len(cols) > 3 else []
+            actions = _li_texts(cols[4]) if len(cols) > 4 else []
+            results.append(
+                {
+                    "id": rule_id,
+                    "name": name,
+                    "enabled": enabled,
+                    "conditions": conditions,
+                    "actions": actions,
+                }
+            )
+        return results[:MAX_RESULTS]

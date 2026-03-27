@@ -513,3 +513,16 @@ class CompletionReportRow(BaseModel):
     department: str | None = None
     starttime: int | None = None
     completedtime: int | None = None
+
+
+# ---------------------------------------------------------------
+# Feature 17: Dynamic Rules
+# ---------------------------------------------------------------
+
+
+class SelectorItem(BaseModel):
+    """Item returned by dynamic rule selector endpoints."""
+
+    id: int
+    name: str = ""
+    shortname: str = ""

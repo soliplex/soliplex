@@ -2485,3 +2485,374 @@ async def test_bulk_deallocate_certification_users_non_dict(client):
 
     assert result.successcount == 0
     assert result.skippedcount == 0
+
+
+# ---------------------------------------------------------------
+# Dynamic Rules (Workplace)
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_enable_rule(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.enable_rule(rule_id=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_enable_rule_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.enable_rule(rule_id=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_disable_rule(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.disable_rule(rule_id=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_disable_rule_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.disable_rule(rule_id=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_archive_rule(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.archive_rule(rule_id=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_archive_rule_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.archive_rule(rule_id=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_unarchive_rule(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.unarchive_rule(rule_id=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_unarchive_rule_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.unarchive_rule(rule_id=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_rule(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.delete_rule(rule_id=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_rule_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.delete_rule(rule_id=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_duplicate_rule(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.duplicate_rule(rule_id=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_duplicate_rule_returns_dict(client):
+    resp = _mock_response({"id": 99})
+    with _patch_httpx(resp):
+        result = await client.duplicate_rule(rule_id=1)
+
+    assert result == {"id": 99}
+
+
+@pytest.mark.asyncio
+async def test_can_enable_rule(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.can_enable_rule(rule_id=1)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_can_enable_rule_returns_dict(client):
+    resp = _mock_response({"result": False})
+    with _patch_httpx(resp):
+        result = await client.can_enable_rule(rule_id=1)
+
+    assert result == {"result": False}
+
+
+@pytest.mark.asyncio
+async def test_delete_condition(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.delete_condition(instanceid=5)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_condition_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.delete_condition(instanceid=5)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_outcome(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.delete_outcome(instanceid=7)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_outcome_returns_dict(client):
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = await client.delete_outcome(instanceid=7)
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_count_matching_users_none(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.count_matching_users(rule_id=1)
+
+    assert result == {"count": 0}
+
+
+@pytest.mark.asyncio
+async def test_count_matching_users(client):
+    resp = _mock_response(42)
+    with _patch_httpx(resp):
+        result = await client.count_matching_users(rule_id=1)
+
+    assert result == {"count": 42}
+
+
+@pytest.mark.asyncio
+async def test_count_matching_users_dict(client):
+    resp = _mock_response({"count": 10})
+    with _patch_httpx(resp):
+        result = await client.count_matching_users(rule_id=1)
+
+    assert result == {"count": 10}
+
+
+@pytest.mark.asyncio
+async def test_count_matched_users_none(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = await client.count_matched_users(rule_id=1)
+
+    assert result == {"count": 0}
+
+
+@pytest.mark.asyncio
+async def test_count_matched_users(client):
+    resp = _mock_response(7)
+    with _patch_httpx(resp):
+        result = await client.count_matched_users(rule_id=1)
+
+    assert result == {"count": 7}
+
+
+@pytest.mark.asyncio
+async def test_count_matched_users_dict(client):
+    resp = _mock_response({"count": 3})
+    with _patch_httpx(resp):
+        result = await client.count_matched_users(rule_id=1)
+
+    assert result == {"count": 3}
+
+
+@pytest.mark.asyncio
+async def test_search_cohorts_for_rule(client):
+    resp = _mock_response(
+        [
+            {"id": 1, "name": "Engineering"},
+            {"id": 2, "name": "Operations"},
+        ]
+    )
+    with _patch_httpx(resp):
+        items = await client.search_cohorts_for_rule(search="eng")
+
+    assert len(items) == 2
+    assert items[0].id == 1
+    assert items[0].name == "Engineering"
+    assert items[1].name == "Operations"
+
+
+@pytest.mark.asyncio
+async def test_search_cohorts_for_rule_non_list(client):
+    resp = _mock_response({"error": "unexpected"})
+    with _patch_httpx(resp):
+        items = await client.search_cohorts_for_rule(search="nothing")
+
+    assert items == []
+
+
+@pytest.mark.asyncio
+async def test_search_competencies_for_rule(client):
+    resp = _mock_response(
+        [
+            {"id": 10, "shortname": "Leadership"},
+            {"id": 11, "shortname": "Communication"},
+        ]
+    )
+    with _patch_httpx(resp):
+        items = await client.search_competencies_for_rule(search="lead")
+
+    assert len(items) == 2
+    assert items[0].id == 10
+    assert items[0].shortname == "Leadership"
+    assert items[1].shortname == "Communication"
+
+
+@pytest.mark.asyncio
+async def test_search_competencies_for_rule_non_list(client):
+    resp = _mock_response({"error": "unexpected"})
+    with _patch_httpx(resp):
+        items = await client.search_competencies_for_rule(search="nothing")
+
+    assert items == []
+
+
+@pytest.mark.asyncio
+async def test_list_dynamic_rules(client):
+    resp = _mock_response(
+        {
+            "data": {
+                "headers": ["", "Name", "Tags", "Conditions", "Actions"],
+                "rows": [
+                    {
+                        "columns": [
+                            '<input id="rule-toggle-42" checked>',
+                            '<span data-value="Safety Rule">Safety Rule</span>',
+                            "",
+                            '<ul><li class="mb-2">Course completed</li></ul>',
+                            '<ul><li class="mb-2">Add to cohort</li></ul>',
+                        ]
+                    },
+                    {
+                        "columns": [
+                            '<input id="rule-toggle-43">',
+                            '<span data-value="Onboarding Rule">Onboarding Rule</span>',
+                            "",
+                            '<ul><li class="mb-2">User enrolled</li></ul>',
+                            '<ul><li class="mb-2">No actions</li></ul>',
+                        ]
+                    },
+                ],
+                "totalrowcount": 2,
+            },
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(resp):
+        rules = await client.list_dynamic_rules()
+
+    assert len(rules) == 2
+    assert rules[0]["id"] == 42
+    assert rules[0]["name"] == "Safety Rule"
+    assert rules[0]["enabled"] is True
+    assert rules[0]["conditions"] == ["Course completed"]
+    assert rules[0]["actions"] == ["Add to cohort"]
+    assert rules[1]["id"] == 43
+    assert rules[1]["name"] == "Onboarding Rule"
+    assert rules[1]["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_list_dynamic_rules_empty(client):
+    resp = _mock_response(
+        {"data": {"headers": [], "rows": [], "totalrowcount": 0}, "warnings": []}
+    )
+    with _patch_httpx(resp):
+        rules = await client.list_dynamic_rules()
+
+    assert rules == []
+
+
+@pytest.mark.asyncio
+async def test_list_dynamic_rules_non_dict(client):
+    resp = _mock_response(True)
+    with _patch_httpx(resp):
+        rules = await client.list_dynamic_rules()
+
+    assert rules == []
+
+
+@pytest.mark.asyncio
+async def test_list_dynamic_rules_malformed_rows(client):
+    """Rows with too few columns or missing toggle ID are skipped."""
+    resp = _mock_response(
+        {
+            "data": {
+                "headers": ["", "Name"],
+                "rows": [
+                    {"columns": ["<span>only one col</span>"]},
+                    {"columns": ["<span>no toggle</span>", "<span>name</span>"]},
+                    {
+                        "columns": [
+                            '<input id="rule-toggle-7" checked>',
+                            '<span data-value="Good Rule">Good Rule</span>',
+                            "",
+                            "<ul><li>cond</li></ul>",
+                            "<ul><li>act</li></ul>",
+                        ]
+                    },
+                ],
+                "totalrowcount": 3,
+            },
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(resp):
+        rules = await client.list_dynamic_rules()
+
+    assert len(rules) == 1
+    assert rules[0]["id"] == 7
+    assert rules[0]["name"] == "Good Rule"

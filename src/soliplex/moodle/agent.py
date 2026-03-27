@@ -127,6 +127,22 @@ whole course
 - get_utm_report — UTM completion report for a course by department
 - get_adv_comp_report — Advanced completion report for a course
 
+## Dynamic Rules Tools
+- list_dynamic_rules — discover rules by name, ID, and status
+- can_enable_rule — check if a rule meets prerequisites to be enabled
+- get_rule_matching_users — how many users currently match a rule
+- get_rule_matched_users — how many users have historically matched
+- search_cohorts_for_rule — find cohorts for rule conditions/outcomes
+- search_competencies_for_rule — find competencies for conditions
+- enable_rule — enable a dynamic rule (by ID or name)
+- disable_rule — disable a dynamic rule (by ID or name)
+- archive_rule — archive a dynamic rule (by ID or name)
+- unarchive_rule — restore an archived rule (by ID or name)
+- delete_rule — permanently delete an archived rule (by ID or name)
+- duplicate_rule — clone a dynamic rule (by ID or name)
+- delete_rule_condition — remove a condition from a rule
+- delete_rule_outcome — remove an outcome from a rule
+
 ## Write Tools (REQUIRE CONFIRMATION)
 - enrol_users — enrol users into a course
 - send_message — send messages to users
@@ -158,6 +174,14 @@ whole course
 - delete_certification — permanently delete a certification
 - restore_certification — restore an archived certification
 - bulk_deallocate_certification_users — remove multiple users
+- enable_rule — enable a dynamic rule
+- disable_rule — disable a dynamic rule
+- archive_rule — archive a dynamic rule
+- unarchive_rule — restore an archived rule
+- delete_rule — permanently delete an archived rule
+- duplicate_rule — clone a dynamic rule
+- delete_rule_condition — remove a condition from a rule
+- delete_rule_outcome — remove an outcome from a rule
 
 WRITE OPERATIONS: For all write tools, you MUST first call the \
 tool WITHOUT confirmed=True to generate a preview. Present the \
@@ -202,6 +226,13 @@ programs first. Use duplicate_program to clone a program.
 bulk_reset_program_progress, bulk_deallocate_certification_users) \
 take allocation IDs, NOT regular user IDs. Get allocation IDs \
 from get_user_program_courses or get_certification_allocations.
+12. For dynamic rules (automation): start with list_dynamic_rules \
+to discover rules by name. Tools accept either rule_id or rule_name. \
+Use can_enable_rule to check prerequisites before enabling. The rule \
+state machine is: Disabled → enable → Enabled, Enabled → disable \
+→ Disabled, any → archive → Archived, Archived → unarchive → \
+Disabled, Archived → delete (permanent). Use get_rule_matching_users \
+to check how many users would be affected before enabling.
 
 Present data in clear tables when appropriate.
 """
@@ -2707,5 +2738,361 @@ def moodle_tools_agent_factory(
                 "total_rows": totalcount,
             }
         )
+
+    # ---------------------------------------------------------------
+    # Feature 17: Dynamic Rules (Workplace)
+    # ---------------------------------------------------------------
+
+    async def _resolve_rule_id(
+        rule_id: int = 0, rule_name: str = ""
+    ) -> int | str:
+        """Resolve a dynamic rule by ID or name.
+
+        Returns the integer rule ID on success, or a JSON error
+        string when the rule cannot be found.
+        """
+        if rule_id > 0:
+            return rule_id
+        if not rule_name:
+            return json.dumps(
+                {"error": "Provide either rule_id or rule_name."}
+            )
+        try:
+            rules = await client.list_dynamic_rules()
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        needle = rule_name.lower()
+        matches = [r for r in rules if needle in r["name"].lower()]
+        if len(matches) == 1:
+            return matches[0]["id"]
+        if len(matches) == 0:
+            return json.dumps(
+                {"error": f"No dynamic rule matching '{rule_name}'."}
+            )
+        return json.dumps(
+            {
+                "error": f"Multiple rules match '{rule_name}'.",
+                "matches": [
+                    {"id": m["id"], "name": m["name"]}
+                    for m in matches
+                ],
+            }
+        )
+
+    @agent.tool_plain
+    async def list_dynamic_rules() -> str:
+        """List all dynamic rules with names, IDs, and status.
+
+        Returns a table of automation rules showing each rule's
+        ID, name, enabled/disabled state, conditions, and actions.
+        Use the rule ID or name from this list for other dynamic
+        rule tools.
+        """
+        try:
+            rules = await client.list_dynamic_rules()
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(rules)
+
+    @agent.tool_plain
+    async def can_enable_rule(
+        rule_id: int = 0, rule_name: str = ""
+    ) -> str:
+        """Check whether a dynamic rule meets prerequisites to be enabled.
+
+        Args:
+            rule_id: Moodle dynamic rule ID.
+            rule_name: Rule name (alternative to rule_id).
+        """
+        resolved = await _resolve_rule_id(rule_id, rule_name)
+        if isinstance(resolved, str):
+            return resolved
+        try:
+            result = await client.can_enable_rule(resolved)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def get_rule_matching_users(
+        rule_id: int = 0, rule_name: str = ""
+    ) -> str:
+        """Count users currently matching a dynamic rule's conditions.
+
+        Args:
+            rule_id: Moodle dynamic rule ID.
+            rule_name: Rule name (alternative to rule_id).
+        """
+        resolved = await _resolve_rule_id(rule_id, rule_name)
+        if isinstance(resolved, str):
+            return resolved
+        try:
+            result = await client.count_matching_users(resolved)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def get_rule_matched_users(
+        rule_id: int = 0, rule_name: str = ""
+    ) -> str:
+        """Count users historically matched by a dynamic rule.
+
+        Args:
+            rule_id: Moodle dynamic rule ID.
+            rule_name: Rule name (alternative to rule_id).
+        """
+        resolved = await _resolve_rule_id(rule_id, rule_name)
+        if isinstance(resolved, str):
+            return resolved
+        try:
+            result = await client.count_matched_users(resolved)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def search_cohorts_for_rule(search: str) -> str:
+        """Search cohorts available for dynamic rule conditions/outcomes.
+
+        Args:
+            search: Search string to filter cohorts by name.
+        """
+        try:
+            items = await client.search_cohorts_for_rule(search)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            [{"id": i.id, "name": i.name} for i in items]
+        )
+
+    @agent.tool_plain
+    async def search_competencies_for_rule(search: str) -> str:
+        """Search competencies available for dynamic rule conditions.
+
+        Args:
+            search: Search string to filter competencies.
+        """
+        try:
+            items = await client.search_competencies_for_rule(search)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            [{"id": i.id, "shortname": i.shortname} for i in items]
+        )
+
+    @agent.tool_plain
+    async def enable_rule(
+        rule_id: int = 0,
+        rule_name: str = "",
+        confirmed: bool = False,
+    ) -> str:
+        """Enable a dynamic rule. REQUIRES USER CONFIRMATION.
+
+        Activates the rule so it begins matching users and
+        applying outcomes.
+
+        Args:
+            rule_id: Moodle dynamic rule ID.
+            rule_name: Rule name (alternative to rule_id).
+            confirmed: Set True only after user approval.
+        """
+        resolved = await _resolve_rule_id(rule_id, rule_name)
+        if isinstance(resolved, str):
+            return resolved
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Enable dynamic rule id={resolved}"}
+            )
+        try:
+            result = await client.enable_rule(resolved)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def disable_rule(
+        rule_id: int = 0,
+        rule_name: str = "",
+        confirmed: bool = False,
+    ) -> str:
+        """Disable a dynamic rule. REQUIRES USER CONFIRMATION.
+
+        Stops the rule from matching users and applying outcomes.
+
+        Args:
+            rule_id: Moodle dynamic rule ID.
+            rule_name: Rule name (alternative to rule_id).
+            confirmed: Set True only after user approval.
+        """
+        resolved = await _resolve_rule_id(rule_id, rule_name)
+        if isinstance(resolved, str):
+            return resolved
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Disable dynamic rule id={resolved}"}
+            )
+        try:
+            result = await client.disable_rule(resolved)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def archive_rule(
+        rule_id: int = 0,
+        rule_name: str = "",
+        confirmed: bool = False,
+    ) -> str:
+        """Archive a dynamic rule (reversible). REQUIRES USER CONFIRMATION.
+
+        Moves the rule to archived state. Archived rules can be
+        restored with unarchive_rule or permanently deleted.
+
+        Args:
+            rule_id: Moodle dynamic rule ID.
+            rule_name: Rule name (alternative to rule_id).
+            confirmed: Set True only after user approval.
+        """
+        resolved = await _resolve_rule_id(rule_id, rule_name)
+        if isinstance(resolved, str):
+            return resolved
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Archive dynamic rule id={resolved}"}
+            )
+        try:
+            result = await client.archive_rule(resolved)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def unarchive_rule(
+        rule_id: int = 0,
+        rule_name: str = "",
+        confirmed: bool = False,
+    ) -> str:
+        """Restore an archived dynamic rule. REQUIRES USER CONFIRMATION.
+
+        Moves the rule back to disabled state so it can be
+        re-enabled.
+
+        Args:
+            rule_id: Moodle dynamic rule ID.
+            rule_name: Rule name (alternative to rule_id).
+            confirmed: Set True only after user approval.
+        """
+        resolved = await _resolve_rule_id(rule_id, rule_name)
+        if isinstance(resolved, str):
+            return resolved
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Unarchive dynamic rule id={resolved}"}
+            )
+        try:
+            result = await client.unarchive_rule(resolved)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def delete_rule(
+        rule_id: int = 0,
+        rule_name: str = "",
+        confirmed: bool = False,
+    ) -> str:
+        """Permanently DELETE a dynamic rule. REQUIRES USER CONFIRMATION.
+
+        The rule must be archived first. This action is irreversible.
+
+        Args:
+            rule_id: Moodle dynamic rule ID.
+            rule_name: Rule name (alternative to rule_id).
+            confirmed: Set True only after user approval.
+        """
+        resolved = await _resolve_rule_id(rule_id, rule_name)
+        if isinstance(resolved, str):
+            return resolved
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"DELETE dynamic rule id={resolved}"}
+            )
+        try:
+            result = await client.delete_rule(resolved)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def duplicate_rule(
+        rule_id: int = 0,
+        rule_name: str = "",
+        confirmed: bool = False,
+    ) -> str:
+        """Clone a dynamic rule. REQUIRES USER CONFIRMATION.
+
+        Creates a copy of the rule with the same conditions and
+        outcomes. The new rule is created in disabled state.
+
+        Args:
+            rule_id: Moodle dynamic rule ID to copy.
+            rule_name: Rule name (alternative to rule_id).
+            confirmed: Set True only after user approval.
+        """
+        resolved = await _resolve_rule_id(rule_id, rule_name)
+        if isinstance(resolved, str):
+            return resolved
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Duplicate dynamic rule id={resolved}"}
+            )
+        try:
+            result = await client.duplicate_rule(resolved)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def delete_rule_condition(
+        instanceid: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Remove a condition from a dynamic rule. REQUIRES USER CONFIRMATION.
+
+        Args:
+            instanceid: The condition instance ID.
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Delete condition id={instanceid} from dynamic rule"}
+            )
+        try:
+            result = await client.delete_condition(instanceid)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def delete_rule_outcome(
+        instanceid: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Remove an outcome from a dynamic rule. REQUIRES USER CONFIRMATION.
+
+        Args:
+            instanceid: The outcome instance ID.
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Delete outcome id={instanceid} from dynamic rule"}
+            )
+        try:
+            result = await client.delete_outcome(instanceid)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
 
     return agent

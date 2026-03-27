@@ -216,6 +216,21 @@ def test_factory_agent_has_expected_tools():
         "get_report_data",
         "get_utm_report",
         "get_adv_comp_report",
+        # Dynamic Rules tools
+        "list_dynamic_rules",
+        "can_enable_rule",
+        "get_rule_matching_users",
+        "get_rule_matched_users",
+        "search_cohorts_for_rule",
+        "search_competencies_for_rule",
+        "enable_rule",
+        "disable_rule",
+        "archive_rule",
+        "unarchive_rule",
+        "delete_rule",
+        "duplicate_rule",
+        "delete_rule_condition",
+        "delete_rule_outcome",
     }
 
 
@@ -3739,5 +3754,874 @@ async def test_bulk_deallocate_certification_users_tool_non_numeric():
     fn = _get_tool_fn(agent, "bulk_deallocate_certification_users")
 
     result = json.loads(await fn(allocation_ids="abc,20"))
+
+    assert "error" in result
+
+
+# -----------------------------------------------------------------
+# Dynamic Rules Tools
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_dynamic_rules_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "list_dynamic_rules")
+
+    resp = _mock_response(
+        {
+            "data": {
+                "headers": ["", "Name", "Tags", "Conditions", "Actions"],
+                "rows": [
+                    {
+                        "columns": [
+                            '<input id="rule-toggle-42" checked>',
+                            '<span data-value="Safety Rule">Safety Rule</span>',
+                            "",
+                            '<ul><li>Course completed</li></ul>',
+                            '<ul><li>Add to cohort</li></ul>',
+                        ]
+                    }
+                ],
+                "totalrowcount": 1,
+            },
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert len(result) == 1
+    assert result[0]["id"] == 42
+    assert result[0]["name"] == "Safety Rule"
+
+
+@pytest.mark.asyncio
+async def test_list_dynamic_rules_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "list_dynamic_rules")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_enable_rule_tool_by_name():
+    """Test that enable_rule resolves rule_name to rule_id."""
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "enable_rule")
+
+    # First call: list_dynamic_rules (for name resolution)
+    list_resp = _mock_response(
+        {
+            "data": {
+                "headers": ["", "Name", "Tags", "Conditions", "Actions"],
+                "rows": [
+                    {
+                        "columns": [
+                            '<input id="rule-toggle-42" checked>',
+                            '<span data-value="Safety Rule">Safety Rule</span>',
+                            "",
+                            "",
+                            "",
+                        ]
+                    }
+                ],
+                "totalrowcount": 1,
+            },
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(list_resp):
+        result = json.loads(await fn(rule_name="Safety Rule"))
+
+    # Should get a preview with the resolved ID
+    assert "preview" in result
+    assert "42" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_enable_rule_tool_name_not_found():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "enable_rule")
+
+    list_resp = _mock_response(
+        {
+            "data": {"headers": [], "rows": [], "totalrowcount": 0},
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(list_resp):
+        result = json.loads(await fn(rule_name="Nonexistent"))
+
+    assert "error" in result
+    assert "No dynamic rule" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_enable_rule_tool_no_id_or_name():
+    """Neither rule_id nor rule_name provided."""
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "enable_rule")
+
+    result = json.loads(await fn())
+
+    assert "error" in result
+    assert "Provide either" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_enable_rule_tool_ambiguous_name():
+    """Multiple rules match the name."""
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "enable_rule")
+
+    list_resp = _mock_response(
+        {
+            "data": {
+                "headers": ["", "Name", "Tags", "Conditions", "Actions"],
+                "rows": [
+                    {
+                        "columns": [
+                            '<input id="rule-toggle-42" checked>',
+                            '<span data-value="Safety Rule A">a</span>',
+                            "",
+                            "",
+                            "",
+                        ]
+                    },
+                    {
+                        "columns": [
+                            '<input id="rule-toggle-43">',
+                            '<span data-value="Safety Rule B">b</span>',
+                            "",
+                            "",
+                            "",
+                        ]
+                    },
+                ],
+                "totalrowcount": 2,
+            },
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(list_resp):
+        result = json.loads(await fn(rule_name="Safety Rule"))
+
+    assert "error" in result
+    assert "Multiple rules" in result["error"]
+    assert len(result["matches"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_enable_rule_tool_name_resolve_api_error():
+    """API error during name resolution."""
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "enable_rule")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_name="Safety"))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_disable_rule_tool_by_name():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "disable_rule")
+
+    list_resp = _mock_response(
+        {
+            "data": {
+                "headers": ["", "Name", "Tags", "Conditions", "Actions"],
+                "rows": [
+                    {
+                        "columns": [
+                            '<input id="rule-toggle-99">',
+                            '<span data-value="My Rule">r</span>',
+                            "",
+                            "",
+                            "",
+                        ]
+                    }
+                ],
+                "totalrowcount": 1,
+            },
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(list_resp):
+        result = json.loads(await fn(rule_name="My Rule"))
+
+    assert "preview" in result
+    assert "99" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_can_enable_rule_tool_by_name():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "can_enable_rule")
+
+    list_resp = _mock_response(
+        {
+            "data": {
+                "headers": ["", "Name", "Tags", "Conditions", "Actions"],
+                "rows": [
+                    {
+                        "columns": [
+                            '<input id="rule-toggle-55">',
+                            '<span data-value="Test Rule">r</span>',
+                            "",
+                            "",
+                            "",
+                        ]
+                    }
+                ],
+                "totalrowcount": 1,
+            },
+            "warnings": [],
+        }
+    )
+    # First call resolves name, second call checks can_enable
+    # Both go through _patch_httpx so the second returns the same
+    # but that's ok — can_enable_rule handles the dict response
+    with _patch_httpx(list_resp):
+        result = json.loads(await fn(rule_name="Test Rule"))
+
+    # The resolved ID 55 is passed to can_enable_rule which gets
+    # the same mock (a dict with data key), but our client wraps it
+    assert isinstance(result, dict)
+
+
+@pytest.mark.asyncio
+async def test_archive_rule_tool_by_name():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "archive_rule")
+
+    list_resp = _mock_response(
+        {
+            "data": {
+                "headers": ["", "Name", "Tags", "Conditions", "Actions"],
+                "rows": [
+                    {
+                        "columns": [
+                            '<input id="rule-toggle-77">',
+                            '<span data-value="Archive Me">r</span>',
+                            "",
+                            "",
+                            "",
+                        ]
+                    }
+                ],
+                "totalrowcount": 1,
+            },
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(list_resp):
+        result = json.loads(await fn(rule_name="Archive Me"))
+
+    assert "preview" in result
+    assert "77" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_duplicate_rule_tool_by_name():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "duplicate_rule")
+
+    list_resp = _mock_response(
+        {
+            "data": {
+                "headers": ["", "Name", "Tags", "Conditions", "Actions"],
+                "rows": [
+                    {
+                        "columns": [
+                            '<input id="rule-toggle-88">',
+                            '<span data-value="Clone Me">r</span>',
+                            "",
+                            "",
+                            "",
+                        ]
+                    }
+                ],
+                "totalrowcount": 1,
+            },
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(list_resp):
+        result = json.loads(await fn(rule_name="Clone Me"))
+
+    assert "preview" in result
+    assert "88" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_get_rule_matching_users_tool_by_name():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_rule_matching_users")
+
+    list_resp = _mock_response(
+        {
+            "data": {
+                "headers": ["", "Name", "Tags", "Conditions", "Actions"],
+                "rows": [
+                    {
+                        "columns": [
+                            '<input id="rule-toggle-22">',
+                            '<span data-value="Count Me">r</span>',
+                            "",
+                            "",
+                            "",
+                        ]
+                    }
+                ],
+                "totalrowcount": 1,
+            },
+            "warnings": [],
+        }
+    )
+    # The mock returns the same response for both the list call and the count call.
+    # count_matching_users expects an int or dict, not this; it will wrap it.
+    with _patch_httpx(list_resp):
+        result = json.loads(await fn(rule_name="Count Me"))
+
+    # The second call gets the same mock (system report format) but
+    # count_matching_users wraps non-dict as {"count": raw}
+    assert isinstance(result, dict)
+
+
+@pytest.mark.asyncio
+async def test_get_rule_matched_users_tool_by_name():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_rule_matched_users")
+
+    list_resp = _mock_response(
+        {
+            "data": {
+                "headers": ["", "Name", "Tags", "Conditions", "Actions"],
+                "rows": [
+                    {
+                        "columns": [
+                            '<input id="rule-toggle-33">',
+                            '<span data-value="History Rule">r</span>',
+                            "",
+                            "",
+                            "",
+                        ]
+                    }
+                ],
+                "totalrowcount": 1,
+            },
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(list_resp):
+        result = json.loads(await fn(rule_name="History Rule"))
+
+    assert isinstance(result, dict)
+
+
+@pytest.mark.asyncio
+async def test_delete_rule_tool_by_name():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_rule")
+
+    list_resp = _mock_response(
+        {
+            "data": {
+                "headers": ["", "Name", "Tags", "Conditions", "Actions"],
+                "rows": [
+                    {
+                        "columns": [
+                            '<input id="rule-toggle-66">',
+                            '<span data-value="Delete Me">r</span>',
+                            "",
+                            "",
+                            "",
+                        ]
+                    }
+                ],
+                "totalrowcount": 1,
+            },
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(list_resp):
+        result = json.loads(await fn(rule_name="Delete Me"))
+
+    assert "preview" in result
+    assert "66" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_unarchive_rule_tool_by_name():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "unarchive_rule")
+
+    list_resp = _mock_response(
+        {
+            "data": {
+                "headers": ["", "Name", "Tags", "Conditions", "Actions"],
+                "rows": [
+                    {
+                        "columns": [
+                            '<input id="rule-toggle-44">',
+                            '<span data-value="Restore Me">r</span>',
+                            "",
+                            "",
+                            "",
+                        ]
+                    }
+                ],
+                "totalrowcount": 1,
+            },
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(list_resp):
+        result = json.loads(await fn(rule_name="Restore Me"))
+
+    assert "preview" in result
+    assert "44" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_can_enable_rule_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "can_enable_rule")
+
+    resp = _mock_response({"result": True})
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=1))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_can_enable_rule_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "can_enable_rule")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=1))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_rule_matching_users_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_rule_matching_users")
+
+    resp = _mock_response(42)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=1))
+
+    assert result == {"count": 42}
+
+
+@pytest.mark.asyncio
+async def test_get_rule_matching_users_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_rule_matching_users")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=1))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_rule_matched_users_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_rule_matched_users")
+
+    resp = _mock_response(7)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=1))
+
+    assert result == {"count": 7}
+
+
+@pytest.mark.asyncio
+async def test_get_rule_matched_users_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_rule_matched_users")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=1))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_search_cohorts_for_rule_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "search_cohorts_for_rule")
+
+    resp = _mock_response(
+        [{"id": 1, "name": "Engineering"}, {"id": 2, "name": "Operations"}]
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(search="eng"))
+
+    assert len(result) == 2
+    assert result[0]["name"] == "Engineering"
+
+
+@pytest.mark.asyncio
+async def test_search_cohorts_for_rule_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "search_cohorts_for_rule")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(search="eng"))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_search_competencies_for_rule_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "search_competencies_for_rule")
+
+    resp = _mock_response(
+        [{"id": 10, "shortname": "Leadership"}, {"id": 11, "shortname": "Communication"}]
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(search="lead"))
+
+    assert len(result) == 2
+    assert result[0]["shortname"] == "Leadership"
+
+
+@pytest.mark.asyncio
+async def test_search_competencies_for_rule_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "search_competencies_for_rule")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(search="lead"))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_enable_rule_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "enable_rule")
+
+    result = json.loads(await fn(rule_id=5))
+
+    assert "preview" in result
+    assert "Enable dynamic rule" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_enable_rule_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "enable_rule")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=5, confirmed=True))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_enable_rule_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "enable_rule")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=5, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_disable_rule_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "disable_rule")
+
+    result = json.loads(await fn(rule_id=5))
+
+    assert "preview" in result
+    assert "Disable dynamic rule" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_disable_rule_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "disable_rule")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=5, confirmed=True))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_disable_rule_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "disable_rule")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=5, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_archive_rule_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "archive_rule")
+
+    result = json.loads(await fn(rule_id=5))
+
+    assert "preview" in result
+    assert "Archive dynamic rule" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_archive_rule_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "archive_rule")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=5, confirmed=True))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_archive_rule_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "archive_rule")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=5, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_unarchive_rule_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "unarchive_rule")
+
+    result = json.loads(await fn(rule_id=5))
+
+    assert "preview" in result
+    assert "Unarchive dynamic rule" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_unarchive_rule_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "unarchive_rule")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=5, confirmed=True))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_unarchive_rule_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "unarchive_rule")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=5, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_rule_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_rule")
+
+    result = json.loads(await fn(rule_id=5))
+
+    assert "preview" in result
+    assert "DELETE dynamic rule" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_delete_rule_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_rule")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=5, confirmed=True))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_rule_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_rule")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=5, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_duplicate_rule_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "duplicate_rule")
+
+    result = json.loads(await fn(rule_id=5))
+
+    assert "preview" in result
+    assert "Duplicate dynamic rule" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_duplicate_rule_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "duplicate_rule")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=5, confirmed=True))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_duplicate_rule_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "duplicate_rule")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(rule_id=5, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_rule_condition_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_rule_condition")
+
+    result = json.loads(await fn(instanceid=10))
+
+    assert "preview" in result
+    assert "Delete condition" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_delete_rule_condition_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_rule_condition")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(instanceid=10, confirmed=True))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_rule_condition_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_rule_condition")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(instanceid=10, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_rule_outcome_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_rule_outcome")
+
+    result = json.loads(await fn(instanceid=10))
+
+    assert "preview" in result
+    assert "Delete outcome" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_delete_rule_outcome_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_rule_outcome")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(instanceid=10, confirmed=True))
+
+    assert result == {"result": True}
+
+
+@pytest.mark.asyncio
+async def test_delete_rule_outcome_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_rule_outcome")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(instanceid=10, confirmed=True))
 
     assert "error" in result
