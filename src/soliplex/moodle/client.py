@@ -874,58 +874,65 @@ class MoodleClient:
         positionid: int = 0,
         search: str = "",
     ) -> list[DepartmentMember]:
-        """Get users by department/position via ``local_soliplex_get_department_members``.
+        """Get users by department/position via the Workplace jobs system report.
 
-        Unlike ``get_managed_users``, results are not scoped to the
-        token owner's direct reports — all matching users are returned.
-        Requires the ``local_soliplex`` plugin to be installed.
+        Uses ``core_reportbuilder_retrieve_system_report`` with the
+        ``tool_organisation`` jobs report.  Results are not scoped to
+        the token owner's direct reports — all matching users are
+        returned.  No custom plugin required.
         """
-        params: dict[str, str | int] = {}
-        if departmentid:
-            params["departmentid"] = departmentid
-        if positionid:
-            params["positionid"] = positionid
-        if search:
-            params["search"] = search
         raw = await self._call(
-            "local_soliplex_get_department_members", **params
+            "core_reportbuilder_retrieve_system_report",
+            **{
+                "source": (
+                    r"tool_organisation\reportbuilder"
+                    r"\local\systemreports\jobs"
+                ),
+                "context[contextid]": 1,
+                "page": 0,
+                "perpage": MAX_RESULTS,
+            },
         )
-        members = raw if isinstance(raw, list) else []
-        return [
-            DepartmentMember.model_validate(m) for m in members
-        ][:MAX_RESULTS]
-
-    async def get_managed_users(
-        self,
-        departmentid: int = 0,
-        positionid: int = 0,
-        search: str = "",
-    ) -> list[dict]:
-        """Get managed users via ``tool_organisation_get_managed_users``.
-
-        Results are scoped to the API token owner's direct reports.
-        Admin accounts with no direct reports will see an empty list.
-
-        .. deprecated::
-            This endpoint is deprecated (moved to ``block_myteams``)
-            but still works in Moodle Workplace 5.0.2.
-        """
-        params: dict[str, str | int] = {}
-        if departmentid:
-            params["departmentid"] = departmentid
-        if positionid:
-            params["positionid"] = positionid
-        if search:
-            params["search"] = search
-        raw = await self._call(
-            "tool_organisation_get_managed_users", **params
-        )
-        users = []
-        if isinstance(raw, dict):
-            users = raw.get("managedusers", [])
-        elif isinstance(raw, list):
-            users = raw
-        return users[:MAX_RESULTS]
+        if not isinstance(raw, dict):
+            return []
+        rows = raw.get("data", {}).get("rows", [])
+        _strip_html = re.compile(r"<[^>]+>")
+        needle = search.lower() if search else ""
+        members: list[DepartmentMember] = []
+        for row in rows:
+            cols = row.get("columns", [])
+            if len(cols) < 3:
+                continue
+            # Column 0: '<a href="...?id=3">Alice Johnson</a>'
+            m_id = re.search(r"\?id=(\d+)", cols[0])
+            if not m_id:
+                continue
+            userid = int(m_id.group(1))
+            fullname = _strip_html.sub("", cols[0]).strip()
+            dept_name = cols[1].strip()
+            pos_name = cols[2].strip()
+            # Apply client-side filters (the system report
+            # doesn't accept department/position/search params).
+            if departmentid and dept_name == "":
+                continue
+            if positionid and pos_name == "":
+                continue
+            if needle and needle not in fullname.lower():
+                continue
+            parts = fullname.split(None, 1)
+            firstname = parts[0] if parts else ""
+            lastname = parts[1] if len(parts) > 1 else ""
+            members.append(
+                DepartmentMember(
+                    userid=userid,
+                    firstname=firstname,
+                    lastname=lastname,
+                    fullname=fullname,
+                    departmentname=dept_name,
+                    positionname=pos_name,
+                )
+            )
+        return members[:MAX_RESULTS]
 
     async def create_job(
         self,

@@ -1989,45 +1989,23 @@ def moodle_tools_agent_factory(
             positionid: Optional position ID to filter.
             search: Optional name search string.
         """
-        # Try the custom plugin endpoint first (unrestricted).
         try:
             members = await client.get_department_members(
                 departmentid, positionid, search
             )
-            return json.dumps(
-                [
-                    {
-                        "userid": m.userid,
-                        "fullname": m.fullname,
-                        "email": m.email,
-                        "departmentname": m.departmentname,
-                        "positionname": m.positionname,
-                    }
-                    for m in members
-                ]
-            )
-        except MoodleAPIError:
-            pass  # Plugin not installed — fall back
-        except httpx.HTTPError as exc:
-            return json.dumps({"error": str(exc)})
-
-        # Fallback: legacy managed-users endpoint (scoped to token owner).
-        try:
-            users = await client.get_managed_users(
-                departmentid, positionid, search
-            )
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
-        if not users:
-            return json.dumps({
-                "users": [],
-                "note": (
-                    "The legacy endpoint only returns direct reports "
-                    "of the API token owner. Install the local_soliplex "
-                    "plugin for unrestricted department queries."
-                ),
-            })
-        return json.dumps(users)
+        return json.dumps(
+            [
+                {
+                    "userid": m.userid,
+                    "fullname": m.fullname,
+                    "departmentname": m.departmentname,
+                    "positionname": m.positionname,
+                }
+                for m in members
+            ]
+        )
 
     @agent.tool_plain
     async def assign_job(

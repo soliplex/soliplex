@@ -1207,47 +1207,6 @@ async def test_get_positions_non_dict(client):
     assert positions == []
 
 
-@pytest.mark.asyncio
-async def test_get_managed_users(client):
-    resp = _mock_response(
-        {"managedusers": [{"id": 3, "fullname": "Alice Johnson"}], "totalcount": 1}
-    )
-    with _patch_httpx(resp):
-        users = await client.get_managed_users()
-
-    assert len(users) == 1
-    assert users[0]["fullname"] == "Alice Johnson"
-
-
-@pytest.mark.asyncio
-async def test_get_managed_users_empty_dict(client):
-    resp = _mock_response({"managedusers": [], "totalcount": 0})
-    with _patch_httpx(resp):
-        users = await client.get_managed_users()
-
-    assert users == []
-
-
-@pytest.mark.asyncio
-async def test_get_managed_users_legacy_list(client):
-    """Backward compat: plain list response still works."""
-    resp = _mock_response([{"id": 3, "fullname": "Alice Johnson"}])
-    with _patch_httpx(resp):
-        users = await client.get_managed_users()
-
-    assert len(users) == 1
-    assert users[0]["fullname"] == "Alice Johnson"
-
-
-@pytest.mark.asyncio
-async def test_get_managed_users_unexpected_type(client):
-    """Returns empty list when response is neither dict nor list."""
-    resp = _mock_response(None)
-    with _patch_httpx(resp):
-        users = await client.get_managed_users()
-
-    assert users == []
-
 
 @pytest.mark.asyncio
 async def test_create_job(client):
@@ -1509,18 +1468,6 @@ async def test_deallocate_user_from_certification_non_dict(client):
     assert result == {"result": True}
 
 
-@pytest.mark.asyncio
-async def test_get_managed_users_with_all_params(client):
-    resp = _mock_response(
-        {"managedusers": [{"id": 3, "fullname": "Alice Johnson"}], "totalcount": 1}
-    )
-    with _patch_httpx(resp):
-        users = await client.get_managed_users(
-            departmentid=1, positionid=2, search="Alice"
-        )
-
-    assert len(users) == 1
-
 
 @pytest.mark.asyncio
 async def test_get_user_learning_plans_non_dict(client):
@@ -1541,31 +1488,50 @@ async def test_get_course_competencies_non_dict(client):
 
 
 # ---------------------------------------------------------------
-# get_department_members (local_soliplex plugin)
+# get_department_members (via Workplace jobs system report)
 # ---------------------------------------------------------------
+
+
+def _jobs_report_response(rows):
+    """Build a mock system report response for jobs."""
+    return {
+        "data": {
+            "headers": [
+                "Full name with link",
+                "Department",
+                "Position",
+                "Permissions",
+                "Start date",
+                "End date",
+            ],
+            "rows": [{"columns": r} for r in rows],
+            "totalrowcount": len(rows),
+        },
+        "warnings": [],
+    }
 
 
 @pytest.mark.asyncio
 async def test_get_department_members(client):
-    resp = _mock_response([
-        {
-            "userid": 3,
-            "username": "alice",
-            "firstname": "Alice",
-            "lastname": "Johnson",
-            "fullname": "Alice Johnson",
-            "email": "alice@example.com",
-            "departmentid": 1,
-            "departmentname": "Engineering",
-            "positionid": 1,
-            "positionname": "Manager",
-        },
-    ])
+    resp = _mock_response(
+        _jobs_report_response([
+            [
+                '<a href="http://moodle.test/user/profile.php?id=3">Alice Johnson</a>',
+                "Engineering",
+                "Manager",
+                "",
+                "18/03/26",
+                "",
+            ],
+        ])
+    )
     with _patch_httpx(resp):
         members = await client.get_department_members()
 
     assert len(members) == 1
     assert members[0].userid == 3
+    assert members[0].firstname == "Alice"
+    assert members[0].lastname == "Johnson"
     assert members[0].fullname == "Alice Johnson"
     assert members[0].departmentname == "Engineering"
     assert members[0].positionname == "Manager"
@@ -1573,7 +1539,9 @@ async def test_get_department_members(client):
 
 @pytest.mark.asyncio
 async def test_get_department_members_empty(client):
-    resp = _mock_response([])
+    resp = _mock_response(
+        _jobs_report_response([])
+    )
     with _patch_httpx(resp):
         members = await client.get_department_members()
 
@@ -1581,38 +1549,105 @@ async def test_get_department_members_empty(client):
 
 
 @pytest.mark.asyncio
-async def test_get_department_members_with_filters(client):
-    resp = _mock_response([
-        {
-            "userid": 4,
-            "username": "bob",
-            "firstname": "Bob",
-            "lastname": "Smith",
-            "fullname": "Bob Smith",
-            "email": "bob@example.com",
-            "departmentid": 1,
-            "departmentname": "Engineering",
-            "positionid": 2,
-            "positionname": "Senior Engineer",
-        },
-    ])
+async def test_get_department_members_search_filter(client):
+    resp = _mock_response(
+        _jobs_report_response([
+            [
+                '<a href="?id=3">Alice Johnson</a>',
+                "Engineering",
+                "Manager",
+                "",
+                "",
+                "",
+            ],
+            [
+                '<a href="?id=4">Bob Smith</a>',
+                "Engineering",
+                "Senior Engineer",
+                "",
+                "",
+                "",
+            ],
+        ])
+    )
     with _patch_httpx(resp):
-        members = await client.get_department_members(
-            departmentid=1, positionid=2, search="Bob"
-        )
+        members = await client.get_department_members(search="Bob")
 
     assert len(members) == 1
-    assert members[0].username == "bob"
+    assert members[0].userid == 4
+    assert members[0].fullname == "Bob Smith"
 
 
 @pytest.mark.asyncio
-async def test_get_department_members_non_list(client):
-    """Returns empty list when response is not a list."""
-    resp = _mock_response({"unexpected": "format"})
+async def test_get_department_members_non_dict(client):
+    """Returns empty list when response is not a dict."""
+    resp = _mock_response(True)
     with _patch_httpx(resp):
         members = await client.get_department_members()
 
     assert members == []
+
+
+@pytest.mark.asyncio
+async def test_get_department_members_malformed_row(client):
+    """Rows with too few columns or missing user ID are skipped."""
+    resp = _mock_response(
+        _jobs_report_response([
+            ["<span>no link</span>"],
+            ["<span>no id in link</span>", "Dept", "Pos", "", "", ""],
+            [
+                '<a href="?id=5">Carol Williams</a>',
+                "Operations",
+                "Analyst",
+                "",
+                "",
+                "",
+            ],
+        ])
+    )
+    with _patch_httpx(resp):
+        members = await client.get_department_members()
+
+    assert len(members) == 1
+    assert members[0].userid == 5
+
+
+@pytest.mark.asyncio
+async def test_get_department_members_dept_position_filter(client):
+    """Client-side departmentid/positionid filters skip empty values."""
+    resp = _mock_response(
+        _jobs_report_response([
+            [
+                '<a href="?id=3">Alice Johnson</a>',
+                "",
+                "Manager",
+                "",
+                "",
+                "",
+            ],
+            [
+                '<a href="?id=4">Bob Smith</a>',
+                "Engineering",
+                "",
+                "",
+                "",
+                "",
+            ],
+        ])
+    )
+    with _patch_httpx(resp):
+        members_dept = await client.get_department_members(departmentid=1)
+
+    # Alice has empty dept, should be skipped; Bob has dept but empty pos
+    assert len(members_dept) == 1
+    assert members_dept[0].userid == 4
+
+    with _patch_httpx(resp):
+        members_pos = await client.get_department_members(positionid=1)
+
+    # Alice has position but empty dept; Bob has empty position, skipped
+    assert len(members_pos) == 1
+    assert members_pos[0].userid == 3
 
 
 # ---------------------------------------------------------------

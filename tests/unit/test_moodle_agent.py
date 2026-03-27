@@ -2055,24 +2055,31 @@ async def test_list_positions_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_team_members_tool():
-    """Primary path: custom plugin returns department members."""
+    """System report returns department members."""
     agent = _build_agent()
     fn = _get_tool_fn(agent, "get_team_members")
 
-    resp = _mock_response([
+    resp = _mock_response(
         {
-            "userid": 3,
-            "username": "alice",
-            "firstname": "Alice",
-            "lastname": "Johnson",
-            "fullname": "Alice Johnson",
-            "email": "alice@example.com",
-            "departmentid": 1,
-            "departmentname": "Engineering",
-            "positionid": 1,
-            "positionname": "Manager",
-        },
-    ])
+            "data": {
+                "headers": ["Full name with link", "Department", "Position", "", "", ""],
+                "rows": [
+                    {
+                        "columns": [
+                            '<a href="http://moodle.test/user/profile.php?id=3">Alice Johnson</a>',
+                            "Engineering",
+                            "Manager",
+                            "",
+                            "",
+                            "",
+                        ]
+                    }
+                ],
+                "totalrowcount": 1,
+            },
+            "warnings": [],
+        }
+    )
     with _patch_httpx(resp):
         result = json.loads(await fn())
 
@@ -2083,127 +2090,15 @@ async def test_get_team_members_tool():
 
 
 @pytest.mark.asyncio
-async def test_get_team_members_tool_fallback():
-    """Falls back to managed_users when plugin not installed."""
-    from soliplex.moodle.client import MoodleAPIError
-
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_team_members")
-
-    managed_resp = _mock_response(
-        {"managedusers": [{"id": 3, "fullname": "Alice Johnson"}], "totalcount": 1}
-    )
-
-    call_count = 0
-
-    async def _side_effect(*args, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            # First call: plugin endpoint returns error
-            error_resp = _mock_response(
-                {"exception": "moodle_exception", "errorcode": "invalidfunction", "message": "not found"}
-            )
-            return error_resp
-        # Second call: managed_users returns data
-        return managed_resp
-
-    mock_client = mock.AsyncMock()
-    mock_client.post.side_effect = _side_effect
-    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
-
-    with mock.patch(
-        "soliplex.moodle.client.httpx.AsyncClient",
-        return_value=mock_client,
-    ):
-        result = json.loads(await fn())
-
-    assert len(result) == 1
-    assert result[0]["fullname"] == "Alice Johnson"
-
-
-@pytest.mark.asyncio
-async def test_get_team_members_tool_fallback_empty():
-    """Fallback returns helpful note when legacy endpoint is also empty."""
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_team_members")
-
-    call_count = 0
-
-    async def _side_effect(*args, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            return _mock_response(
-                {"exception": "moodle_exception", "errorcode": "invalidfunction", "message": "not found"}
-            )
-        return _mock_response({"managedusers": [], "totalcount": 0})
-
-    mock_client = mock.AsyncMock()
-    mock_client.post.side_effect = _side_effect
-    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
-
-    with mock.patch(
-        "soliplex.moodle.client.httpx.AsyncClient",
-        return_value=mock_client,
-    ):
-        result = json.loads(await fn())
-
-    assert result["users"] == []
-    assert "local_soliplex" in result["note"]
-
-
-@pytest.mark.asyncio
-async def test_get_team_members_tool_fallback_error():
-    """Error on both primary and fallback endpoints returns error."""
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_team_members")
-
-    call_count = 0
-
-    async def _side_effect(*args, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            return _mock_response(
-                {"exception": "moodle_exception", "errorcode": "invalidfunction", "message": "not found"}
-            )
-        return _mock_response(
-            {"exception": "moodle_exception", "errorcode": "err", "message": "fallback fail"}
-        )
-
-    mock_client = mock.AsyncMock()
-    mock_client.post.side_effect = _side_effect
-    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
-
-    with mock.patch(
-        "soliplex.moodle.client.httpx.AsyncClient",
-        return_value=mock_client,
-    ):
-        result = json.loads(await fn())
-
-    assert "error" in result
-    assert "fallback fail" in result["error"]
-
-
-@pytest.mark.asyncio
 async def test_get_team_members_tool_error():
-    """HTTP error on primary endpoint is returned directly."""
+    """API error returns error JSON."""
     agent = _build_agent()
     fn = _get_tool_fn(agent, "get_team_members")
 
-    mock_client = mock.AsyncMock()
-    mock_client.post.side_effect = httpx.ConnectError("connection refused")
-    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
-
-    with mock.patch(
-        "soliplex.moodle.client.httpx.AsyncClient",
-        return_value=mock_client,
-    ):
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
         result = json.loads(await fn())
 
     assert "error" in result
