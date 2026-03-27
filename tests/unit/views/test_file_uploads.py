@@ -89,7 +89,7 @@ async def test_post_room_agui_thread_id_upload(
     the_installation.get_environment.side_effect = installation_env.get
 
     if w_upload_env:
-        installation_env["RAGSERVER_UPLOADS_PATH"] = str(uploads_dir)
+        installation_env["SOLIPLEX_UPLOADS_PATH"] = str(uploads_dir)
 
     the_authz_policy = mock.create_autospec(
         authz_package.AuthorizationPolicy,

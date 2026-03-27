@@ -31,3 +31,4 @@ dist/
 # mkdocs artifacts
 site/
 
+uploads/

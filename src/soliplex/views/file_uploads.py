@@ -62,7 +62,7 @@ async def post_uploads_room_thread(
             detail=exc.args,
         ) from None
 
-    uploads_dir = the_installation.get_environment("RAGSERVER_UPLOADS_PATH")
+    uploads_dir = the_installation.get_environment("SOLIPLEX_UPLOADS_PATH")
 
     if uploads_dir is None:
         raise fastapi.HTTPException(

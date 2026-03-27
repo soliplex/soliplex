@@ -187,6 +187,7 @@ _DEFAULT_ROUTER_NAMES = {
     "authn": "soliplex.views.authn.router",
     "authz": "soliplex.views.authz.router",
     "completions": "soliplex.views.completions.router",
+    "file_uploads": "soliplex.views.file_uploads.router",
     "installation": "soliplex.views.installation.router",
     "log_ingest": "soliplex.views.log_ingest.router",
     "quizzes": "soliplex.views.quizzes.router",
