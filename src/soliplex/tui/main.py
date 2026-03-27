@@ -2,6 +2,7 @@ import json
 
 import requests
 import textual
+import textual_fspicker
 from ag_ui import core as agui_core
 from textual import app as t_app
 from textual import binding as t_binding
@@ -590,6 +591,7 @@ class RunButtonWidget(t_widget.Widget):
 class ThreadRunsView(t_screen.Screen):
     BINDINGS = [
         t_binding.Binding("escape", "dismiss(None)", "Exit"),
+        t_binding.Binding("ctrl+u", "upload_file", "Upload file"),
     ]
     DEFAULT_CSS = """
     .run-label {
@@ -644,6 +646,18 @@ class ThreadRunsView(t_screen.Screen):
                     )
 
         yield t_widgets.Footer()
+
+    @textual.work
+    async def action_upload_file(self) -> None:
+        ofd = textual_fspicker.FileOpen()
+        payload = await self.app.push_screen_wait(ofd)
+
+        if payload is not None:
+            self.rest_api.post_thread_file_upload(
+                self.room_id,
+                self.thread_id,
+                payload,
+            )
 
     async def on_button_pressed(
         self,

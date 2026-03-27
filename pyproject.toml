@@ -65,6 +65,7 @@ postgres = [
 tui = [
     "textual",
     "textual-serve",
+    "textual-fspicker",
     "typer",
 ]
 

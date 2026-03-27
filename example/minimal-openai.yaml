@@ -220,6 +220,9 @@ environment:
   - name: "RAG_LANCE_DB_PATH"
     value: "file:../db/rag"
 
+  - name: "SOLIPLEX_UPLOADS_PATH"
+    value: "file:../uploads"
+
   #------------------------------------------------------------------------
   # Expire MCP room server tokens after one hour.
   #------------------------------------------------------------------------

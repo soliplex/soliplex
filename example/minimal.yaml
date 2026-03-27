@@ -212,7 +212,7 @@ environment:
   - name: "RAG_LANCE_DB_PATH"
     value: "file:../db/rag"
 
-  - name: "SOLILPLEX_UPLOADS_PATH"
+  - name: "SOLIPLEX_UPLOADS_PATH"
     value: "file:../uploads"
 
   #------------------------------------------------------------------------
