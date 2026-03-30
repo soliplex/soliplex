@@ -197,10 +197,18 @@ def _load_filesystem_skill_configs(i_config) -> config_skills.SkillConfigMap:
     return fs_skill_configs
 
 
-def _load_entrypoint_skill_configs() -> config_skills.SkillConfigMap:
+def _load_entrypoint_skill_configs(i_config) -> config_skills.SkillConfigMap:
+    i_config.resolve_environment()
     ep_skill_configs = {}
 
     for skill in hs_discovery.discover_from_entrypoints():
+        # Replace haiku-rag-based skills' 'config' with our own.
+        if skill.extras.get("db_path") is not None:
+            skill.reconfigure(
+                config=i_config.haiku_rag_config,
+                db_path=skill.extras["db_path"],
+            )
+
         feature_name = skill.state_namespace
         feature_registry = config_agui.AGUI_FEATURES_BY_NAME
 
@@ -476,7 +484,7 @@ class InstallationConfig:
     ) -> config_skills.SkillConfigMap:
         if self._available_entrypoint_skill_configs is None:
             self._available_entrypoint_skill_configs = (
-                _load_entrypoint_skill_configs()  # no 'self' needed
+                _load_entrypoint_skill_configs(self)
             )
 
         return self._available_entrypoint_skill_configs.copy()
@@ -1003,9 +1011,11 @@ class InstallationConfig:
     def reload_configurations(self):
         """Load all dependent configuration sets"""
         self._available_filesystem_configs = _load_filesystem_skill_configs(
-            self
+            self,
         )
-        self._available_entrypoint_configs = _load_entrypoint_skill_configs()
+        self._available_entrypoint_configs = _load_entrypoint_skill_configs(
+            self,
+        )
         self._oidc_auth_system_configs = self._load_oidc_auth_system_configs()
         self._room_configs = self._load_room_configs()
         self._completion_configs = self._load_completion_configs()

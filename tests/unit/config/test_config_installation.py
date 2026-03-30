@@ -2005,33 +2005,49 @@ def test_installationconfig_avl_ep_skill_configs_wo_existing(
     dfe,
     patched_soliplex_config,
     patched_agui_features,
+    temp_dir,
 ):
     STATE_NAMESPACE = "test-state-namespace"
 
     class DerivedFeatureModel(agui_features.EmptyFeatureModel):
         pass
 
+    ic_hr_config_file = temp_dir / "haiku.rag.yaml"
+    ic_hr_config_file.write_text("environment: installation")
+    db_path = temp_dir / "test.lancedb"
+
     ep_skill_1 = mock.create_autospec(hs_models.Skill)
     ep_skill_1.metadata = mock.create_autospec(hs_models.SkillMetadata)
     ep_skill_1.metadata.name = "foo"
     ep_skill_1.state_namespace = STATE_NAMESPACE
     ep_skill_1.state_type = agui_features.EmptyFeatureModel
+    ep_skill_1.extras = {
+        "db_path": db_path,
+    }
 
     ep_skill_2 = mock.create_autospec(hs_models.Skill)
     ep_skill_2.metadata = mock.create_autospec(hs_models.SkillMetadata)
     ep_skill_2.metadata.name = "bar"
     ep_skill_2.state_namespace = STATE_NAMESPACE
     ep_skill_2.state_type = DerivedFeatureModel
+    ep_skill_2.extras = {}
 
     dfe.return_value = [ep_skill_1, ep_skill_2]
 
-    kw = BARE_INSTALLATION_CONFIG_KW.copy()
+    kw = BARE_INSTALLATION_CONFIG_KW.copy() | {
+        "_haiku_rag_config_file": ic_hr_config_file,
+    }
     i_config = config_installation.InstallationConfig(**kw)
 
     found = i_config.available_entrypoint_skill_configs
 
     assert found["foo"].name == "foo"
     assert found["bar"].name == "bar"
+
+    ep_skill_1.reconfigure.assert_called_once_with(
+        db_path=db_path,
+        config=i_config.haiku_rag_config,
+    )
 
     # First registration wins
     registered = patched_agui_features[STATE_NAMESPACE]
@@ -2050,12 +2066,14 @@ def test_installationconfig_avl_ep_skill_configs_wo_existing_w_conflict(
     ep_skill_1.metadata.name = test_skills.SKILL_NAME
     skill_desc_1 = f"{test_skills.SKILL_DESC} (from ep_skill_1)"
     ep_skill_1.metadata.description = skill_desc_1
+    ep_skill_1.extras = {}
 
     ep_skill_2 = mock.create_autospec(hs_models.Skill)
     ep_skill_2.metadata = mock.create_autospec(hs_models.SkillMetadata)
     ep_skill_2.metadata.name = test_skills.SKILL_NAME
     skill_desc_2 = f"{test_skills.SKILL_DESC} (from ep_skill_2)"
     ep_skill_2.metadata.description = skill_desc_2
+    ep_skill_2.extras = {}
 
     dfe.return_value = [ep_skill_1, ep_skill_2]
 
@@ -2103,6 +2121,7 @@ def test_installationconfig_skill_configs_w_set():
         test_skills.SKILL_NAME: skill_config,
         "other-skill": object(),
     }
+    kw["_available_entrypoint_skill_configs"] = {}
 
     i_config = config_installation.InstallationConfig(**kw)
 
@@ -2157,10 +2176,16 @@ def test_installationconfig_reload_configurations(temp_dir):
         i_config._available_filesystem_configs
         is config_patch["_load_filesystem_skill_configs"].return_value
     )
+    config_patch["_load_filesystem_skill_configs"].assert_called_once_with(
+        i_config,
+    )
 
     assert (
         i_config._available_entrypoint_configs
         is config_patch["_load_entrypoint_skill_configs"].return_value
+    )
+    config_patch["_load_entrypoint_skill_configs"].assert_called_once_with(
+        i_config,
     )
 
 
