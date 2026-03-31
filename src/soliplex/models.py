@@ -594,8 +594,8 @@ class AGUI_RunFeedbackReview(pydantic.BaseModel):
 
     user_name: str = KW_ONLY
     room_id: str = KW_ONLY
-    thread_id: str = KW_ONLY
-    run_id: str = KW_ONLY
+    thread_id: pydantic.UUID4 = KW_ONLY
+    run_id: pydantic.UUID4 = KW_ONLY
     note: str | None = KW_ONLY_NONE
 
 
@@ -604,8 +604,8 @@ class AGUI_RunFeedbackResolution(pydantic.BaseModel):
 
     user_name: str = KW_ONLY
     room_id: str = KW_ONLY
-    thread_id: str = KW_ONLY
-    run_id: str = KW_ONLY
+    thread_id: pydantic.UUID4 = KW_ONLY
+    run_id: pydantic.UUID4 = KW_ONLY
     note: str | None = KW_ONLY_NONE
 
 
@@ -643,7 +643,7 @@ class AGUI_FeedbackQueryTerms(pydantic.BaseModel):
 
 
 class AGUI_NewRunRequest(pydantic.BaseModel):
-    parent_run_id: str = KW_ONLY_NONE
+    parent_run_id: pydantic.UUID4 = KW_ONLY_NONE
     metadata: AGUI_RunMetadata = KW_ONLY_NONE
 
 
@@ -664,10 +664,10 @@ class AGUI_RunUsage(pydantic.BaseModel):
 
 
 class AGUI_Run(pydantic.BaseModel):
-    thread_id: str = KW_ONLY
-    run_id: str = KW_ONLY
+    thread_id: pydantic.UUID4 = KW_ONLY
+    run_id: pydantic.UUID4 = KW_ONLY
 
-    parent_run_id: str | None = KW_ONLY_NONE
+    parent_run_id: pydantic.UUID4 | None = KW_ONLY_NONE
 
     run_input: agui_core.RunAgentInput | None = KW_ONLY_NONE
     created: datetime.datetime = KW_ONLY_NONE
@@ -704,7 +704,7 @@ class AGUI_Run(pydantic.BaseModel):
         )
 
 
-AGUI_Runs = dict[str, AGUI_Run]
+AGUI_Runs = dict[pydantic.UUID4, AGUI_Run]
 
 
 class AGUI_ThreadMetadata(pydantic.BaseModel):
@@ -734,7 +734,7 @@ class AGUI_NewThreadRequest(pydantic.BaseModel):
 
 class AGUI_Thread(pydantic.BaseModel):
     room_id: str = KW_ONLY
-    thread_id: str = KW_ONLY
+    thread_id: pydantic.UUID4 = KW_ONLY
 
     runs: AGUI_Runs | None = pydantic.Field(
         kw_only=True,

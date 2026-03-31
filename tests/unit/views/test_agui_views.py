@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import datetime
 import functools
+import uuid
 from unittest import mock
 
 import fastapi
@@ -46,15 +47,23 @@ UNKNOWN_USER = {
 
 TEST_ROOM_ID = "test-room"
 OTHER_ROOM_ID = "other-room"
-TEST_THREAD_ID = "test-thread-123"
+
+TEST_THREAD_ID_UUID = uuid.uuid4()
+TEST_THREAD_ID_STR = str(TEST_THREAD_ID_UUID)
 TEST_THREAD_NAME = "Test thread #123"
 TEST_THREAD_DESC = "Test thread description"
-TEST_PARENT_RUN_ID = "test-run-234"
-TEST_RUN_ID = "test-run-456"
+
+TEST_PARENT_RUN_ID_UUID = uuid.uuid4()
+TEST_PARENT_RUN_ID_STR = str(TEST_PARENT_RUN_ID_UUID)
+
+TEST_RUN_ID_UUID = uuid.uuid4()
+TEST_RUN_ID_STR = str(TEST_RUN_ID_UUID)
 TEST_RUN_LABEL = "My test run #456"
 TEST_RUN_FEEDBACK = "test-feedback"
 TEST_RUN_FEEDBACK_REASON = "Just because"
+
 REVIEWED_NOTE = "test feedback reviewed note"
+RESOLVED_NOTE = "test feedback resolved note"
 
 EMPTY_FEATURE_NAME = "test-empty-feature"
 EMPTY_FEATURE = config_agui.AGUI_Feature(
@@ -64,8 +73,8 @@ EMPTY_FEATURE = config_agui.AGUI_Feature(
 )
 
 EMPTY_RUN_INPUT = agui_core.RunAgentInput(
-    thread_id=TEST_THREAD_ID,
-    run_id=TEST_RUN_ID,
+    thread_id=TEST_THREAD_ID_STR,
+    run_id=TEST_RUN_ID_STR,
     state=None,
     messages=(),
     tools=(),
@@ -75,12 +84,12 @@ EMPTY_RUN_INPUT = agui_core.RunAgentInput(
 
 AGUI_EVENTS = [
     agui_core.RunStartedEvent(
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
     ),
     agui_core.RunFinishedEvent(
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
     ),
 ]
 
@@ -90,7 +99,7 @@ def test_thread():
     return mock.create_autospec(
         agui_package.Thread,
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
+        thread_id=TEST_THREAD_ID_STR,
         thread_metadata=None,
         created=NOW,
         awaitable_attrs=mock.AsyncMock(),
@@ -114,8 +123,8 @@ def _make_thread_metadata(
 def test_run():
     return mock.create_autospec(
         agui_package.Run,
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
         parent_run_id=None,
         run_metadata=None,
         created=NOW,
@@ -145,8 +154,8 @@ def test_run_feedback():
 @pytest.fixture
 def run_input():
     return agui_core.RunAgentInput(
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
         state={},
         messages=[],
         tools=[],
@@ -171,17 +180,17 @@ def _awaitable(name, value):
 
 no_error = contextlib.nullcontext
 
-UNKNOWN_THREAD = agui_package.UnknownThread(USER_NAME, TEST_THREAD_ID)
+UNKNOWN_THREAD = agui_package.UnknownThread(USER_NAME, TEST_THREAD_ID_STR)
 THREAD_ROOM_MISMATCH = agui_package.ThreadRoomMismatch(
     OTHER_ROOM_ID,
     TEST_ROOM_ID,
 )
-UNKNOWN_PARENT_RUN = agui_package.MissingParentRun(TEST_PARENT_RUN_ID)
-UNKNOWN_RUN = agui_package.UnknownRun(TEST_RUN_ID)
+UNKNOWN_PARENT_RUN = agui_package.MissingParentRun(TEST_PARENT_RUN_ID_STR)
+UNKNOWN_RUN = agui_package.UnknownRun(TEST_RUN_ID_STR)
 ALREADY_STARTED = agui_package.RunAlreadyStarted(
     USER_NAME,
-    TEST_THREAD_ID,
-    TEST_RUN_ID,
+    TEST_THREAD_ID_STR,
+    TEST_RUN_ID_STR,
 )
 
 
@@ -310,7 +319,7 @@ async def test_get_room_agui_only(
     (m_thread,) = found.threads
 
     assert m_thread.room_id == TEST_ROOM_ID
-    assert m_thread.thread_id == TEST_THREAD_ID
+    assert m_thread.thread_id == TEST_THREAD_ID_UUID
     assert m_thread.runs is None
 
     if w_thread_meta:
@@ -403,7 +412,7 @@ async def test_get_room_agui_thread_id_only(
         )
 
     if w_parent:
-        test_run.parent_run_id = TEST_PARENT_RUN_ID
+        test_run.parent_run_id = TEST_PARENT_RUN_ID_STR
     else:
         test_run.parent_run_id = None
 
@@ -421,7 +430,7 @@ async def test_get_room_agui_thread_id_only(
         found = await agui_views.get_room_agui_thread_id(
             request=request,
             room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
+            thread_id=TEST_THREAD_ID_UUID,
             the_installation=the_installation,
             the_threads=the_threads,
             the_authz_policy=the_authz_policy,
@@ -431,7 +440,7 @@ async def test_get_room_agui_thread_id_only(
 
     if expected is None:
         assert found.room_id == TEST_ROOM_ID
-        assert found.thread_id == TEST_THREAD_ID
+        assert found.thread_id == TEST_THREAD_ID_UUID
 
         exp_model_run = models.AGUI_Run.from_run(
             a_run=test_run,
@@ -439,7 +448,7 @@ async def test_get_room_agui_thread_id_only(
             a_run_meta=test_run.run_metadata,
             a_run_events=None,
         )
-        assert found.runs == {TEST_RUN_ID: exp_model_run}
+        assert found.runs == {TEST_RUN_ID_UUID: exp_model_run}
 
         if w_thread_meta:
             assert found.metadata.name == TEST_THREAD_NAME
@@ -455,7 +464,7 @@ async def test_get_room_agui_thread_id_only(
     the_threads.get_thread.assert_called_once_with(
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
+        thread_id=TEST_THREAD_ID_STR,
     )
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
@@ -523,7 +532,7 @@ async def test_get_room_agui_thread_id_run_id(
         )
 
     if w_parent:
-        test_run.parent_run_id = TEST_PARENT_RUN_ID
+        test_run.parent_run_id = TEST_PARENT_RUN_ID_STR
     else:
         test_run.parent_run_id = None
 
@@ -557,8 +566,8 @@ async def test_get_room_agui_thread_id_run_id(
         found = await agui_views.get_room_agui_thread_id_run_id(
             request=request,
             room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
-            run_id=TEST_RUN_ID,
+            thread_id=TEST_THREAD_ID_UUID,
+            run_id=TEST_RUN_ID_UUID,
             the_installation=the_installation,
             the_threads=the_threads,
             the_authz_policy=the_authz_policy,
@@ -567,8 +576,8 @@ async def test_get_room_agui_thread_id_run_id(
         )
 
     if expected is None:
-        assert found.thread_id == TEST_THREAD_ID
-        assert found.run_id == TEST_RUN_ID
+        assert found.thread_id == TEST_THREAD_ID_UUID
+        assert found.run_id == TEST_RUN_ID_UUID
 
         assert found.events == w_events
 
@@ -586,8 +595,8 @@ async def test_get_room_agui_thread_id_run_id(
     the_threads.get_run.assert_called_once_with(
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
     )
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
@@ -685,12 +694,12 @@ async def test_post_room_agui_only(
     )
 
     assert found.room_id == TEST_ROOM_ID
-    assert found.thread_id == TEST_THREAD_ID
+    assert found.thread_id == TEST_THREAD_ID_UUID
     assert found.metadata == new_thread_request.metadata
 
     (m_run,) = found.runs.values()
-    assert m_run.thread_id == TEST_THREAD_ID
-    assert m_run.run_id == TEST_RUN_ID
+    assert m_run.thread_id == TEST_THREAD_ID_UUID
+    assert m_run.run_id == TEST_RUN_ID_UUID
     assert m_run.parent_run_id is None
 
     m_run_state = m_run.run_input.state
@@ -725,9 +734,9 @@ async def test_post_room_agui_only(
     "w_parent_id, missing_parent, expectation",
     [
         (None, False, no_error()),
-        (TEST_PARENT_RUN_ID, False, no_error()),
+        (TEST_PARENT_RUN_ID_UUID, False, no_error()),
         (
-            TEST_PARENT_RUN_ID,
+            TEST_PARENT_RUN_ID_UUID,
             True,
             raises_httpexc(code=400, match="Unknown parent run"),
         ),
@@ -753,14 +762,14 @@ async def test_post_room_agui_thread_id_only(
     nrr = {}
 
     if w_parent_id:
-        nrr = {"parent_run_id": TEST_PARENT_RUN_ID}
+        nrr = {"parent_run_id": w_parent_id}
 
     if missing_parent:
         the_threads.new_run.side_effect = UNKNOWN_PARENT_RUN
     else:
         the_threads.new_run.return_value = test_run
 
-        test_run.awaitable_attrs.run_id = _awaitable("run_id", TEST_RUN_ID)
+        test_run.awaitable_attrs.run_id = _awaitable("run_id", TEST_RUN_ID_STR)
         test_run.awaitable_attrs.created = _awaitable("created", NOW)
 
         if w_run_meta:
@@ -797,7 +806,7 @@ async def test_post_room_agui_thread_id_only(
         found = await agui_views.post_room_agui_thread_id(
             request,
             room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
+            thread_id=TEST_THREAD_ID_UUID,
             new_run_request=new_run_request,
             the_installation=the_installation,
             the_threads=the_threads,
@@ -807,7 +816,7 @@ async def test_post_room_agui_thread_id_only(
         )
 
     if expected is None:
-        assert found.thread_id == TEST_THREAD_ID
+        assert found.thread_id == TEST_THREAD_ID_UUID
 
         if w_run_meta:
             assert found.metadata == models.AGUI_RunMetadata.from_run_meta(
@@ -821,7 +830,7 @@ async def test_post_room_agui_thread_id_only(
         the_threads.new_run.assert_called_once_with(
             user_name=USER_NAME,
             room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
+            thread_id=TEST_THREAD_ID_STR,
             run_metadata=run_meta_kw,
             parent_run_id=w_parent_id,
         )
@@ -884,7 +893,7 @@ async def test_post_room_agui_thread_id_meta(
         found = await agui_views.post_room_agui_thread_id_meta(
             request,
             room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
+            thread_id=TEST_THREAD_ID_UUID,
             new_metadata=r_meta,
             the_installation=the_installation,
             the_threads=the_threads,
@@ -900,7 +909,7 @@ async def test_post_room_agui_thread_id_meta(
     the_threads.update_thread_metadata.assert_called_once_with(
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
+        thread_id=TEST_THREAD_ID_STR,
         thread_metadata=exp_t_meta,
     )
     cuir.assert_called_once_with(
@@ -946,7 +955,7 @@ async def test_delete_room_agui_thread_id(
         found = await agui_views.delete_room_agui_thread_id(
             request,
             room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
+            thread_id=TEST_THREAD_ID_UUID,
             the_installation=the_installation,
             the_threads=the_threads,
             the_authz_policy=the_authz_policy,
@@ -963,7 +972,7 @@ async def test_delete_room_agui_thread_id(
     the_threads.delete_thread.assert_called_once_with(
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
+        thread_id=TEST_THREAD_ID_STR,
     )
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
@@ -1002,16 +1011,16 @@ async def test_capture_usage_after_stream(a_session, t_storage, w_usage):
         sqla_engine=sqla_engine,
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
     )
 
     if w_usage:
         the_threads.save_run_usage.assert_awaited_once_with(
             user_name=USER_NAME,
             room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
-            run_id=TEST_RUN_ID,
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
             input_tokens=1,
             output_tokens=2,
             requests=3,
@@ -1040,16 +1049,16 @@ async def test_save_thread_run_events(a_session, t_storage):
         event_list=event_list,
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
     )
 
     the_threads.save_run_events.assert_called_once_with(
         events=event_list,
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
     )
 
     t_storage.assert_called_once_with(w_session)
@@ -1081,8 +1090,8 @@ async def test_drive_llm_stream(
     event_queue = asyncio.Queue()
 
     finished_event = agui_core.events.RunFinishedEvent(
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
     )
     error_event = agui_core.events.RunErrorEvent(message="test error")
 
@@ -1108,15 +1117,15 @@ async def test_drive_llm_stream(
             event_queue=event_queue,
             user_name=USER_NAME,
             room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
-            run_id=TEST_RUN_ID,
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
         )
 
     logfire.span.assert_called_once_with(
         "AG-UI event stream: {room_id}/{thread_id}/{run_id}",
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
     )
 
     assert event_queue.qsize() == len(expected) + 1
@@ -1132,8 +1141,8 @@ async def test_drive_llm_stream(
         sqla_engine=sqla_engine,
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
     )
 
     if stre_expected is None:
@@ -1256,8 +1265,8 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         found = await agui_views.post_room_agui_thread_id_run_id(
             request,
             room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
-            run_id=TEST_RUN_ID,
+            thread_id=TEST_THREAD_ID_UUID,
+            run_id=TEST_RUN_ID_UUID,
             the_installation=the_installation,
             the_threads=the_threads,
             the_authz_policy=the_authz_policy,
@@ -1293,8 +1302,8 @@ async def test_post_room_agui_thread_id_run_id_streaming(
             event_queue=event_queue,
             user_name=USER_NAME,
             room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
-            run_id=TEST_RUN_ID,
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
         )
 
         ces.assert_called_once_with(exp_agent_stream)
@@ -1317,8 +1326,8 @@ async def test_post_room_agui_thread_id_run_id_streaming(
             sqla_engine=sqla_engine,
             user_name=USER_NAME,
             room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
-            run_id=TEST_RUN_ID,
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
         )
 
         the_installation.get_agent_deps_for_room.assert_called_once_with(
@@ -1337,8 +1346,8 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         the_threads.add_run_input.assert_called_once_with(
             user_name=USER_NAME,
             room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
-            run_id=TEST_RUN_ID,
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
             run_input=exp_adapter.run_input,
         )
 
@@ -1403,8 +1412,8 @@ async def test_post_room_agui_thread_id_run_id_meta(
         found = await agui_views.post_room_agui_thread_id_run_id_meta(
             request,
             room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
-            run_id=TEST_RUN_ID,
+            thread_id=TEST_THREAD_ID_UUID,
+            run_id=TEST_RUN_ID_UUID,
             new_metadata=r_meta,
             the_installation=the_installation,
             the_threads=the_threads,
@@ -1420,8 +1429,8 @@ async def test_post_room_agui_thread_id_run_id_meta(
     the_threads.update_run_metadata.assert_called_once_with(
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
         run_metadata=exp_t_meta,
     )
     cuir.assert_called_once_with(
@@ -1476,8 +1485,8 @@ async def test_get_room_agui_thread_id_run_id_feedback(
         found = await agui_views.get_room_agui_thread_id_run_id_feedback(
             request,
             room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
-            run_id=TEST_RUN_ID,
+            thread_id=TEST_THREAD_ID_UUID,
+            run_id=TEST_RUN_ID_UUID,
             the_installation=the_installation,
             the_threads=the_threads,
             the_authz_policy=the_authz_policy,
@@ -1491,8 +1500,8 @@ async def test_get_room_agui_thread_id_run_id_feedback(
     the_threads.get_run_feedback.assert_called_once_with(
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
     )
     cuir.assert_called_once_with(
         room_id=TEST_ROOM_ID,
@@ -1543,8 +1552,8 @@ async def test_post_room_agui_thread_id_run_id_feedback(
         found = await agui_views.post_room_agui_thread_id_run_id_feedback(
             request,
             room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID,
-            run_id=TEST_RUN_ID,
+            thread_id=TEST_THREAD_ID_UUID,
+            run_id=TEST_RUN_ID_UUID,
             new_feedback=r_feedback,
             the_installation=the_installation,
             the_threads=the_threads,
@@ -1560,8 +1569,8 @@ async def test_post_room_agui_thread_id_run_id_feedback(
     the_threads.save_run_feedback.assert_called_once_with(
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
         feedback=TEST_RUN_FEEDBACK,
         reason=TEST_RUN_FEEDBACK_REASON,
     )
@@ -1809,8 +1818,8 @@ async def test_post_agui_review_recent_feedback(
     review_payload = models.AGUI_RunFeedbackReview(
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
+        thread_id=TEST_THREAD_ID_UUID,
+        run_id=TEST_RUN_ID_UUID,
         note=REVIEWED_NOTE,
     )
 
@@ -1850,8 +1859,8 @@ async def test_post_agui_review_recent_feedback(
     the_threads.review_run_feedback.assert_called_once_with(
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
         note=REVIEWED_NOTE,
     )
     the_logger.debug.assert_called_once_with(
@@ -1886,9 +1895,9 @@ async def test_post_agui_resolve_recent_feedback(
     resolution_payload = models.AGUI_RunFeedbackReview(
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
-        note=REVIEWED_NOTE,
+        thread_id=TEST_THREAD_ID_UUID,
+        run_id=TEST_RUN_ID_UUID,
+        note=RESOLVED_NOTE,
     )
 
     tsrslvrf = the_threads.resolve_run_feedback = mock.AsyncMock()
@@ -1897,13 +1906,13 @@ async def test_post_agui_resolve_recent_feedback(
         review_entry = mock.create_autospec(
             agui_package.RunFeedbackReviewEntry,
             status=FRS.REVIEWED,
-            note=REVIEWED_NOTE,
+            note=RESOLVED_NOTE,
             created=NOW,
         )
         tsrslvrf.return_value = review_entry
         expected_rv_model = models.AGUI_RunFeedbackHistoryEntry(
             status=FRS.REVIEWED,
-            note=REVIEWED_NOTE,
+            note=RESOLVED_NOTE,
         )
     else:  # pragma NO COVER XXX error conditions?
         tsrslvrf.side_effect = tsrslvrf_side_effect
@@ -1927,9 +1936,9 @@ async def test_post_agui_resolve_recent_feedback(
     the_threads.resolve_run_feedback.assert_called_once_with(
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
-        run_id=TEST_RUN_ID,
-        note=REVIEWED_NOTE,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
+        note=RESOLVED_NOTE,
     )
     the_logger.debug.assert_called_once_with(
         loggers.AGUI_POST_RESOLVE_RECENT_FEEDBACK,

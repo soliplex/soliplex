@@ -127,13 +127,16 @@ CONVO_NAME = USER_TEXT
 CONVO_ROOM_ID = "test-room"
 TIMESTAMP = "2025-09-30T18:18:27Z"
 
-AGUI_THREAD_ID = "test-thread"
-AGUI_RUN_ID = "test-run"
-AGUI_PARENT_RUN_ID = "test-parent-run"
+AGUI_THREAD_ID_UUID = uuid.uuid4()
+AGUI_THREAD_ID_STR = str(AGUI_THREAD_ID_UUID)
+AGUI_RUN_ID_UUID = uuid.uuid4()
+AGUI_RUN_ID_STR = str(AGUI_RUN_ID_UUID)
+AGUI_PARENT_RUN_ID_UUID = uuid.uuid4()
+AGUI_PARENT_RUN_ID_STR = str(AGUI_PARENT_RUN_ID_UUID)
 
 EMPTY_AGUI_RUN_INPUT = agui_core.RunAgentInput(
-    thread_id=AGUI_THREAD_ID,
-    run_id=AGUI_RUN_ID,
+    thread_id=AGUI_THREAD_ID_STR,
+    run_id=AGUI_RUN_ID_STR,
     state={},
     messages=[],
     tools=[],
@@ -142,12 +145,12 @@ EMPTY_AGUI_RUN_INPUT = agui_core.RunAgentInput(
 )
 
 E_RUN_STARTED = agui_core.RunStartedEvent(
-    thread_id=AGUI_THREAD_ID,
-    run_id=AGUI_RUN_ID,
+    thread_id=AGUI_THREAD_ID_STR,
+    run_id=AGUI_RUN_ID_STR,
 )
 E_RUN_FINISHED = agui_core.RunFinishedEvent(
-    thread_id=AGUI_THREAD_ID,
-    run_id=AGUI_RUN_ID,
+    thread_id=AGUI_THREAD_ID_STR,
+    run_id=AGUI_RUN_ID_STR,
 )
 AGUI_EVENTS = [
     E_RUN_STARTED,
@@ -160,9 +163,9 @@ def _make_run(**kw):
 
 
 AGUI_RUNS = {
-    AGUI_RUN_ID: _make_run(
-        thread_id=AGUI_THREAD_ID,
-        run_id=AGUI_RUN_ID,
+    AGUI_RUN_ID_STR: _make_run(
+        thread_id=AGUI_THREAD_ID_STR,
+        run_id=AGUI_RUN_ID_STR,
         created=NOW,
         finished=None,
         parent_run_id=None,
@@ -1280,11 +1283,11 @@ def test_aguirun_from_run(
     exp_label,
 ):
     a_run = _make_run(
-        thread_id=AGUI_THREAD_ID,
-        run_id=AGUI_RUN_ID,
+        thread_id=AGUI_THREAD_ID_STR,
+        run_id=AGUI_RUN_ID_STR,
         created=NOW,
         finished=NOW if w_finished else None,
-        parent_run_id=AGUI_PARENT_RUN_ID if w_parent else None,
+        parent_run_id=AGUI_PARENT_RUN_ID_STR if w_parent else None,
         run_input=run_input,
     )
 
@@ -1295,10 +1298,12 @@ def test_aguirun_from_run(
         a_run_events=AGUI_EVENTS if w_events else [],
     )
 
-    assert found.thread_id == AGUI_THREAD_ID
-    assert found.run_id == AGUI_RUN_ID
+    assert found.thread_id == AGUI_THREAD_ID_UUID
+    assert found.run_id == AGUI_RUN_ID_UUID
     assert found.created == NOW
-    assert found.parent_run_id == (AGUI_PARENT_RUN_ID if w_parent else None)
+    assert found.parent_run_id == (
+        AGUI_PARENT_RUN_ID_UUID if w_parent else None
+    )
     assert found.run_input is run_input
 
     if w_events:
@@ -1348,7 +1353,7 @@ def test_aguithread_from_thread(
 ):
     a_thread = _make_thread(
         room_id=ROOM_ID,
-        thread_id=AGUI_THREAD_ID,
+        thread_id=AGUI_THREAD_ID_STR,
         created=NOW,
     )
 
@@ -1362,7 +1367,7 @@ def test_aguithread_from_thread(
 
     if w_runs:
         a_thread_runs = {
-            agui_run.run_id: models.AGUI_Run.from_run(
+            uuid.UUID(agui_run.run_id): models.AGUI_Run.from_run(
                 a_run=agui_run,
                 a_run_input=agui_run.run_input,
                 a_run_meta=agui_run.run_metadata,
@@ -1380,7 +1385,7 @@ def test_aguithread_from_thread(
     )
 
     assert found.room_id == ROOM_ID
-    assert found.thread_id == AGUI_THREAD_ID
+    assert found.thread_id == AGUI_THREAD_ID_UUID
     assert found.created == a_thread.created
     assert found.runs == (a_thread_runs if w_runs else None)
 
