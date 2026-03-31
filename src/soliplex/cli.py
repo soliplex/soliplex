@@ -51,6 +51,7 @@ the_cli = typer.Typer(
     },
     no_args_is_help=True,
     add_completion=False,
+    pretty_exceptions_show_locals=False,
 )
 
 the_console = console.Console()
