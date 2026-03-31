@@ -5,6 +5,7 @@ import functools
 
 import fastapi
 import logfire
+import pydantic
 import pydantic_ai
 from ag_ui import core as agui_core
 from fastapi import responses
@@ -150,7 +151,7 @@ async def _get_run_input(
 async def get_room_agui_thread_id(
     request: fastapi.Request,
     room_id: str,
-    thread_id: str,
+    thread_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
@@ -209,8 +210,8 @@ async def get_room_agui_thread_id(
 async def get_room_agui_thread_id_run_id(
     request: fastapi.Request,
     room_id: str,
-    thread_id: str,
-    run_id: str,
+    thread_id: pydantic.UUID4,
+    run_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
@@ -348,7 +349,7 @@ async def post_room_agui(
 async def post_room_agui_thread_id(
     request: fastapi.Request,
     room_id: str,
-    thread_id: str,
+    thread_id: pydantic.UUID4,
     new_run_request: models.AGUI_NewRunRequest,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
@@ -418,7 +419,7 @@ async def post_room_agui_thread_id(
 async def post_room_agui_thread_id_meta(
     request: fastapi.Request,
     room_id: str,
-    thread_id: str,
+    thread_id: pydantic.UUID4,
     new_metadata: models.AGUI_ThreadMetadata,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
@@ -473,7 +474,7 @@ async def post_room_agui_thread_id_meta(
 async def delete_room_agui_thread_id(
     request: fastapi.Request,
     room_id: str,
-    thread_id: str,
+    thread_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
@@ -655,8 +656,8 @@ async def stream_llm_events(event_queue: asyncio.Queue):
 async def post_room_agui_thread_id_run_id(
     request: fastapi.Request,
     room_id: str,
-    thread_id: str,
-    run_id: str,
+    thread_id: pydantic.UUID4,
+    run_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
@@ -769,8 +770,8 @@ async def post_room_agui_thread_id_run_id(
 async def post_room_agui_thread_id_run_id_meta(
     request: fastapi.Request,
     room_id: str,
-    thread_id: str,
-    run_id: str,
+    thread_id: pydantic.UUID4,
+    run_id: pydantic.UUID4,
     new_metadata: models.AGUI_RunMetadata,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
@@ -828,8 +829,8 @@ async def post_room_agui_thread_id_run_id_meta(
 async def get_room_agui_thread_id_run_id_feedback(
     request: fastapi.Request,
     room_id: str,
-    thread_id: str,
-    run_id: str,
+    thread_id: pydantic.UUID4,
+    run_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
@@ -875,8 +876,8 @@ async def get_room_agui_thread_id_run_id_feedback(
 async def post_room_agui_thread_id_run_id_feedback(
     request: fastapi.Request,
     room_id: str,
-    thread_id: str,
-    run_id: str,
+    thread_id: pydantic.UUID4,
+    run_id: pydantic.UUID4,
     new_feedback: models.AGUI_RunFeedback,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
