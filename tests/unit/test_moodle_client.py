@@ -2891,3 +2891,212 @@ async def test_list_dynamic_rules_malformed_rows(client):
     assert len(rules) == 1
     assert rules[0]["id"] == 7
     assert rules[0]["name"] == "Good Rule"
+
+
+# ---------------------------------------------------------------
+# User management CRUD (Feature 18)
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_users(client):
+    resp = _mock_response(
+        [{"id": 10, "username": "jdoe"}]
+    )
+    with _patch_httpx(resp):
+        result = await client.create_users(
+            [
+                {
+                    "username": "jdoe",
+                    "firstname": "Jane",
+                    "lastname": "Doe",
+                    "email": "jdoe@example.com",
+                    "createpassword": 1,
+                }
+            ]
+        )
+    assert len(result) == 1
+    assert result[0].id == 10
+    assert result[0].username == "jdoe"
+
+
+@pytest.mark.asyncio
+async def test_update_users(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        await client.update_users(
+            [{"id": 10, "firstname": "Janet"}]
+        )
+
+
+@pytest.mark.asyncio
+async def test_delete_users(client):
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        await client.delete_users([10])
+
+
+# ---------------------------------------------------------------
+# Course management CRUD (Feature 19)
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_categories(client):
+    resp = _mock_response(
+        [
+            {
+                "id": 1,
+                "name": "Default",
+                "parent": 0,
+                "coursecount": 3,
+                "depth": 1,
+                "path": "/1",
+                "visible": 1,
+            }
+        ]
+    )
+    with _patch_httpx(resp):
+        cats = await client.get_categories()
+    assert len(cats) == 1
+    assert cats[0].id == 1
+    assert cats[0].name == "Default"
+
+
+@pytest.mark.asyncio
+async def test_create_courses(client):
+    resp = _mock_response(
+        [{"id": 5, "shortname": "TEST101"}]
+    )
+    with _patch_httpx(resp):
+        result = await client.create_courses(
+            [
+                {
+                    "fullname": "Test Course",
+                    "shortname": "TEST101",
+                    "categoryid": 1,
+                }
+            ]
+        )
+    assert len(result) == 1
+    assert result[0].id == 5
+    assert result[0].shortname == "TEST101"
+
+
+@pytest.mark.asyncio
+async def test_update_courses(client):
+    resp = _mock_response({"warnings": []})
+    with _patch_httpx(resp):
+        await client.update_courses(
+            [{"id": 5, "fullname": "Updated Course"}]
+        )
+
+
+@pytest.mark.asyncio
+async def test_delete_courses(client):
+    resp = _mock_response(
+        {"warnings": []}
+    )
+    with _patch_httpx(resp):
+        result = await client.delete_courses([5])
+    assert isinstance(result, dict)
+
+
+@pytest.mark.asyncio
+async def test_duplicate_course(client):
+    resp = _mock_response(
+        {"id": 6, "shortname": "COPY101"}
+    )
+    with _patch_httpx(resp):
+        result = await client.duplicate_course(
+            courseid=5,
+            fullname="Copy Course",
+            shortname="COPY101",
+            categoryid=1,
+        )
+    assert result.id == 6
+    assert result.shortname == "COPY101"
+
+
+@pytest.mark.asyncio
+async def test_create_categories(client):
+    resp = _mock_response(
+        [{"id": 2, "name": "Training"}]
+    )
+    with _patch_httpx(resp):
+        result = await client.create_categories(
+            [{"name": "Training", "parent": 0}]
+        )
+    assert len(result) == 1
+    assert result[0].id == 2
+    assert result[0].name == "Training"
+
+
+# ---------------------------------------------------------------
+# Import / Export (Feature 20)
+# ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_perform_export(client):
+    resp = _mock_response({"id": 1})
+    with _patch_httpx(resp):
+        result = await client.perform_export("courses")
+    assert result == {"id": 1}
+
+
+@pytest.mark.asyncio
+async def test_get_export_status(client):
+    resp = _mock_response(
+        {"status": 2, "statusmessage": "Complete", "progress": 100}
+    )
+    with _patch_httpx(resp):
+        status = await client.get_export_status(1)
+    assert status.is_complete
+    assert not status.is_error
+    assert status.progress == 100
+
+
+@pytest.mark.asyncio
+async def test_get_export_file(client):
+    resp = _mock_response(
+        {"fileurl": "http://moodle.test/export.zip"}
+    )
+    with _patch_httpx(resp):
+        result = await client.get_export_file(1)
+    assert "fileurl" in result
+
+
+@pytest.mark.asyncio
+async def test_perform_import(client):
+    resp = _mock_response({"id": 2})
+    with _patch_httpx(resp):
+        result = await client.perform_import()
+    assert result == {"id": 2}
+
+
+@pytest.mark.asyncio
+async def test_get_import_status(client):
+    resp = _mock_response(
+        {"status": 1, "statusmessage": "In progress", "progress": 50}
+    )
+    with _patch_httpx(resp):
+        status = await client.get_import_status(2)
+    assert not status.is_complete
+    assert status.progress == 50
+
+
+@pytest.mark.asyncio
+async def test_delete_export(client):
+    resp = _mock_response({})
+    with _patch_httpx(resp):
+        result = await client.delete_export(1)
+    assert isinstance(result, dict)
+
+
+@pytest.mark.asyncio
+async def test_delete_import(client):
+    resp = _mock_response({})
+    with _patch_httpx(resp):
+        result = await client.delete_import(2)
+    assert isinstance(result, dict)

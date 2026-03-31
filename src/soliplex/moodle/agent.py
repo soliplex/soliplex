@@ -127,6 +127,30 @@ whole course
 - get_utm_report — UTM completion report for a course by department
 - get_adv_comp_report — Advanced completion report for a course
 
+## User Management Tools
+- create_user — create a new Moodle user account
+- update_user — update user profile fields
+- delete_user — permanently delete a user (WARNING: irreversible)
+- unsuspend_user — reactivate a suspended user
+
+## Course Management Tools
+- list_categories — list course categories
+- create_category — create a course category
+- create_course — create a new course
+- update_course — update course settings
+- delete_course — permanently delete a course (WARNING: irreversible)
+- duplicate_course — copy a course as a template
+
+## Import/Export Tools (Workplace)
+- export_workplace_data — start an export (specify type: courses, \
+programs, certifications, users, rules, etc.)
+- get_export_status — check export job progress
+- download_export — get download URL for a completed export
+- import_workplace_data — import from an export file (WARNING: high-risk)
+- get_import_status — check import job progress
+- delete_export — remove a completed export
+- delete_import — remove a completed import
+
 ## Dynamic Rules Tools
 - list_dynamic_rules — discover rules by name, ID, and status
 - can_enable_rule — check if a rule meets prerequisites to be enabled
@@ -144,6 +168,19 @@ whole course
 - delete_rule_outcome — remove an outcome from a rule
 
 ## Write Tools (REQUIRE CONFIRMATION)
+- create_user — create a new user account
+- update_user — update user profile fields
+- delete_user — permanently delete a user
+- unsuspend_user — reactivate a suspended user
+- create_category — create a course category
+- create_course — create a new course
+- update_course — update course settings
+- delete_course — permanently delete a course
+- duplicate_course — copy a course as a template
+- export_workplace_data — start a Workplace export
+- import_workplace_data — start a Workplace import
+- delete_export — remove a completed export
+- delete_import — remove a completed import
 - enrol_users — enrol users into a course
 - send_message — send messages to users
 - certify_user — mark a user as certified
@@ -233,6 +270,19 @@ state machine is: Disabled → enable → Enabled, Enabled → disable \
 → Disabled, any → archive → Archived, Archived → unarchive → \
 Disabled, Archived → delete (permanent). Use get_rule_matching_users \
 to check how many users would be affected before enabling.
+
+13. For user management: use create_user to provision new \
+accounts (requires username, firstname, lastname, email). Use \
+update_user to change profile fields. Use unsuspend_user to \
+reactivate suspended users. delete_user is permanent and cannot \
+be undone.
+14. For course management: use list_categories to find the right \
+category, then create_course. Use duplicate_course to clone a \
+template course. delete_course is permanent and cannot be undone.
+15. For import/export: use export_workplace_data to start an \
+export, then poll with get_export_status until complete, then \
+use download_export to get the file. For imports, use \
+import_workplace_data then poll with get_import_status.
 
 Present data in clear tables when appropriate.
 """
@@ -3069,6 +3119,718 @@ def moodle_tools_agent_factory(
             )
         try:
             result = await client.delete_outcome(instanceid)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    # ---------------------------------------------------------------
+    # User management CRUD (Feature 18)
+    # ---------------------------------------------------------------
+
+    @agent.tool_plain
+    async def create_user(
+        username: str,
+        firstname: str,
+        lastname: str,
+        email: str,
+        password: str = "",
+        createpassword: bool = True,
+        confirmed: bool = False,
+    ) -> str:
+        """Create a new Moodle user account. REQUIRES USER CONFIRMATION.
+
+        Args:
+            username: Login username.
+            firstname: User's first name.
+            lastname: User's last name.
+            email: User's email address.
+            password: Optional password. If empty, a random
+                password is generated and emailed.
+            createpassword: If True and no password given,
+                Moodle creates and emails a password.
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {
+                    "action": "create_user",
+                    "preview": (
+                        f"Will create user '{username}' "
+                        f"({firstname} {lastname}, {email})"
+                    ),
+                    "instructions": (
+                        "Present this to the user and ask for "
+                        "confirmation. If confirmed, call this "
+                        "tool again with confirmed=True"
+                    ),
+                }
+            )
+        user_data: dict = {
+            "username": username,
+            "firstname": firstname,
+            "lastname": lastname,
+            "email": email,
+        }
+        if password:
+            user_data["password"] = password
+        else:
+            user_data["createpassword"] = 1 if createpassword else 0
+        try:
+            result = await client.create_users([user_data])
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {
+                "success": True,
+                "created": [
+                    {"id": u.id, "username": u.username}
+                    for u in result
+                ],
+            }
+        )
+
+    @agent.tool_plain
+    async def update_user(
+        userid: str,
+        firstname: str = "",
+        lastname: str = "",
+        email: str = "",
+        city: str = "",
+        country: str = "",
+        description: str = "",
+        institution: str = "",
+        department: str = "",
+        confirmed: bool = False,
+    ) -> str:
+        """Update a user's profile fields. REQUIRES USER CONFIRMATION.
+
+        Only non-empty fields are updated. Pass the user ID and
+        any fields you want to change.
+
+        Args:
+            userid: Moodle user ID.
+            firstname: New first name (leave empty to skip).
+            lastname: New last name (leave empty to skip).
+            email: New email (leave empty to skip).
+            city: City (leave empty to skip).
+            country: Country code, e.g. 'AU' (leave empty to skip).
+            description: Profile description (leave empty to skip).
+            institution: Institution (leave empty to skip).
+            department: Department name (leave empty to skip).
+            confirmed: Set True only after user approval.
+        """
+        uid = _parse_single_id(userid, "user ID")
+        if isinstance(uid, str):
+            return uid
+        updates: dict = {"id": uid}
+        for field, value in [
+            ("firstname", firstname),
+            ("lastname", lastname),
+            ("email", email),
+            ("city", city),
+            ("country", country),
+            ("description", description),
+            ("institution", institution),
+            ("department", department),
+        ]:
+            if value:
+                updates[field] = value
+        if len(updates) == 1:
+            return json.dumps(
+                {"error": "No fields to update. Provide at least one field."}
+            )
+        if not confirmed:
+            fields = {k: v for k, v in updates.items() if k != "id"}
+            return json.dumps(
+                {
+                    "action": "update_user",
+                    "preview": (
+                        f"Will update user {uid}: "
+                        f"{fields}"
+                    ),
+                    "instructions": (
+                        "Present this to the user and ask for "
+                        "confirmation. If confirmed, call this "
+                        "tool again with confirmed=True"
+                    ),
+                }
+            )
+        try:
+            await client.update_users([updates])
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps({"success": True, "userid": uid})
+
+    @agent.tool_plain
+    async def delete_user(
+        userid: str,
+        confirmed: bool = False,
+    ) -> str:
+        """Permanently delete a user. WARNING: This cannot be undone.
+
+        REQUIRES USER CONFIRMATION.
+
+        Args:
+            userid: Moodle user ID.
+            confirmed: Set True only after user approval.
+        """
+        uid = _parse_single_id(userid, "user ID")
+        if isinstance(uid, str):
+            return uid
+        if not confirmed:
+            return json.dumps(
+                {
+                    "action": "delete_user",
+                    "preview": (
+                        f"WARNING: Will PERMANENTLY delete "
+                        f"user {uid}. This cannot be undone."
+                    ),
+                    "instructions": (
+                        "Present this WARNING to the user and "
+                        "ask for explicit confirmation. If "
+                        "confirmed, call this tool again with "
+                        "confirmed=True"
+                    ),
+                }
+            )
+        try:
+            await client.delete_users([uid])
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps({"success": True, "deleted_userid": uid})
+
+    @agent.tool_plain
+    async def unsuspend_user(
+        userid: str,
+        confirmed: bool = False,
+    ) -> str:
+        """Reactivate a suspended user. REQUIRES USER CONFIRMATION.
+
+        Args:
+            userid: Moodle user ID.
+            confirmed: Set True only after user approval.
+        """
+        uid = _parse_single_id(userid, "user ID")
+        if isinstance(uid, str):
+            return uid
+        if not confirmed:
+            return json.dumps(
+                {
+                    "action": "unsuspend_user",
+                    "preview": f"Will unsuspend (reactivate) user {uid}",
+                    "instructions": (
+                        "Present this to the user and ask for "
+                        "confirmation. If confirmed, call this "
+                        "tool again with confirmed=True"
+                    ),
+                }
+            )
+        try:
+            await client.update_users([{"id": uid, "suspended": 0}])
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps({"success": True, "unsuspended_userid": uid})
+
+    # ---------------------------------------------------------------
+    # Course management CRUD (Feature 19)
+    # ---------------------------------------------------------------
+
+    @agent.tool_plain
+    async def list_categories() -> str:
+        """List all course categories."""
+        try:
+            cats = await client.get_categories()
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            [
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "parent": c.parent,
+                    "coursecount": c.coursecount,
+                    "depth": c.depth,
+                    "visible": c.visible,
+                }
+                for c in cats
+            ]
+        )
+
+    @agent.tool_plain
+    async def create_category(
+        name: str,
+        parent: int = 0,
+        description: str = "",
+        confirmed: bool = False,
+    ) -> str:
+        """Create a course category. REQUIRES USER CONFIRMATION.
+
+        Args:
+            name: Category name.
+            parent: Parent category ID (0 for top-level).
+            description: Optional description.
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {
+                    "action": "create_category",
+                    "preview": (
+                        f"Will create category '{name}' "
+                        f"under parent={parent}"
+                    ),
+                    "instructions": (
+                        "Present this to the user and ask for "
+                        "confirmation. If confirmed, call this "
+                        "tool again with confirmed=True"
+                    ),
+                }
+            )
+        cat_data: dict = {"name": name, "parent": parent}
+        if description:
+            cat_data["description"] = description
+        try:
+            result = await client.create_categories([cat_data])
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {
+                "success": True,
+                "created": [
+                    {"id": c.id, "name": c.name} for c in result
+                ],
+            }
+        )
+
+    @agent.tool_plain
+    async def create_course(
+        fullname: str,
+        shortname: str,
+        categoryid: int,
+        summary: str = "",
+        visible: int = 1,
+        format: str = "topics",
+        confirmed: bool = False,
+    ) -> str:
+        """Create a new course. REQUIRES USER CONFIRMATION.
+
+        Args:
+            fullname: Full course name.
+            shortname: Short identifier (must be unique).
+            categoryid: Category to place the course in.
+            summary: Optional course summary/description.
+            visible: 1=visible, 0=hidden (default 1).
+            format: Course format (default 'topics').
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {
+                    "action": "create_course",
+                    "preview": (
+                        f"Will create course '{fullname}' "
+                        f"(shortname='{shortname}') in "
+                        f"category {categoryid}"
+                    ),
+                    "instructions": (
+                        "Present this to the user and ask for "
+                        "confirmation. If confirmed, call this "
+                        "tool again with confirmed=True"
+                    ),
+                }
+            )
+        course_data: dict = {
+            "fullname": fullname,
+            "shortname": shortname,
+            "categoryid": categoryid,
+            "format": format,
+            "visible": visible,
+        }
+        if summary:
+            course_data["summary"] = summary
+        try:
+            result = await client.create_courses([course_data])
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {
+                "success": True,
+                "created": [
+                    {"id": c.id, "shortname": c.shortname}
+                    for c in result
+                ],
+            }
+        )
+
+    @agent.tool_plain
+    async def update_course(
+        courseid: int,
+        fullname: str = "",
+        shortname: str = "",
+        summary: str = "",
+        visible: int = -1,
+        confirmed: bool = False,
+    ) -> str:
+        """Update course settings. REQUIRES USER CONFIRMATION.
+
+        Only non-empty/non-default fields are updated.
+
+        Args:
+            courseid: Moodle course ID.
+            fullname: New full name (leave empty to skip).
+            shortname: New short name (leave empty to skip).
+            summary: New summary (leave empty to skip).
+            visible: 1=visible, 0=hidden, -1=skip.
+            confirmed: Set True only after user approval.
+        """
+        updates: dict = {"id": courseid}
+        if fullname:
+            updates["fullname"] = fullname
+        if shortname:
+            updates["shortname"] = shortname
+        if summary:
+            updates["summary"] = summary
+        if visible >= 0:
+            updates["visible"] = visible
+        if len(updates) == 1:
+            return json.dumps(
+                {"error": "No fields to update. Provide at least one field."}
+            )
+        if not confirmed:
+            fields = {k: v for k, v in updates.items() if k != "id"}
+            return json.dumps(
+                {
+                    "action": "update_course",
+                    "preview": (
+                        f"Will update course {courseid}: "
+                        f"{fields}"
+                    ),
+                    "instructions": (
+                        "Present this to the user and ask for "
+                        "confirmation. If confirmed, call this "
+                        "tool again with confirmed=True"
+                    ),
+                }
+            )
+        try:
+            await client.update_courses([updates])
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps({"success": True, "courseid": courseid})
+
+    @agent.tool_plain
+    async def delete_course(
+        courseid: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Permanently delete a course. WARNING: This cannot be undone.
+
+        REQUIRES USER CONFIRMATION.
+
+        Args:
+            courseid: Moodle course ID.
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {
+                    "action": "delete_course",
+                    "preview": (
+                        f"WARNING: Will PERMANENTLY delete "
+                        f"course {courseid}. This cannot be undone."
+                    ),
+                    "instructions": (
+                        "Present this WARNING to the user and "
+                        "ask for explicit confirmation. If "
+                        "confirmed, call this tool again with "
+                        "confirmed=True"
+                    ),
+                }
+            )
+        try:
+            result = await client.delete_courses([courseid])
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {"success": True, "deleted_courseid": courseid, "result": result}
+        )
+
+    @agent.tool_plain
+    async def duplicate_course(
+        courseid: int,
+        fullname: str,
+        shortname: str,
+        categoryid: int,
+        visible: int = 1,
+        confirmed: bool = False,
+    ) -> str:
+        """Copy a course as a template. REQUIRES USER CONFIRMATION.
+
+        Args:
+            courseid: Source course ID to duplicate.
+            fullname: Full name for the new copy.
+            shortname: Short name for the new copy (must be unique).
+            categoryid: Category for the new copy.
+            visible: 1=visible, 0=hidden.
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {
+                    "action": "duplicate_course",
+                    "preview": (
+                        f"Will duplicate course {courseid} as "
+                        f"'{fullname}' (shortname='{shortname}') "
+                        f"in category {categoryid}"
+                    ),
+                    "instructions": (
+                        "Present this to the user and ask for "
+                        "confirmation. If confirmed, call this "
+                        "tool again with confirmed=True"
+                    ),
+                }
+            )
+        try:
+            result = await client.duplicate_course(
+                courseid, fullname, shortname, categoryid, visible
+            )
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {
+                "success": True,
+                "new_course_id": result.id,
+                "shortname": result.shortname,
+            }
+        )
+
+    # ---------------------------------------------------------------
+    # Import / Export (Feature 20 — Workplace)
+    # ---------------------------------------------------------------
+
+    @agent.tool_plain
+    async def export_workplace_data(
+        exporter: str,
+        confirmed: bool = False,
+    ) -> str:
+        """Start an export of Workplace data. REQUIRES USER CONFIRMATION.
+
+        After starting, use get_export_status to poll progress
+        and download_export to retrieve the file.
+
+        Available exporters:
+        - courses, users, cohorts, reports, site,
+          certificates, coursecategories
+        - programs, certifications, rules
+        - departments_csv, positions_csv, jobs_csv,
+          orgstructure, jobs
+        - tenants
+
+        Use the short name (e.g. 'courses') — the full
+        class path is resolved automatically.
+
+        Args:
+            exporter: Short name like 'courses' or full
+                class path.
+            confirmed: Set True only after user approval.
+        """
+        # Resolve short names to full class paths
+        _EXPORTER_MAP = {
+            "courses": r"tool_wp\tool_wp\exporter\courses",
+            "users": r"tool_wp\tool_wp\exporter\users",
+            "cohorts": r"tool_wp\tool_wp\exporter\cohorts",
+            "reports": r"tool_wp\tool_wp\exporter\reports",
+            "site": r"tool_wp\tool_wp\exporter\site",
+            "certificates": (
+                r"tool_wp\tool_wp\exporter\certificates"
+            ),
+            "coursecategories": (
+                r"tool_wp\tool_wp\exporter\coursecategories"
+            ),
+            "programs": (
+                r"tool_program\tool_wp\exporter\programs"
+            ),
+            "certifications": (
+                r"tool_certification\tool_wp"
+                r"\exporter\certifications"
+            ),
+            "rules": (
+                r"tool_dynamicrule\tool_wp\exporter\rules"
+            ),
+            "departments_csv": (
+                r"tool_organisation\tool_wp"
+                r"\exporter\departments_csv"
+            ),
+            "positions_csv": (
+                r"tool_organisation\tool_wp"
+                r"\exporter\positions_csv"
+            ),
+            "jobs_csv": (
+                r"tool_organisation\tool_wp"
+                r"\exporter\jobs_csv"
+            ),
+            "orgstructure": (
+                r"tool_organisation\tool_wp"
+                r"\exporter\orgstructure"
+            ),
+            "jobs": (
+                r"tool_organisation\tool_wp\exporter\jobs"
+            ),
+            "tenants": (
+                r"tool_tenant\tool_wp\exporter\tenants"
+            ),
+        }
+        resolved = _EXPORTER_MAP.get(exporter, exporter)
+        if not confirmed:
+            return json.dumps(
+                {
+                    "action": "export_workplace_data",
+                    "preview": (
+                        f"Will export '{exporter}' data "
+                        f"from Workplace"
+                    ),
+                    "instructions": (
+                        "Present this to the user and ask for "
+                        "confirmation. If confirmed, call this "
+                        "tool again with confirmed=True"
+                    ),
+                }
+            )
+        try:
+            result = await client.perform_export(resolved)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps({"success": True, "result": result})
+
+    @agent.tool_plain
+    async def get_export_status(export_id: int) -> str:
+        """Check the progress of a Workplace export job.
+
+        Args:
+            export_id: The export job ID.
+        """
+        try:
+            status = await client.get_export_status(export_id)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {
+                "status": status.status,
+                "message": status.statusmessage,
+                "progress": status.progress,
+                "is_complete": status.is_complete,
+                "is_error": status.is_error,
+            }
+        )
+
+    @agent.tool_plain
+    async def download_export(export_id: int) -> str:
+        """Get download info for a completed Workplace export.
+
+        Args:
+            export_id: The export job ID.
+        """
+        try:
+            result = await client.get_export_file(export_id)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def import_workplace_data(
+        confirmed: bool = False,
+    ) -> str:
+        """Import Workplace data from an export file.
+        WARNING: This can modify programs, certifications,
+        and org structure. REQUIRES USER CONFIRMATION.
+
+        After starting, use get_import_status to poll progress.
+
+        Args:
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {
+                    "action": "import_workplace_data",
+                    "preview": (
+                        "WARNING: Will start a Workplace data "
+                        "import. This can modify programs, "
+                        "certifications, and org structure."
+                    ),
+                    "instructions": (
+                        "Present this WARNING to the user and "
+                        "ask for explicit confirmation. If "
+                        "confirmed, call this tool again with "
+                        "confirmed=True"
+                    ),
+                }
+            )
+        try:
+            result = await client.perform_import()
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps({"success": True, "result": result})
+
+    @agent.tool_plain
+    async def get_import_status(import_id: int) -> str:
+        """Check the progress of a Workplace import job.
+
+        Args:
+            import_id: The import job ID.
+        """
+        try:
+            status = await client.get_import_status(import_id)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(
+            {
+                "status": status.status,
+                "message": status.statusmessage,
+                "progress": status.progress,
+                "is_complete": status.is_complete,
+                "is_error": status.is_error,
+            }
+        )
+
+    @agent.tool_plain
+    async def delete_export(
+        export_id: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Delete a completed export. REQUIRES USER CONFIRMATION.
+
+        Args:
+            export_id: The export job ID.
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Delete export id={export_id}"}
+            )
+        try:
+            result = await client.delete_export(export_id)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+        return json.dumps(result)
+
+    @agent.tool_plain
+    async def delete_import(
+        import_id: int,
+        confirmed: bool = False,
+    ) -> str:
+        """Delete a completed import record. REQUIRES USER CONFIRMATION.
+
+        Args:
+            import_id: The import job ID.
+            confirmed: Set True only after user approval.
+        """
+        if not confirmed:
+            return json.dumps(
+                {"preview": f"Delete import id={import_id}"}
+            )
+        try:
+            result = await client.delete_import(import_id)
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(result)

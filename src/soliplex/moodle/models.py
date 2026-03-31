@@ -526,3 +526,91 @@ class SelectorItem(BaseModel):
     id: int
     name: str = ""
     shortname: str = ""
+
+
+# ---------------------------------------------------------------
+# Feature 18: User Management CRUD
+# ---------------------------------------------------------------
+
+
+class CreatedUser(BaseModel):
+    """Result from ``core_user_create_users``."""
+
+    id: int
+    username: str = ""
+
+
+# ---------------------------------------------------------------
+# Feature 19: Course Management CRUD
+# ---------------------------------------------------------------
+
+
+class CourseCategory(BaseModel):
+    """Category from ``core_course_get_categories``."""
+
+    id: int
+    name: str = ""
+    parent: int = 0
+    coursecount: int = 0
+    description: str = ""
+    depth: int = 0
+    path: str = ""
+    visible: int = 1
+
+
+class CreatedCourse(BaseModel):
+    """Result from ``core_course_create_courses``."""
+
+    id: int
+    shortname: str = ""
+
+
+class CreatedCategory(BaseModel):
+    """Result from ``core_course_create_categories``."""
+
+    id: int
+    name: str = ""
+
+
+class DuplicatedCourse(BaseModel):
+    """Result from ``core_course_duplicate_course``."""
+
+    id: int
+    shortname: str = ""
+
+
+# ---------------------------------------------------------------
+# Feature 20: Import / Export (Workplace)
+# ---------------------------------------------------------------
+
+
+class ExportStatus(BaseModel):
+    """Status from ``tool_wp_get_export_status``."""
+
+    status: int = 0
+    statusmessage: str = ""
+    progress: int = 0
+
+    @property
+    def is_complete(self) -> bool:
+        return self.status == 2
+
+    @property
+    def is_error(self) -> bool:
+        return self.status == 3
+
+
+class ImportStatus(BaseModel):
+    """Status from ``tool_wp_get_import_status``."""
+
+    status: int = 0
+    statusmessage: str = ""
+    progress: int = 0
+
+    @property
+    def is_complete(self) -> bool:
+        return self.status == 2
+
+    @property
+    def is_error(self) -> bool:
+        return self.status == 3

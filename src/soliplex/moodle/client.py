@@ -22,14 +22,21 @@ from soliplex.moodle.models import CompetencyFramework
 from soliplex.moodle.models import CompletionReportRow
 from soliplex.moodle.models import CompletionStatus
 from soliplex.moodle.models import Course
+from soliplex.moodle.models import CourseCategory
 from soliplex.moodle.models import CourseSection
+from soliplex.moodle.models import CreatedCategory
+from soliplex.moodle.models import CreatedCourse
 from soliplex.moodle.models import CreatedEntity
+from soliplex.moodle.models import CreatedUser
 from soliplex.moodle.models import Department
 from soliplex.moodle.models import DepartmentMember
+from soliplex.moodle.models import DuplicatedCourse
 from soliplex.moodle.models import DuplicatedProgram
 from soliplex.moodle.models import EnrolledUser
+from soliplex.moodle.models import ExportStatus
 from soliplex.moodle.models import Group
 from soliplex.moodle.models import GroupMembers
+from soliplex.moodle.models import ImportStatus
 from soliplex.moodle.models import LearningPlan
 from soliplex.moodle.models import Position
 from soliplex.moodle.models import PotentialParent
@@ -1526,3 +1533,204 @@ class MoodleClient:
                 }
             )
         return results[:MAX_RESULTS]
+
+    # ---------------------------------------------------------------
+    # User management CRUD (Feature 18)
+    # ---------------------------------------------------------------
+
+    async def create_users(
+        self,
+        users: list[dict],
+    ) -> list[CreatedUser]:
+        """Create users via ``core_user_create_users``.
+
+        Each dict must contain at least ``username``, ``firstname``,
+        ``lastname``, ``email``, and either ``password`` or
+        ``createpassword=1``.
+        """
+        params: dict[str, str | int] = {}
+        for i, u in enumerate(users):
+            for key, val in u.items():
+                params[f"users[{i}][{key}]"] = val
+        raw = await self._call("core_user_create_users", **params)
+        return [CreatedUser.model_validate(r) for r in raw]
+
+    async def update_users(
+        self,
+        users: list[dict],
+    ) -> None:
+        """Update users via ``core_user_update_users``.
+
+        Each dict must contain ``id`` and any fields to update.
+        """
+        params: dict[str, str | int] = {}
+        for i, u in enumerate(users):
+            for key, val in u.items():
+                params[f"users[{i}][{key}]"] = val
+        await self._call("core_user_update_users", **params)
+
+    async def delete_users(
+        self,
+        userids: list[int],
+    ) -> None:
+        """Delete users via ``core_user_delete_users``."""
+        params: dict[str, str | int] = {}
+        for i, uid in enumerate(userids):
+            params[f"userids[{i}]"] = uid
+        await self._call("core_user_delete_users", **params)
+
+    # ---------------------------------------------------------------
+    # Course management CRUD (Feature 19)
+    # ---------------------------------------------------------------
+
+    async def get_categories(
+        self,
+    ) -> list[CourseCategory]:
+        """List categories via ``core_course_get_categories``."""
+        raw = await self._call("core_course_get_categories")
+        return [
+            CourseCategory.model_validate(c) for c in raw
+        ][:MAX_RESULTS]
+
+    async def create_courses(
+        self,
+        courses: list[dict],
+    ) -> list[CreatedCourse]:
+        """Create courses via ``core_course_create_courses``.
+
+        Each dict must contain at least ``fullname``,
+        ``shortname``, and ``categoryid``.
+        """
+        params: dict[str, str | int] = {}
+        for i, c in enumerate(courses):
+            for key, val in c.items():
+                params[f"courses[{i}][{key}]"] = val
+        raw = await self._call("core_course_create_courses", **params)
+        return [CreatedCourse.model_validate(r) for r in raw]
+
+    async def update_courses(
+        self,
+        courses: list[dict],
+    ) -> None:
+        """Update courses via ``core_course_update_courses``.
+
+        Each dict must contain ``id`` and any fields to update.
+        """
+        params: dict[str, str | int] = {}
+        for i, c in enumerate(courses):
+            for key, val in c.items():
+                params[f"courses[{i}][{key}]"] = val
+        raw = await self._call("core_course_update_courses", **params)
+        if isinstance(raw, dict) and raw.get("warnings"):
+            return raw
+        return None
+
+    async def delete_courses(
+        self,
+        courseids: list[int],
+    ) -> dict:
+        """Delete courses via ``core_course_delete_courses``."""
+        params: dict[str, str | int] = {}
+        for i, cid in enumerate(courseids):
+            params[f"courseids[{i}]"] = cid
+        raw = await self._call("core_course_delete_courses", **params)
+        return raw if isinstance(raw, dict) else {}
+
+    async def duplicate_course(
+        self,
+        courseid: int,
+        fullname: str,
+        shortname: str,
+        categoryid: int,
+        visible: int = 1,
+    ) -> DuplicatedCourse:
+        """Duplicate a course via ``core_course_duplicate_course``."""
+        raw = await self._call(
+            "core_course_duplicate_course",
+            courseid=courseid,
+            fullname=fullname,
+            shortname=shortname,
+            categoryid=categoryid,
+            visible=visible,
+        )
+        return DuplicatedCourse.model_validate(raw)
+
+    async def create_categories(
+        self,
+        categories: list[dict],
+    ) -> list[CreatedCategory]:
+        """Create categories via ``core_course_create_categories``.
+
+        Each dict must contain ``name`` and optionally ``parent``.
+        """
+        params: dict[str, str | int] = {}
+        for i, c in enumerate(categories):
+            for key, val in c.items():
+                params[f"categories[{i}][{key}]"] = val
+        raw = await self._call(
+            "core_course_create_categories", **params
+        )
+        return [CreatedCategory.model_validate(r) for r in raw]
+
+    # ---------------------------------------------------------------
+    # Import / Export (Feature 20 — Workplace)
+    # ---------------------------------------------------------------
+
+    async def perform_export(
+        self, exporter: str, **params: str | int
+    ) -> dict:
+        """Start an export via ``tool_wp_perform_export``.
+
+        ``exporter`` is the exporter class name, e.g.
+        ``tool_wp\\tool_wp\\exporter\\courses``.
+        """
+        raw = await self._call(
+            "tool_wp_perform_export",
+            exporter=exporter,
+            **params,
+        )
+        return raw if isinstance(raw, dict) else {}
+
+    async def get_export_status(
+        self, exportid: int
+    ) -> ExportStatus:
+        """Check export progress via ``tool_wp_get_export_status``."""
+        raw = await self._call(
+            "tool_wp_get_export_status", exportid=exportid
+        )
+        return ExportStatus.model_validate(raw)
+
+    async def get_export_file(self, exportid: int) -> dict:
+        """Get export file info via ``tool_wp_get_export_file``."""
+        raw = await self._call(
+            "tool_wp_get_export_file", exportid=exportid
+        )
+        return raw if isinstance(raw, dict) else {}
+
+    async def perform_import(self, **params: str | int) -> dict:
+        """Start an import via ``tool_wp_perform_import``."""
+        raw = await self._call("tool_wp_perform_import", **params)
+        return raw if isinstance(raw, dict) else {}
+
+    async def get_import_status(
+        self, importid: int
+    ) -> ImportStatus:
+        """Check import progress via ``tool_wp_get_import_status``."""
+        raw = await self._call(
+            "tool_wp_get_import_status", importid=importid
+        )
+        return ImportStatus.model_validate(raw)
+
+    async def delete_export(self, exportid: int) -> dict:
+        """Delete an export via ``tool_wp_delete_export``."""
+        raw = await self._call(
+            "tool_wp_delete_export", id=exportid
+        )
+        return raw if isinstance(raw, dict) else {}
+
+    async def delete_import(self, importid: int) -> dict:
+        """Delete an import via ``tool_wp_delete_import``."""
+        raw = await self._call(
+            "tool_wp_delete_import", id=importid
+        )
+        return raw if isinstance(raw, dict) else {}

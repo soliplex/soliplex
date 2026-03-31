@@ -22,16 +22,23 @@ from soliplex.moodle.models import Cohort
 from soliplex.moodle.models import CohortMembers
 from soliplex.moodle.models import CompetencyFramework
 from soliplex.moodle.models import CompletionReportRow
+from soliplex.moodle.models import CourseCategory
 from soliplex.moodle.models import CourseModule
 from soliplex.moodle.models import CourseSection
+from soliplex.moodle.models import CreatedCategory
+from soliplex.moodle.models import CreatedCourse
 from soliplex.moodle.models import CreatedEntity
+from soliplex.moodle.models import CreatedUser
 from soliplex.moodle.models import Department
 from soliplex.moodle.models import DepartmentMember
+from soliplex.moodle.models import DuplicatedCourse
 from soliplex.moodle.models import DuplicatedProgram
 from soliplex.moodle.models import EnrolmentRequest
+from soliplex.moodle.models import ExportStatus
 from soliplex.moodle.models import GradeItem
 from soliplex.moodle.models import Group
 from soliplex.moodle.models import GroupMembers
+from soliplex.moodle.models import ImportStatus
 from soliplex.moodle.models import Job
 from soliplex.moodle.models import LearningPlan
 from soliplex.moodle.models import MessageRequest
@@ -60,16 +67,23 @@ __all__ = [
     "CertificationLogEntry",
     "Cohort",
     "CompletionReportRow",
+    "CourseCategory",
+    "CreatedCategory",
+    "CreatedCourse",
     "CreatedEntity",
+    "CreatedUser",
     "CohortMembers",
     "CompetencyFramework",
     "CourseModule",
     "CourseSection",
     "Department",
     "DepartmentMember",
+    "DuplicatedCourse",
     "DuplicatedProgram",
+    "ExportStatus",
     "EnrolmentRequest",
     "GradeItem",
+    "ImportStatus",
     "Group",
     "GroupMembers",
     "Job",

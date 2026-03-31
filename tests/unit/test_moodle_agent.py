@@ -231,6 +231,26 @@ def test_factory_agent_has_expected_tools():
         "duplicate_rule",
         "delete_rule_condition",
         "delete_rule_outcome",
+        # User management CRUD tools
+        "create_user",
+        "update_user",
+        "delete_user",
+        "unsuspend_user",
+        # Course management CRUD tools
+        "list_categories",
+        "create_category",
+        "create_course",
+        "update_course",
+        "delete_course",
+        "duplicate_course",
+        # Import/Export tools
+        "export_workplace_data",
+        "get_export_status",
+        "download_export",
+        "import_workplace_data",
+        "get_import_status",
+        "delete_export",
+        "delete_import",
     }
 
 
