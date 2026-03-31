@@ -8,6 +8,7 @@ from unittest import mock
 
 import pytest
 import yaml
+from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import settings as ai_settings
 
 from soliplex.config import agents as config_agents
@@ -24,7 +25,6 @@ PROVIDER_BASE_URL = "https://provider.example.com/api"
 OTHER_PROVIDER_BASE_URL = "https://other-provider.example.com/api"
 OLLAMA_BASE_URL = "https://example.com:12345"
 AGUI_FEATURE_NAME = "test-agui-feature"
-
 
 BOGUS_AGENT_CONFIG_YAML = ""
 
@@ -159,6 +159,25 @@ W_PROMPT_FILE_W_BOGUS_TEMPLATE_ID_AGENT_CONFIG_YAML = f"""
 id: "{AGENT_ID}"
 template_id: "{BOGUS_TEMPLATE_AGENT_ID}"
 system_prompt: ./prompt.txt
+"""
+
+# 'model_name' not required heree:  supplied by template
+W_CAPABILITIES_AGENT_CONFIG_KW = dict(
+    id=AGENT_ID,
+    _capability_configs=[
+        config_agents.AgentCapabilityConfig(name="WebSearch"),
+        config_agents.AgentCapabilityConfig(
+            name="Thinking",
+            kwargs={"effort": "high"},
+        ),
+    ],
+)
+W_CAPABILITIES_AGENT_CONFIG_YAML = f"""
+id: "{AGENT_ID}"
+capabilities:
+    - WebSearch
+    - Thinking:
+        effort: "high"
 """
 
 W_AGUI_FEATURE_NAMES_AGENT_CONFIG_KW = dict(
@@ -306,6 +325,82 @@ def test__apply_agent_config_template(temp_dir, config_dict, expected):
 
 
 @pytest.mark.parametrize(
+    "name, kwargs, expectation",
+    [
+        ("bogus", {}, pytest.raises(config_agents.UnknownCapability)),
+        ("WebSearch", {}, contextlib.nullcontext(ai_capabilities.WebSearch())),
+        (
+            "Thinking",
+            {"effort": "high"},
+            contextlib.nullcontext(ai_capabilities.Thinking(effort="high")),
+        ),
+    ],
+)
+def test_agentcapabilityconfig_as_capability(
+    temp_dir,
+    name,
+    kwargs,
+    expectation,
+):
+    config_path = temp_dir / "config.yaml"
+    acc = config_agents.AgentCapabilityConfig(
+        name=name,
+        kwargs=kwargs,
+        _config_path=config_path,
+    )
+
+    with expectation as expected:
+        found = acc.as_capability
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert found == expected
+
+
+@pytest.mark.parametrize(
+    "cap_config, expectation",
+    [
+        (
+            {"name": "bogus"},
+            pytest.raises(config_agents.UnknownCapability),
+        ),
+        (
+            "WebSearch",
+            contextlib.nullcontext(
+                config_agents.AgentCapabilityConfig(name="WebSearch"),
+            ),
+        ),
+        (
+            {"Thinking": {"effort": "high"}},
+            contextlib.nullcontext(
+                config_agents.AgentCapabilityConfig(
+                    name="Thinking",
+                    kwargs={"effort": "high"},
+                ),
+            ),
+        ),
+    ],
+)
+def test_extract_agent_capability(
+    temp_dir,
+    cap_config,
+    expectation,
+):
+    config_path = temp_dir / "config.yaml"
+
+    with expectation as expected:
+        found = config_agents.extract_capability_config(
+            cap_config,
+            config_path,
+        )
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert found == dataclasses.replace(
+            expected,
+            _config_path=config_path,
+        )
+
+
+@pytest.mark.parametrize(
     "kw",
     [
         BARE_AGENT_CONFIG_KW.copy(),
@@ -357,6 +452,10 @@ def test_agentconfig_ctor(installation_config, kw):
             pytest.raises(config_exc.FromYamlException),
         ),
         (
+            W_CAPABILITIES_AGENT_CONFIG_YAML,
+            contextlib.nullcontext(W_CAPABILITIES_AGENT_CONFIG_KW.copy()),
+        ),
+        (
             W_AGUI_FEATURE_NAMES_AGENT_CONFIG_YAML,
             contextlib.nullcontext(
                 W_AGUI_FEATURE_NAMES_AGENT_CONFIG_KW.copy()
@@ -401,6 +500,13 @@ def test_agentconfig_from_yaml(
         )
 
     if isinstance(expected, dict):
+        cap_configs = expected.pop("_capability_configs", None)
+        if cap_configs is not None:
+            expected["_capability_configs"] = [
+                dataclasses.replace(cc, _config_path=yaml_file)
+                for cc in cap_configs
+            ]
+
         exp_agent_config = config_agents.AgentConfig(
             _installation_config=installation_config,
             _config_path=yaml_file,
@@ -668,6 +774,35 @@ def test_agentconfig_llm_provider_kw_google(
         )
     else:
         installation_config.get_secret.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "w_kwargs, expected",
+    [
+        ({}, []),
+        (
+            {
+                "_capability_configs": [
+                    config_agents.AgentCapabilityConfig(name="WebSearch"),
+                    config_agents.AgentCapabilityConfig(
+                        name="Thinking",
+                        kwargs={"effort": "high"},
+                    ),
+                ],
+            },
+            [
+                ai_capabilities.WebSearch(),
+                ai_capabilities.Thinking(effort="high"),
+            ],
+        ),
+    ],
+)
+def test_agentconfig_capabilities(w_kwargs, expected):
+    aconfig = config_agents.AgentConfig(id="test-agent", **w_kwargs)
+
+    found = aconfig.capabilities
+
+    assert found == expected
 
 
 @pytest.mark.parametrize(

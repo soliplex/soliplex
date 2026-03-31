@@ -2,6 +2,7 @@ import dataclasses
 from unittest import mock
 
 import pytest
+from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import tools as ai_tools
 
 from soliplex import agents
@@ -226,6 +227,7 @@ def test_get_model_from_config(
         google_provider_klass.assert_not_called()
 
 
+@pytest.mark.parametrize("w_capabilities", [False, True])
 @pytest.mark.parametrize("w_room_skills", [False, True])
 @pytest.mark.parametrize("w_model_settings", [None, MODEL_SETTINGS])
 @mock.patch("soliplex.agents.get_model_from_config")
@@ -239,11 +241,18 @@ def test_get_default_agent_from_configs(
     mcp_ct_configs_tools,
     w_model_settings,
     w_room_skills,
+    w_capabilities,
 ):
     agent_config = mock.create_autospec(config_agents.AgentConfig)
     agent_config.kind = "default"
     agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
     agent_config.model_settings = w_model_settings
+
+    if w_capabilities:
+        capability = mock.create_autospec(ai_capabilities.AbstractCapability)
+        exp_capabilities = agent_config.capabilities = [capability]
+    else:
+        exp_capabilities = agent_config.capabilities = []
 
     tool_configs = {tc.tool_id: tc for (tc, _) in tool_configs_tools}
     exp_tools = [tool for (_, tool) in tool_configs_tools]
@@ -286,6 +295,7 @@ def test_get_default_agent_from_configs(
     gmfc.assert_called_once_with(agent_config=agent_config)
 
     assert akc_kw["instructions"] == exp_instructions
+    assert akc_kw["capabilities"] == exp_capabilities
 
     if w_room_skills:
         build_system_prompt.assert_called_once_with(

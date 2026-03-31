@@ -156,6 +156,7 @@ def get_default_agent_from_configs(
         tools=tools,
         toolsets=toolsets,
         instructions=instructions,
+        capabilities=agent_config.capabilities,
         deps_type=AgentDependencies,
     )
 

@@ -7,6 +7,7 @@ import pathlib
 import typing
 from collections import abc
 
+from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import settings as ai_settings
 from pydantic_ai.agent import abstract as ai_ag_abstract
 
@@ -17,6 +18,7 @@ from . import exceptions
 
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 _default_dict_field = _utils._default_dict_field
+_default_list_field = _utils._default_list_field
 
 # ============================================================================
 #   Agent-related configuration types
@@ -31,6 +33,19 @@ class InvalidAgentTemplateID(KeyError):
             f"Template agent not found: {template_id} "
             f"(configured in {_config_path})"
         )
+
+
+class UnknownCapability(KeyError):
+    def __init__(self, name, _config_path=None):
+        self.name = name
+        self._config_path = _config_path
+        if _config_path is not None:
+            super().__init__(
+                f"Unknown capability name: {name} "
+                f"(configured in {_config_path})"
+            )
+        else:
+            super().__init__(f"Unknown capability name: {name}")
 
 
 class LLMProviderType(enum.StrEnum):
@@ -69,6 +84,43 @@ def _apply_agent_config_template(
 
 
 @dataclasses.dataclass(kw_only=True)
+class AgentCapabilityConfig:
+    name: str
+    kwargs: dict[str, typing.Any] = _default_dict_field()
+
+    _config_path: pathlib.Path = None
+
+    @property
+    def as_capability(self) -> ai_capabilities.AbstractCapability:
+        try:
+            cap_klass = ai_capabilities.CAPABILITY_TYPES[self.name]
+        except KeyError:
+            raise UnknownCapability(self.name) from None
+
+        return cap_klass(**self.kwargs)
+
+
+def extract_capability_config(
+    cap_config: str | dict[str, typing.Any],
+    _config_path: pathlib.Path,
+) -> AgentCapabilityConfig:
+    if isinstance(cap_config, str):
+        name = cap_config
+        kwargs = {}
+    else:
+        ((name, kwargs),) = cap_config.items()
+
+    if name not in ai_capabilities.CAPABILITY_TYPES:
+        raise UnknownCapability(name, _config_path)
+
+    return AgentCapabilityConfig(
+        name=name,
+        kwargs=kwargs,
+        _config_path=_config_path,
+    )
+
+
+@dataclasses.dataclass(kw_only=True)
 class AgentConfig:
     #
     # Agent-specific options
@@ -87,6 +139,8 @@ class AgentConfig:
     provider_key: str = None  # secret containing API key
 
     model_settings: ai_settings.ModelSettings = None
+
+    _capability_configs: list[AgentCapabilityConfig] = _default_list_field()
 
     agui_feature_names: tuple[str] = ()
 
@@ -121,19 +175,25 @@ class AgentConfig:
                 config_path,
             )
 
-            if "system_prompt" in config_dict:
-                system_prompt = config_dict.pop("system_prompt")
-
+            system_prompt = config_dict.pop("system_prompt", None)
+            if system_prompt is not None:
                 if system_prompt.startswith("./"):
                     config_dict["_system_prompt_path"] = system_prompt
                 else:
                     config_dict["system_prompt"] = system_prompt
 
-            if config_dict.get("model_settings") is not None:
-                pm_settings = config_dict.pop("model_settings")
+            pm_settings = config_dict.pop("model_settings", None)
+            if pm_settings is not None:
                 config_dict["model_settings"] = ai_settings.ModelSettings(
                     **pm_settings
                 )
+
+            capabilities = config_dict.pop("capabilities", None)
+            if capabilities is not None:
+                config_dict["_capability_configs"] = [
+                    extract_capability_config(cap, config_path)
+                    for cap in capabilities
+                ]
 
             agui_feature_names = config_dict.pop("agui_feature_names", ())
             config_dict["agui_feature_names"] = tuple(agui_feature_names)
@@ -187,6 +247,10 @@ class AgentConfig:
             )
 
         return provider_kw
+
+    @property
+    def capabilities(self) -> list[ai_capabilities.AbstractCapability]:
+        return [acc.as_capability for acc in self._capability_configs]
 
     @property
     def as_yaml(self) -> dict:
