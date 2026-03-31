@@ -106,6 +106,14 @@ def patched_skill_configs():
 
 
 @pytest.fixture
+def patched_agent_capabilities():
+    with mock.patch.dict(config_agents.__dict__) as patched:
+        registry = patched["AGENT_CAPABILITY_CLASSES_BY_NAME"] = {}
+
+        yield registry
+
+
+@pytest.fixture
 def patched_agent_configs():
     with mock.patch.dict(config_agents.__dict__) as patched:
         result = patched["AGENT_CONFIG_CLASSES_BY_KIND"] = {}

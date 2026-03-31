@@ -20,6 +20,13 @@ _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 _default_dict_field = _utils._default_dict_field
 _default_list_field = _utils._default_list_field
 
+
+#
+#   Copy the pydantic_ai capability registry as defaults, so that we
+#   can extend via meta-config.
+#
+AGENT_CAPABILITY_CLASSES_BY_NAME = ai_capabilities.CAPABILITY_TYPES.copy()
+
 # ============================================================================
 #   Agent-related configuration types
 # ============================================================================
@@ -93,7 +100,7 @@ class AgentCapabilityConfig:
     @property
     def as_capability(self) -> ai_capabilities.AbstractCapability:
         try:
-            cap_klass = ai_capabilities.CAPABILITY_TYPES[self.name]
+            cap_klass = AGENT_CAPABILITY_CLASSES_BY_NAME[self.name]
         except KeyError:
             raise UnknownCapability(self.name) from None
 
@@ -110,7 +117,7 @@ def extract_capability_config(
     else:
         ((name, kwargs),) = cap_config.items()
 
-    if name not in ai_capabilities.CAPABILITY_TYPES:
+    if name not in AGENT_CAPABILITY_CLASSES_BY_NAME:
         raise UnknownCapability(name, _config_path)
 
     return AgentCapabilityConfig(

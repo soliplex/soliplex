@@ -266,6 +266,18 @@ extra_config:
 """
 
 
+@pytest.fixture
+def extra_agent_capability(patched_agent_capabilities):
+    @dataclasses.dataclass(kw_only=True)
+    class TestCapability:
+        dotted_name: str | None = None
+
+    # Register our extension capability
+    patched_agent_capabilities["testing"] = TestCapability
+
+    return TestCapability
+
+
 @pytest.mark.parametrize(
     "config_dict, expected",
     [
@@ -328,16 +340,13 @@ def test__apply_agent_config_template(temp_dir, config_dict, expected):
     "name, kwargs, expectation",
     [
         ("bogus", {}, pytest.raises(config_agents.UnknownCapability)),
-        ("WebSearch", {}, contextlib.nullcontext(ai_capabilities.WebSearch())),
-        (
-            "Thinking",
-            {"effort": "high"},
-            contextlib.nullcontext(ai_capabilities.Thinking(effort="high")),
-        ),
+        ("testing", {}, contextlib.nullcontext()),
+        ("testing", {"dotted_name": "foo.bar"}, contextlib.nullcontext()),
     ],
 )
 def test_agentcapabilityconfig_as_capability(
     temp_dir,
+    extra_agent_capability,
     name,
     kwargs,
     expectation,
@@ -352,29 +361,34 @@ def test_agentcapabilityconfig_as_capability(
     with expectation as expected:
         found = acc.as_capability
 
-    if not isinstance(expected, pytest.ExceptionInfo):
-        assert found == expected
+    if expected is None:
+        assert isinstance(found, extra_agent_capability)
+        for key, value in kwargs.items():
+            assert getattr(found, key) == value
 
 
 @pytest.mark.parametrize(
     "cap_config, expectation",
     [
         (
-            {"name": "bogus"},
+            "bogus",
             pytest.raises(config_agents.UnknownCapability),
         ),
         (
-            "WebSearch",
+            "testing",
             contextlib.nullcontext(
-                config_agents.AgentCapabilityConfig(name="WebSearch"),
+                config_agents.AgentCapabilityConfig(
+                    name="testing",
+                    kwargs={},
+                ),
             ),
         ),
         (
-            {"Thinking": {"effort": "high"}},
+            {"testing": {"dotted_name": "foo.bar"}},
             contextlib.nullcontext(
                 config_agents.AgentCapabilityConfig(
-                    name="Thinking",
-                    kwargs={"effort": "high"},
+                    name="testing",
+                    kwargs={"dotted_name": "foo.bar"},
                 ),
             ),
         ),
@@ -382,9 +396,11 @@ def test_agentcapabilityconfig_as_capability(
 )
 def test_extract_agent_capability(
     temp_dir,
+    extra_agent_capability,
     cap_config,
     expectation,
 ):
+
     config_path = temp_dir / "config.yaml"
 
     with expectation as expected:

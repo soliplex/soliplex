@@ -123,6 +123,11 @@ class InstallationConfigMeta:
         config classes) or `ConfigMeta' mappings, defining the types
         of skills which can be configured.
 
+    'agent_capability_types'
+        a list consisting of strings (importable dotted names of agent
+        capability classes) or `ConfigMeta' mappings, defining additional
+        capability types with which agents can be configured.
+
     'agent_configs'
         a list consisting of strings (importable dotted names of agent
         config classes) or `ConfigMeta' mappings, defining the
@@ -143,6 +148,7 @@ class InstallationConfigMeta:
     mcp_toolset_configs: list[str | ConfigMeta] = ()
     mcp_server_tool_wrappers: list[ConfigMeta] = ()
     skill_configs: list[str | ConfigMeta] = ()
+    agent_capability_types: list[str | ConfigMeta] = ()
     agent_configs: list[str | ConfigMeta] = ()
     secret_sources: list[str | ConfigMeta] = ()
 
@@ -183,6 +189,11 @@ class InstallationConfigMeta:
             config_dict["skill_configs"] = [
                 ConfigMeta.from_yaml(sc_yaml)
                 for sc_yaml in config_dict.get("skill_configs", ())
+            ]
+
+            config_dict["agent_capability_types"] = [
+                ConfigMeta.from_yaml(ac_yaml)
+                for ac_yaml in config_dict.get("agent_capability_types", ())
             ]
 
             config_dict["agent_configs"] = [
@@ -243,6 +254,12 @@ class InstallationConfigMeta:
             klass = sc_meta.config_klass
             config_skills.SKILL_CONFIG_CLASSES_BY_KIND[klass.kind] = klass
 
+        self.agent_capability_types = list(self.agent_capability_types)
+        act_registry = config_agents.AGENT_CAPABILITY_CLASSES_BY_NAME
+        for act_meta in self.agent_capability_types:
+            klass = act_meta.config_klass
+            act_registry[klass.__name__] = klass
+
         self.agent_configs = list(self.agent_configs)
         for ac_meta in self.agent_configs:
             klass = ac_meta.config_klass
@@ -300,6 +317,11 @@ class InstallationConfigMeta:
             for klass in skill_config_registry.values()
         ]
 
+        cap_types = config_agents.AGENT_CAPABILITY_CLASSES_BY_NAME.values()
+        capability_type_entries = [
+            _utils._dotted_name(klass) for klass in cap_types
+        ]
+
         agent_config_registry = config_agents.AGENT_CONFIG_CLASSES_BY_KIND
         agent_config_entries = [
             _utils._dotted_name(klass)
@@ -324,6 +346,7 @@ class InstallationConfigMeta:
             "mcp_toolset_configs": mcp_toolset_config_entries,
             "mcp_server_tool_wrappers": mcp_server_tool_wrapper_entries,
             "skill_configs": skill_config_entries,
+            "agent_capability_types": capability_type_entries,
             "agent_configs": agent_config_entries,
             "secret_sources": secret_source_entries,
         }

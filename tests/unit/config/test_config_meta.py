@@ -23,6 +23,10 @@ class FauxToolConfig:
     tool_name = "faux"
 
 
+class FauxCapability:
+    dotted_name = "foo.bar"
+
+
 BOGUS_ICMETA_YAML = """\
 meta:
     tool_configs:
@@ -33,6 +37,7 @@ BARE_ICMETA_KW = {
     "mcp_toolset_configs": [],
     "skill_configs": [],
     "mcp_server_tool_wrappers": [],
+    "agent_capability_types": [],
     "agent_configs": [],
     "secret_sources": [],
 }
@@ -103,6 +108,18 @@ W_SKILL_CONFIGS_ICMETA_YAML = """\
 meta:
   skill_configs:
     - "soliplex.config.skills.HR_RAG_SkillConfig"
+"""
+
+
+W_AGENT_CAPABILITY_ICMETA_KW = BARE_ICMETA_KW | {
+    "agent_capability_types": [
+        config_meta.ConfigMeta(config_klass=FauxCapability),
+    ],
+}
+W_AGENT_CAPABILITY_ICMETA_YAML = """\
+meta:
+  agent_capability_types:
+      - "test_config_meta.FauxCapability"
 """
 
 
@@ -264,6 +281,7 @@ def test_configmeta_from_yaml_w_dict_w_names(w_wrapper):
         (W_TOOL_CONFIGS_ICMETA_YAML, W_TOOL_CONFIGS_ICMETA_KW),
         (W_MCP_TOOLSET_CONFIGS_ICMETA_YAML, W_MCP_TOOLSET_CONFIGS_ICMETA_KW),
         (W_SKILL_CONFIGS_ICMETA_YAML, W_SKILL_CONFIGS_ICMETA_KW),
+        (W_AGENT_CAPABILITY_ICMETA_YAML, W_AGENT_CAPABILITY_ICMETA_KW),
         (W_AGENT_CONFIGS_ICMETA_YAML, W_AGENT_CONFIGS_ICMETA_KW),
         (
             W_SECRET_SOURCE_ICMETA_YAML,
@@ -276,6 +294,7 @@ def test_installationconfigmeta_from_yaml(
     temp_dir,
     patched_soliplex_config,
     patched_skill_configs,
+    patched_agent_capabilities,
     patched_agent_configs,
     patched_secret_getters,
     patched_agui_features,
@@ -366,6 +385,15 @@ def test_installationconfigmeta_from_yaml(
                     == mcptcp_by_class_name[wrapper_klass_name]
                 )
 
+        if config_dict_meta and "agent_capability_types" in config_dict_meta:
+            acts_by_class_name = {
+                f"{klass.__module__}.{klass.__name__}": klass.__name__
+                for klass in patched_agent_capabilities.values()
+            }
+            for klass_name in config_dict_meta["agent_capability_types"]:
+                short_name = acts_by_class_name[klass_name]
+                assert short_name in patched_agent_capabilities
+
         if config_dict_meta and "agent_configs" in config_dict_meta:
             acs_by_class_name = {
                 f"{klass.__module__}.{klass.__name__}": klass
@@ -383,12 +411,14 @@ def test_installationconfigmeta_from_yaml(
 
 @pytest.mark.parametrize("w_secret_reg", [False, True])
 @pytest.mark.parametrize("w_agent", [False, True])
+@pytest.mark.parametrize("w_capability", [False, True])
 @pytest.mark.parametrize("w_skills", [False, True])
 @pytest.mark.parametrize("w_mcp_toolsets", [False, True])
 @pytest.mark.parametrize("w_tools", [False, True])
 def test_installationconfigmeta_as_yaml(
     patched_soliplex_config,
     patched_agent_configs,
+    patched_agent_capabilities,
     patched_skill_configs,
     patched_secret_getters,
     patched_agui_features,
@@ -399,6 +429,7 @@ def test_installationconfigmeta_as_yaml(
     w_tools,
     w_mcp_toolsets,
     w_skills,
+    w_capability,
     w_agent,
     w_secret_reg,
 ):
@@ -433,6 +464,13 @@ def test_installationconfigmeta_as_yaml(
         patched_skill_configs[klass.kind] = klass
         expected["skill_configs"].append(
             "soliplex.config.skills.HR_RAG_SkillConfig",
+        )
+
+    if w_capability:
+        klass = FauxCapability
+        patched_agent_capabilities[klass.__name__] = klass
+        expected["agent_capability_types"].append(
+            "test_config_meta.FauxCapability",
         )
 
     if w_agent:
