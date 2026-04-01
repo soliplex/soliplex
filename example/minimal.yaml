@@ -212,9 +212,6 @@ environment:
   - name: "RAG_LANCE_DB_PATH"
     value: "file:../db/rag"
 
-  - name: "SOLIPLEX_UPLOADS_PATH"
-    value: "file:../uploads"
-
   #------------------------------------------------------------------------
   # Expire MCP room server tokens after one hour.
   #------------------------------------------------------------------------
@@ -253,6 +250,11 @@ agent_configs:
       Your answers should be clear, concise, and ready for production use.
 
       Always provide code or examples in Markdown blocks.
+
+#==========================================================================
+# Upload directory configuraition
+#==========================================================================
+upload_path: ../uploads
 
 #==========================================================================
 # Thread peristence:  SQLAlchemy DBURIs
