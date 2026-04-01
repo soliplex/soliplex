@@ -6,6 +6,8 @@ from unittest import mock
 import pydantic
 import pytest
 import yaml
+from haiku.rag import config as hr_config
+from haiku.rag.skills import rag as hr_skills_rag
 from haiku.rag.skills import rlm as hr_skills_rlm
 from haiku.skills import agent as hs_agent
 from haiku.skills import models as hs_models
@@ -616,6 +618,11 @@ def test_entrypointskillconfig_skill(
 
 
 @pytest.fixture
+def haiku_rag_config():
+    return hr_config.AppConfig(environment="testing")
+
+
+@pytest.fixture
 def derived_hrskillconfig():
     skill_module = mock.Mock(
         spec_set=[
@@ -681,16 +688,15 @@ def test_hrskillconfigbbase_skill(derived_hrskillconfig):
 def test_hr_rag_skillconfig_metadata(
     temp_dir,
     installation_config,
+    haiku_rag_config,
 ):
-    skill_haiku_rag_config = object()
-
     config_path = temp_dir / "config_file.yaml"
     lancedb = temp_dir / "rag.lancedb"
     lancedb.mkdir()
 
     inst = config_skills.HR_RAG_SkillConfig(
         rag_lancedb_override_path=lancedb,
-        _haiku_rag_config=skill_haiku_rag_config,
+        _haiku_rag_config=haiku_rag_config,
         _config_path=config_path,
         _installation_config=installation_config,
     )
@@ -698,6 +704,28 @@ def test_hr_rag_skillconfig_metadata(
     found = inst.skill_metadata
 
     assert found.name == "rag"
+
+
+def test_hr_rag_skillconfig_skill(
+    temp_dir,
+    installation_config,
+    haiku_rag_config,
+):
+    config_path = temp_dir / "config_file.yaml"
+    lancedb = temp_dir / "rag.lancedb"
+    lancedb.mkdir()
+
+    inst = config_skills.HR_RAG_SkillConfig(
+        rag_lancedb_override_path=lancedb,
+        _haiku_rag_config=haiku_rag_config,
+        _config_path=config_path,
+        _installation_config=installation_config,
+    )
+
+    found = inst.skill
+
+    assert isinstance(found, hs_models.Skill)
+    assert found.metadata == hr_skills_rag.skill_metadata()
 
 
 @pytest.mark.parametrize(
@@ -759,16 +787,15 @@ def test_hr_rag_skillconfig_from_yaml(
 def test_hr_rlm_skillconfig_metadata(
     temp_dir,
     installation_config,
+    haiku_rag_config,
 ):
-    skill_haiku_rag_config = object()
-
     config_path = temp_dir / "config_file.yaml"
     lancedb = temp_dir / "rag.lancedb"
     lancedb.mkdir()
 
     inst = config_skills.HR_RLM_SkillConfig(
         rag_lancedb_override_path=lancedb,
-        _haiku_rag_config=skill_haiku_rag_config,
+        _haiku_rag_config=haiku_rag_config,
         _config_path=config_path,
         _installation_config=installation_config,
     )
@@ -778,16 +805,18 @@ def test_hr_rlm_skillconfig_metadata(
     assert found.name == "rag-rlm"
 
 
-def test_hr_rlm_skillconfig_skill(temp_dir, installation_config):
-    skill_haiku_rag_config = object()
-
+def test_hr_rlm_skillconfig_skill(
+    temp_dir,
+    installation_config,
+    haiku_rag_config,
+):
     config_path = temp_dir / "config_file.yaml"
     lancedb = temp_dir / "rag.lancedb"
     lancedb.mkdir()
 
     inst = config_skills.HR_RLM_SkillConfig(
         rag_lancedb_override_path=lancedb,
-        _haiku_rag_config=skill_haiku_rag_config,
+        _haiku_rag_config=haiku_rag_config,
         _config_path=config_path,
         _installation_config=installation_config,
     )
