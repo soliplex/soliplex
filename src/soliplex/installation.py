@@ -333,6 +333,7 @@ class Installation:
             the_installation=self,
             user=user,
             tool_configs=room_config.tool_configs,
+            room_id=room_id,
             thread_id=thread_id,
             **kwargs,
         )

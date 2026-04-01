@@ -44,6 +44,7 @@ class AgentDependencies:
     the_installation: typing.Any  # installation.Installation
     the_threads: agui_package.ThreadStorage = None
     state: agui_package.AGUI_State = dataclasses.field(default_factory=dict)
+    room_id: str | None = None
     thread_id: str | None = None
     user: models.UserProfile = None  # TBD make required
     tool_configs: ToolConfigMap = None

@@ -1076,6 +1076,7 @@ async def test_installation_get_agent_deps_for_room(
             assert isinstance(found, agents.AgentDependencies)
 
             assert found.the_installation is the_installation
+            assert found.room_id == w_room_id
             assert found.user == test_user
             assert found.tool_configs == t_configs
 
@@ -1144,6 +1145,7 @@ async def test_installation_get_agent_deps_for_completion(
         assert isinstance(found, agents.AgentDependencies)
 
         assert found.the_installation is the_installation
+        assert found.room_id is None
         assert found.user == test_user
         assert found.tool_configs == t_configs
 
