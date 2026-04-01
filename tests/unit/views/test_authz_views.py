@@ -39,7 +39,7 @@ def test_get_the_authz_logger():
 
     assert found is the_logger.bind.return_value
 
-    the_logger.bind.assert_called_once_with(name=loggers.AUTHZ_LOGGER_NAME)
+    the_logger.bind.assert_called_once_with(loggers.AUTHZ_LOGGER_NAME)
 
 
 @pytest.mark.anyio

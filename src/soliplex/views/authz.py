@@ -21,7 +21,7 @@ depend_the_logger = views.depend_the_logger
 def get_the_authz_logger(
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> loggers.LogWrapper:
-    return the_logger.bind(name=loggers.AUTHZ_LOGGER_NAME)
+    return the_logger.bind(loggers.AUTHZ_LOGGER_NAME)
 
 
 depend_the_authz_logger = fastapi.Depends(get_the_authz_logger)
