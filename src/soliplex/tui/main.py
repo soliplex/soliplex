@@ -811,6 +811,7 @@ class RoomView(t_screen.Screen):
         t_binding.Binding("ctrl+s", "view_state", "State"),
         t_binding.Binding("ctrl+z", "edit_metadata", "Metadata"),
         t_binding.Binding("ctrl+p", "mcp_token", "MCP Token"),
+        t_binding.Binding("shift+ctrl+u", "upload", "Upload file"),
         t_binding.Binding("escape", "app.pop_screen", "Exit"),
     ]
 
@@ -953,6 +954,17 @@ class RoomView(t_screen.Screen):
 
             self.thread_name = payload.get("name")
             self.thread_description = payload.get("description")
+
+    @textual.work
+    async def action_upload(self) -> None:
+        ofd = textual_fspicker.FileOpen()
+        payload = await self.app.push_screen_wait(ofd)
+
+        if payload is not None:
+            self.rest_api.post_room_file_upload(
+                self.room_id,
+                payload,
+            )
 
     @textual.work
     async def action_mcp_token(self) -> None:

@@ -155,6 +155,29 @@ class TUI_REST_API:
 
         return response.json()
 
+    def post_room_file_upload(
+        self,
+        room_id: str,
+        file_path: pathlib.Path,
+    ) -> None:
+        upload_url = f"{self.api_v1_base}/uploads/{room_id}"
+
+        with file_path.open("rb") as file_stream:
+            files = {
+                "upload_file": (
+                    file_path.name,
+                    file_stream,
+                    mimetypes.guess_type(file_path.name),
+                ),
+            }
+
+            response = requests.post(
+                upload_url,
+                files=files,
+                headers=self.api_v1_headers,
+            )
+            response.raise_for_status()
+
     def post_thread_file_upload(
         self,
         room_id: str,
