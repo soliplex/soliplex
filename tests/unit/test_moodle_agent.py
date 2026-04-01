@@ -4540,3 +4540,783 @@ async def test_delete_rule_outcome_tool_error():
         result = json.loads(await fn(instanceid=10, confirmed=True))
 
     assert "error" in result
+
+
+# -----------------------------------------------------------------
+# Dynamic rules — name-resolution error branches
+# -----------------------------------------------------------------
+
+_EMPTY_RULES_RESP = {
+    "data": {"headers": [], "rows": [], "totalrowcount": 0},
+    "warnings": [],
+}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tool_name",
+    [
+        "can_enable_rule",
+        "get_rule_matching_users",
+        "get_rule_matched_users",
+        "disable_rule",
+        "archive_rule",
+        "unarchive_rule",
+        "delete_rule",
+        "duplicate_rule",
+    ],
+)
+async def test_rule_tool_name_not_found(tool_name):
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, tool_name)
+
+    with _patch_httpx(_mock_response(_EMPTY_RULES_RESP)):
+        result = json.loads(await fn(rule_name="Nonexistent"))
+
+    assert "error" in result
+
+
+# -----------------------------------------------------------------
+# User management CRUD tools
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_user_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_user")
+
+    result = json.loads(
+        await fn(
+            username="jdoe",
+            firstname="John",
+            lastname="Doe",
+            email="jdoe@example.com",
+        )
+    )
+
+    assert result["action"] == "create_user"
+    assert "jdoe" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_create_user_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_user")
+
+    resp = _mock_response([{"id": 10, "username": "jdoe"}])
+    with _patch_httpx(resp):
+        result = json.loads(
+            await fn(
+                username="jdoe",
+                firstname="John",
+                lastname="Doe",
+                email="jdoe@example.com",
+                confirmed=True,
+            )
+        )
+
+    assert result["success"] is True
+    assert result["created"][0]["id"] == 10
+
+
+@pytest.mark.asyncio
+async def test_create_user_tool_with_password():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_user")
+
+    resp = _mock_response([{"id": 11, "username": "jdoe2"}])
+    with _patch_httpx(resp):
+        result = json.loads(
+            await fn(
+                username="jdoe2",
+                firstname="Jane",
+                lastname="Doe",
+                email="jdoe2@example.com",
+                password="secret123",
+                confirmed=True,
+            )
+        )
+
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_create_user_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_user")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(
+            await fn(
+                username="jdoe", firstname="John",
+                lastname="Doe", email="jdoe@example.com", confirmed=True,
+            )
+        )
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_update_user_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_user")
+
+    result = json.loads(await fn(userid="5", department="Engineering"))
+
+    assert result["action"] == "update_user"
+    assert "Engineering" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_update_user_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_user")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(
+            await fn(userid="5", department="Engineering", confirmed=True)
+        )
+
+    assert result["success"] is True
+    assert result["userid"] == 5
+
+
+@pytest.mark.asyncio
+async def test_update_user_tool_no_fields():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_user")
+
+    result = json.loads(await fn(userid="5"))
+
+    assert "No fields" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_update_user_tool_bad_id():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_user")
+
+    result = json.loads(await fn(userid="abc", department="Eng"))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_update_user_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_user")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(
+            await fn(userid="5", department="Eng", confirmed=True)
+        )
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_user_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_user")
+
+    result = json.loads(await fn(userid="5"))
+
+    assert result["action"] == "delete_user"
+    assert "WARNING" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_delete_user_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_user")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(userid="5", confirmed=True))
+
+    assert result["success"] is True
+    assert result["deleted_userid"] == 5
+
+
+@pytest.mark.asyncio
+async def test_delete_user_tool_bad_id():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_user")
+
+    result = json.loads(await fn(userid="abc"))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_user_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_user")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(userid="5", confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_unsuspend_user_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "unsuspend_user")
+
+    result = json.loads(await fn(userid="5"))
+
+    assert result["action"] == "unsuspend_user"
+
+
+@pytest.mark.asyncio
+async def test_unsuspend_user_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "unsuspend_user")
+
+    resp = _mock_response(None)
+    with _patch_httpx(resp):
+        result = json.loads(await fn(userid="5", confirmed=True))
+
+    assert result["success"] is True
+    assert result["unsuspended_userid"] == 5
+
+
+@pytest.mark.asyncio
+async def test_unsuspend_user_tool_bad_id():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "unsuspend_user")
+
+    result = json.loads(await fn(userid="abc"))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_unsuspend_user_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "unsuspend_user")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(userid="5", confirmed=True))
+
+    assert "error" in result
+
+
+# -----------------------------------------------------------------
+# Course management CRUD tools
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_categories_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "list_categories")
+
+    resp = _mock_response(
+        [{"id": 1, "name": "Default", "parent": 0, "coursecount": 3,
+          "depth": 1, "visible": 1}]
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert len(result) == 1
+    assert result[0]["name"] == "Default"
+
+
+@pytest.mark.asyncio
+async def test_list_categories_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "list_categories")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_create_category_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_category")
+
+    result = json.loads(await fn(name="Test Cat"))
+
+    assert result["action"] == "create_category"
+
+
+@pytest.mark.asyncio
+async def test_create_category_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_category")
+
+    resp = _mock_response([{"id": 5, "name": "Test Cat"}])
+    with _patch_httpx(resp):
+        result = json.loads(
+            await fn(name="Test Cat", description="Desc", confirmed=True)
+        )
+
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_create_category_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_category")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(name="Test Cat", confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_create_course_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_course")
+
+    result = json.loads(
+        await fn(fullname="Test Course", shortname="TC01", categoryid=1)
+    )
+
+    assert result["action"] == "create_course"
+
+
+@pytest.mark.asyncio
+async def test_create_course_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_course")
+
+    resp = _mock_response([{"id": 10, "shortname": "TC01"}])
+    with _patch_httpx(resp):
+        result = json.loads(
+            await fn(
+                fullname="Test Course", shortname="TC01",
+                categoryid=1, summary="A test", confirmed=True,
+            )
+        )
+
+    assert result["success"] is True
+    assert result["created"][0]["id"] == 10
+
+
+@pytest.mark.asyncio
+async def test_create_course_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "create_course")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(
+            await fn(fullname="T", shortname="T", categoryid=1, confirmed=True)
+        )
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_update_course_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_course")
+
+    result = json.loads(await fn(courseid=2, fullname="New Name"))
+
+    assert result["action"] == "update_course"
+
+
+@pytest.mark.asyncio
+async def test_update_course_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_course")
+
+    resp = _mock_response({"warnings": []})
+    with _patch_httpx(resp):
+        result = json.loads(
+            await fn(
+                courseid=2, fullname="New", shortname="NEW",
+                summary="Updated", visible=0, confirmed=True,
+            )
+        )
+
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_update_course_tool_no_fields():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_course")
+
+    result = json.loads(await fn(courseid=2))
+
+    assert "No fields" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_update_course_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "update_course")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(
+            await fn(courseid=2, fullname="X", confirmed=True)
+        )
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_course_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_course")
+
+    result = json.loads(await fn(courseid=4))
+
+    assert result["action"] == "delete_course"
+    assert "WARNING" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_delete_course_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_course")
+
+    resp = _mock_response({"warnings": []})
+    with _patch_httpx(resp):
+        result = json.loads(await fn(courseid=4, confirmed=True))
+
+    assert result["success"] is True
+    assert result["deleted_courseid"] == 4
+
+
+@pytest.mark.asyncio
+async def test_delete_course_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_course")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(courseid=4, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_duplicate_course_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "duplicate_course")
+
+    result = json.loads(
+        await fn(courseid=2, fullname="Copy", shortname="CP", categoryid=1)
+    )
+
+    assert result["action"] == "duplicate_course"
+
+
+@pytest.mark.asyncio
+async def test_duplicate_course_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "duplicate_course")
+
+    resp = _mock_response({"id": 20, "shortname": "CP"})
+    with _patch_httpx(resp):
+        result = json.loads(
+            await fn(
+                courseid=2, fullname="Copy", shortname="CP",
+                categoryid=1, confirmed=True,
+            )
+        )
+
+    assert result["success"] is True
+    assert result["new_course_id"] == 20
+
+
+@pytest.mark.asyncio
+async def test_duplicate_course_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "duplicate_course")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(
+            await fn(
+                courseid=2, fullname="Copy", shortname="CP",
+                categoryid=1, confirmed=True,
+            )
+        )
+
+    assert "error" in result
+
+
+# -----------------------------------------------------------------
+# Import / Export tools
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_export_workplace_data_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "export_workplace_data")
+
+    result = json.loads(await fn(exporter="courses"))
+
+    assert result["action"] == "export_workplace_data"
+
+
+@pytest.mark.asyncio
+async def test_export_workplace_data_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "export_workplace_data")
+
+    resp = _mock_response({"jobid": 1})
+    with _patch_httpx(resp):
+        result = json.loads(await fn(exporter="courses", confirmed=True))
+
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_export_workplace_data_tool_custom_exporter():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "export_workplace_data")
+
+    resp = _mock_response({"jobid": 2})
+    with _patch_httpx(resp):
+        result = json.loads(
+            await fn(exporter=r"custom\exporter\class", confirmed=True)
+        )
+
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_export_workplace_data_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "export_workplace_data")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(exporter="courses", confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_export_status_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_export_status")
+
+    resp = _mock_response(
+        {"status": 2, "statusmessage": "Done", "progress": 100}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(export_id=1))
+
+    assert result["status"] == 2
+
+
+@pytest.mark.asyncio
+async def test_get_export_status_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_export_status")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(export_id=1))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_download_export_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "download_export")
+
+    resp = _mock_response({"fileurl": "http://moodle.test/file.zip"})
+    with _patch_httpx(resp):
+        result = json.loads(await fn(export_id=1))
+
+    assert "fileurl" in result
+
+
+@pytest.mark.asyncio
+async def test_download_export_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "download_export")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(export_id=1))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_import_workplace_data_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "import_workplace_data")
+
+    result = json.loads(await fn())
+
+    assert result["action"] == "import_workplace_data"
+    assert "WARNING" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_import_workplace_data_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "import_workplace_data")
+
+    resp = _mock_response({"jobid": 5})
+    with _patch_httpx(resp):
+        result = json.loads(await fn(confirmed=True))
+
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_import_workplace_data_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "import_workplace_data")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_import_status_tool():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_import_status")
+
+    resp = _mock_response(
+        {"status": 2, "statusmessage": "Done", "progress": 100}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(import_id=1))
+
+    assert result["status"] == 2
+
+
+@pytest.mark.asyncio
+async def test_get_import_status_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "get_import_status")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(import_id=1))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_export_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_export")
+
+    result = json.loads(await fn(export_id=1))
+
+    assert "preview" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_export_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_export")
+
+    resp = _mock_response({"success": True})
+    with _patch_httpx(resp):
+        result = json.loads(await fn(export_id=1, confirmed=True))
+
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_delete_export_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_export")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(export_id=1, confirmed=True))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_import_tool_preview():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_import")
+
+    result = json.loads(await fn(import_id=1))
+
+    assert "preview" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_import_tool_confirmed():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_import")
+
+    resp = _mock_response({"success": True})
+    with _patch_httpx(resp):
+        result = json.loads(await fn(import_id=1, confirmed=True))
+
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_delete_import_tool_error():
+    agent = _build_agent()
+    fn = _get_tool_fn(agent, "delete_import")
+
+    resp = _mock_response(
+        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(import_id=1, confirmed=True))
+
+    assert "error" in result
