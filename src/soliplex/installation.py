@@ -142,6 +142,14 @@ class Installation:
         return found
 
     @property
+    def rooms_upload_path(self) -> pathlib.Path | None:
+        return self._config.rooms_upload_path
+
+    @property
+    def threads_upload_path(self) -> pathlib.Path | None:
+        return self._config.threads_upload_path
+
+    @property
     def logfire_config(self) -> config_logfire.LogfireConfig | None:
         return self._config.logfire_config
 

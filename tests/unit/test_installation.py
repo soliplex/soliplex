@@ -508,6 +508,20 @@ def test_installation_all_provider_info(
     assert found == expected
 
 
+def test_installation_rooms_upload_path():
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    assert the_installation.rooms_upload_path is i_config.rooms_upload_path
+
+
+def test_installation_threads_upload_path():
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    assert the_installation.threads_upload_path is i_config.threads_upload_path
+
+
 def test_installation_logfire_config():
     i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)

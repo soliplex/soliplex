@@ -497,6 +497,31 @@ class InstallationConfig:
             return {}
 
     #
+    # Path to upload directory
+    #
+    # If not set, uploads are disabled.
+    #
+    # If set, uploads within this directory will be kept in subdirectories:
+    # - 'threads/{thread_uuid}' will hold per-thread uploads
+    # - 'rooms/{room_id}' will hold per-room uploads
+    #
+    upload_path: pathlib.Path | None = None
+
+    @property
+    def rooms_upload_path(self) -> pathlib.Path | None:
+        if self.upload_path is None:
+            return None
+        else:
+            return self.upload_path / "rooms"
+
+    @property
+    def threads_upload_path(self) -> pathlib.Path | None:
+        if self.upload_path is None:
+            return None
+        else:
+            return self.upload_path / "threads"
+
+    #
     # Path(s) to OIDC Authentication System configs
     #
     # Defaults to one path: './oidc' (set in '__post_init__')
@@ -826,6 +851,9 @@ class InstallationConfig:
 
         if self._config_path is not None:
             parent_dir = self._config_path.parent
+
+            if self.upload_path is not None:
+                self.upload_path = parent_dir / self.upload_path
 
             self.oidc_paths = [
                 parent_dir / oidc_path

@@ -1,30 +1,32 @@
 """Tools for managing files uploaded to an AGUI thread"""
 
-import pathlib
-
 import pydantic_ai
 
 from soliplex import agents
 
 
 class UploadsPathNotConfigured(ValueError):
-    def __init__(self):
+    def __init__(self, which):
+        self.which = which
         super().__init__(
-            "'SOLIPLEX_UPLOADS_PATH' not configured "
-            "in installation environment"
+            f"'{which}s_upload_path' not configured for installation"
         )
 
 
 class UploadsPathNotADirectory(ValueError):
-    def __init__(self, uploads_dir):
-        self.uploads_dir = uploads_dir
-        super().__init__(f"Uploads path not a directory: {uploads_dir}")
+    def __init__(self, which, uploads_path):
+        self.which = which
+        self.uploads_path = uploads_path
+        super().__init__(
+            f"'{which}s_upload_path' not a directory: {uploads_path}"
+        )
 
 
 class UploadNotFound(ValueError):
-    def __init__(self, filename):
+    def __init__(self, which, filename):
+        self.which = which
         self.filename = filename
-        super().__init__(f"Upload not found in thread: {filename}")
+        super().__init__(f"Upload not found in {which}: {filename}")
 
 
 async def list_thread_file_uploads(
@@ -33,17 +35,15 @@ async def list_thread_file_uploads(
     """List names of files uploaded to the current thread"""
     the_installation = ctx.deps.the_installation
     thread_id = ctx.deps.thread_id
-    uploads_dir = the_installation.get_environment("SOLIPLEX_UPLOADS_PATH")
+    uploads_path = the_installation.threads_upload_path
 
-    if uploads_dir is None:
-        raise UploadsPathNotConfigured()
+    if uploads_path is None:
+        raise UploadsPathNotConfigured("thread")
 
-    uploads_dir = pathlib.Path(uploads_dir)
+    if not uploads_path.is_dir():
+        raise UploadsPathNotADirectory("thread", uploads_path)
 
-    if not uploads_dir.is_dir():
-        raise UploadsPathNotADirectory(uploads_dir)
-
-    thread_dir = uploads_dir / thread_id
+    thread_dir = uploads_path / thread_id
 
     return [sub.name for sub in thread_dir.glob("*") if sub.is_file()]
 
@@ -60,21 +60,19 @@ async def get_thread_file_upload(
     """
     the_installation = ctx.deps.the_installation
     thread_id = ctx.deps.thread_id
-    uploads_dir = the_installation.get_environment("SOLIPLEX_UPLOADS_PATH")
+    uploads_path = the_installation.threads_upload_path
 
-    if uploads_dir is None:
-        raise UploadsPathNotConfigured()
+    if uploads_path is None:
+        raise UploadsPathNotConfigured("thread")
 
-    uploads_dir = pathlib.Path(uploads_dir)
+    if not uploads_path.is_dir():
+        raise UploadsPathNotADirectory("thread", uploads_path)
 
-    if not uploads_dir.is_dir():
-        raise UploadsPathNotADirectory(uploads_dir)
-
-    thread_dir = uploads_dir / thread_id
+    thread_dir = uploads_path / thread_id
     file_path = thread_dir / filename
 
     if not file_path.exists():
-        raise UploadNotFound(filename)
+        raise UploadNotFound("thread", filename)
 
     try:
         return file_path.read_text(errors="strict")

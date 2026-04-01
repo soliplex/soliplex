@@ -41,7 +41,7 @@ def the_threads():
 
 
 @pytest.fixture
-def uploads_dir(temp_dir):
+def uploads_path(temp_dir):
     result = temp_dir / "uploads"
     result.mkdir()
     return result
@@ -50,7 +50,7 @@ def uploads_dir(temp_dir):
 @pytest.mark.anyio
 @mock.patch("soliplex.views.agui._check_user_in_room")
 @pytest.mark.parametrize(
-    "tsgt_side_effect, w_upload_env, expectation",
+    "tsgt_side_effect, w_upload_path, expectation",
     [
         (None, True, no_error(204)),
         (
@@ -67,10 +67,10 @@ def uploads_dir(temp_dir):
 )
 async def test_post_room_agui_thread_id_upload(
     cuir,
-    uploads_dir,
+    uploads_path,
     the_threads,
     tsgt_side_effect,
-    w_upload_env,
+    w_upload_path,
     expectation,
 ):
     room_config = mock.create_autospec(config_rooms.RoomConfig)
@@ -85,11 +85,10 @@ async def test_post_room_agui_thread_id_upload(
         installation.Installation,
     )
 
-    installation_env = {}
-    the_installation.get_environment.side_effect = installation_env.get
-
-    if w_upload_env:
-        installation_env["SOLIPLEX_UPLOADS_PATH"] = str(uploads_dir)
+    if w_upload_path:
+        the_installation.threads_upload_path = str(uploads_path / "threads")
+    else:
+        the_installation.threads_upload_path = None
 
     the_authz_policy = mock.create_autospec(
         authz_package.AuthorizationPolicy,
@@ -111,7 +110,7 @@ async def test_post_room_agui_thread_id_upload(
 
     if not isinstance(expected, pytest.ExceptionInfo):
         assert response.status_code == expected
-        exp_file = uploads_dir / TEST_THREAD_ID / TEST_FILENAME
+        exp_file = uploads_path / "threads" / TEST_THREAD_ID / TEST_FILENAME
         assert exp_file.read_bytes() == TEST_CONTENT
 
     the_threads.get_thread.assert_called_once_with(

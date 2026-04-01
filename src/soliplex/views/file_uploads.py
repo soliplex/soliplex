@@ -62,16 +62,16 @@ async def post_uploads_room_thread(
             detail=exc.args,
         ) from None
 
-    uploads_dir = the_installation.get_environment("SOLIPLEX_UPLOADS_PATH")
+    uploads_path = the_installation.threads_upload_path
 
-    if uploads_dir is None:
+    if uploads_path is None:
         raise fastapi.HTTPException(
             status_code=404,
             detail="Uploads not configured",
         )
 
-    thread_dir = pathlib.Path(uploads_dir) / thread_id
-    thread_dir.mkdir(exist_ok=True)
+    thread_dir = pathlib.Path(uploads_path) / thread_id
+    thread_dir.mkdir(parents=True, exist_ok=True)
     upload_target = thread_dir / upload_file.filename
     upload_target.write_bytes(await upload_file.read())
 

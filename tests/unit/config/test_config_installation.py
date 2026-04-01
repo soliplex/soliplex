@@ -311,6 +311,17 @@ agent_configs:
       factory_name: "soliplex.haiku_chat.chat_agent_factory"
 """
 
+UPLOAD_PATH = "uploads"
+
+W_UPLOAD_PATH_INSTALLATION_CONFIG_KW = {
+    "id": INSTALLATION_ID,
+    "upload_path": UPLOAD_PATH,
+}
+W_UPLOAD_PATH_INSTALLATION_CONFIG_YAML = f"""\
+id: "{INSTALLATION_ID}"
+upload_path: "{UPLOAD_PATH}"
+"""
+
 OIDC_PATH_1 = "./oidc"
 OIDC_PATH_2 = "/path/to/other/oidc"
 
@@ -1260,6 +1271,10 @@ def test_installationconfig_authorization_dburi_async(w_kw, expected):
             W_FACTORY_AGENT_CONFIG_INSTALLATION_CONFIG_KW.copy(),
         ),
         (
+            W_UPLOAD_PATH_INSTALLATION_CONFIG_YAML,
+            W_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(),
+        ),
+        (
             W_OIDC_PATHS_INSTALLATION_CONFIG_YAML,
             W_OIDC_PATHS_INSTALLATION_CONFIG_KW.copy(),
         ),
@@ -1401,6 +1416,13 @@ def test_installationconfig_from_yaml(
                 **expected_kw,
                 _config_path=config_path,
             )
+
+        if "upload_path" in expected_kw:
+            exp_upload_path = temp_dir / expected_kw["upload_path"]
+        else:
+            exp_upload_path = None
+
+        expected = dataclasses.replace(expected, upload_path=exp_upload_path)
 
         if "oidc_paths" in expected_kw:
             exp_oidc_paths = [
@@ -2126,6 +2148,62 @@ def test_installationconfig_skill_configs_w_set():
     i_config = config_installation.InstallationConfig(**kw)
 
     assert i_config.skill_configs == {test_skills.SKILL_NAME: skill_config}
+
+
+@pytest.mark.parametrize(
+    "w_kwargs, expected",
+    [
+        (BARE_INSTALLATION_CONFIG_KW.copy(), None),
+        (W_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(), "uploads/rooms"),
+    ],
+)
+def test_installationconfig_rooms_upload_path(
+    temp_dir,
+    w_kwargs,
+    expected,
+):
+    w_kwargs["_config_path"] = temp_dir / "installation.yaml"
+
+    upload_path = w_kwargs.pop("upload_path", None)
+    if upload_path is not None:
+        w_kwargs["upload_path"] = pathlib.Path(upload_path)
+
+    if expected is not None:
+        expected = temp_dir / expected
+
+    i_config = config_installation.InstallationConfig(**w_kwargs)
+
+    found = i_config.rooms_upload_path
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    "w_kwargs, expected",
+    [
+        (BARE_INSTALLATION_CONFIG_KW.copy(), None),
+        (W_UPLOAD_PATH_INSTALLATION_CONFIG_KW.copy(), "uploads/threads"),
+    ],
+)
+def test_installationconfig_threads_upload_path(
+    temp_dir,
+    w_kwargs,
+    expected,
+):
+    w_kwargs["_config_path"] = temp_dir / "installation.yaml"
+
+    upload_path = w_kwargs.pop("upload_path", None)
+    if upload_path is not None:
+        w_kwargs["upload_path"] = pathlib.Path(upload_path)
+
+    if expected is not None:
+        expected = temp_dir / expected
+
+    i_config = config_installation.InstallationConfig(**w_kwargs)
+
+    found = i_config.threads_upload_path
+
+    assert found == expected
 
 
 def test_installationconfig_reload_configurations(temp_dir):

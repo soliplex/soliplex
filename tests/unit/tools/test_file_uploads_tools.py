@@ -69,11 +69,8 @@ async def test_list_thread_file_uploads(
     Args:
       thread_id (str, required): UUID of the current AGUI thread
     """
-    installation_env = {}
-    the_installation.get_environment.side_effect = installation_env.get
-
     if w_upload_env:
-        installation_env["SOLIPLEX_UPLOADS_PATH"] = str(uploads_dir)
+        the_installation.threads_upload_path = uploads_dir
 
         if w_thread_files is not None:
             thread_dir = uploads_dir / TEST_THREAD_ID
@@ -82,6 +79,8 @@ async def test_list_thread_file_uploads(
             for filename in w_thread_files:
                 thread_file = thread_dir / filename
                 thread_file.write_text("")
+    else:
+        the_installation.threads_upload_path = None
 
     with expectation as expected:
         found = await file_uploads_tools.list_thread_file_uploads(ctx_w_deps)
@@ -140,11 +139,8 @@ async def test_get_thread_file_upload(
     Args:
       thread_id (str, required): UUID of the current AGUI thread
     """
-    installation_env = {}
-    the_installation.get_environment.side_effect = installation_env.get
-
     if w_upload_env:
-        installation_env["SOLIPLEX_UPLOADS_PATH"] = str(uploads_dir)
+        the_installation.threads_upload_path = uploads_dir
 
         if w_thread_file is not None:
             thread_dir = uploads_dir / TEST_THREAD_ID
@@ -156,6 +152,8 @@ async def test_get_thread_file_upload(
                     thread_file.write_bytes(w_contents)
                 else:
                     thread_file.write_text(w_contents)
+    else:
+        the_installation.threads_upload_path = None
 
     with expectation as expected:
         found = await file_uploads_tools.get_thread_file_upload(
