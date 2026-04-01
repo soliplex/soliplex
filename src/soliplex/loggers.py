@@ -21,6 +21,7 @@ AGUI_POST_RECENT_USER_FEEDBACK = "post recent room user feedback"
 AGUI_POST_REVIEW_RECENT_FEEDBACK = "post review recent agui feedback"
 AGUI_POST_RESOLVE_RECENT_FEEDBACK = "post resolve recent agui feedback"
 
+UPLOADS_POST_ROOM = "uploads post room"
 UPLOADS_POST_ROOM_THREAD = "uploads post room thread"
 
 AUTHN_LOGGER_NAME = "soliplex.authn"
