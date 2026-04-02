@@ -307,6 +307,11 @@ agent_configs:
 
       Always provide code or examples in Markdown blocks.
 
+  - id: "title"
+    model_name: "gpt-oss:latest"
+
+title_agent_config_id: "title"
+
 #==========================================================================
 # Upload directory configuraition
 #==========================================================================

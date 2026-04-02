@@ -315,6 +315,14 @@ agent_configs:
 
       Always provide code or examples in Markdown blocks.
 
+  - id: "title"
+    model_name: "gpt-4o-mini"
+    provider_type: "openai"
+    provider_base_url: "https://api.openai.com"
+    provider_key: "secret:OPENAI_API_KEY"
+
+title_agent_config_id: "title"
+
 #==========================================================================
 # Upload directory configuraition
 #==========================================================================

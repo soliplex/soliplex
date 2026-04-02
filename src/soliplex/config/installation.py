@@ -443,6 +443,8 @@ class InstallationConfig:
     agent_configs: list[config_agents.AgentConfigTypes] = _default_list_field()
     _agent_configs_map: config_agents.AgentConfigMap = None
 
+    title_agent_config_id: str | None = None
+
     @property
     def agent_configs_map(self) -> config_agents.AgentConfigMap:
         if self._agent_configs_map is None:
@@ -931,6 +933,9 @@ class InstallationConfig:
             "completion_paths": [str(path) for path in self.completion_paths],
             "quizzes_paths": [str(path) for path in self.quizzes_paths],
         }
+
+        if self.title_agent_config_id is not None:
+            result["title_agent_config_id"] = self.title_agent_config_id
 
         if self.logfire_config is not None:
             result["logfire_config"] = self.logfire_config.as_yaml

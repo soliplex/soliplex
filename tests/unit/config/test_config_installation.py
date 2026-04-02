@@ -1554,8 +1554,10 @@ def test_installationconfig_from_yaml_environ_wo_value(temp_dir, config_yaml):
 
 @pytest.mark.parametrize("w_aro", [False, True])
 @pytest.mark.parametrize("w_logfire_config", [False, True])
+@pytest.mark.parametrize("w_title_agent_config_id", [None, "title"])
 def test_installationconfig_as_yaml(
     patched_app_routers,
+    w_title_agent_config_id,
     w_logfire_config,
     w_aro,
 ):
@@ -1594,6 +1596,7 @@ def test_installationconfig_as_yaml(
         },
         _haiku_rag_config_file=pathlib.Path(HAIKU_RAG_CONFIG_FILE),
         agent_configs=[agent_config],
+        title_agent_config_id=w_title_agent_config_id,
         _logging_config_file=pathlib.Path(LOGGING_CONFIG_FILE),
         oidc_paths=[pathlib.Path("./oidc-test")],
         room_paths=[
@@ -1630,6 +1633,9 @@ def test_installationconfig_as_yaml(
         "quizzes_paths": [str(pathlib.Path("other/quizzes"))],
         "filesystem_skills_paths": [str(pathlib.Path("other/skills"))],
     }
+
+    if w_title_agent_config_id is not None:
+        expected["title_agent_config_id"] = w_title_agent_config_id
 
     if w_logfire_config:
         expected["logfire_config"] = (

@@ -260,6 +260,14 @@ class Installation:
     ) -> config_completions.CompletionConfig:
         return self._config.completion_configs[completion_id]
 
+    def get_title_agent_config(
+        self,
+    ) -> config_agents.AgentConfig | None:
+        title_agent_config_id = self._config.title_agent_config_id
+        if title_agent_config_id is None:
+            return None
+        return self._config.agent_configs_map[title_agent_config_id]
+
     def get_agent_by_id(
         self,
         agent_id: str,

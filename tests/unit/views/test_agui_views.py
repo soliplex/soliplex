@@ -1076,11 +1076,15 @@ async def test_save_thread_run_events(a_session, t_storage):
     ],
 )
 @pytest.mark.parametrize("w_finished_error", [None, "finished", "error"])
+@pytest.mark.parametrize("w_title_config", [False, True])
+@mock.patch("soliplex.views.agui.titles.maybe_generate_title")
 @mock.patch("soliplex.views.agui.save_thread_run_events")
 @mock.patch("soliplex.views.agui.logfire")
 async def test_drive_llm_stream(
     logfire,
     stre,
+    maybe_gen_title,
+    w_title_config,
     w_finished_error,
     w_stre_error,
     stre_expectation,
@@ -1088,6 +1092,9 @@ async def test_drive_llm_stream(
 ):
     sqla_engine = mock.AsyncMock(spec_set=())
     event_queue = asyncio.Queue()
+
+    title_agent_config = mock.MagicMock() if w_title_config else None
+    messages = [mock.MagicMock()]
 
     finished_event = agui_core.events.RunFinishedEvent(
         thread_id=TEST_THREAD_ID_STR,
@@ -1119,6 +1126,8 @@ async def test_drive_llm_stream(
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID_STR,
             run_id=TEST_RUN_ID_STR,
+            title_agent_config=title_agent_config,
+            messages=messages,
         )
 
     logfire.span.assert_called_once_with(
@@ -1167,6 +1176,24 @@ async def test_drive_llm_stream(
             "Error saving run events: {error_message}",
             error_message="stre error",
         )
+
+    should_generate_title = (
+        stre_expected is None
+        and w_finished_error == "finished"
+        and w_title_config
+    )
+
+    if should_generate_title:
+        maybe_gen_title.assert_awaited_once_with(
+            title_agent_config=title_agent_config,
+            threads_engine=sqla_engine,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID_STR,
+            user_name=USER_NAME,
+            messages=messages,
+        )
+    else:
+        maybe_gen_title.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1296,6 +1323,7 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         (event_queue,) = sle.call_args_list[0].args
 
         # asyncio.task starts 'drive_llm_stream' right away.
+        exp_title_config = the_installation.get_title_agent_config.return_value
         dls.assert_called_once_with(
             llm_stream=ces.return_value,
             sqla_engine=sqla_engine,
@@ -1304,6 +1332,8 @@ async def test_post_room_agui_thread_id_run_id_streaming(
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID_STR,
             run_id=TEST_RUN_ID_STR,
+            title_agent_config=exp_title_config,
+            messages=exp_adapter.run_input.messages,
         )
 
         ces.assert_called_once_with(exp_agent_stream)

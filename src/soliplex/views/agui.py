@@ -19,9 +19,11 @@ from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
+from soliplex import titles
 from soliplex import util
 from soliplex import views
 from soliplex.agui import persistence as agui_persistence
+from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import rooms as config_rooms
 from soliplex.views import streaming as streaming_views
@@ -584,6 +586,8 @@ async def drive_llm_stream(
     room_id: str,
     thread_id: str,
     run_id: str,
+    title_agent_config: config_agents.AgentConfig | None = None,
+    messages: list[agui_core.Message] | None = None,
 ):
     """Primary consumer of LLM event stream
 
@@ -643,6 +647,16 @@ async def drive_llm_stream(
                 )
             else:
                 logfire.info("Stream status: {status}", status=status)
+
+            if status == "FINISHED" and title_agent_config is not None:
+                await titles.maybe_generate_title(
+                    title_agent_config=title_agent_config,
+                    threads_engine=sqla_engine,
+                    room_id=room_id,
+                    thread_id=thread_id,
+                    user_name=user_name,
+                    messages=messages,
+                )
 
 
 async def stream_llm_events(event_queue: asyncio.Queue):
@@ -737,6 +751,8 @@ async def post_room_agui_thread_id_run_id(
 
     # Drive the LLM stream in a background task, in order to save
     # the thread persistence and usage at the end.
+    title_agent_config = the_installation.get_title_agent_config()
+
     bg_tasks = request.app.state.agui_background_tasks
     task = asyncio.create_task(
         # No 'await' here:  'create_task' *wants* a coroutine
@@ -748,6 +764,8 @@ async def post_room_agui_thread_id_run_id(
             room_id=room_id,
             thread_id=thread_id,
             run_id=run_id,
+            title_agent_config=title_agent_config,
+            messages=agui_adapter.run_input.messages,
         )
     )
     bg_tasks.add(task)

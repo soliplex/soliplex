@@ -810,6 +810,29 @@ async def test_installation_get_completion_config(
 
 
 @pytest.mark.parametrize(
+    "w_title_agent_config_id",
+    [None, "title_agent"],
+)
+def test_installation_get_title_agent_config(
+    w_title_agent_config_id,
+):
+    a_config = mock.create_autospec(config_agents.AgentConfig)
+
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    i_config.title_agent_config_id = w_title_agent_config_id
+    i_config.agent_configs_map = {"title_agent": a_config}
+
+    the_installation = installation.Installation(i_config)
+
+    found = the_installation.get_title_agent_config()
+
+    if w_title_agent_config_id is None:
+        assert found is None
+    else:
+        assert found is a_config
+
+
+@pytest.mark.parametrize(
     "w_agent_id, raises", [("agent_id", False), ("nonesuch", True)]
 )
 @mock.patch("soliplex.agents.get_agent_from_configs")
