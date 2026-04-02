@@ -1,11 +1,12 @@
 """Moodle Workplace integration for Soliplex.
 
 Provides an async HTTP client for the Moodle REST Web Services API
-and a pydantic-ai agent factory that exposes Moodle data as LLM
-tools (courses, users, enrollment, completion, groups, grades,
-calendar, and write operations).
+and a pydantic-ai agent factory that routes requests to
+domain-specific skills (courses, users, organisation,
+certifications, programs, dynamic rules, and reporting).
 """
 
+from soliplex.moodle.agent import MOODLE_ROUTER_PROMPT
 from soliplex.moodle.agent import moodle_tools_agent_factory
 from soliplex.moodle.client import MoodleAPIError
 from soliplex.moodle.client import MoodleClient
@@ -54,8 +55,16 @@ from soliplex.moodle.models import Tenant
 from soliplex.moodle.models import UnassignedManager
 from soliplex.moodle.models import UpdatedEntity
 from soliplex.moodle.models import UserCatalogueItem
+from soliplex.moodle.skills import build_certifications_skill
+from soliplex.moodle.skills import build_courses_skill
+from soliplex.moodle.skills import build_organisation_skill
+from soliplex.moodle.skills import build_programs_skill
+from soliplex.moodle.skills import build_reporting_skill
+from soliplex.moodle.skills import build_rules_skill
+from soliplex.moodle.skills import build_users_skill
 
 __all__ = [
+    "MOODLE_ROUTER_PROMPT",
     "ActivityCompletionStatus",
     "AssignmentGrade",
     "BulkOperationResult",
@@ -103,5 +112,12 @@ __all__ = [
     "UnassignedManager",
     "UpdatedEntity",
     "UserCatalogueItem",
+    "build_certifications_skill",
+    "build_courses_skill",
+    "build_organisation_skill",
+    "build_programs_skill",
+    "build_reporting_skill",
+    "build_rules_skill",
+    "build_users_skill",
     "moodle_tools_agent_factory",
 ]

@@ -59,7 +59,7 @@ def _patch_httpx(response):
 
 
 def _build_agent():
-    """Build the Moodle agent using mocked config + model."""
+    """Build the Moodle router agent using mocked config + model."""
     from soliplex.moodle.agent import moodle_tools_agent_factory
 
     agent_config = _make_agent_config()
@@ -71,9 +71,55 @@ def _build_agent():
         return moodle_tools_agent_factory(agent_config)
 
 
-def _get_tool_fn(agent, name):
-    """Extract a tool's underlying async function."""
-    return agent._function_toolset.tools[name].function
+def _build_skills():
+    """Build all Moodle skills with a mocked-config client."""
+    from soliplex.moodle.client import MoodleClient
+    from soliplex.moodle.skills import (
+        build_certifications_skill,
+        build_courses_skill,
+        build_organisation_skill,
+        build_programs_skill,
+        build_reporting_skill,
+        build_rules_skill,
+        build_users_skill,
+    )
+
+    client = MoodleClient(
+        base_url=BASE_URL, token=TOKEN, verify=False
+    )
+    return [
+        build_courses_skill(client),
+        build_users_skill(client),
+        build_organisation_skill(client),
+        build_certifications_skill(client),
+        build_programs_skill(client),
+        build_rules_skill(client),
+        build_reporting_skill(client),
+    ]
+
+
+# Cache skills across tests for speed (stateless closures)
+_CACHED_SKILLS = None
+
+
+def _get_skills():
+    global _CACHED_SKILLS
+    if _CACHED_SKILLS is None:
+        _CACHED_SKILLS = _build_skills()
+    return _CACHED_SKILLS
+
+
+def _get_tool_fn(agent_or_skills, name):
+    """Extract a tool's underlying async function.
+
+    Works with either the old-style agent (for factory tests) or
+    a list of Skill objects (for tool-level tests).
+    """
+    for skill in agent_or_skills:
+        for tool in skill.tools:
+            if callable(tool) and tool.__name__ == name:
+                return tool
+    raise KeyError(f"Tool '{name}' not found")
 
 
 # -----------------------------------------------------------------
@@ -101,24 +147,27 @@ def test_factory_accepts_skill_toolset_config():
 
 
 def test_factory_wires_skill_toolset():
-    from haiku.skills.agent import SkillToolset
     from haiku.skills.models import Skill
     from haiku.skills.models import SkillMetadata
     from haiku.skills.models import SkillSource
 
-    from soliplex.moodle.agent import MOODLE_TOOLS_PROMPT
+    from soliplex.moodle.agent import MOODLE_ROUTER_PROMPT
     from soliplex.moodle.agent import moodle_tools_agent_factory
 
-    skill = Skill(
+    ext_skill = Skill(
         metadata=SkillMetadata(
             name="test-skill", description="A test skill"
         ),
         source=SkillSource.ENTRYPOINT,
         instructions="Test instructions",
     )
-    toolset = SkillToolset(skills=[skill])
+
+    # Build a SkillToolset that carries the external skill
+    from haiku.skills.agent import SkillToolset
+
+    ext_toolset = SkillToolset(skills=[ext_skill])
     stc = mock.MagicMock()
-    stc.skill_toolset = toolset
+    stc.skill_toolset = ext_toolset
 
     agent_config = _make_agent_config()
     with mock.patch(
@@ -130,18 +179,63 @@ def test_factory_wires_skill_toolset():
         )
 
     assert isinstance(agent, pydantic_ai.Agent)
-    # The skill toolset should be wired in
-    assert toolset in agent._user_toolsets
-    # System prompt should contain both the Moodle prompt and skill catalog
+    # System prompt should contain the router prompt and the external skill
     instructions = "\n".join(agent._instructions)
-    assert MOODLE_TOOLS_PROMPT in instructions
+    assert MOODLE_ROUTER_PROMPT in instructions
     assert "test-skill" in instructions
 
 
+def test_factory_skips_colliding_external_skill():
+    """External skills with the same name as a Moodle skill are skipped."""
+    from haiku.skills.agent import SkillToolset
+    from haiku.skills.models import Skill, SkillMetadata, SkillSource
+
+    from soliplex.moodle.agent import moodle_tools_agent_factory
+
+    # Create an external skill that collides with "moodle-courses"
+    collider = Skill(
+        metadata=SkillMetadata(
+            name="moodle-courses",
+            description="I collide!",
+        ),
+        source=SkillSource.ENTRYPOINT,
+        instructions="Colliding skill",
+    )
+    ext_toolset = SkillToolset(skills=[collider])
+    stc = mock.MagicMock()
+    stc.skill_toolset = ext_toolset
+
+    agent_config = _make_agent_config()
+    with mock.patch(
+        "soliplex.moodle.agent.agents"
+        ".get_model_from_factory_config",
+        return_value=TestModel(),
+    ):
+        # Should not raise — colliding skill is skipped
+        agent = moodle_tools_agent_factory(
+            agent_config, skill_toolset_config=stc
+        )
+    assert isinstance(agent, pydantic_ai.Agent)
+
+
 def test_factory_agent_has_expected_tools():
+    """The router agent exposes execute_skill; individual tools
+    live inside the seven Moodle skills."""
     agent = _build_agent()
-    tool_names = set(agent._function_toolset.tools.keys())
-    assert tool_names == {
+    # Router agent should have execute_skill from SkillToolset
+    all_tool_names: set[str] = set()
+    for ts in agent._user_toolsets:
+        if hasattr(ts, 'tools'):
+            all_tool_names.update(ts.tools.keys())
+    assert "execute_skill" in all_tool_names
+
+    # Verify skills collectively contain the expected tool names
+    skills = _get_skills()
+    skill_tool_names: set[str] = set()
+    for skill in skills:
+        for tool in skill.tools:
+            skill_tool_names.add(tool.__name__)
+    assert skill_tool_names == {
         "list_courses",
         "find_user",
         "list_enrolled_users",
@@ -261,8 +355,8 @@ def test_factory_agent_has_expected_tools():
 
 @pytest.mark.asyncio
 async def test_list_courses_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_courses")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_courses")
 
     resp = _mock_response(
         [
@@ -281,8 +375,8 @@ async def test_list_courses_tool():
 
 @pytest.mark.asyncio
 async def test_list_courses_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_courses")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_courses")
 
     resp = _mock_response(
         {
@@ -305,8 +399,8 @@ async def test_list_courses_tool_error():
 
 @pytest.mark.asyncio
 async def test_find_user_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "find_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "find_user")
 
     resp = _mock_response(
         [
@@ -328,8 +422,8 @@ async def test_find_user_tool():
 
 @pytest.mark.asyncio
 async def test_find_user_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "find_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "find_user")
 
     resp = _mock_response(
         {
@@ -351,8 +445,8 @@ async def test_find_user_tool_error():
 
 @pytest.mark.asyncio
 async def test_list_enrolled_users_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_enrolled_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_enrolled_users")
 
     resp = _mock_response(
         [
@@ -375,8 +469,8 @@ async def test_list_enrolled_users_tool():
 
 @pytest.mark.asyncio
 async def test_list_enrolled_users_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_enrolled_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_enrolled_users")
 
     resp = _mock_response(
         {
@@ -398,8 +492,8 @@ async def test_list_enrolled_users_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_completion_status_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_completion_status")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_completion_status")
 
     resp = _mock_response(
         {
@@ -428,8 +522,8 @@ async def test_get_completion_status_tool():
 
 @pytest.mark.asyncio
 async def test_get_completion_status_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_completion_status")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_completion_status")
 
     resp = _mock_response(
         {
@@ -452,8 +546,8 @@ async def test_get_completion_status_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_course_contents_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_course_contents")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_course_contents")
 
     resp = _mock_response(
         [
@@ -492,8 +586,8 @@ async def test_get_course_contents_tool():
 
 @pytest.mark.asyncio
 async def test_get_course_contents_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_course_contents")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_course_contents")
 
     resp = _mock_response(
         {
@@ -515,8 +609,8 @@ async def test_get_course_contents_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_course_completion_overview_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_course_completion_overview")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_course_completion_overview")
 
     # We need to mock two different API calls:
     # 1. get_enrolled_users returns list of users
@@ -593,8 +687,8 @@ async def test_get_course_completion_overview_tool():
 
 @pytest.mark.asyncio
 async def test_get_course_completion_overview_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_course_completion_overview")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_course_completion_overview")
 
     resp = _mock_response(
         {
@@ -612,8 +706,8 @@ async def test_get_course_completion_overview_tool_error():
 @pytest.mark.asyncio
 async def test_get_course_completion_overview_per_user_error():
     """When per-user completion lookup fails, the user still appears with completed=None."""
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_course_completion_overview")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_course_completion_overview")
 
     enrolled_resp = [
         {"id": 3, "username": "u1", "fullname": "User 1", "roles": []},
@@ -666,8 +760,8 @@ async def test_get_course_completion_overview_per_user_error():
 
 @pytest.mark.asyncio
 async def test_list_course_groups_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_course_groups")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_course_groups")
 
     resp = _mock_response(
         [
@@ -684,8 +778,8 @@ async def test_list_course_groups_tool():
 
 @pytest.mark.asyncio
 async def test_get_group_members_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_group_members")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_group_members")
 
     resp = _mock_response([{"groupid": 1, "userids": [3, 4, 5]}])
     with _patch_httpx(resp):
@@ -697,8 +791,8 @@ async def test_get_group_members_tool():
 
 @pytest.mark.asyncio
 async def test_get_group_members_tool_empty():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_group_members")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_group_members")
 
     resp = _mock_response([])
     with _patch_httpx(resp):
@@ -710,8 +804,8 @@ async def test_get_group_members_tool_empty():
 
 @pytest.mark.asyncio
 async def test_list_course_groups_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_course_groups")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_course_groups")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -724,8 +818,8 @@ async def test_list_course_groups_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_group_members_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_group_members")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_group_members")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -738,8 +832,8 @@ async def test_get_group_members_tool_error():
 
 @pytest.mark.asyncio
 async def test_list_cohorts_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_cohorts")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_cohorts")
 
     resp = _mock_response(
         [
@@ -755,8 +849,8 @@ async def test_list_cohorts_tool():
 
 @pytest.mark.asyncio
 async def test_get_cohort_members_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_cohort_members")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_cohort_members")
 
     resp = _mock_response([{"cohortid": 1, "userids": [3, 4]}])
     with _patch_httpx(resp):
@@ -768,8 +862,8 @@ async def test_get_cohort_members_tool():
 
 @pytest.mark.asyncio
 async def test_get_cohort_members_tool_empty():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_cohort_members")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_cohort_members")
 
     resp = _mock_response([])
     with _patch_httpx(resp):
@@ -781,8 +875,8 @@ async def test_get_cohort_members_tool_empty():
 
 @pytest.mark.asyncio
 async def test_list_cohorts_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_cohorts")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_cohorts")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -795,8 +889,8 @@ async def test_list_cohorts_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_cohort_members_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_cohort_members")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_cohort_members")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -814,8 +908,8 @@ async def test_get_cohort_members_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_user_grades_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_user_grades")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_grades")
 
     resp = _mock_response(
         {
@@ -850,8 +944,8 @@ async def test_get_user_grades_tool():
 
 @pytest.mark.asyncio
 async def test_get_user_grades_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_user_grades")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_grades")
 
     resp = _mock_response(
         {
@@ -869,8 +963,8 @@ async def test_get_user_grades_tool_error():
 @pytest.mark.asyncio
 async def test_get_user_grades_tool_string_cells():
     """Grade table cells can be plain strings instead of dicts."""
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_user_grades")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_grades")
 
     resp = _mock_response(
         {
@@ -901,8 +995,8 @@ async def test_get_user_grades_tool_string_cells():
 @pytest.mark.asyncio
 async def test_get_user_grades_tool_missing_keys():
     """Rows with missing grade/percentage keys still parse; rows without itemname are skipped."""
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_user_grades")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_grades")
 
     resp = _mock_response(
         {
@@ -933,8 +1027,8 @@ async def test_get_user_grades_tool_missing_keys():
 
 @pytest.mark.asyncio
 async def test_get_assignment_grades_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_assignment_grades")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_assignment_grades")
 
     # First call: get_course_contents, second call: get_assignment_grades
     contents_resp = [
@@ -996,8 +1090,8 @@ async def test_get_assignment_grades_tool():
 
 @pytest.mark.asyncio
 async def test_get_assignment_grades_tool_no_assignments():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_assignment_grades")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_assignment_grades")
 
     resp = _mock_response(
         [
@@ -1021,8 +1115,8 @@ async def test_get_assignment_grades_tool_no_assignments():
 @pytest.mark.asyncio
 async def test_get_assignment_grades_tool_contents_error():
     """Error on the first API call (get_course_contents)."""
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_assignment_grades")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_assignment_grades")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1036,8 +1130,8 @@ async def test_get_assignment_grades_tool_contents_error():
 @pytest.mark.asyncio
 async def test_get_assignment_grades_tool_grades_error():
     """Error on the second API call (get_assignment_grades)."""
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_assignment_grades")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_assignment_grades")
 
     contents_resp = [
         {
@@ -1094,8 +1188,8 @@ async def test_get_assignment_grades_tool_grades_error():
 
 @pytest.mark.asyncio
 async def test_get_upcoming_events_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_upcoming_events")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_upcoming_events")
 
     resp = _mock_response(
         {
@@ -1123,8 +1217,8 @@ async def test_get_upcoming_events_tool():
 
 @pytest.mark.asyncio
 async def test_get_upcoming_events_tool_no_filter():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_upcoming_events")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_upcoming_events")
 
     # When no courseids provided, the tool fetches all courses first,
     # then calls get_calendar_events with those course IDs.
@@ -1143,8 +1237,8 @@ async def test_get_upcoming_events_tool_no_filter():
 
 @pytest.mark.asyncio
 async def test_get_upcoming_events_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_upcoming_events")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_upcoming_events")
 
     resp = _mock_response(
         {
@@ -1166,8 +1260,8 @@ async def test_get_upcoming_events_tool_error():
 
 @pytest.mark.asyncio
 async def test_enrol_users_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "enrol_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "enrol_users")
 
     # No HTTP call needed for preview mode
     result = json.loads(await fn("3,4", 2, 5, False))
@@ -1180,8 +1274,8 @@ async def test_enrol_users_tool_preview():
 
 @pytest.mark.asyncio
 async def test_enrol_users_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "enrol_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "enrol_users")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -1193,8 +1287,8 @@ async def test_enrol_users_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_enrol_users_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "enrol_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "enrol_users")
 
     resp = _mock_response(
         {
@@ -1211,8 +1305,8 @@ async def test_enrol_users_tool_error():
 
 @pytest.mark.asyncio
 async def test_send_message_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "send_message")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "send_message")
 
     result = json.loads(await fn("3,4", "Hello!", False))
 
@@ -1223,8 +1317,8 @@ async def test_send_message_tool_preview():
 
 @pytest.mark.asyncio
 async def test_send_message_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "send_message")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "send_message")
 
     resp = _mock_response([{"msgid": 1}, {"msgid": 2}])
     with _patch_httpx(resp):
@@ -1237,8 +1331,8 @@ async def test_send_message_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_send_message_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "send_message")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "send_message")
 
     resp = _mock_response(
         {
@@ -1260,8 +1354,8 @@ async def test_send_message_tool_error():
 
 @pytest.mark.asyncio
 async def test_list_certifications_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_certifications")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_certifications")
 
     resp = _mock_response(
         [
@@ -1278,8 +1372,8 @@ async def test_list_certifications_tool():
 
 @pytest.mark.asyncio
 async def test_list_certifications_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_certifications")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_certifications")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1292,8 +1386,8 @@ async def test_list_certifications_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_certification_allocations_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_certification_allocations")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_allocations")
 
     resp = _mock_response(
         [
@@ -1316,8 +1410,8 @@ async def test_get_certification_allocations_tool():
 
 @pytest.mark.asyncio
 async def test_get_certification_allocations_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_certification_allocations")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_allocations")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1330,8 +1424,8 @@ async def test_get_certification_allocations_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_user_certifications_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_user_certifications")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_certifications")
 
     resp = _mock_response(
         [
@@ -1354,8 +1448,8 @@ async def test_get_user_certifications_tool():
 
 @pytest.mark.asyncio
 async def test_get_user_certifications_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_user_certifications")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_certifications")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1368,8 +1462,8 @@ async def test_get_user_certifications_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_certification_history_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_certification_history")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_history")
 
     resp = _mock_response(
         [
@@ -1387,8 +1481,8 @@ async def test_get_certification_history_tool():
 
 @pytest.mark.asyncio
 async def test_get_certification_history_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_certification_history")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_history")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1401,8 +1495,8 @@ async def test_get_certification_history_tool_error():
 
 @pytest.mark.asyncio
 async def test_certify_user_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "certify_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "certify_user")
 
     result = json.loads(await fn("3", 1, False))
 
@@ -1415,8 +1509,8 @@ async def test_certify_user_tool_preview():
 
 @pytest.mark.asyncio
 async def test_certify_user_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "certify_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "certify_user")
 
     resp = _mock_response({"result": True})
     with _patch_httpx(resp):
@@ -1429,8 +1523,8 @@ async def test_certify_user_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_certify_user_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "certify_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "certify_user")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1443,8 +1537,8 @@ async def test_certify_user_tool_error():
 
 @pytest.mark.asyncio
 async def test_revoke_certification_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "revoke_certification")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "revoke_certification")
 
     result = json.loads(await fn("3", 1, False))
 
@@ -1456,8 +1550,8 @@ async def test_revoke_certification_tool_preview():
 
 @pytest.mark.asyncio
 async def test_revoke_certification_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "revoke_certification")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "revoke_certification")
 
     resp = _mock_response({"result": True})
     with _patch_httpx(resp):
@@ -1469,8 +1563,8 @@ async def test_revoke_certification_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_revoke_certification_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "revoke_certification")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "revoke_certification")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1488,8 +1582,8 @@ async def test_revoke_certification_tool_error():
 
 @pytest.mark.asyncio
 async def test_search_programs_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "search_programs")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "search_programs")
 
     resp = _mock_response(
         [
@@ -1506,8 +1600,8 @@ async def test_search_programs_tool():
 
 @pytest.mark.asyncio
 async def test_search_programs_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "search_programs")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "search_programs")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1520,8 +1614,8 @@ async def test_search_programs_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_user_program_courses_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_user_program_courses")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_program_courses")
 
     resp = _mock_response(
         [
@@ -1539,8 +1633,8 @@ async def test_get_user_program_courses_tool():
 
 @pytest.mark.asyncio
 async def test_get_user_program_courses_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_user_program_courses")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_program_courses")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1553,8 +1647,8 @@ async def test_get_user_program_courses_tool_error():
 
 @pytest.mark.asyncio
 async def test_allocate_users_to_program_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "allocate_users_to_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "allocate_users_to_program")
 
     result = json.loads(await fn("3,4,5", 1, False))
 
@@ -1567,8 +1661,8 @@ async def test_allocate_users_to_program_tool_preview():
 
 @pytest.mark.asyncio
 async def test_allocate_users_to_program_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "allocate_users_to_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "allocate_users_to_program")
 
     resp = _mock_response({"result": []})
     with _patch_httpx(resp):
@@ -1581,8 +1675,8 @@ async def test_allocate_users_to_program_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_allocate_users_to_program_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "allocate_users_to_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "allocate_users_to_program")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1600,8 +1694,8 @@ async def test_allocate_users_to_program_tool_error():
 
 @pytest.mark.asyncio
 async def test_list_tenants_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_tenants")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_tenants")
 
     resp = _mock_response(
         [
@@ -1619,8 +1713,8 @@ async def test_list_tenants_tool():
 
 @pytest.mark.asyncio
 async def test_list_tenants_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_tenants")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_tenants")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1638,8 +1732,8 @@ async def test_list_tenants_tool_error():
 
 @pytest.mark.asyncio
 async def test_browse_catalogue_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "browse_catalogue")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "browse_catalogue")
 
     resp = _mock_response(
         {
@@ -1659,8 +1753,8 @@ async def test_browse_catalogue_tool():
 
 @pytest.mark.asyncio
 async def test_browse_catalogue_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "browse_catalogue")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "browse_catalogue")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1673,8 +1767,8 @@ async def test_browse_catalogue_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_user_learning_catalogue_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_user_learning_catalogue")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_learning_catalogue")
 
     resp = _mock_response(
         {
@@ -1703,8 +1797,8 @@ async def test_get_user_learning_catalogue_tool():
 
 @pytest.mark.asyncio
 async def test_get_user_learning_catalogue_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_user_learning_catalogue")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_learning_catalogue")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1717,8 +1811,8 @@ async def test_get_user_learning_catalogue_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_program_content_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_program_content")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_program_content")
 
     resp = _mock_response(
         {"sets": [{"name": "Core"}], "courses": [{"id": 2}], "warnings": []}
@@ -1732,8 +1826,8 @@ async def test_get_program_content_tool():
 
 @pytest.mark.asyncio
 async def test_get_program_content_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_program_content")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_program_content")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1751,8 +1845,8 @@ async def test_get_program_content_tool_error():
 
 @pytest.mark.asyncio
 async def test_search_courses_for_program_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "search_courses_for_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "search_courses_for_program")
 
     resp = _mock_response(
         [{"id": 2, "fullname": "Safety Fundamentals"}]
@@ -1766,8 +1860,8 @@ async def test_search_courses_for_program_tool():
 
 @pytest.mark.asyncio
 async def test_search_courses_for_program_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "search_courses_for_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "search_courses_for_program")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1780,8 +1874,8 @@ async def test_search_courses_for_program_tool_error():
 
 @pytest.mark.asyncio
 async def test_deallocate_user_from_program_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "deallocate_user_from_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "deallocate_user_from_program")
 
     result = json.loads(await fn(3, 1, False))
 
@@ -1792,8 +1886,8 @@ async def test_deallocate_user_from_program_tool_preview():
 
 @pytest.mark.asyncio
 async def test_deallocate_user_from_program_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "deallocate_user_from_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "deallocate_user_from_program")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -1804,8 +1898,8 @@ async def test_deallocate_user_from_program_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_deallocate_user_from_program_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "deallocate_user_from_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "deallocate_user_from_program")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1823,8 +1917,8 @@ async def test_deallocate_user_from_program_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_certification_user_details_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_certification_user_details")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_user_details")
 
     resp = _mock_response(
         {"id": 10, "userid": 3, "status": "certified"}
@@ -1839,8 +1933,8 @@ async def test_get_certification_user_details_tool():
 
 @pytest.mark.asyncio
 async def test_get_certification_user_details_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_certification_user_details")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_user_details")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1853,8 +1947,8 @@ async def test_get_certification_user_details_tool_error():
 
 @pytest.mark.asyncio
 async def test_deallocate_user_from_certification_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "deallocate_user_from_certification")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "deallocate_user_from_certification")
 
     result = json.loads(await fn(3, 1, False))
 
@@ -1864,8 +1958,8 @@ async def test_deallocate_user_from_certification_tool_preview():
 
 @pytest.mark.asyncio
 async def test_deallocate_user_from_certification_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "deallocate_user_from_certification")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "deallocate_user_from_certification")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -1876,8 +1970,8 @@ async def test_deallocate_user_from_certification_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_deallocate_user_from_certification_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "deallocate_user_from_certification")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "deallocate_user_from_certification")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1890,8 +1984,8 @@ async def test_deallocate_user_from_certification_tool_error():
 
 @pytest.mark.asyncio
 async def test_archive_certification_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "archive_certification")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_certification")
 
     result = json.loads(await fn(1, False))
 
@@ -1901,8 +1995,8 @@ async def test_archive_certification_tool_preview():
 
 @pytest.mark.asyncio
 async def test_archive_certification_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "archive_certification")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_certification")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -1913,8 +2007,8 @@ async def test_archive_certification_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_archive_certification_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "archive_certification")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_certification")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1932,8 +2026,8 @@ async def test_archive_certification_tool_error():
 
 @pytest.mark.asyncio
 async def test_allocate_users_to_tenant_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "allocate_users_to_tenant")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "allocate_users_to_tenant")
 
     result = json.loads(await fn("3,4", 2, False))
 
@@ -1945,8 +2039,8 @@ async def test_allocate_users_to_tenant_tool_preview():
 
 @pytest.mark.asyncio
 async def test_allocate_users_to_tenant_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "allocate_users_to_tenant")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "allocate_users_to_tenant")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -1958,8 +2052,8 @@ async def test_allocate_users_to_tenant_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_allocate_users_to_tenant_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "allocate_users_to_tenant")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "allocate_users_to_tenant")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -1972,8 +2066,8 @@ async def test_allocate_users_to_tenant_tool_error():
 
 @pytest.mark.asyncio
 async def test_suspend_users_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "suspend_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "suspend_users")
 
     result = json.loads(await fn("3,4", False))
 
@@ -1985,8 +2079,8 @@ async def test_suspend_users_tool_preview():
 
 @pytest.mark.asyncio
 async def test_suspend_users_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "suspend_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "suspend_users")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -1998,8 +2092,8 @@ async def test_suspend_users_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_suspend_users_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "suspend_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "suspend_users")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2017,8 +2111,8 @@ async def test_suspend_users_tool_error():
 
 @pytest.mark.asyncio
 async def test_list_departments_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_departments")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_departments")
 
     resp = _mock_response(
         {"departments": [{"id": 1, "name": "Engineering"}], "positions": []}
@@ -2032,8 +2126,8 @@ async def test_list_departments_tool():
 
 @pytest.mark.asyncio
 async def test_list_departments_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_departments")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_departments")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2046,8 +2140,8 @@ async def test_list_departments_tool_error():
 
 @pytest.mark.asyncio
 async def test_list_positions_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_positions")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_positions")
 
     resp = _mock_response(
         {"departments": [], "positions": [{"id": 1, "name": "Manager"}]}
@@ -2061,8 +2155,8 @@ async def test_list_positions_tool():
 
 @pytest.mark.asyncio
 async def test_list_positions_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_positions")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_positions")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2076,8 +2170,8 @@ async def test_list_positions_tool_error():
 @pytest.mark.asyncio
 async def test_get_team_members_tool():
     """System report returns department members."""
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_team_members")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_team_members")
 
     resp = _mock_response(
         {
@@ -2112,8 +2206,8 @@ async def test_get_team_members_tool():
 @pytest.mark.asyncio
 async def test_get_team_members_tool_error():
     """API error returns error JSON."""
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_team_members")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_team_members")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2126,8 +2220,8 @@ async def test_get_team_members_tool_error():
 
 @pytest.mark.asyncio
 async def test_assign_job_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "assign_job")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "assign_job")
 
     result = json.loads(await fn(3, "ENG", "MGR", False))
 
@@ -2137,8 +2231,8 @@ async def test_assign_job_tool_preview():
 
 @pytest.mark.asyncio
 async def test_assign_job_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "assign_job")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "assign_job")
 
     resp = _mock_response({"id": 1})
     with _patch_httpx(resp):
@@ -2149,8 +2243,8 @@ async def test_assign_job_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_assign_job_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "assign_job")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "assign_job")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2163,8 +2257,8 @@ async def test_assign_job_tool_error():
 
 @pytest.mark.asyncio
 async def test_assign_manager_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "assign_manager")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "assign_manager")
 
     result = json.loads(await fn("4", "3", False))
 
@@ -2176,8 +2270,8 @@ async def test_assign_manager_tool_preview():
 
 @pytest.mark.asyncio
 async def test_assign_manager_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "assign_manager")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "assign_manager")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -2188,8 +2282,8 @@ async def test_assign_manager_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_assign_manager_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "assign_manager")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "assign_manager")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2207,8 +2301,8 @@ async def test_assign_manager_tool_error():
 
 @pytest.mark.asyncio
 async def test_list_competency_frameworks_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_competency_frameworks")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_competency_frameworks")
 
     resp = _mock_response(
         {
@@ -2232,8 +2326,8 @@ async def test_list_competency_frameworks_tool():
 
 @pytest.mark.asyncio
 async def test_list_competency_frameworks_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_competency_frameworks")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_competency_frameworks")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2246,8 +2340,8 @@ async def test_list_competency_frameworks_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_user_learning_plans_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_user_learning_plans")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_learning_plans")
 
     resp = _mock_response(
         {
@@ -2271,8 +2365,8 @@ async def test_get_user_learning_plans_tool():
 
 @pytest.mark.asyncio
 async def test_get_user_learning_plans_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_user_learning_plans")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_learning_plans")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2285,8 +2379,8 @@ async def test_get_user_learning_plans_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_user_competency_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_user_competency")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_competency")
 
     resp = _mock_response(
         {"usercompetency": {"userid": 3, "competencyid": 1}}
@@ -2300,8 +2394,8 @@ async def test_get_user_competency_tool():
 
 @pytest.mark.asyncio
 async def test_get_user_competency_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_user_competency")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_competency")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2314,8 +2408,8 @@ async def test_get_user_competency_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_course_competencies_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_course_competencies")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_course_competencies")
 
     resp = _mock_response(
         {
@@ -2333,8 +2427,8 @@ async def test_get_course_competencies_tool():
 
 @pytest.mark.asyncio
 async def test_get_course_competencies_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_course_competencies")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_course_competencies")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2352,8 +2446,8 @@ async def test_get_course_competencies_tool_error():
 
 @pytest.mark.asyncio
 async def test_enrol_users_tool_non_numeric():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "enrol_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "enrol_users")
 
     result = json.loads(await fn("alice,bob", 2, 5, False))
 
@@ -2364,8 +2458,8 @@ async def test_enrol_users_tool_non_numeric():
 
 @pytest.mark.asyncio
 async def test_certify_user_tool_non_numeric():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "certify_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "certify_user")
 
     result = json.loads(await fn("alice", 1, False))
 
@@ -2376,8 +2470,8 @@ async def test_certify_user_tool_non_numeric():
 
 @pytest.mark.asyncio
 async def test_assign_manager_tool_non_numeric():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "assign_manager")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "assign_manager")
 
     result = json.loads(await fn("alice", "3", False))
 
@@ -2388,8 +2482,8 @@ async def test_assign_manager_tool_non_numeric():
 
 @pytest.mark.asyncio
 async def test_assign_manager_tool_non_numeric_manager():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "assign_manager")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "assign_manager")
 
     result = json.loads(await fn("4", "bob", False))
 
@@ -2400,8 +2494,8 @@ async def test_assign_manager_tool_non_numeric_manager():
 
 @pytest.mark.asyncio
 async def test_send_message_tool_non_numeric():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "send_message")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "send_message")
 
     result = json.loads(await fn("alice", "Hello!", False))
 
@@ -2412,8 +2506,8 @@ async def test_send_message_tool_non_numeric():
 
 @pytest.mark.asyncio
 async def test_revoke_certification_tool_non_numeric():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "revoke_certification")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "revoke_certification")
 
     result = json.loads(await fn("alice", 1, False))
 
@@ -2424,8 +2518,8 @@ async def test_revoke_certification_tool_non_numeric():
 
 @pytest.mark.asyncio
 async def test_allocate_users_to_program_tool_non_numeric():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "allocate_users_to_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "allocate_users_to_program")
 
     result = json.loads(await fn("alice", 1, False))
 
@@ -2436,8 +2530,8 @@ async def test_allocate_users_to_program_tool_non_numeric():
 
 @pytest.mark.asyncio
 async def test_allocate_users_to_tenant_tool_non_numeric():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "allocate_users_to_tenant")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "allocate_users_to_tenant")
 
     result = json.loads(await fn("alice", 1, False))
 
@@ -2448,8 +2542,8 @@ async def test_allocate_users_to_tenant_tool_non_numeric():
 
 @pytest.mark.asyncio
 async def test_suspend_users_tool_non_numeric():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "suspend_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "suspend_users")
 
     result = json.loads(await fn("alice", False))
 
@@ -2466,8 +2560,8 @@ async def test_suspend_users_tool_non_numeric():
 @pytest.mark.asyncio
 async def test_find_user_by_name():
     """find_user with field='name' splits into firstname+lastname criteria."""
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "find_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "find_user")
 
     resp = _mock_response(
         {
@@ -2494,8 +2588,8 @@ async def test_find_user_by_name():
 @pytest.mark.asyncio
 async def test_find_user_by_firstname():
     """find_user with field='firstname' uses search_users."""
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "find_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "find_user")
 
     resp = _mock_response(
         {
@@ -2521,8 +2615,8 @@ async def test_find_user_by_firstname():
 @pytest.mark.asyncio
 async def test_find_user_unsupported_field():
     """find_user with an unsupported field returns an error."""
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "find_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "find_user")
 
     result = json.loads(await fn("phone", "1234"))
 
@@ -2533,8 +2627,8 @@ async def test_find_user_unsupported_field():
 @pytest.mark.asyncio
 async def test_find_user_by_name_error():
     """find_user with field='name' returns error on API failure."""
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "find_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "find_user")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2552,8 +2646,8 @@ async def test_find_user_by_name_error():
 
 @pytest.mark.asyncio
 async def test_list_reports_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_reports")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_reports")
 
     resp = _mock_response(
         {
@@ -2580,8 +2674,8 @@ async def test_list_reports_tool():
 
 @pytest.mark.asyncio
 async def test_list_reports_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_reports")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_reports")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2594,8 +2688,8 @@ async def test_list_reports_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_report_data_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_report_data")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_report_data")
 
     resp = _mock_response(
         {
@@ -2626,8 +2720,8 @@ async def test_get_report_data_tool():
 
 @pytest.mark.asyncio
 async def test_get_report_data_tool_strips_none_values():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_report_data")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_report_data")
 
     resp = _mock_response(
         {
@@ -2654,8 +2748,8 @@ async def test_get_report_data_tool_strips_none_values():
 
 @pytest.mark.asyncio
 async def test_get_report_data_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_report_data")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_report_data")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2668,8 +2762,8 @@ async def test_get_report_data_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_utm_report_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_utm_report")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_utm_report")
 
     resp = _mock_response(
         {
@@ -2698,8 +2792,8 @@ async def test_get_utm_report_tool():
 
 @pytest.mark.asyncio
 async def test_get_utm_report_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_utm_report")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_utm_report")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2712,8 +2806,8 @@ async def test_get_utm_report_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_adv_comp_report_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_adv_comp_report")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_adv_comp_report")
 
     resp = _mock_response(
         {
@@ -2743,8 +2837,8 @@ async def test_get_adv_comp_report_tool():
 
 @pytest.mark.asyncio
 async def test_get_adv_comp_report_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_adv_comp_report")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_adv_comp_report")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2762,8 +2856,8 @@ async def test_get_adv_comp_report_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_potential_parent_departments_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_potential_parent_departments")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_potential_parent_departments")
 
     resp = _mock_response(
         [{"id": 1, "name": "Root", "path": "/Root", "locked": 0}]
@@ -2777,8 +2871,8 @@ async def test_get_potential_parent_departments_tool():
 
 @pytest.mark.asyncio
 async def test_get_potential_parent_departments_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_potential_parent_departments")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_potential_parent_departments")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2791,8 +2885,8 @@ async def test_get_potential_parent_departments_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_potential_parent_positions_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_potential_parent_positions")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_potential_parent_positions")
 
     resp = _mock_response(
         [{"id": 1, "name": "Management", "path": "/Mgmt", "locked": 0}]
@@ -2806,8 +2900,8 @@ async def test_get_potential_parent_positions_tool():
 
 @pytest.mark.asyncio
 async def test_get_potential_parent_positions_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_potential_parent_positions")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_potential_parent_positions")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2820,8 +2914,8 @@ async def test_get_potential_parent_positions_tool_error():
 
 @pytest.mark.asyncio
 async def test_create_department_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_department")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_department")
 
     result = json.loads(await fn(name="Finance", idnumber="FIN"))
 
@@ -2831,8 +2925,8 @@ async def test_create_department_tool_preview():
 
 @pytest.mark.asyncio
 async def test_create_department_tool_preview_with_optional():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_department")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_department")
 
     result = json.loads(
         await fn(name="Security", parent="ENG", description="Sec team")
@@ -2844,8 +2938,8 @@ async def test_create_department_tool_preview_with_optional():
 
 @pytest.mark.asyncio
 async def test_create_department_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_department")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_department")
 
     resp = _mock_response(
         {"result": [{"id": 10, "name": "Finance", "idnumber": "FIN"}], "warnings": []}
@@ -2859,8 +2953,8 @@ async def test_create_department_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_create_department_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_department")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_department")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2873,8 +2967,8 @@ async def test_create_department_tool_error():
 
 @pytest.mark.asyncio
 async def test_update_department_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_department")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_department")
 
     result = json.loads(await fn(idnumber="FIN", name="Finance Dept"))
 
@@ -2884,8 +2978,8 @@ async def test_update_department_tool_preview():
 
 @pytest.mark.asyncio
 async def test_update_department_tool_preview_with_optional():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_department")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_department")
 
     result = json.loads(
         await fn(idnumber="FIN", parent="ROOT", description="Updated")
@@ -2897,8 +2991,8 @@ async def test_update_department_tool_preview_with_optional():
 
 @pytest.mark.asyncio
 async def test_update_department_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_department")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_department")
 
     resp = _mock_response(
         {"result": [{"id": 10, "idnumber": "FIN"}], "warnings": []}
@@ -2912,8 +3006,8 @@ async def test_update_department_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_update_department_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_department")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_department")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2926,8 +3020,8 @@ async def test_update_department_tool_error():
 
 @pytest.mark.asyncio
 async def test_delete_department_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_department")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_department")
 
     result = json.loads(await fn(department_id=10))
 
@@ -2936,8 +3030,8 @@ async def test_delete_department_tool_preview():
 
 @pytest.mark.asyncio
 async def test_delete_department_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_department")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_department")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -2948,8 +3042,8 @@ async def test_delete_department_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_delete_department_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_department")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_department")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -2962,8 +3056,8 @@ async def test_delete_department_tool_error():
 
 @pytest.mark.asyncio
 async def test_create_position_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_position")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_position")
 
     result = json.loads(await fn(name="Engineer", idnumber="ENG"))
 
@@ -2973,8 +3067,8 @@ async def test_create_position_tool_preview():
 
 @pytest.mark.asyncio
 async def test_create_position_tool_preview_with_optional():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_position")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_position")
 
     result = json.loads(
         await fn(name="Analyst", parent="MGMT", description="Data team")
@@ -2986,8 +3080,8 @@ async def test_create_position_tool_preview_with_optional():
 
 @pytest.mark.asyncio
 async def test_create_position_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_position")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_position")
 
     resp = _mock_response(
         {"result": [{"id": 5, "name": "Engineer", "idnumber": "ENG"}], "warnings": []}
@@ -3001,8 +3095,8 @@ async def test_create_position_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_create_position_tool_with_flags():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_position")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_position")
 
     resp = _mock_response(
         {"result": [{"id": 6, "name": "Lead", "idnumber": "LEAD"}], "warnings": []}
@@ -3023,8 +3117,8 @@ async def test_create_position_tool_with_flags():
 
 @pytest.mark.asyncio
 async def test_create_position_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_position")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_position")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3037,8 +3131,8 @@ async def test_create_position_tool_error():
 
 @pytest.mark.asyncio
 async def test_update_position_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_position")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_position")
 
     result = json.loads(await fn(idnumber="ENG", name="Senior Engineer"))
 
@@ -3048,8 +3142,8 @@ async def test_update_position_tool_preview():
 
 @pytest.mark.asyncio
 async def test_update_position_tool_preview_with_optional():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_position")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_position")
 
     result = json.loads(
         await fn(idnumber="ENG", parent="MGMT", description="Updated")
@@ -3061,8 +3155,8 @@ async def test_update_position_tool_preview_with_optional():
 
 @pytest.mark.asyncio
 async def test_update_position_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_position")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_position")
 
     resp = _mock_response(
         {"result": [{"id": 5, "idnumber": "ENG"}], "warnings": []}
@@ -3075,8 +3169,8 @@ async def test_update_position_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_update_position_tool_with_flags():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_position")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_position")
 
     resp = _mock_response(
         {"result": [{"id": 5, "idnumber": "ENG"}], "warnings": []}
@@ -3091,8 +3185,8 @@ async def test_update_position_tool_with_flags():
 
 @pytest.mark.asyncio
 async def test_update_position_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_position")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_position")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3105,8 +3199,8 @@ async def test_update_position_tool_error():
 
 @pytest.mark.asyncio
 async def test_delete_position_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_position")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_position")
 
     result = json.loads(await fn(position_id=5))
 
@@ -3115,8 +3209,8 @@ async def test_delete_position_tool_preview():
 
 @pytest.mark.asyncio
 async def test_delete_position_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_position")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_position")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -3127,8 +3221,8 @@ async def test_delete_position_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_delete_position_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_position")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_position")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3141,8 +3235,8 @@ async def test_delete_position_tool_error():
 
 @pytest.mark.asyncio
 async def test_delete_job_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_job")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_job")
 
     result = json.loads(await fn(job_id=42))
 
@@ -3151,8 +3245,8 @@ async def test_delete_job_tool_preview():
 
 @pytest.mark.asyncio
 async def test_delete_job_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_job")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_job")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -3163,8 +3257,8 @@ async def test_delete_job_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_delete_job_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_job")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_job")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3177,8 +3271,8 @@ async def test_delete_job_tool_error():
 
 @pytest.mark.asyncio
 async def test_unassign_manager_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "unassign_manager")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "unassign_manager")
 
     result = json.loads(await fn(userids="3", managerids="5"))
 
@@ -3187,8 +3281,8 @@ async def test_unassign_manager_tool_preview():
 
 @pytest.mark.asyncio
 async def test_unassign_manager_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "unassign_manager")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "unassign_manager")
 
     resp = _mock_response(
         {"warnings": [], "unassignedmanagers": [{"itemid": 1, "userid": 3, "managerid": 5}]}
@@ -3201,8 +3295,8 @@ async def test_unassign_manager_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_unassign_manager_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "unassign_manager")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "unassign_manager")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3215,8 +3309,8 @@ async def test_unassign_manager_tool_error():
 
 @pytest.mark.asyncio
 async def test_unassign_manager_tool_non_numeric():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "unassign_manager")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "unassign_manager")
 
     result = json.loads(await fn(userids="abc", managerids="5"))
 
@@ -3230,8 +3324,8 @@ async def test_unassign_manager_tool_non_numeric():
 
 @pytest.mark.asyncio
 async def test_archive_program_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "archive_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_program")
 
     result = json.loads(await fn(program_id=7))
 
@@ -3241,8 +3335,8 @@ async def test_archive_program_tool_preview():
 
 @pytest.mark.asyncio
 async def test_archive_program_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "archive_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_program")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -3253,8 +3347,8 @@ async def test_archive_program_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_archive_program_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "archive_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_program")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3267,8 +3361,8 @@ async def test_archive_program_tool_error():
 
 @pytest.mark.asyncio
 async def test_restore_program_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "restore_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "restore_program")
 
     result = json.loads(await fn(program_id=7))
 
@@ -3278,8 +3372,8 @@ async def test_restore_program_tool_preview():
 
 @pytest.mark.asyncio
 async def test_restore_program_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "restore_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "restore_program")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -3290,8 +3384,8 @@ async def test_restore_program_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_restore_program_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "restore_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "restore_program")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3304,8 +3398,8 @@ async def test_restore_program_tool_error():
 
 @pytest.mark.asyncio
 async def test_delete_program_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_program")
 
     result = json.loads(await fn(program_id=7))
 
@@ -3315,8 +3409,8 @@ async def test_delete_program_tool_preview():
 
 @pytest.mark.asyncio
 async def test_delete_program_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_program")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -3327,8 +3421,8 @@ async def test_delete_program_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_delete_program_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_program")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3341,8 +3435,8 @@ async def test_delete_program_tool_error():
 
 @pytest.mark.asyncio
 async def test_duplicate_program_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "duplicate_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "duplicate_program")
 
     result = json.loads(await fn(program_id=7))
 
@@ -3352,8 +3446,8 @@ async def test_duplicate_program_tool_preview():
 
 @pytest.mark.asyncio
 async def test_duplicate_program_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "duplicate_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "duplicate_program")
 
     resp = _mock_response(
         {"duplicatedprogramid": 99, "redirecturl": "/program/view.php?id=99"}
@@ -3367,8 +3461,8 @@ async def test_duplicate_program_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_duplicate_program_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "duplicate_program")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "duplicate_program")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3381,8 +3475,8 @@ async def test_duplicate_program_tool_error():
 
 @pytest.mark.asyncio
 async def test_update_program_visibility_tool_preview_visible():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_program_visibility")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_program_visibility")
 
     result = json.loads(await fn(program_id=7, visible=1))
 
@@ -3392,8 +3486,8 @@ async def test_update_program_visibility_tool_preview_visible():
 
 @pytest.mark.asyncio
 async def test_update_program_visibility_tool_preview_hidden():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_program_visibility")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_program_visibility")
 
     result = json.loads(await fn(program_id=7, visible=0))
 
@@ -3403,8 +3497,8 @@ async def test_update_program_visibility_tool_preview_hidden():
 
 @pytest.mark.asyncio
 async def test_update_program_visibility_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_program_visibility")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_program_visibility")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -3415,8 +3509,8 @@ async def test_update_program_visibility_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_update_program_visibility_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_program_visibility")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_program_visibility")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3429,8 +3523,8 @@ async def test_update_program_visibility_tool_error():
 
 @pytest.mark.asyncio
 async def test_bulk_deallocate_program_users_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "bulk_deallocate_program_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "bulk_deallocate_program_users")
 
     result = json.loads(await fn(allocation_ids="10,20"))
 
@@ -3440,8 +3534,8 @@ async def test_bulk_deallocate_program_users_tool_preview():
 
 @pytest.mark.asyncio
 async def test_bulk_deallocate_program_users_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "bulk_deallocate_program_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "bulk_deallocate_program_users")
 
     resp = _mock_response({"successcount": 2, "skippedcount": 0})
     with _patch_httpx(resp):
@@ -3453,8 +3547,8 @@ async def test_bulk_deallocate_program_users_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_bulk_deallocate_program_users_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "bulk_deallocate_program_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "bulk_deallocate_program_users")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3467,8 +3561,8 @@ async def test_bulk_deallocate_program_users_tool_error():
 
 @pytest.mark.asyncio
 async def test_bulk_deallocate_program_users_tool_non_numeric():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "bulk_deallocate_program_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "bulk_deallocate_program_users")
 
     result = json.loads(await fn(allocation_ids="abc,20"))
 
@@ -3477,8 +3571,8 @@ async def test_bulk_deallocate_program_users_tool_non_numeric():
 
 @pytest.mark.asyncio
 async def test_bulk_reset_program_progress_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "bulk_reset_program_progress")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "bulk_reset_program_progress")
 
     result = json.loads(await fn(allocation_ids="10,20"))
 
@@ -3488,8 +3582,8 @@ async def test_bulk_reset_program_progress_tool_preview():
 
 @pytest.mark.asyncio
 async def test_bulk_reset_program_progress_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "bulk_reset_program_progress")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "bulk_reset_program_progress")
 
     resp = _mock_response({"successcount": 2, "skippedcount": 0})
     with _patch_httpx(resp):
@@ -3501,8 +3595,8 @@ async def test_bulk_reset_program_progress_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_bulk_reset_program_progress_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "bulk_reset_program_progress")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "bulk_reset_program_progress")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3515,8 +3609,8 @@ async def test_bulk_reset_program_progress_tool_error():
 
 @pytest.mark.asyncio
 async def test_bulk_reset_program_progress_tool_non_numeric():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "bulk_reset_program_progress")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "bulk_reset_program_progress")
 
     result = json.loads(await fn(allocation_ids="abc,20"))
 
@@ -3525,8 +3619,8 @@ async def test_bulk_reset_program_progress_tool_non_numeric():
 
 @pytest.mark.asyncio
 async def test_delete_certification_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_certification")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_certification")
 
     result = json.loads(await fn(certification_id=3))
 
@@ -3536,8 +3630,8 @@ async def test_delete_certification_tool_preview():
 
 @pytest.mark.asyncio
 async def test_delete_certification_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_certification")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_certification")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -3548,8 +3642,8 @@ async def test_delete_certification_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_delete_certification_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_certification")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_certification")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3562,8 +3656,8 @@ async def test_delete_certification_tool_error():
 
 @pytest.mark.asyncio
 async def test_restore_certification_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "restore_certification")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "restore_certification")
 
     result = json.loads(await fn(certification_id=3))
 
@@ -3573,8 +3667,8 @@ async def test_restore_certification_tool_preview():
 
 @pytest.mark.asyncio
 async def test_restore_certification_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "restore_certification")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "restore_certification")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -3585,8 +3679,8 @@ async def test_restore_certification_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_restore_certification_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "restore_certification")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "restore_certification")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3599,8 +3693,8 @@ async def test_restore_certification_tool_error():
 
 @pytest.mark.asyncio
 async def test_search_certifications_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "search_certifications")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "search_certifications")
 
     resp = _mock_response([{"id": 1, "fullname": "Safety Cert"}])
     with _patch_httpx(resp):
@@ -3613,8 +3707,8 @@ async def test_search_certifications_tool():
 
 @pytest.mark.asyncio
 async def test_search_certifications_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "search_certifications")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "search_certifications")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3627,8 +3721,8 @@ async def test_search_certifications_tool_error():
 
 @pytest.mark.asyncio
 async def test_bulk_deallocate_certification_users_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "bulk_deallocate_certification_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "bulk_deallocate_certification_users")
 
     result = json.loads(await fn(allocation_ids="10,20"))
 
@@ -3638,8 +3732,8 @@ async def test_bulk_deallocate_certification_users_tool_preview():
 
 @pytest.mark.asyncio
 async def test_bulk_deallocate_certification_users_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "bulk_deallocate_certification_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "bulk_deallocate_certification_users")
 
     resp = _mock_response({"successcount": 2, "skippedcount": 0})
     with _patch_httpx(resp):
@@ -3651,8 +3745,8 @@ async def test_bulk_deallocate_certification_users_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_bulk_deallocate_certification_users_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "bulk_deallocate_certification_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "bulk_deallocate_certification_users")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3665,8 +3759,8 @@ async def test_bulk_deallocate_certification_users_tool_error():
 
 @pytest.mark.asyncio
 async def test_bulk_deallocate_certification_users_tool_non_numeric():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "bulk_deallocate_certification_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "bulk_deallocate_certification_users")
 
     result = json.loads(await fn(allocation_ids="abc,20"))
 
@@ -3680,8 +3774,8 @@ async def test_bulk_deallocate_certification_users_tool_non_numeric():
 
 @pytest.mark.asyncio
 async def test_list_dynamic_rules_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_dynamic_rules")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_dynamic_rules")
 
     resp = _mock_response(
         {
@@ -3713,8 +3807,8 @@ async def test_list_dynamic_rules_tool():
 
 @pytest.mark.asyncio
 async def test_list_dynamic_rules_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_dynamic_rules")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_dynamic_rules")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3728,8 +3822,8 @@ async def test_list_dynamic_rules_tool_error():
 @pytest.mark.asyncio
 async def test_enable_rule_tool_by_name():
     """Test that enable_rule resolves rule_name to rule_id."""
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "enable_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "enable_rule")
 
     # First call: list_dynamic_rules (for name resolution)
     list_resp = _mock_response(
@@ -3762,8 +3856,8 @@ async def test_enable_rule_tool_by_name():
 
 @pytest.mark.asyncio
 async def test_enable_rule_tool_name_not_found():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "enable_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "enable_rule")
 
     list_resp = _mock_response(
         {
@@ -3781,8 +3875,8 @@ async def test_enable_rule_tool_name_not_found():
 @pytest.mark.asyncio
 async def test_enable_rule_tool_no_id_or_name():
     """Neither rule_id nor rule_name provided."""
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "enable_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "enable_rule")
 
     result = json.loads(await fn())
 
@@ -3793,8 +3887,8 @@ async def test_enable_rule_tool_no_id_or_name():
 @pytest.mark.asyncio
 async def test_enable_rule_tool_ambiguous_name():
     """Multiple rules match the name."""
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "enable_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "enable_rule")
 
     list_resp = _mock_response(
         {
@@ -3836,8 +3930,8 @@ async def test_enable_rule_tool_ambiguous_name():
 @pytest.mark.asyncio
 async def test_enable_rule_tool_name_resolve_api_error():
     """API error during name resolution."""
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "enable_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "enable_rule")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -3850,8 +3944,8 @@ async def test_enable_rule_tool_name_resolve_api_error():
 
 @pytest.mark.asyncio
 async def test_disable_rule_tool_by_name():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "disable_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "disable_rule")
 
     list_resp = _mock_response(
         {
@@ -3882,8 +3976,8 @@ async def test_disable_rule_tool_by_name():
 
 @pytest.mark.asyncio
 async def test_can_enable_rule_tool_by_name():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "can_enable_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "can_enable_rule")
 
     list_resp = _mock_response(
         {
@@ -3918,8 +4012,8 @@ async def test_can_enable_rule_tool_by_name():
 
 @pytest.mark.asyncio
 async def test_archive_rule_tool_by_name():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "archive_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_rule")
 
     list_resp = _mock_response(
         {
@@ -3950,8 +4044,8 @@ async def test_archive_rule_tool_by_name():
 
 @pytest.mark.asyncio
 async def test_duplicate_rule_tool_by_name():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "duplicate_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "duplicate_rule")
 
     list_resp = _mock_response(
         {
@@ -3982,8 +4076,8 @@ async def test_duplicate_rule_tool_by_name():
 
 @pytest.mark.asyncio
 async def test_get_rule_matching_users_tool_by_name():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_rule_matching_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_rule_matching_users")
 
     list_resp = _mock_response(
         {
@@ -4017,8 +4111,8 @@ async def test_get_rule_matching_users_tool_by_name():
 
 @pytest.mark.asyncio
 async def test_get_rule_matched_users_tool_by_name():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_rule_matched_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_rule_matched_users")
 
     list_resp = _mock_response(
         {
@@ -4048,8 +4142,8 @@ async def test_get_rule_matched_users_tool_by_name():
 
 @pytest.mark.asyncio
 async def test_delete_rule_tool_by_name():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_rule")
 
     list_resp = _mock_response(
         {
@@ -4080,8 +4174,8 @@ async def test_delete_rule_tool_by_name():
 
 @pytest.mark.asyncio
 async def test_unarchive_rule_tool_by_name():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "unarchive_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "unarchive_rule")
 
     list_resp = _mock_response(
         {
@@ -4112,8 +4206,8 @@ async def test_unarchive_rule_tool_by_name():
 
 @pytest.mark.asyncio
 async def test_can_enable_rule_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "can_enable_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "can_enable_rule")
 
     resp = _mock_response({"result": True})
     with _patch_httpx(resp):
@@ -4124,8 +4218,8 @@ async def test_can_enable_rule_tool():
 
 @pytest.mark.asyncio
 async def test_can_enable_rule_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "can_enable_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "can_enable_rule")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4138,8 +4232,8 @@ async def test_can_enable_rule_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_rule_matching_users_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_rule_matching_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_rule_matching_users")
 
     resp = _mock_response(42)
     with _patch_httpx(resp):
@@ -4150,8 +4244,8 @@ async def test_get_rule_matching_users_tool():
 
 @pytest.mark.asyncio
 async def test_get_rule_matching_users_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_rule_matching_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_rule_matching_users")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4164,8 +4258,8 @@ async def test_get_rule_matching_users_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_rule_matched_users_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_rule_matched_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_rule_matched_users")
 
     resp = _mock_response(7)
     with _patch_httpx(resp):
@@ -4176,8 +4270,8 @@ async def test_get_rule_matched_users_tool():
 
 @pytest.mark.asyncio
 async def test_get_rule_matched_users_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_rule_matched_users")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_rule_matched_users")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4190,8 +4284,8 @@ async def test_get_rule_matched_users_tool_error():
 
 @pytest.mark.asyncio
 async def test_search_cohorts_for_rule_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "search_cohorts_for_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "search_cohorts_for_rule")
 
     resp = _mock_response(
         [{"id": 1, "name": "Engineering"}, {"id": 2, "name": "Operations"}]
@@ -4205,8 +4299,8 @@ async def test_search_cohorts_for_rule_tool():
 
 @pytest.mark.asyncio
 async def test_search_cohorts_for_rule_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "search_cohorts_for_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "search_cohorts_for_rule")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4219,8 +4313,8 @@ async def test_search_cohorts_for_rule_tool_error():
 
 @pytest.mark.asyncio
 async def test_search_competencies_for_rule_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "search_competencies_for_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "search_competencies_for_rule")
 
     resp = _mock_response(
         [{"id": 10, "shortname": "Leadership"}, {"id": 11, "shortname": "Communication"}]
@@ -4234,8 +4328,8 @@ async def test_search_competencies_for_rule_tool():
 
 @pytest.mark.asyncio
 async def test_search_competencies_for_rule_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "search_competencies_for_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "search_competencies_for_rule")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4248,8 +4342,8 @@ async def test_search_competencies_for_rule_tool_error():
 
 @pytest.mark.asyncio
 async def test_enable_rule_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "enable_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "enable_rule")
 
     result = json.loads(await fn(rule_id=5))
 
@@ -4259,8 +4353,8 @@ async def test_enable_rule_tool_preview():
 
 @pytest.mark.asyncio
 async def test_enable_rule_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "enable_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "enable_rule")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -4271,8 +4365,8 @@ async def test_enable_rule_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_enable_rule_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "enable_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "enable_rule")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4285,8 +4379,8 @@ async def test_enable_rule_tool_error():
 
 @pytest.mark.asyncio
 async def test_disable_rule_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "disable_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "disable_rule")
 
     result = json.loads(await fn(rule_id=5))
 
@@ -4296,8 +4390,8 @@ async def test_disable_rule_tool_preview():
 
 @pytest.mark.asyncio
 async def test_disable_rule_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "disable_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "disable_rule")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -4308,8 +4402,8 @@ async def test_disable_rule_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_disable_rule_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "disable_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "disable_rule")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4322,8 +4416,8 @@ async def test_disable_rule_tool_error():
 
 @pytest.mark.asyncio
 async def test_archive_rule_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "archive_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_rule")
 
     result = json.loads(await fn(rule_id=5))
 
@@ -4333,8 +4427,8 @@ async def test_archive_rule_tool_preview():
 
 @pytest.mark.asyncio
 async def test_archive_rule_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "archive_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_rule")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -4345,8 +4439,8 @@ async def test_archive_rule_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_archive_rule_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "archive_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_rule")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4359,8 +4453,8 @@ async def test_archive_rule_tool_error():
 
 @pytest.mark.asyncio
 async def test_unarchive_rule_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "unarchive_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "unarchive_rule")
 
     result = json.loads(await fn(rule_id=5))
 
@@ -4370,8 +4464,8 @@ async def test_unarchive_rule_tool_preview():
 
 @pytest.mark.asyncio
 async def test_unarchive_rule_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "unarchive_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "unarchive_rule")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -4382,8 +4476,8 @@ async def test_unarchive_rule_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_unarchive_rule_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "unarchive_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "unarchive_rule")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4396,8 +4490,8 @@ async def test_unarchive_rule_tool_error():
 
 @pytest.mark.asyncio
 async def test_delete_rule_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_rule")
 
     result = json.loads(await fn(rule_id=5))
 
@@ -4407,8 +4501,8 @@ async def test_delete_rule_tool_preview():
 
 @pytest.mark.asyncio
 async def test_delete_rule_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_rule")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -4419,8 +4513,8 @@ async def test_delete_rule_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_delete_rule_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_rule")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4433,8 +4527,8 @@ async def test_delete_rule_tool_error():
 
 @pytest.mark.asyncio
 async def test_duplicate_rule_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "duplicate_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "duplicate_rule")
 
     result = json.loads(await fn(rule_id=5))
 
@@ -4444,8 +4538,8 @@ async def test_duplicate_rule_tool_preview():
 
 @pytest.mark.asyncio
 async def test_duplicate_rule_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "duplicate_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "duplicate_rule")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -4456,8 +4550,8 @@ async def test_duplicate_rule_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_duplicate_rule_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "duplicate_rule")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "duplicate_rule")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4470,8 +4564,8 @@ async def test_duplicate_rule_tool_error():
 
 @pytest.mark.asyncio
 async def test_delete_rule_condition_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_rule_condition")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_rule_condition")
 
     result = json.loads(await fn(instanceid=10))
 
@@ -4481,8 +4575,8 @@ async def test_delete_rule_condition_tool_preview():
 
 @pytest.mark.asyncio
 async def test_delete_rule_condition_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_rule_condition")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_rule_condition")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -4493,8 +4587,8 @@ async def test_delete_rule_condition_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_delete_rule_condition_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_rule_condition")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_rule_condition")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4507,8 +4601,8 @@ async def test_delete_rule_condition_tool_error():
 
 @pytest.mark.asyncio
 async def test_delete_rule_outcome_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_rule_outcome")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_rule_outcome")
 
     result = json.loads(await fn(instanceid=10))
 
@@ -4518,8 +4612,8 @@ async def test_delete_rule_outcome_tool_preview():
 
 @pytest.mark.asyncio
 async def test_delete_rule_outcome_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_rule_outcome")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_rule_outcome")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -4530,8 +4624,8 @@ async def test_delete_rule_outcome_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_delete_rule_outcome_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_rule_outcome")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_rule_outcome")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4567,8 +4661,8 @@ _EMPTY_RULES_RESP = {
     ],
 )
 async def test_rule_tool_name_not_found(tool_name):
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, tool_name)
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, tool_name)
 
     with _patch_httpx(_mock_response(_EMPTY_RULES_RESP)):
         result = json.loads(await fn(rule_name="Nonexistent"))
@@ -4583,8 +4677,8 @@ async def test_rule_tool_name_not_found(tool_name):
 
 @pytest.mark.asyncio
 async def test_create_user_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_user")
 
     result = json.loads(
         await fn(
@@ -4601,8 +4695,8 @@ async def test_create_user_tool_preview():
 
 @pytest.mark.asyncio
 async def test_create_user_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_user")
 
     resp = _mock_response([{"id": 10, "username": "jdoe"}])
     with _patch_httpx(resp):
@@ -4622,8 +4716,8 @@ async def test_create_user_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_create_user_tool_with_password():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_user")
 
     resp = _mock_response([{"id": 11, "username": "jdoe2"}])
     with _patch_httpx(resp):
@@ -4643,8 +4737,8 @@ async def test_create_user_tool_with_password():
 
 @pytest.mark.asyncio
 async def test_create_user_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_user")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4662,8 +4756,8 @@ async def test_create_user_tool_error():
 
 @pytest.mark.asyncio
 async def test_update_user_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_user")
 
     result = json.loads(await fn(userid="5", department="Engineering"))
 
@@ -4673,8 +4767,8 @@ async def test_update_user_tool_preview():
 
 @pytest.mark.asyncio
 async def test_update_user_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_user")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -4688,8 +4782,8 @@ async def test_update_user_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_update_user_tool_no_fields():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_user")
 
     result = json.loads(await fn(userid="5"))
 
@@ -4698,8 +4792,8 @@ async def test_update_user_tool_no_fields():
 
 @pytest.mark.asyncio
 async def test_update_user_tool_bad_id():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_user")
 
     result = json.loads(await fn(userid="abc", department="Eng"))
 
@@ -4708,8 +4802,8 @@ async def test_update_user_tool_bad_id():
 
 @pytest.mark.asyncio
 async def test_update_user_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_user")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4724,8 +4818,8 @@ async def test_update_user_tool_error():
 
 @pytest.mark.asyncio
 async def test_delete_user_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_user")
 
     result = json.loads(await fn(userid="5"))
 
@@ -4735,8 +4829,8 @@ async def test_delete_user_tool_preview():
 
 @pytest.mark.asyncio
 async def test_delete_user_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_user")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -4748,8 +4842,8 @@ async def test_delete_user_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_delete_user_tool_bad_id():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_user")
 
     result = json.loads(await fn(userid="abc"))
 
@@ -4758,8 +4852,8 @@ async def test_delete_user_tool_bad_id():
 
 @pytest.mark.asyncio
 async def test_delete_user_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_user")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4772,8 +4866,8 @@ async def test_delete_user_tool_error():
 
 @pytest.mark.asyncio
 async def test_unsuspend_user_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "unsuspend_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "unsuspend_user")
 
     result = json.loads(await fn(userid="5"))
 
@@ -4782,8 +4876,8 @@ async def test_unsuspend_user_tool_preview():
 
 @pytest.mark.asyncio
 async def test_unsuspend_user_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "unsuspend_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "unsuspend_user")
 
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -4795,8 +4889,8 @@ async def test_unsuspend_user_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_unsuspend_user_tool_bad_id():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "unsuspend_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "unsuspend_user")
 
     result = json.loads(await fn(userid="abc"))
 
@@ -4805,8 +4899,8 @@ async def test_unsuspend_user_tool_bad_id():
 
 @pytest.mark.asyncio
 async def test_unsuspend_user_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "unsuspend_user")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "unsuspend_user")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4824,8 +4918,8 @@ async def test_unsuspend_user_tool_error():
 
 @pytest.mark.asyncio
 async def test_list_categories_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_categories")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_categories")
 
     resp = _mock_response(
         [{"id": 1, "name": "Default", "parent": 0, "coursecount": 3,
@@ -4840,8 +4934,8 @@ async def test_list_categories_tool():
 
 @pytest.mark.asyncio
 async def test_list_categories_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "list_categories")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_categories")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4854,8 +4948,8 @@ async def test_list_categories_tool_error():
 
 @pytest.mark.asyncio
 async def test_create_category_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_category")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_category")
 
     result = json.loads(await fn(name="Test Cat"))
 
@@ -4864,8 +4958,8 @@ async def test_create_category_tool_preview():
 
 @pytest.mark.asyncio
 async def test_create_category_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_category")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_category")
 
     resp = _mock_response([{"id": 5, "name": "Test Cat"}])
     with _patch_httpx(resp):
@@ -4878,8 +4972,8 @@ async def test_create_category_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_create_category_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_category")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_category")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4892,8 +4986,8 @@ async def test_create_category_tool_error():
 
 @pytest.mark.asyncio
 async def test_create_course_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_course")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_course")
 
     result = json.loads(
         await fn(fullname="Test Course", shortname="TC01", categoryid=1)
@@ -4904,8 +4998,8 @@ async def test_create_course_tool_preview():
 
 @pytest.mark.asyncio
 async def test_create_course_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_course")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_course")
 
     resp = _mock_response([{"id": 10, "shortname": "TC01"}])
     with _patch_httpx(resp):
@@ -4922,8 +5016,8 @@ async def test_create_course_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_create_course_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "create_course")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_course")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4938,8 +5032,8 @@ async def test_create_course_tool_error():
 
 @pytest.mark.asyncio
 async def test_update_course_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_course")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_course")
 
     result = json.loads(await fn(courseid=2, fullname="New Name"))
 
@@ -4948,8 +5042,8 @@ async def test_update_course_tool_preview():
 
 @pytest.mark.asyncio
 async def test_update_course_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_course")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_course")
 
     resp = _mock_response({"warnings": []})
     with _patch_httpx(resp):
@@ -4965,8 +5059,8 @@ async def test_update_course_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_update_course_tool_no_fields():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_course")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_course")
 
     result = json.loads(await fn(courseid=2))
 
@@ -4975,8 +5069,8 @@ async def test_update_course_tool_no_fields():
 
 @pytest.mark.asyncio
 async def test_update_course_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "update_course")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_course")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -4991,8 +5085,8 @@ async def test_update_course_tool_error():
 
 @pytest.mark.asyncio
 async def test_delete_course_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_course")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_course")
 
     result = json.loads(await fn(courseid=4))
 
@@ -5002,8 +5096,8 @@ async def test_delete_course_tool_preview():
 
 @pytest.mark.asyncio
 async def test_delete_course_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_course")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_course")
 
     resp = _mock_response({"warnings": []})
     with _patch_httpx(resp):
@@ -5015,8 +5109,8 @@ async def test_delete_course_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_delete_course_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_course")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_course")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -5029,8 +5123,8 @@ async def test_delete_course_tool_error():
 
 @pytest.mark.asyncio
 async def test_duplicate_course_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "duplicate_course")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "duplicate_course")
 
     result = json.loads(
         await fn(courseid=2, fullname="Copy", shortname="CP", categoryid=1)
@@ -5041,8 +5135,8 @@ async def test_duplicate_course_tool_preview():
 
 @pytest.mark.asyncio
 async def test_duplicate_course_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "duplicate_course")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "duplicate_course")
 
     resp = _mock_response({"id": 20, "shortname": "CP"})
     with _patch_httpx(resp):
@@ -5059,8 +5153,8 @@ async def test_duplicate_course_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_duplicate_course_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "duplicate_course")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "duplicate_course")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -5083,8 +5177,8 @@ async def test_duplicate_course_tool_error():
 
 @pytest.mark.asyncio
 async def test_export_workplace_data_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "export_workplace_data")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "export_workplace_data")
 
     result = json.loads(await fn(exporter="courses"))
 
@@ -5093,8 +5187,8 @@ async def test_export_workplace_data_tool_preview():
 
 @pytest.mark.asyncio
 async def test_export_workplace_data_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "export_workplace_data")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "export_workplace_data")
 
     resp = _mock_response({"jobid": 1})
     with _patch_httpx(resp):
@@ -5105,8 +5199,8 @@ async def test_export_workplace_data_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_export_workplace_data_tool_custom_exporter():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "export_workplace_data")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "export_workplace_data")
 
     resp = _mock_response({"jobid": 2})
     with _patch_httpx(resp):
@@ -5119,8 +5213,8 @@ async def test_export_workplace_data_tool_custom_exporter():
 
 @pytest.mark.asyncio
 async def test_export_workplace_data_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "export_workplace_data")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "export_workplace_data")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -5133,8 +5227,8 @@ async def test_export_workplace_data_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_export_status_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_export_status")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_export_status")
 
     resp = _mock_response(
         {"status": 2, "statusmessage": "Done", "progress": 100}
@@ -5147,8 +5241,8 @@ async def test_get_export_status_tool():
 
 @pytest.mark.asyncio
 async def test_get_export_status_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_export_status")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_export_status")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -5161,8 +5255,8 @@ async def test_get_export_status_tool_error():
 
 @pytest.mark.asyncio
 async def test_download_export_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "download_export")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "download_export")
 
     resp = _mock_response({"fileurl": "http://moodle.test/file.zip"})
     with _patch_httpx(resp):
@@ -5173,8 +5267,8 @@ async def test_download_export_tool():
 
 @pytest.mark.asyncio
 async def test_download_export_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "download_export")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "download_export")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -5187,8 +5281,8 @@ async def test_download_export_tool_error():
 
 @pytest.mark.asyncio
 async def test_import_workplace_data_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "import_workplace_data")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "import_workplace_data")
 
     result = json.loads(await fn())
 
@@ -5198,8 +5292,8 @@ async def test_import_workplace_data_tool_preview():
 
 @pytest.mark.asyncio
 async def test_import_workplace_data_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "import_workplace_data")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "import_workplace_data")
 
     resp = _mock_response({"jobid": 5})
     with _patch_httpx(resp):
@@ -5210,8 +5304,8 @@ async def test_import_workplace_data_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_import_workplace_data_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "import_workplace_data")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "import_workplace_data")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -5224,8 +5318,8 @@ async def test_import_workplace_data_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_import_status_tool():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_import_status")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_import_status")
 
     resp = _mock_response(
         {"status": 2, "statusmessage": "Done", "progress": 100}
@@ -5238,8 +5332,8 @@ async def test_get_import_status_tool():
 
 @pytest.mark.asyncio
 async def test_get_import_status_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "get_import_status")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_import_status")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -5252,8 +5346,8 @@ async def test_get_import_status_tool_error():
 
 @pytest.mark.asyncio
 async def test_delete_export_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_export")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_export")
 
     result = json.loads(await fn(export_id=1))
 
@@ -5262,8 +5356,8 @@ async def test_delete_export_tool_preview():
 
 @pytest.mark.asyncio
 async def test_delete_export_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_export")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_export")
 
     resp = _mock_response({"success": True})
     with _patch_httpx(resp):
@@ -5274,8 +5368,8 @@ async def test_delete_export_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_delete_export_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_export")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_export")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
@@ -5288,8 +5382,8 @@ async def test_delete_export_tool_error():
 
 @pytest.mark.asyncio
 async def test_delete_import_tool_preview():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_import")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_import")
 
     result = json.loads(await fn(import_id=1))
 
@@ -5298,8 +5392,8 @@ async def test_delete_import_tool_preview():
 
 @pytest.mark.asyncio
 async def test_delete_import_tool_confirmed():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_import")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_import")
 
     resp = _mock_response({"success": True})
     with _patch_httpx(resp):
@@ -5310,8 +5404,8 @@ async def test_delete_import_tool_confirmed():
 
 @pytest.mark.asyncio
 async def test_delete_import_tool_error():
-    agent = _build_agent()
-    fn = _get_tool_fn(agent, "delete_import")
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_import")
 
     resp = _mock_response(
         {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
