@@ -656,6 +656,7 @@ async def drive_llm_stream(
                     thread_id=thread_id,
                     user_name=user_name,
                     messages=messages,
+                    event_list=event_list,
                 )
 
 

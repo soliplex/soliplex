@@ -1191,6 +1191,7 @@ async def test_drive_llm_stream(
             thread_id=TEST_THREAD_ID_STR,
             user_name=USER_NAME,
             messages=messages,
+            event_list=expected,
         )
     else:
         maybe_gen_title.assert_not_awaited()

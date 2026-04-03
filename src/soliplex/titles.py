@@ -24,28 +24,44 @@ class ThreadTitle(pydantic.BaseModel):
     title: str | None = None
 
 
+def format_message(msg: agui_core.Message) -> str | None:
+    if msg.role not in ("user", "assistant"):
+        return None
+    content = msg.content
+    if content is None:
+        return None
+    if isinstance(content, list):
+        parts = [
+            part.text
+            for part in content
+            if isinstance(part, agui_core.TextInputContent)
+        ]
+        if not parts:
+            return None
+        content = "\n".join(parts)
+    return f"{msg.role}: {content}"
+
+
 def format_messages(messages: list[agui_core.Message]) -> str:
-    lines = []
-    for msg in messages:
-        if msg.role not in ("user", "assistant"):
-            continue
-        content = msg.content
-        if content is None:
-            continue
-        if isinstance(content, list):
-            parts = [
-                part.text
-                for part in content
-                if isinstance(part, agui_core.TextInputContent)
-            ]
-            content = "\n".join(parts)
-        lines.append(f"{msg.role}: {content}")
-    return "\n".join(lines)
+    return "\n".join(filter(None, map(format_message, messages)))
+
+
+def extract_assistant_text(
+    event_list: list[agui_core.Event],
+) -> str:
+    """Build assistant text from TEXT_MESSAGE_CONTENT events."""
+    parts = [
+        event.delta
+        for event in event_list
+        if event.type == agui_core.EventType.TEXT_MESSAGE_CONTENT
+    ]
+    return "".join(parts)
 
 
 async def generate_title(
     agent_config: config_agents.AgentConfig,
     messages: list[agui_core.Message],
+    assistant_text: str = "",
 ) -> str | None:
     model = agents.get_model_from_config(agent_config=agent_config)
     agent = pydantic_ai.Agent(
@@ -54,6 +70,8 @@ async def generate_title(
         instructions=TITLE_PROMPT,
     )
     formatted = format_messages(messages)
+    if assistant_text:
+        formatted += f"\nassistant: {assistant_text}"
     result = await agent.run(formatted)
     return result.output.title
 
@@ -66,6 +84,7 @@ async def maybe_generate_title(
     thread_id: str,
     user_name: str,
     messages: list[agui_core.Message],
+    event_list: list[agui_core.Event] = (),
 ):
     try:
         async with sqla_asyncio.AsyncSession(
@@ -85,7 +104,10 @@ async def maybe_generate_title(
         ):
             return
 
-        title = await generate_title(title_agent_config, messages)
+        assistant_text = extract_assistant_text(event_list)
+        title = await generate_title(
+            title_agent_config, messages, assistant_text
+        )
         if title is None:
             return
 
