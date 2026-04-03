@@ -1044,7 +1044,7 @@ wheels = [
 
 [[package]]
 name = "haiku-rag-slim"
-version = "0.36.2"
+version = "0.36.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cachetools" },
@@ -1064,9 +1064,9 @@ dependencies = [
     { name = "typer" },
     { name = "watchfiles" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/21/ee/eedcac0cc01fc24523f10679e0c9ac5d3caaa3af67ff649fc2fbe7bab5fa/haiku_rag_slim-0.36.2.tar.gz", hash = "sha256:066aabcb729a9314b0d993785801bbb571f19c51a44e821777c14194f49da5fb", size = 109855, upload-time = "2026-03-28T08:06:28.094Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/53/41/4420633913d013bcda499be3712d2d62d5d6f44aa273c78647002185eb5c/haiku_rag_slim-0.36.3.tar.gz", hash = "sha256:ec3fdb794fb41d31cf5a27dec619cb0ec3d2494b35bad268c6b9c3b4ed85e245", size = 110364, upload-time = "2026-04-01T10:33:54.302Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bf/72/6803e92a200c21ea245fe1f328645fe9753d62201fab05a56295723b0900/haiku_rag_slim-0.36.2-py3-none-any.whl", hash = "sha256:ccd44eac89e0597162085eb359e17ae4f9af48b9673abb89743f7c45d3814b09", size = 155447, upload-time = "2026-03-28T08:06:26.92Z" },
+    { url = "https://files.pythonhosted.org/packages/03/0e/c89ae33842487f42be10bdfa5c49387bb99edce6782d3c090b573210c0b1/haiku_rag_slim-0.36.3-py3-none-any.whl", hash = "sha256:50724fba956ed5167b17511cb29968a38266d55cb7e2ea5b5641f173f85ba6bf", size = 155669, upload-time = "2026-04-01T10:33:52.941Z" },
 ]
 
 [[package]]
@@ -3344,8 +3344,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography" },
-    { name = "jeepney" },
+    { name = "cryptography", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "jeepney", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [
@@ -3455,7 +3455,7 @@ requires-dist = [
     { name = "fastapi" },
     { name = "fastmcp", specifier = ">=2.14.0,<2.15" },
     { name = "greenlet" },
-    { name = "haiku-rag-slim", specifier = ">=0.36.2,<0.37" },
+    { name = "haiku-rag-slim", specifier = ">=0.36.3,<0.37" },
     { name = "haiku-skills", specifier = ">=0.13.0,<0.14" },
     { name = "itsdangerous" },
     { name = "jsonpatch" },
