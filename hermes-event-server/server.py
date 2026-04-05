@@ -50,6 +50,116 @@ os.environ["TERMINAL_ENV"] = os.environ.get(
 # Import model_tools early to populate the tool registry (tools self-register on import)
 import model_tools as _mt  # noqa: E402
 
+# Register Soliplex integration tools in Hermes registry
+from tools.registry import registry as _registry
+
+
+def _soliplex_list_rooms(**kwargs) -> str:
+    """List available Soliplex rooms."""
+    import json as _json
+    import requests as _requests
+    soliplex_url = os.environ.get("SOLIPLEX_URL", "http://host.docker.internal:8000/api")
+    try:
+        r = _requests.get(f"{soliplex_url}/v1/rooms", timeout=10)
+        rooms = r.json()
+        lines = []
+        for room_id, room_data in rooms.items():
+            if isinstance(room_data, dict):
+                name = room_data.get("name", room_id)
+                desc = room_data.get("description", "")
+                kind = room_data.get("agent", {}).get("kind", "default")
+                tools = list(room_data.get("tools", {}).keys())
+                line = f"- {room_id} [{kind}]: {name} — {desc}"
+                if tools:
+                    line += f"\n  tools: {', '.join(tools[:5])}"
+                lines.append(line)
+        return "\n".join(lines) or "No rooms found."
+    except Exception as e:
+        return _json.dumps({"error": str(e)})
+
+
+def _soliplex_ask_room(room_id: str = "", message: str = "", **kwargs) -> str:
+    """Send a message to another Soliplex room and get the response."""
+    import json as _json
+    import uuid as _uuid
+    import requests as _requests
+    soliplex_url = os.environ.get("SOLIPLEX_URL", "http://host.docker.internal:8000/api")
+    try:
+        # Create thread
+        r = _requests.post(f"{soliplex_url}/v1/rooms/{room_id}/agui", json={}, timeout=10)
+        if r.status_code != 200:
+            return f"Error: Cannot access room '{room_id}' (HTTP {r.status_code})"
+        data = r.json()
+        tid = data["thread_id"]
+        rid = list(data["runs"].keys())[0]
+
+        # Send run
+        body = {
+            "threadId": tid, "runId": rid, "state": {},
+            "messages": [{"id": str(_uuid.uuid4()), "role": "user", "content": message}],
+            "tools": [], "context": [], "forwardedProps": {},
+        }
+        r = _requests.post(
+            f"{soliplex_url}/v1/rooms/{room_id}/agui/{tid}/{rid}",
+            json=body, stream=True, timeout=120,
+        )
+
+        # Collect text from SSE
+        text_parts = []
+        tool_calls = []
+        for line in r.iter_lines(decode_unicode=True):
+            if not line or not line.startswith("data:"):
+                continue
+            d = line[6:].strip()
+            if d == "[DONE]":
+                break
+            try:
+                event = _json.loads(d)
+                etype = event.get("type", "")
+                if "TEXT_MESSAGE_CONTENT" in etype:
+                    text_parts.append(event.get("delta", ""))
+                elif "TOOL_CALL_START" in etype:
+                    tool_calls.append(event.get("toolCallName", ""))
+            except _json.JSONDecodeError:
+                pass
+
+        result = "".join(text_parts)
+        if tool_calls:
+            result += f"\n[Room '{room_id}' used: {', '.join(tool_calls)}]"
+        return result or f"Room '{room_id}' returned no response."
+    except Exception as e:
+        return _json.dumps({"error": str(e)})
+
+
+_registry.register(
+    name="soliplex_list_rooms",
+    toolset="soliplex",
+    schema={
+        "name": "soliplex_list_rooms",
+        "description": "List all available Soliplex rooms with their names, descriptions, and tools. Use this to discover what rooms exist.",
+        "parameters": {"type": "object", "properties": {}},
+    },
+    handler=lambda args, **kw: _soliplex_list_rooms(**args, **kw),
+)
+
+_registry.register(
+    name="soliplex_ask_room",
+    toolset="soliplex",
+    schema={
+        "name": "soliplex_ask_room",
+        "description": "Send a message to another Soliplex room's agent and get the response. Each room has its own agent and tools.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "room_id": {"type": "string", "description": "Target room ID (e.g. 'plain', 'search', 'chat')"},
+                "message": {"type": "string", "description": "Message to send to the room's agent"},
+            },
+            "required": ["room_id", "message"],
+        },
+    },
+    handler=lambda args, **kw: _soliplex_ask_room(**args, **kw),
+)
+
 app = FastAPI(title="Hermes Event Server", version="0.1.0")
 
 # Shared thread pool for agent execution
@@ -373,6 +483,30 @@ async def agent_run(request: RunRequest):
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "hermes-event-server"}
+
+
+@app.get("/v1/soliplex/rooms")
+async def soliplex_rooms():
+    """Proxy to Soliplex rooms API — lets Hermes discover rooms."""
+    import httpx as _httpx
+    soliplex_url = os.environ.get("SOLIPLEX_URL", "http://host.docker.internal:8000/api")
+    try:
+        async with _httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(f"{soliplex_url}/v1/rooms")
+            rooms = r.json()
+            summary = []
+            for room_id, room_data in rooms.items():
+                if isinstance(room_data, dict):
+                    summary.append({
+                        "id": room_id,
+                        "name": room_data.get("name", room_id),
+                        "description": room_data.get("description", ""),
+                        "agent_kind": room_data.get("agent", {}).get("kind", "default"),
+                        "tools": list(room_data.get("tools", {}).keys()),
+                    })
+            return {"rooms": summary, "count": len(summary)}
+    except Exception as e:
+        return {"error": str(e), "rooms": []}
 
 
 class ToolCallRequest(BaseModel):
