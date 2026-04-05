@@ -93,14 +93,54 @@ docker run -d \
 # Health check
 curl http://localhost:8642/health
 
-# List tools (should show 48+)
-curl http://localhost:8642/v1/agent/tools | python3 -c "import sys,json; print(json.load(sys.stdin)['tools'][:3])"
-
 # Send a message
 curl -N http://localhost:8642/v1/agent/run \
   -H "Content-Type: application/json" \
   -d '{"message": "Hello!", "config": {"max_iterations": 2}}'
 ```
+
+### 7. Discover what's available
+
+Before configuring a Hermes room, check what tools, skills, and memory
+are available on your instance:
+
+```bash
+# Which toolsets are available vs gated (need API keys)?
+curl -s http://localhost:8642/v1/agent/tools | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+s = d['summary']
+print(f'{s[\"available_tools\"]}/{s[\"total_tools\"]} tools available')
+print()
+print('Available toolsets (use these in hermes_toolsets):')
+for ts in s['available_toolsets']:
+    count = d['toolsets'][ts]['tool_count']
+    tools = ', '.join(t['name'] for t in d['toolsets'][ts]['tools'])
+    print(f'  {ts:20s} ({count}) {tools}')
+print()
+print('Gated toolsets (need API keys in .env):')
+for ts in s['gated_toolsets']:
+    count = d['toolsets'][ts]['tool_count']
+    print(f'  {ts:20s} ({count})')
+"
+
+# What skills does Hermes have? (74 bundled)
+curl -s http://localhost:8642/v1/agent/skills | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print(f'{d[\"count\"]} skills available:')
+for s in d['skills'][:10]:
+    print(f'  {s[\"name\"]:30s} {s[\"description\"][:50]}')
+if d['count'] > 10: print(f'  ... and {d[\"count\"]-10} more')
+"
+
+# What has the agent memorized?
+curl -s http://localhost:8642/v1/agent/memory | python3 -m json.tool
+```
+
+Use the available toolset names in your room config's `hermes_toolsets` list.
+Only toolsets that show as "available" will work — gated toolsets need their
+API keys added to `~/hermes-data/.env` first.
 
 ## API Endpoints
 
