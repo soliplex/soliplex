@@ -194,6 +194,66 @@ docker compose up -d
 
 See `docker-compose.yaml` for the full configuration with PostgreSQL and health checks.
 
+## Tool Availability
+
+Hermes has 48 tools across 19 toolsets. Some tools require specific
+environment variables or API keys to pass their availability checks.
+
+The event server automatically sets these context variables at startup:
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `HERMES_INTERACTIVE` | Unlocks cronjob tool | `1` |
+| `HERMES_GATEWAY_SESSION` | Unlocks gateway-dependent tools | `1` |
+| `TERMINAL_ENV` | Terminal backend (`local`, `docker`, `ssh`) | `local` |
+
+### Core toolsets (available by default)
+
+| Toolset | Tools | Notes |
+|---------|-------|-------|
+| `terminal` | terminal, process | Shell command execution |
+| `file` | read_file, write_file, search_files, patch | File operations |
+| `web` | web_search, web_extract | Requires `TAVILY_API_KEY` in .env |
+| `cronjob` | cronjob | Scheduled tasks |
+| `skills` | skill_manage, skill_view, skills_list | Skill CRUD |
+| `memory` | memory | Persistent agent memory |
+| `code_execution` | execute_code | Code sandbox |
+| `todo` | todo | Task tracking |
+| `delegation` | delegate_task | Subagent spawning |
+| `session_search` | session_search | Search past conversations |
+| `clarify` | clarify | Ask user for input |
+
+### Toolsets requiring additional API keys
+
+| Toolset | Requires | How to enable |
+|---------|----------|---------------|
+| `vision` | Vision API key | Add key to .env |
+| `image_gen` | fal.ai API key (`FAL_KEY`) | Add to .env |
+| `browser` | Browserbase keys | Add `BROWSERBASE_API_KEY` + `BROWSERBASE_PROJECT_ID` to .env |
+| `moa` | OpenRouter key | Add `OPENROUTER_API_KEY` to .env |
+| `homeassistant` | HA URL + token | Add `HA_BASE_URL` + `HA_TOKEN` to .env |
+| `tts` | (Edge TTS is free) | Available by default |
+| `rl` | Tinker + W&B keys | Specialized — add `TINKER_API_KEY` + `WANDB_API_KEY` |
+
+### Configuring per room
+
+Each Hermes room specifies which toolsets the agent can use:
+
+```yaml
+agent:
+  kind: hermes
+  hermes_toolsets:
+    - terminal
+    - file
+    - web
+    - cronjob
+    - skills
+    - memory
+```
+
+Tools not in the room's `hermes_toolsets` list are not available to the agent,
+even if their API keys are configured.
+
 ## Persistent Data
 
 Everything persists in `~/hermes-data/`:

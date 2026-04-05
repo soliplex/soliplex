@@ -37,6 +37,13 @@ if os.path.exists(_env_path):
     load_dotenv(_env_path, override=True)
     logger.info("Loaded env from %s", _env_path)
     logger.info("MINIMAX_API_KEY=%s...", os.environ.get("MINIMAX_API_KEY", "NOT SET")[:15])
+    logger.info("TAVILY_API_KEY=%s...", os.environ.get("TAVILY_API_KEY", "NOT SET")[:15])
+
+# Signal to Hermes tools that we're in an interactive/gateway context
+# and use local terminal (no Docker-in-Docker)
+os.environ.setdefault("HERMES_INTERACTIVE", "1")
+os.environ.setdefault("HERMES_GATEWAY_SESSION", "1")
+os.environ.setdefault("TERMINAL_ENV", "local")
 
 # Import model_tools early to populate the tool registry (tools self-register on import)
 import model_tools as _mt  # noqa: E402
