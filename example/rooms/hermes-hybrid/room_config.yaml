@@ -53,6 +53,7 @@ skills:
   installation_skill_names:
     - "soliplex-guide"
 
-  skill_configs:
-    - kind: "haiku.rag.skills.rag"
-      rag_lancedb_stem: "rag"
+  # RAG skill requires a seeded LanceDB — uncomment when db/rag/ exists:
+  # skill_configs:
+  #   - kind: "haiku.rag.skills.rag"
+  #     rag_lancedb_stem: "rag"
