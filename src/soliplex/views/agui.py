@@ -680,6 +680,7 @@ async def _hermes_agent_run(
     run_id: str,
     user_name: str,
     the_threads: agui_package.ThreadStorage,
+    the_installation: installation.Installation,
     sqla_engine,
 ) -> responses.StreamingResponse:
     """Execute an AGUI run via Hermes Event Server backend."""
@@ -790,6 +791,17 @@ async def _hermes_agent_run(
 
     event_queue = asyncio.Queue()
 
+    title_agent_config = the_installation.get_title_agent_config()
+
+    # Build AG-UI messages for title generation
+    agui_messages = [
+        agui_core.UserMessage(
+            role="user",
+            id=str(uuid.uuid4()),
+            content=user_message,
+        )
+    ]
+
     bg_tasks = request.app.state.agui_background_tasks
     task = asyncio.create_task(
         drive_llm_stream(
@@ -800,6 +812,8 @@ async def _hermes_agent_run(
             room_id=room_config.id,
             thread_id=thread_id,
             run_id=run_id,
+            title_agent_config=title_agent_config,
+            messages=agui_messages,
         )
     )
     bg_tasks.add(task)
@@ -867,6 +881,7 @@ async def post_room_agui_thread_id_run_id(
             run_id=run_id,
             user_name=user_name,
             the_threads=the_threads,
+            the_installation=the_installation,
             sqla_engine=request.state.threads_engine,
         )
 
