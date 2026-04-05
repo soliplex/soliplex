@@ -311,6 +311,12 @@ skill_configs:
   - skill_name: "soliplex-guide"
     kind: "filesystem"
 
+  - skill_name: "soliplex-api"
+    kind: "filesystem"
+
+  - skill_name: "soliplex-agui"
+    kind: "filesystem"
+
 # Requires installing 'haiku-skills-image-generation'
 # - skill_name: "image-generation"
 #   kind: "entrypoint"
