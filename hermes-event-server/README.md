@@ -29,10 +29,14 @@ docker run --rm -v ~/hermes-data:/opt/data hermes-agent:latest doctor
 ```
 
 This creates `~/hermes-data/` with:
-- `.env` — API keys (edit this)
+- `.env` — API keys (**you must edit this — see step 3**)
 - `config.yaml` — runtime configuration
 - `SOUL.md` — agent personality
 - `skills/` — 74 bundled skills
+
+> **Note:** The `.env` file is copied from `.env.example` with all keys blank.
+> You must configure at least one LLM provider before the event server will work.
+> If you skip this step, all agent requests will fail with HTTP 401.
 
 ### 3. Configure your LLM provider
 
