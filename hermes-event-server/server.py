@@ -43,9 +43,13 @@ if os.path.exists(_env_path):
 # and force local terminal (no Docker-in-Docker inside the container)
 os.environ["HERMES_INTERACTIVE"] = "1"
 os.environ["HERMES_GATEWAY_SESSION"] = "1"
-os.environ["TERMINAL_ENV"] = os.environ.get(
-    "HERMES_EVENT_SERVER_TERMINAL_ENV", "local"
+_terminal_env = os.environ.get(
+    "HERMES_EVENT_SERVER_TERMINAL_ENV",
+    "daytona" if os.environ.get("DAYTONA_API_KEY") else "local"
 )
+os.environ["TERMINAL_ENV"] = _terminal_env
+logger.info("TERMINAL_ENV=%s (DAYTONA_API_KEY=%s)", _terminal_env,
+            "set" if os.environ.get("DAYTONA_API_KEY") else "not set")
 
 # Import model_tools early to populate the tool registry (tools self-register on import)
 import model_tools as _mt  # noqa: E402
@@ -214,6 +218,25 @@ def _run_agent_blocking(
     """Run AIAgent synchronously in a thread. Push structured events into queue."""
 
     from run_agent import AIAgent
+
+    logger.info("Agent thread: TERMINAL_ENV=%s DAYTONA_API_KEY=%s",
+                os.environ.get("TERMINAL_ENV", "NOT SET"),
+                "set" if os.environ.get("DAYTONA_API_KEY") else "NOT SET")
+
+    # Debug: check which tools pass check_fn
+    from tools.registry import registry as _dbg_reg
+    for _tn in ["terminal", "process", "read_file", "write_file"]:
+        _entry = _dbg_reg._tools.get(_tn)
+        if _entry and _entry.check_fn:
+            try:
+                _ok = _entry.check_fn()
+            except Exception as _e:
+                _ok = f"error: {_e}"
+            logger.info("  tool %s check_fn=%s", _tn, _ok)
+        elif _entry:
+            logger.info("  tool %s no check_fn", _tn)
+        else:
+            logger.info("  tool %s NOT IN REGISTRY", _tn)
 
     run_id = str(uuid.uuid4())
     msg_counter = {"n": 0}
