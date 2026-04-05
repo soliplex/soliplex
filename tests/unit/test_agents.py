@@ -1,7 +1,11 @@
 import dataclasses
+import pathlib
 from unittest import mock
 
 import pytest
+from haiku.skills import agent as hs_agent
+from haiku.skills import models as hs_models
+from haiku.skills import registry as hs_registry
 from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import tools as ai_tools
 
@@ -365,6 +369,8 @@ def test_get_agent_from_configs_wo_hit_w_default_kind(
         agent_config=agent_config,
         tool_configs=tool_configs,
         mcp_client_toolset_configs=mcp_tc_configs,
+        thread_id=None,
+        threads_upload_path=None,
         **kwargs,
     )
 
@@ -425,3 +431,115 @@ def test_get_agent_from_configs_w_hit():
         )
 
     assert found is expected
+
+
+THREAD_ID = "thread-abc-123"
+
+
+def test_get_agent_from_configs_w_thread_id_cache_key():
+    """When thread_id is provided, the cache key includes it."""
+    a_config = mock.create_autospec(config_agents.AgentConfig)
+    a_config.id = ROOM_ID
+    a_config.kind = "default"
+
+    with (
+        mock.patch(
+            "soliplex.agents.get_default_agent_from_configs"
+        ) as gdafc,
+        mock.patch.dict(
+            "soliplex.agents._agent_cache", clear=True
+        ) as cache,
+    ):
+        found = agents.get_agent_from_configs(
+            agent_config=a_config,
+            tool_configs={},
+            mcp_client_toolset_configs={},
+            thread_id=THREAD_ID,
+        )
+
+        assert (ROOM_ID, THREAD_ID) in cache
+        assert cache[(ROOM_ID, THREAD_ID)] is found
+
+
+def test_get_agent_from_configs_w_thread_id_cache_hit():
+    """Cache hit by (room_id, thread_id) key."""
+    expected = object()
+    a_config = mock.create_autospec(config_agents.AgentConfig)
+    a_config.id = ROOM_ID
+
+    with mock.patch.dict(
+        "soliplex.agents._agent_cache", clear=True
+    ) as ac:
+        ac[(ROOM_ID, THREAD_ID)] = expected
+
+        found = agents.get_agent_from_configs(
+            agent_config=a_config,
+            tool_configs={},
+            mcp_client_toolset_configs={},
+            thread_id=THREAD_ID,
+        )
+
+    assert found is expected
+
+
+@mock.patch("soliplex.agents.get_default_agent_from_configs")
+def test_get_agent_from_configs_passes_thread_id(gdafc):
+    """thread_id and threads_upload_path are forwarded."""
+    a_config = mock.create_autospec(config_agents.AgentConfig)
+    a_config.id = ROOM_ID
+    a_config.kind = "default"
+    threads_path = pathlib.Path("/uploads/threads")
+
+    with mock.patch.dict(
+        "soliplex.agents._agent_cache", clear=True
+    ):
+        agents.get_agent_from_configs(
+            agent_config=a_config,
+            tool_configs={},
+            mcp_client_toolset_configs={},
+            thread_id=THREAD_ID,
+            threads_upload_path=threads_path,
+        )
+
+    gdafc.assert_called_once()
+    call_kw = gdafc.call_args.kwargs
+    assert call_kw["thread_id"] == THREAD_ID
+    assert call_kw["threads_upload_path"] is threads_path
+
+
+@pytest.mark.parametrize(
+    "thread_id, w_upload_path, has_sandbox",
+    [
+        (None, False, True),
+        (THREAD_ID, False, True),
+        (THREAD_ID, True, False),
+        (THREAD_ID, True, True),
+    ],
+)
+def test_reconfigure_sandbox(
+    temp_dir, thread_id, w_upload_path, has_sandbox
+):
+    toolset = mock.create_autospec(hs_agent.SkillToolset)
+    registry = hs_registry.SkillRegistry()
+    toolset.registry = registry
+
+    sandbox_skill = None
+    if has_sandbox:
+        sandbox_skill = mock.create_autospec(hs_models.Skill)
+        sandbox_skill.metadata = hs_models.SkillMetadata(
+            name="sandbox", description="test"
+        )
+        registry.register(sandbox_skill)
+
+    upload_path = temp_dir / "uploads" / "threads" if w_upload_path else None
+
+    agents._reconfigure_sandbox(toolset, thread_id, upload_path)
+
+    if thread_id and upload_path and has_sandbox:
+        expected_workspace = upload_path / thread_id
+        sandbox_skill.reconfigure.assert_called_once_with(
+            workspace=expected_workspace,
+        )
+        assert expected_workspace.exists()
+    elif has_sandbox:
+        sandbox_skill.reconfigure.assert_not_called()

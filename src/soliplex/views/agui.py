@@ -75,6 +75,7 @@ async def _check_user_room_agent(
     the_authz_policy: authz_package.AuthorizationPolicy,
     the_user_claims: authn.UserClaims,
     the_logger: loggers.LogWrapper,
+    thread_id: str | None = None,
 ) -> tuple[models.UserProfile, pydantic_ai.Agent]:
     """Check that the user has access to the given room.
 
@@ -86,6 +87,7 @@ async def _check_user_room_agent(
         agent = await the_installation.get_agent_for_room(
             room_id=room_id,
             user=the_user_claims,
+            thread_id=thread_id,
             the_authz_policy=the_authz_policy,
             the_logger=the_logger,
         )
@@ -700,6 +702,7 @@ async def post_room_agui_thread_id_run_id(
         the_authz_policy=the_authz_policy,
         the_user_claims=the_user_claims,
         the_logger=the_logger,
+        thread_id=thread_id,
     )
 
     agui_adapter = await ai_ag_ui.AGUIAdapter.from_request(

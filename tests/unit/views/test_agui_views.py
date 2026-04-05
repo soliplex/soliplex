@@ -270,6 +270,7 @@ async def test__check_user_room_agent(w_miss, expectation):
     the_installation.get_agent_for_room.assert_awaited_once_with(
         room_id=TEST_ROOM_ID,
         user=THE_USER_CLAIMS,
+        thread_id=None,
         the_authz_policy=the_authz_policy,
         the_logger=the_logger,
     )
@@ -1388,6 +1389,7 @@ async def test_post_room_agui_thread_id_run_id_streaming(
             the_authz_policy=the_authz_policy,
             the_user_claims=THE_USER_CLAIMS,
             the_logger=the_logger,
+            thread_id=TEST_THREAD_ID_STR,
         )
 
         assert state.agui_background_tasks is global_agui_bg_tasks

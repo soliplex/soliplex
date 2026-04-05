@@ -1,5 +1,6 @@
 import contextlib
 import dataclasses
+import pathlib
 from unittest import mock
 
 import fastapi
@@ -973,6 +974,46 @@ async def test_installation_get_agent_for_room(
             the_installation=the_installation,
             user=test_user,
         )
+
+
+@pytest.mark.anyio
+@mock.patch("soliplex.agents.get_agent_from_configs")
+@mock.patch("soliplex.loggers.LogWrapper")
+async def test_installation_get_agent_for_room_w_thread_id(
+    lw_klass,
+    gafc,
+    test_user,
+):
+    a_config = mock.create_autospec(config_agents.AgentConfig)
+    r_config = mock.create_autospec(config_rooms.RoomConfig)
+    r_config.agent_config = a_config
+    r_config.skills = None
+    t_configs = r_config.tool_configs = {}
+    mcp_configs = r_config.mcp_client_toolset_configs = {}
+
+    threads_path = pathlib.Path("/uploads/threads")
+
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    i_config.room_configs = {"room_id": r_config}
+    i_config.threads_upload_path = threads_path
+
+    the_installation = installation.Installation(i_config)
+
+    found = await the_installation.get_agent_for_room(
+        room_id="room_id",
+        user=test_user,
+        thread_id="thread-123",
+    )
+
+    assert found is gafc.return_value
+    gafc.assert_called_once_with(
+        agent_config=a_config,
+        tool_configs=t_configs,
+        mcp_client_toolset_configs=mcp_configs,
+        skill_toolset_config=None,
+        thread_id="thread-123",
+        threads_upload_path=threads_path,
+    )
 
 
 @pytest.mark.anyio

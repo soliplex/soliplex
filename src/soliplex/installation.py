@@ -283,6 +283,7 @@ class Installation:
         *,
         room_id: str,
         user: dict,
+        thread_id: str | None = None,
         the_authz_policy: authz_package.AuthorizationPolicy = None,
         the_logger: loggers.LogWrapper = None,
     ) -> pydantic_ai.Agent:
@@ -294,11 +295,17 @@ class Installation:
         )
         mcpcts_configs = room_config.mcp_client_toolset_configs
 
+        kwargs = {}
+        if thread_id is not None:
+            kwargs["thread_id"] = thread_id
+            kwargs["threads_upload_path"] = self._config.threads_upload_path
+
         return agents.get_agent_from_configs(
             agent_config=room_config.agent_config,
             tool_configs=room_config.tool_configs,
             mcp_client_toolset_configs=mcpcts_configs,
             skill_toolset_config=room_config.skills,
+            **kwargs,
         )
 
     async def get_agent_for_completion(

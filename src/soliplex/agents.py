@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import dataclasses
+import pathlib
 import typing
 
 import pydantic_ai
@@ -123,12 +124,29 @@ def get_model_from_config(
         )
 
 
+def _reconfigure_sandbox(
+    toolset: hs_agent.SkillToolset,
+    thread_id: str | None,
+    threads_upload_path: pathlib.Path | None,
+) -> None:
+    if thread_id is None or threads_upload_path is None:
+        return
+    sandbox = toolset.registry.get("sandbox")
+    if sandbox is None:
+        return
+    workspace = threads_upload_path / thread_id
+    workspace.mkdir(parents=True, exist_ok=True)
+    sandbox.reconfigure(workspace=workspace)
+
+
 def get_default_agent_from_configs(
     *,
     agent_config: config_agents.AgentConfig,
     tool_configs: ToolConfigMap,
     mcp_client_toolset_configs: config_tools.MCP_ClientToolsetConfigMap,
     skill_toolset_config: SkillToolsetConfig | None = None,
+    thread_id: str | None = None,
+    threads_upload_path: pathlib.Path | None = None,
 ) -> SoliplexAgent:
     """Build a Pydantic AI agent from a config"""
     model = get_model_from_config(agent_config=agent_config)
@@ -143,6 +161,7 @@ def get_default_agent_from_configs(
 
     if skill_toolset_config is not None:
         toolset = skill_toolset_config.skill_toolset
+        _reconfigure_sandbox(toolset, thread_id, threads_upload_path)
         toolsets.append(toolset)
         instructions = hs_prompts.build_system_prompt(
             preamble=agent_config.get_system_prompt(),
@@ -168,16 +187,26 @@ def get_agent_from_configs(
     tool_configs: ToolConfigMap,
     mcp_client_toolset_configs: config_tools.MCP_ClientToolsetConfigMap,
     skill_toolset_config: SkillToolsetConfig | None = None,
+    thread_id: str | None = None,
+    threads_upload_path: pathlib.Path | None = None,
 ) -> SoliplexAgent:
     """Get or create an agent from the specified agent and tool configs."""
 
-    if agent_config.id not in _agent_cache:
+    cache_key = (
+        (agent_config.id, thread_id)
+        if thread_id is not None
+        else agent_config.id
+    )
+
+    if cache_key not in _agent_cache:
         if agent_config.kind == "default":
             agent = get_default_agent_from_configs(
                 agent_config=agent_config,
                 tool_configs=tool_configs,
                 mcp_client_toolset_configs=mcp_client_toolset_configs,
                 skill_toolset_config=skill_toolset_config,
+                thread_id=thread_id,
+                threads_upload_path=threads_upload_path,
             )
 
         else:
@@ -188,6 +217,6 @@ def get_agent_from_configs(
                 skill_toolset_config=skill_toolset_config,
             )
 
-        _agent_cache[agent_config.id] = agent
+        _agent_cache[cache_key] = agent
 
-    return _agent_cache[agent_config.id]
+    return _agent_cache[cache_key]
