@@ -30,11 +30,16 @@ agent:
     - run_hermes_task: delegate a complex multi-step task to Hermes
       (research, analysis, code writing — Hermes uses its own agent loop)
 
+    Cross-room tools:
+    - list_rooms: discover other rooms and their specializations
+    - ask_room: send a message to another room's agent and get its response
+
     Guidelines:
-    - For questions about our documents → use RAG search
+    - For questions about our documents → use RAG search or ask_room("search", ...)
     - For current info from the web → use hermes_tool("web_search", ...)
     - For simple commands → use hermes_tool("terminal", ...)
     - For complex multi-step tasks → use run_hermes_task
+    - For specialized analysis → use ask_room to delegate to the right room
     - For questions about this platform → refer to the soliplex-guide skill
 
 tools:
@@ -48,6 +53,10 @@ tools:
   - tool_name: "soliplex.tools.hermes.run_hermes_task"
   - tool_name: "soliplex.tools.hermes.hermes_tool"
   - tool_name: "soliplex.tools.hermes.list_hermes_tools"
+
+  # Cross-room communication
+  - tool_name: "soliplex.tools.rooms.ask_room"
+  - tool_name: "soliplex.tools.rooms.list_rooms"
 
 skills:
   installation_skill_names:

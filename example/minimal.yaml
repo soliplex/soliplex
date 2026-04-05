@@ -206,6 +206,9 @@ environment:
   - name: "HERMES_URL"
     value: "http://localhost:8642"
 
+  - name: "SOLIPLEX_INTERNAL_URL"
+    value: "http://localhost:8000/api"
+
   #------------------------------------------------------------------------
   # 'soliplex': on-disk configuration locations
   #------------------------------------------------------------------------
