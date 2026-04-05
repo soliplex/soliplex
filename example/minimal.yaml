@@ -305,6 +305,9 @@ skill_configs:
   - skill_name: "bare-bones"
     kind: "filesystem"
 
+  - skill_name: "soliplex-guide"
+    kind: "filesystem"
+
 # Requires installing 'haiku-skills-image-generation'
 # - skill_name: "image-generation"
 #   kind: "entrypoint"

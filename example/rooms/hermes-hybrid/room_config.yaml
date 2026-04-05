@@ -29,3 +29,7 @@ tools:
   - tool_name: "soliplex.tools.hermes.run_hermes_task"
   - tool_name: "soliplex.tools.hermes.hermes_tool"
   - tool_name: "soliplex.tools.hermes.list_hermes_tools"
+
+skills:
+  installation_skill_names:
+    - "soliplex-guide"
