@@ -406,9 +406,13 @@ def _run_agent_blocking(
                 if hasattr(agent, 'valid_tool_names') and agent.valid_tool_names:
                     agent.valid_tool_names.add(ct.name)
 
+        # Use session_id as task_id so Daytona reuses sandboxes across runs
+        effective_task_id = request.session_id or "default"
+
         result = agent.run_conversation(
             user_message=request.message,
             conversation_history=request.history or [],
+            task_id=effective_task_id,
         )
 
         # Close any open text segment
