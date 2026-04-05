@@ -1140,3 +1140,82 @@ def test_roomskillsconfig_skill_toolset(
         gmfc.assert_called_once_with(agent_config=model_agent_config)
     else:
         gmfc.assert_not_called()
+
+
+# ====================================================================
+# SandboxSkillConfig
+# ====================================================================
+
+
+@pytest.mark.parametrize(
+    "w_kw, exp_create_kw",
+    [
+        ({}, {}),
+        (
+            {"image": "my-image:v1", "idle_timeout": 1800},
+            {"image": "my-image:v1", "idle_timeout": 1800},
+        ),
+    ],
+)
+@mock.patch.object(config_skills.SandboxSkillConfig, "_create_skill")
+def test_sandboxskillconfig_skill(
+    mock_create_skill, w_kw, exp_create_kw
+):
+    fake_skill = mock.create_autospec(hs_models.Skill)
+    mock_create_skill.return_value = fake_skill
+
+    inst = config_skills.SandboxSkillConfig(**w_kw)
+
+    found = inst.skill
+
+    assert found is fake_skill
+    mock_create_skill.assert_called_once_with(**exp_create_kw)
+
+
+@pytest.mark.parametrize(
+    "w_config, expectation",
+    [
+        (
+            {"not_a_valid_key": "FAIL"},
+            pytest.raises(config_exc.FromYamlException),
+        ),
+        (
+            {"image": "custom:latest", "idle_timeout": 600},
+            contextlib.nullcontext(
+                {"image": "custom:latest", "idle_timeout": 600}
+            ),
+        ),
+        ({}, contextlib.nullcontext({})),
+    ],
+)
+def test_sandboxskillconfig_from_yaml(
+    installation_config,
+    temp_dir,
+    w_config,
+    expectation,
+):
+    config_path = temp_dir / "config_file.yaml"
+    config_dict = {"kind": "sandbox"} | w_config
+
+    with expectation as expected:
+        inst = config_skills.SandboxSkillConfig.from_yaml(
+            installation_config=installation_config,
+            config_path=config_path,
+            config_dict=config_dict,
+        )
+
+    if not isinstance(expected, pytest.ExceptionInfo):
+        assert isinstance(inst, config_skills.SandboxSkillConfig)
+        assert inst.image == expected.get("image")
+        assert inst.idle_timeout == expected.get("idle_timeout")
+
+
+def test_sandboxskillconfig_registered():
+    assert "sandbox" in config_skills.SKILL_CONFIG_CLASSES_BY_KIND
+    assert (
+        config_skills.SKILL_CONFIG_CLASSES_BY_KIND["sandbox"]
+        is config_skills.SandboxSkillConfig
+    )
+
+    inst = config_skills.SandboxSkillConfig()
+    assert inst.name == "sandbox"

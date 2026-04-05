@@ -415,6 +415,56 @@ class HR_RLM_SkillConfig(_HR_SkillConfigBase):
         )
 
 
+@dataclasses.dataclass(kw_only=True)
+class SandboxSkillConfig:
+    """Configuration for the Docker sandbox skill."""
+
+    kind: typing.ClassVar[str] = "sandbox"
+
+    image: str | None = None
+    idle_timeout: int | None = None
+
+    _config_path: pathlib.Path | None = None
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,  # noqa F821 cycles
+        config_path: pathlib.Path,
+        config_dict: dict,
+    ):
+        try:
+            _kind = config_dict.pop("kind", None)
+            config_dict["_config_path"] = config_path
+
+            return cls(**config_dict)
+        except Exception as exc:
+            raise config_exc.FromYamlException(
+                config_path,
+                "sandbox",
+                config_dict,
+            ) from exc
+
+    @property
+    def name(self) -> str:
+        return "sandbox"
+
+    @staticmethod
+    def _create_skill(**kwargs) -> hs_models.Skill:  # pragma: NO COVER
+        import haiku_skills_sandbox
+
+        return haiku_skills_sandbox.create_skill(**kwargs)
+
+    @property
+    def skill(self) -> hs_models.Skill:
+        kwargs = {}
+        if self.image is not None:
+            kwargs["image"] = self.image
+        if self.idle_timeout is not None:
+            kwargs["idle_timeout"] = self.idle_timeout
+        return self._create_skill(**kwargs)
+
+
 SKILL_CONFIG_CLASSES_BY_KIND = {
     klass.kind: klass
     for klass in [
@@ -422,6 +472,7 @@ SKILL_CONFIG_CLASSES_BY_KIND = {
         EntrypointSkillConfig,
         HR_RAG_SkillConfig,
         HR_RLM_SkillConfig,
+        SandboxSkillConfig,
     ]
 }
 
@@ -430,6 +481,7 @@ SkillConfigTypes = (
     | EntrypointSkillConfig
     | HR_RAG_SkillConfig
     | HR_RLM_SkillConfig
+    | SandboxSkillConfig
 )
 SkillConfigMap = dict[str, SkillConfigTypes]
 SkillMap = dict[str, hs_models.Skill]
