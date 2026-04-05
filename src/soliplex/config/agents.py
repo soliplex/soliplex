@@ -364,15 +364,85 @@ class FactoryAgentConfig:
         }
 
 
+@dataclasses.dataclass(kw_only=True)
+class HermesAgentConfig:
+    """Configuration for a Hermes Agent backend.
+
+    Routes to a Hermes Event Server instead of pydantic-ai.
+    """
+
+    id: str
+    kind: typing.ClassVar[str] = "hermes"
+
+    hermes_url: str  # e.g. http://hermes:8642
+    hermes_model: str = None
+    hermes_toolsets: list[str] = dataclasses.field(default_factory=list)
+    hermes_disabled_toolsets: list[str] = dataclasses.field(
+        default_factory=list
+    )
+    hermes_max_iterations: int = 10
+    hermes_system_prompt: str = None
+
+    agui_feature_names: tuple[str] = ()
+
+    # Set by `from_yaml` factory
+    _installation_config: InstallationConfig = (  # noqa F821 cycle
+        _no_repr_no_compare_none()
+    )
+    _config_path: pathlib.Path = None
+    _template_id: str = None
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,  # noqa F821 cycle
+        config_path: pathlib.Path,
+        config_dict: dict,
+    ):
+        try:
+            config_dict["_installation_config"] = installation_config
+            config_dict["_config_path"] = config_path
+
+            config_dict = _apply_agent_config_template(
+                config_dict,
+                installation_config,
+                config_path,
+            )
+
+            agui_feature_names = config_dict.pop("agui_feature_names", ())
+            config_dict["agui_feature_names"] = tuple(agui_feature_names)
+
+            return cls(**config_dict)
+
+        except Exception as exc:
+            raise exceptions.FromYamlException(
+                config_path,
+                "hermes_agent",
+                config_dict,
+            ) from exc
+
+    @property
+    def as_yaml(self) -> dict:
+        return {
+            "id": self.id,
+            "hermes_url": self.hermes_url,
+            "hermes_model": self.hermes_model,
+            "hermes_toolsets": self.hermes_toolsets,
+            "hermes_max_iterations": self.hermes_max_iterations,
+            "hermes_system_prompt": self.hermes_system_prompt,
+        }
+
+
 AGENT_CONFIG_CLASSES_BY_KIND = {
     klass.kind: klass
     for klass in [
         AgentConfig,
         FactoryAgentConfig,
+        HermesAgentConfig,
     ]
 }
 
-AgentConfigTypes = AgentConfig | FactoryAgentConfig
+AgentConfigTypes = AgentConfig | FactoryAgentConfig | HermesAgentConfig
 
 AgentConfigMap = dict[str, AgentConfigTypes]
 

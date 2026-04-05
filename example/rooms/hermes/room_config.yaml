@@ -1,0 +1,18 @@
+id: "hermes"
+name: "Hermes Agent"
+description: "Self-improving AI agent powered by Hermes — with tools, memory, and skills"
+
+suggestions:
+  - "Search the web for latest AI news"
+  - "What time is it?"
+  - "Create a simple Python script that prints fibonacci numbers"
+
+agent:
+  kind: hermes
+  hermes_url: http://localhost:8642
+  hermes_model: "MiniMax-M2.7"
+  hermes_max_iterations: 10
+  hermes_toolsets:
+    - terminal
+    - file
+    - web

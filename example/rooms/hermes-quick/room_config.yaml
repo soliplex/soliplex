@@ -1,0 +1,18 @@
+id: "hermes-quick"
+name: "Hermes Quick Chat"
+description: "Fast answers, no tools — lightweight Hermes for simple questions"
+
+suggestions:
+  - "Explain quantum computing in one paragraph"
+  - "Write a haiku about programming"
+  - "What are the SOLID principles?"
+
+agent:
+  kind: hermes
+  hermes_url: http://localhost:8642
+  hermes_model: "MiniMax-M2.7"
+  hermes_max_iterations: 2
+  hermes_toolsets: []
+  hermes_system_prompt: >
+    You are a concise assistant. Give brief, direct answers.
+    Do not use tools. Keep responses under 3 sentences.

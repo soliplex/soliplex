@@ -200,7 +200,8 @@ secrets:
 #==========================================================================
 
 environment:
-  - "OLLAMA_BASE_URL"
+  - name: "OLLAMA_BASE_URL"
+    value: "http://bizon.local:11434"
 
   #------------------------------------------------------------------------
   # 'soliplex': on-disk configuration locations
@@ -265,15 +266,15 @@ upload_path: ../uploads
 # Thread peristence:  SQLAlchemy DBURIs
 #==========================================================================
 thread_persistence_dburi:
-  sync: "sqlite://"
-  async: "sqlite+aiosqlite://"
+  sync: "postgresql+psycopg2://soliplex:soliplex@localhost:5432/soliplex"
+  async: "postgresql+asyncpg://soliplex:soliplex@localhost:5432/soliplex"
 
 #==========================================================================
 # Authorization policy:  SQLAlchemy DBURIs
 #==========================================================================
 authorization_dburi:
-  sync: "sqlite://"
-  async: "sqlite+aiosqlite://"
+  sync: "postgresql+psycopg2://soliplex:soliplex@localhost:5432/soliplex"
+  async: "postgresql+asyncpg://soliplex:soliplex@localhost:5432/soliplex"
 
 #==========================================================================
 # OIDC authentication provider configuration
@@ -324,6 +325,10 @@ room_paths:
   - "./rooms/multi_arg"
   - "./rooms/title_only"
   - "./rooms/feedback"
+  - "./rooms/echo"
+  - "./rooms/plain"
+  - "./rooms/hermes"
+  - "./rooms/hermes-quick"
 
 #==========================================================================
 # Completions configuration

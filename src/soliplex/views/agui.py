@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import uuid
 
 import fastapi
 import logfire
@@ -672,6 +673,160 @@ async def stream_llm_events(event_queue: asyncio.Queue):
         yield event
 
 
+async def _hermes_agent_run(
+    request: fastapi.Request,
+    room_config: config_rooms.RoomConfig,
+    thread_id: str,
+    run_id: str,
+    user_name: str,
+    the_threads: agui_package.ThreadStorage,
+    sqla_engine,
+) -> responses.StreamingResponse:
+    """Execute an AGUI run via Hermes Event Server backend."""
+    from soliplex import hermes_backend
+
+    hermes_config = room_config.agent_config
+
+    # Parse AG-UI RunAgentInput from request body
+    body = await request.json()
+
+    # Extract state from prior runs (Flutter sends this back each time)
+    agui_state = body.get("state", {}) or {}
+
+    # Resolve or create Hermes session_id from AG-UI state
+    session_id = agui_state.get("hermes_session_id")
+    if not session_id:
+        session_id = f"soliplex-{room_config.id}-{thread_id}"
+
+    # Extract client-side tools from AG-UI RunAgentInput.tools
+    raw_tools = body.get("tools", [])
+    client_tools = None
+    if raw_tools:
+        client_tools = [
+            {
+                "name": t.get("name"),
+                "description": t.get("description", ""),
+                "parameters": t.get("parameters", {}),
+            }
+            for t in raw_tools
+            if t.get("name")
+        ]
+
+    # Extract messages and build Hermes-compatible history
+    raw_messages = body.get("messages", [])
+    user_message = ""
+    history = []
+    for msg in raw_messages:
+        role = msg.get("role", "user")
+        # AG-UI messages have 'content' as string or structured
+        content = msg.get("content", "")
+        if isinstance(content, list):
+            content = " ".join(
+                p.get("text", "") for p in content
+                if isinstance(p, dict)
+            )
+        if role == "user":
+            user_message = content
+        history.append({"role": role, "content": content})
+
+    # Last user message is the new prompt; prior messages are history
+    if history and history[-1].get("role") == "user":
+        history = history[:-1]
+
+    # Build RunAgentInput for thread persistence
+    agui_messages = []
+    for msg in raw_messages:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        msg_id = msg.get("id", str(uuid.uuid4()))
+        if role == "user":
+            agui_messages.append(
+                agui_core.UserMessage(role="user", id=msg_id, content=content)
+            )
+        elif role == "assistant":
+            agui_messages.append(
+                agui_core.AssistantMessage(
+                    role="assistant", id=msg_id, content=content,
+                )
+            )
+
+    run_input = agui_core.RunAgentInput(
+        thread_id=thread_id,
+        run_id=run_id,
+        state=agui_state,
+        messages=agui_messages,
+        tools=[],
+        context=[],
+        forwarded_props={},
+    )
+
+    # Persist thread + run input (creates the DB records)
+    try:
+        await the_threads.add_run_input(
+            user_name=user_name,
+            room_id=room_config.id,
+            thread_id=thread_id,
+            run_id=run_id,
+            run_input=run_input,
+        )
+    except agui_package.AGUI_Exception as exc:
+        raise fastapi.HTTPException(
+            status_code=exc.status_code,
+            detail=exc.args,
+        ) from None
+
+    agui_stream = hermes_backend.hermes_to_agui_events(
+        hermes_config,
+        user_message,
+        thread_id=thread_id,
+        run_id=run_id,
+        session_id=session_id,
+        history=history or None,
+        prior_state=agui_state,
+        client_tools=client_tools,
+    )
+
+    compacted_stream = agui_package.compact_event_stream(agui_stream)
+
+    event_queue = asyncio.Queue()
+
+    bg_tasks = request.app.state.agui_background_tasks
+    task = asyncio.create_task(
+        drive_llm_stream(
+            llm_stream=compacted_stream,
+            sqla_engine=sqla_engine,
+            event_queue=event_queue,
+            user_name=user_name,
+            room_id=room_config.id,
+            thread_id=thread_id,
+            run_id=run_id,
+        )
+    )
+    bg_tasks.add(task)
+    task.add_done_callback(bg_tasks.discard)
+
+    async def encode_agui_sse(events):
+        async for event in events:
+            data = event.model_dump_json(
+                exclude_none=True, by_alias=True
+            )
+            yield f"data: {data}\n\n"
+
+    sse_stream = encode_agui_sse(stream_llm_events(event_queue))
+
+    w_keepalive_stream = streaming_views.stream_sse_with_keepalive(
+        sse_stream,
+        request=request,
+        log_info=logfire.info,
+    )
+
+    return responses.StreamingResponse(
+        w_keepalive_stream,
+        media_type="text/event-stream",
+        headers=streaming_views.HEADERS_DO_NOT_BUFFER_SSE,
+    )
+
+
 @util.logfire_span("POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}")
 @router.post("/v1/rooms/{room_id}/agui/{thread_id}/{run_id}")
 async def post_room_agui_thread_id_run_id(
@@ -694,6 +849,28 @@ async def post_room_agui_thread_id_run_id(
     the_logger.debug(loggers.AGUI_POST_ROOM_THREAD_RUN)
 
     user_name = the_user_claims.get("preferred_username", "<unknown>")
+
+    # --- Hermes routing: detect hermes-kind rooms ---
+    room_config = await _check_user_in_room(
+        room_id=room_id,
+        the_installation=the_installation,
+        the_authz_policy=the_authz_policy,
+        the_user_claims=the_user_claims,
+        the_logger=the_logger,
+    )
+
+    if isinstance(room_config.agent_config, config_agents.HermesAgentConfig):
+        return await _hermes_agent_run(
+            request=request,
+            room_config=room_config,
+            thread_id=thread_id,
+            run_id=run_id,
+            user_name=user_name,
+            the_threads=the_threads,
+            sqla_engine=request.state.threads_engine,
+        )
+
+    # --- Standard pydantic-ai path (unchanged) ---
     user, agent = await _check_user_room_agent(
         room_id=room_id,
         the_installation=the_installation,
