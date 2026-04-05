@@ -375,6 +375,39 @@ async def health():
     return {"status": "ok", "service": "hermes-event-server"}
 
 
+class ToolCallRequest(BaseModel):
+    """Single tool dispatch — no agent loop."""
+    tool: str
+    args: dict = Field(default_factory=dict)
+
+
+@app.post("/v1/agent/tool")
+async def call_tool(request: ToolCallRequest):
+    """Execute a single Hermes tool without the agent loop."""
+    from tools.registry import registry
+    import time
+
+    entry = registry._tools.get(request.tool)
+    if not entry:
+        return {"error": f"Unknown tool: {request.tool}", "available_tools": sorted(registry._tools.keys())}
+
+    if entry.check_fn:
+        try:
+            if not entry.check_fn():
+                return {"error": f"Tool '{request.tool}' is not available (failed check)"}
+        except Exception:
+            return {"error": f"Tool '{request.tool}' availability check failed"}
+
+    start = time.time()
+    try:
+        result = registry.dispatch(request.tool, request.args)
+        duration_ms = int((time.time() - start) * 1000)
+        return {"result": result, "tool": request.tool, "duration_ms": duration_ms}
+    except Exception as e:
+        duration_ms = int((time.time() - start) * 1000)
+        return {"error": str(e), "tool": request.tool, "duration_ms": duration_ms}
+
+
 @app.get("/v1/agent/tools")
 async def list_tools():
     """List all tools with availability status per toolset."""

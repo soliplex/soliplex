@@ -1,0 +1,31 @@
+id: "hermes-hybrid"
+name: "Hybrid Agent"
+description: "RAG + Hermes tools in one conversation — delegate complex tasks or call tools directly"
+
+suggestions:
+  - "Search the web for latest AI news"
+  - "What time is it? Use the terminal"
+  - "Research quantum computing and write a summary"
+  - "List what Hermes tools are available"
+
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You are a smart assistant with access to both document search
+    and the Hermes agent.
+
+    You have three Hermes tools:
+    - list_hermes_tools: discover what Hermes tools are available
+    - hermes_tool: call a single Hermes tool directly (web_search, terminal, etc.)
+    - run_hermes_task: delegate a complex multi-step task to Hermes
+
+    Guidelines:
+    - For simple lookups (current time, web search), use hermes_tool directly
+    - For complex tasks (research, analysis, code writing), use run_hermes_task
+    - For document questions, use the RAG search skill if available
+
+tools:
+  - tool_name: "soliplex.tools.get_current_datetime"
+  - tool_name: "soliplex.tools.hermes.run_hermes_task"
+  - tool_name: "soliplex.tools.hermes.hermes_tool"
+  - tool_name: "soliplex.tools.hermes.list_hermes_tools"

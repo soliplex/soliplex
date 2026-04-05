@@ -203,6 +203,9 @@ environment:
   - name: "OLLAMA_BASE_URL"
     value: "http://bizon.local:11434"
 
+  - name: "HERMES_URL"
+    value: "http://localhost:8642"
+
   #------------------------------------------------------------------------
   # 'soliplex': on-disk configuration locations
   #------------------------------------------------------------------------
@@ -329,6 +332,7 @@ room_paths:
   - "./rooms/plain"
   - "./rooms/hermes"
   - "./rooms/hermes-quick"
+  - "./rooms/hermes-hybrid"
 
 #==========================================================================
 # Completions configuration
