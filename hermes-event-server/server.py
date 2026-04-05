@@ -1,0 +1,468 @@
+"""
+Hermes Event Server — M1
+
+Wraps Hermes AIAgent in a FastAPI app that emits structured SSE events.
+Bridges AIAgent's sync callbacks to async SSE via asyncio.Queue + ThreadPoolExecutor.
+
+Event schema:
+  {"type":"run_started","run_id":"..."}
+  {"type":"thinking","content":"..."}
+  {"type":"text_delta","delta":"...","message_id":"msg_1"}
+  {"type":"tool_start","tool_call_id":"call_abc","name":"web_search","args":{...}}
+  {"type":"tool_result","tool_call_id":"call_abc","content":"..."}
+  {"type":"run_finished","usage":{...}}
+  {"type":"run_error","message":"..."}
+"""
+
+import asyncio
+import json
+import logging
+import os
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from typing import Optional
+
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger("hermes_event_server")
+
+# Load Hermes .env from HERMES_HOME (mounted volume) — must happen before any imports
+from dotenv import load_dotenv
+_hermes_home = os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes"))
+_env_path = os.path.join(_hermes_home, ".env")
+if os.path.exists(_env_path):
+    load_dotenv(_env_path, override=True)
+    logger.info("Loaded env from %s", _env_path)
+    logger.info("MINIMAX_API_KEY=%s...", os.environ.get("MINIMAX_API_KEY", "NOT SET")[:15])
+
+# Import model_tools early to populate the tool registry (tools self-register on import)
+import model_tools as _mt  # noqa: E402
+
+app = FastAPI(title="Hermes Event Server", version="0.1.0")
+
+# Shared thread pool for agent execution
+_executor = ThreadPoolExecutor(max_workers=4)
+
+
+# ---------------------------------------------------------------------------
+# Request / config models
+# ---------------------------------------------------------------------------
+
+class AgentConfig(BaseModel):
+    model: Optional[str] = None
+    enabled_toolsets: Optional[list[str]] = None
+    disabled_toolsets: Optional[list[str]] = None
+    max_iterations: int = 10
+    system_prompt: Optional[str] = None
+
+
+class ClientTool(BaseModel):
+    """A tool defined by the AG-UI client (Flutter) for callback execution."""
+    name: str
+    description: str = ""
+    parameters: dict = Field(default_factory=dict)
+
+
+class RunRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = None
+    history: Optional[list[dict]] = None
+    config: AgentConfig = Field(default_factory=AgentConfig)
+    client_tools: Optional[list[ClientTool]] = None
+
+
+# ---------------------------------------------------------------------------
+# SSE helpers
+# ---------------------------------------------------------------------------
+
+def _sse_line(data: dict) -> str:
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+# ---------------------------------------------------------------------------
+# Core: run agent, bridge callbacks to queue
+# ---------------------------------------------------------------------------
+
+def _run_agent_blocking(
+    request: RunRequest,
+    queue: asyncio.Queue,
+    loop: asyncio.AbstractEventLoop,
+) -> dict:
+    """Run AIAgent synchronously in a thread. Push structured events into queue."""
+
+    from run_agent import AIAgent
+
+    run_id = str(uuid.uuid4())
+    msg_counter = {"n": 0}
+    current_msg = {"id": None}
+
+    def _put(event: dict):
+        loop.call_soon_threadsafe(queue.put_nowait, event)
+
+    # --- callbacks ---
+
+    def on_stream_delta(delta):
+        if delta is None:
+            # Signal: text segment ended, tools coming next
+            if current_msg["id"] is not None:
+                _put({"type": "text_end", "message_id": current_msg["id"]})
+                current_msg["id"] = None
+            return
+        # Start new text segment if needed
+        if current_msg["id"] is None:
+            msg_counter["n"] += 1
+            current_msg["id"] = f"msg_{msg_counter['n']}"
+            _put({"type": "text_start", "message_id": current_msg["id"]})
+        _put({"type": "text_delta", "delta": delta, "message_id": current_msg["id"]})
+
+    def on_tool_start(tool_call_id, name, args):
+        # Close any open text segment
+        if current_msg["id"] is not None:
+            _put({"type": "text_end", "message_id": current_msg["id"]})
+            current_msg["id"] = None
+        _put({
+            "type": "tool_start",
+            "tool_call_id": tool_call_id,
+            "name": name,
+            "args": args if isinstance(args, dict) else {},
+        })
+
+    def on_tool_complete(tool_call_id, name, args, result):
+        _put({
+            "type": "tool_result",
+            "tool_call_id": tool_call_id,
+            "name": name,
+            "content": result if isinstance(result, str) else str(result),
+        })
+
+    def on_thinking(content):
+        if content:  # Non-empty = thinking started/updated
+            _put({"type": "thinking", "content": content})
+        else:  # Empty = thinking cleared (first token arrived)
+            _put({"type": "thinking_end"})
+
+    def on_reasoning(content):
+        if content:
+            _put({"type": "reasoning_delta", "delta": content})
+
+    def on_step(api_call_count, prev_tools):
+        _put({
+            "type": "step",
+            "iteration": api_call_count,
+            "max_iterations": request.config.max_iterations,
+            "prev_tools": prev_tools if isinstance(prev_tools, list) else [],
+        })
+
+    def on_status(status_type, message):
+        _put({"type": "status", "status_type": status_type, "message": message})
+
+    # --- build agent ---
+
+    cfg = request.config
+    agent_kwargs = {
+        "model": cfg.model or os.environ.get("HERMES_MODEL", "MiniMax-M2.7"),
+        "max_iterations": cfg.max_iterations,
+        "quiet_mode": True,
+        "verbose_logging": False,
+        "skip_context_files": True,
+        "platform": "soliplex",
+        "stream_delta_callback": on_stream_delta,
+        "tool_start_callback": on_tool_start,
+        "tool_complete_callback": on_tool_complete,
+        "thinking_callback": on_thinking,
+        "reasoning_callback": on_reasoning,
+        "step_callback": on_step,
+        "status_callback": on_status,
+    }
+
+    if cfg.enabled_toolsets is not None:
+        agent_kwargs["enabled_toolsets"] = cfg.enabled_toolsets
+    if cfg.disabled_toolsets is not None:
+        agent_kwargs["disabled_toolsets"] = cfg.disabled_toolsets
+    if cfg.system_prompt:
+        agent_kwargs["ephemeral_system_prompt"] = cfg.system_prompt
+    if request.session_id:
+        agent_kwargs["session_id"] = request.session_id
+
+    # Load credentials from auth.json credential pool
+    _auth_path = os.path.join(_hermes_home, "auth.json")
+    if os.path.exists(_auth_path):
+        import json as _json
+        _auth = _json.load(open(_auth_path))
+        _pool = _auth.get("credential_pool", {})
+        # Find first usable credential (not exhausted)
+        for _provider_name, _creds in _pool.items():
+            for _cred in _creds:
+                if _cred.get("last_status") == "exhausted":
+                    continue
+                if _cred.get("access_token") and _cred.get("base_url"):
+                    agent_kwargs["api_key"] = _cred["access_token"]
+                    agent_kwargs["base_url"] = _cred["base_url"]
+                    # Use anthropic_messages mode for /anthropic endpoints
+                    if "/anthropic" in _cred["base_url"]:
+                        agent_kwargs["api_mode"] = "anthropic_messages"
+                    break
+            if "api_key" in agent_kwargs:
+                break
+
+    # Emit run_started
+    _put({"type": "run_started", "run_id": run_id})
+
+    try:
+        agent = AIAgent(**agent_kwargs)
+
+        # --- Client tool injection ---
+        # Register client-side tools (from AG-UI RunAgentInput.tools)
+        # These tools trigger an interrupt when called, yielding control
+        # back to the client via the multi-run AG-UI protocol.
+        client_tool_names = set()
+        if request.client_tools:
+            from tools.registry import registry
+            import threading
+
+            for ct in request.client_tools:
+                client_tool_names.add(ct.name)
+
+                def _make_handler(tool_name, _agent=agent):
+                    def handler(args=None, **kwargs):
+                        _agent.interrupt(f"client_tool:{tool_name}")
+                        return json.dumps({
+                            "awaiting_client": True,
+                            "tool": tool_name,
+                            "args": args or {},
+                        })
+                    return handler
+
+                registry.register(
+                    name=ct.name,
+                    toolset="agui_client",
+                    schema={
+                        "name": ct.name,
+                        "description": ct.description,
+                        "parameters": ct.parameters or {
+                            "type": "object", "properties": {}
+                        },
+                    },
+                    handler=_make_handler(ct.name),
+                )
+
+                # Append schema to agent's tool list so LLM sees it
+                agent.tools.append({
+                    "type": "function",
+                    "function": {
+                        "name": ct.name,
+                        "description": ct.description,
+                        "parameters": ct.parameters or {
+                            "type": "object", "properties": {}
+                        },
+                    },
+                })
+                if hasattr(agent, 'valid_tool_names') and agent.valid_tool_names:
+                    agent.valid_tool_names.add(ct.name)
+
+        result = agent.run_conversation(
+            user_message=request.message,
+            conversation_history=request.history or [],
+        )
+
+        # Close any open text segment
+        if current_msg["id"] is not None:
+            _put({"type": "text_end", "message_id": current_msg["id"]})
+            current_msg["id"] = None
+
+        # Emit run_finished with usage
+        _put({
+            "type": "run_finished",
+            "run_id": run_id,
+            "usage": {
+                "input_tokens": result.get("input_tokens", 0),
+                "output_tokens": result.get("output_tokens", 0),
+                "total_tokens": result.get("total_tokens", 0),
+                "cache_read_tokens": result.get("cache_read_tokens", 0),
+                "reasoning_tokens": result.get("reasoning_tokens", 0),
+            },
+            "session_id": getattr(agent, "session_id", request.session_id),
+            "client_tool_names": sorted(client_tool_names) if client_tool_names else [],
+        })
+
+        return result
+
+    except Exception as e:
+        logger.exception("Agent error")
+        _put({
+            "type": "run_error",
+            "run_id": run_id,
+            "message": str(e),
+        })
+        return {"error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/v1/agent/run")
+async def agent_run(request: RunRequest):
+    """Run Hermes agent, stream structured SSE events."""
+
+    queue: asyncio.Queue = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+
+    async def event_stream():
+        # Launch agent in thread pool
+        future = loop.run_in_executor(
+            _executor,
+            _run_agent_blocking,
+            request,
+            queue,
+            loop,
+        )
+
+        # Stream events from queue
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=0.5)
+            except asyncio.TimeoutError:
+                # Check if agent finished without more events
+                if future.done():
+                    # Drain remaining
+                    while not queue.empty():
+                        event = queue.get_nowait()
+                        yield _sse_line(event)
+                    break
+                # Send keepalive
+                yield ": keepalive\n\n"
+                continue
+
+            yield _sse_line(event)
+
+            # Stop after terminal events
+            if event.get("type") in ("run_finished", "run_error"):
+                break
+
+        yield "data: [DONE]\n\n"
+
+        # Ensure thread completes (propagate exceptions)
+        try:
+            await asyncio.wrap_future(future)
+        except Exception:
+            pass
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok", "service": "hermes-event-server"}
+
+
+@app.get("/v1/agent/tools")
+async def list_tools():
+    """List available tools and toolsets."""
+    from tools.registry import registry
+    toolsets = registry.get_available_toolsets()
+    tool_names = registry.get_all_tool_names()
+    tool_map = registry.get_tool_to_toolset_map()
+    return {
+        "tools": [
+            {"name": name, "toolset": tool_map.get(name, "unknown")}
+            for name in sorted(tool_names)
+        ],
+        "toolsets": toolsets,
+    }
+
+
+@app.get("/v1/agent/memory")
+async def get_memory():
+    """Return Hermes agent memory and user profile."""
+    from pathlib import Path
+
+    mem_dir = Path(_hermes_home) / "memories"
+    result = {}
+
+    for name in ("MEMORY.md", "USER.md"):
+        path = mem_dir / name
+        if path.exists():
+            content = path.read_text().strip()
+            entries = [
+                line.strip().lstrip("- ")
+                for line in content.splitlines()
+                if line.strip() and not line.startswith("#")
+            ]
+            result[name.replace(".md", "").lower()] = {
+                "raw": content,
+                "entries": entries,
+            }
+        else:
+            result[name.replace(".md", "").lower()] = {
+                "raw": "",
+                "entries": [],
+            }
+
+    return result
+
+
+@app.get("/v1/agent/skills")
+async def list_skills():
+    """Return available Hermes skills from the volume."""
+    from pathlib import Path
+    import yaml
+
+    skills_dir = Path(_hermes_home) / "skills"
+    skills = []
+
+    if skills_dir.is_dir():
+        for skill_md in skills_dir.rglob("SKILL.md"):
+            try:
+                content = skill_md.read_text()
+                if not content.startswith("---"):
+                    continue
+                parts = content.split("---", 2)
+                if len(parts) < 3:
+                    continue
+                fm = yaml.safe_load(parts[1])
+                if not isinstance(fm, dict):
+                    continue
+
+                tags = []
+                meta = fm.get("metadata", {})
+                if isinstance(meta, dict):
+                    hermes_meta = meta.get("hermes", {})
+                    if isinstance(hermes_meta, dict):
+                        tags = hermes_meta.get("tags", [])
+
+                skills.append({
+                    "name": fm.get("name", skill_md.parent.name),
+                    "description": fm.get("description", ""),
+                    "version": fm.get("version"),
+                    "author": fm.get("author"),
+                    "tags": tags,
+                    "path": str(skill_md.parent.relative_to(skills_dir)),
+                })
+            except Exception:
+                continue
+
+    return {
+        "count": len(skills),
+        "skills": sorted(skills, key=lambda s: s["name"]),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("HERMES_EVENT_SERVER_PORT", "8642"))
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
