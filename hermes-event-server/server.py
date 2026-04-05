@@ -485,30 +485,6 @@ async def health():
     return {"status": "ok", "service": "hermes-event-server"}
 
 
-@app.get("/v1/soliplex/rooms")
-async def soliplex_rooms():
-    """Proxy to Soliplex rooms API — lets Hermes discover rooms."""
-    import httpx as _httpx
-    soliplex_url = os.environ.get("SOLIPLEX_URL", "http://host.docker.internal:8000/api")
-    try:
-        async with _httpx.AsyncClient(timeout=10.0) as client:
-            r = await client.get(f"{soliplex_url}/v1/rooms")
-            rooms = r.json()
-            summary = []
-            for room_id, room_data in rooms.items():
-                if isinstance(room_data, dict):
-                    summary.append({
-                        "id": room_id,
-                        "name": room_data.get("name", room_id),
-                        "description": room_data.get("description", ""),
-                        "agent_kind": room_data.get("agent", {}).get("kind", "default"),
-                        "tools": list(room_data.get("tools", {}).keys()),
-                    })
-            return {"rooms": summary, "count": len(summary)}
-    except Exception as e:
-        return {"error": str(e), "rooms": []}
-
-
 class ToolCallRequest(BaseModel):
     """Single tool dispatch — no agent loop."""
     tool: str
