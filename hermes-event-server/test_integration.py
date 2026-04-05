@@ -53,7 +53,10 @@ async def test_tools():
     async with httpx.AsyncClient() as c:
         r = await c.get(f"{HERMES_URL}/v1/agent/tools")
         data = r.json()
-        result("tools_list", len(data["tools"]) > 0, f"{len(data['tools'])} tools")
+        summary = data.get("summary", {})
+        total = summary.get("total_tools", 0)
+        available = summary.get("available_tools", 0)
+        result("tools_list", total > 0, f"{available}/{total} tools")
 
 
 async def test_skills():
