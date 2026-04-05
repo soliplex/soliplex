@@ -107,7 +107,8 @@ def _soliplex_ask_room(room_id: str = "", message: str = "", **kwargs) -> str:
         # Collect text from SSE
         text_parts = []
         tool_calls = []
-        for line in r.iter_lines(decode_unicode=True):
+        for raw_line in r.iter_lines():
+            line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else raw_line
             if not line or not line.startswith("data:"):
                 continue
             d = line[6:].strip()
