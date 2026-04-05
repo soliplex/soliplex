@@ -40,10 +40,12 @@ if os.path.exists(_env_path):
     logger.info("TAVILY_API_KEY=%s...", os.environ.get("TAVILY_API_KEY", "NOT SET")[:15])
 
 # Signal to Hermes tools that we're in an interactive/gateway context
-# and use local terminal (no Docker-in-Docker)
-os.environ.setdefault("HERMES_INTERACTIVE", "1")
-os.environ.setdefault("HERMES_GATEWAY_SESSION", "1")
-os.environ.setdefault("TERMINAL_ENV", "local")
+# and force local terminal (no Docker-in-Docker inside the container)
+os.environ["HERMES_INTERACTIVE"] = "1"
+os.environ["HERMES_GATEWAY_SESSION"] = "1"
+os.environ["TERMINAL_ENV"] = os.environ.get(
+    "HERMES_EVENT_SERVER_TERMINAL_ENV", "local"
+)
 
 # Import model_tools early to populate the tool registry (tools self-register on import)
 import model_tools as _mt  # noqa: E402
@@ -375,17 +377,52 @@ async def health():
 
 @app.get("/v1/agent/tools")
 async def list_tools():
-    """List available tools and toolsets."""
+    """List all tools with availability status per toolset."""
     from tools.registry import registry
-    toolsets = registry.get_available_toolsets()
-    tool_names = registry.get_all_tool_names()
+
     tool_map = registry.get_tool_to_toolset_map()
+    toolsets = {}
+
+    for name, entry in sorted(registry._tools.items()):
+        ts = entry.toolset
+        available = True
+        if entry.check_fn:
+            try:
+                available = bool(entry.check_fn())
+            except Exception:
+                available = False
+
+        toolsets.setdefault(ts, {"tools": [], "available": True})
+        toolsets[ts]["tools"].append({
+            "name": name,
+            "available": available,
+            "description": entry.description or "",
+        })
+        if not available:
+            toolsets[ts]["available"] = False
+
     return {
-        "tools": [
-            {"name": name, "toolset": tool_map.get(name, "unknown")}
-            for name in sorted(tool_names)
-        ],
-        "toolsets": toolsets,
+        "toolsets": {
+            ts: {
+                "available": info["available"],
+                "tool_count": len(info["tools"]),
+                "tools": info["tools"],
+            }
+            for ts, info in sorted(toolsets.items())
+        },
+        "summary": {
+            "total_tools": sum(len(i["tools"]) for i in toolsets.values()),
+            "available_tools": sum(
+                1 for i in toolsets.values()
+                for t in i["tools"] if t["available"]
+            ),
+            "available_toolsets": [
+                ts for ts, i in toolsets.items() if i["available"]
+            ],
+            "gated_toolsets": [
+                ts for ts, i in toolsets.items() if not i["available"]
+            ],
+        },
     }
 
 
