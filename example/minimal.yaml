@@ -324,8 +324,8 @@ room_paths:
   - "./rooms/chat"
   - "./rooms/search"
   - "./rooms/analysis"
-  - "./rooms/joker"
-  - "./rooms/faux"
+  # - "./rooms/joker"  # broken: skill_toolset_config → skills_toolset_config
+  # - "./rooms/faux"   # broken: same factory arg mismatch
   - "./rooms/quiztest"
   - "./rooms/skillstest"
   - "./rooms/multi_arg"
