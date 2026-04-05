@@ -170,3 +170,67 @@ curl http://localhost:8642/v1/agent/tool \
   -H "Content-Type: application/json" \
   -d '{"tool": "terminal", "args": {"command": "date"}}'
 ```
+
+## Python Client: TUI_REST_API
+
+Soliplex includes a ready-made Python REST client at `soliplex.tui.rest_api.TUI_REST_API`.
+Use it instead of raw httpx/requests:
+
+```python
+from soliplex.tui.rest_api import TUI_REST_API
+
+api = TUI_REST_API(soliplex_url="http://localhost:8000")
+
+# List rooms
+rooms = api.get_rooms()
+
+# Get room details
+room = api.get_room("hermes-hybrid")
+
+# Get room documents (RAG)
+docs = api.get_room_documents("search")
+
+# Get MCP token for a room
+token = api.get_room_mcp_token("search")
+
+# Thread lifecycle
+thread = api.post_new_thread("hermes-hybrid", {})
+thread_id = thread["thread_id"]
+run_id = list(thread["runs"].keys())[0]
+
+# Get thread details
+details = api.get_thread("hermes-hybrid", thread_id)
+
+# Start a run (returns streaming response)
+from ag_ui.core import RunAgentInput, UserMessage
+run_input = RunAgentInput(
+    thread_id=thread_id,
+    run_id=run_id,
+    state={},
+    messages=[UserMessage(id="m1", role="user", content="Hello")],
+    tools=[], context=[], forwarded_props={},
+)
+response = api.post_start_run("hermes-hybrid", thread_id, run_id, run_input)
+for line in response.iter_lines():
+    print(line)
+
+# File uploads
+api.post_room_file_upload("hermes-hybrid", Path("data.csv"))
+api.post_thread_file_upload("hermes-hybrid", thread_id, Path("notes.txt"))
+
+# Thread metadata
+api.post_thread_metadata("hermes-hybrid", thread_id, {"name": "Research session"})
+
+# Run feedback
+api.post_run_feedback("hermes-hybrid", thread_id, run_id, {"rating": "good"})
+```
+
+Available methods:
+- `get_rooms()`, `get_room(id)`, `get_room_documents(id)`, `get_room_mcp_token(id)`
+- `get_installation()`, `get_installed_versions()`, `get_provider_models()`
+- `post_new_thread(room, request)`, `get_thread(room, tid)`, `get_room_threads(room)`
+- `post_new_run(room, tid, request)`, `get_run(room, tid, rid)`
+- `post_start_run(room, tid, rid, input)` — returns streaming response
+- `post_room_file_upload(room, path)`, `post_thread_file_upload(room, tid, path)`
+- `post_thread_metadata(room, tid, meta)`, `post_run_metadata(room, tid, rid, meta)`
+- `post_run_feedback(room, tid, rid, feedback)`
