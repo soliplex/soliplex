@@ -345,6 +345,7 @@ room_paths:
   - "./rooms/hermes"
   - "./rooms/hermes-quick"
   - "./rooms/hermes-hybrid"
+  - "./rooms/hermes-daytona"
 
 #==========================================================================
 # Completions configuration

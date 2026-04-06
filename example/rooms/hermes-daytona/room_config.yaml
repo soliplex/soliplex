@@ -1,0 +1,28 @@
+id: "hermes-daytona"
+name: "Hermes + Daytona"
+description: "Hermes agent with persistent Daytona cloud sandboxes — install packages, create files, run code across turns"
+
+suggestions:
+  - "Install numpy and run a matrix multiplication benchmark"
+  - "Create a Python project with tests and run them"
+  - "What OS is the sandbox running? Show me hardware info"
+  - "Write a script, save it, then run it"
+
+agent:
+  kind: hermes
+  hermes_url: http://localhost:8642
+  hermes_model: "MiniMax-M2.7"
+  hermes_max_iterations: 15
+  hermes_toolsets:
+    - terminal
+    - file
+    - code_execution
+    - web
+    - skills
+    - memory
+    - soliplex
+  hermes_system_prompt: |
+    You have access to a persistent Daytona cloud sandbox.
+    Files and packages persist across messages within a session.
+    Use "terminal" for shell commands and "write_file"/"read_file" for files.
+    The sandbox runs Linux x86_64 with Python and Node.js.

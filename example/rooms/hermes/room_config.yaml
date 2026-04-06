@@ -9,7 +9,7 @@ suggestions:
 
 agent:
   kind: hermes
-  hermes_url: http://localhost:8642
+  hermes_url: http://localhost:8643
   hermes_model: "MiniMax-M2.7"
   hermes_max_iterations: 10
   hermes_toolsets:
@@ -23,3 +23,8 @@ agent:
     - code_execution
     - todo
     - soliplex
+  hermes_disabled_toolsets: []
+  hermes_system_prompt: |
+    When you need to run a shell command, use the "terminal" tool (not "process").
+    The "terminal" tool executes one-shot commands and returns the output.
+    The "process" tool is for managing background processes — avoid it for simple commands.
