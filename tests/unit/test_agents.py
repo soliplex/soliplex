@@ -443,12 +443,8 @@ def test_get_agent_from_configs_w_thread_id_cache_key():
     a_config.kind = "default"
 
     with (
-        mock.patch(
-            "soliplex.agents.get_default_agent_from_configs"
-        ) as gdafc,
-        mock.patch.dict(
-            "soliplex.agents._agent_cache", clear=True
-        ) as cache,
+        mock.patch("soliplex.agents.get_default_agent_from_configs"),
+        mock.patch.dict("soliplex.agents._agent_cache", clear=True) as cache,
     ):
         found = agents.get_agent_from_configs(
             agent_config=a_config,
@@ -467,9 +463,7 @@ def test_get_agent_from_configs_w_thread_id_cache_hit():
     a_config = mock.create_autospec(config_agents.AgentConfig)
     a_config.id = ROOM_ID
 
-    with mock.patch.dict(
-        "soliplex.agents._agent_cache", clear=True
-    ) as ac:
+    with mock.patch.dict("soliplex.agents._agent_cache", clear=True) as ac:
         ac[(ROOM_ID, THREAD_ID)] = expected
 
         found = agents.get_agent_from_configs(
@@ -490,9 +484,7 @@ def test_get_agent_from_configs_passes_thread_id(gdafc):
     a_config.kind = "default"
     threads_path = pathlib.Path("/uploads/threads")
 
-    with mock.patch.dict(
-        "soliplex.agents._agent_cache", clear=True
-    ):
+    with mock.patch.dict("soliplex.agents._agent_cache", clear=True):
         agents.get_agent_from_configs(
             agent_config=a_config,
             tool_configs={},
@@ -516,9 +508,7 @@ def test_get_agent_from_configs_passes_thread_id(gdafc):
         (THREAD_ID, True, True),
     ],
 )
-def test_reconfigure_sandbox(
-    temp_dir, thread_id, w_upload_path, has_sandbox
-):
+def test_reconfigure_sandbox(temp_dir, thread_id, w_upload_path, has_sandbox):
     toolset = mock.create_autospec(hs_agent.SkillToolset)
     registry = hs_registry.SkillRegistry()
     toolset.registry = registry

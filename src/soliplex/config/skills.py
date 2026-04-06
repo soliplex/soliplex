@@ -11,6 +11,8 @@ from haiku.rag.skills import rlm as hr_skills_rlm
 from haiku.skills import agent as hs_agent
 from haiku.skills import discovery as hs_discovery
 from haiku.skills import models as hs_models
+from haiku_skills_sandbox import SandboxState
+from haiku_skills_sandbox import create_skill as create_sandbox_skill
 from pydantic_ai import models as ai_models
 
 from soliplex import agents
@@ -415,16 +417,35 @@ class HR_RLM_SkillConfig(_HR_SkillConfigBase):
         )
 
 
+SANDBOX_SKILL_METADATA = hs_models.SkillMetadata(
+    name="sandbox",
+    description=(
+        "Writes and executes Python code in a Docker sandbox"
+        " with filesystem access and pre-installed data"
+        " science packages."
+    ),
+)
+
+
 @dataclasses.dataclass(kw_only=True)
-class SandboxSkillConfig:
+class SandboxSkillConfig(_SkillPropertiesFromMetadata):
     """Configuration for the Docker sandbox skill."""
 
     kind: typing.ClassVar[str] = "sandbox"
+    source: typing.ClassVar[str] = SkillKind.ENTRYPOINT
 
     image: str | None = None
     idle_timeout: int | None = None
 
+    _skill_metadata: hs_models.SkillMetadata = dataclasses.field(
+        default_factory=lambda: SANDBOX_SKILL_METADATA,
+        repr=False,
+        compare=False,
+    )
     _config_path: pathlib.Path | None = None
+
+    state_type: SkillStateType = SandboxState
+    state_namespace: str | None = "sandbox"
 
     @classmethod
     def from_yaml(
@@ -446,14 +467,8 @@ class SandboxSkillConfig:
             ) from exc
 
     @property
-    def name(self) -> str:
-        return "sandbox"
-
-    @staticmethod
-    def _create_skill(**kwargs) -> hs_models.Skill:  # pragma: NO COVER
-        import haiku_skills_sandbox
-
-        return haiku_skills_sandbox.create_skill(**kwargs)
+    def agui_feature_names(self) -> tuple[str]:
+        return ("sandbox",)
 
     @property
     def skill(self) -> hs_models.Skill:
@@ -462,7 +477,9 @@ class SandboxSkillConfig:
             kwargs["image"] = self.image
         if self.idle_timeout is not None:
             kwargs["idle_timeout"] = self.idle_timeout
-        return self._create_skill(**kwargs)
+        skill = create_sandbox_skill(**kwargs)
+        skill._factory = create_sandbox_skill
+        return skill
 
 
 SKILL_CONFIG_CLASSES_BY_KIND = {

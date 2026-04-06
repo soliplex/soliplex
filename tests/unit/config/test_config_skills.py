@@ -1157,10 +1157,8 @@ def test_roomskillsconfig_skill_toolset(
         ),
     ],
 )
-@mock.patch.object(config_skills.SandboxSkillConfig, "_create_skill")
-def test_sandboxskillconfig_skill(
-    mock_create_skill, w_kw, exp_create_kw
-):
+@mock.patch("soliplex.config.skills.create_sandbox_skill")
+def test_sandboxskillconfig_skill(mock_create_skill, w_kw, exp_create_kw):
     fake_skill = mock.create_autospec(hs_models.Skill)
     mock_create_skill.return_value = fake_skill
 
@@ -1217,5 +1215,16 @@ def test_sandboxskillconfig_registered():
         is config_skills.SandboxSkillConfig
     )
 
+    from haiku_skills_sandbox import SandboxState
+
     inst = config_skills.SandboxSkillConfig()
     assert inst.name == "sandbox"
+    assert inst.description is not None
+    assert inst.source == hs_models.SkillSource.ENTRYPOINT
+    assert inst.state_type is SandboxState
+    assert inst.state_namespace == "sandbox"
+    assert inst.agui_feature_names == ("sandbox",)
+    assert inst.license is None
+    assert inst.compatibility is None
+    assert inst.allowed_tools == []
+    assert inst.metadata == {}
