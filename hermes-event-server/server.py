@@ -43,13 +43,13 @@ if os.path.exists(_env_path):
 # and force local terminal (no Docker-in-Docker inside the container)
 os.environ["HERMES_INTERACTIVE"] = "1"
 os.environ["HERMES_GATEWAY_SESSION"] = "1"
-# Don't override TERMINAL_ENV if .env already set it — AIAgent reloads .env
-# Only set if not present at all (bare container with no .env)
-if not os.environ.get("TERMINAL_ENV"):
-    _terminal_env = "daytona" if os.environ.get("DAYTONA_API_KEY") else "local"
-    os.environ["TERMINAL_ENV"] = _terminal_env
-logger.info("TERMINAL_ENV=%s (DAYTONA_API_KEY=%s)",
-            os.environ.get("TERMINAL_ENV", "not set"),
+# Force TERMINAL_ENV for the server process (check_fn runs here).
+# AIAgent reloads .env in __init__ so it gets the .env value too.
+# If .env says daytona, we set daytona. If local, we set local.
+# The .env was already loaded by load_dotenv above.
+_terminal_env = os.environ.get("TERMINAL_ENV", "local")
+os.environ["TERMINAL_ENV"] = _terminal_env
+logger.info("TERMINAL_ENV=%s (DAYTONA_API_KEY=%s)", _terminal_env,
             "set" if os.environ.get("DAYTONA_API_KEY") else "not set")
 
 # Import model_tools early to populate the tool registry (tools self-register on import)
