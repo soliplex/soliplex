@@ -241,9 +241,7 @@ async def test_get_auth_system(
                     the_unauth_logger=the_unauth_logger,
                 )
 
-            bound_logger.exception.assert_called_once_with(
-                loggers.AUTHN_JWT_INVALID,
-            )
+            bound_logger.exception.assert_called_once()
 
             assert exc.value.status_code == 401
         else:

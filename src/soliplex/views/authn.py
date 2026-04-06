@@ -158,14 +158,11 @@ async def get_auth_system(
 
     try:
         tokendict = await oauth_app.authorize_access_token(request)
-    except starlette_client.OAuthError as exc:
-        # Diagnostic logging for session issues (though we now use DB)
-        bound_logger.error(
-            "OAuth error: %s, session keys: %s",
-            str(exc),
+    except starlette_client.OAuthError:
+        bound_logger.exception(
+            "OAuth error, session keys: %s",
             list(request.session.keys()),
         )
-        bound_logger.exception(loggers.AUTHN_JWT_INVALID)
         raise fastapi.HTTPException(
             status_code=401,
             detail=loggers.AUTHN_JWT_INVALID,
