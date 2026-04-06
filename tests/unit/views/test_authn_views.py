@@ -406,6 +406,100 @@ async def test_get_authn_system_without_hash():
 
 
 @pytest.mark.anyio
+async def test_get_auth_system_invalid_state():
+    """Test that an invalid/expired OIDC state returns 401."""
+    state = "nonexistent_state"
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.auth_disabled = False
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_authz_policy.consume_oidc_state = mock.AsyncMock(return_value=None)
+    the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
+
+    request = fastapi.Request(
+        scope={
+            "type": "http",
+            "query_string": f"state={state}",
+            "session": {},
+        }
+    )
+
+    with (
+        mock.patch("soliplex.authn.get_oauth"),
+        pytest.raises(fastapi.HTTPException) as exc,
+    ):
+        await authn_views.get_auth_system(
+            request=request,
+            system="josce",
+            the_installation=the_installation,
+            the_authz_policy=the_authz_policy,
+            the_unauth_logger=the_unauth_logger,
+        )
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail == "Invalid OIDC state"
+    the_authz_policy.consume_oidc_state.assert_awaited_once_with(
+        state=state,
+        system="josce",
+    )
+
+
+@pytest.mark.anyio
+async def test_get_auth_system_fragment_with_existing_query():
+    """Test token appending when fragment already has query params."""
+    state = "test_state"
+    nonce = "test_nonce"
+    redirect_uri = "http://test/authn/system"
+
+    request = mock.Mock()
+    request.query_params = {
+        "return_to": "/#/authn/callback?existing=param",
+        "state": state,
+    }
+    request.scope = {"session": {}}
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.auth_disabled = False
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_authz_policy.consume_oidc_state = mock.AsyncMock(
+        return_value={"nonce": nonce, "redirect_uri": redirect_uri},
+    )
+    the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
+
+    oauth = mock.Mock()
+    oauth_app = mock.Mock()
+    tokendict = {
+        "access_token": "test_access_token",
+        "refresh_token": "test_refresh_token",
+        "expires_in": 3600,
+        "refresh_expires_in": 86400,
+    }
+    oauth_app.authorize_access_token = mock.AsyncMock(return_value=tokendict)
+    oauth.create_client = mock.Mock(return_value=oauth_app)
+
+    with (
+        mock.patch("soliplex.authn.get_oauth", return_value=oauth),
+        mock.patch("soliplex.authn.authenticate"),
+    ):
+        result = await authn_views.get_auth_system(
+            request=request,
+            system="pydio",
+            the_installation=the_installation,
+            the_authz_policy=the_authz_policy,
+            the_unauth_logger=the_unauth_logger,
+        )
+
+    assert isinstance(result, responses.RedirectResponse)
+    redirect_url = result.headers.get("location")
+
+    # Fragment already had ?existing=param, tokens should be appended with &
+    parts = redirect_url.split("#")
+    assert len(parts) == 2
+    assert "existing=param" in parts[1]
+    assert "&token=test_access_token" in parts[1]
+    assert "&refresh_token=test_refresh_token" in parts[1]
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("w_auth_disabled", [False, True])
 async def test_get_user_info(w_auth_disabled):
     the_installation = mock.create_autospec(installation.Installation)
