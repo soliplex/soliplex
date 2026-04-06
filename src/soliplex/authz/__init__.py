@@ -78,6 +78,23 @@ class AuthorizationPolicy(abc.ABC):
     ) -> None:
         """Delete the authorization policy for the room"""
 
+    @abc.abstractmethod
+    async def create_oidc_state(
+        self,
+        state: str,
+        nonce: str,
+        system: str,
+    ) -> None:
+        """Store an OIDC state/nonce pair for a system."""
+
+    @abc.abstractmethod
+    async def consume_oidc_state(
+        self,
+        state: str,
+        system: str,
+    ) -> str | None:
+        """Return and delete the nonce for an OIDC state/system pair."""
+
 
 async def get_the_authz_policy(
     request: fastapi.Request,

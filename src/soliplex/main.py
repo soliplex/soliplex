@@ -57,9 +57,14 @@ def app_with_cors(app: fastapi.FastAPI) -> fastapi.FastAPI:
 
 
 def app_with_session(app: fastapi.FastAPI, token: str) -> fastapi.FastAPI:
+    # We now store OIDC state/nonce in the database, so the session cookie
+    # SameSite policy is no longer critical for the login flow. We keep it
+    # as 'lax' for a secure default.
     app.add_middleware(
         starlette_mw_sessions.SessionMiddleware,
         secret_key=token.encode("ascii"),
+        same_site="lax",
+        https_only=True,
     )
     return app
 

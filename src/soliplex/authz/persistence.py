@@ -219,3 +219,29 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
             if policy is not None:
                 async with session.begin_nested():
                     await session.delete(policy)
+
+    async def create_oidc_state(self, state: str, nonce: str, system: str):
+        """Store an OIDC state/nonce pair for a system."""
+        async with self.session as session:
+            oidc_state = authz_schema.OIDCState(
+                state=state,
+                nonce=nonce,
+                system=system,
+            )
+            session.add(oidc_state)
+
+    async def consume_oidc_state(self, state: str, system: str) -> str | None:
+        """Return and delete the nonce for an OIDC state/system pair."""
+        async with self.session as session:
+            query = sqla_sql.select(authz_schema.OIDCState).where(
+                authz_schema.OIDCState.state == state,
+                authz_schema.OIDCState.system == system,
+            )
+            oidc_state = (await session.scalars(query)).first()
+
+            if oidc_state is not None:
+                nonce = oidc_state.nonce
+                await session.delete(oidc_state)
+                return nonce
+
+        return None

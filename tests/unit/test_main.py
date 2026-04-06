@@ -124,6 +124,8 @@ def test_app_with_session():
     app.add_middleware.assert_called_once_with(
         starlette_mw_sessions.SessionMiddleware,
         secret_key=TOKEN.encode("ascii"),
+        same_site="lax",
+        https_only=True,
     )
 
 

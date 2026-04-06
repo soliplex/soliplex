@@ -67,6 +67,27 @@ class AdminUser(Base):
     )
 
 
+class OIDCState(Base):
+    """Store OAuth state and nonce for cross-site redirect robustness.
+
+    'state': random string sent to OIDC provider
+    'nonce': random string used for ID token validation
+    'system': the name of the OIDC system (e.g. 'josce')
+    'timestamp': when the state was generated (for cleanup)
+    """
+
+    __tablename__ = "oidc_states"
+
+    state: Mapped[str] = mapped_column(primary_key=True)
+    nonce: Mapped[str] = mapped_column()
+    system: Mapped[str] = mapped_column()
+
+    created: Mapped[datetime.datetime] = mapped_column(
+        sqla_sqltypes.TIMESTAMP(timezone=True),
+        default=_timestamp,
+    )
+
+
 class RoomPolicy(Base):
     """Describe authorization policy for a room
 

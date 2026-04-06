@@ -1,6 +1,7 @@
 """Soliplex authentication views"""
 
 import dataclasses
+import secrets
 from urllib import parse as urlparse
 
 import fastapi
@@ -8,6 +9,7 @@ from authlib.integrations import starlette_client
 from fastapi import responses
 
 from soliplex import authn
+from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -17,6 +19,7 @@ from soliplex import views
 router = fastapi.APIRouter(tags=["authentication"])
 
 depend_the_installation = installation.depend_the_installation
+depend_the_authz = authz_package.depend_the_authz_policy
 depend_the_user_claims = views.depend_the_user_claims
 depend_the_unauth_logger = views.depend_the_unauth_logger
 depend_the_logger = views.depend_the_logger
@@ -50,6 +53,7 @@ async def get_login_system(
     request: fastapi.Request,
     system: str,
     the_installation: installation.Installation = depend_the_installation,
+    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_unauth_logger: loggers.LogWrapper = depend_the_unauth_logger,
 ):
     """Initiate token auth flow with the specified OIDC auth provider"""
@@ -70,7 +74,26 @@ async def get_login_system(
     oauth = authn.get_oauth(the_installation)
     oauth_app = oauth.create_client(system)
 
-    found = await oauth_app.authorize_redirect(request, redirect_uri)
+    # Generate state and nonce and store them in the database instead of
+    # the session cookie. This avoids SameSite cookie issues during
+    # cross-site redirects (e.g. ADFS).
+    state = secrets.token_urlsafe(32)
+    nonce = secrets.token_urlsafe(32)
+    await the_authz_policy.create_oidc_state(
+        state=state,
+        nonce=nonce,
+        system=system,
+    )
+
+    # We must mock the session for authlib's authorize_redirect to see it,
+    # even though we don't intend to use the cookie it might try to set.
+    request.scope.setdefault("session", {})
+    found = await oauth_app.authorize_redirect(
+        request,
+        redirect_uri,
+        state=state,
+        nonce=nonce,
+    )
     bound_logger.debug(loggers.AUTHN_GET_LOGIN_SYSTEM)
     return found
 
@@ -84,6 +107,7 @@ async def get_auth_system(
     request: fastapi.Request,
     system: str,
     the_installation: installation.Installation = depend_the_installation,
+    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_unauth_logger: loggers.LogWrapper = depend_the_unauth_logger,
 ):
     """Complete the OIDC token auth flow with the specified provider
@@ -102,9 +126,35 @@ async def get_auth_system(
     oauth = authn.get_oauth(the_installation)
     oauth_app = oauth.create_client(system)
 
+    # Retrieve state from URL and look up corresponding nonce from DB
+    state = request.query_params.get("state")
+    nonce = await the_authz_policy.consume_oidc_state(
+        state=state,
+        system=system,
+    )
+
+    if nonce is None:
+        bound_logger.error("OIDC state not found in database: %s", state)
+        raise fastapi.HTTPException(
+            status_code=401,
+            detail="Invalid OIDC state",
+        )
+
+    # Mock the session so authlib finds the expected state/nonce
+    request.scope["session"] = {
+        f"_{system}_state_": state,
+        f"_{system}_nonce_": nonce,
+    }
+
     try:
         tokendict = await oauth_app.authorize_access_token(request)
-    except starlette_client.OAuthError:
+    except starlette_client.OAuthError as exc:
+        # Diagnostic logging for session issues (though we now use DB)
+        bound_logger.error(
+            "OAuth error: %s, session keys: %s",
+            str(exc),
+            list(request.session.keys()),
+        )
         bound_logger.exception(loggers.AUTHN_JWT_INVALID)
         raise fastapi.HTTPException(
             status_code=401,
@@ -126,12 +176,12 @@ async def get_auth_system(
     refresh_expires_in = tokendict["refresh_expires_in"]
 
     # Handle hash-based routing (e.g., /#/auth/callback)
-    # Query params must be placed before the hash fragment for Flutter to see
-    # them
+    # Tokens should be passed via the URL fragment (#) instead of query
+    # params (?) to avoid exposure in server logs and browser history.
     return_to = request.query_params.get("return_to", "/")
 
     components = urlparse.urlparse(return_to)
-    qs = urlparse.urlencode(
+    token_fragment = urlparse.urlencode(
         dict(
             token=access_token,
             refresh_token=refresh_token,
@@ -139,14 +189,23 @@ async def get_auth_system(
             refresh_expires_in=refresh_expires_in,
         )
     )
+
+    if components.fragment:
+        if "?" in components.fragment:
+            new_fragment = f"{components.fragment}&{token_fragment}"
+        else:
+            new_fragment = f"{components.fragment}?{token_fragment}"
+    else:
+        new_fragment = token_fragment
+
     return_to = urlparse.urlunparse(
         (
             components.scheme,
             components.netloc,
             components.path,
             components.params,
-            qs,
-            components.fragment,
+            "",  # query params cleared
+            new_fragment,
         )
     )
 
