@@ -36,6 +36,7 @@ async def stream_hermes_events(
     message: str,
     *,
     session_id: str | None = None,
+    task_id: str | None = None,
     history: list[dict] | None = None,
     config: dict | None = None,
     client_tools: list[dict] | None = None,
@@ -48,6 +49,8 @@ async def stream_hermes_events(
     }
     if session_id:
         payload["session_id"] = session_id
+    if task_id:
+        payload["task_id"] = task_id
     if history:
         payload["history"] = history
     if client_tools:
@@ -77,6 +80,7 @@ async def hermes_to_agui_events(
     *,
     thread_id: str,
     run_id: str,
+    room_id: str | None = None,
     session_id: str | None = None,
     history: list[dict] | None = None,
     prior_state: dict | None = None,
@@ -145,6 +149,7 @@ async def hermes_to_agui_events(
             hermes_config.hermes_url,
             message,
             session_id=session_id,
+            task_id=room_id,  # Daytona sandbox reused per room
             history=history,
             config=config,
             client_tools=client_tools,

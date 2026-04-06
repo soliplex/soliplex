@@ -781,6 +781,7 @@ async def _hermes_agent_run(
         user_message,
         thread_id=thread_id,
         run_id=run_id,
+        room_id=room_config.id,
         session_id=session_id,
         history=history or None,
         prior_state=agui_state,
