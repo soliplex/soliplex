@@ -60,6 +60,8 @@ def app_with_session(app: fastapi.FastAPI, token: str) -> fastapi.FastAPI:
     app.add_middleware(
         starlette_mw_sessions.SessionMiddleware,
         secret_key=token.encode("ascii"),
+        https_only=True,
+        same_site="lax",
     )
     return app
 
