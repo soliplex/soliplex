@@ -72,14 +72,16 @@ class OIDCState(Base):
 
     'state': random string sent to OIDC provider
     'nonce': random string used for ID token validation
+    'redirect_uri': the callback URI for the token exchange
     'system': the name of the OIDC system (e.g. 'josce')
-    'timestamp': when the state was generated (for cleanup)
+    'created': when the state was generated (for cleanup)
     """
 
     __tablename__ = "oidc_states"
 
     state: Mapped[str] = mapped_column(primary_key=True)
     nonce: Mapped[str] = mapped_column()
+    redirect_uri: Mapped[str] = mapped_column()
     system: Mapped[str] = mapped_column()
 
     created: Mapped[datetime.datetime] = mapped_column(

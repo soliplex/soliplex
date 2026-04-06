@@ -220,18 +220,21 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
                 async with session.begin_nested():
                     await session.delete(policy)
 
-    async def create_oidc_state(self, state: str, nonce: str, system: str):
-        """Store an OIDC state/nonce pair for a system."""
+    async def create_oidc_state(
+        self, state: str, nonce: str, redirect_uri: str, system: str
+    ):
+        """Store an OIDC state/nonce/redirect_uri for a system."""
         async with self.session as session:
             oidc_state = authz_schema.OIDCState(
                 state=state,
                 nonce=nonce,
+                redirect_uri=redirect_uri,
                 system=system,
             )
             session.add(oidc_state)
 
-    async def consume_oidc_state(self, state: str, system: str) -> str | None:
-        """Return and delete the nonce for an OIDC state/system pair."""
+    async def consume_oidc_state(self, state: str, system: str) -> dict | None:
+        """Return and delete the OIDC state data for a state/system pair."""
         async with self.session as session:
             query = sqla_sql.select(authz_schema.OIDCState).where(
                 authz_schema.OIDCState.state == state,
@@ -240,8 +243,11 @@ class AuthorizationPolicy(authz_package.AuthorizationPolicy):
             oidc_state = (await session.scalars(query)).first()
 
             if oidc_state is not None:
-                nonce = oidc_state.nonce
+                data = {
+                    "nonce": oidc_state.nonce,
+                    "redirect_uri": oidc_state.redirect_uri,
+                }
                 await session.delete(oidc_state)
-                return nonce
+                return data
 
         return None

@@ -83,17 +83,21 @@ class AuthorizationPolicy(abc.ABC):
         self,
         state: str,
         nonce: str,
+        redirect_uri: str,
         system: str,
     ) -> None:
-        """Store an OIDC state/nonce pair for a system."""
+        """Store an OIDC state/nonce/redirect_uri for a system."""
 
     @abc.abstractmethod
     async def consume_oidc_state(
         self,
         state: str,
         system: str,
-    ) -> str | None:
-        """Return and delete the nonce for an OIDC state/system pair."""
+    ) -> dict | None:
+        """Return and delete the OIDC state data for a state/system pair.
+
+        Returns a dict with 'nonce' and 'redirect_uri', or None.
+        """
 
 
 async def get_the_authz_policy(

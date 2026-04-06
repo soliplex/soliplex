@@ -2,6 +2,7 @@
 
 import dataclasses
 import secrets
+import time
 from urllib import parse as urlparse
 
 import fastapi
@@ -82,6 +83,7 @@ async def get_login_system(
     await the_authz_policy.create_oidc_state(
         state=state,
         nonce=nonce,
+        redirect_uri=str(redirect_uri),
         system=system,
     )
 
@@ -126,24 +128,32 @@ async def get_auth_system(
     oauth = authn.get_oauth(the_installation)
     oauth_app = oauth.create_client(system)
 
-    # Retrieve state from URL and look up corresponding nonce from DB
+    # Retrieve state from URL and look up corresponding data from DB
     state = request.query_params.get("state")
-    nonce = await the_authz_policy.consume_oidc_state(
+    state_data = await the_authz_policy.consume_oidc_state(
         state=state,
         system=system,
     )
 
-    if nonce is None:
+    if state_data is None:
         bound_logger.error("OIDC state not found in database: %s", state)
         raise fastapi.HTTPException(
             status_code=401,
             detail="Invalid OIDC state",
         )
 
-    # Mock the session so authlib finds the expected state/nonce
+    # Populate the session with the format authlib expects:
+    # key: _state_{system}_{state_value}
+    # value: {"data": {nonce, redirect_uri, ...}, "exp": timestamp}
+    # See: authlib/integrations/starlette_client/integration.py
     request.scope["session"] = {
-        f"_{system}_state_": state,
-        f"_{system}_nonce_": nonce,
+        f"_state_{system}_{state}": {
+            "data": {
+                "nonce": state_data["nonce"],
+                "redirect_uri": state_data["redirect_uri"],
+            },
+            "exp": time.time() + 3600,
+        }
     }
 
     try:

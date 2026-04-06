@@ -5,6 +5,7 @@ import pytest
 from authlib.integrations import starlette_client
 from fastapi import responses
 
+from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
@@ -56,6 +57,8 @@ async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
     system = "test_oauth_appname"
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.auth_disabled = w_auth_disabled
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_authz_policy.create_oidc_state = mock.AsyncMock()
     the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
     bound_logger = the_unauth_logger.bind.return_value
 
@@ -85,6 +88,7 @@ async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
                 request=request,
                 system=system,
                 the_installation=the_installation,
+                the_authz_policy=the_authz_policy,
                 the_unauth_logger=the_unauth_logger,
             )
 
@@ -103,12 +107,28 @@ async def test_get_login_system(get_oauth, w_return_to, w_auth_disabled):
             request=request,
             system=system,
             the_installation=the_installation,
+            the_authz_policy=the_authz_policy,
             the_unauth_logger=the_unauth_logger,
         )
 
         assert found is oidc.authorize_redirect.return_value
 
-        ar.assert_awaited_once_with(request, rqp.return_value)
+        # authorize_redirect is called with state and nonce kwargs
+        ar.assert_awaited_once()
+        call_args = ar.call_args
+        assert call_args[0][0] is request
+        assert call_args[0][1] == rqp.return_value
+        assert "state" in call_args[1]
+        assert "nonce" in call_args[1]
+
+        # State was persisted to DB
+        the_authz_policy.create_oidc_state.assert_awaited_once()
+        create_call = the_authz_policy.create_oidc_state.call_args[1]
+        assert create_call["state"] == call_args[1]["state"]
+        assert create_call["nonce"] == call_args[1]["nonce"]
+        assert create_call["system"] == system
+        assert "redirect_uri" in create_call
+
         rqp.assert_called_once_with(return_to=exp_path)
         ruf.assert_called_once_with("get_auth_system", system=system)
         cc.assert_called_once_with(system)
@@ -136,8 +156,15 @@ async def test_get_auth_system(
     w_auth_disabled,
 ):
     system = "test_oauth_appname"
+    state = "test_state_value"
+    nonce = "test_nonce_value"
+    redirect_uri = "https://example.com/api/auth/test_oauth_appname"
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.auth_disabled = w_auth_disabled
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_authz_policy.consume_oidc_state = mock.AsyncMock(
+        return_value={"nonce": nonce, "redirect_uri": redirect_uri},
+    )
     the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
     bound_logger = the_unauth_logger.bind.return_value
 
@@ -163,40 +190,25 @@ async def test_get_auth_system(
             "email": "phreddy@example.com",
         }
 
-    session = {}
+    token_params = (
+        "token=TOKEN&refresh_token=RTOKEN"
+        "&expires_in=EXPIRES_IN&refresh_expires_in=REFRESH_EXPIRES_IN"
+    )
 
     if w_return_to:
-        exp_path = (
-            "/another/path?token=TOKEN&refresh_token=RTOKEN"
-            "&expires_in=EXPIRES_IN&refresh_expires_in=REFRESH_EXPIRES_IN"
-        )
-        qs = "return_to=/another/path"
+        exp_path = f"/another/path#{token_params}"
+        qs = f"return_to=/another/path&state={state}"
     else:
-        exp_path = (
-            "/?token=TOKEN&refresh_token=RTOKEN"
-            "&expires_in=EXPIRES_IN&refresh_expires_in=REFRESH_EXPIRES_IN"
-        )
-        qs = ""
+        exp_path = f"/#{token_params}"
+        qs = f"state={state}"
 
     request = fastapi.Request(
         scope={
             "type": "http",
             "query_string": qs,
-            "session": session,
+            "session": {},
         }
     )
-
-    aat = oidc.authorize_access_token = mock.AsyncMock()
-
-    if w_error == "aat":
-        aat.side_effect = starlette_client.OAuthError("testing")
-    else:
-        aat.return_value = {
-            "access_token": "TOKEN",
-            "refresh_token": "RTOKEN",
-            "expires_in": "EXPIRES_IN",
-            "refresh_expires_in": "REFRESH_EXPIRES_IN",
-        }
 
     if w_auth_disabled:
         with pytest.raises(fastapi.HTTPException) as exc:
@@ -204,6 +216,7 @@ async def test_get_auth_system(
                 request=request,
                 system=system,
                 the_installation=the_installation,
+                the_authz_policy=the_authz_policy,
                 the_unauth_logger=the_unauth_logger,
             )
         bound_logger.error.assert_called_once_with(
@@ -224,6 +237,7 @@ async def test_get_auth_system(
                     request=request,
                     system=system,
                     the_installation=the_installation,
+                    the_authz_policy=the_authz_policy,
                     the_unauth_logger=the_unauth_logger,
                 )
 
@@ -237,6 +251,7 @@ async def test_get_auth_system(
                 request=request,
                 system=system,
                 the_installation=the_installation,
+                the_authz_policy=the_authz_policy,
                 the_unauth_logger=the_unauth_logger,
             )
 
@@ -247,6 +262,12 @@ async def test_get_auth_system(
             bound_logger.debug.assert_called_once_with(
                 loggers.AUTHN_JWT_VALID,
             )
+
+        # State was consumed from DB
+        the_authz_policy.consume_oidc_state.assert_awaited_once_with(
+            state=state,
+            system=system,
+        )
 
         aat.assert_awaited_once_with(request)
 
@@ -264,23 +285,29 @@ async def test_get_auth_system(
 
 @pytest.mark.anyio
 async def test_get_auth_system_with_hash_routing():
-    """Test that authn callback handles hash-based routing correctly."""
+    """Test that authn callback handles hash-based routing correctly.
+
+    Tokens are placed in the URL fragment to avoid exposure in server logs.
+    """
+    state = "test_state"
+    nonce = "test_nonce"
+    redirect_uri = "http://test/authn/system"
 
     # Mock request with hash-based return_to URL
     request = mock.Mock()
-    request.query_params = {"return_to": "/#/authn/callback"}
-    request.url_for = mock.Mock(
-        return_value=mock.Mock(
-            replace_query_params=mock.Mock(
-                return_value="http://test/authn/system"
-            )
-        )
-    )
+    request.query_params = {
+        "return_to": "/#/authn/callback",
+        "state": state,
+    }
+    request.scope = {"session": {}}
 
-    # Mock installation with empty oidc_auth_system_configs
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.auth_disabled = False
     the_installation.oidc_auth_system_configs = []
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_authz_policy.consume_oidc_state = mock.AsyncMock(
+        return_value={"nonce": nonce, "redirect_uri": redirect_uri},
+    )
     the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
 
     # Mock OAuth components
@@ -301,54 +328,50 @@ async def test_get_auth_system_with_hash_routing():
         mock.patch("soliplex.authn.get_oauth", return_value=oauth),
         mock.patch("soliplex.authn.authenticate"),
     ):
-        # Call the function
         result = await authn_views.get_auth_system(
             request=request,
             system="pydio",
             the_installation=the_installation,
+            the_authz_policy=the_authz_policy,
             the_unauth_logger=the_unauth_logger,
         )
 
-    # Check that the redirect URL has query params before the hash
     assert isinstance(result, responses.RedirectResponse)
     redirect_url = result.headers.get("location")
 
-    # Should be /?token=xxx&refresh_token=xxx#/authn/callback
-    # Not /#/authn/callback?token=xxx
-    assert redirect_url.startswith("/")
-    assert "?token=test_access_token" in redirect_url
-    assert "&refresh_token=test_refresh_token" in redirect_url
-    assert redirect_url.endswith("#/authn/callback")
-
-    # Verify the correct structure
+    # Tokens should be in the fragment, after the hash route
+    # e.g. /#/authn/callback?token=xxx&refresh_token=xxx
     parts = redirect_url.split("#")
     assert len(parts) == 2
-    assert "?token=" in parts[0]  # Query params before hash
-    assert parts[1] == "/authn/callback"  # Hash fragment preserved
+    assert parts[0] == "/"  # No query params in the path
+    assert "/authn/callback?" in parts[1]
+    assert "token=test_access_token" in parts[1]
+    assert "refresh_token=test_refresh_token" in parts[1]
 
 
 @pytest.mark.anyio
 async def test_get_authn_system_without_hash():
-    """Test that authn callback still works without hash routing."""
+    """Test that authn callback works without hash routing.
 
-    # Mock request without hash in return_to
+    Tokens are placed in the fragment even when there's no hash route.
+    """
+    state = "test_state"
+    nonce = "test_nonce"
+    redirect_uri = "http://test/authn/system"
+
     request = mock.Mock()
-    request.query_params = {"return_to": "/dashboard"}
-    request.url_for = mock.Mock(
-        return_value=mock.Mock(
-            replace_query_params=mock.Mock(
-                return_value="http://test/authn/system"
-            )
-        )
-    )
+    request.query_params = {"return_to": "/dashboard", "state": state}
+    request.scope = {"session": {}}
 
-    # Mock installation with empty oidc_auth_system_configs
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.auth_disabled = False
     the_installation.oidc_auth_system_configs = []
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_authz_policy.consume_oidc_state = mock.AsyncMock(
+        return_value={"nonce": nonce, "redirect_uri": redirect_uri},
+    )
     the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
 
-    # Mock OAuth components
     oauth = mock.Mock()
     oauth_app = mock.Mock()
     tokendict = {
@@ -361,28 +384,25 @@ async def test_get_authn_system_without_hash():
     oauth_app.authorize_access_token = mock.AsyncMock(return_value=tokendict)
     oauth.create_client = mock.Mock(return_value=oauth_app)
 
-    # Patch auth functions
     with (
         mock.patch("soliplex.authn.get_oauth", return_value=oauth),
         mock.patch("soliplex.authn.authenticate"),
     ):
-        # Call the function
         result = await authn_views.get_auth_system(
             request=request,
             system="pydio",
             the_installation=the_installation,
+            the_authz_policy=the_authz_policy,
             the_unauth_logger=the_unauth_logger,
         )
 
-    # Check that the redirect URL has standard query params
     assert isinstance(result, responses.RedirectResponse)
     redirect_url = result.headers.get("location")
 
-    # Should be /dashboard?token=xxx&refresh_token=xxx
-    assert redirect_url.startswith("/dashboard")
-    assert "?token=test_access_token" in redirect_url
-    assert "&refresh_token=test_refresh_token" in redirect_url
-    assert "#" not in redirect_url  # No hash fragment
+    # Tokens in fragment: /dashboard#token=xxx&refresh_token=xxx
+    assert redirect_url.startswith("/dashboard#")
+    assert "token=test_access_token" in redirect_url
+    assert "refresh_token=test_refresh_token" in redirect_url
 
 
 @pytest.mark.anyio
