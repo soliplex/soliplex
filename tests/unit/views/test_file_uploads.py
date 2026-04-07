@@ -49,6 +49,13 @@ def uploads_path(temp_dir):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
+    "w_filename, exp_filename",
+    [
+        (TEST_FILENAME, TEST_FILENAME),
+        ("../../../../etc/passwd", "passwd"),
+    ],
+)
+@pytest.mark.parametrize(
     "w_upload_path, expectation",
     [
         (True, no_error(204)),
@@ -63,12 +70,14 @@ async def test_post_uploads_room(
     uploads_path,
     w_upload_path,
     expectation,
+    w_filename,
+    exp_filename,
 ):
     room_config = mock.create_autospec(config_rooms.RoomConfig)
     cuir.return_value = room_config
     upload_file = fastapi.UploadFile(
         file=io.BytesIO(TEST_CONTENT),
-        filename=TEST_FILENAME,
+        filename=w_filename,
         headers={"Content-Type": "text/plain"},
     )
 
@@ -121,7 +130,7 @@ async def test_post_uploads_room(
 
         if not isinstance(expected, pytest.ExceptionInfo):
             assert response.status_code == expected
-            exp_file = uploads_path / "rooms" / TEST_ROOM_ID / TEST_FILENAME
+            exp_file = uploads_path / "rooms" / TEST_ROOM_ID / exp_filename
             assert exp_file.read_bytes() == TEST_CONTENT
 
     the_authz_logger.debug.assert_called_once_with(
@@ -134,6 +143,13 @@ async def test_post_uploads_room(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_filename, exp_filename",
+    [
+        (TEST_FILENAME, TEST_FILENAME),
+        ("../../../../etc/passwd", "passwd"),
+    ],
+)
 @pytest.mark.parametrize(
     "tsgt_side_effect, w_upload_path, expectation",
     [
@@ -158,12 +174,14 @@ async def test_post_uploads_room_thread(
     tsgt_side_effect,
     w_upload_path,
     expectation,
+    w_filename,
+    exp_filename,
 ):
     room_config = mock.create_autospec(config_rooms.RoomConfig)
     cuir.return_value = room_config
     upload_file = fastapi.UploadFile(
         file=io.BytesIO(TEST_CONTENT),
-        filename=TEST_FILENAME,
+        filename=w_filename,
         headers={"Content-Type": "text/plain"},
     )
 
@@ -196,7 +214,7 @@ async def test_post_uploads_room_thread(
 
     if not isinstance(expected, pytest.ExceptionInfo):
         assert response.status_code == expected
-        exp_file = uploads_path / "threads" / TEST_THREAD_ID / TEST_FILENAME
+        exp_file = uploads_path / "threads" / TEST_THREAD_ID / exp_filename
         assert exp_file.read_bytes() == TEST_CONTENT
 
     the_threads.get_thread.assert_called_once_with(

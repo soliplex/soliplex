@@ -69,7 +69,8 @@ async def post_uploads_room(
 
     room_dir = pathlib.Path(uploads_path) / room_id
     room_dir.mkdir(parents=True, exist_ok=True)
-    upload_target = room_dir / upload_file.filename
+    stripped_filename = pathlib.Path(upload_file.filename).name
+    upload_target = room_dir / stripped_filename
     upload_target.write_bytes(await upload_file.read())
 
     return fastapi.Response(status_code=204)
@@ -127,7 +128,8 @@ async def post_uploads_room_thread(
 
     thread_dir = pathlib.Path(uploads_path) / thread_id
     thread_dir.mkdir(parents=True, exist_ok=True)
-    upload_target = thread_dir / upload_file.filename
+    stripped_filename = pathlib.Path(upload_file.filename).name
+    upload_target = thread_dir / stripped_filename
     upload_target.write_bytes(await upload_file.read())
 
     return fastapi.Response(status_code=204)
