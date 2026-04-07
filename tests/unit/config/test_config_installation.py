@@ -506,12 +506,21 @@ logfire_config:
     token: "{test_logfire.TEST_LOGFIRE_TOKEN}"
 """
 
+DB_USER_NAME = "db_user"
+
+ENVVAR_NAME_1 = "TEST_SECRET_ONE"
+ENVVAR_NAME_2 = "TEST_SECRET_TWO"
+ENVVAR_VALUE_1 = "<envvar1>"
+ENVVAR_VALUE_2 = "<envvar2>"
+
 TP_DBURI_SYNC = "sqlite+pysqlite:////tmp/tp_testing.sqlite"
-TP_DBURI_SYNC_W_SECRET = (
-    f"sqlite+pysqlcipher://secret:{DB_SECRET_NAME}//tmp/tp_testing.sqlite"
+TP_DBURI_SYNC_W_SECRET_AND_ENV = (
+    f"sqlite+pysqlcipher://env:DB_USER_NAME@"
+    f"secret:{DB_SECRET_NAME}//tmp/tp_testing.sqlite"
 )
-TP_DBURI_SYNC_W_SECRET_RESOLVED = (
-    f"sqlite+pysqlcipher://{DB_SECRET_VALUE}//tmp/tp_testing.sqlite"
+TP_DBURI_SYNC_W_SECRET_AND_ENV_RESOLVED = (
+    f"sqlite+pysqlcipher://{DB_USER_NAME}@"
+    f"{DB_SECRET_VALUE}//tmp/tp_testing.sqlite"
 )
 TP_DBURI_ASYNC = "sqlite+aiosqlite:////tmp/tp_testing.sqlite"
 
@@ -529,23 +538,26 @@ thread_persistence_dburi:
 
 W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "_thread_persistence_dburi_sync": TP_DBURI_SYNC_W_SECRET,
+    "_thread_persistence_dburi_sync": TP_DBURI_SYNC_W_SECRET_AND_ENV,
     # aiosqlite doesn't support secrets
     "_thread_persistence_dburi_async": TP_DBURI_ASYNC,
 }
 W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
 thread_persistence_dburi:
-    sync: {TP_DBURI_SYNC_W_SECRET}
+    sync: {TP_DBURI_SYNC_W_SECRET_AND_ENV}
     async: {TP_DBURI_ASYNC}
 """
 
+RA_DB_USER_NAME = "ra_db_user"
 RA_DBURI_SYNC = "sqlite+pysqlite:////tmp/ra_testing.sqlite"
-RA_DBURI_SYNC_W_SECRET = (
-    f"sqlite+pysqlcipher://secret:{DB_SECRET_NAME}//tmp/ra_testing.sqlite"
+RA_DBURI_SYNC_W_SECRET_AND_ENV = (
+    f"sqlite+pysqlcipher://env:DB_USER_NAME@"
+    f"secret:{DB_SECRET_NAME}//tmp/ra_testing.sqlite"
 )
-RA_DBURI_SYNC_W_SECRET_RESOLVED = (
-    f"sqlite+pysqlcipher://{DB_SECRET_VALUE}//tmp/ra_testing.sqlite"
+RA_DBURI_SYNC_W_SECRET_AND_ENV_RESOLVED = (
+    f"sqlite+pysqlcipher://{DB_USER_NAME}@"
+    f"{DB_SECRET_VALUE}//tmp/ra_testing.sqlite"
 )
 RA_DBURI_ASYNC = "sqlite+aiosqlite:////tmp/ra_testing.sqlite"
 
@@ -563,14 +575,14 @@ authorization_dburi:
 
 W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_KW = {
     "id": INSTALLATION_ID,
-    "_authorization_dburi_sync": RA_DBURI_SYNC_W_SECRET,
+    "_authorization_dburi_sync": RA_DBURI_SYNC_W_SECRET_AND_ENV,
     # aiosqlite doesn't support secrets
     "_authorization_dburi_async": RA_DBURI_ASYNC,
 }
 W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_YAML = f"""\
 id: "{INSTALLATION_ID}"
 authorization_dburi:
-    sync: {RA_DBURI_SYNC_W_SECRET}
+    sync: {RA_DBURI_SYNC_W_SECRET_AND_ENV}
     async: {RA_DBURI_ASYNC}
 """
 
@@ -940,6 +952,51 @@ def test_installationconfig_resolve_environment(
         assert i_config.environment == exp_env
 
 
+RaiseUnknownEnvVar = pytest.raises(
+    config_installation.UnknownEnvironmentVariable,
+)
+
+
+@pytest.mark.parametrize(
+    "value, environment, expectation, exp_value",
+    [
+        ("No env var here", {}, NoRaise, "No env var here"),
+        ("Foo env:UNKNOWN", {}, RaiseUnknownEnvVar, None),
+        (
+            f"Foo env:{ENVVAR_NAME_1}",
+            {ENVVAR_NAME_1: ENVVAR_VALUE_1},
+            NoRaise,
+            "Foo <envvar1>",
+        ),
+        (
+            f"PRE|env:{ENVVAR_NAME_1}|INTER|env:{ENVVAR_NAME_2}|POST",
+            {
+                ENVVAR_NAME_1: ENVVAR_VALUE_1,
+                ENVVAR_NAME_2: ENVVAR_VALUE_2,
+            },
+            NoRaise,
+            "PRE|<envvar1>|INTER|<envvar2>|POST",
+        ),
+    ],
+)
+def test_installationconfig_interpolate_environment(
+    value,
+    environment,
+    expectation,
+    exp_value,
+):
+    i_config = config_installation.InstallationConfig(
+        id="test-ic",
+        environment=environment,
+    )
+
+    with expectation:
+        found = i_config.interpolate_environment(value)
+
+    if exp_value is not None:
+        assert found == exp_value
+
+
 @pytest.mark.parametrize("w_obu", [False, True])
 def test_installationconfig_haiku_rag_config(temp_dir, w_obu):
     hr_config_file = temp_dir / "haiku.rag.yaml"
@@ -1149,8 +1206,9 @@ def test_installationconfig_agui_features(
             (
                 W_TP_DBURI_W_SECRET_INSTALLATION_CONFIG_KW
                 | {"secrets": [DB_SECRET_CONFIG]}
+                | {"environment": {"DB_USER_NAME": DB_USER_NAME}}
             ),
-            TP_DBURI_SYNC_W_SECRET_RESOLVED,
+            TP_DBURI_SYNC_W_SECRET_AND_ENV_RESOLVED,
         ),
     ],
 )
@@ -1192,8 +1250,9 @@ def test_installationconfig_thread_persistence_dburi_async(w_kw, expected):
             (
                 W_RA_DBURI_W_SECRET_INSTALLATION_CONFIG_KW
                 | {"secrets": [DB_SECRET_CONFIG]}
+                | {"environment": {"DB_USER_NAME": DB_USER_NAME}}
             ),
-            RA_DBURI_SYNC_W_SECRET_RESOLVED,
+            RA_DBURI_SYNC_W_SECRET_AND_ENV_RESOLVED,
         ),
     ],
 )

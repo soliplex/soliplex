@@ -6,6 +6,7 @@ import functools
 import itertools
 import os
 import pathlib
+import re
 import sys
 import typing
 
@@ -39,6 +40,10 @@ FILE_PREFIX = "file:"
 SYNC_MEMORY_ENGINE_URL = "sqlite://"
 ASYNC_MEMORY_ENGINE_URL = "sqlite+aiosqlite://"
 
+ENVIRONMENT_PREFIX = "env:"
+ENVIRONMENT_PATTERN = rf"{ENVIRONMENT_PREFIX}(?P<env_name>\w+)"
+ENVIRONMENT_RE = re.compile(ENVIRONMENT_PATTERN)
+
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none
 _no_repr_no_compare_dict = _utils._no_repr_no_compare_dict
 _default_list_field = _utils._default_list_field
@@ -60,6 +65,12 @@ class MissingEnvVars(ExceptionGroup, ValueError):
             f"Environment variables cannot be resolved: {env_vars}",
             excs,
         )
+
+
+class UnknownEnvironmentVariable(KeyError):
+    def __init__(self, env_var):
+        self.env_var = env_var
+        super().__init__(f"Unknown environment variable '{env_var}'")
 
 
 # ============================================================================
@@ -422,6 +433,34 @@ class InstallationConfig:
             for key, value in resolved.items()
         }
 
+    def _resolve_environment_var(self, env_var_name):
+        try:
+            return self.environment[env_var_name]
+        except KeyError:
+            raise UnknownEnvironmentVariable(env_var_name) from None
+
+    def interpolate_environment(self, value):
+        """Replace 'env:<secret_name>' markers w/ env value
+
+        The marker pattern may appear zero or more times.
+        """
+
+        def resolved_tokens(value):
+            tokens = ENVIRONMENT_RE.split(value)
+
+            if sys.version_info >= (3, 13):  # noqa: UP036
+                batch = itertools.batched(tokens, 2, strict=False)
+            else:  # pragma: NO COVER
+                batch = itertools.batched(tokens, 2)  # noqa: B911
+
+            for two_or_one in batch:
+                yield two_or_one[0]
+
+                if len(two_or_one) == 2:
+                    yield self._resolve_environment_var(two_or_one[1])
+
+        return "".join(resolved_tokens(value))
+
     #
     # Global haiku-rag configuration
     #
@@ -631,13 +670,16 @@ class InstallationConfig:
     logfire_config: config_logfire.LogfireConfig = None
 
     #
-    # DB-URI secret handling
+    # DB-URI secret / environment handling
     #
-    def _dburi_w_secret(self, dburi: str | None, default: str) -> str:
+    def _interpolate_dburi(self, dburi: str | None, default: str) -> str:
         if dburi is None:
             return default
 
-        return self.interpolate_secrets(dburi)
+        w_secrets = self.interpolate_secrets(dburi)
+        w_environ = self.interpolate_environment(w_secrets)
+
+        return w_environ
 
     #
     # Thread persistence DB-URI
@@ -647,14 +689,14 @@ class InstallationConfig:
 
     @property
     def thread_persistence_dburi_sync(self):
-        return self._dburi_w_secret(
+        return self._interpolate_dburi(
             self._thread_persistence_dburi_sync,
             SYNC_MEMORY_ENGINE_URL,
         )
 
     @property
     def thread_persistence_dburi_async(self):
-        return self._dburi_w_secret(
+        return self._interpolate_dburi(
             self._thread_persistence_dburi_async,
             ASYNC_MEMORY_ENGINE_URL,
         )
@@ -667,14 +709,14 @@ class InstallationConfig:
 
     @property
     def authorization_dburi_sync(self):
-        return self._dburi_w_secret(
+        return self._interpolate_dburi(
             self._authorization_dburi_sync,
             SYNC_MEMORY_ENGINE_URL,
         )
 
     @property
     def authorization_dburi_async(self):
-        return self._dburi_w_secret(
+        return self._interpolate_dburi(
             self._authorization_dburi_async,
             ASYNC_MEMORY_ENGINE_URL,
         )
