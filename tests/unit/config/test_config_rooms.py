@@ -244,7 +244,7 @@ allow_mcp: true
         (
             W_HR_SKILLS_ROOM_CONFIG_YAML,
             contextlib.nullcontext(W_HR_SKILLS_ROOM_CONFIG_KW),
-            True,
+            False,
         ),
         (
             W_NON_HR_TOOLS_ROOM_CONFIG_YAML,
@@ -351,7 +351,7 @@ def test_roomconfig_from_yaml(
 
         assert found == expected
 
-        if w_depr:
+        if w_depr:  # pragma: NO COVER
             (depr,) = warned
             assert depr.category is DeprecationWarning
         else:

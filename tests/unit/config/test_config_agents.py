@@ -165,7 +165,7 @@ system_prompt: ./prompt.txt
 W_CAPABILITIES_AGENT_CONFIG_KW = dict(
     id=AGENT_ID,
     _capability_configs=[
-        config_agents.AgentCapabilityConfig(name="WebSearch"),
+        config_agents.AgentCapabilityConfig(name="IncludeToolReturnSchemas"),
         config_agents.AgentCapabilityConfig(
             name="Thinking",
             kwargs={"effort": "high"},
@@ -175,7 +175,7 @@ W_CAPABILITIES_AGENT_CONFIG_KW = dict(
 W_CAPABILITIES_AGENT_CONFIG_YAML = f"""
 id: "{AGENT_ID}"
 capabilities:
-    - WebSearch
+    - IncludeToolReturnSchemas
     - Thinking:
         effort: "high"
 """
@@ -799,7 +799,9 @@ def test_agentconfig_llm_provider_kw_google(
         (
             {
                 "_capability_configs": [
-                    config_agents.AgentCapabilityConfig(name="WebSearch"),
+                    config_agents.AgentCapabilityConfig(
+                        name="IncludeToolReturnSchemas",
+                    ),
                     config_agents.AgentCapabilityConfig(
                         name="Thinking",
                         kwargs={"effort": "high"},
@@ -807,7 +809,7 @@ def test_agentconfig_llm_provider_kw_google(
                 ],
             },
             [
-                ai_capabilities.WebSearch(),
+                ai_capabilities.IncludeToolReturnSchemas(),
                 ai_capabilities.Thinking(effort="high"),
             ],
         ),
