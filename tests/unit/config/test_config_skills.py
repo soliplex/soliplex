@@ -864,7 +864,7 @@ def test_hr_rlm_skillconfig_from_yaml(
 
     if not isinstance(expected, pytest.ExceptionInfo):
         assert len(warned) == expected
-        for warning in warned:
+        for warning in warned:  # pragma: NO COVER
             assert warning.category is DeprecationWarning
 
         assert inst.rag_lancedb_path == lancedb
@@ -917,7 +917,7 @@ def test_extractskillconfigs(
 
     if not isinstance(expected, pytest.ExceptionInfo):
         assert len(warned) == expected
-        for warning in warned:
+        for warning in warned:  # pragma: NO COVER
             assert warning.category is DeprecationWarning
 
         assert isinstance(found["rag"], config_skills.HR_RAG_SkillConfig)

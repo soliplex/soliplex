@@ -351,7 +351,7 @@ def test_roomconfig_from_yaml(
 
         assert found == expected
 
-        if w_depr:
+        if w_depr:  # pragma: NO COVER
             (depr,) = warned
             assert depr.category is DeprecationWarning
         else:
