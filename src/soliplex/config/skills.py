@@ -314,18 +314,6 @@ class _HR_SkillConfigBase(
         )
 
 
-HR_RAG_SKILLCONFIG_DEPRECATION = """\
-The 'haiku.rag.skills.rag' skill is deprecated, and will be removed after
-'soliplex v0.58'.
-
-Replace instances with a skill generated using 'haiku-rag create-skill'.
-
-See: https://ggozad.github.io/haiku.rag/skills/#generating-custom-skills
-
-Configured in: {config_path}
-"""
-
-
 @dataclasses.dataclass(kw_only=True)
 class HR_RAG_SkillConfig(_HR_SkillConfigBase):
     """Configuration for an agent skill from 'haiku.rag.skills.rag"""
@@ -344,13 +332,6 @@ class HR_RAG_SkillConfig(_HR_SkillConfigBase):
         config_path: pathlib.Path,
         config_dict: dict,
     ):
-        warnings.warn(
-            HR_RAG_SKILLCONFIG_DEPRECATION.format(
-                config_path=config_path,
-            ),
-            DeprecationWarning,
-            stacklevel=2,
-        )
         tool_names = config_dict.pop("tool_names", None)
         rag_features = config_dict.pop("rag_features", None)
 
@@ -375,18 +356,6 @@ class HR_RAG_SkillConfig(_HR_SkillConfigBase):
         )
 
 
-HR_RLM_SKILLCONFIG_DEPRECATION = """\
-The 'haiku.rag.skills.rlm' skill is deprecated, and will be removed after
-'soliplex v0.58'.
-
-Replace instances with a skill generated using 'haiku-rag create-skill'.
-
-See: https://ggozad.github.io/haiku.rag/skills/#generating-custom-skills
-
-Configured in: {config_path}
-"""
-
-
 @dataclasses.dataclass(kw_only=True)
 class HR_RLM_SkillConfig(_HR_SkillConfigBase):
     """Configuration for an agent skill from 'haiku.rag.skills.rlm"""
@@ -401,13 +370,6 @@ class HR_RLM_SkillConfig(_HR_SkillConfigBase):
         config_path: pathlib.Path,
         config_dict: dict,
     ):
-        warnings.warn(
-            HR_RLM_SKILLCONFIG_DEPRECATION.format(
-                config_path=config_path,
-            ),
-            DeprecationWarning,
-            stacklevel=2,
-        )
         return super().from_yaml(
             installation_config,
             config_path,

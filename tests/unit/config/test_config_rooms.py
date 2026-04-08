@@ -244,7 +244,7 @@ allow_mcp: true
         (
             W_HR_SKILLS_ROOM_CONFIG_YAML,
             contextlib.nullcontext(W_HR_SKILLS_ROOM_CONFIG_KW),
-            True,
+            False,
         ),
         (
             W_NON_HR_TOOLS_ROOM_CONFIG_YAML,
