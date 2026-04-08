@@ -79,4 +79,5 @@ async def test_search_documents(
     hr_class.assert_called_once_with(
         db_path=sd_tool_config.rag_lancedb_path,
         config=sd_tool_config.haiku_rag_config,
+        read_only=True,
     )
