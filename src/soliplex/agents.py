@@ -63,10 +63,6 @@ class AgentFactory(typing.Protocol):
     ) -> SoliplexAgent: ...
 
 
-# Cache for agents to avoid recreating them
-_agent_cache: dict[str, pydantic_ai.Agent] = {}
-
-
 def make_ai_tool(tool_config: config_tools.ToolConfig) -> ai_tools.Tool:
     tool_func = tool_config.tool_with_config
 
@@ -171,23 +167,18 @@ def get_agent_from_configs(
 ) -> SoliplexAgent:
     """Get or create an agent from the specified agent and tool configs."""
 
-    if agent_config.id not in _agent_cache:
-        if agent_config.kind == "default":
-            agent = get_default_agent_from_configs(
-                agent_config=agent_config,
-                tool_configs=tool_configs,
-                mcp_client_toolset_configs=mcp_client_toolset_configs,
-                skill_toolset_config=skill_toolset_config,
-            )
+    if agent_config.kind == "default":
+        return get_default_agent_from_configs(
+            agent_config=agent_config,
+            tool_configs=tool_configs,
+            mcp_client_toolset_configs=mcp_client_toolset_configs,
+            skill_toolset_config=skill_toolset_config,
+        )
 
-        else:
-            # Treat 'agent_config' as an 'AgentFactory'
-            agent = agent_config.factory(
-                tool_configs=tool_configs,
-                mcp_client_toolset_configs=mcp_client_toolset_configs,
-                skill_toolset_config=skill_toolset_config,
-            )
-
-        _agent_cache[agent_config.id] = agent
-
-    return _agent_cache[agent_config.id]
+    else:
+        # Treat 'agent_config' as an 'AgentFactory'
+        return agent_config.factory(
+            tool_configs=tool_configs,
+            mcp_client_toolset_configs=mcp_client_toolset_configs,
+            skill_toolset_config=skill_toolset_config,
+        )

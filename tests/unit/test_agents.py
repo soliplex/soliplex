@@ -322,7 +322,7 @@ def test_get_default_agent_from_configs(
 
 @pytest.mark.parametrize("w_room_skills", [False, True])
 @mock.patch("soliplex.agents.get_default_agent_from_configs")
-def test_get_agent_from_configs_wo_hit_w_default_kind(
+def test_get_agent_from_configs_w_default_kind(
     gdafc,
     tool_configs_tools,
     mcp_ct_configs_tools,
@@ -347,17 +347,12 @@ def test_get_agent_from_configs_wo_hit_w_default_kind(
     else:
         kwargs["skill_toolset_config"] = None
 
-    with (
-        mock.patch.dict("soliplex.agents._agent_cache", clear=True) as cache,
-    ):
-        found = agents.get_agent_from_configs(
-            agent_config=agent_config,
-            tool_configs=tool_configs,
-            mcp_client_toolset_configs=mcp_tc_configs,
-            **kwargs,
-        )
-
-        assert cache[ROOM_ID] is found
+    found = agents.get_agent_from_configs(
+        agent_config=agent_config,
+        tool_configs=tool_configs,
+        mcp_client_toolset_configs=mcp_tc_configs,
+        **kwargs,
+    )
 
     assert found is gdafc.return_value
 
@@ -370,7 +365,7 @@ def test_get_agent_from_configs_wo_hit_w_default_kind(
 
 
 @pytest.mark.parametrize("w_room_skills", [False, True])
-def test_get_agent_from_configs_wo_hit_w_python_kind(w_room_skills):
+def test_get_agent_from_configs_w_python_kind(w_room_skills):
     agent_config = mock.create_autospec(config_agents.FactoryAgentConfig)
     agent_config.kind = "factory"
     agent_config.id = ROOM_ID
@@ -389,17 +384,12 @@ def test_get_agent_from_configs_wo_hit_w_python_kind(w_room_skills):
     else:
         kwargs["skill_toolset_config"] = None
 
-    with (
-        mock.patch.dict("soliplex.agents._agent_cache", clear=True) as cache,
-    ):
-        found = agents.get_agent_from_configs(
-            agent_config=agent_config,
-            tool_configs=tool_configs,
-            mcp_client_toolset_configs=mcpcts_configs,
-            **kwargs,
-        )
-
-        assert cache[ROOM_ID] is found
+    found = agents.get_agent_from_configs(
+        agent_config=agent_config,
+        tool_configs=tool_configs,
+        mcp_client_toolset_configs=mcpcts_configs,
+        **kwargs,
+    )
 
     assert found is agent_config.factory.return_value
 
@@ -408,20 +398,3 @@ def test_get_agent_from_configs_wo_hit_w_python_kind(w_room_skills):
         mcp_client_toolset_configs=mcpcts_configs,
         **kwargs,
     )
-
-
-def test_get_agent_from_configs_w_hit():
-    expected = object()
-    a_config = mock.create_autospec(config_agents.AgentConfig)
-    a_config.id = ROOM_ID
-
-    with mock.patch.dict("soliplex.agents._agent_cache", clear=True) as ac:
-        ac[ROOM_ID] = expected
-
-        found = agents.get_agent_from_configs(
-            agent_config=a_config,
-            tool_configs={},
-            mcp_client_toolset_configs={},
-        )
-
-    assert found is expected
