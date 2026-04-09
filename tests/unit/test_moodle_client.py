@@ -2993,6 +2993,17 @@ async def test_update_courses(client):
 
 
 @pytest.mark.asyncio
+async def test_update_courses_with_warnings(client):
+    raw = {"warnings": [{"item": "fullname", "message": "ignored"}]}
+    resp = _mock_response(raw)
+    with _patch_httpx(resp):
+        result = await client.update_courses(
+            [{"id": 5, "fullname": "Bad"}]
+        )
+    assert result == raw
+
+
+@pytest.mark.asyncio
 async def test_delete_courses(client):
     resp = _mock_response(
         {"warnings": []}

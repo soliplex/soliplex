@@ -223,8 +223,9 @@ def test_factory_agent_has_expected_tools():
     live inside the seven Moodle skills."""
     agent = _build_agent()
     # Router agent should have execute_skill from SkillToolset
+    # Inject a dummy toolset without .tools to cover the hasattr False branch
     all_tool_names: set[str] = set()
-    for ts in agent._user_toolsets:
+    for ts in [object(), *agent._user_toolsets]:
         if hasattr(ts, 'tools'):
             all_tool_names.update(ts.tools.keys())
     assert "execute_skill" in all_tool_names
@@ -346,6 +347,13 @@ def test_factory_agent_has_expected_tools():
         "delete_export",
         "delete_import",
     }
+
+
+def test_get_tool_fn_raises_for_missing_tool():
+    skills = _get_skills()
+    with pytest.raises(KeyError, match="no_such_tool"):
+        _get_tool_fn(skills, "no_such_tool")
+
 
 
 # -----------------------------------------------------------------
