@@ -511,6 +511,23 @@ class RoomSkillsConfig(_SkillConfigModelBase):
         }
 
     @property
+    def skill_preambles(self) -> list[str]:
+        preambles = []
+
+        rag_skill_configs = [
+            skill_config
+            for skill_config in self.skill_configs.values()
+            if isinstance(skill_config, config_rag._RAGConfigBase)
+        ]
+
+        for rag_skill_config in rag_skill_configs:
+            skill_hr_config = rag_skill_config.haiku_rag_config
+            prompt = skill_hr_config.prompts.domain_preamble
+            preambles.append(prompt)
+
+        return [preamble for preamble in preambles if preamble]
+
+    @property
     def skill_toolset(self) -> hs_agent.SkillToolset:
         skill_map = self.skills
         return hs_agent.SkillToolset(

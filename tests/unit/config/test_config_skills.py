@@ -33,6 +33,7 @@ SKILL_METADATA = {
     "author": SKILL_AUTHOR,
     "version": SKILL_VERSION,
 }
+DOMAIN_PREAMBLE = "test domain preamble"
 
 BARE_SKILL_MD_KW = {
     "name": SKILL_NAME,
@@ -623,6 +624,18 @@ def haiku_rag_config():
 
 
 @pytest.fixture
+def lancedb(temp_dir):
+    result = temp_dir / "rag.lancedb"
+    result.mkdir()
+    return result
+
+
+@pytest.fixture
+def config_path(temp_dir):
+    return temp_dir / "config_file.yaml"
+
+
+@pytest.fixture
 def derived_hrskillconfig():
     skill_module = mock.Mock(
         spec_set=[
@@ -686,13 +699,11 @@ def test_hrskillconfigbbase_skill(derived_hrskillconfig):
 
 
 def test_hr_rag_skillconfig_metadata(
-    temp_dir,
     installation_config,
     haiku_rag_config,
+    lancedb,
+    config_path,
 ):
-    config_path = temp_dir / "config_file.yaml"
-    lancedb = temp_dir / "rag.lancedb"
-    lancedb.mkdir()
 
     inst = config_skills.HR_RAG_SkillConfig(
         rag_lancedb_override_path=lancedb,
@@ -707,14 +718,11 @@ def test_hr_rag_skillconfig_metadata(
 
 
 def test_hr_rag_skillconfig_skill(
-    temp_dir,
     installation_config,
     haiku_rag_config,
+    lancedb,
+    config_path,
 ):
-    config_path = temp_dir / "config_file.yaml"
-    lancedb = temp_dir / "rag.lancedb"
-    lancedb.mkdir()
-
     inst = config_skills.HR_RAG_SkillConfig(
         rag_lancedb_override_path=lancedb,
         _haiku_rag_config=haiku_rag_config,
@@ -751,15 +759,12 @@ def test_hr_rag_skillconfig_skill(
     ],
 )
 def test_hr_rag_skillconfig_from_yaml(
-    temp_dir,
+    lancedb,
+    config_path,
     installation_config,
     w_config,
     expectation,
 ):
-    config_path = temp_dir / "config_file.yaml"
-    lancedb = temp_dir / "rag.lancedb"
-    lancedb.mkdir()
-
     config_dict = {
         "rag_lancedb_override_path": lancedb,
     } | w_config
@@ -785,14 +790,11 @@ def test_hr_rag_skillconfig_from_yaml(
 
 
 def test_hr_rlm_skillconfig_metadata(
-    temp_dir,
     installation_config,
     haiku_rag_config,
+    lancedb,
+    config_path,
 ):
-    config_path = temp_dir / "config_file.yaml"
-    lancedb = temp_dir / "rag.lancedb"
-    lancedb.mkdir()
-
     inst = config_skills.HR_RLM_SkillConfig(
         rag_lancedb_override_path=lancedb,
         _haiku_rag_config=haiku_rag_config,
@@ -806,14 +808,11 @@ def test_hr_rlm_skillconfig_metadata(
 
 
 def test_hr_rlm_skillconfig_skill(
-    temp_dir,
     installation_config,
     haiku_rag_config,
+    lancedb,
+    config_path,
 ):
-    config_path = temp_dir / "config_file.yaml"
-    lancedb = temp_dir / "rag.lancedb"
-    lancedb.mkdir()
-
     inst = config_skills.HR_RLM_SkillConfig(
         rag_lancedb_override_path=lancedb,
         _haiku_rag_config=haiku_rag_config,
@@ -839,15 +838,12 @@ def test_hr_rlm_skillconfig_skill(
     ],
 )
 def test_hr_rlm_skillconfig_from_yaml(
-    temp_dir,
+    lancedb,
+    config_path,
     installation_config,
     w_config,
     expectation,
 ):
-    config_path = temp_dir / "config_file.yaml"
-    lancedb = temp_dir / "rag.lancedb"
-    lancedb.mkdir()
-
     config_dict = {
         "rag_lancedb_override_path": lancedb,
     } | w_config
@@ -961,33 +957,32 @@ def test_extractskillconfigs(
 )
 def test_roomskillsconfig_from_yaml(
     installation_config,
-    temp_dir,
+    config_path,
     config_yaml,
     expectation,
 ):
     installation_config.skill_configs = {SKILL_NAME: object()}
-    yaml_file = temp_dir / "test.yaml"
-    yaml_file.write_text(config_yaml)
+    config_path.write_text(config_yaml)
 
-    with yaml_file.open() as stream:
+    with config_path.open() as stream:
         config_dict = yaml.safe_load(stream)
 
     with expectation as expected:
         found = config_skills.RoomSkillsConfig.from_yaml(
             installation_config,
-            yaml_file,
+            config_path,
             config_dict,
         )
 
     if isinstance(expected, pytest.ExceptionInfo):
-        assert expected.value._config_path == yaml_file
+        assert expected.value._config_path == config_path
 
     else:
         expected = config_skills.RoomSkillsConfig(**expected)
         expected = dataclasses.replace(
             expected,
             _installation_config=installation_config,
-            _config_path=yaml_file,
+            _config_path=config_path,
         )
 
         assert found == expected
@@ -1032,6 +1027,35 @@ def test_roomskillsconfig_skills(installation_config):
     found = room_skill_config.skills
 
     assert found == {SKILL_NAME: skill_config.skill}
+
+
+def test_roomskillsconfig_skill_preambles(
+    installation_config,
+    haiku_rag_config,
+    lancedb,
+    config_path,
+):
+    haiku_rag_config.prompts.domain_preamble = DOMAIN_PREAMBLE
+    skill_config = config_skills.HR_RAG_SkillConfig(
+        rag_lancedb_override_path=lancedb,
+        _haiku_rag_config=haiku_rag_config,
+        _config_path=config_path,
+        _installation_config=installation_config,
+    )
+    installation_config.skill_configs = {
+        SKILL_NAME: skill_config,
+        "other_skill": object(),
+    }
+
+    room_skill_config_kw = {"installation_skill_names": [SKILL_NAME]}
+    room_skill_config = config_skills.RoomSkillsConfig(
+        **room_skill_config_kw,
+        _installation_config=installation_config,
+    )
+
+    found = room_skill_config.skill_preambles
+
+    assert found == [DOMAIN_PREAMBLE]
 
 
 @pytest.mark.parametrize(

@@ -32,6 +32,7 @@ MODEL_SETTINGS = {
 
 ROOM_ID = "test-room"
 RAG_LANCEDB_OVERRIDE_PATH = "/path/to/db/rag"
+DOMAIN_PREAMBLE = "test domain preamble"
 
 TOOL_ID = "test-tool-id"
 AI_TOOL_PARAM_NAME = "test-ai-tool-param-name"
@@ -228,7 +229,14 @@ def test_get_model_from_config(
 
 
 @pytest.mark.parametrize("w_capabilities", [False, True])
-@pytest.mark.parametrize("w_room_skills", [False, True])
+@pytest.mark.parametrize(
+    "w_room_skills, preambles",
+    [
+        (False, None),
+        (True, []),
+        (True, [DOMAIN_PREAMBLE]),
+    ],
+)
 @pytest.mark.parametrize("w_model_settings", [None, MODEL_SETTINGS])
 @mock.patch("soliplex.agents.get_model_from_config")
 @mock.patch("haiku.skills.prompts.build_system_prompt")
@@ -241,6 +249,7 @@ def test_get_default_agent_from_configs(
     mcp_ct_configs_tools,
     w_model_settings,
     w_room_skills,
+    preambles,
     w_capabilities,
 ):
     agent_config = mock.create_autospec(config_agents.AgentConfig)
@@ -263,15 +272,19 @@ def test_get_default_agent_from_configs(
     }
     exp_toolsets = [tool for (_, tool) in mcp_ct_configs_tools]
 
-    room_skills = mock.create_autospec(agents.SkillToolsetConfig)
     kwargs = {}
 
-    exp_instructions = SYSTEM_PROMPT
+    room_skills = mock.create_autospec(agents.SkillToolsetConfig)
+    room_skills.skill_preambles = preambles
 
     if w_room_skills:
         kwargs["skill_toolset_config"] = room_skills
         exp_toolsets.append(room_skills.skill_toolset)
         exp_instructions = build_system_prompt.return_value
+        if preambles:
+            exp_preamble = f"{SYSTEM_PROMPT}\n\n{DOMAIN_PREAMBLE}"
+        else:
+            exp_preamble = SYSTEM_PROMPT
     else:
         exp_instructions = SYSTEM_PROMPT
 
@@ -299,7 +312,7 @@ def test_get_default_agent_from_configs(
 
     if w_room_skills:
         build_system_prompt.assert_called_once_with(
-            preamble=SYSTEM_PROMPT,
+            preamble=exp_preamble,
             skill_catalog=room_skills.skill_toolset.skill_catalog,
         )
     else:
@@ -339,10 +352,10 @@ def test_get_agent_from_configs_w_default_kind(
         for mctc_id, (mctc, _) in enumerate(mcp_ct_configs_tools)
     }
 
-    room_skills = mock.create_autospec(agents.SkillToolsetConfig)
     kwargs = {}
 
     if w_room_skills:
+        room_skills = mock.create_autospec(agents.SkillToolsetConfig)
         kwargs["skill_toolset_config"] = room_skills
     else:
         kwargs["skill_toolset_config"] = None
