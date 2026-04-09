@@ -1,0 +1,343 @@
+import asyncio
+import pathlib
+import tomllib
+
+import pydantic
+import pydantic_ai
+from bubble_sandbox import config as bs_config
+from bubble_sandbox import models as bs_models
+from bubble_sandbox import sandbox as bs_sandbox
+from haiku.skills import models as hs_models
+from haiku.skills import parser as hs_parser
+from haiku.skills import state as hs_state
+from pydantic_ai import toolsets as ai_toolests
+
+SKILL_NAME = "bubble-sandbox"
+SKILL_DESCRIPTION = """\
+Write and execute Python code in a bubblerwap sandbox
+"""
+SKILL_METADATA = hs_models.SkillMetadata(
+    name=SKILL_NAME,
+    description=SKILL_DESCRIPTION,
+)
+
+
+EnvironmentInfo = dict[str, str]
+
+
+class SandboxState(pydantic.BaseModel):
+    pass
+
+
+STATE_TYPE = SandboxState
+STATE_NAMESPACE = SKILL_NAME
+
+LIST_ENVIRONMENTS_DESCRIPTION = """
+Return a list of information about available sandbox environments
+
+Each entry will contain these fields:
+- 'name' (string) pass this value to the ``execute`` and ``execute_script`` \
+tools to run the tool in the environment.
+- 'description' (string) describes the purposes for which the environment is \
+configured.
+"""
+
+
+async def skill_list_environments(
+    ctx: pydantic_ai.RunContext,
+    bwrap_sandbox: bs_sandbox.BwrapSandbox,
+) -> list[EnvironmentInfo]:
+    environments = []
+    root = bwrap_sandbox.config.environments_path
+
+    for subpath in sorted(root.glob("*")):
+        if (subpath / ".venv").is_dir():
+            toml_path = subpath / "pyproject.toml"
+
+            if toml_path.is_file():
+                toml_text = toml_path.read_text()
+                toml = tomllib.loads(toml_text)
+                project = toml["project"]
+                environments.append(
+                    {
+                        "name": project["name"],
+                        "description": project["description"],
+                    }
+                )
+
+    return environments
+
+
+EXECUTE_DESCRIPTION = """\
+Execute a shell command in the working directory.
+
+IMPORTANT: This tool is for operations that REQUIRE a real shell — \
+running tests, builds, git commands, package installs, running scripts.
+
+## Usage
+- To run a command requiring shell support, pass the command as a single \
+string; the skill will then pass it to a shell via "sh -c".
+- To run a command which does not require shell support, pas a list of \
+strings, where the first element is the name or path of the executable \
+to run, ant the remaining elements are arguments to that executable.
+- Always quote file paths containing spaces with double quotes.
+- Prefer absolute paths over relative paths.
+- When running multiple independent commands, make separate `execute` calls \
+in a single response (parallel execution).
+- When commands depend on each other, chain with `&&` in a single call \
+(e.g., `cd /project && make test`).
+- For long-running commands (builds, large test suites), increase the timeout.
+
+## Debugging
+- Read the FULL error output when a command fails — the root cause is often \
+in the middle of a traceback, not the last line.
+- Reproduce the error before attempting a fix.
+- Change one thing at a time — don't make multiple speculative fixes.
+- If something fails 3 times with the same approach, STOP and try a \
+completely different strategy.
+
+## Safety
+- Be careful not to introduce command injection vulnerabilities.
+- Be careful with destructive commands (`rm -rf`, `drop table`, etc.) — \
+verify the target path/object before executing.
+"""
+
+
+async def skill_execute(
+    ctx: pydantic_ai.RunContext,
+    bwrap_sandbox: bs_sandbox.BwrapSandbox,
+    command: str | list[str],
+    environment_name: str = None,
+    workdir: pathlib.Path | None = None,
+    timeout: float = None,  # seconds
+) -> str:
+    """Execute a shell command in the working directory.
+
+    Args:
+        command: Shell command to execute.
+        environment_name: name of sandbox environment (defaults to 'bare')
+        workdir: path on host system to mount as the working directory
+        timeout: Maximum execution time in seconds. Defaults to the value
+            in the 'buuble_sandbox.config.Config' used to construct
+            the toolset.
+    """
+    if isinstance(command, str):
+        command = ["sh", "-c", command]
+
+    try:
+        result = await asyncio.to_thread(
+            bwrap_sandbox.execute,
+            command=command,
+            environment_name=environment_name,
+            workdir=workdir,
+            timeout=timeout,
+        )
+    except RuntimeError as e:
+        return f"Error: {e}"
+
+    output = result.output
+    if result.truncated:
+        output += "\n\n... (output truncated)"
+
+    if result.exit_code is not None and result.exit_code != 0:
+        return f"Command failed (exit code {result.exit_code}):\n{output}"
+
+    return str(output)
+
+
+EXECUTE_SCRIPT_DESCRIPTION = """\
+Execute a Python script in the working directory.
+
+IMPORTANT: This tool uses the Python interpreter built into the enviornement \
+including pre-installed packages.
+
+## Usage
+- To run a command requiring shell support, pass the command as a single \
+string; the skill will then pass it to a shell via "sh -c".
+- To run a command which does not require shell support, pas a list of \
+strings, where the first element is the name or path of the executable \
+to run, ant the remaining elements are arguments to that executable.
+- Always quote file paths containing spaces with double quotes.
+- Prefer absolute paths over relative paths.
+- When running multiple independent commands, make separate `execute` calls \
+in a single response (parallel execution).
+- When commands depend on each other, chain with `&&` in a single call \
+(e.g., `cd /project && make test`).
+- For long-running commands (builds, large test suites), increase the timeout.
+
+## Dependencies
+- Check what packages are already installed using `pip list`.
+- If a command fails because a package or tool is missing, STOP.
+
+## Debugging
+- Read the FULL error output when a command fails — the root cause is often \
+in the middle of a traceback, not the last line.
+- Reproduce the error before attempting a fix.
+- Change one thing at a time — don't make multiple speculative fixes.
+- If something fails 3 times with the same approach, STOP and try a \
+completely different strategy.
+
+## Safety
+- Be careful not to introduce command injection vulnerabilities.
+- Be careful with destructive commands (`rm -rf`, `drop table`, etc.) — \
+verify the target path/object before executing.
+"""
+
+
+async def skill_execute_script(
+    ctx: pydantic_ai.RunContext,
+    bwrap_sandbox: bs_sandbox.BwrapSandbox,
+    script: str,
+    environment_name: str = None,
+    workdir: pathlib.Path | None = None,
+    timeout: float = None,  # seconds
+) -> str:
+    """Execute a python script in the working directory.
+
+    Args:
+        script: Python script to execute.
+        environment_name: name of sandbox environment (defaults to 'bare')
+        workdir: path on host system to mount as the working directory
+        timeout: Maximum execution time in seconds. Defaults to the value
+            in the 'buuble_sandbox.config.Config' used to construct
+            the toolset.
+    """
+    try:
+        result = await asyncio.to_thread(
+            bwrap_sandbox.execute_script,
+            script=script,
+            environment_name=environment_name,
+            workdir=workdir,
+            timeout=timeout,
+        )
+    except RuntimeError as e:
+        return f"Error: {e}"
+
+    output = result.output
+    if result.truncated:
+        output += "\n\n... (output truncated)"
+
+    if result.exit_code is not None and result.exit_code != 0:
+        return f"Command failed (exit code {result.exit_code}):\n{output}"
+
+    return str(output)
+
+
+def create_sandbox_toolset(
+    id: str | None = None,
+    default_environment_name: str = "bare",
+    sandbox_config: bs_config.Config | None = None,
+    volumes: bs_models.VolumeMap | None = None,
+    max_retries: int = 1,
+) -> ai_toolests.FunctionToolset:
+    """Create a sandbox toolset for shell / script execution.
+
+    This toolset provides tools for executing shell commands and Python
+    scripts.
+
+    Args:
+        id: Optional unique ID for the toolset.
+
+        default_environment_name: name of default configured environment
+
+        sandbox_config: bubble_sandbox configuration
+
+        volumes: bubble_sandbox volume map
+
+        max_retries: Maximum number of retries for each tool during a run.
+            When the model sends invalid arguments (e.g. missing required
+            fields), the validation error is fed back and the model can retry
+            up to this many times. Defaults to 1.
+
+    Returns:
+        FunctionToolset with 'execute' and 'execute_script' tools.
+    """
+    if sandbox_config is None:
+        sandbox_config = bs_config.Config()
+
+    if volumes is None:
+        volumes = {}
+
+    bwrap_sandbox = bs_sandbox.BwrapSandbox(
+        default_environment_name=default_environment_name,
+        config=sandbox_config,
+        volumes=volumes,
+    )
+
+    toolset = ai_toolests.FunctionToolset(id=id, max_retries=max_retries)
+
+    @toolset.tool(description=LIST_ENVIRONMENTS_DESCRIPTION)
+    async def list_environments(
+        ctx: pydantic_ai.RunContext,
+    ) -> list[EnvironmentInfo]:  # pragma: NO COVER
+        return await skill_list_environments(
+            ctx=ctx,
+            bwrap_sandbox=bwrap_sandbox,
+        )
+
+    @toolset.tool(description=EXECUTE_DESCRIPTION)
+    async def execute(
+        ctx: pydantic_ai.RunContext,
+        command: str | list[str],
+        environment_name: str = None,
+        workdir: pathlib.Path | None = None,
+        timeout: float = None,  # seconds
+    ) -> str:  # pragma: NO COVER
+        return await skill_execute(
+            ctx=ctx,
+            bwrap_sandbox=bwrap_sandbox,
+            command=command,
+            environment_name=environment_name,
+            workdir=workdir,
+            timeout=timeout,
+        )
+
+    @toolset.tool(description=EXECUTE_SCRIPT_DESCRIPTION)
+    async def execute_script(
+        ctx: pydantic_ai.RunContext,
+        script: str,
+        environment_name: str = None,
+        workdir: pathlib.Path | None = None,
+        timeout: float = None,  # seconds
+    ) -> str:  # pragma: NO COVER
+        return await skill_execute_script(
+            ctx=ctx,
+            bwrap_sandbox=bwrap_sandbox,
+            script=script,
+            environment_name=environment_name,
+            workdir=workdir,
+            timeout=timeout,
+        )
+
+    return toolset
+
+
+def create_bwrap_sandbox_skill(
+    id: str = None,
+    default_environment_name: str = "bare",
+    sandbox_config: bs_config.Config | None = None,
+    volumes: bs_models.VolumeMap | None = None,
+    max_retries: int = 1,
+) -> hs_models.Skill:
+
+    skill_path = pathlib.Path(__file__).parent
+    skill_md_path = skill_path / "SKILL.md"
+    metadata, instructions = hs_parser.parse_skill_md(skill_md_path)
+
+    toolset = create_sandbox_toolset(
+        id=id,
+        default_environment_name=default_environment_name,
+        sandbox_config=sandbox_config,
+        volumes=volumes,
+        max_retries=max_retries,
+    )
+
+    return hs_models.Skill(
+        metadata=metadata,
+        instructions=instructions,
+        path=skill_path,
+        toolsets=[toolset],
+        state_type=STATE_TYPE,
+        state_namespace=STATE_NAMESPACE,
+        deps_type=hs_state.SkillRunDeps,
+    )

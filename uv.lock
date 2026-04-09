@@ -294,6 +294,30 @@ wheels = [
 ]
 
 [[package]]
+name = "bracex"
+version = "2.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/63/9a/fec38644694abfaaeca2798b58e276a8e61de49e2e37494ace423395febc/bracex-2.6.tar.gz", hash = "sha256:98f1347cd77e22ee8d967a30ad4e310b233f7754dbf31ff3fceb76145ba47dc7", size = 26642, upload-time = "2025-06-22T19:12:31.254Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9d/2a/9186535ce58db529927f6cf5990a849aa9e052eea3e2cfefe20b9e1802da/bracex-2.6-py3-none-any.whl", hash = "sha256:0b0049264e7340b3ec782b5cb99beb325f36c3782a32e36e876452fd49a09952", size = 11508, upload-time = "2025-06-22T19:12:29.781Z" },
+]
+
+[[package]]
+name = "bubble-sandbox"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic-ai-backend" },
+    { name = "pydantic-settings" },
+    { name = "pyyaml" },
+    { name = "typer" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2c/03/3f4d7ab25ca74c6146aca82bccfe29531caaabea1da758bab5d5a0a3d626/bubble_sandbox-0.1.0.tar.gz", hash = "sha256:13b52eef2bc702a908c1bbcab04698e780314a4e2091132907eaaf5deb517dce", size = 7436, upload-time = "2026-04-09T15:45:54.239Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0e/6a/1d5f021aff925236cd3bf0a7e1e8fede88213f9bf1fd064eb351aefedc7d/bubble_sandbox-0.1.0-py3-none-any.whl", hash = "sha256:139fd496d960ea410777af4b53ecbf7bbe819adae8d6c511bd64f5d0c67f6c8f", size = 9280, upload-time = "2026-04-09T15:45:52.924Z" },
+]
+
+[[package]]
 name = "cachetools"
 version = "7.0.5"
 source = { registry = "https://pypi.org/simple" }
@@ -2636,6 +2660,19 @@ email = [
 ]
 
 [[package]]
+name = "pydantic-ai-backend"
+version = "0.2.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "wcmatch" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ef/1d/fc2370661e5ade6a6902b5161139c9dc6f2c48a5da2a21f86661df9cc11e/pydantic_ai_backend-0.2.3.tar.gz", hash = "sha256:7c4b7d32d20a44c44196272ba3689e70aad17f50b0574e94a5c01924e9189777", size = 13770769, upload-time = "2026-04-06T22:01:11.103Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e5/a8/3523d87103270f053351c94c3075d058ca64c913f945ebf42d9e73f648c9/pydantic_ai_backend-0.2.3-py3-none-any.whl", hash = "sha256:1342f498644e3b50200bdd4c496a73c25e226697e9b0a63785942e47228b396e", size = 57599, upload-time = "2026-04-06T22:01:09.706Z" },
+]
+
+[[package]]
 name = "pydantic-ai-slim"
 version = "1.78.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3401,6 +3438,7 @@ dependencies = [
     { name = "ag-ui-protocol" },
     { name = "aiosqlite" },
     { name = "authlib" },
+    { name = "bubble-sandbox" },
     { name = "certifi" },
     { name = "fakeredis" },
     { name = "fastapi" },
@@ -3453,6 +3491,7 @@ requires-dist = [
     { name = "ag-ui-protocol", specifier = ">=0.1.10" },
     { name = "aiosqlite" },
     { name = "authlib" },
+    { name = "bubble-sandbox" },
     { name = "certifi", specifier = ">=2025.11.12" },
     { name = "fakeredis", specifier = ">=2.34.1,<2.35" },
     { name = "fastapi" },
@@ -3965,6 +4004,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/4f/55/2af26693fd15165c4ff7857e38330e1b61ab8c37d15dc79118cdba115b7a/watchfiles-1.1.1-cp314-cp314t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8c91ed27800188c2ae96d16e3149f199d62f86c7af5f5f4d2c61a3ed8cd3666c", size = 455072, upload-time = "2025-10-14T15:05:48.928Z" },
     { url = "https://files.pythonhosted.org/packages/66/1d/d0d200b10c9311ec25d2273f8aad8c3ef7cc7ea11808022501811208a750/watchfiles-1.1.1-cp314-cp314t-musllinux_1_1_aarch64.whl", hash = "sha256:311ff15a0bae3714ffb603e6ba6dbfba4065ab60865d15a6ec544133bdb21099", size = 629104, upload-time = "2025-10-14T15:05:49.908Z" },
     { url = "https://files.pythonhosted.org/packages/e3/bd/fa9bb053192491b3867ba07d2343d9f2252e00811567d30ae8d0f78136fe/watchfiles-1.1.1-cp314-cp314t-musllinux_1_1_x86_64.whl", hash = "sha256:a916a2932da8f8ab582f242c065f5c81bed3462849ca79ee357dd9551b0e9b01", size = 622112, upload-time = "2025-10-14T15:05:50.941Z" },
+]
+
+[[package]]
+name = "wcmatch"
+version = "10.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "bracex" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/79/3e/c0bdc27cf06f4e47680bd5803a07cb3dfd17de84cde92dd217dcb9e05253/wcmatch-10.1.tar.gz", hash = "sha256:f11f94208c8c8484a16f4f48638a85d771d9513f4ab3f37595978801cb9465af", size = 117421, upload-time = "2025-06-22T19:14:02.49Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/d8/0d1d2e9d3fabcf5d6840362adcf05f8cf3cd06a73358140c3a97189238ae/wcmatch-10.1-py3-none-any.whl", hash = "sha256:5848ace7dbb0476e5e55ab63c6bbd529745089343427caa5537f230cc01beb8a", size = 39854, upload-time = "2025-06-22T19:14:00.978Z" },
 ]
 
 [[package]]

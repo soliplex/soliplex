@@ -6,6 +6,8 @@ import typing
 import warnings
 
 import pydantic
+from bubble_sandbox import config as bs_config
+from bubble_sandbox import models as bs_models
 from haiku.rag.skills import rag as hr_skills_rag
 from haiku.rag.skills import rlm as hr_skills_rlm
 from haiku.skills import agent as hs_agent
@@ -15,6 +17,8 @@ from pydantic_ai import models as ai_models
 
 from soliplex import agents
 from soliplex.agui import features as agui_features_module  # noqa F401
+from soliplex.config import agui as config_agui
+from soliplex.skills import bwrap_sandbox as sk_bwrap_sandbox
 
 from . import _utils
 from . import agents as config_agents
@@ -377,6 +381,77 @@ class HR_RLM_SkillConfig(_HR_SkillConfigBase):
         )
 
 
+@dataclasses.dataclass(kw_only=True)
+class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
+    """Configuration for the bubblewrap sandbox skill."""
+
+    kind: typing.ClassVar[str] = sk_bwrap_sandbox.SKILL_NAME
+    source: typing.ClassVar[str] = SkillKind.ENTRYPOINT
+
+    _skill_metadata: hs_models.SkillMetadata = dataclasses.field(
+        default_factory=lambda: sk_bwrap_sandbox.SKILL_METADATA,
+        repr=False,
+        compare=False,
+    )
+    _config_path: pathlib.Path | None = None
+
+    state_type: SkillStateType = sk_bwrap_sandbox.STATE_TYPE
+    state_namespace: str | None = sk_bwrap_sandbox.STATE_NAMESPACE
+
+    id: str | None = None
+    default_environment_name: str = "bare"
+    sandbox_config: bs_config.Config = None
+    volumes: bs_models.VolumeMap = _default_dict_field()
+
+    @classmethod
+    def from_yaml(
+        cls,
+        installation_config: InstallationConfig,  # noqa F821 cycles
+        config_path: pathlib.Path,
+        config_dict: dict,
+    ):
+        try:
+            _kind = config_dict.pop("kind", None)
+            config_dict["_config_path"] = config_path
+
+            sandbox_config_dict = config_dict.pop("sandbox_config", {})
+            config_dict["sandbox_config"] = bs_config.Config(
+                config_file_path=config_path,
+                **sandbox_config_dict,
+            )
+
+            return cls(**config_dict)
+        except Exception as exc:
+            raise config_exc.FromYamlException(
+                config_path,
+                "bwrap-sandbox",
+                config_dict,
+            ) from exc
+
+    @property
+    def agui_feature_names(self) -> tuple[str]:
+        return (sk_bwrap_sandbox.STATE_NAMESPACE,)
+
+    @property
+    def skill(self) -> hs_models.Skill:
+        skill = sk_bwrap_sandbox.create_bwrap_sandbox_skill(
+            id=self.id,
+            default_environment_name=self.default_environment_name,
+            sandbox_config=self.sandbox_config,
+            volumes=self.volumes,
+        )
+        skill._factory = sk_bwrap_sandbox.create_bwrap_sandbox_skill
+        return skill
+
+
+feature_registry = config_agui.AGUI_FEATURES_BY_NAME
+feature_registry[sk_bwrap_sandbox.STATE_NAMESPACE] = config_agui.AGUI_Feature(
+    name=sk_bwrap_sandbox.STATE_NAMESPACE,
+    model_klass=sk_bwrap_sandbox.STATE_TYPE,
+    source=config_agui.AGUI_FeatureSource.SERVER,
+)
+
+
 SKILL_CONFIG_CLASSES_BY_KIND = {
     klass.kind: klass
     for klass in [
@@ -384,6 +459,7 @@ SKILL_CONFIG_CLASSES_BY_KIND = {
         EntrypointSkillConfig,
         HR_RAG_SkillConfig,
         HR_RLM_SkillConfig,
+        BwrapSandboxSkillConfig,
     ]
 }
 
@@ -392,6 +468,7 @@ SkillConfigTypes = (
     | EntrypointSkillConfig
     | HR_RAG_SkillConfig
     | HR_RLM_SkillConfig
+    | BwrapSandboxSkillConfig
 )
 SkillConfigMap = dict[str, SkillConfigTypes]
 SkillMap = dict[str, hs_models.Skill]
