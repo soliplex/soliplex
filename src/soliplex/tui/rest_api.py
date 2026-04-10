@@ -24,7 +24,7 @@ class TUI_REST_API:
 
     def get_oidc_providers(self):
         oidc_providers_url = f"{self.api_base}/login"
-        response = requests.get(oidc_providers_url)
+        response = requests.get(oidc_providers_url, timeout=10.0)
         response.raise_for_status()
 
         return response.json()
@@ -50,6 +50,7 @@ class TUI_REST_API:
         response = requests.get(
             f"{self.api_v1_base}/installation",
             headers=self.api_v1_headers,
+            timeout=10.0,
         )
         response.raise_for_status()
 
@@ -59,6 +60,7 @@ class TUI_REST_API:
         response = requests.get(
             f"{self.api_v1_base}/rooms",
             headers=self.api_v1_headers,
+            timeout=10.0,
         )
         response.raise_for_status()
 
@@ -68,6 +70,7 @@ class TUI_REST_API:
         response = requests.get(
             f"{self.api_v1_base}/rooms/{room_id}",
             headers=self.api_v1_headers,
+            timeout=10.0,
         )
         response.raise_for_status()
 
@@ -77,6 +80,7 @@ class TUI_REST_API:
         response = requests.get(
             f"{self.api_v1_base}/rooms/{room_id}/mcp_token",
             headers=self.api_v1_headers,
+            timeout=10.0,
         )
         response.raise_for_status()
 
@@ -86,6 +90,7 @@ class TUI_REST_API:
         response = requests.get(
             f"{self.api_v1_base}/rooms/{room_id}/documents",
             headers=self.api_v1_headers,
+            timeout=10.0,
         )
         response.raise_for_status()
 
@@ -95,6 +100,7 @@ class TUI_REST_API:
         response = requests.get(
             f"{self.api_v1_base}/installation/versions",
             headers=self.api_v1_headers,
+            timeout=10.0,
         )
         response.raise_for_status()
 
@@ -104,6 +110,7 @@ class TUI_REST_API:
         response = requests.get(
             f"{self.api_v1_base}/installation/providers",
             headers=self.api_v1_headers,
+            timeout=10.0,
         )
         response.raise_for_status()
 
@@ -122,6 +129,7 @@ class TUI_REST_API:
         response = requests.get(
             self.room_agui_base(room_id),
             headers=self.api_v1_headers,
+            timeout=10.0,
         )
         response.raise_for_status()
 
@@ -131,6 +139,7 @@ class TUI_REST_API:
         response = requests.get(
             self.thread_url(room_id, thread_id),
             headers=self.api_v1_headers,
+            timeout=10.0,
         )
         response.raise_for_status()
 
@@ -150,6 +159,7 @@ class TUI_REST_API:
             new_thread_request_url,
             json=request,
             headers=self.api_v1_headers,
+            timeout=10.0,
         )
         response.raise_for_status()
 
@@ -175,6 +185,7 @@ class TUI_REST_API:
                 upload_url,
                 files=files,
                 headers=self.api_v1_headers,
+                timeout=10.0,
             )
             response.raise_for_status()
 
@@ -199,6 +210,7 @@ class TUI_REST_API:
                 upload_url,
                 files=files,
                 headers=self.api_v1_headers,
+                timeout=10.0,
             )
             response.raise_for_status()
 
@@ -217,6 +229,7 @@ class TUI_REST_API:
             meta_url,
             json=meta,
             headers=self.api_v1_headers,
+            timeout=10.0,
         )
         response.raise_for_status()
 
@@ -235,6 +248,7 @@ class TUI_REST_API:
             new_run_request_url,
             json=request,
             headers=self.api_v1_headers,
+            timeout=10.0,
         )
         response.raise_for_status()
 
@@ -249,6 +263,7 @@ class TUI_REST_API:
         response = requests.get(
             self.run_url(room_id, thread_id, run_id),
             headers=self.api_v1_headers,
+            timeout=10.0,
         )
         response.raise_for_status()
 
@@ -271,6 +286,7 @@ class TUI_REST_API:
             json=run_agent_input,
             headers=self.api_v1_headers,
             stream=True,
+            timeout=10.0,
         )
         response.raise_for_status()
 
@@ -292,6 +308,7 @@ class TUI_REST_API:
             meta_url,
             json=meta,
             headers=self.api_v1_headers,
+            timeout=10.0,
         )
         response.raise_for_status()
 
@@ -311,5 +328,6 @@ class TUI_REST_API:
             meta_url,
             json=feedback,
             headers=self.api_v1_headers,
+            timeout=10.0,
         )
         response.raise_for_status()

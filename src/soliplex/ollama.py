@@ -23,7 +23,7 @@ class REST_API:
     def _get_endpoint(self, endpoint_name):
         url = self._api_url(endpoint_name)
 
-        response = requests.get(url)
+        response = requests.get(url, timeout=10.0)
         response.raise_for_status()
 
         return response.json()
@@ -31,7 +31,7 @@ class REST_API:
     def _post_endpoint(self, endpoint_name, data):
         url = self._api_url(endpoint_name)
 
-        response = requests.post(url, json=data)
+        response = requests.post(url, json=data, timeout=10.0)
         response.raise_for_status()
 
         return response.json()
@@ -39,7 +39,7 @@ class REST_API:
     def _delete_endpoint(self, endpoint_name, data):
         url = self._api_url(endpoint_name)
 
-        response = requests.delete(url, json=data)
+        response = requests.delete(url, json=data, timeout=10.0)
         response.raise_for_status()
 
         return response.json()

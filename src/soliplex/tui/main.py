@@ -158,7 +158,7 @@ class OIDCProviderSelectView(t_screen.Screen):
         if payload:
             token_url = login_dialog.oidc_provider_token_url
             token_request = login_dialog.oidc_provider_token_data | payload
-            response = requests.post(token_url, data=token_request)
+            response = requests.post(token_url, data=token_request, timeout=10.0)
             response.raise_for_status()
             token_data = response.json()
             self.dismiss((token_url, token_data))
