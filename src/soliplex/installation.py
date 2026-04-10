@@ -338,9 +338,10 @@ class Installation:
 
         kwargs = {}
 
-        thread_id = None
+        thread_id = run_id = None
         if run_agent_input is not None:
             thread_id = run_agent_input.thread_id
+            run_id = run_agent_input.run_id
 
         if the_threads is not None:
             kwargs["the_threads"] = the_threads
@@ -351,6 +352,7 @@ class Installation:
             tool_configs=room_config.tool_configs,
             room_id=room_id,
             thread_id=thread_id,
+            run_id=run_id,
             **kwargs,
         )
 

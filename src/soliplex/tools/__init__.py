@@ -1,5 +1,6 @@
 import datetime
 
+import pydantic
 import pydantic_ai
 
 from soliplex import agents
@@ -29,3 +30,20 @@ async def agui_state(
 ) -> agui.AGUI_State:
     """Return the AGUI state."""
     return ctx.deps.state
+
+
+class CurrentRunInfo(pydantic.BaseModel):
+    room_id: str
+    thread_id: pydantic.UUID4
+    run_id: pydantic.UUID4
+
+
+async def current_run_info(
+    ctx: pydantic_ai.RunContext[agents.AgentDependencies],
+) -> CurrentRunInfo:
+    """Return the room ID, thread ID, and run ID for the current run"""
+    return CurrentRunInfo(
+        room_id=ctx.deps.room_id,
+        thread_id=ctx.deps.thread_id,
+        run_id=ctx.deps.run_id,
+    )

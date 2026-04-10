@@ -52,6 +52,7 @@ class AgentDependencies:
     state: agui_package.AGUI_State = dataclasses.field(default_factory=dict)
     room_id: str | None = None
     thread_id: str | None = None
+    run_id: str | None = None
     user: models.UserProfile = None  # TBD make required
     tool_configs: ToolConfigMap = None
 

@@ -1,4 +1,5 @@
 import datetime
+import uuid
 from unittest import mock
 
 import pytest
@@ -11,6 +12,9 @@ USER = {
     "full_name": "Phreddy Phlyntstone",
     "email": "phreddy@example.com",
 }
+ROOM_ID = "test-room"
+THREAD_ID = uuid.uuid4()
+RUN_ID = uuid.uuid4()
 
 
 @pytest.fixture
@@ -75,3 +79,24 @@ async def test_agui_state(the_installation, w_state):
     found = await tools.agui_state(ctx=ctx)
 
     assert found == expected
+
+
+@pytest.mark.anyio
+async def test_current_run_info():
+    deps = agents.AgentDependencies(
+        the_installation=the_installation,
+        user=USER,
+        tool_configs={},
+        room_id=ROOM_ID,
+        thread_id=THREAD_ID,
+        run_id=RUN_ID,
+    )
+
+    ctx = mock.Mock(spec_set=(["deps"]), deps=deps)
+
+    found = await tools.current_run_info(ctx=ctx)
+
+    assert isinstance(found, tools.CurrentRunInfo)
+    assert found.room_id == ROOM_ID
+    assert found.thread_id == THREAD_ID
+    assert found.run_id == RUN_ID

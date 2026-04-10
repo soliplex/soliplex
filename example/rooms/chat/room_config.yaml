@@ -9,10 +9,15 @@ suggestions:
 
 agent:
   template_id: "default_chat"
+  system_prompt: |
+    You are a helpful agent.
+
+    Use the room's tools and skills to respond to the user's requests.
 
 tools:
   - tool_name: "soliplex.tools.get_current_datetime"
   - tool_name: "soliplex.tools.get_current_user"
+  - tool_name: "soliplex.tools.current_run_info"
   - tool_name: "soliplex.tools.file_uploads.list_thread_file_uploads"
   - tool_name: "soliplex.tools.file_uploads.get_thread_file_upload"
 

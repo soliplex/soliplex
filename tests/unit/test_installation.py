@@ -1117,6 +1117,10 @@ async def test_installation_get_agent_deps_for_room(
             assert found.user == test_user
             assert found.tool_configs == t_configs
 
+            if w_run_agent_input:
+                assert found.thread_id == RUN_AGENT_INPUT.thread_id
+                assert found.run_id == RUN_AGENT_INPUT.run_id
+
             if w_the_threads:
                 assert found.the_threads is the_threads
             else:
