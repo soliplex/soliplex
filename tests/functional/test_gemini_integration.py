@@ -87,22 +87,6 @@ async def close_cached_httpx_client(anyio_backend, monkeypatch):
     original_cached_func.cache_clear()
 
 
-@pytest.fixture(autouse=True)
-async def reset_gemini_client():
-    """Reset google-genai's internal httpx clients after each test.
-
-    google-genai caches httpx.AsyncClient instances that get bound to
-    event loops. When pytest-anyio creates a new event loop per test,
-    these cached clients fail with "Event loop is closed" errors.
-
-    This fixture closes google-genai's internal httpx clients and clears
-    the soliplex agent cache to ensure fresh clients are created per test.
-
-    See: https://github.com/pydantic/pydantic-ai/issues/748
-    """
-    yield
-
-
 @pytest.fixture
 def gemini_room_config():
     """Load the gemini_flash room configuration directly."""
