@@ -393,6 +393,7 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
         repr=False,
         compare=False,
     )
+    _installation_config: InstallationConfig = None  # noqa F821 cycles
     _config_path: pathlib.Path | None = None
 
     state_type: SkillStateType = sk_bwrap_sandbox.STATE_TYPE
@@ -412,6 +413,7 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
     ):
         try:
             _kind = config_dict.pop("kind", None)
+            config_dict["_installation_config"] = installation_config
             config_dict["_config_path"] = config_path
 
             sandbox_config_dict = config_dict.pop("sandbox_config", {})
@@ -439,6 +441,7 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
             default_environment_name=self.default_environment_name,
             sandbox_config=self.sandbox_config,
             volumes=self.volumes,
+            installation_config=self._installation_config,
         )
         skill._factory = sk_bwrap_sandbox.create_bwrap_sandbox_skill
         return skill

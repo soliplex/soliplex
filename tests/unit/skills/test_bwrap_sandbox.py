@@ -9,6 +9,7 @@ from haiku.skills import models as hs_models
 from haiku.skills import state as hs_state
 from pydantic_ai import toolsets as ai_toolsets
 
+from soliplex.config import installation as config_installation
 from soliplex.skills import bwrap_sandbox as skills_bwrap_sandbox
 
 
@@ -445,6 +446,7 @@ async def test_create_sandbox_toolset_execute_script(
     )
 
 
+@pytest.mark.parametrize("w_iconfig", [False, True])
 @pytest.mark.parametrize(
     "w_kwargs",
     [
@@ -465,7 +467,7 @@ async def test_create_sandbox_toolset_execute_script(
 )
 @mock.patch("soliplex.skills.bwrap_sandbox.create_sandbox_toolset")
 @mock.patch("haiku.skills.parser.parse_skill_md")
-def test_create_bwrap_sandbox_skill(psm, csts, w_kwargs):
+def test_create_bwrap_sandbox_skill(psm, csts, w_kwargs, w_iconfig):
     metadata = hs_models.SkillMetadata(
         name="test-skill",
         description="This is a test skill",
@@ -474,7 +476,21 @@ def test_create_bwrap_sandbox_skill(psm, csts, w_kwargs):
     psm.return_value = metadata, instructions
     exp_path = pathlib.Path(skills_bwrap_sandbox.__file__).parent
 
-    skill = skills_bwrap_sandbox.create_bwrap_sandbox_skill(**w_kwargs)
+    installation_config = mock.create_autospec(
+        config_installation.InstallationConfig
+    )
+
+    if w_iconfig:
+        iconfig_kwargs = {"installation_config": installation_config}
+        exp_iconfig_args = iconfig_kwargs
+    else:
+        iconfig_kwargs = {}
+        exp_iconfig_args = {"installation_config": None}
+
+    skill = skills_bwrap_sandbox.create_bwrap_sandbox_skill(
+        **w_kwargs,
+        **iconfig_kwargs,
+    )
 
     assert isinstance(skill, hs_models.Skill)
     assert skill.metadata == metadata
@@ -487,12 +503,16 @@ def test_create_bwrap_sandbox_skill(psm, csts, w_kwargs):
     (toolset,) = skill.toolsets
     assert toolset is csts.return_value
 
-    exp_toolset_kw = {
-        "id": None,
-        "default_environment_name": "bare",
-        "sandbox_config": None,
-        "volumes": None,
-        "max_retries": 1,
-    } | w_kwargs
+    exp_toolset_kw = (
+        {
+            "id": None,
+            "default_environment_name": "bare",
+            "sandbox_config": None,
+            "volumes": None,
+            "max_retries": 1,
+        }
+        | w_kwargs
+        | exp_iconfig_args
+    )
 
     csts.assert_called_once_with(**exp_toolset_kw)

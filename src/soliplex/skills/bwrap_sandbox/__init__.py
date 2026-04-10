@@ -229,6 +229,7 @@ def create_sandbox_toolset(
     sandbox_config: bs_config.Config | None = None,
     volumes: bs_models.VolumeMap | None = None,
     max_retries: int = 1,
+    installation_config=None,  # noqa F821 cycles
 ) -> ai_toolests.FunctionToolset:
     """Create a sandbox toolset for shell / script execution.
 
@@ -318,6 +319,7 @@ def create_bwrap_sandbox_skill(
     sandbox_config: bs_config.Config | None = None,
     volumes: bs_models.VolumeMap | None = None,
     max_retries: int = 1,
+    installation_config=None,  # noqa F821 cycles
 ) -> hs_models.Skill:
 
     skill_path = pathlib.Path(__file__).parent
@@ -330,6 +332,7 @@ def create_bwrap_sandbox_skill(
         sandbox_config=sandbox_config,
         volumes=volumes,
         max_retries=max_retries,
+        installation_config=installation_config,
     )
 
     return hs_models.Skill(

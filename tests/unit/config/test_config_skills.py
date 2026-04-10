@@ -18,6 +18,7 @@ from pydantic_ai.providers import ollama as ollama_providers
 
 from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
+from soliplex.config import installation as config_installation
 from soliplex.config import skills as config_skills
 from soliplex.skills import bwrap_sandbox as sk_bwrap_sandbox
 
@@ -942,7 +943,13 @@ def test_bwrapsandboxskillconfig_agui_feature_names():
     ],
 )
 @mock.patch("soliplex.skills.bwrap_sandbox.create_bwrap_sandbox_skill")
-def test_bwrapsandboxskillconfig_skill(cbss, w_volumes):
+def test_bwrapsandboxskillconfig_skill(
+    cbss,
+    w_volumes,
+):
+    installation_config = mock.create_autospec(
+        config_installation.InstallationConfig
+    )
     bssc = config_skills.BwrapSandboxSkillConfig(
         id=TEST_SKILL_CONFIG_ID,
         default_environment_name=TEST_DEFAULT_ENVIRONMENT,
@@ -950,6 +957,7 @@ def test_bwrapsandboxskillconfig_skill(cbss, w_volumes):
             execution_timeout_seconds=TEST_EXEC_TIMEOUT_SECS,
         ),
         volumes=w_volumes,
+        _installation_config=installation_config,
     )
 
     found = bssc.skill
@@ -961,6 +969,7 @@ def test_bwrapsandboxskillconfig_skill(cbss, w_volumes):
         default_environment_name=bssc.default_environment_name,
         sandbox_config=bssc.sandbox_config,
         volumes=w_volumes,
+        installation_config=installation_config,
     )
 
     assert found._factory is cbss
