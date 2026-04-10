@@ -75,7 +75,7 @@ async def get_room_file_upload(
         raise UploadNotFound("room", filename)
 
     try:
-        return file_path.read_text(errors="strict")
+        return file_path.read_text(encoding="utf-8", errors="strict")
     except ValueError:
         return file_path.read_bytes()
 
@@ -126,6 +126,6 @@ async def get_thread_file_upload(
         raise UploadNotFound("thread", filename)
 
     try:
-        return file_path.read_text(errors="strict")
+        return file_path.read_text(encoding="utf-8", errors="strict")
     except ValueError:
         return file_path.read_bytes()

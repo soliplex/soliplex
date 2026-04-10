@@ -43,6 +43,13 @@ AGUI_EVENT_CLASSES_BY_TYPE = {
     "RUN_ERROR": agui_core.RunErrorEvent,
     "STEP_STARTED": agui_core.StepStartedEvent,
     "STEP_FINISHED": agui_core.StepFinishedEvent,
+    "REASONING_START": agui_core.ReasoningStartEvent,
+    "REASONING_END": agui_core.ReasoningEndEvent,
+    "REASONING_MESSAGE_START": agui_core.ReasoningMessageStartEvent,
+    "REASONING_MESSAGE_CONTENT": agui_core.ReasoningMessageContentEvent,
+    "REASONING_MESSAGE_END": agui_core.ReasoningMessageEndEvent,
+    "REASONING_MESSAGE_CHUNK": agui_core.ReasoningMessageChunkEvent,
+    "REASONING_ENCRYPTED_VALUE": agui_core.ReasoningEncryptedValueEvent,
 }
 
 
