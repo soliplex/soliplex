@@ -1,0 +1,27 @@
+id: "bwrap_sandbox"
+name: "BWrap Sandbox"
+description: "Upload files and analyze them with code execution and RAG"
+
+enable_attachments: true
+
+suggestions:
+  - "List the files in the workspace"
+  - "Analyze the uploaded data"
+  - "Search the knowledge base for context"
+
+agent:
+  template_id: "default_chat"
+  system_prompt: "./prompt.txt"
+
+tools:
+  - tool_name: "soliplex.tools.current_run_info"
+  - tool_name: "soliplex.tools.file_uploads.list_thread_file_uploads"
+  - tool_name: "soliplex.tools.file_uploads.get_thread_file_upload"
+
+skills:
+  skill_configs:
+    - kind: "bubble-sandbox"
+    - kind: "haiku.rag.skills.rag"
+      rag_lancedb_stem: "rag"
+
+allow_mcp: false

@@ -257,9 +257,16 @@ agent_configs:
 title_agent_config_id: "title"
 
 #==========================================================================
-# Upload directory configuraition
+# Upload directory configuration
 #==========================================================================
 upload_path: ../uploads
+
+#==========================================================================
+# Sandbox configuration
+#==========================================================================
+sandbox_config:
+    environments_path: ../sandbox/environments
+    workdirs_path: ../sandbox/workdirs
 
 #==========================================================================
 # Thread peristence:  SQLAlchemy DBURIs
@@ -321,9 +328,8 @@ room_paths:
   - "./rooms/faux"
   - "./rooms/quiztest"
   - "./rooms/skillstest"
-  - "./rooms/multi_arg"
-  - "./rooms/title_only"
   - "./rooms/feedback"
+  - "./rooms/bwrap_sandbox"
 
 #==========================================================================
 # Completions configuration
