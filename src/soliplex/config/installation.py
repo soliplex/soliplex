@@ -270,6 +270,14 @@ class SandboxConfig:
         return cls(_config_path=config_path, **config_dict)
 
     @property
+    def as_yaml(self) -> dict[str, typing.Any]:
+        result = {"environments_path": str(self.environments_path)}
+        if self._workdirs_path is not None:
+            result["workdirs_path"] = str(self.workdirs_path)
+
+        return result
+
+    @property
     def environments_path(self) -> pathlib.Path:
         """Subdirectories function as sandboxable environments
 
@@ -277,7 +285,9 @@ class SandboxConfig:
         and a '.venv' virtual environment initialized from it.
         """
         if self._config_path is not None:
-            return self._config_path.parent / self._environments_path
+            return (
+                self._config_path.parent / self._environments_path
+            ).resolve()
         else:
             return None
 
@@ -291,7 +301,7 @@ class SandboxConfig:
         If not set, the sandox workdir will be a temporary directory.
         """
         if self._config_path is not None and self._workdirs_path is not None:
-            return self._config_path.parent / self._workdirs_path
+            return (self._config_path.parent / self._workdirs_path).resolve()
         else:
             return None
 
@@ -1033,6 +1043,12 @@ class InstallationConfig:
             "completion_paths": [str(path) for path in self.completion_paths],
             "quizzes_paths": [str(path) for path in self.quizzes_paths],
         }
+
+        if self.upload_path:
+            result["upload_path"] = str(self.upload_path)
+
+        if self.sandbox_config:
+            result["sandbox_config"] = self.sandbox_config.as_yaml
 
         if self.title_agent_config_id is not None:
             result["title_agent_config_id"] = self.title_agent_config_id

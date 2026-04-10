@@ -657,6 +657,32 @@ def test_sandboxconfig_from_yaml(
     assert found == expected
 
 
+@pytest.mark.parametrize(
+    "w_kw",
+    [
+        WO_WORKDIRS_PATH_SANDBOX_CONFIG_KW.copy(),
+        W_WORKDIRS_PATH_SANDBOX_CONFIG_KW.copy(),
+    ],
+)
+def test_sandboxconfig_as_yaml(temp_dir, w_kw):
+    yaml_file = temp_dir / "installation.yaml"
+    inst = config_installation.SandboxConfig(
+        **w_kw,
+        _config_path=yaml_file,
+    )
+
+    expected = {
+        "environments_path": str(temp_dir / SANDBOX_ENVIRONMENTS_PATH),
+    }
+
+    if "_workdirs_path" in w_kw:
+        expected["workdirs_path"] = str(temp_dir / SANDBOX_WORKDIRS_PATH)
+
+    found = inst.as_yaml
+
+    assert found == expected
+
+
 @pytest.mark.parametrize("w_config_path", [False, True])
 def test_sandboxconfig_environments_path(temp_dir, w_config_path):
     ep_relative = pathlib.Path("sandbox") / "environments"
@@ -1767,12 +1793,18 @@ def test_installationconfig_from_yaml_environ_wo_value(temp_dir, config_yaml):
 @pytest.mark.parametrize("w_aro", [False, True])
 @pytest.mark.parametrize("w_logfire_config", [False, True])
 @pytest.mark.parametrize("w_title_agent_config_id", [None, "title"])
+@pytest.mark.parametrize("w_sandbox_config", [False, True])
+@pytest.mark.parametrize("w_upload_path", [False, True])
 def test_installationconfig_as_yaml(
+    temp_dir,
     patched_app_routers,
+    w_upload_path,
+    w_sandbox_config,
     w_title_agent_config_id,
     w_logfire_config,
     w_aro,
 ):
+    config_path = temp_dir / "installation.yaml"
     meta = mock.create_autospec(config_meta.InstallationConfigMeta)
     secret_1 = config_secrets.SecretConfig(secret_name="SECRET_ONE")
     secret_2 = config_secrets.SecretConfig(secret_name="SECRET_TWO")
@@ -1798,6 +1830,19 @@ def test_installationconfig_as_yaml(
                 prefix="/prefix",
             )
         ]
+
+    if w_upload_path:
+        upload_path = kwargs["upload_path"] = temp_dir / "uploads"
+
+    if w_sandbox_config:
+        environments_path = temp_dir / "sandbox" / "environments"
+        workdirs_path = temp_dir / "sandbox" / "workdirs"
+        sandbox_config = config_installation.SandboxConfig(
+            _config_path=config_path,
+            _environments_path=environments_path,
+            _workdirs_path=workdirs_path,
+        )
+        kwargs["sandbox_config"] = sandbox_config
 
     installation_config = config_installation.InstallationConfig(
         id=INSTALLATION_ID,
@@ -1845,6 +1890,12 @@ def test_installationconfig_as_yaml(
         "quizzes_paths": [str(pathlib.Path("other/quizzes"))],
         "filesystem_skills_paths": [str(pathlib.Path("other/skills"))],
     }
+
+    if w_upload_path:
+        expected["upload_path"] = str(upload_path)
+
+    if w_sandbox_config:
+        expected["sandbox_config"] = sandbox_config.as_yaml
 
     if w_title_agent_config_id is not None:
         expected["title_agent_config_id"] = w_title_agent_config_id
