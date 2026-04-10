@@ -1,4 +1,5 @@
 import pathlib
+import uuid
 from unittest import mock
 
 import pytest
@@ -11,6 +12,10 @@ from pydantic_ai import toolsets as ai_toolsets
 
 from soliplex.config import installation as config_installation
 from soliplex.skills import bwrap_sandbox as skills_bwrap_sandbox
+
+ROOM_ID = "test_room"
+THREAD_ID = uuid.uuid4()
+RUN_ID = uuid.uuid4()
 
 
 @pytest.fixture
@@ -30,6 +35,60 @@ def bwrap_sandbox(temp_dir):
         environments_path=temp_dir,
     )
     return mock.create_autospec(bs_sandbox.BwrapSandbox, config=config)
+
+
+@pytest.fixture
+def workdirs_path(temp_dir):
+    result = temp_dir / "sandbox" / "workdirs"
+    result.mkdir(parents=True)
+    return result
+
+
+@pytest.fixture
+def environments_path(temp_dir):
+    result = temp_dir / "sandbox" / "environments"
+    result.mkdir(parents=True)
+    return result
+
+
+@pytest.fixture
+def s_config(
+    workdirs_path,
+    environments_path,
+):
+    return mock.create_autospec(
+        config_installation.SandboxConfig,
+        environments_path=environments_path,
+        workdirs_path=workdirs_path,
+    )
+
+
+@pytest.fixture
+def rooms_upload_path(temp_dir):
+    result = temp_dir / "uploads" / "rooms"
+    result.mkdir(parents=True)
+    return result
+
+
+@pytest.fixture
+def threads_upload_path(temp_dir):
+    result = temp_dir / "uploads" / "threads"
+    result.mkdir(parents=True)
+    return result
+
+
+@pytest.fixture
+def i_config(
+    s_config,
+    rooms_upload_path,
+    threads_upload_path,
+):
+    return mock.create_autospec(
+        config_installation.InstallationConfig,
+        sandbox_config=s_config,
+        rooms_upload_path=rooms_upload_path,
+        threads_upload_path=threads_upload_path,
+    )
 
 
 @pytest.mark.anyio
@@ -149,6 +208,7 @@ async def test_skill_execute_w_errors_truncation(
         environment_name=None,
         workdir=None,
         timeout=None,
+        extra_volumes=None,
     )
 
 
@@ -159,6 +219,14 @@ async def test_skill_execute_w_errors_truncation(
         {"environment_name": "test-environment"},
         {"workdir": "/tmp/foo"},
         {"timeout": 17},
+        {
+            "extra_volumes": {
+                "test-volume": bs_models.VolumeInfo(
+                    host_path="/tmp/bar",
+                    writable=True,
+                ),
+            },
+        },
     ],
 )
 @pytest.mark.parametrize(
@@ -198,6 +266,7 @@ async def test_skill_execute_w_extra_args(
         "environment_name": None,
         "workdir": None,
         "timeout": None,
+        "extra_volumes": None,
     } | w_kw
 
     att.assert_awaited_once_with(
@@ -252,6 +321,7 @@ async def test_skill_execute_script_w_errors_truncation(
         environment_name=None,
         workdir=None,
         timeout=None,
+        extra_volumes=None,
     )
 
 
@@ -262,6 +332,14 @@ async def test_skill_execute_script_w_errors_truncation(
         {"environment_name": "test-environment"},
         {"workdir": "/tmp/foo"},
         {"timeout": 17},
+        {
+            "extra_volumes": {
+                "test-volume": bs_models.VolumeInfo(
+                    host_path="/tmp/bar",
+                    writable=True,
+                ),
+            },
+        },
     ],
 )
 @mock.patch("asyncio.to_thread")
@@ -292,6 +370,7 @@ async def test_skill_execute_script_w_extra_args(
         "environment_name": None,
         "workdir": None,
         "timeout": None,
+        "extra_volumes": None,
     } | w_kw
 
     att.assert_awaited_once_with(
@@ -301,6 +380,73 @@ async def test_skill_execute_script_w_extra_args(
     )
 
 
+@pytest.mark.parametrize("w_wd_path", [False, True])
+def test_get_workdir(workdirs_path, w_wd_path):
+    if w_wd_path:
+        wd_path = workdirs_path
+        expected = workdirs_path / ROOM_ID / str(THREAD_ID) / str(RUN_ID)
+    else:
+        wd_path = None
+        expected = None
+
+    found = skills_bwrap_sandbox.get_workdir(
+        wd_path,
+        ROOM_ID,
+        THREAD_ID,
+        RUN_ID,
+    )
+
+    assert found == expected
+
+    if expected is not None:
+        assert expected.is_dir()
+
+
+@pytest.mark.parametrize("w_thread_path", [None, False, True])
+@pytest.mark.parametrize("w_room_path", [None, False, True])
+def test_get_extra_volumes(
+    rooms_upload_path,
+    threads_upload_path,
+    w_room_path,
+    w_thread_path,
+):
+    expected = {}
+
+    if w_room_path is not None:
+        ru_path = rooms_upload_path
+        if w_room_path:
+            room_path = ru_path / ROOM_ID
+            room_path.mkdir(parents=True)
+            expected["room"] = bs_models.VolumeInfo(
+                host_path=room_path,
+                writable=False,
+            )
+    else:
+        ru_path = None
+
+    if w_thread_path is not None:
+        tu_path = threads_upload_path
+        if w_thread_path:
+            thread_path = tu_path / str(THREAD_ID)
+            thread_path.mkdir(parents=True)
+            expected["thread"] = bs_models.VolumeInfo(
+                host_path=thread_path,
+                writable=False,
+            )
+    else:
+        tu_path = None
+
+    found = skills_bwrap_sandbox.get_extra_volumes(
+        ru_path,
+        tu_path,
+        ROOM_ID,
+        THREAD_ID,
+    )
+
+    assert found == expected
+
+
+@pytest.mark.parametrize("w_iconfig", [False, True])
 @pytest.mark.parametrize(
     "w_kwargs",
     [
@@ -320,14 +466,36 @@ async def test_skill_execute_script_w_extra_args(
     ],
 )
 @mock.patch("bubble_sandbox.sandbox.BwrapSandbox")
-def test_create_sandbox_toolset(bs_klass, w_kwargs):
-    found = skills_bwrap_sandbox.create_sandbox_toolset(**w_kwargs)
+def test_create_sandbox_toolset(
+    bs_klass,
+    i_config,
+    environments_path,
+    w_kwargs,
+    w_iconfig,
+):
+
+    if w_iconfig:
+        iconfig_kwargs = {"installation_config": i_config}
+    else:
+        iconfig_kwargs = {}
+
+    found = skills_bwrap_sandbox.create_sandbox_toolset(
+        **w_kwargs,
+        **iconfig_kwargs,
+    )
 
     assert isinstance(found, ai_toolsets.FunctionToolset)
     assert found.id == w_kwargs.pop("id", None)
     assert found.max_retries == w_kwargs.pop("max_retries", 1)
 
-    exp_config = w_kwargs.pop("sandbox_config", bs_config.Config())
+    sandbox_config = w_kwargs.pop("sandbox_config", bs_config.Config())
+    if w_iconfig:
+        exp_config = sandbox_config.model_copy(
+            update={"environments_pathname": environments_path}
+        )
+    else:
+        exp_config = sandbox_config
+
     exp_sandbox_kw = {
         "default_environment_name": "bare",
         "config": exp_config,
@@ -359,30 +527,48 @@ async def test_create_sandbox_toolset_list_environments(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("w_iconfig", [False, True])
 @pytest.mark.parametrize(
     "w_kw",
     [
         {},
         {"environment_name": "test-environment"},
-        {"workdir": "/tmp/foo"},
         {"timeout": 17},
     ],
 )
+@mock.patch("soliplex.skills.bwrap_sandbox.get_extra_volumes")
+@mock.patch("soliplex.skills.bwrap_sandbox.get_workdir")
 @mock.patch("soliplex.skills.bwrap_sandbox.skill_execute")
 @mock.patch("bubble_sandbox.sandbox.BwrapSandbox")
 async def test_create_sandbox_toolset_execute(
     bs_klass,
     skill_execute,
+    gw,
+    gev,
     ctx_w_deps,
+    i_config,
+    workdirs_path,
+    rooms_upload_path,
+    threads_upload_path,
     w_kw,
+    w_iconfig,
 ):
-    found = skills_bwrap_sandbox.create_sandbox_toolset()
+    if w_iconfig:
+        toolset = skills_bwrap_sandbox.create_sandbox_toolset(
+            installation_config=i_config,
+        )
+    else:
+        toolset = skills_bwrap_sandbox.create_sandbox_toolset()
+
     sandbox = bs_klass.return_value
-    tool = found.tools["execute"]
+    tool = toolset.tools["execute"]
 
     found = await tool.function(
         ctx=ctx_w_deps,
         command=["/bin/true"],
+        room_id=ROOM_ID,
+        thread_id=THREAD_ID,
+        run_id=RUN_ID,
         **w_kw,
     )
 
@@ -390,8 +576,9 @@ async def test_create_sandbox_toolset_execute(
 
     exp_kw = {
         "environment_name": None,
-        "workdir": None,
         "timeout": None,
+        "workdir": gw.return_value,
+        "extra_volumes": gev.return_value,
     } | w_kw
 
     skill_execute.assert_called_once_with(
@@ -401,32 +588,67 @@ async def test_create_sandbox_toolset_execute(
         **exp_kw,
     )
 
+    if w_iconfig:
+        gw.assert_called_once_with(workdirs_path, ROOM_ID, THREAD_ID, RUN_ID)
+        gev.assert_called_once_with(
+            rooms_upload_path,
+            threads_upload_path,
+            ROOM_ID,
+            THREAD_ID,
+        )
+    else:
+        gw.assert_called_once_with(None, ROOM_ID, THREAD_ID, RUN_ID)
+        gev.assert_called_once_with(
+            None,
+            None,
+            ROOM_ID,
+            THREAD_ID,
+        )
+
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("w_iconfig", [False, True])
 @pytest.mark.parametrize(
     "w_kw",
     [
         {},
         {"environment_name": "test-environment"},
-        {"workdir": "/tmp/foo"},
         {"timeout": 17},
     ],
 )
+@mock.patch("soliplex.skills.bwrap_sandbox.get_extra_volumes")
+@mock.patch("soliplex.skills.bwrap_sandbox.get_workdir")
 @mock.patch("soliplex.skills.bwrap_sandbox.skill_execute_script")
 @mock.patch("bubble_sandbox.sandbox.BwrapSandbox")
 async def test_create_sandbox_toolset_execute_script(
     bs_klass,
     skill_execute_script,
+    gw,
+    gev,
     ctx_w_deps,
+    i_config,
+    workdirs_path,
+    rooms_upload_path,
+    threads_upload_path,
     w_kw,
+    w_iconfig,
 ):
-    found = skills_bwrap_sandbox.create_sandbox_toolset()
+    if w_iconfig:
+        toolset = skills_bwrap_sandbox.create_sandbox_toolset(
+            installation_config=i_config,
+        )
+    else:
+        toolset = skills_bwrap_sandbox.create_sandbox_toolset()
+
     sandbox = bs_klass.return_value
-    tool = found.tools["execute_script"]
+    tool = toolset.tools["execute_script"]
 
     found = await tool.function(
         ctx=ctx_w_deps,
         script="print('hello')",
+        room_id=ROOM_ID,
+        thread_id=THREAD_ID,
+        run_id=RUN_ID,
         **w_kw,
     )
 
@@ -434,8 +656,9 @@ async def test_create_sandbox_toolset_execute_script(
 
     exp_kw = {
         "environment_name": None,
-        "workdir": None,
         "timeout": None,
+        "workdir": gw.return_value,
+        "extra_volumes": gev.return_value,
     } | w_kw
 
     skill_execute_script.assert_called_once_with(
@@ -444,6 +667,23 @@ async def test_create_sandbox_toolset_execute_script(
         script="print('hello')",
         **exp_kw,
     )
+
+    if w_iconfig:
+        gw.assert_called_once_with(workdirs_path, ROOM_ID, THREAD_ID, RUN_ID)
+        gev.assert_called_once_with(
+            rooms_upload_path,
+            threads_upload_path,
+            ROOM_ID,
+            THREAD_ID,
+        )
+    else:
+        gw.assert_called_once_with(None, ROOM_ID, THREAD_ID, RUN_ID)
+        gev.assert_called_once_with(
+            None,
+            None,
+            ROOM_ID,
+            THREAD_ID,
+        )
 
 
 @pytest.mark.parametrize("w_iconfig", [False, True])
@@ -467,7 +707,7 @@ async def test_create_sandbox_toolset_execute_script(
 )
 @mock.patch("soliplex.skills.bwrap_sandbox.create_sandbox_toolset")
 @mock.patch("haiku.skills.parser.parse_skill_md")
-def test_create_bwrap_sandbox_skill(psm, csts, w_kwargs, w_iconfig):
+def test_create_bwrap_sandbox_skill(psm, csts, w_kwargs, w_iconfig, i_config):
     metadata = hs_models.SkillMetadata(
         name="test-skill",
         description="This is a test skill",
@@ -481,7 +721,7 @@ def test_create_bwrap_sandbox_skill(psm, csts, w_kwargs, w_iconfig):
     )
 
     if w_iconfig:
-        iconfig_kwargs = {"installation_config": installation_config}
+        iconfig_kwargs = {"installation_config": i_config}
         exp_iconfig_args = iconfig_kwargs
     else:
         iconfig_kwargs = {}

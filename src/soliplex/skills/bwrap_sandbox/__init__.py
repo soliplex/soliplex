@@ -12,6 +12,7 @@ from haiku.skills import parser as hs_parser
 from haiku.skills import state as hs_state
 from pydantic_ai import toolsets as ai_toolests
 
+
 SKILL_NAME = "bubble-sandbox"
 SKILL_DESCRIPTION = """\
 Write and execute Python code in a bubblerwap sandbox
@@ -110,6 +111,7 @@ async def skill_execute(
     environment_name: str = None,
     workdir: pathlib.Path | None = None,
     timeout: float = None,  # seconds
+    extra_volumes: bs_models.VolumeMap = None,
 ) -> str:
     """Execute a shell command in the working directory.
 
@@ -131,6 +133,7 @@ async def skill_execute(
             environment_name=environment_name,
             workdir=workdir,
             timeout=timeout,
+            extra_volumes=extra_volumes,
         )
     except RuntimeError as e:
         return f"Error: {e}"
@@ -191,6 +194,7 @@ async def skill_execute_script(
     environment_name: str = None,
     workdir: pathlib.Path | None = None,
     timeout: float = None,  # seconds
+    extra_volumes: bs_models.VolumeMap = None,
 ) -> str:
     """Execute a python script in the working directory.
 
@@ -209,6 +213,7 @@ async def skill_execute_script(
             environment_name=environment_name,
             workdir=workdir,
             timeout=timeout,
+            extra_volumes=extra_volumes,
         )
     except RuntimeError as e:
         return f"Error: {e}"
@@ -221,6 +226,48 @@ async def skill_execute_script(
         return f"Command failed (exit code {result.exit_code}):\n{output}"
 
     return str(output)
+
+
+def get_workdir(
+    workdirs_path: pathlib.Path | None,
+    room_id: str,
+    thread_id: str,
+    run_id: str,
+):
+    if workdirs_path is not None:
+        workdir = workdirs_path / room_id / str(thread_id) / str(run_id)
+        workdir.mkdir(parents=True)
+    else:
+        workdir = None
+
+    return workdir
+
+
+def get_extra_volumes(
+    rooms_upload_path: pathlib.Path | None,
+    threads_upload_path: pathlib.Path | None,
+    room_id: str,
+    thread_id: str,
+):
+    result = {}
+
+    if rooms_upload_path is not None:
+        room_dir = rooms_upload_path / room_id
+        if room_dir.exists():
+            result["room"] = bs_models.VolumeInfo(
+                host_path=room_dir,
+                writable=False,
+            )
+
+    if threads_upload_path is not None:
+        thread_dir = threads_upload_path / str(thread_id)
+        if thread_dir.exists():
+            result["thread"] = bs_models.VolumeInfo(
+                host_path=thread_dir,
+                writable=False,
+            )
+
+    return result
 
 
 def create_sandbox_toolset(
@@ -256,6 +303,19 @@ def create_sandbox_toolset(
     if sandbox_config is None:
         sandbox_config = bs_config.Config()
 
+    if installation_config is not None:
+        i_config = installation_config
+        s_config = i_config.sandbox_config
+        sandbox_config.environments_pathname = s_config.environments_path
+        workdirs_path = s_config.workdirs_path
+
+        threads_upload_path = i_config.threads_upload_path
+        rooms_upload_path = i_config.rooms_upload_path
+    else:
+        workdirs_path = None
+        threads_upload_path = None
+        rooms_upload_path = None
+
     if volumes is None:
         volumes = {}
 
@@ -280,10 +340,21 @@ def create_sandbox_toolset(
     async def execute(
         ctx: pydantic_ai.RunContext,
         command: str | list[str],
+        room_id: str,
+        thread_id: str,
+        run_id: str,
         environment_name: str = None,
-        workdir: pathlib.Path | None = None,
         timeout: float = None,  # seconds
     ) -> str:  # pragma: NO COVER
+        workdir = get_workdir(workdirs_path, room_id, thread_id, run_id)
+
+        extra_volumes = get_extra_volumes(
+            rooms_upload_path,
+            threads_upload_path,
+            room_id,
+            thread_id,
+        )
+
         return await skill_execute(
             ctx=ctx,
             bwrap_sandbox=bwrap_sandbox,
@@ -291,16 +362,28 @@ def create_sandbox_toolset(
             environment_name=environment_name,
             workdir=workdir,
             timeout=timeout,
+            extra_volumes=extra_volumes,
         )
 
     @toolset.tool(description=EXECUTE_SCRIPT_DESCRIPTION)
     async def execute_script(
         ctx: pydantic_ai.RunContext,
         script: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
         environment_name: str = None,
-        workdir: pathlib.Path | None = None,
         timeout: float = None,  # seconds
     ) -> str:  # pragma: NO COVER
+        workdir = get_workdir(workdirs_path, room_id, thread_id, run_id)
+
+        extra_volumes = get_extra_volumes(
+            rooms_upload_path,
+            threads_upload_path,
+            room_id,
+            thread_id,
+        )
+
         return await skill_execute_script(
             ctx=ctx,
             bwrap_sandbox=bwrap_sandbox,
@@ -308,6 +391,7 @@ def create_sandbox_toolset(
             environment_name=environment_name,
             workdir=workdir,
             timeout=timeout,
+            extra_volumes=extra_volumes,
         )
 
     return toolset
