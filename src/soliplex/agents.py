@@ -28,11 +28,14 @@ ToolConfigMap = dict[str, typing.Any]
 
 
 class SkillToolsetConfig(typing.Protocol):
-    # contract for config.RoomSkillsConfig etc.
-    @abc.abstractproperty
+    """Contract for config.RoomSkillsConfig etc."""
+
+    @property
+    @abc.abstractmethod
     def skill_preambles(self) -> list[str]: ...
 
-    @abc.abstractproperty
+    @property
+    @abc.abstractmethod
     def skill_toolset(self) -> hs_agent.SkillToolset: ...
 
 
