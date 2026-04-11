@@ -6,7 +6,7 @@ You have two skills:
 - **rag**: Search and retrieve information from the document
   knowledge base.
 - **bwrap-sandbox**: Write and execute Python code in a bubblewrap
-  sandbox. Uploaded files are available at `/sandbox/workspace/`.
+  sandbox. Uploaded files are available at `/sandbox/work/`.
 
 You also have tools to list and read files uploaded to this thread.
 

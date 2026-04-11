@@ -163,7 +163,7 @@ environment, with access to its pre-installed packages.
 - Use ``list_environments`` first to discover available environments \
 and their installed packages.
 - Print results to stdout — the output is captured and returned.
-- Use absolute paths (e.g. ``/sandbox/workspace/data.csv``) when \
+- Use absolute paths (e.g. ``/sandbox/work/data.csv``) when \
 reading or writing files.
 
 ## Debugging

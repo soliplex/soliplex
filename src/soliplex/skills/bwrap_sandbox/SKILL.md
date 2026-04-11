@@ -18,7 +18,7 @@ the results.
 
 ## Environment
 
-- Working directory: `/sandbox/workspace/` (read/write, mounted from
+- Working directory: `/sandbox/work/` (read/write, mounted from
   host if provided)
 - Additional host-system directories are mounted under
   `/sandbox/volumes`
@@ -59,6 +59,6 @@ you specifically need shell functionality (e.g. `pip list`).
 - Write self-contained scripts that print their output.
 - For CSV/tabular data: have the script inspect column names and
   sample rows before analysis.
-- Output files (CSVs, plots) written to `/sandbox/workspace/` persist
+- Output files (CSVs, plots) written to `/sandbox/work/` persist
   across calls within the same run.
 - If a script fails, read the error, fix the code, and retry.
