@@ -610,7 +610,35 @@ class RoomSkillsConfig(_SkillConfigModelBase):
     @property
     def skill_toolset(self) -> hs_agent.SkillToolset:
         skill_map = self.skills
-        return hs_agent.SkillToolset(
+        return SoliplexSkillToolset(
             skills=skill_map.values(),
             skill_model=self.model_or_name,
         )
+
+
+class SoliplexSkillToolset(hs_agent.SkillToolset):
+    """SkillToolset that injects run context into skill states.
+
+    Copies ``room_id``, ``thread_id`` and ``run_id`` from the outer
+    agent's deps into the sandbox skill namespace so that sub-agent
+    tools can resolve workdirs and upload volumes.
+    """
+
+    async def for_run(self, ctx):
+        result = await super().for_run(ctx)
+        deps = ctx.deps
+        if deps is None:
+            return result
+
+        sandbox_ns = self.get_namespace(
+            sk_bwrap_sandbox.STATE_NAMESPACE,
+        )
+        if sandbox_ns is None:
+            return result
+
+        for attr in ("room_id", "thread_id", "run_id"):
+            val = getattr(deps, attr, None)
+            if val is not None:
+                setattr(sandbox_ns, attr, str(val))
+
+        return result

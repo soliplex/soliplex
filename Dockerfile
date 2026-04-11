@@ -14,12 +14,21 @@ RUN \
     rsync \
     vim \
     jq \
+    bubblewrap \
     && \
-  pip3 install --upgrade pip
+  pip3 install --upgrade pip uv
 
 COPY pyproject.toml /app/pyproject.toml
 COPY src/soliplex /app/src/soliplex
 
 RUN pip3 install -e .
+
+# Bootstrap sandbox environments
+COPY sandbox/environments /app/sandbox/environments
+RUN for env_dir in /app/sandbox/environments/*/; do \
+      if [ -f "$env_dir/pyproject.toml" ]; then \
+        cd "$env_dir" && uv sync && cd /app; \
+      fi; \
+    done
 
 CMD ["/usr/local/bin/soliplex-cli", "serve", "--host=0.0.0.0", "/app/installation"]

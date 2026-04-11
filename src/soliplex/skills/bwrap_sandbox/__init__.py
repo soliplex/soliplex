@@ -1,4 +1,3 @@
-import asyncio
 import pathlib
 import tomllib
 
@@ -15,7 +14,7 @@ from pydantic_ai import toolsets as ai_toolests
 
 SKILL_NAME = "bubble-sandbox"
 SKILL_DESCRIPTION = """\
-Write and execute Python code in a bubblerwap sandbox
+Write and execute Python code in a bubblewrap sandbox
 """
 SKILL_METADATA = hs_models.SkillMetadata(
     name=SKILL_NAME,
@@ -27,7 +26,9 @@ EnvironmentInfo = dict[str, str]
 
 
 class SandboxState(pydantic.BaseModel):
-    pass
+    room_id: str | None = None
+    thread_id: str | None = None
+    run_id: str | None = None
 
 
 STATE_TYPE = SandboxState
@@ -62,7 +63,9 @@ async def skill_list_environments(
                 environments.append(
                     {
                         "name": project["name"],
-                        "description": project["description"],
+                        "description": project.get(
+                            "description", ""
+                        ),
                     }
                 )
 
@@ -78,9 +81,9 @@ running tests, builds, git commands, package installs, running scripts.
 ## Usage
 - To run a command requiring shell support, pass the command as a single \
 string; the skill will then pass it to a shell via "sh -c".
-- To run a command which does not require shell support, pas a list of \
+- To run a command which does not require shell support, pass a list of \
 strings, where the first element is the name or path of the executable \
-to run, ant the remaining elements are arguments to that executable.
+to run, and the remaining elements are arguments to that executable.
 - Always quote file paths containing spaces with double quotes.
 - Prefer absolute paths over relative paths.
 - When running multiple independent commands, make separate `execute` calls \
@@ -127,8 +130,7 @@ async def skill_execute(
         command = ["sh", "-c", command]
 
     try:
-        result = await asyncio.to_thread(
-            bwrap_sandbox.execute,
+        result = await bwrap_sandbox.execute(
             command=command,
             environment_name=environment_name,
             workdir=workdir,
@@ -149,41 +151,27 @@ async def skill_execute(
 
 
 EXECUTE_SCRIPT_DESCRIPTION = """\
-Execute a Python script in the working directory.
+Execute a Python script in the sandbox environment.
 
-IMPORTANT: This tool uses the Python interpreter built into the enviornement \
-including pre-installed packages.
+IMPORTANT: The ``script`` parameter must be valid Python source code. \
+Do NOT pass shell commands — use the ``execute`` tool for shell commands.
 
 ## Usage
-- To run a command requiring shell support, pass the command as a single \
-string; the skill will then pass it to a shell via "sh -c".
-- To run a command which does not require shell support, pas a list of \
-strings, where the first element is the name or path of the executable \
-to run, ant the remaining elements are arguments to that executable.
-- Always quote file paths containing spaces with double quotes.
-- Prefer absolute paths over relative paths.
-- When running multiple independent commands, make separate `execute` calls \
-in a single response (parallel execution).
-- When commands depend on each other, chain with `&&` in a single call \
-(e.g., `cd /project && make test`).
-- For long-running commands (builds, large test suites), increase the timeout.
-
-## Dependencies
-- Check what packages are already installed using `pip list`.
-- If a command fails because a package or tool is missing, STOP.
+- Pass a complete, self-contained Python script as the ``script`` string.
+- The script runs via the Python interpreter built into the chosen \
+environment, with access to its pre-installed packages.
+- Use ``list_environments`` first to discover available environments \
+and their installed packages.
+- Print results to stdout — the output is captured and returned.
+- Use absolute paths (e.g. ``/sandbox/workspace/data.csv``) when \
+reading or writing files.
 
 ## Debugging
-- Read the FULL error output when a command fails — the root cause is often \
-in the middle of a traceback, not the last line.
-- Reproduce the error before attempting a fix.
-- Change one thing at a time — don't make multiple speculative fixes.
+- Read the FULL error output when a script fails — the root cause is \
+often in the middle of a traceback, not the last line.
+- Fix one thing at a time — don't make multiple speculative fixes.
 - If something fails 3 times with the same approach, STOP and try a \
 completely different strategy.
-
-## Safety
-- Be careful not to introduce command injection vulnerabilities.
-- Be careful with destructive commands (`rm -rf`, `drop table`, etc.) — \
-verify the target path/object before executing.
 """
 
 
@@ -207,8 +195,7 @@ async def skill_execute_script(
             the toolset.
     """
     try:
-        result = await asyncio.to_thread(
-            bwrap_sandbox.execute_script,
+        result = await bwrap_sandbox.execute_script(
             script=script,
             environment_name=environment_name,
             workdir=workdir,
@@ -236,7 +223,7 @@ def get_workdir(
 ):
     if workdirs_path is not None:
         workdir = workdirs_path / room_id / str(thread_id) / str(run_id)
-        workdir.mkdir(parents=True)
+        workdir.mkdir(parents=True, exist_ok=True)
     else:
         workdir = None
 
@@ -340,19 +327,22 @@ def create_sandbox_toolset(
     async def execute(
         ctx: pydantic_ai.RunContext,
         command: str | list[str],
-        room_id: str,
-        thread_id: str,
-        run_id: str,
         environment_name: str = None,
         timeout: float = None,  # seconds
     ) -> str:  # pragma: NO COVER
-        workdir = get_workdir(workdirs_path, room_id, thread_id, run_id)
+        state = ctx.deps.state
+        workdir = get_workdir(
+            workdirs_path,
+            state.room_id or "",
+            state.thread_id or "",
+            state.run_id or "",
+        )
 
         extra_volumes = get_extra_volumes(
             rooms_upload_path,
             threads_upload_path,
-            room_id,
-            thread_id,
+            state.room_id or "",
+            state.thread_id or "",
         )
 
         return await skill_execute(
@@ -369,19 +359,22 @@ def create_sandbox_toolset(
     async def execute_script(
         ctx: pydantic_ai.RunContext,
         script: str,
-        room_id: str,
-        thread_id: str,
-        run_id: str,
         environment_name: str = None,
         timeout: float = None,  # seconds
     ) -> str:  # pragma: NO COVER
-        workdir = get_workdir(workdirs_path, room_id, thread_id, run_id)
+        state = ctx.deps.state
+        workdir = get_workdir(
+            workdirs_path,
+            state.room_id or "",
+            state.thread_id or "",
+            state.run_id or "",
+        )
 
         extra_volumes = get_extra_volumes(
             rooms_upload_path,
             threads_upload_path,
-            room_id,
-            thread_id,
+            state.room_id or "",
+            state.thread_id or "",
         )
 
         return await skill_execute_script(

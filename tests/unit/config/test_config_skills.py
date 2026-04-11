@@ -1222,7 +1222,7 @@ def test_roomskillsconfig_skill_toolset(
 
     found = room_skill_config.skill_toolset
 
-    assert isinstance(found, hs_agent.SkillToolset)
+    assert isinstance(found, config_skills.SoliplexSkillToolset)
     catalog_lines = found.skill_catalog.splitlines()
     assert f"- **{SKILL_NAME}**: {SKILL_DESC}" in catalog_lines
     assert found._skill_model is exp_model
@@ -1231,3 +1231,45 @@ def test_roomskillsconfig_skill_toolset(
         gmfc.assert_called_once_with(agent_config=model_agent_config)
     else:
         gmfc.assert_not_called()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("w_deps_has_ids", [False, True])
+@pytest.mark.parametrize("w_deps_none", [False, True])
+@pytest.mark.parametrize("w_has_namespace", [False, True])
+async def test_soliplex_skill_toolset_for_run(
+    w_has_namespace,
+    w_deps_none,
+    w_deps_has_ids,
+):
+    toolset = config_skills.SoliplexSkillToolset()
+
+    if w_has_namespace:
+        ns = sk_bwrap_sandbox.SandboxState()
+        toolset._namespaces[sk_bwrap_sandbox.STATE_NAMESPACE] = ns
+
+    if w_deps_none:
+        deps = None
+    elif w_deps_has_ids:
+        deps = mock.Mock(
+            room_id="test-room",
+            thread_id="test-thread",
+            run_id="test-run",
+            state={},
+        )
+    else:
+        deps = mock.Mock(spec_set=["state"], state={})
+
+    ctx = mock.Mock(deps=deps)
+    result = await toolset.for_run(ctx)
+
+    assert result is toolset
+
+    if w_has_namespace and not w_deps_none and w_deps_has_ids:
+        assert ns.room_id == "test-room"
+        assert ns.thread_id == "test-thread"
+        assert ns.run_id == "test-run"
+    elif w_has_namespace:
+        assert ns.room_id is None
+        assert ns.thread_id is None
+        assert ns.run_id is None
