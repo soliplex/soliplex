@@ -27,7 +27,7 @@ dependencies = [
     "jsonpatch",
     "jwcrypto",
     "logfire[fastapi]",
-    "pydantic-ai-slim[google]",
+    "pydantic-ai-slim[google] >= 1.78.0, < 1.79",  # AG-UI 1.0.15 breakage
     "pyjwt",
     "python-keycloak",
     "sqlmodel",
