@@ -78,6 +78,7 @@ python3.13 --version
 ### Step 2: Install and Configure Ollama (if using Ollama)
 
 1. **Install Ollama**
+
    ```bash
    # Linux
    curl -fsSL https://ollama.com/install.sh | sh
@@ -89,6 +90,7 @@ python3.13 --version
    ```
 
 2. **Start Ollama service**
+
    ```bash
    # Linux/macOS
    ollama serve
@@ -97,6 +99,7 @@ python3.13 --version
    ```
 
 3. **Pull required models**
+
    ```bash
    # Chat model (choose one)
    ollama pull qwen2.5:latest
@@ -110,6 +113,7 @@ python3.13 --version
    ```
 
 4. **Verify models**
+
    ```bash
    ollama list
    ```
@@ -160,11 +164,13 @@ soliplex-cli --help
 Soliplex requires `haiku.rag` (full version) for document ingestion:
 
 #### Option 1: Install haiku-rag locally
+
 ```bash
 pip install haiku-rag
 ```
 
 #### Option 2: Use docling-serve Docker container
+
 ```bash
 docker run -p 5001:5001 -d \
   -e DOCLING_SERVE_ENABLE_UI=1 \
@@ -179,11 +185,13 @@ See the `Environment Variables` section in the [README](README.md) for
 an explanation of when to configure Soliplex using OS environment variables.
 
 1. **Copy example environment file**
+
    ```bash
    cp .env.example .env
    ```
 
 2. **Edit .env file**
+
    ```bash
    # Linux/macOS
    nano .env
@@ -195,16 +203,19 @@ an explanation of when to configure Soliplex using OS environment variables.
 3. **Set required variables**
 
    **For Ollama:**
+
    ```bash
    OLLAMA_BASE_URL=http://localhost:11434
    ```
 
    **For OpenAI:**
+
    ```bash
    OPENAI_API_KEY=sk-proj-your-key-here
    ```
 
 4. **Load environment variables**
+
    ```bash
    # Linux/macOS
    source .env
@@ -235,16 +246,19 @@ Soliplex provides several example configurations:
 The RAG database MUST be initialized before starting the server.
 
 1. **Create database directory**
+
    ```bash
    mkdir -p db/rag
    ```
 
 2. **Initialize database**
+
    ```bash
    haiku-rag --config example/haiku.rag.yaml init --db db/rag/rag.lancedb
    ```
 
 3. **Index documentation**
+
    ```bash
    # Index all documentation
    haiku-rag --config example/haiku.rag.yaml \
@@ -255,6 +269,7 @@ The RAG database MUST be initialized before starting the server.
    ```
 
 4. **Verify database**
+
    ```bash
    ls -la db/rag/rag.lancedb/
    ```
@@ -295,7 +310,8 @@ soliplex-cli serve example/minimal.yaml --no-auth-mode
 ```
 
 Expected output:
-```
+
+```text
 INFO:     Started server process [xxxxx]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
@@ -324,27 +340,31 @@ curl http://localhost:8000/api/v1/rooms
 If you want to use the web UI:
 
 1. **Install Flutter**
+
    ```bash
    # Follow instructions at https://flutter.dev/docs/get-started/install
    ```
 
 2. **Navigate to Flutter directory**
+
    ```bash
    cd src/flutter
    ```
 
 3. **Install dependencies**
+
    ```bash
    flutter pub get
    ```
 
 4. **Run web application**
+
    ```bash
    flutter run -d chrome --web-port 59001
    ```
 
 5. **Access frontend**
-   - Open browser: http://localhost:59001
+   - Open browser: <http://localhost:59001>
    - Select "localhost" from dropdown
    - Start chatting!
 
@@ -420,25 +440,30 @@ docker-compose up
 ## Troubleshooting
 
 ### Python 3.13 not found
+
 - Ensure Python 3.13 is installed and in your PATH
 - Try `python3.13 --version` to verify
 
 ### Ollama connection refused
+
 - Ensure Ollama service is running: `ollama serve`
 - Verify URL is correct in .env file
 - Check firewall settings
 
 ### RAG database errors
+
 - Ensure database is initialized before starting server
 - Check file permissions on db/ directory
 - Verify `OLLAMA_BASE_URL` is accessible
 
 ### Module not found errors
+
 - Ensure virtual environment is activated
 - Reinstall dependencies: `pip install -e .`
 - Check Python version: `python --version`
 
 ### Port already in use
+
 - Backend (8000): Change with `--port` flag
 - Frontend (59001): Change with `--web-port` flag
 - Check for other processes: `lsof -i :8000` (Linux/macOS)
@@ -455,6 +480,6 @@ After successful installation:
 
 ## Getting Help
 
-- **Documentation**: https://soliplex.github.io/
-- **Issues**: https://github.com/soliplex/soliplex/issues
-- **API Docs**: http://localhost:8000/docs (when server is running)
+- **Documentation**: <https://soliplex.github.io/>
+- **Issues**: <https://github.com/soliplex/soliplex/issues>
+- **API Docs**: <http://localhost:8000/docs> (when server is running)

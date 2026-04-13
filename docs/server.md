@@ -9,27 +9,29 @@ to OpenAI and provides RAG functionality.
 
 - Access to LLM:
 
-   - OpenAI - an API key is required to use OpenAI
-   - Ollama (<https://ollama.com/>)
+  - OpenAI - an API key is required to use OpenAI
+  - Ollama (<https://ollama.com/>)
 
 - Logfire (optional):
 
   A token from logfire ([login here](https://logfire-us.pydantic.dev/login))
   allows for visibility into the application. See:
 
-  - [Soliplex Logfire configuration](config/logfire.md)
+- [Soliplex Logfire configuration](config/logfire.md)
 
-  - [Logfire docs on FastAPI integration](https://logfire.pydantic.dev/docs/integrations/web-frameworks/fastapi/)
+- [Logfire docs on FastAPI integration](https://logfire.pydantic.dev/docs/integrations/web-frameworks/fastapi/)
 
 ## Installation
 
 1. Clone the repository:
+
    ```bash
    git clone git@github.com:soliplex/soliplex.git
    cd soliplex/
    ```
 
 2. Set up a Python3 virtual environment:
+
    ```bash
    python -m venv venv
    source venv/bin/activate
@@ -37,6 +39,7 @@ to OpenAI and provides RAG functionality.
    ```
 
 3. Install `soliplex` and its dependencies:
+
    ```bash
    pip install -e .
    ```
@@ -94,6 +97,7 @@ Each installation configuration includes a number of rooms that
 
    - The example configuration uses the `gpt-oss` model.  If using either
      Ollama variant, install that model via:
+
      ```bash
      ollama pull gpt-oss:latest
      ```
@@ -102,13 +106,15 @@ Each installation configuration includes a number of rooms that
 
    This command will check the server for any missing variables or
    invalid configuration files.
+
    ```bash
    soliplex-cli check-config example/<installation config>.yaml
    ```
 
    The secrets used in the your chosen configuration should be exported as
    environment variables, e.g.:
-   ```
+
+   ```bash
    SMITHERY_AI_API_KEY=<your key>
    SMITHERY_AI_PROFILE=<your profile>
    ```
@@ -118,6 +124,7 @@ Each installation configuration includes a number of rooms that
    The `example/minimal.yaml` configuration still expects
    the `OLLAMA_BASE_URL` environment variable to be set (or present in
    an `.env` file):
+
    ```bash
    soliplex-cli check-config example/minimal.yaml
    ```
@@ -128,6 +135,7 @@ Each installation configuration includes a number of rooms that
 5. Configure any missing environment variables, e.g. by editing
    the installation YAML file, adding them to a `.env` file in the
    installation path, or exporting them directly.
+
    ```bash
    export OLLAMA_BASE_URL=http://<your-ollama-host>:11434
    soliplex-cli check-config example/
@@ -196,6 +204,7 @@ soliplex-cli serve [OPTIONS] INSTALLATION_CONFIG_PATH
 ### Common Usage Examples
 
 **Development with hot reload:**
+
 ```bash
 soliplex-cli serve example/installation.yaml \
   --reload both \
@@ -203,6 +212,7 @@ soliplex-cli serve example/installation.yaml \
 ```
 
 **Production (behind nginx):**
+
 ```bash
 soliplex-cli serve example/installation.yaml \
   --host 127.0.0.1 \
@@ -212,6 +222,7 @@ soliplex-cli serve example/installation.yaml \
 ```
 
 **Docker container (all network interfaces):**
+
 ```bash
 soliplex-cli serve example/installation.yaml \
   --host 0.0.0.0 \
@@ -219,6 +230,7 @@ soliplex-cli serve example/installation.yaml \
 ```
 
 **Custom port for testing:**
+
 ```bash
 soliplex-cli serve example/minimal.yaml \
   --port 8080 \
@@ -228,6 +240,7 @@ soliplex-cli serve example/minimal.yaml \
 ### Verifying the Server
 
 To confirm your room configuration:
+
 ```bash
 curl -X 'GET' \
   'http://127.0.0.1:8000/api/v1/rooms' \
@@ -235,6 +248,7 @@ curl -X 'GET' \
 ```
 
 To check server health:
+
 ```bash
 curl http://127.0.0.1:8000/health
 ```

@@ -36,6 +36,7 @@ The compose configuration defines two services:
 1. **Create environment file**
 
    Copy the example environment file and configure your secrets:
+
    ```bash
    cp .env.example .env
    ```
@@ -48,6 +49,7 @@ The compose configuration defines two services:
    By default, the `./example` directory is mounted there.
 
    To use a custom configuration:
+
    ```yaml
    volumes:
      - ./path/to/your/config:/app/installation
@@ -64,21 +66,25 @@ The compose configuration defines two services:
 ### Running with Docker Compose
 
 #### Start all services
+
 ```bash
 docker-compose up
 ```
 
 Add `-d` flag to run in detached mode:
+
 ```bash
 docker-compose up -d
 ```
 
 #### Start specific service
+
 ```bash
 docker-compose up soliplex_backend
 ```
 
 #### View logs
+
 ```bash
 # All services
 docker-compose logs -f
@@ -88,20 +94,22 @@ docker-compose logs -f soliplex_backend
 ```
 
 #### Stop services
+
 ```bash
 docker-compose down
 ```
 
 #### Rebuild after code changes
+
 ```bash
 docker-compose up --build
 ```
 
 ### Accessing the Application
 
-- **Backend API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
-- **Frontend Web UI**: http://localhost:9000
+- **Backend API**: <http://localhost:8000>
+- **API Documentation**: <http://localhost:8000/docs>
+- **Frontend Web UI**: <http://localhost:9000>
 
 ## Building Custom Docker Images
 
@@ -110,11 +118,13 @@ docker-compose up --build
 The backend [Dockerfile](../Dockerfile) uses Python 3.13 and installs Soliplex in editable mode.
 
 Build manually:
+
 ```bash
 docker build -t soliplex-backend .
 ```
 
 Run manually:
+
 ```bash
 docker run -p 8000:8000 \
   --env-file .env \
@@ -126,12 +136,14 @@ docker run -p 8000:8000 \
 ### Frontend Dockerfile
 
 Build the Flutter web client:
+
 ```bash
 cd src/flutter
 docker build -t soliplex-web .
 ```
 
 Run manually:
+
 ```bash
 docker run -p 9000:9000 soliplex-web
 ```
@@ -150,16 +162,19 @@ See [.env.example](../.env.example) for a complete list.
 **For Ollama:**
 
 If you run Ollama as a Docker container:
+
 ```bash
 OLLAMA_BASE_URL=http://host.docker.internal:11434
 ```
 
 Otherwise:
+
 ```bash
 OLLAMA_BASE_URL=http://your-ollama-host:11434
 ```
 
 **For OpenAI:**
+
 ```bash
 OPENAI_API_KEY=sk-...
 ```
@@ -174,6 +189,7 @@ OLLAMA_BASE_URL=http://host.docker.internal:11434
 ```
 
 On Linux, you may need to add this to docker-compose.yaml (already included):
+
 ```yaml
 extra_hosts:
   - "host.docker.internal:host-gateway"
@@ -248,6 +264,7 @@ exit
 If ports 8000 or 9000 are already allocated:
 
 Edit `docker-compose.yaml`:
+
 ```yaml
 ports:
   - "8001:8000"  # Map host port 8001 to container port 8000
@@ -256,11 +273,13 @@ ports:
 ### Cannot Connect to Ollama
 
 Ensure `OLLAMA_BASE_URL` uses `host.docker.internal`:
+
 ```bash
 OLLAMA_BASE_URL=http://host.docker.internal:11434
 ```
 
 Verify Ollama is running on host:
+
 ```bash
 ollama list
 ```
@@ -270,6 +289,7 @@ ollama list
 The backend will fail if the RAG database hasn't been initialized.
 
 Check for database files:
+
 ```bash
 ls -la db/rag/
 ```
@@ -328,6 +348,7 @@ docker-compose run --rm soliplex_backend pytest --cov=soliplex
 6. **Resource Limits**: Set memory and CPU limits
 
 Example production docker-compose additions:
+
 ```yaml
 services:
   soliplex_backend:

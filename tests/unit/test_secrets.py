@@ -1,5 +1,6 @@
 import contextlib
 import pathlib
+import sys
 from unittest import mock
 
 import pytest
@@ -227,8 +228,13 @@ def test_get_file_path_secret(temp_dir, file_path, expectation, expected):
     "command, args, expectation, expected",
     [
         ("/nowhere/not_executable", (), SubprocessError, ERROR_MISS),
-        ("printf", [""], SubprocessError, ERROR_MISS),  # Empty output
-        ("echo", [SECRET_VALUE], NoRaise, SECRET_VALUE),
+        (sys.executable, ["-c", ""], SubprocessError, ERROR_MISS),
+        (
+            sys.executable,
+            ["-c", f"print('{SECRET_VALUE}')"],
+            NoRaise,
+            SECRET_VALUE,
+        ),
     ],
 )
 def test_get_subprocess_secret(command, args, expectation, expected):

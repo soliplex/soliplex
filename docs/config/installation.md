@@ -83,6 +83,7 @@ agent_configs:
       ...
 
 ```
+
 Please see [this page](agents.md) for details on configuring agents.
 In addition to the values described there, note that the `id` element is
 required here.
@@ -171,10 +172,12 @@ oidc_paths:
 ```
 
 To disable authentication, list a single, "null" path, e.g.:
+
 ```yaml
 oidc_paths:
   -
 ```
+
 Or else run 'soliplex-cli serve --no-auth-mode'
 
 ## Filesystem Skill Paths
@@ -207,6 +210,7 @@ filesystem_skills_paths:
 ```
 
 To disable filesystem skill discovery, list a single, "null" path, e.g.:
+
 ```yaml
 filesystem_skills_paths:
   -
@@ -296,6 +300,7 @@ completion_paths:
 ```
 
 To disable all completions, list a single, "null" path, e.g.:
+
 ```yaml
 completion_paths:
   -

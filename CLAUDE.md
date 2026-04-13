@@ -27,7 +27,7 @@ uv run soliplex-cli check-config example/minimal.yaml
 
 ## Repository Structure
 
-```
+```text
 src/soliplex/
 ├── views/              # FastAPI routers
 ├── config/             # YAML config parsing (16 modules)

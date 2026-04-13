@@ -20,7 +20,7 @@ A Soliplex installation currently supports kinds of skills:
 
 At the installation level, define the directories to be searched for
 `SKILLS.md` spec files using the
-[`filesystem_skills_paths` entry ](installation.md#filesystem-skill-paths)
+[`filesystem_skills_paths` entry](installation.md#filesystem-skill-paths)
 in the installation configuration file.
 
 Discovered filesystem skills can be queried using the

@@ -1,4 +1,4 @@
-https://pypi.org/project/soliplex/# Soliplex
+# Soliplex
 
 An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web interface.
 
@@ -17,6 +17,7 @@ An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web inte
 ## Architecture
 
 ### Backend (`/src/soliplex/`)
+
 **Python 3.12+ / FastAPI**
 
 - **Core**: FastAPI application with async support
@@ -38,6 +39,7 @@ Key modules:
 - `tui/` - Terminal user interface
 
 ### Frontend (`/src/flutter/`)
+
 **Flutter 3.35+ / Dart 3.10.0+**
 
 - **Framework**: Flutter web with Material Design
@@ -98,55 +100,73 @@ See: `docs/rag.md` for more options.
 The `soliplex-cli` command provides several utilities for managing your Soliplex installation:
 
 #### Check Configuration
+
 Validate your configuration file and report any missing secrets or environment variables:
+
 ```bash
 soliplex-cli check-config example/minimal.yaml
 ```
 
 #### List Rooms
+
 Show all configured chat rooms:
+
 ```bash
 soliplex-cli list-rooms example/minimal.yaml
 ```
 
 #### List Completions
+
 Show all configured completion endpoints:
+
 ```bash
 soliplex-cli list-completions example/minimal.yaml
 ```
 
 #### List Secrets
+
 Display all configured secrets and their status:
+
 ```bash
 soliplex-cli list-secrets example/minimal.yaml
 ```
 
 #### List Environment Variables
+
 Show all environment variables and their values:
+
 ```bash
 soliplex-cli list-environment example/minimal.yaml
 ```
 
 #### List OIDC Providers
+
 Display configured OIDC authentication providers:
+
 ```bash
 soliplex-cli list-oidc-auth-providers example/minimal.yaml
 ```
 
 #### Export Configuration
+
 Export the installation configuration as YAML:
+
 ```bash
 soliplex-cli config example/minimal.yaml
 ```
 
 #### Export AG-UI Feature Schemas
+
 Export AG-UI feature schemas as JSON:
+
 ```bash
 soliplex-cli agui-feature-schemas example/minimal.yaml
 ```
 
 #### Run Backend Server
+
 Start the Soliplex backend server:
+
 ```bash
 export OLLAMA_BASE_URL=<your Ollama server / port>
 soliplex-cli serve example/minimal.yaml --no-auth-mode

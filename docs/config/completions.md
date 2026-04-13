@@ -12,6 +12,7 @@ Within that directory should be one or two files:
   which are initiated from the room.
 
 Example layout without external prompt:
+
 ```yaml
 simple/
     completion_config.yaml
@@ -19,6 +20,7 @@ simple/
 ```
 
 Example layout with external prompt:
+
 ```yaml
 chat/
     prompt.txt
@@ -26,7 +28,7 @@ chat/
 
 ```
 
-# Completions Endpoint Configuration File Schema
+## Completions Endpoint Configuration File Schema
 
 ## Required endpoint elements
 

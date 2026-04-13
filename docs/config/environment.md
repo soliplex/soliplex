@@ -23,6 +23,7 @@ entry corresponds exactly to a mapping with `name: "<bare string` and
 no `value`.
 
 This configuration:
+
 ```yaml
 environment:
   - "ENV_VAR_NAME"

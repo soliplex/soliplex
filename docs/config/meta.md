@@ -56,6 +56,7 @@ meta:
 ```
 
 ## Registering MCP Client Toolset Configuration Classes
+
 The `meta.mcp_toolset_configs` section enumerates MCP client toolset
 configuration types so that they can be referenced by their 'kind'.
 
@@ -73,6 +74,7 @@ meta:
 ```
 
 ## Registering Skill Configuration Classes
+
 The `meta.skill_configs` section enumerates skill
 configuration types so that they can be referenced by their 'kind'.
 

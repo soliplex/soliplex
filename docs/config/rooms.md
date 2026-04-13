@@ -52,7 +52,7 @@ A minimal room configuration must include the above elements, e.g.:
         You are an..... #
   ```
 
-### Optional room elements (UI-related):
+### Optional room elements (UI-related)
 
 - `welcome_message` (a string), for the UI to display when the user
   enters a room.  E.g.:
@@ -111,6 +111,7 @@ for configuring an agent.
        - tool_name: "soliplex.tools.get_current_datetime"
        - tool_name: "soliplex.tools.get_current_user"
    ```
+
   Each tool mapping can contain additional elements, which are used to
   configure the tool's behavior.
 
@@ -156,13 +157,13 @@ configuring the RAG database and RAG client:
 
 - One of the following (exactly one must be provided):
 
-    - `rag_lancedb_stem`: a string, the "base name" (without path or
-      `.lancedb` suffix) of the LanceDB file containing the RAG document
-      data.  This file must exist in the standard location (typically
-      under the `db/rag/` directory; see [rooms](rooms.md) for details).
+  - `rag_lancedb_stem`: a string, the "base name" (without path or
+    `.lancedb` suffix) of the LanceDB file containing the RAG document
+    data.  This file must exist in the standard location (typically
+    under the `db/rag/` directory; see [rooms](rooms.md) for details).
 
-    - `rag_lancedb_override_path`: a string, a fully-qualified pathname,
-      including the suffix, of the LanceDB directory.
+  - `rag_lancedb_override_path`: a string, a fully-qualified pathname,
+    including the suffix, of the LanceDB directory.
 
 - `haiku_rag_config`: a path to the `haiku.rag.yaml` file used to configure
   the RAG client.  If not absolute, this path is resolved relative to
@@ -179,24 +180,24 @@ additional options:
 
   Available tools:
 
-    - `"search"` — semantic document search with multi-query expansion.
-      Gives the agent a `search` tool that returns ranked passages with
-      citations.
+  - `"search"` — semantic document search with multi-query expansion.
+    Gives the agent a `search` tool that returns ranked passages with
+    citations.
 
-    - `"list_documents"` — list the documents in the RAG database.
+  - `"list_documents"` — list the documents in the RAG database.
 
-    - `"get_document"` — return the content of a single document in the
-      RAG database.
+  - `"get_document"` — return the content of a single document in the
+    RAG database.
 
-    - `"ask"` — question-answering via a research graph.  Gives the agent
-      an `ask` tool that searches, synthesizes an answer with citations,
-      and caches results for similar follow-up questions.
+  - `"ask"` — question-answering via a research graph.  Gives the agent
+    an `ask` tool that searches, synthesizes an answer with citations,
+    and caches results for similar follow-up questions.
 
-    - `"research"` — deep research via a research graph. Gives the agent
-      a `research` tool that performs a more elaborate search, analysis,
-      and synthesis. Slower than the `ask` tool, and more expensive in
-      terms of token budget, but potentially produces a higher-quality
-      result.
+  - `"research"` — deep research via a research graph. Gives the agent
+    a `research` tool that performs a more elaborate search, analysis,
+    and synthesis. Slower than the `ask` tool, and more expensive in
+    terms of token budget, but potentially produces a higher-quality
+    result.
 
 - `rag_features` (a list of strings) controls which haiku.rag toolsets
   are enabled.  A deprecated alternative to `tool_names`:  each "features"
@@ -204,15 +205,15 @@ additional options:
 
   Available features:
 
-    - `"search"` — equivalent to the `search` tool above.
+  - `"search"` — equivalent to the `search` tool above.
 
-    - `"documents"` — equivalent to the `list_documents` and `get_document`
-      tools above.
+  - `"documents"` — equivalent to the `list_documents` and `get_document`
+    tools above.
 
-    - `"qa"` — equivalent to the `ask` tool above.
+  - `"qa"` — equivalent to the `ask` tool above.
 
-    - `"analysis"` — formerly equivalent to the `haiku.rag.skills.rml`
-      skill below.  This feature is no longer supported.
+  - `"analysis"` — formerly equivalent to the `haiku.rag.skills.rml`
+    skill below.  This feature is no longer supported.
 
 The `haiku.rag.skills.rlm` skill gives the agent an `analyze` tool that
 iteratively writes and executes Python code in a Docker sandbox with
