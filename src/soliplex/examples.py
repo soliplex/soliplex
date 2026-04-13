@@ -32,7 +32,7 @@ def joker_agent_factory(
     agent_config,
     tool_configs: config_tools.ToolConfigMap = None,
     mcp_client_toolset_configs: config_tools.MCP_ClientToolsetConfigMap = None,
-    skills_toolset_config: agents.SkillToolsetConfig | None = None,
+    skill_toolset_config: agents.SkillToolsetConfig | None = None,
 ):  # pragma NO COVER
     installation_config = agent_config._installation_config
 
