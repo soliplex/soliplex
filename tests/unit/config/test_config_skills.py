@@ -11,7 +11,6 @@ from bubble_sandbox import models as bs_models
 from haiku.rag import config as hr_config
 from haiku.rag.skills import rag as hr_skills_rag
 from haiku.rag.skills import rlm as hr_skills_rlm
-from haiku.skills import agent as hs_agent
 from haiku.skills import models as hs_models
 from pydantic_ai.models import openai as openai_models
 from pydantic_ai.providers import ollama as ollama_providers
@@ -108,6 +107,10 @@ model_name: "{ROOM_SKILLS_MODEL_NAME}"
 installation_skill_names:
     - "bogus"
 """
+
+TEST_ROOM_ID = "test_room_id"
+TEST_THREAD_ID = "test_thread_id"
+TEST_RUN_ID = "test_run_id"
 
 
 @pytest.fixture
@@ -1222,7 +1225,7 @@ def test_roomskillsconfig_skill_toolset(
 
     found = room_skill_config.skill_toolset
 
-    assert isinstance(found, hs_agent.SkillToolset)
+    assert isinstance(found, config_skills.SoliplexSkillToolset)
     catalog_lines = found.skill_catalog.splitlines()
     assert f"- **{SKILL_NAME}**: {SKILL_DESC}" in catalog_lines
     assert found._skill_model is exp_model
@@ -1231,3 +1234,43 @@ def test_roomskillsconfig_skill_toolset(
         gmfc.assert_called_once_with(agent_config=model_agent_config)
     else:
         gmfc.assert_not_called()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_deps",
+    [
+        None,
+        mock.Mock(spec_set=["state"], state={}),  # Use outside soliplex app
+        mock.Mock(
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID,
+            run_id=TEST_RUN_ID,
+            state={},
+        ),
+    ],
+)
+@pytest.mark.parametrize("w_namespace", [False, True])
+async def test_soliplex_skill_toolset_for_run(
+    w_namespace,
+    w_deps,
+):
+    toolset = config_skills.SoliplexSkillToolset()
+
+    ns = sk_bwrap_sandbox.SandboxState()
+    if w_namespace:
+        toolset._namespaces[sk_bwrap_sandbox.STATE_NAMESPACE] = ns
+
+    ctx = mock.Mock(deps=w_deps)
+    result = await toolset.for_run(ctx)
+
+    assert result is toolset
+
+    if w_namespace and getattr(w_deps, "room_id", None):
+        assert ns.room_id == TEST_ROOM_ID
+        assert ns.thread_id == TEST_THREAD_ID
+        assert ns.run_id == TEST_RUN_ID
+    else:
+        assert ns.room_id is None
+        assert ns.thread_id is None
+        assert ns.run_id is None

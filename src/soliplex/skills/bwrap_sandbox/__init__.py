@@ -27,7 +27,9 @@ EnvironmentInfo = dict[str, str]
 
 
 class SandboxState(pydantic.BaseModel):
-    pass
+    room_id: str | None = None
+    thread_id: str | None = None
+    run_id: str | None = None
 
 
 STATE_TYPE = SandboxState
