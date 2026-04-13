@@ -1,56 +1,146 @@
 ---
 name: soliplex-consumer-tool
-description: Demonstrate AG-UI client-side (consumer) tool calling against a Soliplex server — register a local shell script as a tool, invoke a room, handle tool calls from the SSE stream, and feed results back in a follow-up run
+description: Multi-turn Soliplex chat with client-side (consumer) tools — local shell scripts registered as AG-UI tools, with transparent tool-call handling and full conversation state
 ---
 
-# Soliplex Consumer Tool Demo
+# Soliplex Consumer Tool
 
-This skill demonstrates **client-side (consumer) tool calling** in the AG-UI protocol with a Soliplex server using `curl`. A local shell script is registered as a tool; when the LLM calls it, the client executes the script and returns the result in a follow-up run.
+This skill lets you hold a **stateful multi-turn conversation** with a Soliplex room while
+registering **local shell scripts** as tools.  When the LLM calls a tool, the script runs
+locally and the result is fed back silently — the user only ever sees the final text replies.
 
-## How Consumer Tools Work
+## What "consumer tools" means
 
-In AG-UI, `tools` in `RunAgentInput` are **consumer tools** — the server exposes them to the LLM but does NOT execute them. When the LLM calls one:
+In the AG-UI protocol the `tools` array in `RunAgentInput` describes **client-side tools** —
+the server exposes them to the LLM but never executes them.  The client is responsible for:
 
-1. Server emits `TOOL_CALL_START` / `TOOL_CALL_ARGS` / `TOOL_CALL_END`, then `RUN_FINISHED`
-2. Client executes the tool locally (the shell script)
-3. Client creates a **new run** on the same thread, passing:
-   - All prior messages
-   - An assistant message containing the tool call (`role: "assistant"`, `toolCalls: [...]`)
-   - A tool result message (`role: "tool"`, `toolCallId`, `content`)
-   - The **same `tools` array** again (required every run)
+1. Running the script when the LLM calls it
+2. Submitting the result in a follow-up run on the same thread
+3. Repeating until the LLM produces a text response (tool chains are possible)
 
-## Setup: The Tool Script
+## Conversation state model
 
-The `secret_number.sh` script lives alongside this skill:
+```
+messages[]   ← the single source of truth; grows with every turn
+thread_id    ← fixed for the session
+run_id       ← new one per HTTP request
+
+user turn N:
+  append → {role: user, content: "..."}
+  while True:
+      execute_run(messages, tools)   ← always pass the full list
+      ┌─ tool call? → run script, append assistant+tool-result msgs, loop
+      └─ text?      → print, append assistant msg, break → next user turn
+```
+
+Key rules:
+- **Always send the full `messages[]` array** on every run — the server is stateless.
+- **Always send the `tools` array** on every run — it is not persisted server-side.
+- Tool calls are **invisible to the user**; handle them in the inner loop before printing anything.
+
+## Quick start
+
+```bash
+# Run a session with the built-in example tool
+python3 soliplex_chat.py \
+    --url  http://localhost:8000 \
+    --room chat \
+    --tool secret_number:./secret_number.sh
+```
+
+The `secret_number.sh` script next to this skill just echoes `42`.  The conversation
+looks like:
+
+```
+Connected to http://localhost:8000/rooms/chat  (thread 4aa71b4e…)
+Tools registered: secret_number
+Type 'quit' or Ctrl-D to exit.
+
+you: Hi
+llm: Hi! How can I help you today?
+
+you: what is the secret number?
+llm: The secret number is 42.
+
+you: Do you see any other tools?
+llm: I only have access to one tool: secret_number.
+
+you: quit
+```
+
+The tool call on turn 2 is completely invisible — `soliplex_chat.py` ran the script,
+submitted the result, and the LLM responded with "42" without any visible intermediate turn.
+
+## Registering multiple tools
+
+Each `--tool` flag registers one script:
+
+```bash
+python3 soliplex_chat.py \
+    --url  http://localhost:8000 \
+    --room chat \
+    --tool secret_number:./secret_number.sh \
+    --tool get_time:./get_time.sh \
+    --tool weather:./weather.sh
+```
+
+## Writing a tool script
+
+Scripts receive the LLM's JSON argument string on **stdin** and must write their result
+to **stdout**.  Exit code 0 = success; anything else is reported as an error to the LLM.
 
 ```bash
 #!/bin/bash
+# secret_number.sh — no arguments needed
 echo "42"
 ```
 
-To use a different script, set `TOOL_SCRIPT` before running the demo.
+```bash
+#!/bin/bash
+# get_time.sh — args on stdin (ignored here)
+date -u +"%Y-%m-%dT%H:%M:%SZ"
+```
+
+A script with named parameters (Python example for clarity):
+
+```python
+#!/usr/bin/env python3
+# unit_converter.py
+import json, sys
+args = json.load(sys.stdin)        # e.g. {"value": 100, "from": "km", "to": "miles"}
+value = args["value"]
+# ... convert ...
+print(result)
+```
+
+## No external dependencies
+
+`soliplex_chat.py` uses **Python stdlib only** (`http.client`, `json`, `subprocess`, `urllib`).
+No `pip install` required — runs on any Python 3.8+ installation.
+
+## Single-shot curl reference
+
+For scripting or quick one-off calls (not interactive), the `curl` approach from earlier
+still works.  See the `## Full Demo (curl + bash)` section below for the step-by-step.
+
+---
 
 ## Full Demo (curl + bash)
 
-Set `SOLIPLEX_URL` if not using the default:
+For scripted (non-interactive) use, here is the raw curl flow:
+
+### 1 — Create a thread
 
 ```bash
-export SOLIPLEX_URL="${SOLIPLEX_URL:-http://localhost:8000}"
-export TOOL_SCRIPT="${TOOL_SCRIPT:-./secret_number.sh}"
-```
-
-### Step 1 — Create a thread
-
-```bash
+SOLIPLEX_URL="${SOLIPLEX_URL:-http://localhost:8000}"
 THREAD_RESP=$(curl -s -X POST "${SOLIPLEX_URL}/api/v1/rooms/chat/agui" \
   -H "Content-Type: application/json" \
   -d '{"metadata": {"name": "consumer tool demo"}}')
-
 THREAD_ID=$(echo "$THREAD_RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['thread_id'])")
 RUN_ID=$(echo "$THREAD_RESP"    | python3 -c "import json,sys; d=json.load(sys.stdin); print(next(iter(d['runs'])))")
 ```
 
-### Step 2 — Execute the run with the tool defined
+### 2 — Execute run with tool defined
 
 ```bash
 SSE=$(curl -s -X POST "${SOLIPLEX_URL}/api/v1/rooms/chat/agui/${THREAD_ID}/${RUN_ID}" \
@@ -62,7 +152,7 @@ SSE=$(curl -s -X POST "${SOLIPLEX_URL}/api/v1/rooms/chat/agui/${THREAD_ID}/${RUN
     \"messages\": [{\"id\": \"user_001\", \"role\": \"user\", \"content\": \"what is the secret number\"}],
     \"tools\": [{
       \"name\":        \"secret_number\",
-      \"description\": \"Returns the secret number. Call this to find out what the secret number is.\",
+      \"description\": \"Returns the secret number.\",
       \"parameters\":  {\"type\": \"object\", \"properties\": {}, \"required\": []}
     }],
     \"context\": [],
@@ -70,162 +160,108 @@ SSE=$(curl -s -X POST "${SOLIPLEX_URL}/api/v1/rooms/chat/agui/${THREAD_ID}/${RUN
   }")
 ```
 
-### Step 3 — Parse the SSE stream for tool calls
+### 3 — Parse tool call from SSE
 
 ```bash
 TOOL_CALL_ID=$(echo "$SSE" | python3 -c "
-import json, sys
-for line in sys.stdin:
-    if line.startswith('data: '):
-        ev = json.loads(line[6:])
-        if ev.get('type') == 'TOOL_CALL_START':
-            print(ev['toolCallId']); break
+import json,sys
+for l in sys.stdin:
+    if l.startswith('data: '):
+        ev=json.loads(l[6:])
+        if ev.get('type')=='TOOL_CALL_START': print(ev['toolCallId']); break
 ")
-
 ASST_MSG_ID=$(echo "$SSE" | python3 -c "
-import json, sys
-for line in sys.stdin:
-    if line.startswith('data: '):
-        ev = json.loads(line[6:])
-        if ev.get('type') == 'TOOL_CALL_START':
-            print(ev['parentMessageId']); break
+import json,sys
+for l in sys.stdin:
+    if l.startswith('data: '):
+        ev=json.loads(l[6:])
+        if ev.get('type')=='TOOL_CALL_START': print(ev['parentMessageId']); break
 ")
-
 TOOL_ARGS=$(echo "$SSE" | python3 -c "
-import json, sys
-args = ''
-for line in sys.stdin:
-    if line.startswith('data: '):
-        ev = json.loads(line[6:])
-        if ev.get('type') == 'TOOL_CALL_ARGS':
-            args += ev.get('delta', '')
+import json,sys; args=''
+for l in sys.stdin:
+    if l.startswith('data: '):
+        ev=json.loads(l[6:])
+        if ev.get('type')=='TOOL_CALL_ARGS': args+=ev.get('delta','')
 print(args or '{}')
 ")
 ```
 
-If `TOOL_CALL_ID` is empty the LLM answered directly (no tool call needed). Otherwise continue:
-
-### Step 4 — Execute the local tool script
+### 4 — Run the script
 
 ```bash
-TOOL_RESULT=$(bash "$TOOL_SCRIPT")
-echo "Tool result: $TOOL_RESULT"
+TOOL_RESULT=$(bash ./secret_number.sh)
 ```
 
-### Step 5 — Create a follow-up run
+### 5 — New run + submit tool result
 
 ```bash
-NEW_RUN=$(curl -s -X POST "${SOLIPLEX_URL}/api/v1/rooms/chat/agui/${THREAD_ID}" \
-  -H "Content-Type: application/json" \
-  -d '{}')
-NEW_RUN_ID=$(echo "$NEW_RUN" | python3 -c "import json,sys; print(json.load(sys.stdin)['run_id'])")
-```
+NEW_RUN_ID=$(curl -s -X POST "${SOLIPLEX_URL}/api/v1/rooms/chat/agui/${THREAD_ID}" \
+  -H "Content-Type: application/json" -d '{}' \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['run_id'])")
 
-### Step 6 — Submit the tool result (with tools array)
-
-```bash
-FINAL=$(curl -s -X POST "${SOLIPLEX_URL}/api/v1/rooms/chat/agui/${THREAD_ID}/${NEW_RUN_ID}" \
+curl -s -X POST "${SOLIPLEX_URL}/api/v1/rooms/chat/agui/${THREAD_ID}/${NEW_RUN_ID}" \
   -H "Content-Type: application/json" \
   -d "{
     \"threadId\": \"${THREAD_ID}\",
     \"runId\":    \"${NEW_RUN_ID}\",
     \"state\": {},
     \"messages\": [
-      {\"id\": \"user_001\",        \"role\": \"user\",      \"content\": \"what is the secret number\"},
-      {\"id\": \"${ASST_MSG_ID}\",  \"role\": \"assistant\", \"content\": null,
-       \"toolCalls\": [{
-         \"id\":   \"${TOOL_CALL_ID}\",
-         \"type\": \"function\",
-         \"function\": {\"name\": \"secret_number\", \"arguments\": \"${TOOL_ARGS}\"}
-       }]},
+      {\"id\": \"user_001\",       \"role\": \"user\",      \"content\": \"what is the secret number\"},
+      {\"id\": \"${ASST_MSG_ID}\", \"role\": \"assistant\", \"content\": null,
+       \"toolCalls\": [{\"id\": \"${TOOL_CALL_ID}\", \"type\": \"function\",
+         \"function\": {\"name\": \"secret_number\", \"arguments\": \"${TOOL_ARGS}\"}}]},
       {\"id\": \"tool_result_001\", \"role\": \"tool\", \"content\": \"${TOOL_RESULT}\",
        \"toolCallId\": \"${TOOL_CALL_ID}\"}
     ],
     \"tools\": [{
-      \"name\":        \"secret_number\",
-      \"description\": \"Returns the secret number. Call this to find out what the secret number is.\",
-      \"parameters\":  {\"type\": \"object\", \"properties\": {}, \"required\": []}
+      \"name\": \"secret_number\",
+      \"description\": \"Returns the secret number.\",
+      \"parameters\": {\"type\": \"object\", \"properties\": {}, \"required\": []}
     }],
     \"context\": [],
     \"forwardedProps\": {}
-  }")
-```
-
-### Step 7 — Extract the final text response
-
-```bash
-echo "$FINAL" | python3 -c "
-import json, sys
-text = ''
-for line in sys.stdin:
-    if line.startswith('data: '):
-        try:
-            ev = json.loads(line[6:])
-            if ev.get('type') == 'TEXT_MESSAGE_CONTENT':
-                text += ev.get('delta', '')
-        except: pass
+  }" | python3 -c "
+import json,sys; text=''
+for l in sys.stdin:
+    if l.startswith('data: '):
+        ev=json.loads(l[6:])
+        if ev.get('type')=='TEXT_MESSAGE_CONTENT': text+=ev.get('delta','')
 print(text)
 "
 ```
 
-## AG-UI Consumer Tool Reference
+---
 
-### Tool definition (in `tools` array)
+## AG-UI consumer tool event reference
 
-```json
-{
-  "name": "tool_name",
-  "description": "What this tool does — the LLM uses this to decide when to call it",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "arg1": {"type": "string", "description": "..."}
-    },
-    "required": ["arg1"]
-  }
-}
-```
-
-### SSE events emitted for a tool call
-
-| Event | Key fields | Action |
+| SSE event | Key fields | What to do |
 |---|---|---|
-| `TOOL_CALL_START` | `toolCallId`, `toolCallName`, `parentMessageId` | Record IDs |
-| `TOOL_CALL_ARGS`  | `toolCallId`, `delta` | Accumulate `delta` strings into args JSON |
+| `TOOL_CALL_START` | `toolCallId`, `toolCallName`, `parentMessageId` | Record; `parentMessageId` becomes the assistant message `id` |
+| `TOOL_CALL_ARGS`  | `toolCallId`, `delta` | Concatenate `delta` values → full args JSON string |
 | `TOOL_CALL_END`   | `toolCallId` | Args complete |
-| `RUN_FINISHED`    | — | Run done; execute the tool now |
+| `RUN_FINISHED`    | — | Run done; execute tool(s) now, then create a new run |
+| `TEXT_MESSAGE_CONTENT` | `delta` | Concatenate → final response text |
+| `RUN_ERROR`       | `message` | Report error; abort |
 
-### Message format for follow-up run
-
-The assistant message carrying the tool call uses the `parentMessageId` from `TOOL_CALL_START` as its `id`. The `arguments` field in `function` is a **JSON string** (not an object):
-
-```json
-{
-  "id": "<parentMessageId>",
-  "role": "assistant",
-  "content": null,
-  "toolCalls": [
-    {
-      "id": "<toolCallId>",
-      "type": "function",
-      "function": {
-        "name": "<toolCallName>",
-        "arguments": "{\"arg1\": \"value\"}"
-      }
-    }
-  ]
-}
-```
-
-The tool result message references the same `toolCallId`:
+**Tool result message format** (in the follow-up run's `messages` array):
 
 ```json
-{
-  "id": "tool_result_001",
-  "role": "tool",
-  "content": "<output from your script>",
-  "toolCallId": "<toolCallId>"
-}
+[
+  {
+    "id": "<parentMessageId from TOOL_CALL_START>",
+    "role": "assistant",
+    "content": null,
+    "toolCalls": [
+      {"id": "<toolCallId>", "type": "function",
+       "function": {"name": "<toolCallName>", "arguments": "<args JSON string>"}}
+    ]
+  },
+  {
+    "id": "tool_result_001",
+    "role": "tool",
+    "content": "<script stdout>",
+    "toolCallId": "<toolCallId>"
+  }
+]
 ```
-
-**Always include the `tools` array again on every run** — the server does not persist tool definitions between runs.
