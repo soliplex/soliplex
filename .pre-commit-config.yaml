@@ -7,12 +7,39 @@ repos:
         types: [python]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0 # Use the latest stable version
     hooks:
+      - id: no-commit-to-branch
+        args: ["--branch", "main", "--branch", "master"]
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-toml
       - id: check-yaml
-        args: ['--multi']
-        types: [yaml]
+      - id: debug-statements
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.21.2
     hooks:
-      - id: gitleaks        
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: pip-audit
+        name: pip-audit
+        #ignore CVE-2026-4539 as not fixed
+        #ignore CVE-2026-33699 CVE-2026-25645 CVE-2026-33123 due to cooldown
+        entry: uv run --with pip-audit pip-audit  --ignore-vuln CVE-2026-4539 --ignore-vuln CVE-2026-33699 --ignore-vuln CVE-2026-25645 --ignore-vuln CVE-2026-33123
+        language: system
+        pass_filenames: false
+        files: (^pyproject\.toml$|^uv\.lock$)
+
+  - repo: https://github.com/jackdewinter/pymarkdown
+    rev: v0.9.36
+    hooks:
+      - id: pymarkdown
+        args:
+          - "--set"
+          - "extensions.front-matter.enabled=$!True"
+          - "--disable-rules"
+          - "MD013,MD024,MD033,MD036,MD041,MD060"
+          - "scan"
+        exclude: ^ios/Runner/Assets\.xcassets/

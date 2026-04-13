@@ -64,6 +64,7 @@ capabilities.
 The system consists of three main components:
 
 ### 1. Backend Server (`src/soliplex/`)
+
 - **Technology**: FastAPI with Python 3.12+
 - **Purpose**: Handles API requests, RAG processing, and AI model integration
 - **Features**:
@@ -73,6 +74,7 @@ The system consists of three main components:
   - Real-time WebSocket communication
 
 ### 2. Frontend Client (`src/flutter/`)
+
 - **Technology**: Flutter web application
 - **Purpose**: Provides user interface for chat and document interaction
 - **Features**:
@@ -82,6 +84,7 @@ The system consists of three main components:
   - Responsive web design
 
 ### 3. Configuration System
+
 - **OIDC Authentication**: Keycloak integration for secure access
 - **Room Configuration**: Chat environments and settings
 - **Model Configuration**: LLM provider and model settings
@@ -90,6 +93,6 @@ The system consists of three main components:
 
 - **RAG Capabilities**: Combines document retrieval with AI generation
 - **Multiple AI Models**: Support for OpenAI and local models
-- **Secure Authentication**: OIDC-based user management  
+- **Secure Authentication**: OIDC-based user management
 - **Real-time Chat**: WebSocket-powered interactive communication
 - **Document Management**: Upload, index, and search through documents

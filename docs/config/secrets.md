@@ -34,7 +34,6 @@ secrets:
        file_path: "/run/secret/my_secret"
 ```
 
-
 ## Secret Source: Subprocess Command
 
 A secret source which uses a subprocess command can be configured so:
@@ -48,7 +47,6 @@ secrets:
        args:
        - "--secret-name=MY_SECRET"
 ```
-
 
 ## Secret Source: Randomly-Generated String
 
@@ -64,6 +62,7 @@ secrets:
 ```
 
 ## Layering Secret Sources
+
 Sources are resolved in the order they are listed, with the first one
 returning a value winning.  This example layers an environment variable
 source with a random string source:
@@ -77,7 +76,6 @@ secrets:
      - kind: "random_chars"
        n_chars: 32
 ```
-
 
 ## Secrets without Sources
 

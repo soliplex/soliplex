@@ -11,8 +11,8 @@ Within that directory should be one or two files:
 - `prompt.txt` (if present) holds the system prompt for conversations
   which are initiated from the room.
 
-
 Example layout without external prompt file:
+
 ```yaml
 simple/
     room_config.yaml
@@ -75,7 +75,7 @@ A minimal room configuration must include the above elements, e.g.:
     - "Why is the sky blue?"
   ```
 
-- `enable_attachments` (a boolean, default `False`), which, if true, 
+- `enable_attachments` (a boolean, default `False`), which, if true,
   tells the UI to allow the user to attach files to a prompt. E.g.:
 
   ```yaml
@@ -111,7 +111,7 @@ for configuring an agent.
        - tool_name: "soliplex.tools.get_current_datetime"
        - tool_name: "soliplex.tools.get_current_user"
    ```
-  Each tool mapping can contain additional elements, which are used to 
+  Each tool mapping can contain additional elements, which are used to
   configure the tool's behavior.
 
 ### Skill Configuration
@@ -151,7 +151,7 @@ E.g.:
 
 Soliplex provides two such skill configuration classes by default:
 one of kind `haiku.rag.skill.rag` and one of kind
-`haiku.rag.skill.rlm`.  Both of hese configuraions have options for
+`haiku.rag.skill.rlm`.  Both of these configurations have options for
 configuring the RAG database and RAG client:
 
 - One of the following (exactly one must be provided):
@@ -183,10 +183,10 @@ additional options:
       Gives the agent a `search` tool that returns ranked passages with
       citations.
 
-    - `"list_documents"` — list the documents in the RAG datbase.
+    - `"list_documents"` — list the documents in the RAG database.
 
     - `"get_document"` — return the content of a single document in the
-      RAG datbase.
+      RAG database.
 
     - `"ask"` — question-answering via a research graph.  Gives the agent
       an `ask` tool that searches, synthesizes an answer with citations,
@@ -194,7 +194,7 @@ additional options:
 
     - `"research"` — deep research via a research graph. Gives the agent
       a `research` tool that performs a more elaborate search, analysis,
-      and syntheses,. Slower than the `ask` tool, and more expensive in
+      and synthesis. Slower than the `ask` tool, and more expensive in
       terms of token budget, but potentially produces a higher-quality
       result.
 
@@ -214,7 +214,7 @@ additional options:
     - `"analysis"` — formerly equivalent to the `haiku.rag.skills.rml`
       skill below.  This feature is no longer supported.
 
-The `haiku.rag.skils.rlm` skill gives the agent an `analyze` tool that
+The `haiku.rag.skills.rlm` skill gives the agent an `analyze` tool that
 iteratively writes and executes Python code in a Docker sandbox with
 access to `haiku.rag` functions (`search`, `list_documents`, `get_document`,
 `llm`, etc.).  Suited for aggregation, multi-document comparison, and

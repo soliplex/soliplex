@@ -13,7 +13,7 @@ two places:
 ## Global Configuration
 
 The default `haiku-rag` configuration for an installation lives in a
-seprate file, `haiku.rag.yaml`, which is located by default in the
+separate file, `haiku.rag.yaml`, which is located by default in the
 installation directory (next to the main installation config file).
 
 See the [`haiku-rag` docs](https://ggozad.github.io/haiku.rag/configuration/)

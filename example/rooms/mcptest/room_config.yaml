@@ -16,8 +16,8 @@ mcp_client_toolsets:
   google_maps:
     kind: "stdio"
     command: "npx"
-    args: 
+    args:
       - "-y"
       - "@modelcontextprotocol/server-google-maps"
-    env: 
+    env:
       GOOGLE_MAPS_API_KEY: secret:GOOGLE_MAPS_API_KEY

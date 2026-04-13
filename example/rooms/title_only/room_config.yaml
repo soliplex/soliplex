@@ -26,4 +26,3 @@ tools:
         'name' (str, required) is the name to be used in the title
 
         'description':  DEPRECATED:  do not use this argument.
-

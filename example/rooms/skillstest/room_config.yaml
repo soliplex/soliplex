@@ -39,4 +39,3 @@ skills:
 #        - "@modelcontextprotocol/server-google-maps"
 #      env:
 #        GOOGLE_MAPS_API_KEY: secret:GOOGLE_MAPS_API_KEY
-

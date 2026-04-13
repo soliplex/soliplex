@@ -17,6 +17,7 @@ The project includes a `docker-compose.yaml` file that orchestrates both the bac
 The compose configuration defines two services:
 
 #### 1. `soliplex_backend` (Python Backend)
+
 - **Port**: 8000
 - **Technology**: Python 3.13 with FastAPI
 - **Purpose**: API server, RAG processing, AI integration
@@ -25,6 +26,7 @@ The compose configuration defines two services:
   - `./db:/app/db` - Database storage (RAG, threads, etc.)
 
 #### 2. `soliplex_web` (Flutter Frontend)
+
 - **Port**: 9000
 - **Technology**: Flutter web application
 - **Purpose**: User interface for chat and document interaction

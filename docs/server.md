@@ -10,7 +10,7 @@ to OpenAI and provides RAG functionality.
 - Access to LLM:
 
    - OpenAI - an API key is required to use OpenAI
-   - Ollama  ([https://ollama.com/] https://ollama.com/)
+   - Ollama (<https://ollama.com/>)
 
 - Logfire (optional):
 
@@ -45,7 +45,7 @@ to OpenAI and provides RAG functionality.
 
    An environment file (`.env`) can be used to configure secrets, e.g.:
 
-   ```
+   ```bash
    SOME_API_TOKEN=<your_token_here>
    ```
 
@@ -267,7 +267,6 @@ when running multiple Soliplex server instances behind a load balancer:
   bearer tokens for MCP clients should not be configured to use the
   `random_chars` secret source, because that value cannot be shared across
   Soliplex server instances.
-
 
 ## API Endpoints
 

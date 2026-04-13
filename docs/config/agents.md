@@ -12,7 +12,6 @@ type is used:
 
 When `kind` is omitted, it defaults to `"default"`.
 
-
 ## `default` kind
 
 The default agent wraps a Pydantic AI agent that calls the configured
@@ -96,7 +95,6 @@ agent:
 - `model_settings`: a mapping, whose keys are determined by
   the `provider_type` above (see below).
 
-
 ### Example Ollama Configuration
 
 **NOTE**: the values below show types, but should not be used without
@@ -152,7 +150,6 @@ model_settings:
   max_tokens: 2048
   verbosity: "high"
 ```
-
 
 ## `factory` kind
 

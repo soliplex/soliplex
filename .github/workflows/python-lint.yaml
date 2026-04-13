@@ -62,4 +62,3 @@ jobs:
               "text": ":x: ${{ github.workflow }} failed on ${{ github.head_ref }}:\n${{ github.event.head_commit.message }}\nhttps://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "icon_emoji": ":ghost:"
             }
-

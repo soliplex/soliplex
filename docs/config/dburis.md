@@ -27,11 +27,11 @@ Because of the requirement for `async` support, Soliplex cannot use
 all possible SQLAlchemy engines.  Known to work:
 
 - [SQLite](https://docs.sqlalchemy.org/en/20/core/engines.html#sqlite)
-  via the [`aiosqlite`]()
+  via the [`aiosqlite`](https://pypi.org/project/aiosqlite/)
   async dialect
 
 - [Postgres](https://docs.sqlalchemy.org/en/20/core/engines.html#postgresql)
-  via the [`asyncpg`]()
+  via the [`asyncpg`](https://pypi.org/project/asyncpg/)
   async dialect
 
 Untested:

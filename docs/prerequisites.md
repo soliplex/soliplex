@@ -14,20 +14,20 @@ This guide provides a complete checklist for setting up Soliplex from scratch.
 ### LLM Provider (Choose One)
 
 - [ ] **Ollama** (Recommended for local development)
-  - Install from: https://ollama.com/
+  - Install from: <https://ollama.com/>
   - Verify: `ollama --version`
 
   OR
 
 - [ ] **OpenAI API Access**
-  - Create account at: https://platform.openai.com/
-  - Generate API key at: https://platform.openai.com/api-keys
+  - Create account at: <https://platform.openai.com/>
+  - Generate API key at: <https://platform.openai.com/api-keys>
 
 ### Optional Components
 
 - [ ] **Flutter SDK** (For frontend development)
   - Version: 3.35+
-  - Install from: https://flutter.dev/docs/get-started/install
+  - Install from: <https://flutter.dev/docs/get-started/install>
   - Verify: `flutter --version`
 
 - [ ] **Dart SDK** (Usually included with Flutter)
@@ -44,6 +44,7 @@ Follow these steps in order for a successful setup.
 ### Step 1: Install Python 3.13
 
 #### Windows
+
 ```bash
 # Download from python.org
 # Or use winget
@@ -51,12 +52,14 @@ winget install Python.Python.3.13
 ```
 
 #### macOS
+
 ```bash
 # Using Homebrew
 brew install python@3.13
 ```
 
 #### Linux
+
 ```bash
 # Ubuntu/Debian
 sudo apt update
@@ -67,6 +70,7 @@ sudo dnf install python3.13
 ```
 
 Verify installation:
+
 ```bash
 python3.13 --version
 ```

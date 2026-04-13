@@ -22,7 +22,7 @@ from soliplex.config import agents as config_agents
 from soliplex.config import tools as config_tools
 
 JOKER_AGENT_PROMPT = """\
-Use the `joke_factory` to generate some jokes, then choose the best. 
+Use the `joke_factory` to generate some jokes, then choose the best.
 
 You must return just a single joke.
 """

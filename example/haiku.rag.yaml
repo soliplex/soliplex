@@ -72,13 +72,11 @@ research:
 
 processing:
   chunk_size: 256
+  converter: docling-serve  # Use remote conversion
+  chunker: docling-serve    # Use remote chunking
 
 search:
   context_radius: 0
-
-processing:
-  converter: docling-serve  # Use remote conversion
-  chunker: docling-serve    # Use remote chunking
 
 providers:
   # The docling-serve url if you have not installed the full haiku.rag package.

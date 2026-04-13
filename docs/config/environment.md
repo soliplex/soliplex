@@ -27,7 +27,9 @@ This configuration:
 environment:
   - "ENV_VAR_NAME"
 ```
+
 is exactly equivalent to this one:
+
 ```yaml
 environment:
   - name: "ENV_VAR_NAME"
@@ -49,15 +51,14 @@ Soliplex use these sources, in order of precedence:
 - Value explicitly configured in the installation
 - Value from the OS environment
 
-
-# Checking Configured Environment Values
+## Checking Configured Environment Values
 
 The `soliplex-cli` application has a sub-command, `list-environment`.
 It loads the configuration, attempts to resolve any values not found, and
 reports them.  For example:
 
 ```bash
-$ soliplex-cli list-environment example/installation.yaml 
+$ soliplex-cli list-environment example/installation.yaml
 
 ─────────────────────── Configured environment variables ───────────────────────
 

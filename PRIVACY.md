@@ -12,8 +12,8 @@ If you do not agree with this Privacy Policy, please do not use the App.
 
 The party responsible for the processing of personal data through the App is:
 
-> Enfold Systems, Inc  
-> Email: developers@enfoldsystems.com  
+> Enfold Systems, Inc
+> Email: developers@enfoldsystems.com
 
 If you have any questions about this Privacy Policy or our data practices, you can contact us at the email address above.
 
@@ -123,7 +123,7 @@ Depending on your location, you may have certain rights regarding your personal 
 - The right to object to or restrict certain processing.
 - The right to withdraw consent where processing is based on consent.
 
-To exercise these rights, please contact us at developers@enfoldsystems.com. We may need to verify your identity before responding to certain requests.
+To exercise these rights, please contact us at <developers@enfoldsystems.com>. We may need to verify your identity before responding to certain requests.
 
 You can also:
 
@@ -178,5 +178,5 @@ Continued use of the App after changes become effective means you accept the upd
 
 If you have any questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact:
 
-> Enfold Systems, Inc  
-> Email: developers@enfoldsystems.com  
+> Enfold Systems, Inc
+> Email: developers@enfoldsystems.com

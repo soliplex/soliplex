@@ -34,7 +34,6 @@ configuration).  See the Logfire
 
 ## Optional attributes
 
-
 - `service_name` defines the service name reported to Logfire
   for the appliction.  See
   [this page](https://logfire.pydantic.dev/docs/reference/api/logfire/#logfire.configure(service_name))

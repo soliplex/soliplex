@@ -64,7 +64,7 @@ can be used to import the configuration class.
 
 By default, Soliplex registers its own tool config classes, just as though
 we configured explicitly:
- 
+
 ```yaml
 meta:
   mcp_toolset_configs:
@@ -81,7 +81,7 @@ can be used to import the configuration class.
 
 By default, Soliplex registers its own tool config classes, just as though
 we configured explicitly:
- 
+
 ```yaml
 meta:
   skill_configs:

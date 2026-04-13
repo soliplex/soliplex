@@ -32,7 +32,6 @@ root:
     - "console"
 ```
 
-
 See the
 [Python docs](https://docs.python.org/3/library/logging.config.html#dictionary-schema-details)
 for details on the schema for this file.
