@@ -2,6 +2,10 @@
 """
 Soliplex consumer-tool chat client — stdlib only, no pip required.
 
+Environment variables (all optional):
+    SOLIPLEX_URL          Server base URL  (default: http://localhost:8000)
+    SOLIPLEX_ACCESS_TOKEN Bearer token for OIDC-protected servers
+
 Interactive REPL:
     python3 soliplex_chat.py \\
         --url  http://localhost:8000 \\
@@ -10,10 +14,13 @@ Interactive REPL:
 
 One-shot (non-interactive):
     python3 soliplex_chat.py \\
-        --url  http://localhost:8000 \\
-        --room chat \\
-        --tool secret_number:./secret_number.sh \\
-        --message "what is the secret number"
+        --message "what is the secret number" \\
+        --tool secret_number:./secret_number.sh
+
+With OIDC auth:
+    SOLIPLEX_ACCESS_TOKEN=<token> python3 soliplex_chat.py ...
+    # or
+    python3 soliplex_chat.py --token <token> ...
 
 Each --tool argument is  <tool-name>:<path-to-script>.
 The script receives the JSON args string on stdin; stdout becomes the tool result.
@@ -27,6 +34,7 @@ from __future__ import annotations
 import argparse
 import http.client
 import json
+import os
 import subprocess
 import sys
 import time
@@ -37,6 +45,10 @@ from typing import Any
 # ---------------------------------------------------------------------------
 # HTTP helpers (stdlib only — no requests/httpx)
 # ---------------------------------------------------------------------------
+
+# Bearer token — set by main() from --token flag or SOLIPLEX_ACCESS_TOKEN env var.
+_access_token: str | None = None
+
 
 def _post(url: str, payload: dict, *, accept: str = "application/json") -> str:
     """POST JSON to url, return response body as text."""
@@ -54,6 +66,8 @@ def _post(url: str, payload: dict, *, accept: str = "application/json") -> str:
         "Content-Length": str(len(body)),
         "Connection":    "close",   # avoid keep-alive state bleeding between calls
     }
+    if _access_token:
+        headers["Authorization"] = f"Bearer {_access_token}"
 
     if parsed.scheme == "https":
         import ssl
@@ -360,29 +374,45 @@ def conversation_loop(
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    global _access_token
+
     parser = argparse.ArgumentParser(
         description="Soliplex multi-turn chat with client-side tools (stdlib only)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 examples:
-  # interactive REPL
+  # interactive REPL (no-auth server)
   python3 soliplex_chat.py --tool secret_number:./secret_number.sh
 
   # one-shot
   python3 soliplex_chat.py --message "what is the secret number" \\
       --tool secret_number:./secret_number.sh
+
+  # OIDC-protected server
+  SOLIPLEX_ACCESS_TOKEN=<token> python3 soliplex_chat.py \\
+      --url https://my.server.com --tool secret_number:./secret_number.sh
         """,
     )
-    parser.add_argument("--url",  default="http://localhost:8000",
-                        help="Soliplex server base URL")
-    parser.add_argument("--room", default="chat",
-                        help="Room ID (default: chat)")
-    parser.add_argument("--tool", action="append", dest="tools",
-                        metavar="NAME:SCRIPT",
-                        help="Client-side tool as name:script  (repeatable)")
+    parser.add_argument(
+        "--url",
+        default=os.environ.get("SOLIPLEX_URL", "http://localhost:8000"),
+        help="Soliplex server base URL  (env: SOLIPLEX_URL)",
+    )
+    parser.add_argument("--room", default="chat", help="Room ID (default: chat)")
+    parser.add_argument(
+        "--token",
+        default=os.environ.get("SOLIPLEX_ACCESS_TOKEN"),
+        help="Bearer token for OIDC auth  (env: SOLIPLEX_ACCESS_TOKEN)",
+    )
+    parser.add_argument(
+        "--tool", action="append", dest="tools", metavar="NAME:SCRIPT",
+        help="Client-side tool as name:script  (repeatable)",
+    )
     parser.add_argument("--message", "-m", default=None,
                         help="Send a single message and exit (non-interactive)")
     args = parser.parse_args()
+
+    _access_token = args.token or None
 
     tools: dict[str, str] = {}
     for spec in (args.tools or []):
