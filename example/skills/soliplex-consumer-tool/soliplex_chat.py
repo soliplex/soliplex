@@ -2,20 +2,24 @@
 """
 Soliplex consumer-tool chat client — stdlib only, no pip required.
 
-Usage:
+Interactive REPL:
     python3 soliplex_chat.py \\
-        --url http://localhost:8000 \\
+        --url  http://localhost:8000 \\
+        --room chat \\
+        --tool secret_number:./secret_number.sh
+
+One-shot (non-interactive):
+    python3 soliplex_chat.py \\
+        --url  http://localhost:8000 \\
         --room chat \\
         --tool secret_number:./secret_number.sh \\
-        --tool other_tool:./other.sh
+        --message "what is the secret number"
 
 Each --tool argument is  <tool-name>:<path-to-script>.
-The script is called with the JSON args string as stdin and its stdout
-becomes the tool result.
+The script receives the JSON args string on stdin; stdout becomes the tool result.
 
 Multi-tool and multi-turn conversations are fully supported.
-Tool calls are transparent to the user — they happen automatically
-between runs without any visible turn.
+Tool calls are transparent — they happen automatically without any visible turn.
 """
 
 from __future__ import annotations
@@ -25,7 +29,7 @@ import http.client
 import json
 import subprocess
 import sys
-import uuid
+import time
 import urllib.parse
 from typing import Any
 
@@ -34,7 +38,7 @@ from typing import Any
 # HTTP helpers (stdlib only — no requests/httpx)
 # ---------------------------------------------------------------------------
 
-def _post(url: str, payload: dict) -> str:
+def _post(url: str, payload: dict, *, accept: str = "application/json") -> str:
     """POST JSON to url, return response body as text."""
     parsed = urllib.parse.urlparse(url)
     host = parsed.hostname
@@ -45,9 +49,10 @@ def _post(url: str, payload: dict) -> str:
 
     body = json.dumps(payload).encode()
     headers = {
-        "Content-Type": "application/json",
-        "Accept": "text/event-stream",
+        "Content-Type":  "application/json",
+        "Accept":        accept,
         "Content-Length": str(len(body)),
+        "Connection":    "close",   # avoid keep-alive state bleeding between calls
     }
 
     if parsed.scheme == "https":
@@ -59,8 +64,7 @@ def _post(url: str, payload: dict) -> str:
 
     try:
         conn.request("POST", path, body=body, headers=headers)
-        resp = conn.getresponse()
-        return resp.read().decode(errors="replace")
+        return conn.getresponse().read().decode(errors="replace")
     finally:
         conn.close()
 
@@ -92,59 +96,12 @@ def _tool_defs(tools: dict[str, str]) -> list[dict]:
     ]
 
 
-# ---------------------------------------------------------------------------
-# Soliplex API
-# ---------------------------------------------------------------------------
-
-def create_thread(base_url: str, room: str) -> tuple[str, str]:
-    """Create a new thread; return (thread_id, initial_run_id)."""
-    url = f"{base_url}/api/v1/rooms/{room}/agui"
-    data = _post(url, {"metadata": {"name": "consumer-tool session"}})
-    d = json.loads(data)
-    thread_id = d["thread_id"]
-    run_id = next(iter(d["runs"]))
-    return thread_id, run_id
-
-
-def new_run(base_url: str, room: str, thread_id: str) -> str:
-    """Create a follow-up run; return the new run_id."""
-    url = f"{base_url}/api/v1/rooms/{room}/agui/{thread_id}"
-    data = _post(url, {})
-    return json.loads(data)["run_id"]
-
-
-def execute_run(
-    base_url: str,
-    room: str,
-    thread_id: str,
-    run_id: str,
-    messages: list[dict],
-    tool_defs: list[dict],
-) -> list[dict]:
-    """Execute a run; return parsed SSE events."""
-    url = f"{base_url}/api/v1/rooms/{room}/agui/{thread_id}/{run_id}"
-    payload = {
-        "threadId": thread_id,
-        "runId": run_id,
-        "state": {},
-        "messages": messages,
-        "tools": tool_defs,
-        "context": [],
-        "forwardedProps": {},
-    }
-    return _parse_sse(_post(url, payload))
-
-
-# ---------------------------------------------------------------------------
-# Event processing
-# ---------------------------------------------------------------------------
-
 def _process_events(events: list[dict]) -> dict[str, Any]:
     """
     Scan SSE events and return one of:
-      {"kind": "text",       "msg_id": ..., "text": ...}
+      {"kind": "text",       "msg_id": str, "text": str}
       {"kind": "tool_calls", "calls": [{id, name, args, parent_msg_id}, ...]}
-      {"kind": "error",      "message": ...}
+      {"kind": "error",      "message": str}
       {"kind": "empty"}
     """
     text = ""
@@ -154,12 +111,10 @@ def _process_events(events: list[dict]) -> dict[str, Any]:
 
     for ev in events:
         t = ev.get("type", "")
-
         if t == "TEXT_MESSAGE_START":
             msg_id = ev.get("messageId")
         elif t == "TEXT_MESSAGE_CONTENT":
             text += ev.get("delta", "")
-
         elif t == "TOOL_CALL_START":
             current = {
                 "id":            ev["toolCallId"],
@@ -172,7 +127,6 @@ def _process_events(events: list[dict]) -> dict[str, Any]:
         elif t == "TOOL_CALL_END" and current:
             tool_calls.append(current)
             current = None
-
         elif t == "RUN_ERROR":
             return {"kind": "error", "message": ev.get("message", "unknown error")}
 
@@ -184,14 +138,65 @@ def _process_events(events: list[dict]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Tool execution (calls the shell script)
+# Soliplex API
+# ---------------------------------------------------------------------------
+
+def create_thread(base_url: str, room: str) -> tuple[str, str]:
+    """Create a new thread; return (thread_id, initial_run_id)."""
+    data = _post(f"{base_url}/api/v1/rooms/{room}/agui",
+                 {"metadata": {"name": "consumer-tool session"}})
+    d = json.loads(data)
+    return d["thread_id"], next(iter(d["runs"]))
+
+
+def new_run(base_url: str, room: str, thread_id: str) -> str:
+    """Create a follow-up run; return the new run_id.
+
+    Retries on failure: the server persists run events in a background task,
+    so calling new_run immediately after an SSE response can race with that
+    task and return a 500.  A short exponential backoff resolves it.
+    """
+    for attempt in range(6):
+        data = _post(f"{base_url}/api/v1/rooms/{room}/agui/{thread_id}", {})
+        try:
+            return json.loads(data)["run_id"]
+        except (json.JSONDecodeError, KeyError):
+            if attempt < 5:
+                time.sleep(0.1 * (2 ** attempt))   # 0.1, 0.2, 0.4, 0.8, 1.6 s
+            else:
+                raise RuntimeError(f"new_run failed after retries: {data!r}")
+
+
+def execute_run(
+    base_url: str,
+    room: str,
+    thread_id: str,
+    run_id: str,
+    messages: list[dict],
+    tool_defs: list[dict],
+) -> list[dict]:
+    """Execute a run; return parsed SSE events."""
+    return _parse_sse(_post(
+        f"{base_url}/api/v1/rooms/{room}/agui/{thread_id}/{run_id}",
+        {
+            "threadId":       thread_id,
+            "runId":          run_id,
+            "state":          {},
+            "messages":       messages,
+            "tools":          tool_defs,
+            "context":        [],
+            "forwardedProps": {},
+        },
+        accept="text/event-stream",
+    ))
+
+
+# ---------------------------------------------------------------------------
+# Tool execution
 # ---------------------------------------------------------------------------
 
 def _run_script(script_path: str, args_json: str) -> str:
-    """
-    Execute a tool script.
-    The JSON args string is passed on stdin; stdout is the result.
-    """
+    """Run a tool script; stdin = JSON args, stdout = result."""
     try:
         result = subprocess.run(
             [script_path],
@@ -210,36 +215,134 @@ def _run_script(script_path: str, args_json: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Conversation loop
+# Inner loop: run until text response (handles chained tool calls)
+# ---------------------------------------------------------------------------
+
+def _send_turn(
+    base_url: str,
+    room: str,
+    thread_id: str,
+    initial_run_id: str,
+    messages: list[dict],
+    tools: dict[str, str],
+    run_counter: int,
+) -> tuple[str, int]:
+    """
+    Execute runs until the LLM produces a text response.
+
+    Tool calls are handled transparently: the script runs, results are
+    appended to messages[], and the loop continues without any output.
+
+    Returns (response_text, updated_run_counter).
+    """
+    defs = _tool_defs(tools)
+    run_id = initial_run_id
+
+    while True:
+        if run_counter > 0:
+            run_id = new_run(base_url, room, thread_id)
+        run_counter += 1
+
+        result = _process_events(
+            execute_run(base_url, room, thread_id, run_id, messages, defs)
+        )
+
+        if result["kind"] == "error":
+            return f"[error] {result['message']}", run_counter
+
+        elif result["kind"] == "tool_calls":
+            asst_tool_calls = []
+            tool_result_msgs = []
+            for i, call in enumerate(result["calls"], 1):
+                script = tools.get(call["name"])
+                output = (
+                    _run_script(script, call["args"] or "{}")
+                    if script is not None
+                    else f"error: unknown tool '{call['name']}'"
+                )
+                asst_tool_calls.append({
+                    "id":   call["id"],
+                    "type": "function",
+                    "function": {
+                        "name":      call["name"],
+                        "arguments": call["args"] or "{}",
+                    },
+                })
+                tool_result_msgs.append({
+                    "id":         f"tool_result_{run_counter:03d}_{i:02d}",
+                    "role":       "tool",
+                    "content":    output,
+                    "toolCallId": call["id"],
+                })
+            messages.append({
+                "id":        result["calls"][0]["parent_msg_id"],
+                "role":      "assistant",
+                "content":   None,
+                "toolCalls": asst_tool_calls,
+            })
+            messages.extend(tool_result_msgs)
+            # loop — re-run with tool results injected
+
+        elif result["kind"] == "text":
+            messages.append({
+                "id":      result["msg_id"],
+                "role":    "assistant",
+                "content": result["text"],
+            })
+            return result["text"], run_counter
+
+        else:
+            return "[no response]", run_counter
+
+
+# ---------------------------------------------------------------------------
+# Conversation loop (REPL or one-shot)
 # ---------------------------------------------------------------------------
 
 def conversation_loop(
     base_url: str,
     room: str,
-    tools: dict[str, str],       # {name: script_path}
-):
+    tools: dict[str, str],
+    initial_message: str | None = None,
+) -> None:
     """
-    Interactive multi-turn conversation with transparent tool call handling.
+    Multi-turn conversation with transparent tool call handling.
 
-    State is the messages list.  Tool calls are invisible to the user —
-    the script runs automatically and feeds the result back before the
-    user sees any response.
+    initial_message: if set, send it, print the response, and return
+                     (one-shot / non-interactive mode).
+                     If None, run an interactive REPL.
     """
-    defs = _tool_defs(tools)
     messages: list[dict] = []
     msg_counter = 0
     run_counter = 0
 
-    # Create the initial thread
     thread_id, run_id = create_thread(base_url, room)
 
-    print(f"Connected to {base_url}/rooms/{room}  (thread {thread_id[:8]}…)")
-    if tools:
-        print(f"Tools registered: {', '.join(tools)}")
-    print("Type 'quit' or Ctrl-D to exit.\n")
+    if not initial_message:
+        print(f"Connected to {base_url}/rooms/{room}  (thread {thread_id[:8]}…)")
+        if tools:
+            print(f"Tools registered: {', '.join(tools)}")
+        print("Type 'quit' or Ctrl-D to exit.\n")
+
+    def _turn(user_input: str) -> None:
+        nonlocal msg_counter, run_counter
+        msg_counter += 1
+        messages.append({
+            "id":      f"user_{msg_counter:03d}",
+            "role":    "user",
+            "content": user_input,
+        })
+        response, run_counter = _send_turn(
+            base_url, room, thread_id, run_id,
+            messages, tools, run_counter,
+        )
+        print(response if initial_message else f"llm: {response}")
+
+    if initial_message:
+        _turn(initial_message)
+        return
 
     while True:
-        # --- get user input ---
         try:
             user_input = input("you: ").strip()
         except (EOFError, KeyboardInterrupt):
@@ -249,107 +352,36 @@ def conversation_loop(
             continue
         if user_input.lower() in ("quit", "exit"):
             break
-
-        msg_counter += 1
-        messages.append({
-            "id":      f"user_{msg_counter:03d}",
-            "role":    "user",
-            "content": user_input,
-        })
-
-        # --- inner loop: run until we get a text response ---
-        # (tool calls are handled transparently here)
-        while True:
-            # On the first turn of this user message use the existing run_id;
-            # subsequent turns (tool result follow-ups) need a new run.
-            if run_counter > 0:
-                run_id = new_run(base_url, room, thread_id)
-            run_counter += 1
-
-            events = execute_run(
-                base_url, room, thread_id, run_id, messages, defs
-            )
-            result = _process_events(events)
-
-            if result["kind"] == "error":
-                print(f"[error] {result['message']}", file=sys.stderr)
-                break
-
-            elif result["kind"] == "tool_calls":
-                # Execute each tool call, accumulate results, then re-run
-                # Build the assistant message that records the tool calls
-                asst_tool_calls = []
-                tool_result_messages = []
-                tr_counter = 0
-
-                for call in result["calls"]:
-                    script = tools.get(call["name"])
-                    if script is None:
-                        tool_output = f"error: unknown tool '{call['name']}'"
-                    else:
-                        tool_output = _run_script(script, call["args"] or "{}")
-
-                    asst_tool_calls.append({
-                        "id":   call["id"],
-                        "type": "function",
-                        "function": {
-                            "name":      call["name"],
-                            "arguments": call["args"] or "{}",
-                        },
-                    })
-                    tr_counter += 1
-                    tool_result_messages.append({
-                        "id":         f"tool_result_{msg_counter:03d}_{tr_counter:02d}",
-                        "role":       "tool",
-                        "content":    tool_output,
-                        "toolCallId": call["id"],
-                    })
-
-                # Append assistant msg (with toolCalls) + all tool results
-                messages.append({
-                    "id":        result["calls"][0]["parent_msg_id"],
-                    "role":      "assistant",
-                    "content":   None,
-                    "toolCalls": asst_tool_calls,
-                })
-                messages.extend(tool_result_messages)
-                # loop again with the tool results injected
-
-            elif result["kind"] == "text":
-                print(f"llm: {result['text']}")
-                messages.append({
-                    "id":      result["msg_id"],
-                    "role":    "assistant",
-                    "content": result["text"],
-                })
-                break  # done with this user turn
-
-            else:  # empty
-                print("[no response]")
-                break
+        _turn(user_input)
 
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Soliplex multi-turn chat with client-side tools (stdlib only)"
+        description="Soliplex multi-turn chat with client-side tools (stdlib only)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+examples:
+  # interactive REPL
+  python3 soliplex_chat.py --tool secret_number:./secret_number.sh
+
+  # one-shot
+  python3 soliplex_chat.py --message "what is the secret number" \\
+      --tool secret_number:./secret_number.sh
+        """,
     )
-    parser.add_argument(
-        "--url", default="http://localhost:8000",
-        help="Soliplex server base URL (default: http://localhost:8000)",
-    )
-    parser.add_argument(
-        "--room", default="chat",
-        help="Room ID to connect to (default: chat)",
-    )
-    parser.add_argument(
-        "--tool", action="append", dest="tools", metavar="NAME:SCRIPT",
-        help="Register a client-side tool as  name:path/to/script.sh  "
-             "(repeatable, e.g. --tool secret_number:./secret_number.sh)",
-    )
+    parser.add_argument("--url",  default="http://localhost:8000",
+                        help="Soliplex server base URL")
+    parser.add_argument("--room", default="chat",
+                        help="Room ID (default: chat)")
+    parser.add_argument("--tool", action="append", dest="tools",
+                        metavar="NAME:SCRIPT",
+                        help="Client-side tool as name:script  (repeatable)")
+    parser.add_argument("--message", "-m", default=None,
+                        help="Send a single message and exit (non-interactive)")
     args = parser.parse_args()
 
     tools: dict[str, str] = {}
@@ -359,7 +391,12 @@ def main():
         name, script = spec.split(":", 1)
         tools[name.strip()] = script.strip()
 
-    conversation_loop(base_url=args.url, room=args.room, tools=tools)
+    conversation_loop(
+        base_url=args.url,
+        room=args.room,
+        tools=tools,
+        initial_message=args.message,
+    )
 
 
 if __name__ == "__main__":

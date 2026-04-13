@@ -118,117 +118,24 @@ print(result)
 `soliplex_chat.py` uses **Python stdlib only** (`http.client`, `json`, `subprocess`, `urllib`).
 No `pip install` required — runs on any Python 3.8+ installation.
 
-## Single-shot curl reference
+## One-shot (non-interactive)
 
-For scripting or quick one-off calls (not interactive), the `curl` approach from earlier
-still works.  See the `## Full Demo (curl + bash)` section below for the step-by-step.
-
----
-
-## Full Demo (curl + bash)
-
-For scripted (non-interactive) use, here is the raw curl flow:
-
-### 1 — Create a thread
+Use `--message` / `-m` to send a single message and exit — useful in scripts or CI:
 
 ```bash
-SOLIPLEX_URL="${SOLIPLEX_URL:-http://localhost:8000}"
-THREAD_RESP=$(curl -s -X POST "${SOLIPLEX_URL}/api/v1/rooms/chat/agui" \
-  -H "Content-Type: application/json" \
-  -d '{"metadata": {"name": "consumer tool demo"}}')
-THREAD_ID=$(echo "$THREAD_RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['thread_id'])")
-RUN_ID=$(echo "$THREAD_RESP"    | python3 -c "import json,sys; d=json.load(sys.stdin); print(next(iter(d['runs'])))")
+python3 soliplex_chat.py \
+    --room chat \
+    --tool secret_number:./secret_number.sh \
+    --message "what is the secret number"
+# → The secret number is 42.
 ```
 
-### 2 — Execute run with tool defined
+Capture the output:
 
 ```bash
-SSE=$(curl -s -X POST "${SOLIPLEX_URL}/api/v1/rooms/chat/agui/${THREAD_ID}/${RUN_ID}" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"threadId\": \"${THREAD_ID}\",
-    \"runId\":    \"${RUN_ID}\",
-    \"state\": {},
-    \"messages\": [{\"id\": \"user_001\", \"role\": \"user\", \"content\": \"what is the secret number\"}],
-    \"tools\": [{
-      \"name\":        \"secret_number\",
-      \"description\": \"Returns the secret number.\",
-      \"parameters\":  {\"type\": \"object\", \"properties\": {}, \"required\": []}
-    }],
-    \"context\": [],
-    \"forwardedProps\": {}
-  }")
-```
-
-### 3 — Parse tool call from SSE
-
-```bash
-TOOL_CALL_ID=$(echo "$SSE" | python3 -c "
-import json,sys
-for l in sys.stdin:
-    if l.startswith('data: '):
-        ev=json.loads(l[6:])
-        if ev.get('type')=='TOOL_CALL_START': print(ev['toolCallId']); break
-")
-ASST_MSG_ID=$(echo "$SSE" | python3 -c "
-import json,sys
-for l in sys.stdin:
-    if l.startswith('data: '):
-        ev=json.loads(l[6:])
-        if ev.get('type')=='TOOL_CALL_START': print(ev['parentMessageId']); break
-")
-TOOL_ARGS=$(echo "$SSE" | python3 -c "
-import json,sys; args=''
-for l in sys.stdin:
-    if l.startswith('data: '):
-        ev=json.loads(l[6:])
-        if ev.get('type')=='TOOL_CALL_ARGS': args+=ev.get('delta','')
-print(args or '{}')
-")
-```
-
-### 4 — Run the script
-
-```bash
-TOOL_RESULT=$(bash ./secret_number.sh)
-```
-
-### 5 — New run + submit tool result
-
-```bash
-NEW_RUN_ID=$(curl -s -X POST "${SOLIPLEX_URL}/api/v1/rooms/chat/agui/${THREAD_ID}" \
-  -H "Content-Type: application/json" -d '{}' \
-  | python3 -c "import json,sys; print(json.load(sys.stdin)['run_id'])")
-
-curl -s -X POST "${SOLIPLEX_URL}/api/v1/rooms/chat/agui/${THREAD_ID}/${NEW_RUN_ID}" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"threadId\": \"${THREAD_ID}\",
-    \"runId\":    \"${NEW_RUN_ID}\",
-    \"state\": {},
-    \"messages\": [
-      {\"id\": \"user_001\",       \"role\": \"user\",      \"content\": \"what is the secret number\"},
-      {\"id\": \"${ASST_MSG_ID}\", \"role\": \"assistant\", \"content\": null,
-       \"toolCalls\": [{\"id\": \"${TOOL_CALL_ID}\", \"type\": \"function\",
-         \"function\": {\"name\": \"secret_number\", \"arguments\": \"${TOOL_ARGS}\"}}]},
-      {\"id\": \"tool_result_001\", \"role\": \"tool\", \"content\": \"${TOOL_RESULT}\",
-       \"toolCallId\": \"${TOOL_CALL_ID}\"}
-    ],
-    \"tools\": [{
-      \"name\": \"secret_number\",
-      \"description\": \"Returns the secret number.\",
-      \"parameters\": {\"type\": \"object\", \"properties\": {}, \"required\": []}
-    }],
-    \"context\": [],
-    \"forwardedProps\": {}
-  }" | python3 -c "
-import json,sys; text=''
-for l in sys.stdin:
-    if l.startswith('data: '):
-        ev=json.loads(l[6:])
-        if ev.get('type')=='TEXT_MESSAGE_CONTENT': text+=ev.get('delta','')
-print(text)
-"
+ANSWER=$(python3 soliplex_chat.py -m "what is the secret number" \
+    --tool secret_number:./secret_number.sh)
+echo "Got: $ANSWER"
 ```
 
 ---
