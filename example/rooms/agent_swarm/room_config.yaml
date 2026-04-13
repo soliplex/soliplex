@@ -1,0 +1,16 @@
+id: "agent_swarm"
+name: "AgentSwarm"
+description: "Help the user research and solve highly complex problems through the use of multiple agents"
+
+
+suggestions:
+  - "Analyze the data in the documents"
+  - "Compare metrics across documents"
+
+agent:
+  template_id: "default_chat"
+  system_prompt: |
+    You are an expert AI assistant. For complex multi-part questions,
+    use the agent_delegator tool to research them in parallel.
+
+allow_mcp: false

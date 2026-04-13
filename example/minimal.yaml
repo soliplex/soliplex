@@ -200,7 +200,8 @@ secrets:
 #==========================================================================
 
 environment:
-  - "OLLAMA_BASE_URL"
+  - name: "OLLAMA_BASE_URL"
+    value: "http://bizon:11434"
 
   #------------------------------------------------------------------------
   # 'soliplex': on-disk configuration locations
@@ -321,6 +322,8 @@ room_paths:
   - "./rooms/faux"
   - "./rooms/quiztest"
   - "./rooms/skillstest"
+  - "./rooms/agent_swarm"
+  - "./rooms/demo"
   - "./rooms/multi_arg"
   - "./rooms/title_only"
   - "./rooms/feedback"
