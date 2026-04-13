@@ -35,7 +35,7 @@ To use a different script, set `TOOL_SCRIPT` before running the demo.
 Set `SOLIPLEX_URL` if not using the default:
 
 ```bash
-export SOLIPLEX_URL="${SOLIPLEX_URL:-https://demo.toughserv.com}"
+export SOLIPLEX_URL="${SOLIPLEX_URL:-http://localhost:8000}"
 export TOOL_SCRIPT="${TOOL_SCRIPT:-./secret_number.sh}"
 ```
 
