@@ -1,5 +1,5 @@
 ---
-name: soliplex-consumer-tool
+name: soliplex-chat
 description: Multi-turn Soliplex chat with client-side (consumer) tools — local shell scripts registered as AG-UI tools, with transparent tool-call handling and full conversation state
 ---
 
