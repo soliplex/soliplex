@@ -1,5 +1,4 @@
 import pathlib
-import tomllib
 
 import pydantic
 import pydantic_ai
@@ -47,25 +46,7 @@ configured.
 async def skill_list_environments(
     bwrap_sandbox: bs_sandbox.BwrapSandbox,
 ) -> list[EnvironmentInfo]:
-    environments = []
-    root = bwrap_sandbox.config.environments_path
-
-    for subpath in sorted(root.glob("*")):
-        if (subpath / ".venv").is_dir():
-            toml_path = subpath / "pyproject.toml"
-
-            if toml_path.is_file():
-                toml_text = toml_path.read_text()
-                toml = tomllib.loads(toml_text)
-                project = toml["project"]
-                environments.append(
-                    {
-                        "name": project["name"],
-                        "description": project.get("description", ""),
-                    }
-                )
-
-    return environments
+    return bwrap_sandbox.config.list_environments()
 
 
 EXECUTE_DESCRIPTION = """\

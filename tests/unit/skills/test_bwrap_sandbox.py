@@ -96,65 +96,15 @@ def i_config(
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize(
-    "w_env_names, w_exists, w_has_toml, w_has_venv, expected",
-    [
-        ([], [], [], [], []),
-        (["nonesuch"], [False], [False], [False], []),
-        (["empty"], [True], [False], [False], []),
-        (["no_venv"], [True], [True], [False], []),
-        (["no_toml"], [True], [False], [True], []),
-        (
-            ["valid"],
-            [True],
-            [True],
-            [True],
-            [{"name": "valid", "description": "Describe valid"}],
-        ),
-    ],
-)
 async def test_skill_list_environments(
-    temp_dir,
-    ctx_w_deps,
     bwrap_sandbox,
-    w_env_names,
-    w_exists,
-    w_has_toml,
-    w_has_venv,
-    expected,
 ):
-
-    for env_name, exists, has_toml, has_venv in zip(
-        w_env_names,
-        w_exists,
-        w_has_toml,
-        w_has_venv,
-        strict=True,
-    ):
-        env_subdir = temp_dir / env_name
-        if exists:
-            env_subdir.mkdir()
-
-            if has_toml:
-                toml = "\n".join(
-                    [
-                        "[project]",
-                        f'name = "{env_name}"',
-                        f'description = "Describe {env_name}"',
-                    ]
-                )
-                toml_file = env_subdir / "pyproject.toml"
-                toml_file.write_text(toml)
-
-            if has_venv:
-                venv_dir = env_subdir / ".venv"
-                venv_dir.mkdir()
 
     found = await skills_bwrap_sandbox.skill_list_environments(
         bwrap_sandbox=bwrap_sandbox,
     )
 
-    assert found == expected
+    assert found is bwrap_sandbox.config.list_environments.return_value
 
 
 @pytest.mark.asyncio
