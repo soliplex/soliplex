@@ -204,6 +204,13 @@ IgnorableEventTypes = frozenset[agui_core.EventType]
 
 DEFAULT_IGNORE_EVENTS: IgnorableEventTypes = frozenset(
     [
+        agui_core.EventType.REASONING_START,
+        agui_core.EventType.REASONING_END,
+        agui_core.EventType.REASONING_MESSAGE_START,
+        agui_core.EventType.REASONING_MESSAGE_CONTENT,
+        agui_core.EventType.REASONING_MESSAGE_END,
+        agui_core.EventType.REASONING_MESSAGE_CHUNK,
+        agui_core.EventType.REASONING_ENCRYPTED_VALUE,
         agui_core.EventType.THINKING_TEXT_MESSAGE_START,
         agui_core.EventType.THINKING_TEXT_MESSAGE_CONTENT,
         agui_core.EventType.THINKING_TEXT_MESSAGE_END,
