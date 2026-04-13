@@ -23,7 +23,11 @@ def ctx_w_deps():
     ctx = mock.Mock(spec_set=["deps"])
     ctx.deps = mock.Mock(
         spec_set=["state"],
-        state={},
+        state=skills_bwrap_sandbox.SandboxState(
+            room_id=ROOM_ID,
+            thread_id=str(THREAD_ID),
+            run_id=str(RUN_ID),
+        ),
     )
     return ctx
 
@@ -147,7 +151,6 @@ async def test_skill_list_environments(
                 venv_dir.mkdir()
 
     found = await skills_bwrap_sandbox.skill_list_environments(
-        ctx=ctx_w_deps,
         bwrap_sandbox=bwrap_sandbox,
     )
 
@@ -165,9 +168,7 @@ async def test_skill_list_environments(
         (["/bin/true"], ["/bin/true"]),
     ],
 )
-@mock.patch("asyncio.to_thread")
 async def test_skill_execute_w_errors_truncation(
-    att,
     ctx_w_deps,
     bwrap_sandbox,
     w_command,
@@ -177,10 +178,10 @@ async def test_skill_execute_w_errors_truncation(
     w_att_rte,
 ):
     if w_att_rte:
-        att.side_effect = RuntimeError("test")
+        bwrap_sandbox.execute.side_effect = RuntimeError("test")
         expected = "Error: test"
     else:
-        att.return_value = mock.create_autospec(
+        bwrap_sandbox.execute.return_value = mock.create_autospec(
             bs_models.ExecuteResult,
             output="test output",
             exit_code=w_exit_code,
@@ -195,15 +196,13 @@ async def test_skill_execute_w_errors_truncation(
             expected = f"Command failed (exit code {w_exit_code}):\n{expected}"
 
     found = await skills_bwrap_sandbox.skill_execute(
-        ctx=ctx_w_deps,
         bwrap_sandbox=bwrap_sandbox,
         command=w_command,
     )
 
     assert found == expected
 
-    att.assert_awaited_once_with(
-        bwrap_sandbox.execute,
+    bwrap_sandbox.execute.assert_awaited_once_with(
         command=exp_cmd_args,
         environment_name=None,
         workdir=None,
@@ -236,16 +235,14 @@ async def test_skill_execute_w_errors_truncation(
         (["/bin/true"], ["/bin/true"]),
     ],
 )
-@mock.patch("asyncio.to_thread")
 async def test_skill_execute_w_extra_args(
-    att,
     ctx_w_deps,
     bwrap_sandbox,
     w_command,
     exp_cmd_args,
     w_kw,
 ):
-    att.return_value = mock.create_autospec(
+    bwrap_sandbox.execute.return_value = mock.create_autospec(
         bs_models.ExecuteResult,
         output="test output",
         exit_code=None,
@@ -254,7 +251,6 @@ async def test_skill_execute_w_extra_args(
     expected = "test output"
 
     found = await skills_bwrap_sandbox.skill_execute(
-        ctx=ctx_w_deps,
         bwrap_sandbox=bwrap_sandbox,
         command=w_command,
         **w_kw,
@@ -269,8 +265,7 @@ async def test_skill_execute_w_extra_args(
         "extra_volumes": None,
     } | w_kw
 
-    att.assert_awaited_once_with(
-        bwrap_sandbox.execute,
+    bwrap_sandbox.execute.assert_awaited_once_with(
         command=exp_cmd_args,
         **exp_kw,
     )
@@ -280,9 +275,7 @@ async def test_skill_execute_w_extra_args(
 @pytest.mark.parametrize("w_att_rte", [False, True])
 @pytest.mark.parametrize("w_exit_code", [0, None, 42])
 @pytest.mark.parametrize("w_truncated", [False, True])
-@mock.patch("asyncio.to_thread")
 async def test_skill_execute_script_w_errors_truncation(
-    att,
     ctx_w_deps,
     bwrap_sandbox,
     w_truncated,
@@ -290,10 +283,10 @@ async def test_skill_execute_script_w_errors_truncation(
     w_att_rte,
 ):
     if w_att_rte:
-        att.side_effect = RuntimeError("test")
+        bwrap_sandbox.execute_script.side_effect = RuntimeError("test")
         expected = "Error: test"
     else:
-        att.return_value = mock.create_autospec(
+        bwrap_sandbox.execute_script.return_value = mock.create_autospec(
             bs_models.ExecuteResult,
             output="test output",
             exit_code=w_exit_code,
@@ -308,15 +301,13 @@ async def test_skill_execute_script_w_errors_truncation(
             expected = f"Command failed (exit code {w_exit_code}):\n{expected}"
 
     found = await skills_bwrap_sandbox.skill_execute_script(
-        ctx=ctx_w_deps,
         bwrap_sandbox=bwrap_sandbox,
         script="print('hello')",
     )
 
     assert found == expected
 
-    att.assert_awaited_once_with(
-        bwrap_sandbox.execute_script,
+    bwrap_sandbox.execute_script.assert_awaited_once_with(
         script="print('hello')",
         environment_name=None,
         workdir=None,
@@ -342,14 +333,12 @@ async def test_skill_execute_script_w_errors_truncation(
         },
     ],
 )
-@mock.patch("asyncio.to_thread")
 async def test_skill_execute_script_w_extra_args(
-    att,
     ctx_w_deps,
     bwrap_sandbox,
     w_kw,
 ):
-    att.return_value = mock.create_autospec(
+    bwrap_sandbox.execute_script.return_value = mock.create_autospec(
         bs_models.ExecuteResult,
         output="test output",
         exit_code=None,
@@ -358,7 +347,6 @@ async def test_skill_execute_script_w_extra_args(
     expected = "test output"
 
     found = await skills_bwrap_sandbox.skill_execute_script(
-        ctx=ctx_w_deps,
         bwrap_sandbox=bwrap_sandbox,
         script="print('hello')",
         **w_kw,
@@ -373,8 +361,7 @@ async def test_skill_execute_script_w_extra_args(
         "extra_volumes": None,
     } | w_kw
 
-    att.assert_awaited_once_with(
-        bwrap_sandbox.execute_script,
+    bwrap_sandbox.execute_script.assert_awaited_once_with(
         script="print('hello')",
         **exp_kw,
     )
@@ -521,7 +508,6 @@ async def test_create_sandbox_toolset_list_environments(
 
     assert found is skill_list_environments.return_value
     skill_list_environments.assert_called_once_with(
-        ctx=ctx_w_deps,
         bwrap_sandbox=sandbox,
     )
 
@@ -566,9 +552,6 @@ async def test_create_sandbox_toolset_execute(
     found = await tool.function(
         ctx=ctx_w_deps,
         command=["/bin/true"],
-        room_id=ROOM_ID,
-        thread_id=THREAD_ID,
-        run_id=RUN_ID,
         **w_kw,
     )
 
@@ -582,27 +565,36 @@ async def test_create_sandbox_toolset_execute(
     } | w_kw
 
     skill_execute.assert_called_once_with(
-        ctx=ctx_w_deps,
         bwrap_sandbox=sandbox,
         command=["/bin/true"],
         **exp_kw,
     )
 
     if w_iconfig:
-        gw.assert_called_once_with(workdirs_path, ROOM_ID, THREAD_ID, RUN_ID)
+        gw.assert_called_once_with(
+            workdirs_path,
+            ROOM_ID,
+            str(THREAD_ID),
+            str(RUN_ID),
+        )
         gev.assert_called_once_with(
             rooms_upload_path,
             threads_upload_path,
             ROOM_ID,
-            THREAD_ID,
+            str(THREAD_ID),
         )
     else:
-        gw.assert_called_once_with(None, ROOM_ID, THREAD_ID, RUN_ID)
+        gw.assert_called_once_with(
+            None,
+            ROOM_ID,
+            str(THREAD_ID),
+            str(RUN_ID),
+        )
         gev.assert_called_once_with(
             None,
             None,
             ROOM_ID,
-            THREAD_ID,
+            str(THREAD_ID),
         )
 
 
@@ -646,9 +638,6 @@ async def test_create_sandbox_toolset_execute_script(
     found = await tool.function(
         ctx=ctx_w_deps,
         script="print('hello')",
-        room_id=ROOM_ID,
-        thread_id=THREAD_ID,
-        run_id=RUN_ID,
         **w_kw,
     )
 
@@ -662,27 +651,36 @@ async def test_create_sandbox_toolset_execute_script(
     } | w_kw
 
     skill_execute_script.assert_called_once_with(
-        ctx=ctx_w_deps,
         bwrap_sandbox=sandbox,
         script="print('hello')",
         **exp_kw,
     )
 
     if w_iconfig:
-        gw.assert_called_once_with(workdirs_path, ROOM_ID, THREAD_ID, RUN_ID)
+        gw.assert_called_once_with(
+            workdirs_path,
+            ROOM_ID,
+            str(THREAD_ID),
+            str(RUN_ID),
+        )
         gev.assert_called_once_with(
             rooms_upload_path,
             threads_upload_path,
             ROOM_ID,
-            THREAD_ID,
+            str(THREAD_ID),
         )
     else:
-        gw.assert_called_once_with(None, ROOM_ID, THREAD_ID, RUN_ID)
+        gw.assert_called_once_with(
+            None,
+            ROOM_ID,
+            str(THREAD_ID),
+            str(RUN_ID),
+        )
         gev.assert_called_once_with(
             None,
             None,
             ROOM_ID,
-            THREAD_ID,
+            str(THREAD_ID),
         )
 
 
@@ -715,10 +713,6 @@ def test_create_bwrap_sandbox_skill(psm, csts, w_kwargs, w_iconfig, i_config):
     instructions = "You are a test"
     psm.return_value = metadata, instructions
     exp_path = pathlib.Path(skills_bwrap_sandbox.__file__).parent
-
-    installation_config = mock.create_autospec(
-        config_installation.InstallationConfig
-    )
 
     if w_iconfig:
         iconfig_kwargs = {"installation_config": i_config}
