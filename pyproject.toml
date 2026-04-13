@@ -19,7 +19,7 @@ dependencies = [
     "authlib",
     "fastapi",
     "fastmcp >= 2.14.0, < 2.15",
-    "fakeredis >= 2.34.1, < 2.35",
+    "fakeredis != 2.35.0",
     "greenlet",
     "haiku.rag-slim >= 0.38.0, < 0.39",
     "haiku-skills >= 0.13.2, < 0.14",
@@ -27,7 +27,7 @@ dependencies = [
     "jsonpatch",
     "jwcrypto",
     "logfire[fastapi]",
-    "pydantic-ai-slim[google] >= 1.78.0, < 1.79",  # AG-UI 1.0.15 breakage
+    "pydantic-ai-slim[google] >= 1.79.0, < 1.80",
     "pyjwt",
     "python-keycloak",
     "sqlmodel",
