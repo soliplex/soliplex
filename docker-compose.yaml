@@ -18,8 +18,17 @@ services:
       - "8000:8000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    privileged: true
     env_file:
       - .env
+    command:
+      - soliplex-cli
+      - serve
+      - --host=0.0.0.0
+      - --no-auth-mode
+      - /app/installation/minimal.yaml
     volumes:
       - ./example:/app/installation
       - ./db:/app/db
+      - ./sandbox/workdirs:/app/sandbox/workdirs
+      - ./uploads:/app/uploads
