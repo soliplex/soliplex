@@ -1,0 +1,7 @@
+customer_id,first_name,last_name,registration_date,loyalty_tier,customer_segment,lifetime_value_estimate
+C-1001,Elena,Rostova,2021-03-15,Gold,Urban-Millennial,1250.50
+C-1002,Marcus,Chen,2022-11-02,Silver,Suburban-Family,840.00
+C-1003,Aisha,Nkosi,2020-08-22,Platinum,Urban-Professional,3400.75
+C-1004,David,O'Connor,2023-01-10,Bronze,Rural-Retiree,150.25
+C-1005,Sarah,Jenkins,2021-09-05,Gold,Suburban-Family,1100.00
+C-1006,Liam,Patel,2022-05-18,Silver,Urban-Student,420.00

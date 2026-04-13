@@ -1,0 +1,7 @@
+product_id,product_name,category,sub_category,supplier_id,wholesale_cost,retail_price,current_stock_level
+P-501,ErgoOffice Chair,Furniture,Seating,SUP-A,85.00,199.99,45
+P-502,Wireless Noise-Cancelling Headphones,Electronics,Audio,SUP-B,120.50,249.99,112
+P-503,Organic Matcha Powder (250g),Groceries,Tea,SUP-C,12.00,28.50,300
+P-504,Standing Desk Converter,Furniture,Desks,SUP-A,65.00,145.00,28
+P-505,Mechanical Keyboard,Electronics,Peripherals,SUP-B,45.75,115.99,85
+P-506,Yoga Mat - Extra Thick,Sporting Goods,Fitness,SUP-D,10.50,35.00,150
