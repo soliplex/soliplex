@@ -18,6 +18,7 @@ AGUI_State = dict[str, typing.Any]
 _COMPACTIBLE_TYPES = {
     agui_core.EventType.TEXT_MESSAGE_CONTENT,
     agui_core.EventType.THINKING_TEXT_MESSAGE_CONTENT,
+    agui_core.EventType.REASONING_MESSAGE_CONTENT,
 }
 
 
