@@ -1116,6 +1116,12 @@ class RoomView(t_screen.Screen):
                 elif chunk["type"] == "THINKING_TEXT_MESSAGE_CONTENT":
                     response_content += chunk["delta"]
 
+                if chunk["type"] == "REASONING_START":
+                    response_content += "\n\n** reasoning **\n\n"
+
+                elif chunk["type"] == "REASONING_MESSAGE_CONTENT":
+                    response_content += chunk["delta"]
+
                 elif chunk["type"] == "TOOL_CALL_START":
                     response_content += (
                         f"\n\n** calling tool {chunk['toolCallName']} **"
