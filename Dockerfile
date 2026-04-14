@@ -22,11 +22,11 @@ RUN groupadd -g ${APP_GID} soliplex && \
 # ---------- builder: install dependencies and package ----------
 FROM base AS builder
 
+COPY --from=ghcr.io/astral-sh/uv:0.11.6 /uv /uvx /bin/
+
 COPY --link pyproject.toml uv.lock ./
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=cache,target=/root/.cache/uv \
-    pip install --upgrade uv && \
+RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project
 
 COPY --link src/ ./src/
