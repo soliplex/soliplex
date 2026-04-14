@@ -61,6 +61,7 @@ nav:
   - Setup:
       - Server: server.md
       - Client: client.md
+      - Docker: docker.md
       - RAG DB: rag.md
   - Configuration:
       - Filesystem Layout: config/filesystem_layout.md

@@ -1,13 +1,4 @@
 services:
-  soliplex_web:
-    build:
-      context: ./src/flutter
-      dockerfile: Dockerfile
-    #network_mode: "host" # only works on linux
-    ports:
-      - "9000:9000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 
   soliplex_backend:
     build:
@@ -28,6 +19,45 @@ services:
       - --no-auth-mode
       - /app/installation/minimal.yaml
     volumes:
+      - ./example:/app/installation
+      - ./db:/app/db
+      - ./sandbox/workdirs:/app/sandbox/workdirs
+      - ./uploads:/app/uploads
+
+  # Example: development service with hot reloading and bind-mounted source.
+  #
+  #   docker compose up soliplex_dev
+  #
+  # On Linux, set APP_UID/APP_GID in .env or your shell so that
+  # container-written files match your host user:
+  #
+  #   APP_UID=$(id -u) APP_GID=$(id -g) docker compose up soliplex_dev
+  #
+  soliplex_dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+      args:
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    privileged: true
+    env_file:
+      - .env
+    command:
+      - soliplex-cli
+      - serve
+      - --host=0.0.0.0
+      - --reload=both
+      - --no-auth-mode
+      - /app/installation/minimal.yaml
+    volumes:
+      - ./src/soliplex:/app/src/soliplex
+      - ./tests:/app/tests
       - ./example:/app/installation
       - ./db:/app/db
       - ./sandbox/workdirs:/app/sandbox/workdirs
