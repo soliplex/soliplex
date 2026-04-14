@@ -21,6 +21,10 @@ AGUI_POST_RECENT_USER_FEEDBACK = "post recent room user feedback"
 AGUI_POST_REVIEW_RECENT_FEEDBACK = "post review recent agui feedback"
 AGUI_POST_RESOLVE_RECENT_FEEDBACK = "post resolve recent agui feedback"
 
+UPLOADS_GET_ROOM = "uploads get room"
+UPLOADS_GET_ROOM_FILE = "uploads get room file"
+UPLOADS_GET_ROOM_THREAD = "uploads get room thread"
+UPLOADS_GET_ROOM_THREAD_FILE = "uploads get room thread file"
 UPLOADS_POST_ROOM = "uploads post room"
 UPLOADS_POST_ROOM_THREAD = "uploads post room thread"
 

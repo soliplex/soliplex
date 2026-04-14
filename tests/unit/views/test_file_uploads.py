@@ -10,6 +10,7 @@ from soliplex import agui as agui_package
 from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex import loggers
+from soliplex import models
 from soliplex.config import rooms as config_rooms
 from soliplex.views import file_uploads as file_uploads_views
 
@@ -25,6 +26,7 @@ TEST_THREAD_ID = uuid.uuid4()
 TEST_FILENAME = "test_file.txt"
 TEST_CONTENT = b"DEADBEEF"
 
+URL_PREFIX = "http://test.example.com/api"
 
 no_error = contextlib.nullcontext
 
@@ -50,6 +52,184 @@ def uploads_path(temp_dir):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
+    "w_filenames",
+    [
+        [],
+        ["foo.txt"],
+        [f"file_{i_file:03}.txt" for i_file in range(10)],
+    ],
+)
+@pytest.mark.parametrize(
+    "w_upload_path, w_room_path, expectation",
+    [
+        (True, True, no_error(None)),
+        (True, False, no_error(None)),
+        (
+            False,
+            None,
+            raises_httpexc(code=404, match="Room uploads not configured"),
+        ),
+    ],
+)
+@mock.patch("soliplex.views.agui._check_user_in_room")
+async def test_get_uploads_room_only(
+    cuir,
+    uploads_path,
+    w_upload_path,
+    w_room_path,
+    expectation,
+    w_filenames,
+):
+    room_uploads_path = uploads_path / "rooms"
+    room_path = room_uploads_path / TEST_ROOM_ID
+    ROUTE_NAME = "/v1/uploads/{room_id}/{filename}"
+
+    def download_url(name, room_id, filename):
+        assert name == ROUTE_NAME
+        return f"{URL_PREFIX}/v1/uploads/{room_id}/{filename}"
+
+    exp_filename_urls = {}
+
+    if w_room_path:
+        room_path.mkdir(parents=True)
+        (room_path / "ignore_me").mkdir()
+        for filename in w_filenames:
+            file_path = room_path / filename
+            file_path.write_text(f"filename: {filename}")
+            exp_filename_urls[filename] = download_url(
+                ROUTE_NAME, TEST_ROOM_ID, filename
+            )
+
+    request = mock.create_autospec(fastapi.Request)
+    request.url_for.side_effect = download_url
+
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    cuir.return_value = room_config
+
+    the_installation = mock.create_autospec(
+        installation.Installation,
+    )
+
+    if w_upload_path:
+        the_installation.rooms_upload_path = str(room_uploads_path)
+    else:
+        the_installation.rooms_upload_path = None
+
+    the_authz_policy = mock.create_autospec(
+        authz_package.AuthorizationPolicy,
+    )
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    with expectation as expected:
+        found = await file_uploads_views.get_uploads_room(
+            request=request,
+            room_id=TEST_ROOM_ID,
+            the_installation=the_installation,
+            the_authz_policy=the_authz_policy,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    if expected is None:
+        assert isinstance(found, models.RoomUploads)
+        assert found.room_id == TEST_ROOM_ID
+
+        if w_room_path:
+            found_files = {f_up.filename: f_up.url for f_up in found.uploads}
+            assert set(found_files) == set(w_filenames)
+
+            for filename in w_filenames:
+                exp_url = exp_filename_urls[filename]
+                assert str(found_files[filename]) == exp_url
+        else:
+            assert found.uploads == []
+
+    the_logger.debug.assert_called_once_with(
+        loggers.UPLOADS_GET_ROOM,
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_upload_path, w_room_path, w_filename, expectation",
+    [
+        (True, True, True, no_error(None)),
+        (
+            True,
+            True,
+            False,
+            raises_httpexc(code=404, match=".*"),
+        ),
+        (
+            True,
+            False,
+            None,
+            raises_httpexc(code=404, match=".*"),
+        ),
+        (
+            False,
+            None,
+            None,
+            raises_httpexc(code=404, match="Room uploads not configured"),
+        ),
+    ],
+)
+@mock.patch("soliplex.views.agui._check_user_in_room")
+async def test_get_uploads_room_filename(
+    cuir,
+    uploads_path,
+    w_upload_path,
+    w_room_path,
+    w_filename,
+    expectation,
+):
+    room_uploads_path = uploads_path / "rooms"
+    room_path = room_uploads_path / TEST_ROOM_ID
+
+    if w_room_path:
+        room_path.mkdir(parents=True)
+
+        if w_filename:
+            file_path = room_path / TEST_FILENAME
+            file_path.write_text(f"filename: {TEST_FILENAME}")
+
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    cuir.return_value = room_config
+
+    the_installation = mock.create_autospec(
+        installation.Installation,
+    )
+
+    if w_upload_path:
+        the_installation.rooms_upload_path = str(room_uploads_path)
+    else:
+        the_installation.rooms_upload_path = None
+
+    the_authz_policy = mock.create_autospec(
+        authz_package.AuthorizationPolicy,
+    )
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    with expectation as expected:
+        found = await file_uploads_views.get_uploads_room_filename(
+            room_id=TEST_ROOM_ID,
+            filename=TEST_FILENAME,
+            the_installation=the_installation,
+            the_authz_policy=the_authz_policy,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    if expected is None:
+        assert found == str(file_path)
+
+    the_logger.debug.assert_called_once_with(
+        loggers.UPLOADS_GET_ROOM_FILE,
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
     "w_filename, exp_filename",
     [
         (TEST_FILENAME, TEST_FILENAME),
@@ -67,8 +247,8 @@ def uploads_path(temp_dir):
 @mock.patch("soliplex.views.agui._check_user_in_room")
 async def test_post_uploads_room(
     cuir,
-    w_admin_access,
     uploads_path,
+    w_admin_access,
     w_upload_path,
     expectation,
     w_filename,
@@ -140,6 +320,187 @@ async def test_post_uploads_room(
 
     the_logger.debug.assert_called_once_with(
         loggers.UPLOADS_POST_ROOM,
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_filenames",
+    [
+        [],
+        ["foo.txt"],
+        [f"file_{i_file:03}.txt" for i_file in range(10)],
+    ],
+)
+@pytest.mark.parametrize(
+    "w_upload_path, w_thread_path, expectation",
+    [
+        (True, True, no_error(None)),
+        (True, False, no_error(None)),
+        (
+            False,
+            None,
+            raises_httpexc(code=404, match="Thread uploads not configured"),
+        ),
+    ],
+)
+@mock.patch("soliplex.views.agui._check_user_in_room")
+async def test_get_uploads_room_thread_only(
+    cuir,
+    uploads_path,
+    w_upload_path,
+    w_thread_path,
+    expectation,
+    w_filenames,
+):
+    thread_uploads_path = uploads_path / "threads"
+    thread_path = thread_uploads_path / str(TEST_THREAD_ID)
+    ROUTE_NAME = "/v1/uploads/{room_id}/{thread_id}/{filename}"
+
+    def download_url(name, room_id, thread_id, filename):
+        assert name == ROUTE_NAME
+        return f"{URL_PREFIX}/v1/uploads/{room_id}/{thread_id}/{filename}"
+
+    exp_filename_urls = {}
+
+    if w_thread_path:
+        thread_path.mkdir(parents=True)
+        (thread_path / "ignore_me").mkdir()
+        for filename in w_filenames:
+            file_path = thread_path / filename
+            file_path.write_text(f"filename: {filename}")
+            exp_filename_urls[filename] = download_url(
+                ROUTE_NAME, TEST_ROOM_ID, str(TEST_THREAD_ID), filename
+            )
+
+    request = mock.create_autospec(fastapi.Request)
+    request.url_for.side_effect = download_url
+
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    cuir.return_value = room_config
+
+    the_installation = mock.create_autospec(
+        installation.Installation,
+    )
+
+    if w_upload_path:
+        the_installation.threads_upload_path = str(thread_uploads_path)
+    else:
+        the_installation.threads_upload_path = None
+
+    the_authz_policy = mock.create_autospec(
+        authz_package.AuthorizationPolicy,
+    )
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    with expectation as expected:
+        found = await file_uploads_views.get_uploads_room_thread(
+            request=request,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID,
+            the_installation=the_installation,
+            the_authz_policy=the_authz_policy,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    if expected is None:
+        assert isinstance(found, models.ThreadUploads)
+        assert found.room_id == TEST_ROOM_ID
+        assert found.thread_id == str(TEST_THREAD_ID)
+
+        if w_thread_path:
+            found_files = {f_up.filename: f_up.url for f_up in found.uploads}
+            assert set(found_files) == set(w_filenames)
+
+            for filename in w_filenames:
+                exp_url = exp_filename_urls[filename]
+                assert str(found_files[filename]) == exp_url
+        else:
+            assert found.uploads == []
+
+    the_logger.debug.assert_called_once_with(
+        loggers.UPLOADS_GET_ROOM_THREAD,
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_upload_path, w_thread_path, w_filename, expectation",
+    [
+        (True, True, True, no_error(None)),
+        (
+            True,
+            True,
+            False,
+            raises_httpexc(code=404, match=".*"),
+        ),
+        (
+            True,
+            False,
+            None,
+            raises_httpexc(code=404, match=".*"),
+        ),
+        (
+            False,
+            None,
+            None,
+            raises_httpexc(code=404, match="Thread uploads not configured"),
+        ),
+    ],
+)
+@mock.patch("soliplex.views.agui._check_user_in_room")
+async def test_get_uploads_room_thread_filename(
+    cuir,
+    uploads_path,
+    w_upload_path,
+    w_thread_path,
+    w_filename,
+    expectation,
+):
+    thread_uploads_path = uploads_path / "threads"
+    thread_path = thread_uploads_path / str(TEST_THREAD_ID)
+
+    if w_thread_path:
+        thread_path.mkdir(parents=True)
+
+        if w_filename:
+            file_path = thread_path / TEST_FILENAME
+            file_path.write_text(f"filename: {TEST_FILENAME}")
+
+    room_config = mock.create_autospec(config_rooms.RoomConfig)
+    cuir.return_value = room_config
+
+    the_installation = mock.create_autospec(
+        installation.Installation,
+    )
+
+    if w_upload_path:
+        the_installation.threads_upload_path = str(thread_uploads_path)
+    else:
+        the_installation.threads_upload_path = None
+
+    the_authz_policy = mock.create_autospec(
+        authz_package.AuthorizationPolicy,
+    )
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    with expectation as expected:
+        found = await file_uploads_views.get_uploads_room_thread_filename(
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID,
+            filename=TEST_FILENAME,
+            the_installation=the_installation,
+            the_authz_policy=the_authz_policy,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+    if expected is None:
+        assert found == str(file_path)
+
+    the_logger.debug.assert_called_once_with(
+        loggers.UPLOADS_GET_ROOM_THREAD_FILE,
     )
 
 

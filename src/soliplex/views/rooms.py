@@ -183,7 +183,7 @@ async def get_room_documents(
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
-) -> models.RoomDocuments:
+) -> models.RoomRAGDocuments:
     """Return a list of the documents in the room's RAG database"""
     the_logger.debug(loggers.ROOM_GET_ROOM_DOCUMENTS)
 
@@ -220,7 +220,7 @@ async def get_room_documents(
                 updated_at=document.updated_at,
             )
 
-    return models.RoomDocuments(
+    return models.RoomRAGDocuments(
         room_id=room_id,
         document_set=document_set,
     )

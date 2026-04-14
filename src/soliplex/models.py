@@ -558,9 +558,25 @@ class RAGDocument(pydantic.BaseModel):
 RAGDocumentSet = dict[str, RAGDocument]
 
 
-class RoomDocuments(pydantic.BaseModel):
+class RoomRAGDocuments(pydantic.BaseModel):
     room_id: str
     document_set: RAGDocumentSet
+
+
+class FileUpload(pydantic.BaseModel):
+    filename: str
+    url: pydantic.HttpUrl
+
+
+class RoomUploads(pydantic.BaseModel):
+    room_id: str
+    uploads: list[FileUpload]
+
+
+class ThreadUploads(pydantic.BaseModel):
+    room_id: str
+    thread_id: str
+    uploads: list[FileUpload]
 
 
 # ----------------------------------------------------------------------------

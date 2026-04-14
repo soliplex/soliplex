@@ -393,7 +393,7 @@ async def test_get_room_documents(
             the_logger=the_logger,
         )
 
-        assert found == models.RoomDocuments(
+        assert found == models.RoomRAGDocuments(
             room_id=ROOM_ID,
             document_set=exp_docs,
         )
