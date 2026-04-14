@@ -216,7 +216,7 @@ class Run(Base):
 
     events: Mapped[list[RunEvent]] = relationship(
         back_populates="run",
-        order_by="RunEvent.created",
+        order_by="RunEvent.created, RunEvent.id_",
         cascade="all, delete",
         passive_deletes=True,
     )
