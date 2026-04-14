@@ -70,9 +70,7 @@ def _create_async_engine(url, **kwargs):
 
     if "sqlite" in url:
 
-        @listens_for(
-            engine.sync_engine, "connect"
-        )
+        @listens_for(engine.sync_engine, "connect")
         def _set_sqlite_pragma(  # pragma: no cover
             dbapi_connection, connection_record
         ):

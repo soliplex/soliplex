@@ -1491,16 +1491,12 @@ async def test_create_async_engine_sqlite_file(tmp_path):
     import sqlite3
 
     with sqlite3.connect(str(db_path)) as conn:
-        (mode,) = conn.execute(
-            "PRAGMA journal_mode"
-        ).fetchone()
+        (mode,) = conn.execute("PRAGMA journal_mode").fetchone()
         assert mode == "wal"
 
     # Engine works and the event listener fires
     async with engine.begin() as conn:
-        rows = await conn.exec_driver_sql(
-            "PRAGMA synchronous"
-        )
+        rows = await conn.exec_driver_sql("PRAGMA synchronous")
         (value,) = rows.fetchone()
         # NORMAL = 1
         assert value == 1
@@ -1510,12 +1506,8 @@ async def test_create_async_engine_sqlite_file(tmp_path):
 
 def test_create_async_engine_non_sqlite():
     url = "postgresql+asyncpg://localhost/testdb"
-    with mock.patch.object(
-        sqla_asyncio, "create_async_engine"
-    ) as cae:
-        engine = installation._create_async_engine(
-            url, pool_pre_ping=True
-        )
+    with mock.patch.object(sqla_asyncio, "create_async_engine") as cae:
+        engine = installation._create_async_engine(url, pool_pre_ping=True)
     cae.assert_called_once_with(
         url,
         connect_args={},
@@ -1532,8 +1524,6 @@ async def test_create_async_engine_memory():
     # In-memory databases should not use NullPool
     from sqlalchemy.pool import NullPool
 
-    assert not isinstance(
-        engine.pool, NullPool
-    )
+    assert not isinstance(engine.pool, NullPool)
 
     await engine.dispose()
