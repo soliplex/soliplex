@@ -71,9 +71,11 @@ class TestFormatMessage:
             id="1",
             content=[
                 agui_core.TextInputContent(text="Part one"),
-                agui_core.BinaryInputContent(
-                    mime_type="image/png",
-                    data="abc",
+                agui_core.ImageInputContent(
+                    source=agui_core.InputContentDataSource(
+                        mime_type="image/png",
+                        value="abc",
+                    ),
                 ),
                 agui_core.TextInputContent(text="Part two"),
             ],
@@ -84,9 +86,11 @@ class TestFormatMessage:
         msg = agui_core.UserMessage(
             id="1",
             content=[
-                agui_core.BinaryInputContent(
-                    mime_type="image/png",
-                    data="abc",
+                agui_core.ImageInputContent(
+                    source=agui_core.InputContentDataSource(
+                        mime_type="image/png",
+                        value="abc",
+                    ),
                 ),
             ],
         )
