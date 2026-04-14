@@ -53,6 +53,6 @@ The agent should:
 
 ## Expected Answer
 
-```
+```text
 1149.90
 ```

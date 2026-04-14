@@ -129,9 +129,9 @@ The development service:
 
     The `./db` directory is mounted to persist:
 
-    - RAG vector database (`db/rag/`)
-    - Thread persistence database
-    - Room authorization database
+   - RAG vector database (`db/rag/`)
+   - Thread persistence database
+   - Room authorization database
 
 ### Common Commands
 

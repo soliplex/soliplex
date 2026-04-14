@@ -1,7 +1,7 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version matching your devenv setup
-    rev: v0.15.7
+    rev: v0.15.10
     hooks:
       - id: ruff-format
         types: [python]
@@ -18,14 +18,14 @@ repos:
       - id: check-yaml
       - id: debug-statements
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.21.2
+    rev: v8.30.0
     hooks:
       - id: gitleaks
   - repo: local
     hooks:
       - id: pip-audit
         name: pip-audit
-        #ignore CVE-2025-69872 as not fixed        
+        #ignore CVE-2025-69872 as not fixed
         entry: uv run --with pip-audit pip-audit  --ignore-vuln CVE-2025-69872
         language: system
         pass_filenames: false
