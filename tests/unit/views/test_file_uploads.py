@@ -1,5 +1,6 @@
 import contextlib
 import io
+import uuid
 from unittest import mock
 
 import fastapi
@@ -20,7 +21,7 @@ EMAIL = "phreddy@example.com"
 THE_USER_CLAIMS = {"preferred_username": USER_NAME, "email": EMAIL}
 
 TEST_ROOM_ID = "test-room-id"
-TEST_THREAD_ID = "test-thread-id"
+TEST_THREAD_ID = uuid.uuid4()
 TEST_FILENAME = "test_file.txt"
 TEST_CONTENT = b"DEADBEEF"
 
@@ -155,7 +156,7 @@ async def test_post_uploads_room(
     [
         (None, True, no_error(204)),
         (
-            agui_package.UnknownThread(USER_NAME, TEST_THREAD_ID),
+            agui_package.UnknownThread(USER_NAME, str(TEST_THREAD_ID)),
             True,
             raises_httpexc(code=404, match="Unknown thread"),
         ),
@@ -214,13 +215,15 @@ async def test_post_uploads_room_thread(
 
     if not isinstance(expected, pytest.ExceptionInfo):
         assert response.status_code == expected
-        exp_file = uploads_path / "threads" / TEST_THREAD_ID / exp_filename
+        exp_file = (
+            uploads_path / "threads" / str(TEST_THREAD_ID) / exp_filename
+        )
         assert exp_file.read_bytes() == TEST_CONTENT
 
     the_threads.get_thread.assert_called_once_with(
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
-        thread_id=TEST_THREAD_ID,
+        thread_id=str(TEST_THREAD_ID),
     )
 
     the_logger.debug.assert_called_once_with(

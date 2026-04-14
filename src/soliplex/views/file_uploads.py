@@ -1,6 +1,7 @@
 import pathlib
 
 import fastapi
+import pydantic
 
 from soliplex import agui as agui_package
 from soliplex import authn as authn_package
@@ -82,7 +83,7 @@ async def post_uploads_room(
 @router.post("/v1/uploads/{room_id}/{thread_id}", status_code=204)
 async def post_uploads_room_thread(
     room_id: str,
-    thread_id: str,
+    thread_id: pydantic.UUID4,
     upload_file: fastapi.UploadFile,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
@@ -95,6 +96,7 @@ async def post_uploads_room_thread(
     Body of request must be a file matching the `Content-Type' header
     of the request.
     """
+    thread_id = str(thread_id)
     the_logger.debug(loggers.UPLOADS_POST_ROOM_THREAD)
 
     user_name = the_user_claims.get("preferred_username", "<unknown>")
