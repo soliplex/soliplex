@@ -3503,7 +3503,7 @@ requires-dist = [
     { name = "authlib" },
     { name = "bubble-sandbox", specifier = ">=0.3.0,<0.4" },
     { name = "certifi", specifier = ">=2025.11.12" },
-    { name = "fakeredis", specifier = ">=2.34.1,<2.35" },
+    { name = "fakeredis", specifier = "!=2.35.0" },
     { name = "fastapi" },
     { name = "fastmcp", specifier = ">=2.14.0,<2.15" },
     { name = "greenlet" },
