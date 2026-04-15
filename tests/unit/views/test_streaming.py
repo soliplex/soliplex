@@ -1,4 +1,5 @@
 import asyncio
+import time
 from unittest import mock
 
 import fastapi
@@ -60,13 +61,13 @@ async def test_stream_sse_with_keepalive_w_timeout():
     poll_interval = 0.1
     sleep_interval = 0.5
     events = ["data: only one\n\n"]
-    expected = [": keepalive\n\n"] + events
 
     async def event_stream():
         for event in events:
             await asyncio.sleep(sleep_interval)
             yield event
 
+    before = time.monotonic()
     found = [
         event
         async for event in views_streaming.stream_sse_with_keepalive(
@@ -75,8 +76,17 @@ async def test_stream_sse_with_keepalive_w_timeout():
             poll_interval_secs=poll_interval,
         )
     ]
+    after = time.monotonic()
 
-    assert found == expected
+    first, *rest = found
+    exp_prefix = ": keepalive "
+    exp_suffix = "\n\n"
+    assert first.startswith(exp_prefix)
+    assert first.endswith(exp_suffix)
+
+    timestamp = float(first[len(exp_prefix) : -len(exp_suffix)])
+    assert before <= timestamp <= after
+    assert rest == events
 
 
 @pytest.mark.asyncio
