@@ -579,6 +579,58 @@ async def save_thread_run_events(
         )
 
 
+async def save_single_event(
+    sqla_engine,
+    user_name: str,
+    room_id: str,
+    thread_id: str,
+    run_id: str,
+    event,
+    event_index: int,
+):
+    """Save a single event to the database.
+
+    This function builds its own session, because the one bound
+    to the request lifetime in the `the_threads` dependency might
+    have been closed (e.g., with an early connection reset).
+    """
+    async with sqla_asyncio.AsyncSession(bind=sqla_engine) as session:
+        the_threads = agui_persistence.ThreadStorage(session)
+
+        await the_threads.save_single_event(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+            event=event,
+            event_index=event_index,
+        )
+
+
+async def finish_run(
+    sqla_engine,
+    user_name: str,
+    room_id: str,
+    thread_id: str,
+    run_id: str,
+):
+    """Mark a run as finished in the database.
+
+    This function builds its own session, because the one bound
+    to the request lifetime in the `the_threads` dependency might
+    have been closed (e.g., with an early connection reset).
+    """
+    async with sqla_asyncio.AsyncSession(bind=sqla_engine) as session:
+        the_threads = agui_persistence.ThreadStorage(session)
+
+        await the_threads.finish_run(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+        )
+
+
 async def drive_llm_stream(
     llm_stream,
     sqla_engine,
@@ -593,6 +645,9 @@ async def drive_llm_stream(
     """Primary consumer of LLM event stream
 
     Always runs to completion.
+
+    Events are pushed to the queue (for the live SSE client) and
+    saved to the database incrementally (for reconnect).
     """
     with logfire.span(
         "AG-UI event stream: {room_id}/{thread_id}/{run_id}",
@@ -603,17 +658,36 @@ async def drive_llm_stream(
         event_list = []
         error_message = None
         status = None
+        event_index = 0
         try:
             async for event in llm_stream:
                 event_list.append(event)
                 await event_queue.put(event)
+
+                try:
+                    await save_single_event(
+                        sqla_engine,
+                        user_name=user_name,
+                        room_id=room_id,
+                        thread_id=thread_id,
+                        run_id=run_id,
+                        event=event,
+                        event_index=event_index,
+                    )
+                except sqla_exc.SQLAlchemyError as sa_exc:
+                    logfire.error(
+                        "Error saving event {event_index}: {error_message}",
+                        event_index=event_index,
+                        error_message=str(sa_exc),
+                    )
+
+                event_index += 1
         finally:
             await event_queue.put(None)  # sentinel
 
             try:
-                await save_thread_run_events(
-                    event_list=event_list,
-                    sqla_engine=sqla_engine,
+                await finish_run(
+                    sqla_engine,
                     user_name=user_name,
                     room_id=room_id,
                     thread_id=thread_id,
@@ -621,7 +695,7 @@ async def drive_llm_stream(
                 )
             except sqla_exc.SQLAlchemyError as sa_exc:
                 logfire.error(
-                    "Error saving run events: {error_message}",
+                    "Error finishing run: {error_message}",
                     error_message=str(sa_exc),
                 )
                 raise
@@ -698,6 +772,27 @@ async def init_agent_stream(
         await drive_llm_stream(llm_stream=compacted, **drive_kwargs)
 
 
+def parse_last_event_id(header_value: str | None):
+    """Parse a ``Last-Event-ID`` header value.
+
+    Expected format: ``{run_id}:{event_index}``
+
+    Returns ``(run_id, event_index)`` or ``None`` if the header is
+    absent or malformed.
+    """
+    if header_value is None:
+        return None
+
+    parts = header_value.rsplit(":", 1)
+    if len(parts) != 2:
+        return None
+
+    try:
+        return parts[0], int(parts[1])
+    except ValueError:
+        return None
+
+
 @util.logfire_span("POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}")
 @router.post("/v1/rooms/{room_id}/agui/{thread_id}/{run_id}")
 async def post_room_agui_thread_id_run_id(
@@ -714,12 +809,75 @@ async def post_room_agui_thread_id_run_id(
     """Execute an AGUI run
 
     Stream AGUI events in the response.
+
+    If the request includes a ``Last-Event-ID`` header, the handler
+    reconnects to an existing (possibly still in-progress) run by
+    replaying persisted events from the database.
     """
     thread_id = str(thread_id)
     run_id = str(run_id)
     the_logger.debug(loggers.AGUI_POST_ROOM_THREAD_RUN)
 
     user_name = the_user_claims.get("preferred_username", "<unknown>")
+
+    # --- SSE Reconnect path ---
+    last_event_id = parse_last_event_id(
+        request.headers.get("last-event-id"),
+    )
+
+    if last_event_id is not None:
+        _, after_index = last_event_id
+
+        await _check_user_in_room(
+            room_id=room_id,
+            the_installation=the_installation,
+            the_authz_policy=the_authz_policy,
+            the_user_claims=the_user_claims,
+            the_logger=the_logger,
+        )
+
+        agui_adapter = await ai_ag_ui.AGUIAdapter.from_request(
+            request=request,
+            agent=(
+                await the_installation.get_agent_for_room(
+                    room_id=room_id,
+                    user=the_user_claims,
+                    the_authz_policy=the_authz_policy,
+                    the_logger=the_logger,
+                )
+            ),
+        )
+
+        db_event_stream = streaming_views.stream_from_db(
+            the_threads,
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+            after_index=after_index,
+        )
+
+        sse_stream = agui_adapter.encode_stream(db_event_stream)
+
+        w_ids_stream = streaming_views.add_sse_event_ids(
+            sse_stream,
+            run_id=run_id,
+            start_index=after_index + 1,
+        )
+
+        w_keepalive_stream = streaming_views.stream_sse_with_keepalive(
+            w_ids_stream,
+            request=request,
+            log_info=logfire.info,
+        )
+
+        return responses.StreamingResponse(
+            w_keepalive_stream,
+            media_type=agui_adapter.accept,
+            headers=streaming_views.HEADERS_DO_NOT_BUFFER_SSE,
+        )
+
+    # --- Normal (first-connect) path ---
     user, agent = await _check_user_room_agent(
         room_id=room_id,
         the_installation=the_installation,
@@ -803,9 +961,15 @@ async def post_room_agui_thread_id_run_id(
         stream_llm_events(event_queue),
     )
 
+    # Inject SSE event IDs for reconnect support
+    w_ids_stream = streaming_views.add_sse_event_ids(
+        sse_stream,
+        run_id=run_id,
+    )
+
     # Wrap the response stream w/ keepalives, cancellation detection
     w_keepalive_stream = streaming_views.stream_sse_with_keepalive(
-        sse_stream,
+        w_ids_stream,
         request=request,
         log_info=logfire.info,
     )

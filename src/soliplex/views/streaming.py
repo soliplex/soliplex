@@ -98,6 +98,84 @@ async def stream_sse_with_keepalive(
             pending.cancel()
 
 
+SSE_RECONNECT_POLL_INTERVAL_SECS = 0.2
+
+
+async def add_sse_event_ids(
+    encoded_stream,
+    run_id: str,
+    start_index: int = 0,
+):
+    """Wrap an encoded SSE stream to inject ``id:`` fields.
+
+    Each ``data:`` frame is prefixed with
+    ``id: {run_id}:{event_index}\\n`` so that clients can reconnect
+    using the ``Last-Event-ID`` header.
+
+    Non-data frames (keepalives, comments) pass through unchanged.
+    """
+    index = start_index
+    async for encoded in encoded_stream:
+        if encoded.startswith("data:"):
+            yield f"id: {run_id}:{index}\n{encoded}"
+            index += 1
+        else:
+            yield encoded
+
+
+async def stream_from_db(
+    the_threads,
+    *,
+    user_name: str,
+    room_id: str,
+    thread_id: str,
+    run_id: str,
+    after_index: int = -1,
+    poll_interval_secs: float = SSE_RECONNECT_POLL_INTERVAL_SECS,
+):
+    """Yield ``(event_index, event)`` tuples by polling the DB.
+
+    Used for SSE reconnect: reads persisted events written by the
+    background ``drive_llm_stream`` task.  Stops when the run is
+    marked finished and all remaining events have been drained.
+    """
+    while True:
+        pairs = await the_threads.list_run_events_after(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+            after_index=after_index,
+        )
+
+        for idx, event in pairs:
+            yield event
+            after_index = idx
+
+        finished = await the_threads.is_run_finished(
+            user_name=user_name,
+            room_id=room_id,
+            thread_id=thread_id,
+            run_id=run_id,
+        )
+
+        if finished:
+            # Drain any final events written between the last
+            # query and the finished flag being set.
+            final = await the_threads.list_run_events_after(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+                after_index=after_index,
+            )
+            for _idx, event in final:
+                yield event
+            break
+
+        await asyncio.sleep(poll_interval_secs)
+
+
 @util.logfire_span("GET /ssetest")
 @router.get("/ssetest", tags=["streaming"])
 async def sse_endpoint():  # pragma: NO COVER

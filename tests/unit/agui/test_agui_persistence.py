@@ -1061,3 +1061,135 @@ async def test_threadstorage_save_run_events(
     ):
         assert found_event == exp_event
         assert db_event == exp_event
+
+
+@pytest.mark.asyncio
+async def test_threadstorage_save_single_event(the_async_session):
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    thread = await ts.new_thread(
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+    )
+
+    thread_id = await thread.awaitable_attrs.thread_id
+
+    (run,) = await thread.list_runs()
+
+    run_id = await run.awaitable_attrs.run_id
+
+    await the_async_session.commit()
+
+    event_0 = agui_constants.TEXT_MESSAGE_START_EVENT
+    event_1 = agui_constants.TEXT_MESSAGE_CONTENT_EVENT
+
+    await ts.save_single_event(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=run_id,
+        event=event_0,
+        event_index=0,
+    )
+
+    await the_async_session.commit()
+
+    await ts.save_single_event(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=run_id,
+        event=event_1,
+        event_index=1,
+    )
+
+    await the_async_session.commit()
+
+    # Verify events were persisted
+    pairs = await ts.list_run_events_after(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=run_id,
+        after_index=-1,
+    )
+
+    assert len(pairs) == 2
+    assert pairs[0][0] == 0
+    assert pairs[0][1] == event_0
+    assert pairs[1][0] == 1
+    assert pairs[1][1] == event_1
+
+    # Query with after_index=0 should only return the second
+    pairs_after = await ts.list_run_events_after(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=run_id,
+        after_index=0,
+    )
+
+    assert len(pairs_after) == 1
+    assert pairs_after[0][0] == 1
+    assert pairs_after[0][1] == event_1
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.agui.util._timestamp")
+async def test_threadstorage_finish_run(
+    ts_mock,
+    the_async_session,
+):
+    ts_mock.return_value = NOW
+
+    ts = agui_persistence.ThreadStorage(the_async_session)
+
+    thread = await ts.new_thread(
+        user_name=USER_NAME,
+        email=EMAIL,
+        room_id=ROOM_ID,
+    )
+
+    thread_id = await thread.awaitable_attrs.thread_id
+
+    (run,) = await thread.list_runs()
+
+    run_id = await run.awaitable_attrs.run_id
+
+    await the_async_session.commit()
+
+    # Run not yet finished
+    is_fin = await ts.is_run_finished(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=run_id,
+    )
+    assert is_fin is False
+
+    await the_async_session.commit()
+
+    # Mark it finished
+    await ts.finish_run(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=run_id,
+    )
+
+    await the_async_session.commit()
+
+    # Now it should be finished
+    is_fin = await ts.is_run_finished(
+        user_name=USER_NAME,
+        room_id=ROOM_ID,
+        thread_id=thread_id,
+        run_id=run_id,
+    )
+    assert is_fin is True
+
+    await the_async_session.commit()
+
+    finished = await run.awaitable_attrs.finished
+    assert finished == NOW.replace(tzinfo=None)

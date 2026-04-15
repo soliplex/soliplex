@@ -339,6 +339,118 @@ class ThreadStorage(agui_package.ThreadStorage):
 
         return run
 
+    async def save_single_event(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+        event: agui_core.Event,
+        event_index: int,
+    ) -> None:
+        """Save a single event for a run (incremental persistence)"""
+        await self._session.commit()
+
+        async with self.session as session:
+            run = await self._find_thread_run(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+                session=session,
+            )
+
+            data = event.model_dump(mode="json")
+            session.add(
+                agui_schema.RunEvent(
+                    run=run,
+                    data=data,
+                    event_index=event_index,
+                )
+            )
+
+    async def finish_run(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+    ) -> None:
+        """Mark a run as finished"""
+        await self._session.commit()
+
+        async with self.session as session:
+            run = await self._find_thread_run(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+                session=session,
+            )
+
+            run.finished = agui_util._timestamp()
+            session.add(run)
+
+    async def list_run_events_after(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+        after_index: int,
+    ) -> list[tuple[int, agui_core.Event]]:
+        """Return events with event_index > after_index"""
+        await self._session.commit()
+
+        async with self.session as session:
+            run = await self._find_thread_run(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+                session=session,
+            )
+
+            query = (
+                sqla_sql.select(agui_schema.RunEvent)
+                .where(agui_schema.RunEvent.run == run)
+                .where(
+                    agui_schema.RunEvent.event_index > after_index,
+                )
+                .order_by(agui_schema.RunEvent.event_index)
+            )
+
+            result = await session.scalars(query)
+
+            return [
+                (row.event_index, row.to_agui_model()) for row in result.all()
+            ]
+
+    async def is_run_finished(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+    ) -> bool:
+        """Return True if the run has a 'finished' timestamp"""
+        await self._session.commit()
+
+        async with self.session as session:
+            run = await self._find_thread_run(
+                user_name=user_name,
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=run_id,
+                session=session,
+            )
+
+            return run.finished is not None
+
     async def save_run_events(
         self,
         *,

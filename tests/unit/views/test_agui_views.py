@@ -1067,9 +1067,89 @@ async def test_save_thread_run_events(a_session, t_storage):
 
 
 @pytest.mark.asyncio
+@mock.patch("soliplex.agui.persistence.ThreadStorage")
+@mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
+async def test_save_single_event_helper(a_session, t_storage):
+    w_session = a_session.return_value.__aenter__.return_value
+    the_threads = t_storage.return_value
+    the_threads.save_single_event = mock.AsyncMock(spec_set=())
+    sqla_engine = object()
+    event = object()
+
+    await agui_views.save_single_event(
+        sqla_engine,
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
+        event=event,
+        event_index=7,
+    )
+
+    the_threads.save_single_event.assert_called_once_with(
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
+        event=event,
+        event_index=7,
+    )
+
+    t_storage.assert_called_once_with(w_session)
+    a_session.assert_called_once_with(bind=sqla_engine)
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.agui.persistence.ThreadStorage")
+@mock.patch("sqlalchemy.ext.asyncio.AsyncSession")
+async def test_finish_run_helper(a_session, t_storage):
+    w_session = a_session.return_value.__aenter__.return_value
+    the_threads = t_storage.return_value
+    the_threads.finish_run = mock.AsyncMock(spec_set=())
+    sqla_engine = object()
+
+    await agui_views.finish_run(
+        sqla_engine,
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
+    )
+
+    the_threads.finish_run.assert_called_once_with(
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
+    )
+
+    t_storage.assert_called_once_with(w_session)
+    a_session.assert_called_once_with(bind=sqla_engine)
+
+
+@pytest.mark.parametrize(
+    "header, expected",
+    [
+        (None, None),
+        ("", None),
+        ("malformed", None),
+        ("run-1:abc", None),
+        ("run-1:0", ("run-1", 0)),
+        ("run-1:42", ("run-1", 42)),
+        (
+            "a1b2c3d4-e5f6-7890-abcd-ef1234567890:99",
+            ("a1b2c3d4-e5f6-7890-abcd-ef1234567890", 99),
+        ),
+    ],
+)
+def test_parse_last_event_id(header, expected):
+    assert agui_views.parse_last_event_id(header) == expected
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("w_event_count", [0, 1, 10])
 @pytest.mark.parametrize(
-    "w_stre_error, stre_expectation",
+    "w_finish_error, finish_expectation",
     [
         (False, contextlib.nullcontext()),
         (True, pytest.raises(sqla_exc.SQLAlchemyError)),
@@ -1078,16 +1158,18 @@ async def test_save_thread_run_events(a_session, t_storage):
 @pytest.mark.parametrize("w_finished_error", [None, "finished", "error"])
 @pytest.mark.parametrize("w_title_config", [False, True])
 @mock.patch("soliplex.views.agui.titles.maybe_generate_title")
-@mock.patch("soliplex.views.agui.save_thread_run_events")
+@mock.patch("soliplex.views.agui.finish_run")
+@mock.patch("soliplex.views.agui.save_single_event")
 @mock.patch("soliplex.views.agui.logfire")
 async def test_drive_llm_stream(
     logfire,
-    stre,
+    sse,
+    fr,
     maybe_gen_title,
     w_title_config,
     w_finished_error,
-    w_stre_error,
-    stre_expectation,
+    w_finish_error,
+    finish_expectation,
     w_event_count,
 ):
     sqla_engine = mock.AsyncMock(spec_set=())
@@ -1102,8 +1184,8 @@ async def test_drive_llm_stream(
     )
     error_event = agui_core.events.RunErrorEvent(message="test error")
 
-    if w_stre_error:
-        stre.side_effect = sqla_exc.SQLAlchemyError("stre error")
+    if w_finish_error:
+        fr.side_effect = sqla_exc.SQLAlchemyError("finish error")
 
     async def event_iter():
         for i_event in range(w_event_count):
@@ -1117,7 +1199,7 @@ async def test_drive_llm_stream(
 
     expected = [event async for event in event_iter()]
 
-    with stre_expectation as stre_expected:
+    with finish_expectation as finish_expected:
         await agui_views.drive_llm_stream(
             event_iter(),
             sqla_engine=sqla_engine,
@@ -1145,16 +1227,28 @@ async def test_drive_llm_stream(
 
     assert await event_queue.get() is None  # sentinel
 
-    stre.assert_called_once_with(
-        event_list=expected,
-        sqla_engine=sqla_engine,
+    # Each event should have been saved incrementally
+    assert sse.call_count == len(expected)
+    for i_call, exp_event in enumerate(expected):
+        sse.assert_any_call(
+            sqla_engine,
+            user_name=USER_NAME,
+            room_id=TEST_ROOM_ID,
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
+            event=exp_event,
+            event_index=i_call,
+        )
+
+    fr.assert_called_once_with(
+        sqla_engine,
         user_name=USER_NAME,
         room_id=TEST_ROOM_ID,
         thread_id=TEST_THREAD_ID_STR,
         run_id=TEST_RUN_ID_STR,
     )
 
-    if stre_expected is None:
+    if finish_expected is None:
         if len(expected) == 0:
             logfire.info.assert_called_once_with(
                 "Stream status: {status}",
@@ -1173,12 +1267,12 @@ async def test_drive_llm_stream(
 
     else:
         logfire.error.assert_called_once_with(
-            "Error saving run events: {error_message}",
-            error_message="stre error",
+            "Error finishing run: {error_message}",
+            error_message="finish error",
         )
 
     should_generate_title = (
-        stre_expected is None
+        finish_expected is None
         and w_finished_error == "finished"
         and w_title_config
     )
@@ -1195,6 +1289,47 @@ async def test_drive_llm_stream(
         )
     else:
         maybe_gen_title.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.views.agui.titles.maybe_generate_title")
+@mock.patch("soliplex.views.agui.finish_run")
+@mock.patch("soliplex.views.agui.save_single_event")
+@mock.patch("soliplex.views.agui.logfire")
+async def test_drive_llm_stream_save_event_error(
+    logfire,
+    sse,
+    fr,
+    maybe_gen_title,
+):
+    """save_single_event errors are logged but don't stop the stream."""
+    sse.side_effect = sqla_exc.SQLAlchemyError("db write failed")
+    sqla_engine = mock.AsyncMock(spec_set=())
+    event_queue = asyncio.Queue()
+
+    async def event_iter():
+        yield agui_core.events.RunFinishedEvent(
+            thread_id=TEST_THREAD_ID_STR,
+            run_id=TEST_RUN_ID_STR,
+        )
+
+    await agui_views.drive_llm_stream(
+        event_iter(),
+        sqla_engine=sqla_engine,
+        event_queue=event_queue,
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
+    )
+
+    # Event still queued despite save error
+    assert event_queue.qsize() == 2  # event + sentinel
+    logfire.error.assert_any_call(
+        "Error saving event {event_index}: {error_message}",
+        event_index=0,
+        error_message="db write failed",
+    )
 
 
 @pytest.mark.asyncio
@@ -1336,6 +1471,7 @@ async def test_init_agent_stream_with_skills(rags, ces, dls):
 )
 @mock.patch("fastapi.responses.StreamingResponse")
 @mock.patch("soliplex.views.streaming.stream_sse_with_keepalive")
+@mock.patch("soliplex.views.streaming.add_sse_event_ids")
 @mock.patch("soliplex.views.agui.stream_llm_events")
 @mock.patch("soliplex.views.agui.init_agent_stream")
 @mock.patch("soliplex.views.agui.capture_usage_after_stream")
@@ -1351,6 +1487,7 @@ async def test_post_room_agui_thread_id_run_id_streaming(
     cuas,
     ias,
     sle,
+    asei,
     sswk,
     frsr,
     the_threads,
@@ -1368,7 +1505,13 @@ async def test_post_room_agui_thread_id_run_id_streaming(
     state = mock.Mock()
     global_agui_bg_tasks = state.agui_background_tasks = set()
     app = mock.create_autospec(fastapi.FastAPI, state=state)
-    request = fastapi.Request(scope={"type": "http", "app": app})
+    request = fastapi.Request(
+        scope={
+            "type": "http",
+            "app": app,
+            "headers": [],
+        },
+    )
     sqla_engine = request.state.threads_engine = object()
 
     the_installation = mock.create_autospec(installation.Installation)
@@ -1416,9 +1559,14 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         )
 
         sswk.assert_called_once_with(
-            exp_sse_stream,
+            asei.return_value,
             request=request,
             log_info=logfire.info,
+        )
+
+        asei.assert_called_once_with(
+            exp_sse_stream,
+            run_id=TEST_RUN_ID_STR,
         )
 
         exp_adapter.encode_stream.assert_called_once_with(sle.return_value)
@@ -1496,6 +1644,104 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         assert len(global_agui_bg_tasks) == 1
 
     the_logger.debug.assert_called_once_with(loggers.AGUI_POST_ROOM_THREAD_RUN)
+
+
+@pytest.mark.asyncio
+@mock.patch("fastapi.responses.StreamingResponse")
+@mock.patch("soliplex.views.streaming.stream_sse_with_keepalive")
+@mock.patch("soliplex.views.streaming.add_sse_event_ids")
+@mock.patch("soliplex.views.streaming.stream_from_db")
+@mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
+@mock.patch("soliplex.views.agui._check_user_in_room")
+@mock.patch("soliplex.views.agui.logfire")
+async def test_post_room_agui_reconnect(
+    logfire,
+    cuir,
+    aga,
+    sfdb,
+    asei,
+    sswk,
+    frsr,
+    the_threads,
+):
+    """Reconnect path: Last-Event-ID present."""
+    agent = object()
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.get_agent_for_room = mock.AsyncMock(
+        return_value=agent,
+    )
+    the_authz_policy = mock.create_autospec(
+        authz_package.AuthorizationPolicy,
+    )
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    aga.from_request = mock.AsyncMock()
+    exp_adapter = aga.from_request.return_value
+    exp_adapter.encode_stream = mock.MagicMock()
+
+    last_event_id = f"{TEST_RUN_ID_STR}:5"
+    request = fastapi.Request(
+        scope={
+            "type": "http",
+            "headers": [
+                (b"last-event-id", last_event_id.encode()),
+            ],
+        },
+    )
+
+    found = await agui_views.post_room_agui_thread_id_run_id(
+        request,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_UUID,
+        run_id=TEST_RUN_ID_UUID,
+        the_installation=the_installation,
+        the_threads=the_threads,
+        the_authz_policy=the_authz_policy,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
+
+    assert found is frsr.return_value
+
+    frsr.assert_called_once_with(
+        sswk.return_value,
+        media_type=exp_adapter.accept,
+        headers=streaming_views.HEADERS_DO_NOT_BUFFER_SSE,
+    )
+
+    sswk.assert_called_once_with(
+        asei.return_value,
+        request=request,
+        log_info=logfire.info,
+    )
+
+    asei.assert_called_once_with(
+        exp_adapter.encode_stream.return_value,
+        run_id=TEST_RUN_ID_STR,
+        start_index=6,
+    )
+
+    sfdb.assert_called_once_with(
+        the_threads,
+        user_name=USER_NAME,
+        room_id=TEST_ROOM_ID,
+        thread_id=TEST_THREAD_ID_STR,
+        run_id=TEST_RUN_ID_STR,
+        after_index=5,
+    )
+
+    exp_adapter.encode_stream.assert_called_once_with(
+        sfdb.return_value,
+    )
+
+    cuir.assert_called_once_with(
+        room_id=TEST_ROOM_ID,
+        the_installation=the_installation,
+        the_authz_policy=the_authz_policy,
+        the_user_claims=THE_USER_CLAIMS,
+        the_logger=the_logger,
+    )
 
 
 @pytest.mark.anyio

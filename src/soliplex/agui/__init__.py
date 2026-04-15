@@ -362,6 +362,56 @@ class ThreadStorage(abc.ABC):
         """
 
     @abc.abstractmethod
+    async def save_single_event(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+        event: agui_core.Event,
+        event_index: int,
+    ) -> None:
+        """Save a single event for a run (incremental persistence)"""
+
+    @abc.abstractmethod
+    async def finish_run(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+    ) -> None:
+        """Mark a run as finished"""
+
+    @abc.abstractmethod
+    async def list_run_events_after(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+        after_index: int,
+    ) -> list[tuple[int, agui_core.Event]]:
+        """Return events with event_index > after_index
+
+        Each element is a (event_index, event) tuple.
+        """
+
+    @abc.abstractmethod
+    async def is_run_finished(
+        self,
+        *,
+        user_name: str,
+        room_id: str,
+        thread_id: str,
+        run_id: str,
+    ) -> bool:
+        """Return True if the run has a 'finished' timestamp"""
+
+    @abc.abstractmethod
     async def save_run_events(
         self,
         *,

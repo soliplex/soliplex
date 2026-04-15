@@ -135,3 +135,188 @@ async def test_stream_sse_with_keepalive_w_cancellation(w_request):
         "SSE generator cancelled {thread_id}/{run_id}",
         **exp_params,
     )
+
+
+# --- add_sse_event_ids tests ---
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "events, start_index, expected",
+    [
+        ([], 0, []),
+        (
+            ["data: {}\n\n"],
+            0,
+            ["id: run-1:0\ndata: {}\n\n"],
+        ),
+        (
+            ["data: a\n\n", "data: b\n\n"],
+            0,
+            ["id: run-1:0\ndata: a\n\n", "id: run-1:1\ndata: b\n\n"],
+        ),
+        (
+            [": keepalive\n\n", "data: x\n\n"],
+            0,
+            [": keepalive\n\n", "id: run-1:0\ndata: x\n\n"],
+        ),
+        (
+            ["data: a\n\n", "data: b\n\n"],
+            5,
+            ["id: run-1:5\ndata: a\n\n", "id: run-1:6\ndata: b\n\n"],
+        ),
+    ],
+)
+async def test_add_sse_event_ids(events, start_index, expected):
+    async def event_stream():
+        for event in events:
+            yield event
+
+    found = [
+        event
+        async for event in views_streaming.add_sse_event_ids(
+            event_stream(),
+            run_id="run-1",
+            start_index=start_index,
+        )
+    ]
+
+    assert found == expected
+
+
+# --- stream_from_db tests ---
+
+
+@pytest.mark.asyncio
+async def test_stream_from_db_finished_run():
+    """Run is already finished: replay events and stop."""
+    the_threads = mock.AsyncMock()
+
+    events = [
+        (0, mock.Mock(name="evt0")),
+        (1, mock.Mock(name="evt1")),
+    ]
+
+    the_threads.list_run_events_after = mock.AsyncMock(
+        side_effect=[events, []],
+    )
+    the_threads.is_run_finished = mock.AsyncMock(
+        return_value=True,
+    )
+
+    found = [
+        event
+        async for event in views_streaming.stream_from_db(
+            the_threads,
+            user_name="user",
+            room_id="room",
+            thread_id="thread",
+            run_id="run",
+            after_index=-1,
+        )
+    ]
+
+    assert found == [events[0][1], events[1][1]]
+
+
+@pytest.mark.asyncio
+async def test_stream_from_db_in_progress_run():
+    """Run is in progress: poll until finished."""
+    the_threads = mock.AsyncMock()
+
+    evt0 = (0, mock.Mock(name="evt0"))
+    evt1 = (1, mock.Mock(name="evt1"))
+
+    # First poll: one event, not finished
+    # Second poll: one more event, now finished
+    # Final drain: empty
+    the_threads.list_run_events_after = mock.AsyncMock(
+        side_effect=[
+            [evt0],
+            [evt1],
+            [],
+        ],
+    )
+    the_threads.is_run_finished = mock.AsyncMock(
+        side_effect=[False, True],
+    )
+
+    found = [
+        event
+        async for event in views_streaming.stream_from_db(
+            the_threads,
+            user_name="user",
+            room_id="room",
+            thread_id="thread",
+            run_id="run",
+            after_index=-1,
+            poll_interval_secs=0.01,
+        )
+    ]
+
+    assert found == [evt0[1], evt1[1]]
+
+
+@pytest.mark.asyncio
+async def test_stream_from_db_final_drain_has_events():
+    """Events arrive between last poll and finished flag."""
+    the_threads = mock.AsyncMock()
+
+    evt0 = (0, mock.Mock(name="evt0"))
+    evt1 = (1, mock.Mock(name="evt1"))
+
+    # First poll: one event, not finished
+    # Second poll: empty, now finished
+    # Final drain: one late event
+    the_threads.list_run_events_after = mock.AsyncMock(
+        side_effect=[
+            [evt0],
+            [],
+            [evt1],
+        ],
+    )
+    the_threads.is_run_finished = mock.AsyncMock(
+        side_effect=[False, True],
+    )
+
+    found = [
+        event
+        async for event in views_streaming.stream_from_db(
+            the_threads,
+            user_name="user",
+            room_id="room",
+            thread_id="thread",
+            run_id="run",
+            after_index=-1,
+            poll_interval_secs=0.01,
+        )
+    ]
+
+    assert found == [evt0[1], evt1[1]]
+
+
+@pytest.mark.asyncio
+async def test_stream_from_db_empty_finished_run():
+    """Run finished with no events."""
+    the_threads = mock.AsyncMock()
+
+    the_threads.list_run_events_after = mock.AsyncMock(
+        side_effect=[[], []],
+    )
+    the_threads.is_run_finished = mock.AsyncMock(
+        return_value=True,
+    )
+
+    found = [
+        event
+        async for event in views_streaming.stream_from_db(
+            the_threads,
+            user_name="user",
+            room_id="room",
+            thread_id="thread",
+            run_id="run",
+            after_index=-1,
+        )
+    ]
+
+    assert found == []
