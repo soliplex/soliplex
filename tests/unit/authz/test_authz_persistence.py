@@ -228,3 +228,44 @@ async def test_authorizationpolicy_room_policy_crud(the_async_session):
 
     await ap.delete_room_policy(ROOM_ID, USER_TOKEN)
     await the_async_session.commit()
+
+
+@pytest.mark.asyncio
+async def test_authorizationpolicy_oidc_state_roundtrip(
+    the_async_session,
+):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+
+    await ap.create_oidc_state(
+        state="abc123",
+        nonce="nonce456",
+        redirect_uri="https://example.com/callback",
+        system="test-oidc",
+    )
+    await the_async_session.commit()
+
+    result = await ap.consume_oidc_state("abc123", "test-oidc")
+    await the_async_session.commit()
+
+    assert result == {
+        "nonce": "nonce456",
+        "redirect_uri": "https://example.com/callback",
+    }
+
+    # Second consume returns None (state was deleted)
+    result = await ap.consume_oidc_state("abc123", "test-oidc")
+    await the_async_session.commit()
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_authorizationpolicy_consume_oidc_state_not_found(
+    the_async_session,
+):
+    ap = authz_persistence.AuthorizationPolicy(the_async_session)
+
+    result = await ap.consume_oidc_state("nonexistent", "test-oidc")
+    await the_async_session.commit()
+
+    assert result is None
