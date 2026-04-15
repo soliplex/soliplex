@@ -1403,6 +1403,11 @@ def test_find_skill_toolset_returns_none_when_absent():
     assert agui_views._find_skill_toolset(agent) is None
 
 
+def test_find_skill_toolset_returns_none_without_toolsets_attr():
+    agent = object()
+    assert agui_views._find_skill_toolset(agent) is None
+
+
 def test_find_skill_toolset_returns_skill_toolset():
     from haiku.skills import agent as hs_agent
 

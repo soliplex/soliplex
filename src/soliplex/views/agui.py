@@ -41,7 +41,7 @@ depend_the_logger = views.depend_the_logger
 def _find_skill_toolset(
     agent: pydantic_ai.Agent,
 ) -> hs_agent.SkillToolset | None:
-    for toolset in agent.toolsets:
+    for toolset in getattr(agent, "toolsets", ()):
         if isinstance(toolset, hs_agent.SkillToolset):
             return toolset
     return None
