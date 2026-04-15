@@ -19,7 +19,8 @@ from soliplex import util
 
 SSE_POLL_INTERVAL_SECS = 2.0
 SSE_KEEPALIVE_INTERVAL_SECS = 15.0
-SSE_KEEPALIVE_MESSAGE = ": keepalive\n\n"  # no field name, ergo a comment
+# SSE message w/o field name before ':' -> a comment
+SSE_KEEPALIVE_MESSAGE = ": keepalive {now}\n\n"
 HEADERS_DO_NOT_BUFFER_SSE = {
     "Cache-Control": "no-cache, no-store",
     "X-Accel-Buffering": "no",
@@ -77,7 +78,7 @@ async def stream_sse_with_keepalive(
                 # Poll timed out — check for keepalive
                 now = time.monotonic()
                 if now - last_update >= keepalive_interval_secs:
-                    yield keepalive_message
+                    yield keepalive_message.format(now=now)
                     last_update = time.monotonic()
 
     except asyncio.CancelledError:
