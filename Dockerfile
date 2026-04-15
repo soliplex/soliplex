@@ -47,7 +47,7 @@ COPY --link sandbox/environments ./sandbox/environments
 RUN --mount=type=cache,target=/root/.cache/uv \
     for env_dir in /app/sandbox/environments/*/; do \
       if [ -f "$env_dir/pyproject.toml" ]; then \
-        cd "$env_dir" && uv sync --frozen && cd /app; \
+        uv --directory "$env_dir" sync --frozen; \
       fi; \
     done
 
