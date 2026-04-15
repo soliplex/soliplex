@@ -25,7 +25,7 @@ repos:
     hooks:
       - id: pip-audit
         name: pip-audit
-        #ignore CVE-2025-69872 as not fixed        
+        #ignore CVE-2025-69872 as not fixed
         entry: uv run --with pip-audit pip-audit  --ignore-vuln CVE-2025-69872
         language: system
         pass_filenames: false
@@ -36,9 +36,5 @@ repos:
     hooks:
       - id: pymarkdown
         args:
-          - "--set"
-          - "extensions.front-matter.enabled=$!True"
-          - "--disable-rules"
-          - "MD013,MD024,MD033,MD036,MD041,MD060"
           - "scan"
         exclude: ^ios/Runner/Assets\.xcassets/

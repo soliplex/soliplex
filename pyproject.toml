@@ -127,3 +127,14 @@ force-single-line = true
 
 [tool.ruff.lint.flake8-pytest-style]
 parametrize-names-type = "csv"
+
+[tool.pymarkdown]
+extensions.front-matter.enabled = true
+plugins.line-length.enabled = false             # md013
+plugins.no-duplicate-heading.enabled = false    # md024
+plugins.no-inline-html.enabled = false          # md033
+plugins.no-emphasis-as-heading.enabled = false  # md036
+plugins.first-line-heading.enabled = false      # md041
+plugins.code-block-style.enabled = false        # md046
+# There is no rule 'md060'
+# plugins.md060.enabled = false                 # md060
