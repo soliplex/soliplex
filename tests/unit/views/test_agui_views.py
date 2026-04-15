@@ -1233,9 +1233,9 @@ async def test_stream_llm_events(num_events):
 @mock.patch("fastapi.responses.StreamingResponse")
 @mock.patch("soliplex.views.streaming.stream_sse_with_keepalive")
 @mock.patch("soliplex.views.agui.stream_llm_events")
-@mock.patch("soliplex.views.agui.drive_llm_stream")
+@mock.patch("soliplex.views.agui._drive_event_stream")
 @mock.patch("soliplex.views.agui.capture_usage_after_stream")
-@mock.patch("soliplex.agui.compact_event_stream")
+@mock.patch("soliplex.views.agui._find_skill_toolset")
 @mock.patch("pydantic_ai.ui.ag_ui.AGUIAdapter")
 @mock.patch("soliplex.views.agui._check_user_room_agent")
 @mock.patch("soliplex.views.agui.logfire")
@@ -1243,9 +1243,9 @@ async def test_post_room_agui_thread_id_run_id_streaming(
     logfire,
     cura,
     aga,
-    ces,
+    fst,
     cuas,
-    dls,
+    des,
     sle,
     sswk,
     frsr,
@@ -1258,6 +1258,8 @@ async def test_post_room_agui_thread_id_run_id_streaming(
     USER_PROFILE = models.UserProfile(**AUTH_USER)
     agent = object()
     cura.return_value = (USER_PROFILE, agent)
+
+    exp_skill_toolset = fst.return_value
 
     state = mock.Mock()
     global_agui_bg_tasks = state.agui_background_tasks = set()
@@ -1284,8 +1286,6 @@ async def test_post_room_agui_thread_id_run_id_streaming(
     exp_adapter = aga.from_request.return_value
     exp_adapter.run_input = run_input
     exp_adapter.encode_stream = mock.MagicMock()
-    exp_adapter.run_stream = mock.MagicMock()
-    exp_agent_stream = exp_adapter.run_stream.return_value
 
     exp_sse_stream = exp_adapter.encode_stream.return_value
 
@@ -1323,34 +1323,32 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         assert sle.call_args_list[0].kwargs == {}
         (event_queue,) = sle.call_args_list[0].args
 
-        # asyncio.task starts 'drive_llm_stream' right away.
+        fst.assert_called_once_with(agent)
+
+        # asyncio.task starts '_drive_event_stream' right away.
         exp_title_config = the_installation.get_title_agent_config.return_value
-        dls.assert_called_once_with(
-            llm_stream=ces.return_value,
-            sqla_engine=sqla_engine,
-            event_queue=event_queue,
-            user_name=USER_NAME,
-            room_id=TEST_ROOM_ID,
-            thread_id=TEST_THREAD_ID_STR,
-            run_id=TEST_RUN_ID_STR,
-            title_agent_config=exp_title_config,
-            messages=exp_adapter.run_input.messages,
-        )
+        des.assert_called_once()
+        des_kwargs = des.call_args_list[0].kwargs
+        assert des_kwargs["skill_toolset"] is exp_skill_toolset
+        assert des_kwargs["agui_adapter"] is exp_adapter
+        assert des_kwargs["sqla_engine"] is sqla_engine
+        assert des_kwargs["event_queue"] is event_queue
+        assert des_kwargs["user_name"] == USER_NAME
+        assert des_kwargs["room_id"] == TEST_ROOM_ID
+        assert des_kwargs["thread_id"] == TEST_THREAD_ID_STR
+        assert des_kwargs["run_id"] == TEST_RUN_ID_STR
+        assert des_kwargs["title_agent_config"] is exp_title_config
+        assert des_kwargs["messages"] is exp_adapter.run_input.messages
 
-        ces.assert_called_once_with(exp_agent_stream)
-
-        exp_adapter.run_stream.assert_called_once()
-        (rs_call_0,) = exp_adapter.run_stream.call_args_list
-        assert rs_call_0.args == ()
-        assert rs_call_0.kwargs["deps"] is exp_deps
-        capture = rs_call_0.kwargs["on_complete"]
+        # Verify run_stream_kwargs contains deps and on_complete
+        rsk = des_kwargs["run_stream_kwargs"]
+        assert rsk["deps"] is exp_deps
+        capture = rsk["on_complete"]
         assert isinstance(capture, functools.partial)
         assert capture.func is cuas
 
-        rs_on_complete = rs_call_0.kwargs["on_complete"]
         faux_result = object()
-
-        await rs_on_complete(faux_result)
+        await capture(faux_result)
 
         cuas.assert_awaited_once_with(
             faux_result,
@@ -1394,6 +1392,100 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         assert len(global_agui_bg_tasks) == 1
 
     the_logger.debug.assert_called_once_with(loggers.AGUI_POST_ROOM_THREAD_RUN)
+
+
+# -- _find_skill_toolset ------------------------------------------------
+
+
+def test_find_skill_toolset_returns_none_when_absent():
+    agent = mock.MagicMock()
+    agent.toolsets = [mock.MagicMock(), mock.MagicMock()]
+    assert agui_views._find_skill_toolset(agent) is None
+
+
+def test_find_skill_toolset_returns_skill_toolset():
+    from haiku.skills import agent as hs_agent
+
+    skill_ts = mock.create_autospec(hs_agent.SkillToolset)
+    agent = mock.MagicMock()
+    agent.toolsets = [mock.MagicMock(), skill_ts]
+    assert agui_views._find_skill_toolset(agent) is skill_ts
+
+
+# -- _drive_event_stream -------------------------------------------------
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.views.agui.drive_llm_stream")
+@mock.patch("soliplex.agui.compact_event_stream")
+async def test_drive_event_stream_without_skills(ces, dls):
+    adapter = mock.MagicMock()
+    exp_agent_stream = adapter.run_stream.return_value
+    run_stream_kwargs = {"deps": object(), "on_complete": object()}
+    drive_kwargs = {
+        "sqla_engine": object(),
+        "event_queue": asyncio.Queue(),
+        "user_name": USER_NAME,
+        "room_id": TEST_ROOM_ID,
+        "thread_id": TEST_THREAD_ID_STR,
+        "run_id": TEST_RUN_ID_STR,
+        "title_agent_config": None,
+        "messages": [],
+    }
+
+    await agui_views._drive_event_stream(
+        skill_toolset=None,
+        agui_adapter=adapter,
+        run_stream_kwargs=run_stream_kwargs,
+        **drive_kwargs,
+    )
+
+    adapter.run_stream.assert_called_once_with(**run_stream_kwargs)
+    ces.assert_called_once_with(exp_agent_stream)
+    dls.assert_awaited_once_with(llm_stream=ces.return_value, **drive_kwargs)
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.views.agui.drive_llm_stream")
+@mock.patch("soliplex.agui.compact_event_stream")
+@mock.patch("soliplex.views.agui.hs_agent.run_agui_stream")
+async def test_drive_event_stream_with_skills(rags, ces, dls):
+    from haiku.skills import agent as hs_agent
+
+    skill_ts = mock.create_autospec(hs_agent.SkillToolset)
+    adapter = mock.MagicMock()
+    run_stream_kwargs = {"deps": object(), "on_complete": object()}
+    drive_kwargs = {
+        "sqla_engine": object(),
+        "event_queue": asyncio.Queue(),
+        "user_name": USER_NAME,
+        "room_id": TEST_ROOM_ID,
+        "thread_id": TEST_THREAD_ID_STR,
+        "run_id": TEST_RUN_ID_STR,
+        "title_agent_config": None,
+        "messages": [],
+    }
+
+    # run_agui_stream returns an async context manager
+    merged_stream = object()
+    rags_cm = mock.AsyncMock()
+    rags_cm.__aenter__.return_value = merged_stream
+    rags.return_value = rags_cm
+
+    await agui_views._drive_event_stream(
+        skill_toolset=skill_ts,
+        agui_adapter=adapter,
+        run_stream_kwargs=run_stream_kwargs,
+        **drive_kwargs,
+    )
+
+    rags.assert_called_once_with(skill_ts, adapter, **run_stream_kwargs)
+    rags_cm.__aenter__.assert_awaited_once()
+    rags_cm.__aexit__.assert_awaited_once()
+    ces.assert_called_once_with(merged_stream)
+    dls.assert_awaited_once_with(llm_stream=ces.return_value, **drive_kwargs)
+    # adapter.run_stream should NOT be called directly
+    adapter.run_stream.assert_not_called()
 
 
 @pytest.mark.anyio

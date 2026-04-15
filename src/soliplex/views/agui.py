@@ -9,6 +9,7 @@ import pydantic
 import pydantic_ai
 from ag_ui import core as agui_core
 from fastapi import responses
+from haiku.skills import agent as hs_agent
 from pydantic_ai.ui import ag_ui as ai_ag_ui
 from sqlalchemy import exc as sqla_exc
 from sqlalchemy.ext import asyncio as sqla_asyncio
@@ -35,6 +36,36 @@ depend_the_threads = agui_package.depend_the_threads
 depend_the_authz = authz_package.depend_the_authz_policy
 depend_the_user_claims = views.depend_the_user_claims
 depend_the_logger = views.depend_the_logger
+
+
+def _find_skill_toolset(
+    agent: pydantic_ai.Agent,
+) -> hs_agent.SkillToolset | None:
+    for toolset in agent.toolsets:
+        if isinstance(toolset, hs_agent.SkillToolset):
+            return toolset
+    return None
+
+
+async def _drive_event_stream(
+    *,
+    skill_toolset: hs_agent.SkillToolset | None,
+    agui_adapter: ai_ag_ui.AGUIAdapter,
+    run_stream_kwargs: dict,
+    **drive_kwargs,
+):
+    if skill_toolset is not None:
+        async with hs_agent.run_agui_stream(
+            skill_toolset,
+            agui_adapter,
+            **run_stream_kwargs,
+        ) as event_stream:
+            compacted = agui_package.compact_event_stream(event_stream)
+            await drive_llm_stream(llm_stream=compacted, **drive_kwargs)
+    else:
+        agent_stream = agui_adapter.run_stream(**run_stream_kwargs)
+        compacted = agui_package.compact_event_stream(agent_stream)
+        await drive_llm_stream(llm_stream=compacted, **drive_kwargs)
 
 
 async def _check_user_in_room(
@@ -730,19 +761,7 @@ async def post_room_agui_thread_id_run_id(
         the_logger=the_logger,
     )
 
-    agent_stream = agui_adapter.run_stream(
-        deps=agent_deps,
-        on_complete=functools.partial(
-            capture_usage_after_stream,
-            sqla_engine=request.state.threads_engine,
-            user_name=user_name,
-            room_id=room_id,
-            thread_id=thread_id,
-            run_id=run_id,
-        ),
-    )
-
-    compacted_stream = agui_package.compact_event_stream(agent_stream)
+    skill_toolset = _find_skill_toolset(agent)
 
     # We use an unbounded queue here, so that the 'drive_llm_stream'
     # task completes even when the SSE stream gets cancelled due to a
@@ -756,9 +775,20 @@ async def post_room_agui_thread_id_run_id(
 
     bg_tasks = request.app.state.agui_background_tasks
     task = asyncio.create_task(
-        # No 'await' here:  'create_task' *wants* a coroutine
-        drive_llm_stream(
-            llm_stream=compacted_stream,
+        _drive_event_stream(
+            skill_toolset=skill_toolset,
+            agui_adapter=agui_adapter,
+            run_stream_kwargs=dict(
+                deps=agent_deps,
+                on_complete=functools.partial(
+                    capture_usage_after_stream,
+                    sqla_engine=request.state.threads_engine,
+                    user_name=user_name,
+                    room_id=room_id,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                ),
+            ),
             sqla_engine=request.state.threads_engine,
             event_queue=event_queue,
             user_name=user_name,
