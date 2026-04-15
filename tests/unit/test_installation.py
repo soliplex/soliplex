@@ -5,8 +5,10 @@ from unittest import mock
 import fastapi
 import pytest
 import sqlalchemy
+import sqlite3
 from ag_ui import core as agui_core
 from sqlalchemy.ext import asyncio as sqla_asyncio
+from sqlalchemy import pool as sqla_pool  # NullPool
 
 from soliplex import agents
 from soliplex import agui as agui_package
@@ -1487,43 +1489,44 @@ async def test_create_async_engine_sqlite_file(tmp_path):
 
     engine = installation._create_async_engine(url)
 
-    # WAL mode is set on the database file
-    import sqlite3
+    try:
+        # WAL mode is set on the database file
 
-    with sqlite3.connect(str(db_path)) as conn:
-        (mode,) = conn.execute("PRAGMA journal_mode").fetchone()
-        assert mode == "wal"
+        with sqlite3.connect(str(db_path)) as conn:
+            (mode,) = conn.execute("PRAGMA journal_mode").fetchone()
+            assert mode == "wal"
 
-    # Engine works and the event listener fires
-    async with engine.begin() as conn:
-        rows = await conn.exec_driver_sql("PRAGMA synchronous")
-        (value,) = rows.fetchone()
-        # NORMAL = 1
-        assert value == 1
+        # Engine works and the event listener fires
+        async with engine.begin() as conn:
+            rows = await conn.exec_driver_sql("PRAGMA synchronous")
+            (value,) = rows.fetchone()
+            # NORMAL = 1
+            assert value == 1
 
-    await engine.dispose()
+    finally:
+        await engine.dispose()
 
 
 def test_create_async_engine_non_sqlite():
     url = "postgresql+asyncpg://localhost/testdb"
+
     with mock.patch.object(sqla_asyncio, "create_async_engine") as cae:
         engine = installation._create_async_engine(url, pool_pre_ping=True)
+
+    assert engine is cae.return_value
     cae.assert_called_once_with(
         url,
         connect_args={},
         pool_pre_ping=True,
     )
-    assert engine is cae.return_value
 
 
 @pytest.mark.asyncio
 async def test_create_async_engine_memory():
     url = "sqlite+aiosqlite:///:memory:"
     engine = installation._create_async_engine(url)
-
-    # In-memory databases should not use NullPool
-    from sqlalchemy.pool import NullPool
-
-    assert not isinstance(engine.pool, NullPool)
-
-    await engine.dispose()
+    try:
+        # In-memory databases should not use NullPool
+        assert not isinstance(engine.pool, sqla_pool.NullPool)
+    finally:
+        await engine.dispose()
