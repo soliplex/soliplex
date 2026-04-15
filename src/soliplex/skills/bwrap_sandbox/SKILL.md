@@ -46,13 +46,15 @@ STEP 1 — ALWAYS do this first: Write a script that discovers and
 reads ALL files from both mounted volumes. Print their names and
 contents (or summaries for large files):
 
-    import os, pathlib
-    for vol in ['/sandbox/volumes/room', '/sandbox/volumes/thread']:
-        p = pathlib.Path(vol)
-        if p.exists():
-            for f in sorted(p.iterdir()):
-                print(f'--- {f} ---')
-                print(f.read_text()[:2000])
+```python
+import os, pathlib
+for vol in ['/sandbox/volumes/room', '/sandbox/volumes/thread']:
+    p = pathlib.Path(vol)
+    if p.exists():
+        for f in sorted(p.iterdir()):
+            print(f'--- {f} ---')
+            print(f.read_text()[:2000])
+```
 
 Room files often contain instructions, formulas, data models, or
 business rules that are REQUIRED to answer the question correctly.
