@@ -88,7 +88,44 @@ class HTTP_MCP_Client_Toolset(ai_mcp.MCPServerStreamableHTTP):
         return _filter_tools(offered_tools, self.allowed_tools)
 
 
+class SSE_MCP_Client_Toolset(ai_mcp.MCPServerSSE):
+    def __init__(
+        self,
+        url: str,
+        headers: dict[str, typing.Any],
+        allowed_tools: list[str] = None,
+    ):  # pragma: NO COVER
+        super().__init__(url=url, headers=headers)
+        self._allowed_tools = allowed_tools or ()
+
+    @property
+    def _params(self):
+        return {
+            "url": self.url,
+            "headers": self.headers,
+            "allowed_tools": self.allowed_tools,
+        }
+
+    @property
+    def allowed_tools(self) -> list[str] | None:  # pragma: NO COVER
+        return list(self._allowed_tools)
+
+    async def list_tools(self) -> list[mcp_types.Tool]:  # pragma: NO COVER
+        """Retrieve tools that are currently active on the server.
+
+        Filter the tools offered by the server using our list of allowed
+        tools.
+
+        Note:
+        - We don't cache tools as they might change.
+        - We also don't subscribe to the server to avoid complexity.
+        """
+        offered_tools = await super().list_tools()
+        return _filter_tools(offered_tools, self.allowed_tools)
+
+
 TOOLSET_CLASS_BY_KIND = {
     "stdio": Stdio_MCP_Client_Toolset,
     "http": HTTP_MCP_Client_Toolset,
+    "sse": SSE_MCP_Client_Toolset,
 }

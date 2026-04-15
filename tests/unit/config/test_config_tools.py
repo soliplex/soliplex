@@ -229,6 +229,38 @@ FULL_HTTP_MCTC_CONFIG_YAML = """
       - "some_tool"
 """
 
+# This one raises
+BOGUS_SSE_MCTC_CONFIG_YAML = ""
+
+BARE_SSE_MCTC_CONFIG_KW = {
+    "url": "https://example.com/sse",
+}
+BARE_SSE_MCTC_CONFIG_YAML = """
+    url: "https://example.com/sse"
+"""
+
+FULL_SSE_MCTC_CONFIG_KW = {
+    "url": "https://example.com/sse",
+    "headers": {
+        "Authorization": "Bearer DEADBEEF",
+    },
+    "query_params": {
+        "foo": "bar",
+    },
+    "allowed_tools": [
+        "some_tool",
+    ],
+}
+FULL_SSE_MCTC_CONFIG_YAML = """
+    url: "https://example.com/sse"
+    headers:
+        Authorization: "Bearer DEADBEEF"
+    query_params:
+        foo: "bar"
+    allowed_tools:
+      - "some_tool"
+"""
+
 
 @pytest.fixture
 def patched_soliplex_tools():
@@ -970,6 +1002,125 @@ def test_http_mctc_tool_kwargs(
 
     else:
         assert found["url"] == http_mctc.url
+
+    for (f_key, f_val), (cfg_key, cfg_value) in zip(
+        found["headers"].items(),
+        w_headers.items(),
+        strict=True,
+    ):
+        assert f_key == cfg_key
+        assert f_val is installation_config.interpolate_secrets.return_value
+        assert (
+            mock.call(cfg_value)
+            in installation_config.interpolate_secrets.call_args_list
+        )
+
+
+@pytest.mark.parametrize(
+    "config_yaml, exp_config",
+    [
+        (BOGUS_SSE_MCTC_CONFIG_YAML, None),
+        (BARE_SSE_MCTC_CONFIG_YAML, BARE_SSE_MCTC_CONFIG_KW),
+        (FULL_SSE_MCTC_CONFIG_YAML, FULL_SSE_MCTC_CONFIG_KW),
+    ],
+)
+def test_sse_mctc_from_yaml(
+    installation_config,
+    temp_dir,
+    config_yaml,
+    exp_config,
+):
+    config_dir = temp_dir / "rooms" / "test_room"
+    config_dir.mkdir(parents=True)
+
+    config_path = config_dir / "room_config.yaml"
+    config_path.write_text(config_yaml)
+
+    with config_path.open() as stream:
+        config_dict = yaml.safe_load(stream)
+
+    if exp_config is None:
+        with pytest.raises(config_exc.FromYamlException) as exc:
+            config_tools.SSE_MCP_ClientToolsetConfig.from_yaml(
+                installation_config=installation_config,
+                config_path=config_path,
+                config_dict=config_dict,
+            )
+
+        assert exc.value._config_path == config_path
+
+    else:
+        sse_mctc = config_tools.SSE_MCP_ClientToolsetConfig.from_yaml(
+            installation_config=installation_config,
+            config_path=config_path,
+            config_dict=config_dict,
+        )
+        expected = config_tools.SSE_MCP_ClientToolsetConfig(
+            _installation_config=installation_config,
+            _config_path=config_path,
+            **exp_config,
+        )
+        assert sse_mctc == expected
+
+
+@pytest.mark.parametrize("w_headers", [{}, HTTP_MCP_AUTH_HEADER])
+@pytest.mark.parametrize("w_query_params", [{}, HTTP_MCP_QUERY_PARAMS])
+def test_sse_mctc_toolset_params(w_query_params, w_headers):
+    sse_mctc = config_tools.SSE_MCP_ClientToolsetConfig(
+        url=HTTP_MCP_URL,
+        headers=w_headers,
+        query_params=w_query_params,
+    )
+
+    found = sse_mctc.toolset_params
+
+    assert found["url"] == sse_mctc.url
+    assert found["query_params"] == sse_mctc.query_params
+    assert found["headers"] == sse_mctc.headers
+    assert found["allowed_tools"] == sse_mctc.allowed_tools
+
+
+@pytest.mark.parametrize("w_headers", [{}, HTTP_MCP_AUTH_HEADER])
+@pytest.mark.parametrize("w_query_params", [{}, HTTP_MCP_QUERY_PARAMS])
+def test_sse_mctc_tool_kwargs(
+    installation_config,
+    w_query_params,
+    w_headers,
+):
+    installation_config.get_secret.return_value = "<secret>"
+    installation_config.interpolate_secrets.return_value = "<interp>"
+
+    sse_mctc = config_tools.SSE_MCP_ClientToolsetConfig(
+        url=HTTP_MCP_URL,
+        headers=w_headers,
+        query_params=w_query_params,
+        _installation_config=installation_config,
+    )
+
+    found = sse_mctc.tool_kwargs
+
+    assert found["allowed_tools"] == sse_mctc.allowed_tools
+
+    if w_query_params:
+        base, qs = found["url"].split("?")
+        assert base == sse_mctc.url
+
+        qp_dict = dict(url_parse.parse_qsl(qs))
+
+        for (f_key, f_val), (cfg_key, cfg_value) in zip(
+            qp_dict.items(),
+            w_query_params.items(),
+            strict=True,
+        ):
+            assert f_key == cfg_key
+            assert f_val == installation_config.get_secret.return_value
+            assert (
+                mock.call(cfg_value)
+                in installation_config.get_secret.call_args_list
+            )
+
+    else:
+        assert found["url"] == sse_mctc.url
 
     for (f_key, f_val), (cfg_key, cfg_value) in zip(
         found["headers"].items(),

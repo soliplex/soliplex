@@ -887,6 +887,9 @@ async def test_installation_get_agent_for_room(
     mcp_http_streaming_config = mock.create_autospec(
         config_tools.HTTP_MCP_ClientToolsetConfig
     )
+    mcp_sse_config = mock.create_autospec(
+        config_tools.SSE_MCP_ClientToolsetConfig
+    )
 
     r_config = mock.create_autospec(config_rooms.RoomConfig)
     r_config.agent_config = a_config
@@ -907,6 +910,7 @@ async def test_installation_get_agent_for_room(
     mcp_configs = r_config.mcp_client_toolset_configs = {
         "test_stdio": mcp_stdio_config,
         "test_http": mcp_http_streaming_config,
+        "test_sse": mcp_sse_config,
     }
 
     r_configs = {"room_id": r_config}
@@ -997,6 +1001,9 @@ async def test_installation_get_agent_for_completion(
     mcp_http_streaming_config = mock.create_autospec(
         config_tools.HTTP_MCP_ClientToolsetConfig
     )
+    mcp_sse_config = mock.create_autospec(
+        config_tools.SSE_MCP_ClientToolsetConfig
+    )
 
     c_config = mock.create_autospec(config_completions.CompletionConfig)
     c_config.agent_config = a_config
@@ -1007,6 +1014,7 @@ async def test_installation_get_agent_for_completion(
     mcp_configs = c_config.mcp_client_toolset_configs = {
         "test_stdio": mcp_stdio_config,
         "test_http": mcp_http_streaming_config,
+        "test_sse": mcp_sse_config,
     }
 
     c_configs = {"completion_id": c_config}

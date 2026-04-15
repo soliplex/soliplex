@@ -57,6 +57,14 @@ HTTP_TOOL = mcp_client.HTTP_MCP_Client_Toolset(
     headers={},
 )
 
+SSE_MCTC = config_tools.SSE_MCP_ClientToolsetConfig(
+    url="https://example.com/sse",
+)
+SSE_TOOL = mcp_client.SSE_MCP_Client_Toolset(
+    url="https://example.com/sse",
+    headers={},
+)
+
 
 def test_tool():
     """This is a test"""
@@ -86,6 +94,7 @@ def tool_configs_tools(request):
         [],
         [(STDIO_MCTC, STDIO_TOOL)],
         [(HTTP_MCTC, HTTP_TOOL)],
+        [(SSE_MCTC, SSE_TOOL)],
     ],
 )
 def mcp_ct_configs_tools(request):
@@ -127,6 +136,7 @@ def test_make_ai_tool(w_aitp, exp_aitp):
     [
         (STDIO_MCTC, STDIO_TOOL),
         (HTTP_MCTC, HTTP_TOOL),
+        (SSE_MCTC, SSE_TOOL),
     ],
 )
 def test_make_mcp_client_toolset(mcp_toolset_config, expected):
