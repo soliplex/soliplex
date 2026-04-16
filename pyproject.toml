@@ -22,7 +22,7 @@ dependencies = [
     "fastmcp >= 2.14.0, < 2.15",
     "fakeredis != 2.35.0",  # brownbag
     "greenlet",
-    "haiku.rag-slim >= 0.38.0, < 0.39",
+    "haiku.rag-slim >= 0.40.0, < 0.41",
     "haiku-skills >= 0.14.0, < 0.15",
     "itsdangerous",
     "jsonpatch",

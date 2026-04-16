@@ -5,6 +5,7 @@ environment: development
 
 storage:
   data_dir: ""
+  auto_vacuum: true
   vacuum_retention_seconds: 86400
 
 # This section is used to configure how files are added to the RAG
@@ -75,8 +76,12 @@ processing:
   converter: docling-serve  # Use remote conversion
   chunker: docling-serve    # Use remote chunking
 
-search:
-  context_radius: 0
+#search:
+#  limit: 10
+#  max_context_items: 10
+#  max_context_chars: 10000
+#  vector_index_metric: cosine
+#  vector_refine_factor: 30
 
 providers:
   # The docling-serve url if you have not installed the full haiku.rag package.

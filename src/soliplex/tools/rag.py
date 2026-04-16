@@ -36,7 +36,4 @@ async def search_documents(
             limit=tool_config.search_documents_limit,
         )
 
-        if hr_config.search.context_radius > 0:
-            results = await rag.expand_context(results)
-
         return results
