@@ -242,6 +242,26 @@ secrets:
         env_var_name: "SOLIPLEX_SESSION_MIDDLEWARE_TOKEN"
       - kind: "random_chars"
 
+  # ----------------------------------------------------------------------
+  # LTI 1.3 session token signing secret
+  #
+  # Used to sign the short-lived session token issued after a successful
+  # LTI launch.  If not set, LTI session validation is skipped.
+  # ----------------------------------------------------------------------
+  - secret_name: "LTI_SESSION_SECRET"
+    sources:
+      - kind: "env_var"
+        env_var_name: "SOLIPLEX_LTI_SESSION_SECRET"
+      - kind: "random_chars"
+
+#==========================================================================
+# LTI 1.3 Platform Registrations (optional)
+#==========================================================================
+# Path to LTI platform configuration.  If omitted, LTI is disabled.
+#==========================================================================
+
+lti_platforms_path: "./lti"
+
 #==========================================================================
 # Environment Variables
 #==========================================================================

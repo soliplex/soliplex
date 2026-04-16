@@ -42,6 +42,8 @@ def test_moodle_tools_room_config_loads():
     )
     assert agent_cfg.with_agent_config is True
     assert agent_cfg.extra_config == {
+        "model_name": "gemma4:26b",
+        "thinking_field": "reasoning",
         "moodle_base_url": "secret:MOODLE_BASE_URL",
         "moodle_api_token": "secret:MOODLE_API_TOKEN",
     }

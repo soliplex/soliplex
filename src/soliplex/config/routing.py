@@ -192,16 +192,26 @@ _DEFAULT_ROUTER_NAMES = {
     "log_ingest": "soliplex.views.log_ingest.router",
     "quizzes": "soliplex.views.quizzes.router",
     "rooms": "soliplex.views.rooms.router",
+    "lti": "soliplex.views.lti.router",
+}
+
+# Per-group kwargs overrides.  Groups not listed here use
+# _DEFAULT_KWARGS.
+_DEFAULT_ROUTER_KWARGS = {
+    "lti": {"prefix": ""},
 }
 
 
 def register_default_routers():
     for group_name, router_name in _DEFAULT_ROUTER_NAMES.items():
         router = _utils._from_dotted_name(router_name)
+        kw = _DEFAULT_ROUTER_KWARGS.get(
+            group_name, _DEFAULT_KWARGS
+        )
         APP_ROUTERS_BY_GROUP_NAME[group_name] = (
             router,
             router_name,
-            _DEFAULT_KWARGS,
+            kw,
         )
 
 

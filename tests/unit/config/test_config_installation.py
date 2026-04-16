@@ -2744,6 +2744,7 @@ def test_installationconfig_reload_configurations(temp_dir):
 
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     kw["_oidc_auth_system_configs"] = existing
+    kw["_lti_platform_configs"] = existing
     kw["_room_configs"] = existing
     kw["_completion_configs"] = existing
     kw["_available_filesystem_skill_configs"] = {}
@@ -2759,6 +2760,7 @@ def test_installationconfig_reload_configurations(temp_dir):
         mock.patch.multiple(
             i_config,
             _load_oidc_auth_system_configs=mock.DEFAULT,
+            _load_lti_platform_configs=mock.DEFAULT,
             _load_room_configs=mock.DEFAULT,
             _load_completion_configs=mock.DEFAULT,
         ) as ic_patch,
@@ -2773,6 +2775,11 @@ def test_installationconfig_reload_configurations(temp_dir):
     assert (
         i_config._oidc_auth_system_configs
         is ic_patch["_load_oidc_auth_system_configs"].return_value
+    )
+
+    assert (
+        i_config._lti_platform_configs
+        is ic_patch["_load_lti_platform_configs"].return_value
     )
 
     assert (
@@ -2854,3 +2861,115 @@ def test_load_installation(populated_temp_dir, rel_path, raises, expected_id):
         installation = config_installation.load_installation(target)
 
         assert installation.id == expected_id
+
+
+# -- LTI platform configs --
+
+
+LTI_PLATFORMS_YAML = """\
+platforms:
+  - id: "moodle-workplace"
+    issuer: "https://moodle.example.com"
+    client_id: "soliplex-lti-tool"
+    auth_login_url: "https://moodle.example.com/auth.php"
+    auth_token_url: "https://moodle.example.com/token.php"
+    key_set_url: "https://moodle.example.com/certs.php"
+    default_room_id: "moodle-tools"
+"""
+
+
+def test_installationconfig_postinit_lti_path(temp_dir):
+    """__post_init__ resolves lti_platforms_path relative to
+    config_path"""
+    config_path = temp_dir / "installation.yaml"
+    kw = BARE_INSTALLATION_CONFIG_KW.copy()
+    kw["lti_platforms_path"] = pathlib.Path("./lti")
+    i_config = config_installation.InstallationConfig(
+        _config_path=config_path,
+        **kw,
+    )
+
+    assert i_config.lti_platforms_path == temp_dir / "lti"
+
+
+def test_installationconfig_as_yaml_w_lti(temp_dir):
+    """as_yaml includes lti_platforms_path when set"""
+    lti_path = temp_dir / "lti"
+    i_config = config_installation.InstallationConfig(
+        **BARE_INSTALLATION_CONFIG_KW,
+        lti_platforms_path=lti_path,
+    )
+
+    found = i_config.as_yaml
+
+    assert found["lti_platforms_path"] == str(lti_path)
+
+
+def test_installationconfig_load_lti_no_path():
+    """_load_lti_platform_configs returns [] when path is
+    None"""
+    i_config = config_installation.InstallationConfig(
+        **BARE_INSTALLATION_CONFIG_KW,
+    )
+    assert i_config.lti_platforms_path is None
+
+    found = i_config._load_lti_platform_configs()
+
+    assert found == []
+
+
+def test_installationconfig_load_lti_missing_file(
+    temp_dir,
+):
+    """_load_lti_platform_configs returns [] when config.yaml
+    doesn't exist"""
+    lti_dir = temp_dir / "lti"
+    lti_dir.mkdir()
+
+    i_config = config_installation.InstallationConfig(
+        **BARE_INSTALLATION_CONFIG_KW,
+        lti_platforms_path=lti_dir,
+    )
+
+    found = i_config._load_lti_platform_configs()
+
+    assert found == []
+
+
+def test_installationconfig_load_lti_happy_path(
+    temp_dir,
+):
+    """_load_lti_platform_configs loads platforms from YAML"""
+    lti_dir = temp_dir / "lti"
+    lti_dir.mkdir()
+    (lti_dir / "config.yaml").write_text(LTI_PLATFORMS_YAML)
+
+    i_config = config_installation.InstallationConfig(
+        **BARE_INSTALLATION_CONFIG_KW,
+        lti_platforms_path=lti_dir,
+    )
+
+    found = i_config._load_lti_platform_configs()
+
+    assert len(found) == 1
+    assert found[0].id == "moodle-workplace"
+    assert found[0].issuer == "https://moodle.example.com"
+
+
+def test_installationconfig_lti_property_lazy(temp_dir):
+    """lti_platform_configs property lazy-loads and caches"""
+    i_config = config_installation.InstallationConfig(
+        **BARE_INSTALLATION_CONFIG_KW,
+    )
+
+    with mock.patch.object(
+        i_config,
+        "_load_lti_platform_configs",
+    ) as load:
+        load.return_value = ["platform"]
+        first = i_config.lti_platform_configs
+        second = i_config.lti_platform_configs
+
+    assert first == ["platform"]
+    assert second == ["platform"]
+    load.assert_called_once()

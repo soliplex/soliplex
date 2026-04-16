@@ -234,6 +234,15 @@ secrets:
       - kind: "env_var"
         env_var_name: "MOODLE_API_TOKEN"
 
+  # ----------------------------------------------------------------------
+  # LTI 1.3 session token signing secret
+  # ----------------------------------------------------------------------
+  - secret_name: "LTI_SESSION_SECRET"
+    sources:
+      - kind: "env_var"
+        env_var_name: "SOLIPLEX_LTI_SESSION_SECRET"
+      - kind: "random_chars"
+
 #==========================================================================
 # Environment Variables
 #==========================================================================
@@ -275,7 +284,10 @@ haiku_rag_config_file: "./haiku.rag.yaml"
 
 agent_configs:
   - id: "default_chat"
-    model_name: "gpt-oss:latest"
+    model_name: "gemma4:26b"
+    model_settings:
+      extra_body:
+        think: false
     system_prompt: |
       You are an expert AI assistant specializing in information retrieval.
 
@@ -293,7 +305,10 @@ agent_configs:
       Always provide code or examples in Markdown blocks.
 
   - id: "title"
-    model_name: "gpt-oss:latest"
+    model_name: "gemma4:26b"
+    model_settings:
+      extra_body:
+        think: false
 
 title_agent_config_id: "title"
 
@@ -361,6 +376,8 @@ skill_configs:
 # We avoid the default here, because the 'mcptest' room uses the SmitheryAI
 # registry, and hence requires additional secrets
 #==========================================================================
+lti_platforms_path: "./lti"
+
 room_paths:
   - "./rooms/chat"
   - "./rooms/search"

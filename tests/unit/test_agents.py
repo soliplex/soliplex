@@ -6,7 +6,6 @@ from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import tools as ai_tools
 
 from soliplex import agents
-from soliplex import config
 from soliplex import mcp_client
 from soliplex import tools
 from soliplex.config import agents as config_agents

@@ -1,0 +1,17 @@
+# LTI 1.3 Platform registrations
+#
+# Each entry describes an LTI platform (e.g. Moodle Workplace)
+# that is allowed to launch Soliplex as an external tool.
+
+platforms:
+  - id: "moodle-workplace"
+    issuer: "http://localhost:9000"
+    client_id: "3iYYAbMrddyQSHX"
+    deployment_ids:
+      - "1"
+    auth_login_url: "http://localhost:9000/mod/lti/auth.php"
+    auth_token_url: "http://localhost:9000/mod/lti/token.php"
+    key_set_url: "http://localhost:9000/mod/lti/certs.php"
+    default_room_id: "joker"
+    show_room_picker: true
+    session_ttl: 3600

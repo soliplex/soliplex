@@ -64,6 +64,28 @@ def authenticate(
         if payload is not None:
             return payload
 
+    # Try LTI session tokens
+    lti_platforms = the_installation.lti_platform_configs
+    if lti_platforms:
+        from soliplex.lti import session as lti_session
+
+        try:
+            secret_key = the_installation.get_secret(
+                "LTI_SESSION_SECRET"
+            )
+        except Exception:
+            secret_key = None
+
+        if secret_key is not None:
+            for platform in lti_platforms:
+                claims = lti_session.validate_session_token(
+                    secret_key,
+                    token,
+                    max_age=platform.session_ttl,
+                )
+                if claims is not None:
+                    return claims
+
     raise fastapi.HTTPException(
         status_code=401,
         detail=JWT_VALIDATION_INVALID_TOKEN,

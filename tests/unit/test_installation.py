@@ -595,14 +595,27 @@ def test_installation_authorization_dburi_async():
     )
 
 
-@pytest.mark.parametrize("w_oidc_configs", [[], [object()]])
-def test_installation_auth_disabled(w_oidc_configs):
-    i_config = mock.create_autospec(config_installation.InstallationConfig)
+@pytest.mark.parametrize(
+    "w_oidc_configs, w_lti_configs, expected",
+    [
+        ([], [], True),
+        ([object()], [], False),
+        ([], [object()], False),
+        ([object()], [object()], False),
+    ],
+)
+def test_installation_auth_disabled(
+    w_oidc_configs, w_lti_configs, expected
+):
+    i_config = mock.create_autospec(
+        config_installation.InstallationConfig
+    )
     i_config.oidc_auth_system_configs = w_oidc_configs
+    i_config.lti_platform_configs = w_lti_configs
 
     the_installation = installation.Installation(i_config)
 
-    assert the_installation.auth_disabled == (not w_oidc_configs)
+    assert the_installation.auth_disabled == expected
 
 
 def test_installation_oidc_auth_system_configs():
@@ -612,6 +625,18 @@ def test_installation_oidc_auth_system_configs():
     assert (
         the_installation.oidc_auth_system_configs
         is i_config.oidc_auth_system_configs
+    )
+
+
+def test_installation_lti_platform_configs():
+    i_config = mock.create_autospec(
+        config_installation.InstallationConfig
+    )
+    the_installation = installation.Installation(i_config)
+
+    assert (
+        the_installation.lti_platform_configs
+        is i_config.lti_platform_configs
     )
 
 

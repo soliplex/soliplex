@@ -79,6 +79,15 @@ ROOM_UNKNOWN_ROOM_ID = "unknown room id: %s"
 ROOM_CHUNK_IMAGES_NOT_AVAILALBE = "chunk images not available: %s"
 ROOM_UNKNOWN_CHUNK_ID = "unknown chunk id: %s"
 
+LTI_UNKNOWN_PLATFORM = "unknown LTI platform"
+LTI_INVALID_LAUNCH = "invalid LTI launch request"
+LTI_LOGIN = "LTI OIDC login initiated"
+LTI_LAUNCH = "LTI launch completed"
+LTI_VALIDATION_FAILED = "LTI id_token validation failed"
+LTI_SECRET_NOT_CONFIGURED = (
+    "LTI_SESSION_SECRET not configured"
+)
+
 
 class LogWrapper(logging.LoggerAdapter):
     """Context wrapper for capturing extra logging values"""

@@ -98,6 +98,9 @@ def moodle_tools_agent_factory(
     )
 
     model = config_agents.get_model_from_factory_config(agent_config)
+    model_settings = config_agents.get_model_settings_from_factory_config(
+        agent_config
+    )
 
     # -- Build seven Moodle skills --------------------------
     moodle_skills = [
@@ -134,6 +137,7 @@ def moodle_tools_agent_factory(
 
     return pydantic_ai.Agent(
         model=model,
+        model_settings=model_settings,
         instructions=instructions,
         toolsets=[toolset],
         deps_type=agents.AgentDependencies,

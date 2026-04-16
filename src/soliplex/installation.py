@@ -258,13 +258,20 @@ class Installation:
 
     @property
     def auth_disabled(self):
-        return len(self._config.oidc_auth_system_configs) == 0
+        return (
+            len(self._config.oidc_auth_system_configs) == 0
+            and len(self._config.lti_platform_configs) == 0
+        )
 
     @property
     def oidc_auth_system_configs(
         self,
     ) -> list[config_authsystem.OIDCAuthSystemConfig]:
         return self._config.oidc_auth_system_configs
+
+    @property
+    def lti_platform_configs(self):
+        return self._config.lti_platform_configs
 
     async def get_room_configs(
         self,

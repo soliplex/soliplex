@@ -312,7 +312,10 @@ def test_register_default_routers(fdn, patched_app_routers):
         router, name, kwargs = patched_app_routers[g_name]
         assert router is fdn.return_value
         assert name == r_name
-        assert kwargs is config_routing._DEFAULT_KWARGS
+        expected_kw = config_routing._DEFAULT_ROUTER_KWARGS.get(
+            g_name, config_routing._DEFAULT_KWARGS
+        )
+        assert kwargs == expected_kw
 
 
 @pytest.mark.parametrize("w_aro", [False, True])

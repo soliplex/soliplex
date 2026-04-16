@@ -4,6 +4,7 @@ import dataclasses
 import enum
 import functools
 import itertools
+import logging
 import os
 import pathlib
 import re
@@ -23,6 +24,7 @@ from . import authsystem as config_authsystem
 from . import completions as config_completions
 from . import exceptions as config_exc
 from . import logfire as config_logfire
+from . import lti as config_lti
 from . import meta as config_meta
 from . import rooms as config_rooms
 from . import routing as config_routing
@@ -32,6 +34,8 @@ from . import skills as config_skills
 # from . import quizzes as config_quizzes
 # from . import rag as config_rag
 # from . import tools as config_tools
+
+_logger = logging.getLogger(__name__)
 
 FILE_PREFIX = "file:"
 
@@ -689,6 +693,15 @@ class InstallationConfig:
     )
 
     #
+    # Optional path to LTI 1.3 platform registration config
+    #
+    lti_platforms_path: pathlib.Path | None = None
+
+    _lti_platform_configs: list[config_lti.LTIPlatformConfig] = (
+        None
+    )
+
+    #
     # Path(s) to room configs:  each item can be either a single
     # room config (a directory containing its own 'room_config.yaml' file),
     # or a directory containing such room configs.
@@ -1027,6 +1040,11 @@ class InstallationConfig:
                 if oidc_path is not None
             ]
 
+            if self.lti_platforms_path is not None:
+                self.lti_platforms_path = (
+                    parent_dir / self.lti_platforms_path
+                )
+
             self.room_paths = [
                 parent_dir / room_path
                 for room_path in self.room_paths
@@ -1073,6 +1091,11 @@ class InstallationConfig:
 
         if self.upload_path:
             result["upload_path"] = str(self.upload_path)
+
+        if self.lti_platforms_path:
+            result["lti_platforms_path"] = str(
+                self.lti_platforms_path
+            )
 
         if self.sandbox_config:
             result["sandbox_config"] = self.sandbox_config.as_yaml
@@ -1127,6 +1150,40 @@ class InstallationConfig:
             )
 
         return self._oidc_auth_system_configs
+
+    def _load_lti_platform_configs(
+        self,
+    ) -> list[config_lti.LTIPlatformConfig]:
+        if self.lti_platforms_path is None:
+            return []
+
+        config_file = self.lti_platforms_path / "config.yaml"
+
+        try:
+            config_yaml = _load_config_yaml(config_file)
+        except config_exc.NoSuchConfig:
+            _logger.debug(
+                "LTI config not found: %s", config_file
+            )
+            return []
+
+        return [
+            config_lti.LTIPlatformConfig.from_yaml(
+                config_file, p_yaml
+            )
+            for p_yaml in config_yaml.get("platforms", ())
+        ]
+
+    @property
+    def lti_platform_configs(
+        self,
+    ) -> list[config_lti.LTIPlatformConfig]:
+        if self._lti_platform_configs is None:
+            self._lti_platform_configs = (
+                self._load_lti_platform_configs()
+            )
+
+        return self._lti_platform_configs
 
     def _load_room_configs(self) -> config_rooms.RoomConfigMap:
         room_configs = {}
@@ -1194,6 +1251,7 @@ class InstallationConfig:
         )
         self._resolved_skill_configs = None
         self._oidc_auth_system_configs = self._load_oidc_auth_system_configs()
+        self._lti_platform_configs = self._load_lti_platform_configs()
         self._room_configs = self._load_room_configs()
         self._completion_configs = self._load_completion_configs()
 
