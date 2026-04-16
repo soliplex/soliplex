@@ -1423,9 +1423,9 @@ def test_find_skill_toolset_returns_skill_toolset():
 @pytest.mark.asyncio
 @mock.patch("soliplex.views.agui.drive_llm_stream")
 @mock.patch("soliplex.agui.compact_event_stream")
-async def test_drive_event_stream_without_skills(ces, dls):
+@mock.patch("soliplex.views.agui.hs_agent.run_agui_stream")
+async def test_drive_event_stream_without_skills(rags, ces, dls):
     adapter = mock.MagicMock()
-    exp_agent_stream = adapter.run_stream.return_value
     run_stream_kwargs = {"deps": object(), "on_complete": object()}
     drive_kwargs = {
         "sqla_engine": object(),
@@ -1438,6 +1438,11 @@ async def test_drive_event_stream_without_skills(ces, dls):
         "messages": [],
     }
 
+    merged_stream = object()
+    rags_cm = mock.AsyncMock()
+    rags_cm.__aenter__.return_value = merged_stream
+    rags.return_value = rags_cm
+
     await agui_views._drive_event_stream(
         skill_toolset=None,
         agui_adapter=adapter,
@@ -1445,8 +1450,8 @@ async def test_drive_event_stream_without_skills(ces, dls):
         **drive_kwargs,
     )
 
-    adapter.run_stream.assert_called_once_with(**run_stream_kwargs)
-    ces.assert_called_once_with(exp_agent_stream)
+    rags.assert_called_once_with(adapter, toolset=None, **run_stream_kwargs)
+    ces.assert_called_once_with(merged_stream)
     dls.assert_awaited_once_with(llm_stream=ces.return_value, **drive_kwargs)
 
 
@@ -1484,13 +1489,11 @@ async def test_drive_event_stream_with_skills(rags, ces, dls):
         **drive_kwargs,
     )
 
-    rags.assert_called_once_with(skill_ts, adapter, **run_stream_kwargs)
+    rags.assert_called_once_with(adapter, toolset=skill_ts, **run_stream_kwargs)
     rags_cm.__aenter__.assert_awaited_once()
     rags_cm.__aexit__.assert_awaited_once()
     ces.assert_called_once_with(merged_stream)
     dls.assert_awaited_once_with(llm_stream=ces.return_value, **drive_kwargs)
-    # adapter.run_stream should NOT be called directly
-    adapter.run_stream.assert_not_called()
 
 
 @pytest.mark.anyio

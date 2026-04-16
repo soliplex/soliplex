@@ -54,17 +54,12 @@ async def _drive_event_stream(
     run_stream_kwargs: dict,
     **drive_kwargs,
 ):
-    if skill_toolset is not None:
-        async with hs_agent.run_agui_stream(
-            skill_toolset,
-            agui_adapter,
-            **run_stream_kwargs,
-        ) as event_stream:
-            compacted = agui_package.compact_event_stream(event_stream)
-            await drive_llm_stream(llm_stream=compacted, **drive_kwargs)
-    else:
-        agent_stream = agui_adapter.run_stream(**run_stream_kwargs)
-        compacted = agui_package.compact_event_stream(agent_stream)
+    async with hs_agent.run_agui_stream(
+        agui_adapter,
+        toolset=skill_toolset,
+        **run_stream_kwargs,
+    ) as event_stream:
+        compacted = agui_package.compact_event_stream(event_stream)
         await drive_llm_stream(llm_stream=compacted, **drive_kwargs)
 
 
