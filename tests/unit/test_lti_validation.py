@@ -165,5 +165,7 @@ class TestValidateIdToken:
 
 
 def test_fetch_jwks():
-    client = lti_validation._fetch_jwks(KEY_SET_URL)
-    assert isinstance(client, jwt.PyJWKClient)
+    with mock.patch("soliplex.lti.validation.jwt.PyJWKClient") as mock_cls:
+        client = lti_validation._fetch_jwks(KEY_SET_URL)
+        mock_cls.assert_called_once_with(KEY_SET_URL, cache_keys=True)
+        assert client is mock_cls.return_value

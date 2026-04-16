@@ -2,11 +2,10 @@ import pytest
 
 from soliplex.config import lti as config_lti
 from soliplex.lti import platform as lti_platform
-
-ISSUER = "https://moodle.example.com"
-CLIENT_ID = "soliplex-lti-tool"
-PLATFORM_ID = "moodle-workplace"
-DEFAULT_ROOM = "moodle-tools"
+from tests.unit.conftest import LTI_TEST_CLIENT_ID as CLIENT_ID
+from tests.unit.conftest import LTI_TEST_DEFAULT_ROOM as DEFAULT_ROOM
+from tests.unit.conftest import LTI_TEST_ISSUER as ISSUER
+from tests.unit.conftest import LTI_TEST_PLATFORM_ID as PLATFORM_ID
 
 
 def _make_platform(**overrides):
@@ -47,6 +46,30 @@ class TestFindPlatform:
         p = _make_platform()
         with pytest.raises(lti_platform.UnknownLTIPlatform):
             lti_platform.find_platform([p], issuer=ISSUER, client_id="wrong")
+
+
+class TestFindPlatformById:
+    def test_found(self):
+        p = _make_platform()
+        found = lti_platform.find_platform_by_id([p], PLATFORM_ID)
+        assert found is p
+
+    def test_not_found_returns_none(self):
+        p = _make_platform()
+        found = lti_platform.find_platform_by_id([p], "nonexistent-id")
+        assert found is None
+
+    def test_empty_list_returns_none(self):
+        found = lti_platform.find_platform_by_id([], PLATFORM_ID)
+        assert found is None
+
+    def test_multiple_platforms_finds_correct_one(self):
+        p1 = _make_platform(id="platform-1")
+        p2 = _make_platform(
+            id="platform-2", issuer="https://other.example.com"
+        )
+        found = lti_platform.find_platform_by_id([p1, p2], "platform-2")
+        assert found is p2
 
 
 class TestCheckDeployment:

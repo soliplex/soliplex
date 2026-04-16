@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from soliplex import mcp_auth
-from soliplex.lti import validation as lti_validation
+from soliplex.lti import LTI_CLAIM_RESOURCE_LINK
+from soliplex.lti import LTI_CLAIM_ROLES
 
 LTI_SESSION_SALT = "lti-session"
 
@@ -16,8 +17,8 @@ def claims_from_lti_payload(payload: dict) -> dict:
     name = payload.get("name", "")
     sub = payload.get("sub", "")
 
-    roles = payload.get(lti_validation.LTI_CLAIM_ROLES, [])
-    resource_link = payload.get(lti_validation.LTI_CLAIM_RESOURCE_LINK, {})
+    roles = payload.get(LTI_CLAIM_ROLES, [])
+    resource_link = payload.get(LTI_CLAIM_RESOURCE_LINK, {})
 
     return {
         "sub": sub,

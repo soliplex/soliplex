@@ -56,6 +56,23 @@ from soliplex.moodle.models import UserProfile
 # Keeps LLM context bounded; acts as a client-side safeguard.
 MAX_RESULTS = 100
 
+# Regex for stripping HTML tags in report data.
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _to_dict(raw, default=None):
+    """Coerce an API response to a dict.
+
+    Many Moodle write endpoints return ``None`` on success or a
+    non-dict value (e.g. ``true``).  This helper normalises those
+    to a dict so callers always get a consistent shape.
+    """
+    if default is None:
+        default = {"result": True}
+    if raw is None:
+        return default
+    return raw if isinstance(raw, dict) else default
+
 
 class MoodleAPIError(Exception):
     """Raised when Moodle returns an error response."""
@@ -421,7 +438,7 @@ class MoodleClient:
             certificationid=certificationid,
             userid=userid,
         )
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def revoke_certification(
         self, certificationid: int, userid: int
@@ -432,7 +449,7 @@ class MoodleClient:
             certificationid=certificationid,
             userid=userid,
         )
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     # ---------------------------------------------------------------
     # Programs / Learning Paths (Workplace)
@@ -485,9 +502,7 @@ class MoodleClient:
             params[f"allocations[{i}][userid]"] = a["userid"]
             params[f"allocations[{i}][tenantid]"] = a["tenantid"]
         raw = await self._call("tool_tenant_allocate_users", **params)
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def suspend_tenant_users(self, userids: list[int]) -> dict:
         """Suspend users system-wide via ``tool_tenant_suspend_users``."""
@@ -495,9 +510,7 @@ class MoodleClient:
         for i, uid in enumerate(userids):
             params[f"userids[{i}]"] = uid
         raw = await self._call("tool_tenant_suspend_users", **params)
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     # ---------------------------------------------------------------
     # Catalogue (Workplace)
@@ -579,9 +592,7 @@ class MoodleClient:
             programid=programid,
             userid=userid,
         )
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def reset_program_progress(self, programuserid: int) -> dict:
         """Reset program progress via ``tool_program_reset_program_progress``.
@@ -592,9 +603,7 @@ class MoodleClient:
             "tool_program_reset_program_progress",
             programuserid=programuserid,
         )
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     # ---------------------------------------------------------------
     # Deeper Certification Management (Workplace)
@@ -622,9 +631,7 @@ class MoodleClient:
             certificationid=certificationid,
             userid=userid,
         )
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def archive_certification(self, certificationid: int) -> dict:
         """Archive a certification via
@@ -633,9 +640,7 @@ class MoodleClient:
             "tool_certification_archive_certification",
             certificationid=certificationid,
         )
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     # ---------------------------------------------------------------
     # Program & Certification Lifecycle (Workplace)
@@ -646,27 +651,21 @@ class MoodleClient:
         raw = await self._call(
             "tool_program_archive_program", programid=programid
         )
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def restore_program(self, programid: int) -> dict:
         """Restore an archived program via ``tool_program_restore_program``."""
         raw = await self._call(
             "tool_program_restore_program", programid=programid
         )
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def delete_program(self, programid: int) -> dict:
         """Delete a program via ``tool_program_delete_program``."""
         raw = await self._call(
             "tool_program_delete_program", programid=programid
         )
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def duplicate_program(self, programid: int) -> DuplicatedProgram:
         """Duplicate a program via ``tool_program_duplicate_program``."""
@@ -687,9 +686,7 @@ class MoodleClient:
             programid=programid,
             visibility=visibility,
         )
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def enrol_user_to_program_course(
         self, courseid: int, programid: int
@@ -701,16 +698,12 @@ class MoodleClient:
             courseid=courseid,
             programid=programid,
         )
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def delete_program_set(self, setid: int) -> dict:
         """Delete a course set via ``tool_program_delete_set``."""
         raw = await self._call("tool_program_delete_set", setid=setid)
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def delete_program_course(self, programcourseid: int) -> dict:
         """Remove a course from program via ``tool_program_delete_course``."""
@@ -718,9 +711,7 @@ class MoodleClient:
             "tool_program_delete_course",
             programcourseid=programcourseid,
         )
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def bulk_deallocate_program_users(
         self, programuserids: list[int]
@@ -772,9 +763,7 @@ class MoodleClient:
             "tool_certification_delete_certification",
             certificationid=certificationid,
         )
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def restore_certification(self, certificationid: int) -> dict:
         """Restore a certification via
@@ -783,9 +772,7 @@ class MoodleClient:
             "tool_certification_restore_certification",
             certificationid=certificationid,
         )
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def search_certifications(
         self, search: str = ""
@@ -881,7 +868,6 @@ class MoodleClient:
         if not isinstance(raw, dict):
             return []
         rows = raw.get("data", {}).get("rows", [])
-        _strip_html = re.compile(r"<[^>]+>")
         needle = search.lower() if search else ""
         members: list[DepartmentMember] = []
         for row in rows:
@@ -893,7 +879,7 @@ class MoodleClient:
             if not m_id:
                 continue
             userid = int(m_id.group(1))
-            fullname = _strip_html.sub("", cols[0]).strip()
+            fullname = _HTML_TAG_RE.sub("", cols[0]).strip()
             dept_name = cols[1].strip()
             pos_name = cols[2].strip()
             # Apply client-side filters (the system report
@@ -944,9 +930,7 @@ class MoodleClient:
         for i, mid in enumerate(manager_ids):
             params[f"managers[{i}][id]"] = mid
         raw = await self._call("tool_organisation_assign_managers", **params)
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     # -- Department CRUD --
 
@@ -995,9 +979,7 @@ class MoodleClient:
         raw = await self._call(
             "tool_organisation_department_delete", id=department_id
         )
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def get_potential_parent_departments(
         self,
@@ -1075,9 +1057,7 @@ class MoodleClient:
         raw = await self._call(
             "tool_organisation_position_delete", id=position_id
         )
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def get_potential_parent_positions(
         self,
@@ -1124,9 +1104,7 @@ class MoodleClient:
     async def delete_job(self, job_id: int) -> dict:
         """Delete a job assignment via ``tool_organisation_job_delete``."""
         raw = await self._call("tool_organisation_job_delete", id=job_id)
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def unassign_managers(
         self,
@@ -1143,9 +1121,7 @@ class MoodleClient:
         if unassign_all:
             params["unassignall"] = 1
         raw = await self._call("tool_organisation_unassign_managers", **params)
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     # ---------------------------------------------------------------
     # Competencies & Learning Plans
@@ -1302,52 +1278,38 @@ class MoodleClient:
     async def enable_rule(self, rule_id: int) -> dict:
         """Enable a dynamic rule via ``tool_dynamicrule_enable_rule``."""
         raw = await self._call("tool_dynamicrule_enable_rule", id=rule_id)
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def disable_rule(self, rule_id: int) -> dict:
         """Disable a dynamic rule via ``tool_dynamicrule_disable_rule``."""
         raw = await self._call("tool_dynamicrule_disable_rule", id=rule_id)
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def archive_rule(self, rule_id: int) -> dict:
         """Archive a dynamic rule via ``tool_dynamicrule_archive_rule``."""
         raw = await self._call("tool_dynamicrule_archive_rule", id=rule_id)
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def unarchive_rule(self, rule_id: int) -> dict:
         """Unarchive a dynamic rule via ``tool_dynamicrule_unarchive_rule``."""
         raw = await self._call("tool_dynamicrule_unarchive_rule", id=rule_id)
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def delete_rule(self, rule_id: int) -> dict:
         """Delete a dynamic rule via ``tool_dynamicrule_delete_rule``."""
         raw = await self._call("tool_dynamicrule_delete_rule", id=rule_id)
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def duplicate_rule(self, rule_id: int) -> dict:
         """Duplicate a dynamic rule via ``tool_dynamicrule_duplicate_rule``."""
         raw = await self._call("tool_dynamicrule_duplicate_rule", id=rule_id)
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def can_enable_rule(self, rule_id: int) -> dict:
         """Check if a rule can be enabled via
         ``tool_dynamicrule_can_enable_rule``."""
         raw = await self._call("tool_dynamicrule_can_enable_rule", id=rule_id)
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def delete_condition(self, instanceid: int) -> dict:
         """Delete a rule condition via
@@ -1355,18 +1317,14 @@ class MoodleClient:
         raw = await self._call(
             "tool_dynamicrule_delete_condition", instanceid=instanceid
         )
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def delete_outcome(self, instanceid: int) -> dict:
         """Delete a rule outcome via ``tool_dynamicrule_delete_outcome``."""
         raw = await self._call(
             "tool_dynamicrule_delete_outcome", instanceid=instanceid
         )
-        if raw is None:
-            return {"result": True}
-        return raw if isinstance(raw, dict) else {"result": True}
+        return _to_dict(raw)
 
     async def count_matching_users(self, rule_id: int) -> dict:
         """Count users currently matching a rule via
@@ -1437,7 +1395,6 @@ class MoodleClient:
         if not isinstance(raw, dict):
             return []
         rows = raw.get("data", {}).get("rows", [])
-        _strip_html = re.compile(r"<[^>]+>")
         results: list[dict] = []
         for row in rows:
             cols = row.get("columns", [])
@@ -1455,7 +1412,7 @@ class MoodleClient:
 
             def _li_texts(col: str) -> list[str]:
                 items = re.findall(r"<li[^>]*>(.*?)</li>", col, re.DOTALL)
-                return [_strip_html.sub("", t).strip() for t in items]
+                return [_HTML_TAG_RE.sub("", t).strip() for t in items]
 
             conditions = _li_texts(cols[3]) if len(cols) > 3 else []
             actions = _li_texts(cols[4]) if len(cols) > 4 else []

@@ -9,11 +9,11 @@ from soliplex import loggers
 from soliplex.config import lti as config_lti
 from soliplex.lti import validation as lti_validation
 from soliplex.views import lti as lti_views
+from tests.unit.conftest import LTI_TEST_CLIENT_ID as CLIENT_ID
+from tests.unit.conftest import LTI_TEST_DEFAULT_ROOM as DEFAULT_ROOM
+from tests.unit.conftest import LTI_TEST_ISSUER as ISSUER
+from tests.unit.conftest import LTI_TEST_PLATFORM_ID as PLATFORM_ID
 
-ISSUER = "https://moodle.example.com"
-CLIENT_ID = "soliplex-lti-tool"
-PLATFORM_ID = "moodle-workplace"
-DEFAULT_ROOM = "moodle-tools"
 SECRET_KEY = "test-lti-secret"
 NONCE = "test-nonce-value"
 STATE = "test-state-token"

@@ -10,6 +10,9 @@ import pydantic_ai
 import pytest
 from pydantic_ai.models.test import TestModel
 
+from tests.unit.conftest import mock_moodle_response as _mock_response
+from tests.unit.conftest import patch_moodle_httpx as _patch_httpx
+
 # -----------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------
@@ -35,27 +38,6 @@ def _make_agent_config():
     cfg._installation_config = ic
     cfg.extra_config = dict(EXTRA_CONFIG)
     return cfg
-
-
-def _mock_response(json_data):
-    resp = mock.MagicMock(spec=httpx.Response)
-    resp.status_code = 200
-    resp.json.return_value = json_data
-    resp.raise_for_status.return_value = None
-    return resp
-
-
-def _patch_httpx(response):
-    mock_client = mock.AsyncMock()
-    mock_client.post.return_value = response
-    mock_client.__aenter__ = mock.AsyncMock(
-        return_value=mock_client,
-    )
-    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
-    return mock.patch(
-        "soliplex.moodle.client.httpx.AsyncClient",
-        return_value=mock_client,
-    )
 
 
 def _build_agent():
@@ -3615,6 +3597,16 @@ async def test_unassign_manager_tool_non_numeric():
     fn = _get_tool_fn(skills, "unassign_manager")
 
     result = json.loads(await fn(userids="abc", managerids="5"))
+
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_unassign_manager_tool_non_numeric_managerids():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "unassign_manager")
+
+    result = json.loads(await fn(userids="3", managerids="abc"))
 
     assert "error" in result
 

@@ -198,6 +198,8 @@ _DEFAULT_ROUTER_NAMES = {
 # Per-group kwargs overrides.  Groups not listed here use
 # _DEFAULT_KWARGS.
 _DEFAULT_ROUTER_KWARGS = {
+    # LTI endpoints are form-POST targets that must be at
+    # root paths, not under /api.
     "lti": {"prefix": ""},
 }
 

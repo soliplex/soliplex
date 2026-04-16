@@ -21,6 +21,55 @@ from soliplex.moodle.client import MAX_RESULTS
 from soliplex.moodle.client import MoodleAPIError
 from soliplex.moodle.client import MoodleClient
 
+# -- Module-level constants --
+
+_CONFIRM_INSTRUCTIONS = (
+    "Present this to the user and ask for "
+    "confirmation. If confirmed, call this "
+    "tool again with confirmed=True"
+)
+
+_CONFIRM_INSTRUCTIONS_WARNING = (
+    "Present this WARNING to the user and "
+    "ask for explicit confirmation. If "
+    "confirmed, call this tool again with "
+    "confirmed=True"
+)
+
+_EXPORTER_MAP = {
+    "courses": r"tool_wp\tool_wp\exporter\courses",
+    "users": r"tool_wp\tool_wp\exporter\users",
+    "cohorts": r"tool_wp\tool_wp\exporter\cohorts",
+    "reports": r"tool_wp\tool_wp\exporter\reports",
+    "site": r"tool_wp\tool_wp\exporter\site",
+    "certificates": (r"tool_wp\tool_wp\exporter\certificates"),
+    "coursecategories": (r"tool_wp\tool_wp\exporter\coursecategories"),
+    "programs": (r"tool_program\tool_wp\exporter\programs"),
+    "certifications": (
+        r"tool_certification\tool_wp"
+        r"\exporter\certifications"
+    ),
+    "rules": (r"tool_dynamicrule\tool_wp\exporter\rules"),
+    "departments_csv": (
+        r"tool_organisation\tool_wp"
+        r"\exporter\departments_csv"
+    ),
+    "positions_csv": (
+        r"tool_organisation\tool_wp"
+        r"\exporter\positions_csv"
+    ),
+    "jobs_csv": (
+        r"tool_organisation\tool_wp"
+        r"\exporter\jobs_csv"
+    ),
+    "orgstructure": (
+        r"tool_organisation\tool_wp"
+        r"\exporter\orgstructure"
+    ),
+    "jobs": (r"tool_organisation\tool_wp\exporter\jobs"),
+    "tenants": (r"tool_tenant\tool_wp\exporter\tenants"),
+}
+
 # -- Shared helpers (used across multiple skills) --
 
 
@@ -743,11 +792,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                         f"course {courseid} with role {roleid}"
                     ),
                     "user_ids": user_list,
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         enrolments = [
@@ -787,11 +832,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                     "preview": (
                         f"Will create category '{name}' under parent={parent}"
                     ),
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         cat_data: dict = {"name": name, "parent": parent}
@@ -837,11 +878,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                         f"(shortname='{shortname}') in "
                         f"category {categoryid}"
                     ),
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         course_data: dict = {
@@ -905,11 +942,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                 {
                     "action": "update_course",
                     "preview": (f"Will update course {courseid}: {fields}"),
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         try:
@@ -938,12 +971,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                         f"WARNING: Will PERMANENTLY delete "
                         f"course {courseid}. This cannot be undone."
                     ),
-                    "instructions": (
-                        "Present this WARNING to the user and "
-                        "ask for explicit confirmation. If "
-                        "confirmed, call this tool again with "
-                        "confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS_WARNING,
                 }
             )
         try:
@@ -981,11 +1009,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                         f"'{fullname}' (shortname='{shortname}') "
                         f"in category {categoryid}"
                     ),
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         try:
@@ -1146,11 +1170,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
                         f"Will create user '{username}' "
                         f"({firstname} {lastname}, {email})"
                     ),
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         user_data: dict = {
@@ -1231,11 +1251,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
                 {
                     "action": "update_user",
                     "preview": (f"Will update user {uid}: {fields}"),
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         try:
@@ -1267,12 +1283,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
                         f"WARNING: Will PERMANENTLY delete "
                         f"user {uid}. This cannot be undone."
                     ),
-                    "instructions": (
-                        "Present this WARNING to the user and "
-                        "ask for explicit confirmation. If "
-                        "confirmed, call this tool again with "
-                        "confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS_WARNING,
                 }
             )
         try:
@@ -1299,11 +1310,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
                 {
                     "action": "unsuspend_user",
                     "preview": f"Will unsuspend (reactivate) user {uid}",
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         try:
@@ -1340,11 +1347,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
                         f'user(s): "{text[:100]}"'
                     ),
                     "user_ids": user_list,
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         messages = [
@@ -1392,11 +1395,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
                     ),
                     "user_ids": user_list,
                     "tenantid": tenantid,
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         allocations = [
@@ -1443,11 +1442,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
                         f"specific tenant. User IDs: {user_list}"
                     ),
                     "user_ids": user_list,
-                    "instructions": (
-                        "Present this WARNING to the user and ask "
-                        "for explicit confirmation. If confirmed, "
-                        "call this tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS_WARNING,
                 }
             )
         try:
@@ -1879,11 +1874,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
                     "userid": userid,
                     "department": department,
                     "position": position,
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         try:
@@ -1951,11 +1942,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
                     ),
                     "user_ids": user_list,
                     "manager_ids": manager_list,
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         try:
@@ -1989,13 +1976,12 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             unassign_all: If True, unassign all relationships.
             confirmed: Set True only after user approval.
         """
-        try:
-            uid_list = [int(x.strip()) for x in userids.split(",")]
-            mid_list = [int(x.strip()) for x in managerids.split(",")]
-        except ValueError:
-            return json.dumps(
-                {"error": "IDs must be comma-separated integers"}
-            )
+        uid_list = _parse_ids(userids, "user IDs")
+        if isinstance(uid_list, str):
+            return uid_list
+        mid_list = _parse_ids(managerids, "manager IDs")
+        if isinstance(mid_list, str):
+            return mid_list
         if not confirmed:
             return json.dumps(
                 {
@@ -2216,11 +2202,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                     ),
                     "userid": uid,
                     "certificationid": certificationid,
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         try:
@@ -2264,11 +2246,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                     ),
                     "userid": uid,
                     "certificationid": certificationid,
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         try:
@@ -2309,11 +2287,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                     ),
                     "userid": userid,
                     "certificationid": certificationid,
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         try:
@@ -2352,11 +2326,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                         f"Will archive certification {certificationid}"
                     ),
                     "certificationid": certificationid,
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         try:
@@ -2719,11 +2689,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
                     ),
                     "user_ids": user_list,
                     "programid": programid,
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         try:
@@ -2765,11 +2731,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
                     ),
                     "userid": userid,
                     "programid": programid,
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         try:
@@ -3615,40 +3577,6 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
                 class path.
             confirmed: Set True only after user approval.
         """
-        # Resolve short names to full class paths
-        _EXPORTER_MAP = {
-            "courses": r"tool_wp\tool_wp\exporter\courses",
-            "users": r"tool_wp\tool_wp\exporter\users",
-            "cohorts": r"tool_wp\tool_wp\exporter\cohorts",
-            "reports": r"tool_wp\tool_wp\exporter\reports",
-            "site": r"tool_wp\tool_wp\exporter\site",
-            "certificates": (r"tool_wp\tool_wp\exporter\certificates"),
-            "coursecategories": (r"tool_wp\tool_wp\exporter\coursecategories"),
-            "programs": (r"tool_program\tool_wp\exporter\programs"),
-            "certifications": (
-                r"tool_certification\tool_wp"
-                r"\exporter\certifications"
-            ),
-            "rules": (r"tool_dynamicrule\tool_wp\exporter\rules"),
-            "departments_csv": (
-                r"tool_organisation\tool_wp"
-                r"\exporter\departments_csv"
-            ),
-            "positions_csv": (
-                r"tool_organisation\tool_wp"
-                r"\exporter\positions_csv"
-            ),
-            "jobs_csv": (
-                r"tool_organisation\tool_wp"
-                r"\exporter\jobs_csv"
-            ),
-            "orgstructure": (
-                r"tool_organisation\tool_wp"
-                r"\exporter\orgstructure"
-            ),
-            "jobs": (r"tool_organisation\tool_wp\exporter\jobs"),
-            "tenants": (r"tool_tenant\tool_wp\exporter\tenants"),
-        }
         resolved = _EXPORTER_MAP.get(exporter, exporter)
         if not confirmed:
             return json.dumps(
@@ -3657,11 +3585,7 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
                     "preview": (
                         f"Will export '{exporter}' data from Workplace"
                     ),
-                    "instructions": (
-                        "Present this to the user and ask for "
-                        "confirmation. If confirmed, call this "
-                        "tool again with confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS,
                 }
             )
         try:
@@ -3691,12 +3615,7 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
                         "import. This can modify programs, "
                         "certifications, and org structure."
                     ),
-                    "instructions": (
-                        "Present this WARNING to the user and "
-                        "ask for explicit confirmation. If "
-                        "confirmed, call this tool again with "
-                        "confirmed=True"
-                    ),
+                    "instructions": _CONFIRM_INSTRUCTIONS_WARNING,
                 }
             )
         try:

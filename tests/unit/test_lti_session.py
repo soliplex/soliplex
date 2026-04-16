@@ -1,7 +1,8 @@
 from unittest import mock
 
+from soliplex.lti import LTI_CLAIM_RESOURCE_LINK
+from soliplex.lti import LTI_CLAIM_ROLES
 from soliplex.lti import session as lti_session
-from soliplex.lti import validation as lti_validation
 
 SECRET_KEY = "test-secret-key"
 ROOM_ID = "moodle-tools"
@@ -15,10 +16,10 @@ class TestClaimsFromLtiPayload:
             "given_name": "Phred",
             "family_name": "Phlyntstone",
             "name": "Phred Phlyntstone",
-            lti_validation.LTI_CLAIM_ROLES: [
+            LTI_CLAIM_ROLES: [
                 "http://purl.imsglobal.org/vocab/lis/v2/membership#Learner"
             ],
-            lti_validation.LTI_CLAIM_RESOURCE_LINK: {
+            LTI_CLAIM_RESOURCE_LINK: {
                 "id": "link-456",
                 "title": "AMIA Chat",
             },

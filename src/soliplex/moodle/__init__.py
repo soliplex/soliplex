@@ -11,7 +11,6 @@ from soliplex.moodle.agent import moodle_tools_agent_factory
 from soliplex.moodle.client import MoodleAPIError
 from soliplex.moodle.client import MoodleClient
 from soliplex.moodle.models import ActivityCompletionStatus
-from soliplex.moodle.models import AssignmentGrade
 from soliplex.moodle.models import BulkOperationResult
 from soliplex.moodle.models import CalendarEvent
 from soliplex.moodle.models import CatalogueItem
@@ -34,15 +33,11 @@ from soliplex.moodle.models import Department
 from soliplex.moodle.models import DepartmentMember
 from soliplex.moodle.models import DuplicatedCourse
 from soliplex.moodle.models import DuplicatedProgram
-from soliplex.moodle.models import EnrolmentRequest
 from soliplex.moodle.models import ExportStatus
-from soliplex.moodle.models import GradeItem
 from soliplex.moodle.models import Group
 from soliplex.moodle.models import GroupMembers
 from soliplex.moodle.models import ImportStatus
-from soliplex.moodle.models import Job
 from soliplex.moodle.models import LearningPlan
-from soliplex.moodle.models import MessageRequest
 from soliplex.moodle.models import Position
 from soliplex.moodle.models import PotentialParent
 from soliplex.moodle.models import Program
@@ -52,7 +47,6 @@ from soliplex.moodle.models import ReportData
 from soliplex.moodle.models import ReportRow
 from soliplex.moodle.models import ReportSummary
 from soliplex.moodle.models import Tenant
-from soliplex.moodle.models import UnassignedManager
 from soliplex.moodle.models import UpdatedEntity
 from soliplex.moodle.models import UserCatalogueItem
 from soliplex.moodle.skills import build_certifications_skill
@@ -66,7 +60,6 @@ from soliplex.moodle.skills import build_users_skill
 __all__ = [
     "MOODLE_ROUTER_PROMPT",
     "ActivityCompletionStatus",
-    "AssignmentGrade",
     "BulkOperationResult",
     "CalendarEvent",
     "CatalogueItem",
@@ -90,14 +83,10 @@ __all__ = [
     "DuplicatedCourse",
     "DuplicatedProgram",
     "ExportStatus",
-    "EnrolmentRequest",
-    "GradeItem",
     "ImportStatus",
     "Group",
     "GroupMembers",
-    "Job",
     "LearningPlan",
-    "MessageRequest",
     "MoodleAPIError",
     "MoodleClient",
     "Position",
@@ -109,7 +98,6 @@ __all__ = [
     "ReportRow",
     "ReportSummary",
     "Tenant",
-    "UnassignedManager",
     "UpdatedEntity",
     "UserCatalogueItem",
     "build_certifications_skill",

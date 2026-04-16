@@ -172,30 +172,6 @@ class CohortMembers(BaseModel):
 
 
 # ---------------------------------------------------------------
-# Feature 4: Grading & Assessments
-# ---------------------------------------------------------------
-
-
-class AssignmentGrade(BaseModel):
-    """Single grade from ``mod_assign_get_grades``."""
-
-    id: int
-    userid: int = 0
-    grade: str = ""
-    grader: int = 0
-    timemodified: int = 0
-
-
-class GradeItem(BaseModel):
-    """Grade table row from ``gradereport_user_get_grades_table``."""
-
-    itemname: str = ""
-    grade: str = ""
-    percentage: str = ""
-    feedback: str = ""
-
-
-# ---------------------------------------------------------------
 # Feature 5: Calendar & Deadlines
 # ---------------------------------------------------------------
 
@@ -211,27 +187,6 @@ class CalendarEvent(BaseModel):
     eventtype: str = ""
     timestart: int = 0
     timeduration: int = 0
-
-
-# ---------------------------------------------------------------
-# Feature 7: Write Operations
-# ---------------------------------------------------------------
-
-
-class EnrolmentRequest(BaseModel):
-    """Enrolment request for ``enrol_manual_enrol_users``."""
-
-    userid: int
-    courseid: int
-    roleid: int = 5
-
-
-class MessageRequest(BaseModel):
-    """Message request for ``core_message_send_instant_messages``."""
-
-    touserid: int
-    text: str
-    textformat: int = 0
 
 
 # ---------------------------------------------------------------
@@ -395,15 +350,6 @@ class Position(BaseModel):
     idnumber: str = ""
 
 
-class Job(BaseModel):
-    """Job assignment from ``tool_organisation_create_job``."""
-
-    id: int
-    userid: int = 0
-    departmentid: int = 0
-    positionid: int = 0
-
-
 class PotentialParent(BaseModel):
     """Valid parent for department/position hierarchy."""
 
@@ -426,14 +372,6 @@ class UpdatedEntity(BaseModel):
 
     id: int
     idnumber: str = ""
-
-
-class UnassignedManager(BaseModel):
-    """Record from ``tool_organisation_unassign_managers``."""
-
-    itemid: int = 0
-    userid: int = 0
-    managerid: int = 0
 
 
 # ---------------------------------------------------------------
@@ -602,8 +540,11 @@ class DuplicatedCourse(BaseModel):
 # ---------------------------------------------------------------
 
 
-class ExportStatus(BaseModel):
-    """Status from ``tool_wp_get_export_status``."""
+class _JobStatus(BaseModel):
+    """Shared base for export/import job status."""
+
+    _STATUS_COMPLETE = 2
+    _STATUS_ERROR = 3
 
     status: int = 0
     statusmessage: str = ""
@@ -611,24 +552,16 @@ class ExportStatus(BaseModel):
 
     @property
     def is_complete(self) -> bool:
-        return self.status == 2
+        return self.status == self._STATUS_COMPLETE
 
     @property
     def is_error(self) -> bool:
-        return self.status == 3
+        return self.status == self._STATUS_ERROR
 
 
-class ImportStatus(BaseModel):
-    """Status from ``tool_wp_get_import_status``."""
+class ExportStatus(_JobStatus):
+    """Status of a Workplace export job."""
 
-    status: int = 0
-    statusmessage: str = ""
-    progress: int = 0
 
-    @property
-    def is_complete(self) -> bool:
-        return self.status == 2
-
-    @property
-    def is_error(self) -> bool:
-        return self.status == 3
+class ImportStatus(_JobStatus):
+    """Status of a Workplace import job."""

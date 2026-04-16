@@ -10,6 +10,9 @@ import pytest
 from soliplex.moodle.client import MAX_RESULTS
 from soliplex.moodle.client import MoodleAPIError
 from soliplex.moodle.client import MoodleClient
+from soliplex.moodle.client import _to_dict
+from tests.unit.conftest import mock_moodle_response as _mock_response
+from tests.unit.conftest import patch_moodle_httpx as _patch_httpx
 
 BASE_URL = "http://moodle.test"
 TOKEN = "test_token_123"
@@ -20,32 +23,28 @@ def client():
     return MoodleClient(base_url=BASE_URL, token=TOKEN)
 
 
-def _mock_response(json_data, status_code=200):
-    """Create a mock httpx.Response."""
-    resp = mock.MagicMock(spec=httpx.Response)
-    resp.status_code = status_code
-    resp.json.return_value = json_data
-    if status_code >= 400:
-        resp.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "error",
-            request=mock.MagicMock(),
-            response=resp,
-        )
-    else:
-        resp.raise_for_status.return_value = None
-    return resp
+# ---------------------------------------------------------------
+# _to_dict helper
+# ---------------------------------------------------------------
 
 
-def _patch_httpx(response):
-    """Patch httpx.AsyncClient to return the given response."""
-    mock_client = mock.AsyncMock()
-    mock_client.post.return_value = response
-    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
-    return mock.patch(
-        "soliplex.moodle.client.httpx.AsyncClient",
-        return_value=mock_client,
-    )
+def test_to_dict_none_returns_default():
+    assert _to_dict(None) == {"result": True}
+
+
+def test_to_dict_dict_passthrough():
+    d = {"key": "value"}
+    assert _to_dict(d) is d
+
+
+def test_to_dict_non_dict_returns_default():
+    assert _to_dict(True) == {"result": True}
+    assert _to_dict(42) == {"result": True}
+
+
+def test_to_dict_custom_default():
+    assert _to_dict(None, default={"ok": 1}) == {"ok": 1}
+    assert _to_dict(True, default={"ok": 1}) == {"ok": 1}
 
 
 # ---------------------------------------------------------------

@@ -12,10 +12,6 @@ LTI_CLAIM_VERSION = "https://purl.imsglobal.org/spec/lti/claim/version"
 LTI_CLAIM_DEPLOYMENT_ID = (
     "https://purl.imsglobal.org/spec/lti/claim/deployment_id"
 )
-LTI_CLAIM_RESOURCE_LINK = (
-    "https://purl.imsglobal.org/spec/lti/claim/resource_link"
-)
-LTI_CLAIM_ROLES = "https://purl.imsglobal.org/spec/lti/claim/roles"
 LTI_CLAIM_CONTEXT = "https://purl.imsglobal.org/spec/lti/claim/context"
 LTI_CLAIM_TARGET_LINK_URI = (
     "https://purl.imsglobal.org/spec/lti/claim/target_link_uri"
@@ -26,21 +22,18 @@ LTI_RESOURCE_LINK_REQUEST = "LtiResourceLinkRequest"
 
 
 class LTIValidationError(ValueError):
-    pass
+    _default: str = ""
+
+    def __init__(self, msg=None):
+        super().__init__(msg or self._default)
 
 
 class LTITokenExpired(LTIValidationError):
     _default = "LTI id_token has expired"
 
-    def __init__(self, msg=None):
-        super().__init__(msg or self._default)
-
 
 class LTIInvalidNonce(LTIValidationError):
     _default = "LTI nonce mismatch"
-
-    def __init__(self, msg=None):
-        super().__init__(msg or self._default)
 
 
 class LTIInvalidVersion(LTIValidationError):

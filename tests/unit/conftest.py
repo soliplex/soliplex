@@ -3,6 +3,7 @@ import tempfile
 from unittest import mock
 
 import _test_features as agui_features
+import httpx
 import pytest
 
 from soliplex import authz as authz_package
@@ -13,6 +14,49 @@ from soliplex.config import routing as config_routing
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
+
+# ---------------------------------------------------------------------------
+# LTI shared test constants
+# ---------------------------------------------------------------------------
+
+LTI_TEST_ISSUER = "https://moodle.example.com"
+LTI_TEST_CLIENT_ID = "soliplex-lti-tool"
+LTI_TEST_PLATFORM_ID = "moodle-workplace"
+LTI_TEST_DEFAULT_ROOM = "moodle-tools"
+
+
+# ---------------------------------------------------------------------------
+# Moodle shared test helpers
+# ---------------------------------------------------------------------------
+
+
+def mock_moodle_response(json_data, status_code=200):
+    """Create a mock httpx.Response for Moodle API tests."""
+    resp = mock.MagicMock(spec=httpx.Response)
+    resp.status_code = status_code
+    resp.json.return_value = json_data
+    if status_code >= 400:
+        resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "error",
+            request=mock.MagicMock(),
+            response=resp,
+        )
+    else:
+        resp.raise_for_status.return_value = None
+    return resp
+
+
+def patch_moodle_httpx(response):
+    """Context manager to patch httpx.AsyncClient for Moodle tests."""
+    mock_client = mock.AsyncMock()
+    mock_client.post.return_value = response
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    return mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    )
+
 
 AGUI_FEATURE_NAME = "test-agui-feature"
 

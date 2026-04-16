@@ -40,6 +40,14 @@ def find_platform(
     raise UnknownLTIPlatform(issuer, client_id)
 
 
+def find_platform_by_id(platforms, platform_id):
+    """Look up a platform by its unique ``id`` field."""
+    for p in platforms:
+        if p.id == platform_id:
+            return p
+    return None
+
+
 def check_deployment(
     platform: config_lti.LTIPlatformConfig,
     deployment_id: str,

@@ -258,10 +258,11 @@ class Installation:
 
     @property
     def auth_disabled(self):
-        return (
-            len(self._config.oidc_auth_system_configs) == 0
-            and len(self._config.lti_platform_configs) == 0
-        )
+        # Only OIDC configs gate the no-auth bypass.  LTI
+        # session tokens are validated as a transparent
+        # fallback in authn.authenticate() and do not
+        # affect whether the system runs in no-auth mode.
+        return len(self._config.oidc_auth_system_configs) == 0
 
     @property
     def oidc_auth_system_configs(

@@ -56,8 +56,8 @@ Present data in clear tables when appropriate.
 
 def moodle_tools_agent_factory(
     agent_config: config.FactoryAgentConfig,
-    tool_configs: agents.ToolConfigMap = None,
-    mcp_client_toolset_configs: (config.MCP_ClientToolsetConfigMap) = None,
+    tool_configs: agents.ToolConfigMap = None,  # noqa: U100
+    mcp_client_toolset_configs: (config.MCP_ClientToolsetConfigMap) = None,  # noqa: U100
     skill_toolset_config: (agents.SkillToolsetConfig | None) = None,
 ) -> pydantic_ai.Agent:
     """Create a Moodle Workplace router agent with skills.

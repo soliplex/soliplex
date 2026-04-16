@@ -71,7 +71,7 @@ def authenticate(
 
         try:
             secret_key = the_installation.get_secret("LTI_SESSION_SECRET")
-        except Exception:
+        except KeyError:
             secret_key = None
 
         if secret_key is not None:
