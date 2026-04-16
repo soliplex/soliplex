@@ -697,9 +697,7 @@ class InstallationConfig:
     #
     lti_platforms_path: pathlib.Path | None = None
 
-    _lti_platform_configs: list[config_lti.LTIPlatformConfig] = (
-        None
-    )
+    _lti_platform_configs: list[config_lti.LTIPlatformConfig] = None
 
     #
     # Path(s) to room configs:  each item can be either a single
@@ -1041,9 +1039,7 @@ class InstallationConfig:
             ]
 
             if self.lti_platforms_path is not None:
-                self.lti_platforms_path = (
-                    parent_dir / self.lti_platforms_path
-                )
+                self.lti_platforms_path = parent_dir / self.lti_platforms_path
 
             self.room_paths = [
                 parent_dir / room_path
@@ -1093,9 +1089,7 @@ class InstallationConfig:
             result["upload_path"] = str(self.upload_path)
 
         if self.lti_platforms_path:
-            result["lti_platforms_path"] = str(
-                self.lti_platforms_path
-            )
+            result["lti_platforms_path"] = str(self.lti_platforms_path)
 
         if self.sandbox_config:
             result["sandbox_config"] = self.sandbox_config.as_yaml
@@ -1162,15 +1156,11 @@ class InstallationConfig:
         try:
             config_yaml = _load_config_yaml(config_file)
         except config_exc.NoSuchConfig:
-            _logger.debug(
-                "LTI config not found: %s", config_file
-            )
+            _logger.debug("LTI config not found: %s", config_file)
             return []
 
         return [
-            config_lti.LTIPlatformConfig.from_yaml(
-                config_file, p_yaml
-            )
+            config_lti.LTIPlatformConfig.from_yaml(config_file, p_yaml)
             for p_yaml in config_yaml.get("platforms", ())
         ]
 
@@ -1179,9 +1169,7 @@ class InstallationConfig:
         self,
     ) -> list[config_lti.LTIPlatformConfig]:
         if self._lti_platform_configs is None:
-            self._lti_platform_configs = (
-                self._load_lti_platform_configs()
-            )
+            self._lti_platform_configs = self._load_lti_platform_configs()
 
         return self._lti_platform_configs
 

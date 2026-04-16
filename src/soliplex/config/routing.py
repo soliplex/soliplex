@@ -205,9 +205,7 @@ _DEFAULT_ROUTER_KWARGS = {
 def register_default_routers():
     for group_name, router_name in _DEFAULT_ROUTER_NAMES.items():
         router = _utils._from_dotted_name(router_name)
-        kw = _DEFAULT_ROUTER_KWARGS.get(
-            group_name, _DEFAULT_KWARGS
-        )
+        kw = _DEFAULT_ROUTER_KWARGS.get(group_name, _DEFAULT_KWARGS)
         APP_ROUTERS_BY_GROUP_NAME[group_name] = (
             router,
             router_name,

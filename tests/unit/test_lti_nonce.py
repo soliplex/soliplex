@@ -45,9 +45,7 @@ def test_decode_state_expired(vt):
     """Expired state returns None"""
     vt.return_value = None
 
-    result = lti_nonce.decode_state(
-        SECRET_KEY, "some-state", max_age=1
-    )
+    result = lti_nonce.decode_state(SECRET_KEY, "some-state", max_age=1)
 
     assert result is None
     vt.assert_called_once_with(
@@ -59,18 +57,14 @@ def test_decode_state_expired(vt):
 
 
 def test_decode_state_tampered():
-    result = lti_nonce.decode_state(
-        SECRET_KEY, "tampered-garbage-token"
-    )
+    result = lti_nonce.decode_state(SECRET_KEY, "tampered-garbage-token")
 
     assert result is None
 
 
 def test_decode_state_missing_fields():
     """If the payload lacks nonce or platform_id, returns None"""
-    with mock.patch(
-        "soliplex.mcp_auth.validate_url_safe_token"
-    ) as vt:
+    with mock.patch("soliplex.mcp_auth.validate_url_safe_token") as vt:
         # Missing platform_id
         vt.return_value = {"nonce": NONCE}
         result = lti_nonce.decode_state(SECRET_KEY, "tok")

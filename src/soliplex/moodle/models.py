@@ -121,7 +121,10 @@ class CourseSection(BaseModel):
 
 
 class ActivityCompletionStatus(BaseModel):
-    """Per-activity completion from ``core_completion_get_activities_completion_status``."""
+    """Per-activity completion.
+
+    Returned by ``core_completion_get_activities_completion_status``.
+    """
 
     cmid: int
     modname: str = ""
@@ -249,7 +252,10 @@ class Certification(BaseModel):
 
 
 class CertificationAllocation(BaseModel):
-    """User allocation from ``tool_certification_get_certification_allocations``."""
+    """User allocation.
+
+    Returned by ``tool_certification_get_certification_allocations``.
+    """
 
     id: int
     userid: int = 0
@@ -357,7 +363,10 @@ class UserCatalogueItem(BaseModel):
 
 
 class ProgramCourseOption(BaseModel):
-    """Course option for program management from ``tool_program_potential_courses_program_selector``."""
+    """Course option for program management.
+
+    Returned by ``tool_program_potential_courses_program_selector``.
+    """
 
     id: int
     fullname: str = ""
@@ -433,7 +442,10 @@ class UnassignedManager(BaseModel):
 
 
 class CompetencyFramework(BaseModel):
-    """Competency framework from ``tool_lp_data_for_competency_frameworks_manage_page``."""
+    """Competency framework.
+
+    Returned by ``tool_lp_data_for_competency_frameworks_manage_page``.
+    """
 
     id: int
     shortname: str = ""
@@ -443,7 +455,10 @@ class CompetencyFramework(BaseModel):
 
 
 class DepartmentMember(BaseModel):
-    """User with job assignment from ``local_soliplex_get_department_members``."""
+    """User with job assignment.
+
+    Returned by ``local_soliplex_get_department_members``.
+    """
 
     userid: int
     username: str = ""
@@ -503,7 +518,10 @@ class ReportData(BaseModel):
 
 
 class CompletionReportRow(BaseModel):
-    """Row from ``local_soliplex_get_utm_report`` or ``local_soliplex_get_adv_comp_report``."""
+    """Row from ``local_soliplex_get_utm_report``.
+
+    Also returned by ``local_soliplex_get_adv_comp_report``.
+    """
 
     userid: int
     username: str = ""

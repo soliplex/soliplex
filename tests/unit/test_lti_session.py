@@ -16,8 +16,7 @@ class TestClaimsFromLtiPayload:
             "family_name": "Phlyntstone",
             "name": "Phred Phlyntstone",
             lti_validation.LTI_CLAIM_ROLES: [
-                "http://purl.imsglobal.org/vocab/lis/v2"
-                "/membership#Learner"
+                "http://purl.imsglobal.org/vocab/lis/v2/membership#Learner"
             ],
             lti_validation.LTI_CLAIM_RESOURCE_LINK: {
                 "id": "link-456",
@@ -32,9 +31,7 @@ class TestClaimsFromLtiPayload:
         assert found["given_name"] == "Phred"
         assert found["family_name"] == "Phlyntstone"
         assert found["name"] == "Phred Phlyntstone"
-        assert found["preferred_username"] == (
-            "phred@example.com"
-        )
+        assert found["preferred_username"] == ("phred@example.com")
         assert len(found["lti_roles"]) == 1
         assert found["lti_resource_link_id"] == "link-456"
 
@@ -80,9 +77,7 @@ class TestClaimsFromLtiPayload:
 
         found = lti_session.claims_from_lti_payload(payload)
 
-        assert found["preferred_username"] == (
-            "phred@example.com"
-        )
+        assert found["preferred_username"] == ("phred@example.com")
 
 
 class TestSessionTokenRoundTrip:
@@ -92,9 +87,7 @@ class TestSessionTokenRoundTrip:
             "email": "phred@example.com",
         }
 
-        token = lti_session.mint_session_token(
-            SECRET_KEY, claims, ROOM_ID
-        )
+        token = lti_session.mint_session_token(SECRET_KEY, claims, ROOM_ID)
 
         found = lti_session.validate_session_token(
             SECRET_KEY, token, max_age=3600
@@ -114,18 +107,14 @@ class TestSessionTokenRoundTrip:
 
     def test_validate_wrong_key(self):
         claims = {"sub": "user-123"}
-        token = lti_session.mint_session_token(
-            SECRET_KEY, claims, ROOM_ID
-        )
+        token = lti_session.mint_session_token(SECRET_KEY, claims, ROOM_ID)
 
         found = lti_session.validate_session_token(
             "wrong-key", token, max_age=3600
         )
         assert found is None
 
-    @mock.patch(
-        "soliplex.mcp_auth.validate_url_safe_token"
-    )
+    @mock.patch("soliplex.mcp_auth.validate_url_safe_token")
     def test_validate_expired(self, vt):
         """Expired token returns None"""
         vt.return_value = None

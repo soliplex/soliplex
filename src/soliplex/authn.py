@@ -70,9 +70,7 @@ def authenticate(
         from soliplex.lti import session as lti_session
 
         try:
-            secret_key = the_installation.get_secret(
-                "LTI_SESSION_SECRET"
-            )
+            secret_key = the_installation.get_secret("LTI_SESSION_SECRET")
         except Exception:
             secret_key = None
 

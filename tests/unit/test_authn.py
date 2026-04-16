@@ -211,54 +211,36 @@ def _make_lti_platform(session_ttl=3600):
 
 
 @mock.patch("soliplex.authn.validate_access_token")
-@mock.patch(
-    "soliplex.lti.session.validate_session_token"
-)
-def test_authenticate_lti_fallback_hit(
-    vst, vat, with_auth_systems
-):
+@mock.patch("soliplex.lti.session.validate_session_token")
+def test_authenticate_lti_fallback_hit(vst, vat, with_auth_systems):
     """LTI session token accepted after OIDC miss"""
     vat.return_value = None
     vst.return_value = LTI_CLAIMS
 
     platform = _make_lti_platform()
-    the_installation = mock.create_autospec(
-        installation.Installation
-    )
+    the_installation = mock.create_autospec(installation.Installation)
     the_installation.auth_disabled = False
-    the_installation.oidc_auth_system_configs = (
-        with_auth_systems
-    )
+    the_installation.oidc_auth_system_configs = with_auth_systems
     the_installation.lti_platform_configs = [platform]
     the_installation.get_secret.return_value = LTI_SECRET
 
     found = authn.authenticate(the_installation, "tok")
 
     assert found is LTI_CLAIMS
-    vst.assert_called_once_with(
-        LTI_SECRET, "tok", max_age=3600
-    )
+    vst.assert_called_once_with(LTI_SECRET, "tok", max_age=3600)
 
 
 @mock.patch("soliplex.authn.validate_access_token")
-@mock.patch(
-    "soliplex.lti.session.validate_session_token"
-)
-def test_authenticate_lti_fallback_miss(
-    vst, vat, with_auth_systems
-):
+@mock.patch("soliplex.lti.session.validate_session_token")
+def test_authenticate_lti_fallback_miss(vst, vat, with_auth_systems):
     """LTI session token miss still raises 401"""
     vat.return_value = None
     vst.return_value = None
 
     platform = _make_lti_platform()
-    the_installation = mock.create_autospec(
-        installation.Installation
-    )
+    the_installation = mock.create_autospec(installation.Installation)
     the_installation.auth_disabled = False
-    the_installation.oidc_auth_system_configs = (
-        with_auth_systems
-    )
+    the_installation.oidc_auth_system_configs = with_auth_systems
     the_installation.lti_platform_configs = [platform]
     the_installation.get_secret.return_value = LTI_SECRET
 
@@ -269,24 +251,16 @@ def test_authenticate_lti_fallback_miss(
 
 
 @mock.patch("soliplex.authn.validate_access_token")
-def test_authenticate_lti_secret_missing(
-    vat, with_auth_systems
-):
+def test_authenticate_lti_secret_missing(vat, with_auth_systems):
     """Missing LTI secret skips LTI check gracefully"""
     vat.return_value = None
 
     platform = _make_lti_platform()
-    the_installation = mock.create_autospec(
-        installation.Installation
-    )
+    the_installation = mock.create_autospec(installation.Installation)
     the_installation.auth_disabled = False
-    the_installation.oidc_auth_system_configs = (
-        with_auth_systems
-    )
+    the_installation.oidc_auth_system_configs = with_auth_systems
     the_installation.lti_platform_configs = [platform]
-    the_installation.get_secret.side_effect = KeyError(
-        "LTI_SESSION_SECRET"
-    )
+    the_installation.get_secret.side_effect = KeyError("LTI_SESSION_SECRET")
 
     with pytest.raises(fastapi.HTTPException) as exc:
         authn.authenticate(the_installation, "tok")

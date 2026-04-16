@@ -445,9 +445,7 @@ async def test_get_course_groups(client):
 
 @pytest.mark.asyncio
 async def test_get_group_members(client):
-    resp = _mock_response(
-        [{"groupid": 1, "userids": [3, 4, 5]}]
-    )
+    resp = _mock_response([{"groupid": 1, "userids": [3, 4, 5]}])
     with _patch_httpx(resp):
         results = await client.get_group_members([1])
 
@@ -473,9 +471,7 @@ async def test_get_cohorts(client):
 
 @pytest.mark.asyncio
 async def test_get_cohort_members(client):
-    resp = _mock_response(
-        [{"cohortid": 1, "userids": [3, 4]}]
-    )
+    resp = _mock_response([{"cohortid": 1, "userids": [3, 4]}])
     with _patch_httpx(resp):
         results = await client.get_cohort_members([1])
 
@@ -615,7 +611,8 @@ async def test_enrol_users_returns_dict(client):
 
 @pytest.mark.asyncio
 async def test_enrol_users_returns_non_dict(client):
-    # When the API returns a non-dict (e.g. a list), fall back to empty warnings
+    # When the API returns a non-dict (e.g. a list), fall back to
+    # empty warnings
     resp = _mock_response([])
     with _patch_httpx(resp):
         result = await client.enrol_users(
@@ -627,9 +624,7 @@ async def test_enrol_users_returns_non_dict(client):
 
 @pytest.mark.asyncio
 async def test_send_messages(client):
-    resp = _mock_response(
-        [{"msgid": 1, "text": "Hello"}]
-    )
+    resp = _mock_response([{"msgid": 1, "text": "Hello"}])
     with _patch_httpx(resp):
         result = await client.send_messages(
             [{"touserid": 3, "text": "Hello", "textformat": 0}]
@@ -783,9 +778,7 @@ async def test_certify_user_non_dict(client):
 async def test_revoke_certification(client):
     resp = _mock_response({"result": True})
     with _patch_httpx(resp):
-        result = await client.revoke_certification(
-            certificationid=1, userid=3
-        )
+        result = await client.revoke_certification(certificationid=1, userid=3)
 
     assert result == {"result": True}
 
@@ -1021,9 +1014,7 @@ async def test_get_program_content(client):
 
 @pytest.mark.asyncio
 async def test_search_courses_for_program(client):
-    resp = _mock_response(
-        [{"id": 2, "fullname": "Safety Fundamentals"}]
-    )
+    resp = _mock_response([{"id": 2, "fullname": "Safety Fundamentals"}])
     with _patch_httpx(resp):
         courses = await client.search_courses_for_program()
 
@@ -1165,7 +1156,12 @@ async def test_get_departments_non_dict(client):
 @pytest.mark.asyncio
 async def test_get_departments_with_search(client):
     resp = _mock_response(
-        {"departments": [{"id": 1, "name": "Engineering"}, {"id": 2, "name": "Operations"}]}
+        {
+            "departments": [
+                {"id": 1, "name": "Engineering"},
+                {"id": 2, "name": "Operations"},
+            ]
+        }
     )
     with _patch_httpx(resp):
         depts = await client.get_departments(search="eng")
@@ -1189,7 +1185,12 @@ async def test_get_positions(client):
 @pytest.mark.asyncio
 async def test_get_positions_with_search(client):
     resp = _mock_response(
-        {"positions": [{"id": 1, "name": "Manager"}, {"id": 2, "name": "Engineer"}]}
+        {
+            "positions": [
+                {"id": 1, "name": "Manager"},
+                {"id": 2, "name": "Engineer"},
+            ]
+        }
     )
     with _patch_httpx(resp):
         positions = await client.get_positions(search="eng")
@@ -1205,7 +1206,6 @@ async def test_get_positions_non_dict(client):
         positions = await client.get_positions()
 
     assert positions == []
-
 
 
 @pytest.mark.asyncio
@@ -1226,9 +1226,7 @@ async def test_create_job(client):
 async def test_assign_managers(client):
     resp = _mock_response(None)
     with _patch_httpx(resp):
-        result = await client.assign_managers(
-            user_ids=[3], manager_ids=[2]
-        )
+        result = await client.assign_managers(user_ids=[3], manager_ids=[2])
 
     assert result == {"result": True}
 
@@ -1237,9 +1235,7 @@ async def test_assign_managers(client):
 async def test_assign_managers_returns_dict(client):
     resp = _mock_response({"result": True})
     with _patch_httpx(resp):
-        result = await client.assign_managers(
-            user_ids=[3], manager_ids=[2]
-        )
+        result = await client.assign_managers(user_ids=[3], manager_ids=[2])
 
     assert result == {"result": True}
 
@@ -1384,7 +1380,11 @@ async def test_get_course_competencies_empty(client):
 @pytest.mark.asyncio
 async def test_get_catalogue_page_with_query(client):
     resp = _mock_response(
-        {"contents": {"catalogueitems": [{"id": 1, "title": "Safety", "url": "/c/1"}]}}
+        {
+            "contents": {
+                "catalogueitems": [{"id": 1, "title": "Safety", "url": "/c/1"}]
+            }
+        }
     )
     with _patch_httpx(resp):
         items = await client.get_catalogue_page(query="safety")
@@ -1468,7 +1468,6 @@ async def test_deallocate_user_from_certification_non_dict(client):
     assert result == {"result": True}
 
 
-
 @pytest.mark.asyncio
 async def test_get_user_learning_plans_non_dict(client):
     resp = _mock_response([])
@@ -1514,16 +1513,21 @@ def _jobs_report_response(rows):
 @pytest.mark.asyncio
 async def test_get_department_members(client):
     resp = _mock_response(
-        _jobs_report_response([
+        _jobs_report_response(
             [
-                '<a href="http://moodle.test/user/profile.php?id=3">Alice Johnson</a>',
-                "Engineering",
-                "Manager",
-                "",
-                "18/03/26",
-                "",
-            ],
-        ])
+                [
+                    (
+                        '<a href="http://moodle.test/user/profile.php?id=3">'
+                        "Alice Johnson</a>"
+                    ),
+                    "Engineering",
+                    "Manager",
+                    "",
+                    "18/03/26",
+                    "",
+                ],
+            ]
+        )
     )
     with _patch_httpx(resp):
         members = await client.get_department_members()
@@ -1539,9 +1543,7 @@ async def test_get_department_members(client):
 
 @pytest.mark.asyncio
 async def test_get_department_members_empty(client):
-    resp = _mock_response(
-        _jobs_report_response([])
-    )
+    resp = _mock_response(_jobs_report_response([]))
     with _patch_httpx(resp):
         members = await client.get_department_members()
 
@@ -1551,24 +1553,26 @@ async def test_get_department_members_empty(client):
 @pytest.mark.asyncio
 async def test_get_department_members_search_filter(client):
     resp = _mock_response(
-        _jobs_report_response([
+        _jobs_report_response(
             [
-                '<a href="?id=3">Alice Johnson</a>',
-                "Engineering",
-                "Manager",
-                "",
-                "",
-                "",
-            ],
-            [
-                '<a href="?id=4">Bob Smith</a>',
-                "Engineering",
-                "Senior Engineer",
-                "",
-                "",
-                "",
-            ],
-        ])
+                [
+                    '<a href="?id=3">Alice Johnson</a>',
+                    "Engineering",
+                    "Manager",
+                    "",
+                    "",
+                    "",
+                ],
+                [
+                    '<a href="?id=4">Bob Smith</a>',
+                    "Engineering",
+                    "Senior Engineer",
+                    "",
+                    "",
+                    "",
+                ],
+            ]
+        )
     )
     with _patch_httpx(resp):
         members = await client.get_department_members(search="Bob")
@@ -1592,18 +1596,20 @@ async def test_get_department_members_non_dict(client):
 async def test_get_department_members_malformed_row(client):
     """Rows with too few columns or missing user ID are skipped."""
     resp = _mock_response(
-        _jobs_report_response([
-            ["<span>no link</span>"],
-            ["<span>no id in link</span>", "Dept", "Pos", "", "", ""],
+        _jobs_report_response(
             [
-                '<a href="?id=5">Carol Williams</a>',
-                "Operations",
-                "Analyst",
-                "",
-                "",
-                "",
-            ],
-        ])
+                ["<span>no link</span>"],
+                ["<span>no id in link</span>", "Dept", "Pos", "", "", ""],
+                [
+                    '<a href="?id=5">Carol Williams</a>',
+                    "Operations",
+                    "Analyst",
+                    "",
+                    "",
+                    "",
+                ],
+            ]
+        )
     )
     with _patch_httpx(resp):
         members = await client.get_department_members()
@@ -1616,24 +1622,26 @@ async def test_get_department_members_malformed_row(client):
 async def test_get_department_members_dept_position_filter(client):
     """Client-side departmentid/positionid filters skip empty values."""
     resp = _mock_response(
-        _jobs_report_response([
+        _jobs_report_response(
             [
-                '<a href="?id=3">Alice Johnson</a>',
-                "",
-                "Manager",
-                "",
-                "",
-                "",
-            ],
-            [
-                '<a href="?id=4">Bob Smith</a>',
-                "Engineering",
-                "",
-                "",
-                "",
-                "",
-            ],
-        ])
+                [
+                    '<a href="?id=3">Alice Johnson</a>',
+                    "",
+                    "Manager",
+                    "",
+                    "",
+                    "",
+                ],
+                [
+                    '<a href="?id=4">Bob Smith</a>',
+                    "Engineering",
+                    "",
+                    "",
+                    "",
+                    "",
+                ],
+            ]
+        )
     )
     with _patch_httpx(resp):
         members_dept = await client.get_department_members(departmentid=1)
@@ -1702,7 +1710,9 @@ async def test_list_reports(client):
                 {
                     "id": 1,
                     "name": "Course Completion Summary",
-                    "source": "core_course\\reportbuilder\\datasource\\courses",
+                    "source": (
+                        "core_course\\reportbuilder\\datasource\\courses"
+                    ),
                     "sourcename": "Courses",
                     "type": 0,
                     "timecreated": 1700000000,
@@ -1906,9 +1916,7 @@ async def test_create_departments(client):
 async def test_create_departments_non_dict(client):
     resp = _mock_response([])
     with _patch_httpx(resp):
-        created, warnings = await client.create_departments(
-            [{"name": "X"}]
-        )
+        created, warnings = await client.create_departments([{"name": "X"}])
 
     assert created == []
     assert warnings == []
@@ -1917,11 +1925,21 @@ async def test_create_departments_non_dict(client):
 @pytest.mark.asyncio
 async def test_create_departments_with_optional_fields(client):
     resp = _mock_response(
-        {"result": [{"id": 11, "name": "HR", "idnumber": "HR01"}], "warnings": []}
+        {
+            "result": [{"id": 11, "name": "HR", "idnumber": "HR01"}],
+            "warnings": [],
+        }
     )
     with _patch_httpx(resp):
         created, warnings = await client.create_departments(
-            [{"name": "HR", "idnumber": "HR01", "parent": "ROOT", "description": "Human Resources"}]
+            [
+                {
+                    "name": "HR",
+                    "idnumber": "HR01",
+                    "parent": "ROOT",
+                    "description": "Human Resources",
+                }
+            ]
         )
 
     assert len(created) == 1
@@ -2033,11 +2051,21 @@ async def test_create_positions(client):
 @pytest.mark.asyncio
 async def test_create_positions_with_manager_flags(client):
     resp = _mock_response(
-        {"result": [{"id": 6, "name": "Lead", "idnumber": "LEAD"}], "warnings": []}
+        {
+            "result": [{"id": 6, "name": "Lead", "idnumber": "LEAD"}],
+            "warnings": [],
+        }
     )
     with _patch_httpx(resp):
         created, warnings = await client.create_positions(
-            [{"name": "Lead", "idnumber": "LEAD", "departmentmanager": True, "globalmanager": True}]
+            [
+                {
+                    "name": "Lead",
+                    "idnumber": "LEAD",
+                    "departmentmanager": True,
+                    "globalmanager": True,
+                }
+            ]
         )
 
     assert len(created) == 1
@@ -2074,7 +2102,13 @@ async def test_update_positions_with_flags(client):
     )
     with _patch_httpx(resp):
         updated, _ = await client.update_positions(
-            [{"idnumber": "ENG", "departmentmanager": False, "globalmanager": True}]
+            [
+                {
+                    "idnumber": "ENG",
+                    "departmentmanager": False,
+                    "globalmanager": True,
+                }
+            ]
         )
 
     assert len(updated) == 1
@@ -2084,9 +2118,7 @@ async def test_update_positions_with_flags(client):
 async def test_update_positions_non_dict(client):
     resp = _mock_response([])
     with _patch_httpx(resp):
-        updated, warnings = await client.update_positions(
-            [{"idnumber": "X"}]
-        )
+        updated, warnings = await client.update_positions([{"idnumber": "X"}])
 
     assert updated == []
     assert warnings == []
@@ -2137,7 +2169,9 @@ async def test_get_potential_parent_positions_non_list(client):
 async def test_update_job(client):
     resp = _mock_response({"status": True})
     with _patch_httpx(resp):
-        result = await client.update_job(3, "ENG", "DEV", startdate=1000, enddate=2000)
+        result = await client.update_job(
+            3, "ENG", "DEV", startdate=1000, enddate=2000
+        )
 
     assert result == {"status": True}
 
@@ -2174,9 +2208,7 @@ async def test_unassign_managers(client):
     resp = _mock_response(
         {
             "warnings": [],
-            "unassignedmanagers": [
-                {"itemid": 1, "userid": 3, "managerid": 5}
-            ],
+            "unassignedmanagers": [{"itemid": 1, "userid": 3, "managerid": 5}],
         }
     )
     with _patch_httpx(resp):
@@ -2404,9 +2436,7 @@ async def test_bulk_reset_program_progress(client):
 async def test_bulk_reset_program_progress_non_dict(client):
     resp = _mock_response(True)
     with _patch_httpx(resp):
-        result = await client.bulk_reset_program_progress(
-            programuserids=[10]
-        )
+        result = await client.bulk_reset_program_progress(programuserids=[10])
 
     assert result.successcount == 0
     assert result.skippedcount == 0
@@ -2805,7 +2835,10 @@ async def test_list_dynamic_rules(client):
                     {
                         "columns": [
                             '<input id="rule-toggle-42" checked>',
-                            '<span data-value="Safety Rule">Safety Rule</span>',
+                            (
+                                '<span data-value="Safety Rule">'
+                                "Safety Rule</span>"
+                            ),
                             "",
                             '<ul><li class="mb-2">Course completed</li></ul>',
                             '<ul><li class="mb-2">Add to cohort</li></ul>',
@@ -2814,7 +2847,10 @@ async def test_list_dynamic_rules(client):
                     {
                         "columns": [
                             '<input id="rule-toggle-43">',
-                            '<span data-value="Onboarding Rule">Onboarding Rule</span>',
+                            (
+                                '<span data-value="Onboarding Rule">'
+                                "Onboarding Rule</span>"
+                            ),
                             "",
                             '<ul><li class="mb-2">User enrolled</li></ul>',
                             '<ul><li class="mb-2">No actions</li></ul>',
@@ -2843,7 +2879,10 @@ async def test_list_dynamic_rules(client):
 @pytest.mark.asyncio
 async def test_list_dynamic_rules_empty(client):
     resp = _mock_response(
-        {"data": {"headers": [], "rows": [], "totalrowcount": 0}, "warnings": []}
+        {
+            "data": {"headers": [], "rows": [], "totalrowcount": 0},
+            "warnings": [],
+        }
     )
     with _patch_httpx(resp):
         rules = await client.list_dynamic_rules()
@@ -2869,7 +2908,12 @@ async def test_list_dynamic_rules_malformed_rows(client):
                 "headers": ["", "Name"],
                 "rows": [
                     {"columns": ["<span>only one col</span>"]},
-                    {"columns": ["<span>no toggle</span>", "<span>name</span>"]},
+                    {
+                        "columns": [
+                            "<span>no toggle</span>",
+                            "<span>name</span>",
+                        ]
+                    },
                     {
                         "columns": [
                             '<input id="rule-toggle-7" checked>',
@@ -2900,9 +2944,7 @@ async def test_list_dynamic_rules_malformed_rows(client):
 
 @pytest.mark.asyncio
 async def test_create_users(client):
-    resp = _mock_response(
-        [{"id": 10, "username": "jdoe"}]
-    )
+    resp = _mock_response([{"id": 10, "username": "jdoe"}])
     with _patch_httpx(resp):
         result = await client.create_users(
             [
@@ -2924,9 +2966,7 @@ async def test_create_users(client):
 async def test_update_users(client):
     resp = _mock_response(None)
     with _patch_httpx(resp):
-        await client.update_users(
-            [{"id": 10, "firstname": "Janet"}]
-        )
+        await client.update_users([{"id": 10, "firstname": "Janet"}])
 
 
 @pytest.mark.asyncio
@@ -2965,9 +3005,7 @@ async def test_get_categories(client):
 
 @pytest.mark.asyncio
 async def test_create_courses(client):
-    resp = _mock_response(
-        [{"id": 5, "shortname": "TEST101"}]
-    )
+    resp = _mock_response([{"id": 5, "shortname": "TEST101"}])
     with _patch_httpx(resp):
         result = await client.create_courses(
             [
@@ -2987,9 +3025,7 @@ async def test_create_courses(client):
 async def test_update_courses(client):
     resp = _mock_response({"warnings": []})
     with _patch_httpx(resp):
-        await client.update_courses(
-            [{"id": 5, "fullname": "Updated Course"}]
-        )
+        await client.update_courses([{"id": 5, "fullname": "Updated Course"}])
 
 
 @pytest.mark.asyncio
@@ -2997,17 +3033,13 @@ async def test_update_courses_with_warnings(client):
     raw = {"warnings": [{"item": "fullname", "message": "ignored"}]}
     resp = _mock_response(raw)
     with _patch_httpx(resp):
-        result = await client.update_courses(
-            [{"id": 5, "fullname": "Bad"}]
-        )
+        result = await client.update_courses([{"id": 5, "fullname": "Bad"}])
     assert result == raw
 
 
 @pytest.mark.asyncio
 async def test_delete_courses(client):
-    resp = _mock_response(
-        {"warnings": []}
-    )
+    resp = _mock_response({"warnings": []})
     with _patch_httpx(resp):
         result = await client.delete_courses([5])
     assert isinstance(result, dict)
@@ -3015,9 +3047,7 @@ async def test_delete_courses(client):
 
 @pytest.mark.asyncio
 async def test_duplicate_course(client):
-    resp = _mock_response(
-        {"id": 6, "shortname": "COPY101"}
-    )
+    resp = _mock_response({"id": 6, "shortname": "COPY101"})
     with _patch_httpx(resp):
         result = await client.duplicate_course(
             courseid=5,
@@ -3031,9 +3061,7 @@ async def test_duplicate_course(client):
 
 @pytest.mark.asyncio
 async def test_create_categories(client):
-    resp = _mock_response(
-        [{"id": 2, "name": "Training"}]
-    )
+    resp = _mock_response([{"id": 2, "name": "Training"}])
     with _patch_httpx(resp):
         result = await client.create_categories(
             [{"name": "Training", "parent": 0}]
@@ -3070,9 +3098,7 @@ async def test_get_export_status(client):
 
 @pytest.mark.asyncio
 async def test_get_export_file(client):
-    resp = _mock_response(
-        {"fileurl": "http://moodle.test/export.zip"}
-    )
+    resp = _mock_response({"fileurl": "http://moodle.test/export.zip"})
     with _patch_httpx(resp):
         result = await client.get_export_file(1)
     assert "fileurl" in result

@@ -74,19 +74,15 @@ def _build_agent():
 def _build_skills():
     """Build all Moodle skills with a mocked-config client."""
     from soliplex.moodle.client import MoodleClient
-    from soliplex.moodle.skills import (
-        build_certifications_skill,
-        build_courses_skill,
-        build_organisation_skill,
-        build_programs_skill,
-        build_reporting_skill,
-        build_rules_skill,
-        build_users_skill,
-    )
+    from soliplex.moodle.skills import build_certifications_skill
+    from soliplex.moodle.skills import build_courses_skill
+    from soliplex.moodle.skills import build_organisation_skill
+    from soliplex.moodle.skills import build_programs_skill
+    from soliplex.moodle.skills import build_reporting_skill
+    from soliplex.moodle.skills import build_rules_skill
+    from soliplex.moodle.skills import build_users_skill
 
-    client = MoodleClient(
-        base_url=BASE_URL, token=TOKEN, verify=False
-    )
+    client = MoodleClient(base_url=BASE_URL, token=TOKEN, verify=False)
     return [
         build_courses_skill(client),
         build_users_skill(client),
@@ -119,7 +115,7 @@ def _get_tool_fn(agent_or_skills, name):
         for tool in skill.tools:
             if callable(tool) and tool.__name__ == name:
                 return tool
-    raise KeyError(f"Tool '{name}' not found")
+    raise KeyError(name)
 
 
 # -----------------------------------------------------------------
@@ -155,9 +151,7 @@ def test_factory_wires_skill_toolset():
     from soliplex.moodle.agent import moodle_tools_agent_factory
 
     ext_skill = Skill(
-        metadata=SkillMetadata(
-            name="test-skill", description="A test skill"
-        ),
+        metadata=SkillMetadata(name="test-skill", description="A test skill"),
         source=SkillSource.ENTRYPOINT,
         instructions="Test instructions",
     )
@@ -188,7 +182,9 @@ def test_factory_wires_skill_toolset():
 def test_factory_skips_colliding_external_skill():
     """External skills with the same name as a Moodle skill are skipped."""
     from haiku.skills.agent import SkillToolset
-    from haiku.skills.models import Skill, SkillMetadata, SkillSource
+    from haiku.skills.models import Skill
+    from haiku.skills.models import SkillMetadata
+    from haiku.skills.models import SkillSource
 
     from soliplex.moodle.agent import moodle_tools_agent_factory
 
@@ -207,8 +203,7 @@ def test_factory_skips_colliding_external_skill():
 
     agent_config = _make_agent_config()
     with mock.patch(
-        "soliplex.moodle.agent.agents"
-        ".get_model_from_factory_config",
+        "soliplex.moodle.agent.agents.get_model_from_factory_config",
         return_value=TestModel(),
     ):
         # Should not raise — colliding skill is skipped
@@ -226,7 +221,7 @@ def test_factory_agent_has_expected_tools():
     # Inject a dummy toolset without .tools to cover the hasattr False branch
     all_tool_names: set[str] = set()
     for ts in [object(), *agent._user_toolsets]:
-        if hasattr(ts, 'tools'):
+        if hasattr(ts, "tools"):
             all_tool_names.update(ts.tools.keys())
     assert "execute_skill" in all_tool_names
 
@@ -353,7 +348,6 @@ def test_get_tool_fn_raises_for_missing_tool():
     skills = _get_skills()
     with pytest.raises(KeyError, match="no_such_tool"):
         _get_tool_fn(skills, "no_such_tool")
-
 
 
 # -----------------------------------------------------------------
@@ -634,7 +628,9 @@ async def test_get_course_completion_overview_tool():
         "completionstatus": {
             "completed": True,
             "aggregation": 1,
-            "completions": [{"type": 1, "title": "t", "status": "Yes", "complete": True}],
+            "completions": [
+                {"type": 1, "title": "t", "status": "Yes", "complete": True}
+            ],
         }
     }
     completion_u2 = {
@@ -648,7 +644,9 @@ async def test_get_course_completion_overview_tool():
         "completionstatus": {
             "completed": True,
             "aggregation": 1,
-            "completions": [{"type": 1, "title": "t", "status": "Yes", "complete": True}],
+            "completions": [
+                {"type": 1, "title": "t", "status": "Yes", "complete": True}
+            ],
         }
     }
 
@@ -713,7 +711,8 @@ async def test_get_course_completion_overview_tool_error():
 
 @pytest.mark.asyncio
 async def test_get_course_completion_overview_per_user_error():
-    """When per-user completion lookup fails, the user still appears with completed=None."""
+    """When per-user completion lookup fails, the user still appears
+    with completed=None."""
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_course_completion_overview")
 
@@ -773,7 +772,12 @@ async def test_list_course_groups_tool():
 
     resp = _mock_response(
         [
-            {"id": 1, "courseid": 2, "name": "Group A", "description": "Desc A"},
+            {
+                "id": 1,
+                "courseid": 2,
+                "name": "Group A",
+                "description": "Desc A",
+            },
             {"id": 2, "courseid": 2, "name": "Group B", "description": ""},
         ]
     )
@@ -816,7 +820,11 @@ async def test_list_course_groups_tool_error():
     fn = _get_tool_fn(skills, "list_course_groups")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(999))
@@ -830,7 +838,11 @@ async def test_get_group_members_tool_error():
     fn = _get_tool_fn(skills, "get_group_members")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(999))
@@ -887,7 +899,11 @@ async def test_list_cohorts_tool_error():
     fn = _get_tool_fn(skills, "list_cohorts")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
@@ -901,7 +917,11 @@ async def test_get_cohort_members_tool_error():
     fn = _get_tool_fn(skills, "get_cohort_members")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(999))
@@ -1002,7 +1022,8 @@ async def test_get_user_grades_tool_string_cells():
 
 @pytest.mark.asyncio
 async def test_get_user_grades_tool_missing_keys():
-    """Rows with missing grade/percentage keys still parse; rows without itemname are skipped."""
+    """Rows with missing grade/percentage keys still parse; rows without
+    itemname are skipped."""
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_user_grades")
 
@@ -1046,8 +1067,20 @@ async def test_get_assignment_grades_tool():
             "visible": 1,
             "summary": "",
             "modules": [
-                {"id": 10, "name": "Assign 1", "modname": "assign", "visible": 1, "completion": 0},
-                {"id": 11, "name": "Quiz 1", "modname": "quiz", "visible": 1, "completion": 0},
+                {
+                    "id": 10,
+                    "name": "Assign 1",
+                    "modname": "assign",
+                    "visible": 1,
+                    "completion": 0,
+                },
+                {
+                    "id": 11,
+                    "name": "Quiz 1",
+                    "modname": "quiz",
+                    "visible": 1,
+                    "completion": 0,
+                },
             ],
         }
     ]
@@ -1056,7 +1089,11 @@ async def test_get_assignment_grades_tool():
             {
                 "assignmentid": 10,
                 "grades": [
-                    {"userid": 3, "grade": "85.00", "timemodified": 1700000000},
+                    {
+                        "userid": 3,
+                        "grade": "85.00",
+                        "timemodified": 1700000000,
+                    },
                 ],
             }
         ],
@@ -1109,7 +1146,13 @@ async def test_get_assignment_grades_tool_no_assignments():
                 "visible": 1,
                 "summary": "",
                 "modules": [
-                    {"id": 10, "name": "Quiz 1", "modname": "quiz", "visible": 1, "completion": 0},
+                    {
+                        "id": 10,
+                        "name": "Quiz 1",
+                        "modname": "quiz",
+                        "visible": 1,
+                        "completion": 0,
+                    },
                 ],
             }
         ]
@@ -1127,7 +1170,11 @@ async def test_get_assignment_grades_tool_contents_error():
     fn = _get_tool_fn(skills, "get_assignment_grades")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(999))
@@ -1148,7 +1195,13 @@ async def test_get_assignment_grades_tool_grades_error():
             "visible": 1,
             "summary": "",
             "modules": [
-                {"id": 10, "name": "Assign 1", "modname": "assign", "visible": 1, "completion": 0},
+                {
+                    "id": 10,
+                    "name": "Assign 1",
+                    "modname": "assign",
+                    "visible": 1,
+                    "completion": 0,
+                },
             ],
         }
     ]
@@ -1237,7 +1290,9 @@ async def test_get_upcoming_events_tool_no_filter():
         ]
     )
     events_resp = _mock_response({"events": []})
-    with mock.patch("httpx.AsyncClient.post", side_effect=[courses_resp, events_resp]):
+    with mock.patch(
+        "httpx.AsyncClient.post", side_effect=[courses_resp, events_resp]
+    ):
         result = json.loads(await fn("", 7))
 
     assert result == []
@@ -1367,8 +1422,18 @@ async def test_list_certifications_tool():
 
     resp = _mock_response(
         [
-            {"id": 1, "fullname": "Workplace Safety", "idnumber": "WS01", "status": 0},
-            {"id": 2, "fullname": "Data Privacy", "idnumber": "DP01", "status": 0},
+            {
+                "id": 1,
+                "fullname": "Workplace Safety",
+                "idnumber": "WS01",
+                "status": 0,
+            },
+            {
+                "id": 2,
+                "fullname": "Data Privacy",
+                "idnumber": "DP01",
+                "status": 0,
+            },
         ]
     )
     with _patch_httpx(resp):
@@ -1384,7 +1449,11 @@ async def test_list_certifications_tool_error():
     fn = _get_tool_fn(skills, "list_certifications")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
@@ -1422,7 +1491,11 @@ async def test_get_certification_allocations_tool_error():
     fn = _get_tool_fn(skills, "get_certification_allocations")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(1))
@@ -1460,7 +1533,11 @@ async def test_get_user_certifications_tool_error():
     fn = _get_tool_fn(skills, "get_user_certifications")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(3))
@@ -1493,7 +1570,11 @@ async def test_get_certification_history_tool_error():
     fn = _get_tool_fn(skills, "get_certification_history")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(1, 3))
@@ -1535,7 +1616,11 @@ async def test_certify_user_tool_error():
     fn = _get_tool_fn(skills, "certify_user")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn("3", 1, True))
@@ -1575,7 +1660,11 @@ async def test_revoke_certification_tool_error():
     fn = _get_tool_fn(skills, "revoke_certification")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn("3", 1, True))
@@ -1612,7 +1701,11 @@ async def test_search_programs_tool_error():
     fn = _get_tool_fn(skills, "search_programs")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
@@ -1627,8 +1720,18 @@ async def test_get_user_program_courses_tool():
 
     resp = _mock_response(
         [
-            {"id": 2, "shortname": "safety101", "fullname": "Safety Fundamentals", "completed": True},
-            {"id": 3, "shortname": "cyber101", "fullname": "Cybersecurity Basics", "completed": False},
+            {
+                "id": 2,
+                "shortname": "safety101",
+                "fullname": "Safety Fundamentals",
+                "completed": True,
+            },
+            {
+                "id": 3,
+                "shortname": "cyber101",
+                "fullname": "Cybersecurity Basics",
+                "completed": False,
+            },
         ]
     )
     with _patch_httpx(resp):
@@ -1645,7 +1748,11 @@ async def test_get_user_program_courses_tool_error():
     fn = _get_tool_fn(skills, "get_user_program_courses")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(3))
@@ -1687,7 +1794,11 @@ async def test_allocate_users_to_program_tool_error():
     fn = _get_tool_fn(skills, "allocate_users_to_program")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn("3", 1, True))
@@ -1707,8 +1818,20 @@ async def test_list_tenants_tool():
 
     resp = _mock_response(
         [
-            {"id": 1, "name": "Default", "sitename": "Moodle", "idnumber": "", "isdefault": True},
-            {"id": 2, "name": "Regional", "sitename": "Regional", "idnumber": "REG01", "isdefault": False},
+            {
+                "id": 1,
+                "name": "Default",
+                "sitename": "Moodle",
+                "idnumber": "",
+                "isdefault": True,
+            },
+            {
+                "id": 2,
+                "name": "Regional",
+                "sitename": "Regional",
+                "idnumber": "REG01",
+                "isdefault": False,
+            },
         ]
     )
     with _patch_httpx(resp):
@@ -1725,7 +1848,11 @@ async def test_list_tenants_tool_error():
     fn = _get_tool_fn(skills, "list_tenants")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
@@ -1765,7 +1892,11 @@ async def test_browse_catalogue_tool_error():
     fn = _get_tool_fn(skills, "browse_catalogue")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
@@ -1809,7 +1940,11 @@ async def test_get_user_learning_catalogue_tool_error():
     fn = _get_tool_fn(skills, "get_user_learning_catalogue")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(3))
@@ -1838,7 +1973,11 @@ async def test_get_program_content_tool_error():
     fn = _get_tool_fn(skills, "get_program_content")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(1))
@@ -1856,9 +1995,7 @@ async def test_search_courses_for_program_tool():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "search_courses_for_program")
 
-    resp = _mock_response(
-        [{"id": 2, "fullname": "Safety Fundamentals"}]
-    )
+    resp = _mock_response([{"id": 2, "fullname": "Safety Fundamentals"}])
     with _patch_httpx(resp):
         result = json.loads(await fn())
 
@@ -1872,7 +2009,11 @@ async def test_search_courses_for_program_tool_error():
     fn = _get_tool_fn(skills, "search_courses_for_program")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
@@ -1910,7 +2051,11 @@ async def test_deallocate_user_from_program_tool_error():
     fn = _get_tool_fn(skills, "deallocate_user_from_program")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(3, 1, True))
@@ -1928,9 +2073,7 @@ async def test_get_certification_user_details_tool():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_certification_user_details")
 
-    resp = _mock_response(
-        {"id": 10, "userid": 3, "status": "certified"}
-    )
+    resp = _mock_response({"id": 10, "userid": 3, "status": "certified"})
     with _patch_httpx(resp):
         result = json.loads(await fn(1, 3))
 
@@ -1945,7 +2088,11 @@ async def test_get_certification_user_details_tool_error():
     fn = _get_tool_fn(skills, "get_certification_user_details")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(1, 3))
@@ -1982,7 +2129,11 @@ async def test_deallocate_user_from_certification_tool_error():
     fn = _get_tool_fn(skills, "deallocate_user_from_certification")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(3, 1, True))
@@ -2019,7 +2170,11 @@ async def test_archive_certification_tool_error():
     fn = _get_tool_fn(skills, "archive_certification")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(1, True))
@@ -2064,7 +2219,11 @@ async def test_allocate_users_to_tenant_tool_error():
     fn = _get_tool_fn(skills, "allocate_users_to_tenant")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn("3,4", 2, True))
@@ -2104,7 +2263,11 @@ async def test_suspend_users_tool_error():
     fn = _get_tool_fn(skills, "suspend_users")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn("3,4", True))
@@ -2138,7 +2301,11 @@ async def test_list_departments_tool_error():
     fn = _get_tool_fn(skills, "list_departments")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
@@ -2167,7 +2334,11 @@ async def test_list_positions_tool_error():
     fn = _get_tool_fn(skills, "list_positions")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
@@ -2184,11 +2355,19 @@ async def test_get_team_members_tool():
     resp = _mock_response(
         {
             "data": {
-                "headers": ["Full name with link", "Department", "Position", "", "", ""],
+                "headers": [
+                    "Full name with link",
+                    "Department",
+                    "Position",
+                    "",
+                    "",
+                    "",
+                ],
                 "rows": [
                     {
                         "columns": [
-                            '<a href="http://moodle.test/user/profile.php?id=3">Alice Johnson</a>',
+                            '<a href="http://moodle.test/user/profile.php'
+                            '?id=3">Alice Johnson</a>',
                             "Engineering",
                             "Manager",
                             "",
@@ -2218,7 +2397,11 @@ async def test_get_team_members_tool_error():
     fn = _get_tool_fn(skills, "get_team_members")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
@@ -2255,7 +2438,11 @@ async def test_assign_job_tool_error():
     fn = _get_tool_fn(skills, "assign_job")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(3, "ENG", "MGR", True))
@@ -2294,7 +2481,11 @@ async def test_assign_manager_tool_error():
     fn = _get_tool_fn(skills, "assign_manager")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn("4", "3", True))
@@ -2338,7 +2529,11 @@ async def test_list_competency_frameworks_tool_error():
     fn = _get_tool_fn(skills, "list_competency_frameworks")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
@@ -2377,7 +2572,11 @@ async def test_get_user_learning_plans_tool_error():
     fn = _get_tool_fn(skills, "get_user_learning_plans")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(3))
@@ -2390,9 +2589,7 @@ async def test_get_user_competency_tool():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_user_competency")
 
-    resp = _mock_response(
-        {"usercompetency": {"userid": 3, "competencyid": 1}}
-    )
+    resp = _mock_response({"usercompetency": {"userid": 3, "competencyid": 1}})
     with _patch_httpx(resp):
         result = json.loads(await fn(3, 1))
 
@@ -2406,7 +2603,11 @@ async def test_get_user_competency_tool_error():
     fn = _get_tool_fn(skills, "get_user_competency")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(3, 1))
@@ -2439,7 +2640,11 @@ async def test_get_course_competencies_tool_error():
     fn = _get_tool_fn(skills, "get_course_competencies")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(2))
@@ -2639,7 +2844,11 @@ async def test_find_user_by_name_error():
     fn = _get_tool_fn(skills, "find_user")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn("name", "Alice"))
@@ -2686,7 +2895,11 @@ async def test_list_reports_tool_error():
     fn = _get_tool_fn(skills, "list_reports")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
@@ -2760,7 +2973,11 @@ async def test_get_report_data_tool_error():
     fn = _get_tool_fn(skills, "get_report_data")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(reportid=9999))
@@ -2804,7 +3021,11 @@ async def test_get_utm_report_tool_error():
     fn = _get_tool_fn(skills, "get_utm_report")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(courseid=2))
@@ -2849,7 +3070,11 @@ async def test_get_adv_comp_report_tool_error():
     fn = _get_tool_fn(skills, "get_adv_comp_report")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(courseid=2))
@@ -2883,7 +3108,11 @@ async def test_get_potential_parent_departments_tool_error():
     fn = _get_tool_fn(skills, "get_potential_parent_departments")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
@@ -2912,7 +3141,11 @@ async def test_get_potential_parent_positions_tool_error():
     fn = _get_tool_fn(skills, "get_potential_parent_positions")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
@@ -2950,10 +3183,15 @@ async def test_create_department_tool_confirmed():
     fn = _get_tool_fn(skills, "create_department")
 
     resp = _mock_response(
-        {"result": [{"id": 10, "name": "Finance", "idnumber": "FIN"}], "warnings": []}
+        {
+            "result": [{"id": 10, "name": "Finance", "idnumber": "FIN"}],
+            "warnings": [],
+        }
     )
     with _patch_httpx(resp):
-        result = json.loads(await fn(name="Finance", idnumber="FIN", confirmed=True))
+        result = json.loads(
+            await fn(name="Finance", idnumber="FIN", confirmed=True)
+        )
 
     assert len(result["created"]) == 1
     assert result["created"][0]["idnumber"] == "FIN"
@@ -2965,7 +3203,11 @@ async def test_create_department_tool_error():
     fn = _get_tool_fn(skills, "create_department")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(name="X", confirmed=True))
@@ -3006,7 +3248,9 @@ async def test_update_department_tool_confirmed():
         {"result": [{"id": 10, "idnumber": "FIN"}], "warnings": []}
     )
     with _patch_httpx(resp):
-        result = json.loads(await fn(idnumber="FIN", name="Finance Dept", confirmed=True))
+        result = json.loads(
+            await fn(idnumber="FIN", name="Finance Dept", confirmed=True)
+        )
 
     assert len(result["updated"]) == 1
     assert result["updated"][0]["idnumber"] == "FIN"
@@ -3018,7 +3262,11 @@ async def test_update_department_tool_error():
     fn = _get_tool_fn(skills, "update_department")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(idnumber="X", confirmed=True))
@@ -3054,7 +3302,11 @@ async def test_delete_department_tool_error():
     fn = _get_tool_fn(skills, "delete_department")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(department_id=10, confirmed=True))
@@ -3092,10 +3344,15 @@ async def test_create_position_tool_confirmed():
     fn = _get_tool_fn(skills, "create_position")
 
     resp = _mock_response(
-        {"result": [{"id": 5, "name": "Engineer", "idnumber": "ENG"}], "warnings": []}
+        {
+            "result": [{"id": 5, "name": "Engineer", "idnumber": "ENG"}],
+            "warnings": [],
+        }
     )
     with _patch_httpx(resp):
-        result = json.loads(await fn(name="Engineer", idnumber="ENG", confirmed=True))
+        result = json.loads(
+            await fn(name="Engineer", idnumber="ENG", confirmed=True)
+        )
 
     assert len(result["created"]) == 1
     assert result["created"][0]["idnumber"] == "ENG"
@@ -3107,7 +3364,10 @@ async def test_create_position_tool_with_flags():
     fn = _get_tool_fn(skills, "create_position")
 
     resp = _mock_response(
-        {"result": [{"id": 6, "name": "Lead", "idnumber": "LEAD"}], "warnings": []}
+        {
+            "result": [{"id": 6, "name": "Lead", "idnumber": "LEAD"}],
+            "warnings": [],
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(
@@ -3129,7 +3389,11 @@ async def test_create_position_tool_error():
     fn = _get_tool_fn(skills, "create_position")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(name="X", confirmed=True))
@@ -3170,7 +3434,9 @@ async def test_update_position_tool_confirmed():
         {"result": [{"id": 5, "idnumber": "ENG"}], "warnings": []}
     )
     with _patch_httpx(resp):
-        result = json.loads(await fn(idnumber="ENG", name="Senior Engineer", confirmed=True))
+        result = json.loads(
+            await fn(idnumber="ENG", name="Senior Engineer", confirmed=True)
+        )
 
     assert len(result["updated"]) == 1
 
@@ -3185,7 +3451,12 @@ async def test_update_position_tool_with_flags():
     )
     with _patch_httpx(resp):
         result = json.loads(
-            await fn(idnumber="ENG", department_manager=True, global_manager=False, confirmed=True)
+            await fn(
+                idnumber="ENG",
+                department_manager=True,
+                global_manager=False,
+                confirmed=True,
+            )
         )
 
     assert len(result["updated"]) == 1
@@ -3197,7 +3468,11 @@ async def test_update_position_tool_error():
     fn = _get_tool_fn(skills, "update_position")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(idnumber="X", confirmed=True))
@@ -3233,7 +3508,11 @@ async def test_delete_position_tool_error():
     fn = _get_tool_fn(skills, "delete_position")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(position_id=5, confirmed=True))
@@ -3269,7 +3548,11 @@ async def test_delete_job_tool_error():
     fn = _get_tool_fn(skills, "delete_job")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(job_id=42, confirmed=True))
@@ -3293,10 +3576,15 @@ async def test_unassign_manager_tool_confirmed():
     fn = _get_tool_fn(skills, "unassign_manager")
 
     resp = _mock_response(
-        {"warnings": [], "unassignedmanagers": [{"itemid": 1, "userid": 3, "managerid": 5}]}
+        {
+            "warnings": [],
+            "unassignedmanagers": [{"itemid": 1, "userid": 3, "managerid": 5}],
+        }
     )
     with _patch_httpx(resp):
-        result = json.loads(await fn(userids="3", managerids="5", confirmed=True))
+        result = json.loads(
+            await fn(userids="3", managerids="5", confirmed=True)
+        )
 
     assert len(result["unassignedmanagers"]) == 1
 
@@ -3307,10 +3595,16 @@ async def test_unassign_manager_tool_error():
     fn = _get_tool_fn(skills, "unassign_manager")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
-        result = json.loads(await fn(userids="3", managerids="5", confirmed=True))
+        result = json.loads(
+            await fn(userids="3", managerids="5", confirmed=True)
+        )
 
     assert "error" in result
 
@@ -3359,7 +3653,11 @@ async def test_archive_program_tool_error():
     fn = _get_tool_fn(skills, "archive_program")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(program_id=7, confirmed=True))
@@ -3396,7 +3694,11 @@ async def test_restore_program_tool_error():
     fn = _get_tool_fn(skills, "restore_program")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(program_id=7, confirmed=True))
@@ -3433,7 +3735,11 @@ async def test_delete_program_tool_error():
     fn = _get_tool_fn(skills, "delete_program")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(program_id=7, confirmed=True))
@@ -3473,7 +3779,11 @@ async def test_duplicate_program_tool_error():
     fn = _get_tool_fn(skills, "duplicate_program")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(program_id=7, confirmed=True))
@@ -3521,7 +3831,11 @@ async def test_update_program_visibility_tool_error():
     fn = _get_tool_fn(skills, "update_program_visibility")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(program_id=7, visible=1, confirmed=True))
@@ -3559,7 +3873,11 @@ async def test_bulk_deallocate_program_users_tool_error():
     fn = _get_tool_fn(skills, "bulk_deallocate_program_users")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(allocation_ids="10,20", confirmed=True))
@@ -3607,7 +3925,11 @@ async def test_bulk_reset_program_progress_tool_error():
     fn = _get_tool_fn(skills, "bulk_reset_program_progress")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(allocation_ids="10,20", confirmed=True))
@@ -3654,7 +3976,11 @@ async def test_delete_certification_tool_error():
     fn = _get_tool_fn(skills, "delete_certification")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(certification_id=3, confirmed=True))
@@ -3691,7 +4017,11 @@ async def test_restore_certification_tool_error():
     fn = _get_tool_fn(skills, "restore_certification")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(certification_id=3, confirmed=True))
@@ -3719,7 +4049,11 @@ async def test_search_certifications_tool_error():
     fn = _get_tool_fn(skills, "search_certifications")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(search="Safety"))
@@ -3757,7 +4091,11 @@ async def test_bulk_deallocate_certification_users_tool_error():
     fn = _get_tool_fn(skills, "bulk_deallocate_certification_users")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(allocation_ids="10,20", confirmed=True))
@@ -3793,10 +4131,11 @@ async def test_list_dynamic_rules_tool():
                     {
                         "columns": [
                             '<input id="rule-toggle-42" checked>',
-                            '<span data-value="Safety Rule">Safety Rule</span>',
+                            '<span data-value="Safety Rule">'
+                            "Safety Rule</span>",
                             "",
-                            '<ul><li>Course completed</li></ul>',
-                            '<ul><li>Add to cohort</li></ul>',
+                            "<ul><li>Course completed</li></ul>",
+                            "<ul><li>Add to cohort</li></ul>",
                         ]
                     }
                 ],
@@ -3819,7 +4158,11 @@ async def test_list_dynamic_rules_tool_error():
     fn = _get_tool_fn(skills, "list_dynamic_rules")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
@@ -3842,7 +4185,8 @@ async def test_enable_rule_tool_by_name():
                     {
                         "columns": [
                             '<input id="rule-toggle-42" checked>',
-                            '<span data-value="Safety Rule">Safety Rule</span>',
+                            '<span data-value="Safety Rule">'
+                            "Safety Rule</span>",
                             "",
                             "",
                             "",
@@ -3942,7 +4286,11 @@ async def test_enable_rule_tool_name_resolve_api_error():
     fn = _get_tool_fn(skills, "enable_rule")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(rule_name="Safety"))
@@ -4107,8 +4455,9 @@ async def test_get_rule_matching_users_tool_by_name():
             "warnings": [],
         }
     )
-    # The mock returns the same response for both the list call and the count call.
-    # count_matching_users expects an int or dict, not this; it will wrap it.
+    # The mock returns the same response for both the list call and
+    # the count call. count_matching_users expects an int or dict,
+    # not this; it will wrap it.
     with _patch_httpx(list_resp):
         result = json.loads(await fn(rule_name="Count Me"))
 
@@ -4230,7 +4579,11 @@ async def test_can_enable_rule_tool_error():
     fn = _get_tool_fn(skills, "can_enable_rule")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(rule_id=1))
@@ -4256,7 +4609,11 @@ async def test_get_rule_matching_users_tool_error():
     fn = _get_tool_fn(skills, "get_rule_matching_users")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(rule_id=1))
@@ -4282,7 +4639,11 @@ async def test_get_rule_matched_users_tool_error():
     fn = _get_tool_fn(skills, "get_rule_matched_users")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(rule_id=1))
@@ -4311,7 +4672,11 @@ async def test_search_cohorts_for_rule_tool_error():
     fn = _get_tool_fn(skills, "search_cohorts_for_rule")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(search="eng"))
@@ -4325,7 +4690,10 @@ async def test_search_competencies_for_rule_tool():
     fn = _get_tool_fn(skills, "search_competencies_for_rule")
 
     resp = _mock_response(
-        [{"id": 10, "shortname": "Leadership"}, {"id": 11, "shortname": "Communication"}]
+        [
+            {"id": 10, "shortname": "Leadership"},
+            {"id": 11, "shortname": "Communication"},
+        ]
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(search="lead"))
@@ -4340,7 +4708,11 @@ async def test_search_competencies_for_rule_tool_error():
     fn = _get_tool_fn(skills, "search_competencies_for_rule")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(search="lead"))
@@ -4377,7 +4749,11 @@ async def test_enable_rule_tool_error():
     fn = _get_tool_fn(skills, "enable_rule")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(rule_id=5, confirmed=True))
@@ -4414,7 +4790,11 @@ async def test_disable_rule_tool_error():
     fn = _get_tool_fn(skills, "disable_rule")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(rule_id=5, confirmed=True))
@@ -4451,7 +4831,11 @@ async def test_archive_rule_tool_error():
     fn = _get_tool_fn(skills, "archive_rule")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(rule_id=5, confirmed=True))
@@ -4488,7 +4872,11 @@ async def test_unarchive_rule_tool_error():
     fn = _get_tool_fn(skills, "unarchive_rule")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(rule_id=5, confirmed=True))
@@ -4525,7 +4913,11 @@ async def test_delete_rule_tool_error():
     fn = _get_tool_fn(skills, "delete_rule")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(rule_id=5, confirmed=True))
@@ -4562,7 +4954,11 @@ async def test_duplicate_rule_tool_error():
     fn = _get_tool_fn(skills, "duplicate_rule")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(rule_id=5, confirmed=True))
@@ -4599,7 +4995,11 @@ async def test_delete_rule_condition_tool_error():
     fn = _get_tool_fn(skills, "delete_rule_condition")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(instanceid=10, confirmed=True))
@@ -4636,7 +5036,11 @@ async def test_delete_rule_outcome_tool_error():
     fn = _get_tool_fn(skills, "delete_rule_outcome")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(instanceid=10, confirmed=True))
@@ -4749,13 +5153,20 @@ async def test_create_user_tool_error():
     fn = _get_tool_fn(skills, "create_user")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(
             await fn(
-                username="jdoe", firstname="John",
-                lastname="Doe", email="jdoe@example.com", confirmed=True,
+                username="jdoe",
+                firstname="John",
+                lastname="Doe",
+                email="jdoe@example.com",
+                confirmed=True,
             )
         )
 
@@ -4814,7 +5225,11 @@ async def test_update_user_tool_error():
     fn = _get_tool_fn(skills, "update_user")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(
@@ -4864,7 +5279,11 @@ async def test_delete_user_tool_error():
     fn = _get_tool_fn(skills, "delete_user")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(userid="5", confirmed=True))
@@ -4911,7 +5330,11 @@ async def test_unsuspend_user_tool_error():
     fn = _get_tool_fn(skills, "unsuspend_user")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(userid="5", confirmed=True))
@@ -4930,8 +5353,16 @@ async def test_list_categories_tool():
     fn = _get_tool_fn(skills, "list_categories")
 
     resp = _mock_response(
-        [{"id": 1, "name": "Default", "parent": 0, "coursecount": 3,
-          "depth": 1, "visible": 1}]
+        [
+            {
+                "id": 1,
+                "name": "Default",
+                "parent": 0,
+                "coursecount": 3,
+                "depth": 1,
+                "visible": 1,
+            }
+        ]
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
@@ -4946,7 +5377,11 @@ async def test_list_categories_tool_error():
     fn = _get_tool_fn(skills, "list_categories")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
@@ -4984,7 +5419,11 @@ async def test_create_category_tool_error():
     fn = _get_tool_fn(skills, "create_category")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(name="Test Cat", confirmed=True))
@@ -5013,8 +5452,11 @@ async def test_create_course_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(
             await fn(
-                fullname="Test Course", shortname="TC01",
-                categoryid=1, summary="A test", confirmed=True,
+                fullname="Test Course",
+                shortname="TC01",
+                categoryid=1,
+                summary="A test",
+                confirmed=True,
             )
         )
 
@@ -5028,7 +5470,11 @@ async def test_create_course_tool_error():
     fn = _get_tool_fn(skills, "create_course")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(
@@ -5057,8 +5503,12 @@ async def test_update_course_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(
             await fn(
-                courseid=2, fullname="New", shortname="NEW",
-                summary="Updated", visible=0, confirmed=True,
+                courseid=2,
+                fullname="New",
+                shortname="NEW",
+                summary="Updated",
+                visible=0,
+                confirmed=True,
             )
         )
 
@@ -5081,12 +5531,14 @@ async def test_update_course_tool_error():
     fn = _get_tool_fn(skills, "update_course")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
-        result = json.loads(
-            await fn(courseid=2, fullname="X", confirmed=True)
-        )
+        result = json.loads(await fn(courseid=2, fullname="X", confirmed=True))
 
     assert "error" in result
 
@@ -5121,7 +5573,11 @@ async def test_delete_course_tool_error():
     fn = _get_tool_fn(skills, "delete_course")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(courseid=4, confirmed=True))
@@ -5150,8 +5606,11 @@ async def test_duplicate_course_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(
             await fn(
-                courseid=2, fullname="Copy", shortname="CP",
-                categoryid=1, confirmed=True,
+                courseid=2,
+                fullname="Copy",
+                shortname="CP",
+                categoryid=1,
+                confirmed=True,
             )
         )
 
@@ -5165,13 +5624,20 @@ async def test_duplicate_course_tool_error():
     fn = _get_tool_fn(skills, "duplicate_course")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(
             await fn(
-                courseid=2, fullname="Copy", shortname="CP",
-                categoryid=1, confirmed=True,
+                courseid=2,
+                fullname="Copy",
+                shortname="CP",
+                categoryid=1,
+                confirmed=True,
             )
         )
 
@@ -5225,7 +5691,11 @@ async def test_export_workplace_data_tool_error():
     fn = _get_tool_fn(skills, "export_workplace_data")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(exporter="courses", confirmed=True))
@@ -5253,7 +5723,11 @@ async def test_get_export_status_tool_error():
     fn = _get_tool_fn(skills, "get_export_status")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(export_id=1))
@@ -5279,7 +5753,11 @@ async def test_download_export_tool_error():
     fn = _get_tool_fn(skills, "download_export")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(export_id=1))
@@ -5316,7 +5794,11 @@ async def test_import_workplace_data_tool_error():
     fn = _get_tool_fn(skills, "import_workplace_data")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(confirmed=True))
@@ -5344,7 +5826,11 @@ async def test_get_import_status_tool_error():
     fn = _get_tool_fn(skills, "get_import_status")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(import_id=1))
@@ -5380,7 +5866,11 @@ async def test_delete_export_tool_error():
     fn = _get_tool_fn(skills, "delete_export")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(export_id=1, confirmed=True))
@@ -5416,7 +5906,11 @@ async def test_delete_import_tool_error():
     fn = _get_tool_fn(skills, "delete_import")
 
     resp = _mock_response(
-        {"exception": "moodle_exception", "errorcode": "err", "message": "fail"}
+        {
+            "exception": "moodle_exception",
+            "errorcode": "err",
+            "message": "fail",
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(import_id=1, confirmed=True))

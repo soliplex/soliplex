@@ -10,9 +10,7 @@ class UnknownLTIPlatform(KeyError):
         self.issuer = issuer
         self.client_id = client_id
         super().__init__(
-            f"Unknown LTI platform:"
-            f" issuer={issuer!r},"
-            f" client_id={client_id!r}"
+            f"Unknown LTI platform: issuer={issuer!r}, client_id={client_id!r}"
         )
 
 
@@ -37,10 +35,7 @@ def find_platform(
     client_id: str,
 ) -> config_lti.LTIPlatformConfig:
     for platform in platforms:
-        if (
-            platform.issuer == issuer
-            and platform.client_id == client_id
-        ):
+        if platform.issuer == issuer and platform.client_id == client_id:
             return platform
     raise UnknownLTIPlatform(issuer, client_id)
 
@@ -71,10 +66,7 @@ def resolve_room_id(
         if len(parts) >= 2 and parts[-2] == "chat":
             return parts[-1]
 
-    if (
-        course_id is not None
-        and course_id in platform.course_room_map
-    ):
+    if course_id is not None and course_id in platform.course_room_map:
         return platform.course_room_map[course_id]
 
     return platform.default_room_id

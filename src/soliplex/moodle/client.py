@@ -239,16 +239,17 @@ class MoodleClient:
         courseid: int,
         userid: int,
     ) -> list[ActivityCompletionStatus]:
-        """Per-activity completion via ``core_completion_get_activities_completion_status``."""
+        """Per-activity completion via
+        ``core_completion_get_activities_completion_status``."""
         raw = await self._call(
             "core_completion_get_activities_completion_status",
             courseid=courseid,
             userid=userid,
         )
         statuses = raw.get("statuses", [])
-        return [
-            ActivityCompletionStatus.model_validate(s) for s in statuses
-        ][:MAX_RESULTS]
+        return [ActivityCompletionStatus.model_validate(s) for s in statuses][
+            :MAX_RESULTS
+        ]
 
     # ---------------------------------------------------------------
     # Groups & cohorts (Feature 3)
@@ -290,9 +291,7 @@ class MoodleClient:
     # Grading & assessments (Feature 4)
     # ---------------------------------------------------------------
 
-    async def get_assignment_grades(
-        self, assignmentids: list[int]
-    ) -> dict:
+    async def get_assignment_grades(self, assignmentids: list[int]) -> dict:
         """Get assignment grades via ``mod_assign_get_grades``."""
         params: dict[str, str | int] = {}
         for i, aid in enumerate(assignmentids):
@@ -328,9 +327,7 @@ class MoodleClient:
             params["options[timestart]"] = timestart
         if timeend is not None:
             params["options[timeend]"] = timeend
-        raw = await self._call(
-            "core_calendar_get_calendar_events", **params
-        )
+        raw = await self._call("core_calendar_get_calendar_events", **params)
         events = raw.get("events", [])
         return [CalendarEvent.model_validate(e) for e in events][:MAX_RESULTS]
 
@@ -357,9 +354,7 @@ class MoodleClient:
             params[f"messages[{i}][touserid]"] = m["touserid"]
             params[f"messages[{i}][text]"] = m["text"]
             params[f"messages[{i}][textformat]"] = m.get("textformat", 0)
-        raw = await self._call(
-            "core_message_send_instant_messages", **params
-        )
+        raw = await self._call("core_message_send_instant_messages", **params)
         return raw if isinstance(raw, list) else []
 
     # ---------------------------------------------------------------
@@ -369,7 +364,8 @@ class MoodleClient:
     async def get_certifications(
         self, tenantid: int = 0
     ) -> list[Certification]:
-        """List certifications via ``tool_certification_get_certifications``."""
+        """List certifications via
+        ``tool_certification_get_certifications``."""
         raw = await self._call(
             "tool_certification_get_certifications",
             tenantid=tenantid,
@@ -380,44 +376,45 @@ class MoodleClient:
     async def get_certification_allocations(
         self, certificationid: int
     ) -> list[CertificationAllocation]:
-        """Get allocated users via ``tool_certification_get_certification_allocations``."""
+        """Get allocated users via
+        ``tool_certification_get_certification_allocations``."""
         raw = await self._call(
             "tool_certification_get_certification_allocations",
             certificationid=certificationid,
         )
-        return [
-            CertificationAllocation.model_validate(a) for a in raw
-        ][:MAX_RESULTS]
+        return [CertificationAllocation.model_validate(a) for a in raw][
+            :MAX_RESULTS
+        ]
 
     async def get_user_certification_allocations(
         self, userid: int
     ) -> list[CertificationAllocation]:
-        """Get user's certs via ``tool_certification_get_user_certification_allocations``."""
+        """Get user's certs via
+        ``tool_certification_get_user_certification_allocations``."""
         raw = await self._call(
             "tool_certification_get_user_certification_allocations",
             userid=userid,
         )
-        return [
-            CertificationAllocation.model_validate(a) for a in raw
-        ][:MAX_RESULTS]
+        return [CertificationAllocation.model_validate(a) for a in raw][
+            :MAX_RESULTS
+        ]
 
     async def get_certification_user_log(
         self, certificationid: int, userid: int
     ) -> list[CertificationLogEntry]:
-        """Get cert history via ``tool_certification_get_certification_user_log``."""
+        """Get cert history via
+        ``tool_certification_get_certification_user_log``."""
         raw = await self._call(
             "tool_certification_get_certification_user_log",
             certificationid=certificationid,
             userid=userid,
         )
         entries = raw if isinstance(raw, list) else []
-        return [
-            CertificationLogEntry.model_validate(e) for e in entries
-        ][:MAX_RESULTS]
+        return [CertificationLogEntry.model_validate(e) for e in entries][
+            :MAX_RESULTS
+        ]
 
-    async def certify_user(
-        self, certificationid: int, userid: int
-    ) -> dict:
+    async def certify_user(self, certificationid: int, userid: int) -> dict:
         """Certify user via ``tool_certification_certify_user``."""
         raw = await self._call(
             "tool_certification_certify_user",
@@ -452,14 +449,11 @@ class MoodleClient:
     async def get_user_program_courses(
         self, userid: int
     ) -> list[ProgramCourse]:
-        """Get user's program courses via ``tool_program_get_users_courses``."""
-        raw = await self._call(
-            "tool_program_get_users_courses", userid=userid
-        )
+        """Get user's program courses via
+        ``tool_program_get_users_courses``."""
+        raw = await self._call("tool_program_get_users_courses", userid=userid)
         courses = raw if isinstance(raw, list) else []
-        return [
-            ProgramCourse.model_validate(c) for c in courses
-        ][:MAX_RESULTS]
+        return [ProgramCourse.model_validate(c) for c in courses][:MAX_RESULTS]
 
     async def allocate_users_to_program(
         self, programid: int, userids: list[int]
@@ -481,9 +475,7 @@ class MoodleClient:
         tenants = raw if isinstance(raw, list) else []
         return [Tenant.model_validate(t) for t in tenants][:MAX_RESULTS]
 
-    async def allocate_users_to_tenant(
-        self, allocations: list[dict]
-    ) -> dict:
+    async def allocate_users_to_tenant(self, allocations: list[dict]) -> dict:
         """Allocate users to a tenant via ``tool_tenant_allocate_users``.
 
         Each allocation dict must have ``userid`` and ``tenantid``.
@@ -497,9 +489,7 @@ class MoodleClient:
             return {"result": True}
         return raw if isinstance(raw, dict) else {"result": True}
 
-    async def suspend_tenant_users(
-        self, userids: list[int]
-    ) -> dict:
+    async def suspend_tenant_users(self, userids: list[int]) -> dict:
         """Suspend users system-wide via ``tool_tenant_suspend_users``."""
         params: dict[str, str | int] = {}
         for i, uid in enumerate(userids):
@@ -513,16 +503,13 @@ class MoodleClient:
     # Catalogue (Workplace)
     # ---------------------------------------------------------------
 
-    async def get_catalogue_page(
-        self, query: str = ""
-    ) -> list[CatalogueItem]:
-        """Search the course/program catalogue via ``tool_catalogue_get_catalogue_page``."""
+    async def get_catalogue_page(self, query: str = "") -> list[CatalogueItem]:
+        """Search the course/program catalogue via
+        ``tool_catalogue_get_catalogue_page``."""
         params: dict[str, str | int] = {}
         if query:
             params["search"] = query
-        raw = await self._call(
-            "tool_catalogue_get_catalogue_page", **params
-        )
+        raw = await self._call("tool_catalogue_get_catalogue_page", **params)
         items = []
         if isinstance(raw, dict):
             contents = raw.get("contents", {})
@@ -533,28 +520,28 @@ class MoodleClient:
     async def get_user_catalogue(
         self, userid: int = 0, search: str = ""
     ) -> list[UserCatalogueItem]:
-        """Get user's learning catalogue via ``tool_catalogue_get_user_catalogue``."""
+        """Get user's learning catalogue via
+        ``tool_catalogue_get_user_catalogue``."""
         params: dict[str, str | int] = {}
         if userid:
             params["userid"] = userid
         if search:
             params["search"] = search
-        raw = await self._call(
-            "tool_catalogue_get_user_catalogue", **params
-        )
+        raw = await self._call("tool_catalogue_get_user_catalogue", **params)
         items = []
         if isinstance(raw, dict):
             catalogue = raw.get("catalogue", {})
             if isinstance(catalogue, dict):
                 items = catalogue.get("listitems", [])
-        return [
-            UserCatalogueItem.model_validate(i) for i in items
-        ][:MAX_RESULTS]
+        return [UserCatalogueItem.model_validate(i) for i in items][
+            :MAX_RESULTS
+        ]
 
     async def get_program_content(
         self, programid: int, userid: int = 0
     ) -> dict:
-        """Get courses inside a program via ``tool_catalogue_get_user_catalogue_program_content``."""
+        """Get courses inside a program via
+        ``tool_catalogue_get_user_catalogue_program_content``."""
         params: dict[str, str | int] = {"programid": programid}
         if userid:
             params["userid"] = userid
@@ -571,20 +558,22 @@ class MoodleClient:
     async def search_courses_for_program(
         self, search: str = ""
     ) -> list[ProgramCourseOption]:
-        """Search courses eligible for programs via ``tool_program_potential_courses_program_selector``."""
+        """Search courses eligible for programs via
+        ``tool_program_potential_courses_program_selector``."""
         raw = await self._call(
             "tool_program_potential_courses_program_selector",
             search=search,
         )
         courses = raw if isinstance(raw, list) else []
-        return [
-            ProgramCourseOption.model_validate(c) for c in courses
-        ][:MAX_RESULTS]
+        return [ProgramCourseOption.model_validate(c) for c in courses][
+            :MAX_RESULTS
+        ]
 
     async def deallocate_user_from_program(
         self, programid: int, userid: int
     ) -> dict:
-        """Remove a user from a program via ``tool_program_deallocate_user``."""
+        """Remove a user from a program via
+        ``tool_program_deallocate_user``."""
         raw = await self._call(
             "tool_program_deallocate_user",
             programid=programid,
@@ -594,9 +583,7 @@ class MoodleClient:
             return {"result": True}
         return raw if isinstance(raw, dict) else {"result": True}
 
-    async def reset_program_progress(
-        self, programuserid: int
-    ) -> dict:
+    async def reset_program_progress(self, programuserid: int) -> dict:
         """Reset program progress via ``tool_program_reset_program_progress``.
 
         Takes the allocation ID (``programuserid``), not the user ID.
@@ -616,7 +603,8 @@ class MoodleClient:
     async def get_certification_user_allocation(
         self, certificationid: int, userid: int
     ) -> dict:
-        """Get detailed user+cert allocation via ``tool_certification_get_certification_user_allocation``."""
+        """Get detailed user+cert allocation via
+        ``tool_certification_get_certification_user_allocation``."""
         raw = await self._call(
             "tool_certification_get_certification_user_allocation",
             certificationid=certificationid,
@@ -627,7 +615,8 @@ class MoodleClient:
     async def deallocate_user_from_certification(
         self, certificationid: int, userid: int
     ) -> dict:
-        """Remove a user from a certification via ``tool_certification_deallocate_user``."""
+        """Remove a user from a certification via
+        ``tool_certification_deallocate_user``."""
         raw = await self._call(
             "tool_certification_deallocate_user",
             certificationid=certificationid,
@@ -637,10 +626,9 @@ class MoodleClient:
             return {"result": True}
         return raw if isinstance(raw, dict) else {"result": True}
 
-    async def archive_certification(
-        self, certificationid: int
-    ) -> dict:
-        """Archive a certification via ``tool_certification_archive_certification``."""
+    async def archive_certification(self, certificationid: int) -> dict:
+        """Archive a certification via
+        ``tool_certification_archive_certification``."""
         raw = await self._call(
             "tool_certification_archive_certification",
             certificationid=certificationid,
@@ -680,9 +668,7 @@ class MoodleClient:
             return {"result": True}
         return raw if isinstance(raw, dict) else {"result": True}
 
-    async def duplicate_program(
-        self, programid: int
-    ) -> DuplicatedProgram:
+    async def duplicate_program(self, programid: int) -> DuplicatedProgram:
         """Duplicate a program via ``tool_program_duplicate_program``."""
         raw = await self._call(
             "tool_program_duplicate_program",
@@ -708,7 +694,8 @@ class MoodleClient:
     async def enrol_user_to_program_course(
         self, courseid: int, programid: int
     ) -> dict:
-        """Enrol user to course in program context via ``tool_program_enrol_user_to_course``."""
+        """Enrol user to course in program context via
+        ``tool_program_enrol_user_to_course``."""
         raw = await self._call(
             "tool_program_enrol_user_to_course",
             courseid=courseid,
@@ -720,16 +707,12 @@ class MoodleClient:
 
     async def delete_program_set(self, setid: int) -> dict:
         """Delete a course set via ``tool_program_delete_set``."""
-        raw = await self._call(
-            "tool_program_delete_set", setid=setid
-        )
+        raw = await self._call("tool_program_delete_set", setid=setid)
         if raw is None:
             return {"result": True}
         return raw if isinstance(raw, dict) else {"result": True}
 
-    async def delete_program_course(
-        self, programcourseid: int
-    ) -> dict:
+    async def delete_program_course(self, programcourseid: int) -> dict:
         """Remove a course from program via ``tool_program_delete_course``."""
         raw = await self._call(
             "tool_program_delete_course",
@@ -746,9 +729,7 @@ class MoodleClient:
         params: dict[str, int] = {}
         for i, pid in enumerate(programuserids):
             params[f"programuserids[{i}]"] = pid
-        raw = await self._call(
-            "tool_program_bulk_deallocate_user", **params
-        )
+        raw = await self._call("tool_program_bulk_deallocate_user", **params)
         if isinstance(raw, dict):
             return BulkOperationResult.model_validate(raw)
         return BulkOperationResult()
@@ -756,7 +737,8 @@ class MoodleClient:
     async def bulk_reset_program_progress(
         self, programuserids: list[int]
     ) -> BulkOperationResult:
-        """Bulk reset progress via ``tool_program_bulk_reset_program_progress``."""
+        """Bulk reset progress via
+        ``tool_program_bulk_reset_program_progress``."""
         params: dict[str, int] = {}
         for i, pid in enumerate(programuserids):
             params[f"programuserids[{i}]"] = pid
@@ -770,7 +752,8 @@ class MoodleClient:
     async def recalculate_program_completions(
         self, programuserids: list[int]
     ) -> BulkOperationResult:
-        """Recalculate completions via ``tool_program_recalculate_program_user_completions``."""
+        """Recalculate completions via
+        ``tool_program_recalculate_program_user_completions``."""
         params: dict[str, int] = {}
         for i, pid in enumerate(programuserids):
             params[f"programuserids[{i}]"] = pid
@@ -782,10 +765,9 @@ class MoodleClient:
             return BulkOperationResult.model_validate(raw)
         return BulkOperationResult()
 
-    async def delete_certification(
-        self, certificationid: int
-    ) -> dict:
-        """Delete a certification via ``tool_certification_delete_certification``."""
+    async def delete_certification(self, certificationid: int) -> dict:
+        """Delete a certification via
+        ``tool_certification_delete_certification``."""
         raw = await self._call(
             "tool_certification_delete_certification",
             certificationid=certificationid,
@@ -794,10 +776,9 @@ class MoodleClient:
             return {"result": True}
         return raw if isinstance(raw, dict) else {"result": True}
 
-    async def restore_certification(
-        self, certificationid: int
-    ) -> dict:
-        """Restore a certification via ``tool_certification_restore_certification``."""
+    async def restore_certification(self, certificationid: int) -> dict:
+        """Restore a certification via
+        ``tool_certification_restore_certification``."""
         raw = await self._call(
             "tool_certification_restore_certification",
             certificationid=certificationid,
@@ -809,17 +790,17 @@ class MoodleClient:
     async def search_certifications(
         self, search: str = ""
     ) -> list[CertificationSearchResult]:
-        """Search certifications via ``tool_certification_potential_certification_selector``."""
+        """Search certifications via
+        ``tool_certification_potential_certification_selector``."""
         raw = await self._call(
             "tool_certification_potential_certification_selector",
             search=search,
         )
         if not isinstance(raw, list):
             return []
-        return [
-            CertificationSearchResult.model_validate(c)
-            for c in raw
-        ][:MAX_RESULTS]
+        return [CertificationSearchResult.model_validate(c) for c in raw][
+            :MAX_RESULTS
+        ]
 
     async def bulk_deallocate_certification_users(
         self, certificationuserids: list[int]
@@ -839,9 +820,7 @@ class MoodleClient:
     # Organisation Structure (Workplace)
     # ---------------------------------------------------------------
 
-    async def get_departments(
-        self, search: str = ""
-    ) -> list[Department]:
+    async def get_departments(self, search: str = "") -> list[Department]:
         """List departments via ``tool_organisation_get_teams_tab_filters``."""
         raw = await self._call(
             "tool_organisation_get_teams_tab_filters",
@@ -852,14 +831,11 @@ class MoodleClient:
         if search:
             search_lower = search.lower()
             depts = [
-                d for d in depts
-                if search_lower in d.get("name", "").lower()
+                d for d in depts if search_lower in d.get("name", "").lower()
             ]
         return [Department.model_validate(d) for d in depts][:MAX_RESULTS]
 
-    async def get_positions(
-        self, search: str = ""
-    ) -> list[Position]:
+    async def get_positions(self, search: str = "") -> list[Position]:
         """List positions via ``tool_organisation_get_teams_tab_filters``."""
         raw = await self._call(
             "tool_organisation_get_teams_tab_filters",
@@ -870,7 +846,8 @@ class MoodleClient:
         if search:
             search_lower = search.lower()
             positions = [
-                p for p in positions
+                p
+                for p in positions
                 if search_lower in p.get("name", "").lower()
             ]
         return [Position.model_validate(p) for p in positions][:MAX_RESULTS]
@@ -881,7 +858,8 @@ class MoodleClient:
         positionid: int = 0,
         search: str = "",
     ) -> list[DepartmentMember]:
-        """Get users by department/position via the Workplace jobs system report.
+        """Get users by department/position via the Workplace jobs system
+        report.
 
         Uses ``core_reportbuilder_retrieve_system_report`` with the
         ``tool_organisation`` jobs report.  Results are not scoped to
@@ -965,9 +943,7 @@ class MoodleClient:
             params[f"users[{i}][id]"] = uid
         for i, mid in enumerate(manager_ids):
             params[f"managers[{i}][id]"] = mid
-        raw = await self._call(
-            "tool_organisation_assign_managers", **params
-        )
+        raw = await self._call("tool_organisation_assign_managers", **params)
         if raw is None:
             return {"result": True}
         return raw if isinstance(raw, dict) else {"result": True}
@@ -990,8 +966,7 @@ class MoodleClient:
         if not isinstance(raw, dict):
             return [], []
         result = [
-            CreatedEntity.model_validate(r)
-            for r in raw.get("result", [])
+            CreatedEntity.model_validate(r) for r in raw.get("result", [])
         ]
         return result, raw.get("warnings", [])
 
@@ -1011,8 +986,7 @@ class MoodleClient:
         if not isinstance(raw, dict):
             return [], []
         result = [
-            UpdatedEntity.model_validate(r)
-            for r in raw.get("result", [])
+            UpdatedEntity.model_validate(r) for r in raw.get("result", [])
         ]
         return result, raw.get("warnings", [])
 
@@ -1044,9 +1018,7 @@ class MoodleClient:
             tenantid=tenantid,
         )
         items = raw if isinstance(raw, list) else []
-        return [
-            PotentialParent.model_validate(p) for p in items
-        ][:MAX_RESULTS]
+        return [PotentialParent.model_validate(p) for p in items][:MAX_RESULTS]
 
     # -- Position CRUD --
 
@@ -1064,14 +1036,11 @@ class MoodleClient:
                 params[f"positions[{i}][departmentmanager]"] = 1
             if p.get("globalmanager"):
                 params[f"positions[{i}][globalmanager]"] = 1
-        raw = await self._call(
-            "tool_organisation_create_positions", **params
-        )
+        raw = await self._call("tool_organisation_create_positions", **params)
         if not isinstance(raw, dict):
             return [], []
         result = [
-            CreatedEntity.model_validate(r)
-            for r in raw.get("result", [])
+            CreatedEntity.model_validate(r) for r in raw.get("result", [])
         ]
         return result, raw.get("warnings", [])
 
@@ -1093,14 +1062,11 @@ class MoodleClient:
                 params[f"positions[{i}][globalmanager]"] = (
                     1 if p["globalmanager"] else 0
                 )
-        raw = await self._call(
-            "tool_organisation_update_positions", **params
-        )
+        raw = await self._call("tool_organisation_update_positions", **params)
         if not isinstance(raw, dict):
             return [], []
         result = [
-            UpdatedEntity.model_validate(r)
-            for r in raw.get("result", [])
+            UpdatedEntity.model_validate(r) for r in raw.get("result", [])
         ]
         return result, raw.get("warnings", [])
 
@@ -1132,9 +1098,7 @@ class MoodleClient:
             tenantid=tenantid,
         )
         items = raw if isinstance(raw, list) else []
-        return [
-            PotentialParent.model_validate(p) for p in items
-        ][:MAX_RESULTS]
+        return [PotentialParent.model_validate(p) for p in items][:MAX_RESULTS]
 
     # -- Job & Manager Management --
 
@@ -1159,9 +1123,7 @@ class MoodleClient:
 
     async def delete_job(self, job_id: int) -> dict:
         """Delete a job assignment via ``tool_organisation_job_delete``."""
-        raw = await self._call(
-            "tool_organisation_job_delete", id=job_id
-        )
+        raw = await self._call("tool_organisation_job_delete", id=job_id)
         if raw is None:
             return {"result": True}
         return raw if isinstance(raw, dict) else {"result": True}
@@ -1180,9 +1142,7 @@ class MoodleClient:
             params[f"managers[{i}][id]"] = mid
         if unassign_all:
             params["unassignall"] = 1
-        raw = await self._call(
-            "tool_organisation_unassign_managers", **params
-        )
+        raw = await self._call("tool_organisation_unassign_managers", **params)
         if raw is None:
             return {"result": True}
         return raw if isinstance(raw, dict) else {"result": True}
@@ -1192,7 +1152,8 @@ class MoodleClient:
     # ---------------------------------------------------------------
 
     async def get_competency_frameworks(self) -> list[CompetencyFramework]:
-        """List competency frameworks via ``tool_lp_data_for_competency_frameworks_manage_page``."""
+        """List competency frameworks via
+        ``tool_lp_data_for_competency_frameworks_manage_page``."""
         raw = await self._call(
             "tool_lp_data_for_competency_frameworks_manage_page",
             **{"pagecontext[contextid]": 1},
@@ -1202,17 +1163,13 @@ class MoodleClient:
             frameworks = raw.get(
                 "competencyframeworks", raw.get("frameworks", [])
             )
-        return [
-            CompetencyFramework.model_validate(f) for f in frameworks
-        ][:MAX_RESULTS]
+        return [CompetencyFramework.model_validate(f) for f in frameworks][
+            :MAX_RESULTS
+        ]
 
-    async def get_user_learning_plans(
-        self, userid: int
-    ) -> list[LearningPlan]:
+    async def get_user_learning_plans(self, userid: int) -> list[LearningPlan]:
         """Get user's learning plans via ``tool_lp_data_for_plans_page``."""
-        raw = await self._call(
-            "tool_lp_data_for_plans_page", userid=userid
-        )
+        raw = await self._call("tool_lp_data_for_plans_page", userid=userid)
         plans = []
         if isinstance(raw, dict):
             plans = raw.get("plans", [])
@@ -1221,7 +1178,8 @@ class MoodleClient:
     async def get_user_competency_summary(
         self, userid: int, competencyid: int
     ) -> dict:
-        """Get user competency summary via ``tool_lp_data_for_user_competency_summary``."""
+        """Get user competency summary via
+        ``tool_lp_data_for_user_competency_summary``."""
         raw = await self._call(
             "tool_lp_data_for_user_competency_summary",
             userid=userid,
@@ -1229,10 +1187,9 @@ class MoodleClient:
         )
         return raw if isinstance(raw, dict) else {}
 
-    async def get_course_competencies(
-        self, courseid: int
-    ) -> list[dict]:
-        """Get course competencies via ``tool_lp_data_for_course_competencies_page``."""
+    async def get_course_competencies(self, courseid: int) -> list[dict]:
+        """Get course competencies via
+        ``tool_lp_data_for_course_competencies_page``."""
         raw = await self._call(
             "tool_lp_data_for_course_competencies_page",
             courseid=courseid,
@@ -1254,13 +1211,9 @@ class MoodleClient:
             "page": page,
             "perpage": perpage or MAX_RESULTS,
         }
-        raw = await self._call(
-            "core_reportbuilder_list_reports", **params
-        )
+        raw = await self._call("core_reportbuilder_list_reports", **params)
         reports = raw.get("reports", []) if isinstance(raw, dict) else []
-        return [
-            ReportSummary.model_validate(r) for r in reports
-        ][:MAX_RESULTS]
+        return [ReportSummary.model_validate(r) for r in reports][:MAX_RESULTS]
 
     async def retrieve_report(
         self,
@@ -1268,21 +1221,19 @@ class MoodleClient:
         page: int = 0,
         perpage: int = 0,
     ) -> tuple[ReportSummary, ReportData]:
-        """Retrieve report content via ``core_reportbuilder_retrieve_report``."""
+        """Retrieve report content via
+        ``core_reportbuilder_retrieve_report``."""
         params: dict[str, str | int] = {
             "reportid": reportid,
             "page": page,
             "perpage": min(perpage or MAX_RESULTS, MAX_RESULTS),
         }
-        raw = await self._call(
-            "core_reportbuilder_retrieve_report", **params
-        )
+        raw = await self._call("core_reportbuilder_retrieve_report", **params)
         details = ReportSummary.model_validate(raw.get("details", {}))
         data_raw = raw.get("data", {})
-        rows = [
-            ReportRow.model_validate(r)
-            for r in data_raw.get("rows", [])
-        ][:MAX_RESULTS]
+        rows = [ReportRow.model_validate(r) for r in data_raw.get("rows", [])][
+            :MAX_RESULTS
+        ]
         data = ReportData(
             headers=data_raw.get("headers", []),
             rows=rows,
@@ -1312,14 +1263,12 @@ class MoodleClient:
             params["departmentid"] = departmentid
         if completionstatus:
             params["completionstatus"] = completionstatus
-        raw = await self._call(
-            "local_soliplex_get_utm_report", **params
-        )
+        raw = await self._call("local_soliplex_get_utm_report", **params)
         rows_raw = raw.get("rows", []) if isinstance(raw, dict) else []
         totalcount = raw.get("totalcount", 0) if isinstance(raw, dict) else 0
-        rows = [
-            CompletionReportRow.model_validate(r) for r in rows_raw
-        ][:MAX_RESULTS]
+        rows = [CompletionReportRow.model_validate(r) for r in rows_raw][
+            :MAX_RESULTS
+        ]
         return rows, totalcount
 
     async def get_adv_comp_report(
@@ -1329,7 +1278,8 @@ class MoodleClient:
         page: int = 0,
         perpage: int = 0,
     ) -> tuple[list[CompletionReportRow], int]:
-        """Get Advanced Completion report via ``local_soliplex_get_adv_comp_report``."""
+        """Get Advanced Completion report via
+        ``local_soliplex_get_adv_comp_report``."""
         params: dict[str, str | int] = {
             "courseid": courseid,
             "page": page,
@@ -1337,14 +1287,12 @@ class MoodleClient:
         }
         if completionstatus:
             params["completionstatus"] = completionstatus
-        raw = await self._call(
-            "local_soliplex_get_adv_comp_report", **params
-        )
+        raw = await self._call("local_soliplex_get_adv_comp_report", **params)
         rows_raw = raw.get("rows", []) if isinstance(raw, dict) else []
         totalcount = raw.get("totalcount", 0) if isinstance(raw, dict) else 0
-        rows = [
-            CompletionReportRow.model_validate(r) for r in rows_raw
-        ][:MAX_RESULTS]
+        rows = [CompletionReportRow.model_validate(r) for r in rows_raw][
+            :MAX_RESULTS
+        ]
         return rows, totalcount
 
     # ---------------------------------------------------------------
@@ -1353,69 +1301,57 @@ class MoodleClient:
 
     async def enable_rule(self, rule_id: int) -> dict:
         """Enable a dynamic rule via ``tool_dynamicrule_enable_rule``."""
-        raw = await self._call(
-            "tool_dynamicrule_enable_rule", id=rule_id
-        )
+        raw = await self._call("tool_dynamicrule_enable_rule", id=rule_id)
         if raw is None:
             return {"result": True}
         return raw if isinstance(raw, dict) else {"result": True}
 
     async def disable_rule(self, rule_id: int) -> dict:
         """Disable a dynamic rule via ``tool_dynamicrule_disable_rule``."""
-        raw = await self._call(
-            "tool_dynamicrule_disable_rule", id=rule_id
-        )
+        raw = await self._call("tool_dynamicrule_disable_rule", id=rule_id)
         if raw is None:
             return {"result": True}
         return raw if isinstance(raw, dict) else {"result": True}
 
     async def archive_rule(self, rule_id: int) -> dict:
         """Archive a dynamic rule via ``tool_dynamicrule_archive_rule``."""
-        raw = await self._call(
-            "tool_dynamicrule_archive_rule", id=rule_id
-        )
+        raw = await self._call("tool_dynamicrule_archive_rule", id=rule_id)
         if raw is None:
             return {"result": True}
         return raw if isinstance(raw, dict) else {"result": True}
 
     async def unarchive_rule(self, rule_id: int) -> dict:
         """Unarchive a dynamic rule via ``tool_dynamicrule_unarchive_rule``."""
-        raw = await self._call(
-            "tool_dynamicrule_unarchive_rule", id=rule_id
-        )
+        raw = await self._call("tool_dynamicrule_unarchive_rule", id=rule_id)
         if raw is None:
             return {"result": True}
         return raw if isinstance(raw, dict) else {"result": True}
 
     async def delete_rule(self, rule_id: int) -> dict:
         """Delete a dynamic rule via ``tool_dynamicrule_delete_rule``."""
-        raw = await self._call(
-            "tool_dynamicrule_delete_rule", id=rule_id
-        )
+        raw = await self._call("tool_dynamicrule_delete_rule", id=rule_id)
         if raw is None:
             return {"result": True}
         return raw if isinstance(raw, dict) else {"result": True}
 
     async def duplicate_rule(self, rule_id: int) -> dict:
         """Duplicate a dynamic rule via ``tool_dynamicrule_duplicate_rule``."""
-        raw = await self._call(
-            "tool_dynamicrule_duplicate_rule", id=rule_id
-        )
+        raw = await self._call("tool_dynamicrule_duplicate_rule", id=rule_id)
         if raw is None:
             return {"result": True}
         return raw if isinstance(raw, dict) else {"result": True}
 
     async def can_enable_rule(self, rule_id: int) -> dict:
-        """Check if a rule can be enabled via ``tool_dynamicrule_can_enable_rule``."""
-        raw = await self._call(
-            "tool_dynamicrule_can_enable_rule", id=rule_id
-        )
+        """Check if a rule can be enabled via
+        ``tool_dynamicrule_can_enable_rule``."""
+        raw = await self._call("tool_dynamicrule_can_enable_rule", id=rule_id)
         if raw is None:
             return {"result": True}
         return raw if isinstance(raw, dict) else {"result": True}
 
     async def delete_condition(self, instanceid: int) -> dict:
-        """Delete a rule condition via ``tool_dynamicrule_delete_condition``."""
+        """Delete a rule condition via
+        ``tool_dynamicrule_delete_condition``."""
         raw = await self._call(
             "tool_dynamicrule_delete_condition", instanceid=instanceid
         )
@@ -1433,7 +1369,8 @@ class MoodleClient:
         return raw if isinstance(raw, dict) else {"result": True}
 
     async def count_matching_users(self, rule_id: int) -> dict:
-        """Count users currently matching a rule via ``tool_dynamicrule_count_matching_users``."""
+        """Count users currently matching a rule via
+        ``tool_dynamicrule_count_matching_users``."""
         raw = await self._call(
             "tool_dynamicrule_count_matching_users", id=rule_id
         )
@@ -1442,7 +1379,8 @@ class MoodleClient:
         return raw if isinstance(raw, dict) else {"count": raw}
 
     async def count_matched_users(self, rule_id: int) -> dict:
-        """Count users historically matched by a rule via ``tool_dynamicrule_count_matched_users``."""
+        """Count users historically matched by a rule via
+        ``tool_dynamicrule_count_matched_users``."""
         raw = await self._call(
             "tool_dynamicrule_count_matched_users", id=rule_id
         )
@@ -1453,7 +1391,8 @@ class MoodleClient:
     async def search_cohorts_for_rule(
         self, search: str, instancetype: str = "condition"
     ) -> list[SelectorItem]:
-        """Search cohorts for rule conditions/outcomes via ``tool_dynamicrule_potential_cohort_selector``."""
+        """Search cohorts for rule conditions/outcomes via
+        ``tool_dynamicrule_potential_cohort_selector``."""
         raw = await self._call(
             "tool_dynamicrule_potential_cohort_selector",
             search=search,
@@ -1461,23 +1400,20 @@ class MoodleClient:
         )
         if not isinstance(raw, list):
             return []
-        return [
-            SelectorItem.model_validate(c) for c in raw
-        ][:MAX_RESULTS]
+        return [SelectorItem.model_validate(c) for c in raw][:MAX_RESULTS]
 
     async def search_competencies_for_rule(
         self, search: str
     ) -> list[SelectorItem]:
-        """Search competencies for rule conditions via ``tool_dynamicrule_potential_competency_selector``."""
+        """Search competencies for rule conditions via
+        ``tool_dynamicrule_potential_competency_selector``."""
         raw = await self._call(
             "tool_dynamicrule_potential_competency_selector",
             search=search,
         )
         if not isinstance(raw, list):
             return []
-        return [
-            SelectorItem.model_validate(c) for c in raw
-        ][:MAX_RESULTS]
+        return [SelectorItem.model_validate(c) for c in raw][:MAX_RESULTS]
 
     async def list_dynamic_rules(self) -> list[dict]:
         """List dynamic rules via the built-in system report.
@@ -1588,9 +1524,7 @@ class MoodleClient:
     ) -> list[CourseCategory]:
         """List categories via ``core_course_get_categories``."""
         raw = await self._call("core_course_get_categories")
-        return [
-            CourseCategory.model_validate(c) for c in raw
-        ][:MAX_RESULTS]
+        return [CourseCategory.model_validate(c) for c in raw][:MAX_RESULTS]
 
     async def create_courses(
         self,
@@ -1667,18 +1601,14 @@ class MoodleClient:
         for i, c in enumerate(categories):
             for key, val in c.items():
                 params[f"categories[{i}][{key}]"] = val
-        raw = await self._call(
-            "core_course_create_categories", **params
-        )
+        raw = await self._call("core_course_create_categories", **params)
         return [CreatedCategory.model_validate(r) for r in raw]
 
     # ---------------------------------------------------------------
     # Import / Export (Feature 20 — Workplace)
     # ---------------------------------------------------------------
 
-    async def perform_export(
-        self, exporter: str, **params: str | int
-    ) -> dict:
+    async def perform_export(self, exporter: str, **params: str | int) -> dict:
         """Start an export via ``tool_wp_perform_export``.
 
         ``exporter`` is the exporter class name, e.g.
@@ -1691,20 +1621,14 @@ class MoodleClient:
         )
         return raw if isinstance(raw, dict) else {}
 
-    async def get_export_status(
-        self, exportid: int
-    ) -> ExportStatus:
+    async def get_export_status(self, exportid: int) -> ExportStatus:
         """Check export progress via ``tool_wp_get_export_status``."""
-        raw = await self._call(
-            "tool_wp_get_export_status", exportid=exportid
-        )
+        raw = await self._call("tool_wp_get_export_status", exportid=exportid)
         return ExportStatus.model_validate(raw)
 
     async def get_export_file(self, exportid: int) -> dict:
         """Get export file info via ``tool_wp_get_export_file``."""
-        raw = await self._call(
-            "tool_wp_get_export_file", exportid=exportid
-        )
+        raw = await self._call("tool_wp_get_export_file", exportid=exportid)
         return raw if isinstance(raw, dict) else {}
 
     async def perform_import(self, **params: str | int) -> dict:
@@ -1712,25 +1636,17 @@ class MoodleClient:
         raw = await self._call("tool_wp_perform_import", **params)
         return raw if isinstance(raw, dict) else {}
 
-    async def get_import_status(
-        self, importid: int
-    ) -> ImportStatus:
+    async def get_import_status(self, importid: int) -> ImportStatus:
         """Check import progress via ``tool_wp_get_import_status``."""
-        raw = await self._call(
-            "tool_wp_get_import_status", importid=importid
-        )
+        raw = await self._call("tool_wp_get_import_status", importid=importid)
         return ImportStatus.model_validate(raw)
 
     async def delete_export(self, exportid: int) -> dict:
         """Delete an export via ``tool_wp_delete_export``."""
-        raw = await self._call(
-            "tool_wp_delete_export", id=exportid
-        )
+        raw = await self._call("tool_wp_delete_export", id=exportid)
         return raw if isinstance(raw, dict) else {}
 
     async def delete_import(self, importid: int) -> dict:
         """Delete an import via ``tool_wp_delete_import``."""
-        raw = await self._call(
-            "tool_wp_delete_import", id=importid
-        )
+        raw = await self._call("tool_wp_delete_import", id=importid)
         return raw if isinstance(raw, dict) else {}

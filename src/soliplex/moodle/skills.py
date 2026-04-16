@@ -34,13 +34,15 @@ def _parse_ids(csv_string: str, param_name: str = "IDs") -> list[int] | str:
         return [int(p) for p in parts]
     except ValueError:
         non_numeric = [p for p in parts if not p.isdigit()]
-        return json.dumps({
-            "error": (
-                f"Invalid {param_name}: {non_numeric}. "
-                f"Use numeric user IDs, not usernames. "
-                f"Call find_user first to look up IDs."
-            )
-        })
+        return json.dumps(
+            {
+                "error": (
+                    f"Invalid {param_name}: {non_numeric}. "
+                    f"Use numeric user IDs, not usernames. "
+                    f"Call find_user first to look up IDs."
+                )
+            }
+        )
 
 
 def _parse_single_id(value: str, param_name: str = "user ID") -> int | str:
@@ -51,13 +53,15 @@ def _parse_single_id(value: str, param_name: str = "user ID") -> int | str:
     try:
         return int(value.strip())
     except ValueError:
-        return json.dumps({
-            "error": (
-                f"Invalid {param_name}: '{value}'. "
-                f"Use a numeric user ID, not a username. "
-                f"Call find_user first to look up the ID."
-            )
-        })
+        return json.dumps(
+            {
+                "error": (
+                    f"Invalid {param_name}: '{value}'. "
+                    f"Use a numeric user ID, not a username. "
+                    f"Call find_user first to look up the ID."
+                )
+            }
+        )
 
 
 # -- Skill prompts --
@@ -70,7 +74,8 @@ tool with confirmed=True after the user explicitly approves.
 
 Present data in clear tables when appropriate."""
 
-_COURSES_PROMPT = """\
+_COURSES_PROMPT = (
+    """\
 You manage Moodle courses, categories, enrollments, completion, \
 grades, calendar events, and groups.
 
@@ -98,9 +103,12 @@ Start with list_courses to discover courses and IDs. Use \
 list_categories before creating courses. Use duplicate_course \
 to clone templates. delete_course is permanent.
 
-""" + _CONFIRM_INSTRUCTIONS
+"""
+    + _CONFIRM_INSTRUCTIONS
+)
 
-_USERS_PROMPT = """\
+_USERS_PROMPT = (
+    """\
 You manage Moodle user accounts and tenants.
 
 ## Available tools
@@ -119,9 +127,12 @@ Use find_user to look up users by name/username/email. When \
 searching by name, use field='name'. create_user requires \
 username, firstname, lastname, email. delete_user is permanent.
 
-""" + _CONFIRM_INSTRUCTIONS
+"""
+    + _CONFIRM_INSTRUCTIONS
+)
 
-_ORGANISATION_PROMPT = """\
+_ORGANISATION_PROMPT = (
+    """\
 You manage Moodle Workplace organisational structure: \
 departments, positions, jobs, and manager relationships.
 
@@ -147,9 +158,12 @@ Use get_potential_parent_departments/positions before creating \
 or moving. Always set an idnumber when creating \
 departments/positions so they can be referenced in updates.
 
-""" + _CONFIRM_INSTRUCTIONS
+"""
+    + _CONFIRM_INSTRUCTIONS
+)
 
-_CERTIFICATIONS_PROMPT = """\
+_CERTIFICATIONS_PROMPT = (
+    """\
 You manage Moodle Workplace certifications: listing, \
 allocating, revoking, archiving, and deleting.
 
@@ -174,9 +188,12 @@ Active -> archive -> Archived -> delete (permanent) or \
 restore -> Active. Bulk ops use allocation IDs (from \
 get_certification_allocations), NOT user IDs.
 
-""" + _CONFIRM_INSTRUCTIONS
+"""
+    + _CONFIRM_INSTRUCTIONS
+)
 
-_PROGRAMS_PROMPT = """\
+_PROGRAMS_PROMPT = (
+    """\
 You manage Moodle Workplace programs (learning paths), \
 catalogue, and competencies.
 
@@ -209,9 +226,12 @@ get_user_program_courses), NOT user IDs. Use browse_catalogue \
 for learning catalogue. Use list_competency_frameworks for \
 competencies.
 
-""" + _CONFIRM_INSTRUCTIONS
+"""
+    + _CONFIRM_INSTRUCTIONS
+)
 
-_RULES_PROMPT = """\
+_RULES_PROMPT = (
+    """\
 You manage Moodle Workplace dynamic rules (automation).
 
 ## Available tools
@@ -238,9 +258,12 @@ archive -> Archived, Archived -> unarchive -> Disabled, \
 Archived -> delete (permanent). Use can_enable_rule before \
 enabling. Use get_rule_matching_users to check impact.
 
-""" + _CONFIRM_INSTRUCTIONS
+"""
+    + _CONFIRM_INSTRUCTIONS
+)
 
-_REPORTING_PROMPT = """\
+_REPORTING_PROMPT = (
+    """\
 You manage Moodle reporting: Report Builder custom reports, \
 UTM and Advanced Completion reports, and Workplace \
 import/export.
@@ -266,7 +289,9 @@ export_workplace_data, poll with get_export_status, then \
 download_export. For import: import_workplace_data then poll \
 with get_import_status.
 
-""" + _CONFIRM_INSTRUCTIONS
+"""
+    + _CONFIRM_INSTRUCTIONS
+)
 
 
 # =================================================================
@@ -639,11 +664,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         """
         cids: list[int] | None = None
         if courseids:
-            cids = [
-                int(c.strip())
-                for c in courseids.split(",")
-                if c.strip()
-            ]
+            cids = [int(c.strip()) for c in courseids.split(",") if c.strip()]
         now = int(time.time())
         end = now + days_ahead * 86400
         try:
@@ -764,8 +785,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                 {
                     "action": "create_category",
                     "preview": (
-                        f"Will create category '{name}' "
-                        f"under parent={parent}"
+                        f"Will create category '{name}' under parent={parent}"
                     ),
                     "instructions": (
                         "Present this to the user and ask for "
@@ -784,9 +804,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         return json.dumps(
             {
                 "success": True,
-                "created": [
-                    {"id": c.id, "name": c.name} for c in result
-                ],
+                "created": [{"id": c.id, "name": c.name} for c in result],
             }
         )
 
@@ -843,8 +861,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             {
                 "success": True,
                 "created": [
-                    {"id": c.id, "shortname": c.shortname}
-                    for c in result
+                    {"id": c.id, "shortname": c.shortname} for c in result
                 ],
             }
         )
@@ -887,10 +904,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             return json.dumps(
                 {
                     "action": "update_course",
-                    "preview": (
-                        f"Will update course {courseid}: "
-                        f"{fields}"
-                    ),
+                    "preview": (f"Will update course {courseid}: {fields}"),
                     "instructions": (
                         "Present this to the user and ask for "
                         "confirmation. If confirmed, call this "
@@ -1060,13 +1074,15 @@ def build_users_skill(client: MoodleClient) -> Skill:
                     criteria = [(field, value)]
                 users = await client.search_users(criteria)
             else:
-                return json.dumps({
-                    "error": (
-                        f"Unsupported field: '{field}'. "
-                        f"Use one of: "
-                        f"{sorted(exact_fields | name_fields)}"
-                    )
-                })
+                return json.dumps(
+                    {
+                        "error": (
+                            f"Unsupported field: '{field}'. "
+                            f"Use one of: "
+                            f"{sorted(exact_fields | name_fields)}"
+                        )
+                    }
+                )
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(
@@ -1155,8 +1171,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
             {
                 "success": True,
                 "created": [
-                    {"id": u.id, "username": u.username}
-                    for u in result
+                    {"id": u.id, "username": u.username} for u in result
                 ],
             }
         )
@@ -1215,10 +1230,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
             return json.dumps(
                 {
                     "action": "update_user",
-                    "preview": (
-                        f"Will update user {uid}: "
-                        f"{fields}"
-                    ),
+                    "preview": (f"Will update user {uid}: {fields}"),
                     "instructions": (
                         "Present this to the user and ask for "
                         "confirmation. If confirmed, call this "
@@ -1325,7 +1337,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
                     "action": "send_message",
                     "preview": (
                         f"Will send message to {len(user_list)} "
-                        f"user(s): \"{text[:100]}\""
+                        f'user(s): "{text[:100]}"'
                     ),
                     "user_ids": user_list,
                     "instructions": (
@@ -1388,8 +1400,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
                 }
             )
         allocations = [
-            {"userid": uid, "tenantid": tenantid}
-            for uid in user_list
+            {"userid": uid, "tenantid": tenantid} for uid in user_list
         ]
         try:
             result = await client.allocate_users_to_tenant(allocations)
@@ -1581,10 +1592,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(
-            [
-                {"id": p.id, "name": p.name, "path": p.path}
-                for p in parents
-            ]
+            [{"id": p.id, "name": p.name, "path": p.path} for p in parents]
         )
 
     async def get_potential_parent_positions(
@@ -1607,10 +1615,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(
-            [
-                {"id": p.id, "name": p.name, "path": p.path}
-                for p in parents
-            ]
+            [{"id": p.id, "name": p.name, "path": p.path} for p in parents]
         )
 
     async def create_department(
@@ -1694,8 +1699,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         return json.dumps(
             {
                 "updated": [
-                    {"id": u.id, "idnumber": u.idnumber}
-                    for u in updated
+                    {"id": u.id, "idnumber": u.idnumber} for u in updated
                 ],
                 "warnings": warnings,
             }
@@ -1820,8 +1824,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         return json.dumps(
             {
                 "updated": [
-                    {"id": u.id, "idnumber": u.idnumber}
-                    for u in updated
+                    {"id": u.id, "idnumber": u.idnumber} for u in updated
                 ],
                 "warnings": warnings,
             }
@@ -1840,9 +1843,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             confirmed: Set True only after user approval.
         """
         if not confirmed:
-            return json.dumps(
-                {"preview": f"Delete position id={position_id}"}
-            )
+            return json.dumps({"preview": f"Delete position id={position_id}"})
         try:
             result = await client.delete_position(position_id)
         except (MoodleAPIError, httpx.HTTPError) as exc:
@@ -1886,9 +1887,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
                 }
             )
         try:
-            result = await client.create_job(
-                userid, department, position
-            )
+            result = await client.create_job(userid, department, position)
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(
@@ -1912,9 +1911,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             confirmed: Set True only after user approval.
         """
         if not confirmed:
-            return json.dumps(
-                {"preview": f"Delete job id={job_id}"}
-            )
+            return json.dumps({"preview": f"Delete job id={job_id}"})
         try:
             result = await client.delete_job(job_id)
         except (MoodleAPIError, httpx.HTTPError) as exc:
@@ -1962,9 +1959,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
                 }
             )
         try:
-            result = await client.assign_managers(
-                user_list, manager_list
-            )
+            result = await client.assign_managers(user_list, manager_list)
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(
@@ -2005,8 +2000,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             return json.dumps(
                 {
                     "preview": (
-                        f"Unassign managers {mid_list}"
-                        f" from users {uid_list}"
+                        f"Unassign managers {mid_list} from users {uid_list}"
                     ),
                     "unassign_all": unassign_all,
                 }
@@ -2093,16 +2087,11 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
             search: Search term to filter by name.
         """
         try:
-            results = await client.search_certifications(
-                search=search
-            )
+            results = await client.search_certifications(search=search)
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(
-            [
-                {"id": c.id, "fullname": c.fullname}
-                for c in results
-            ]
+            [{"id": c.id, "fullname": c.fullname} for c in results]
         )
 
     async def get_certification_allocations(
@@ -2139,9 +2128,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
             userid: The Moodle user ID.
         """
         try:
-            allocs = await client.get_user_certification_allocations(
-                userid
-            )
+            allocs = await client.get_user_certification_allocations(userid)
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(
@@ -2285,9 +2272,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                 }
             )
         try:
-            result = await client.revoke_certification(
-                certificationid, uid
-            )
+            result = await client.revoke_certification(certificationid, uid)
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(
@@ -2364,8 +2349,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                 {
                     "action": "archive_certification",
                     "preview": (
-                        f"Will archive certification "
-                        f"{certificationid}"
+                        f"Will archive certification {certificationid}"
                     ),
                     "certificationid": certificationid,
                     "instructions": (
@@ -2376,9 +2360,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                 }
             )
         try:
-            result = await client.archive_certification(
-                certificationid
-            )
+            result = await client.archive_certification(certificationid)
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(
@@ -2407,16 +2389,11 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
         if not confirmed:
             return json.dumps(
                 {
-                    "preview": (
-                        f"DELETE certification "
-                        f"id={certification_id}"
-                    ),
+                    "preview": (f"DELETE certification id={certification_id}"),
                 }
             )
         try:
-            result = await client.delete_certification(
-                certification_id
-            )
+            result = await client.delete_certification(certification_id)
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(result)
@@ -2440,15 +2417,12 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
             return json.dumps(
                 {
                     "preview": (
-                        f"Restore certification "
-                        f"id={certification_id}"
+                        f"Restore certification id={certification_id}"
                     ),
                 }
             )
         try:
-            result = await client.restore_certification(
-                certification_id
-            )
+            result = await client.restore_certification(certification_id)
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(result)
@@ -2474,18 +2448,13 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
             return json.dumps(
                 {
                     "preview": (
-                        f"Deallocate {len(parsed)} "
-                        f"certification user(s)"
+                        f"Deallocate {len(parsed)} certification user(s)"
                     ),
                     "allocation_ids": parsed,
                 }
             )
         try:
-            result = (
-                await client.bulk_deallocate_certification_users(
-                    parsed
-                )
-            )
+            result = await client.bulk_deallocate_certification_users(parsed)
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(result.model_dump())
@@ -2580,10 +2549,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(
-            [
-                {"id": c.id, "fullname": c.fullname}
-                for c in courses
-            ]
+            [{"id": c.id, "fullname": c.fullname} for c in courses]
         )
 
     async def browse_catalogue(query: str = "") -> str:
@@ -2647,9 +2613,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             userid: Optional user ID (0 = current user).
         """
         try:
-            content = await client.get_program_content(
-                programid, userid
-            )
+            content = await client.get_program_content(programid, userid)
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(content)
@@ -2721,9 +2685,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             courseid: The Moodle course ID.
         """
         try:
-            competencies = await client.get_course_competencies(
-                courseid
-            )
+            competencies = await client.get_course_competencies(courseid)
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(competencies)
@@ -2799,8 +2761,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
                 {
                     "action": "deallocate_user_from_program",
                     "preview": (
-                        f"Will remove user {userid} from "
-                        f"program {programid}"
+                        f"Will remove user {userid} from program {programid}"
                     ),
                     "userid": userid,
                     "programid": programid,
@@ -2840,9 +2801,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             confirmed: Set True only after user approval.
         """
         if not confirmed:
-            return json.dumps(
-                {"preview": f"Archive program id={program_id}"}
-            )
+            return json.dumps({"preview": f"Archive program id={program_id}"})
         try:
             result = await client.archive_program(program_id)
         except (MoodleAPIError, httpx.HTTPError) as exc:
@@ -2863,9 +2822,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             confirmed: Set True only after user approval.
         """
         if not confirmed:
-            return json.dumps(
-                {"preview": f"Restore program id={program_id}"}
-            )
+            return json.dumps({"preview": f"Restore program id={program_id}"})
         try:
             result = await client.restore_program(program_id)
         except (MoodleAPIError, httpx.HTTPError) as exc:
@@ -2887,9 +2844,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             confirmed: Set True only after user approval.
         """
         if not confirmed:
-            return json.dumps(
-                {"preview": f"DELETE program id={program_id}"}
-            )
+            return json.dumps({"preview": f"DELETE program id={program_id}"})
         try:
             result = await client.delete_program(program_id)
         except (MoodleAPIError, httpx.HTTPError) as exc:
@@ -2940,10 +2895,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         if not confirmed:
             return json.dumps(
                 {
-                    "preview": (
-                        f"Set program id={program_id} "
-                        f"to {label}"
-                    ),
+                    "preview": (f"Set program id={program_id} to {label}"),
                 }
             )
         try:
@@ -2974,17 +2926,12 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         if not confirmed:
             return json.dumps(
                 {
-                    "preview": (
-                        f"Deallocate {len(parsed)} program "
-                        f"user(s)"
-                    ),
+                    "preview": (f"Deallocate {len(parsed)} program user(s)"),
                     "allocation_ids": parsed,
                 }
             )
         try:
-            result = await client.bulk_deallocate_program_users(
-                parsed
-            )
+            result = await client.bulk_deallocate_program_users(parsed)
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(result.model_dump())
@@ -3010,16 +2957,13 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             return json.dumps(
                 {
                     "preview": (
-                        f"Reset progress for {len(parsed)} "
-                        f"program user(s)"
+                        f"Reset progress for {len(parsed)} program user(s)"
                     ),
                     "allocation_ids": parsed,
                 }
             )
         try:
-            result = await client.bulk_reset_program_progress(
-                parsed
-            )
+            result = await client.bulk_reset_program_progress(parsed)
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
         return json.dumps(result.model_dump())
@@ -3099,8 +3043,7 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             {
                 "error": f"Multiple rules match '{rule_name}'.",
                 "matches": [
-                    {"id": m["id"], "name": m["name"]}
-                    for m in matches
+                    {"id": m["id"], "name": m["name"]} for m in matches
                 ],
             }
         )
@@ -3121,9 +3064,7 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             return json.dumps({"error": str(exc)})
         return json.dumps(rules)
 
-    async def can_enable_rule(
-        rule_id: int = 0, rule_name: str = ""
-    ) -> str:
+    async def can_enable_rule(rule_id: int = 0, rule_name: str = "") -> str:
         """Check whether a dynamic rule meets prerequisites to be enabled.
 
         Args:
@@ -3185,9 +3126,7 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             items = await client.search_cohorts_for_rule(search)
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
-        return json.dumps(
-            [{"id": i.id, "name": i.name} for i in items]
-        )
+        return json.dumps([{"id": i.id, "name": i.name} for i in items])
 
     async def search_competencies_for_rule(search: str) -> str:
         """Search competencies available for dynamic rule conditions.
@@ -3383,8 +3322,7 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             return json.dumps(
                 {
                     "preview": (
-                        f"Delete condition id={instanceid}"
-                        f" from dynamic rule"
+                        f"Delete condition id={instanceid} from dynamic rule"
                     ),
                 }
             )
@@ -3408,8 +3346,7 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             return json.dumps(
                 {
                     "preview": (
-                        f"Delete outcome id={instanceid}"
-                        f" from dynamic rule"
+                        f"Delete outcome id={instanceid} from dynamic rule"
                     ),
                 }
             )
@@ -3514,8 +3451,7 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
                 "source": details.sourcename,
                 "headers": data.headers,
                 "rows": [
-                    [_strip_html(c) for c in row.columns]
-                    for row in data.rows
+                    [_strip_html(c) for c in row.columns] for row in data.rows
                 ],
                 "total_rows": data.totalrowcount,
                 "page": page,
@@ -3686,22 +3622,14 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
             "cohorts": r"tool_wp\tool_wp\exporter\cohorts",
             "reports": r"tool_wp\tool_wp\exporter\reports",
             "site": r"tool_wp\tool_wp\exporter\site",
-            "certificates": (
-                r"tool_wp\tool_wp\exporter\certificates"
-            ),
-            "coursecategories": (
-                r"tool_wp\tool_wp\exporter\coursecategories"
-            ),
-            "programs": (
-                r"tool_program\tool_wp\exporter\programs"
-            ),
+            "certificates": (r"tool_wp\tool_wp\exporter\certificates"),
+            "coursecategories": (r"tool_wp\tool_wp\exporter\coursecategories"),
+            "programs": (r"tool_program\tool_wp\exporter\programs"),
             "certifications": (
                 r"tool_certification\tool_wp"
                 r"\exporter\certifications"
             ),
-            "rules": (
-                r"tool_dynamicrule\tool_wp\exporter\rules"
-            ),
+            "rules": (r"tool_dynamicrule\tool_wp\exporter\rules"),
             "departments_csv": (
                 r"tool_organisation\tool_wp"
                 r"\exporter\departments_csv"
@@ -3718,12 +3646,8 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
                 r"tool_organisation\tool_wp"
                 r"\exporter\orgstructure"
             ),
-            "jobs": (
-                r"tool_organisation\tool_wp\exporter\jobs"
-            ),
-            "tenants": (
-                r"tool_tenant\tool_wp\exporter\tenants"
-            ),
+            "jobs": (r"tool_organisation\tool_wp\exporter\jobs"),
+            "tenants": (r"tool_tenant\tool_wp\exporter\tenants"),
         }
         resolved = _EXPORTER_MAP.get(exporter, exporter)
         if not confirmed:
@@ -3731,8 +3655,7 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
                 {
                     "action": "export_workplace_data",
                     "preview": (
-                        f"Will export '{exporter}' data "
-                        f"from Workplace"
+                        f"Will export '{exporter}' data from Workplace"
                     ),
                     "instructions": (
                         "Present this to the user and ask for "
@@ -3793,9 +3716,7 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
             confirmed: Set True only after user approval.
         """
         if not confirmed:
-            return json.dumps(
-                {"preview": f"Delete export id={export_id}"}
-            )
+            return json.dumps({"preview": f"Delete export id={export_id}"})
         try:
             result = await client.delete_export(export_id)
         except (MoodleAPIError, httpx.HTTPError) as exc:
@@ -3813,9 +3734,7 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
             confirmed: Set True only after user approval.
         """
         if not confirmed:
-            return json.dumps(
-                {"preview": f"Delete import id={import_id}"}
-            )
+            return json.dumps({"preview": f"Delete import id={import_id}"})
         try:
             result = await client.delete_import(import_id)
         except (MoodleAPIError, httpx.HTTPError) as exc:

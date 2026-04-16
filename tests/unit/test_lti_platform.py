@@ -32,9 +32,7 @@ class TestFindPlatform:
 
     def test_not_found_empty(self):
         with pytest.raises(lti_platform.UnknownLTIPlatform) as exc:
-            lti_platform.find_platform(
-                [], issuer=ISSUER, client_id=CLIENT_ID
-            )
+            lti_platform.find_platform([], issuer=ISSUER, client_id=CLIENT_ID)
         assert exc.value.issuer == ISSUER
         assert exc.value.client_id == CLIENT_ID
 
@@ -48,9 +46,7 @@ class TestFindPlatform:
     def test_not_found_wrong_client_id(self):
         p = _make_platform()
         with pytest.raises(lti_platform.UnknownLTIPlatform):
-            lti_platform.find_platform(
-                [p], issuer=ISSUER, client_id="wrong"
-            )
+            lti_platform.find_platform([p], issuer=ISSUER, client_id="wrong")
 
 
 class TestCheckDeployment:
@@ -60,9 +56,7 @@ class TestCheckDeployment:
 
     def test_invalid(self):
         p = _make_platform(deployment_ids=["1"])
-        with pytest.raises(
-            lti_platform.InvalidLTIDeployment
-        ) as exc:
+        with pytest.raises(lti_platform.InvalidLTIDeployment) as exc:
             lti_platform.check_deployment(p, "99")
         assert exc.value.deployment_id == "99"
         assert exc.value.platform_id == PLATFORM_ID
@@ -73,9 +67,7 @@ class TestResolveRoomId:
         p = _make_platform()
         found = lti_platform.resolve_room_id(
             p,
-            target_link_uri=(
-                "https://soliplex.example.com/lti/chat/my-room"
-            ),
+            target_link_uri=("https://soliplex.example.com/lti/chat/my-room"),
         )
         assert found == "my-room"
 
@@ -83,9 +75,7 @@ class TestResolveRoomId:
         p = _make_platform()
         found = lti_platform.resolve_room_id(
             p,
-            target_link_uri=(
-                "https://soliplex.example.com/lti/chat/my-room/"
-            ),
+            target_link_uri=("https://soliplex.example.com/lti/chat/my-room/"),
         )
         assert found == "my-room"
 
@@ -93,28 +83,18 @@ class TestResolveRoomId:
         p = _make_platform()
         found = lti_platform.resolve_room_id(
             p,
-            target_link_uri=(
-                "https://soliplex.example.com/lti/launch"
-            ),
+            target_link_uri=("https://soliplex.example.com/lti/launch"),
         )
         assert found == DEFAULT_ROOM
 
     def test_from_course_room_map(self):
-        p = _make_platform(
-            course_room_map={"101": "room-101"}
-        )
-        found = lti_platform.resolve_room_id(
-            p, course_id="101"
-        )
+        p = _make_platform(course_room_map={"101": "room-101"})
+        found = lti_platform.resolve_room_id(p, course_id="101")
         assert found == "room-101"
 
     def test_course_id_not_in_map(self):
-        p = _make_platform(
-            course_room_map={"101": "room-101"}
-        )
-        found = lti_platform.resolve_room_id(
-            p, course_id="999"
-        )
+        p = _make_platform(course_room_map={"101": "room-101"})
+        found = lti_platform.resolve_room_id(p, course_id="999")
         assert found == DEFAULT_ROOM
 
     def test_default_room(self):
@@ -127,9 +107,7 @@ class TestResolveRoomId:
         p = _make_platform()
         found = lti_platform.resolve_room_id(
             p,
-            target_link_uri=(
-                "https://soliplex.example.com/lti/chat/"
-            ),
+            target_link_uri=("https://soliplex.example.com/lti/chat/"),
         )
         # After rstrip("/"), URL ends in /chat, so parts[-2]
         # is "lti", not "chat" → falls to default

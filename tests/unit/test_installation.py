@@ -604,12 +604,8 @@ def test_installation_authorization_dburi_async():
         ([object()], [object()], False),
     ],
 )
-def test_installation_auth_disabled(
-    w_oidc_configs, w_lti_configs, expected
-):
-    i_config = mock.create_autospec(
-        config_installation.InstallationConfig
-    )
+def test_installation_auth_disabled(w_oidc_configs, w_lti_configs, expected):
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     i_config.oidc_auth_system_configs = w_oidc_configs
     i_config.lti_platform_configs = w_lti_configs
 
@@ -629,14 +625,11 @@ def test_installation_oidc_auth_system_configs():
 
 
 def test_installation_lti_platform_configs():
-    i_config = mock.create_autospec(
-        config_installation.InstallationConfig
-    )
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
 
     assert (
-        the_installation.lti_platform_configs
-        is i_config.lti_platform_configs
+        the_installation.lti_platform_configs is i_config.lti_platform_configs
     )
 
 

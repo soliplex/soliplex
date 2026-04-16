@@ -16,9 +16,7 @@ BASE_PAYLOAD = {
     "aud": CLIENT_ID,
     "nonce": NONCE,
     lti_validation.LTI_CLAIM_VERSION: "1.3.0",
-    lti_validation.LTI_CLAIM_MESSAGE_TYPE: (
-        "LtiResourceLinkRequest"
-    ),
+    lti_validation.LTI_CLAIM_MESSAGE_TYPE: ("LtiResourceLinkRequest"),
     lti_validation.LTI_CLAIM_DEPLOYMENT_ID: "1",
 }
 
@@ -100,9 +98,7 @@ class TestValidateIdToken:
             payload["nonce"] = "wrong-nonce"
             jwtd.return_value = payload
 
-            with pytest.raises(
-                lti_validation.LTIInvalidNonce
-            ):
+            with pytest.raises(lti_validation.LTIInvalidNonce):
                 lti_validation.validate_id_token(
                     "fake-token",
                     key_set_url=KEY_SET_URL,
@@ -118,9 +114,7 @@ class TestValidateIdToken:
             payload[lti_validation.LTI_CLAIM_VERSION] = "2.0"
             jwtd.return_value = payload
 
-            with pytest.raises(
-                lti_validation.LTIInvalidVersion
-            ):
+            with pytest.raises(lti_validation.LTIInvalidVersion):
                 lti_validation.validate_id_token(
                     "fake-token",
                     key_set_url=KEY_SET_URL,
@@ -138,9 +132,7 @@ class TestValidateIdToken:
             )
             jwtd.return_value = payload
 
-            with pytest.raises(
-                lti_validation.LTIInvalidMessageType
-            ):
+            with pytest.raises(lti_validation.LTIInvalidMessageType):
                 lti_validation.validate_id_token(
                     "fake-token",
                     key_set_url=KEY_SET_URL,
@@ -153,9 +145,7 @@ class TestValidateIdToken:
     def test_no_jwks_client_fetches(self):
         """When jwks_client is None, _fetch_jwks is called"""
         with (
-            mock.patch(
-                "soliplex.lti.validation._fetch_jwks"
-            ) as fetch,
+            mock.patch("soliplex.lti.validation._fetch_jwks") as fetch,
             mock.patch("jwt.decode") as jwtd,
         ):
             key = mock.Mock()

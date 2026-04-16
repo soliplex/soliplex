@@ -57,12 +57,8 @@ Present data in clear tables when appropriate.
 def moodle_tools_agent_factory(
     agent_config: config.FactoryAgentConfig,
     tool_configs: agents.ToolConfigMap = None,
-    mcp_client_toolset_configs: (
-        config.MCP_ClientToolsetConfigMap
-    ) = None,
-    skill_toolset_config: (
-        agents.SkillToolsetConfig | None
-    ) = None,
+    mcp_client_toolset_configs: (config.MCP_ClientToolsetConfigMap) = None,
+    skill_toolset_config: (agents.SkillToolsetConfig | None) = None,
 ) -> pydantic_ai.Agent:
     """Create a Moodle Workplace router agent with skills.
 
@@ -93,9 +89,7 @@ def moodle_tools_agent_factory(
     base_url = ic.get_secret(extra["moodle_base_url"])
     token = ic.get_secret(extra["moodle_api_token"])
     verify = extra.get("moodle_verify_ssl")
-    client = MoodleClient(
-        base_url=base_url, token=token, verify=verify
-    )
+    client = MoodleClient(base_url=base_url, token=token, verify=verify)
 
     model = config_agents.get_model_from_factory_config(agent_config)
     model_settings = config_agents.get_model_settings_from_factory_config(
@@ -116,20 +110,14 @@ def moodle_tools_agent_factory(
     # -- Merge external skills (e.g. RAG) if provided -------
     all_skills = list(moodle_skills)
     if skill_toolset_config is not None:
-        moodle_names = {
-            s.metadata.name for s in moodle_skills
-        }
+        moodle_names = {s.metadata.name for s in moodle_skills}
         ext_toolset = skill_toolset_config.skill_toolset
         for name in ext_toolset.registry.names:
             if name not in moodle_names:
-                all_skills.append(
-                    ext_toolset.registry.get(name)
-                )
+                all_skills.append(ext_toolset.registry.get(name))
 
     # -- Assemble router agent ------------------------------
-    toolset = SkillToolset(
-        skills=all_skills, use_subagents=True
-    )
+    toolset = SkillToolset(skills=all_skills, use_subagents=True)
     instructions = hs_prompts.build_system_prompt(
         preamble=MOODLE_ROUTER_PROMPT,
         skill_catalog=toolset.skill_catalog,

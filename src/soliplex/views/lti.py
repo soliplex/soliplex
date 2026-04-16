@@ -246,7 +246,8 @@ _MARKED_CDN = (
     'marked@15/marked.min.js"></script>'
 )
 
-_CHAT_PAGE = """\
+_CHAT_PAGE = (
+    """\
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -254,24 +255,33 @@ _CHAT_PAGE = """\
 <meta name="viewport"
       content="width=device-width, initial-scale=1.0">
 <title>Soliplex Chat</title>
-""" + _MARKED_CDN + """
+"""
+    + _MARKED_CDN
+    + """
 <style>
-""" + _CHAT_STYLES + """\
+"""
+    + _CHAT_STYLES
+    + """\
 </style>
 </head>
 <body>
 <div id="chat">
-""" + _CHAT_BODY + """\
+"""
+    + _CHAT_BODY
+    + """\
 </div>
 <script>
 const ROOM  = "{room_id}";
 const TOKEN = "{session_token}";
 const BASE  = "{base_url}";
-""" + _CHAT_SCRIPT + """\
+"""
+    + _CHAT_SCRIPT
+    + """\
 </script>
 </body>
 </html>
 """
+)
 
 _PICKER_STYLES = """\
 #picker{{padding:1.5rem;overflow-y:auto}}
@@ -299,7 +309,8 @@ _PICKER_STYLES = """\
 .loader{{text-align:center;padding:2rem;color:#777}}
 """
 
-_PICKER_CHAT_PAGE = """\
+_PICKER_CHAT_PAGE = (
+    """\
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -307,9 +318,14 @@ _PICKER_CHAT_PAGE = """\
 <meta name="viewport"
       content="width=device-width, initial-scale=1.0">
 <title>Soliplex</title>
-""" + _MARKED_CDN + """
+"""
+    + _MARKED_CDN
+    + """
 <style>
-""" + _CHAT_STYLES + _PICKER_STYLES + """\
+"""
+    + _CHAT_STYLES
+    + _PICKER_STYLES
+    + """\
 #chat{{display:none}}
 </style>
 </head>
@@ -318,7 +334,9 @@ _PICKER_CHAT_PAGE = """\
   <div class="loader">Loading rooms\u2026</div>
 </div>
 <div id="chat">
-""" + _CHAT_BODY + """\
+"""
+    + _CHAT_BODY
+    + """\
 </div>
 <script>
 let ROOM  = "";
@@ -388,11 +406,14 @@ function escHtml(s) {{
 
 loadRooms();
 
-""" + _CHAT_SCRIPT + """\
+"""
+    + _CHAT_SCRIPT
+    + """\
 </script>
 </body>
 </html>
 """
+)
 
 
 # ----------------------------------------------------------------
@@ -426,9 +447,7 @@ async def _read_params(
 )
 async def lti_login(
     request: fastapi.Request,
-    the_installation: (
-        installation.Installation
-    ) = depend_the_installation,
+    the_installation: (installation.Installation) = depend_the_installation,
 ):
     """Handle OIDC third-party login initiation from an LTI
     platform.
@@ -459,9 +478,7 @@ async def lti_login(
         ) from None
 
     try:
-        secret_key = the_installation.get_secret(
-            "LTI_SESSION_SECRET"
-        )
+        secret_key = the_installation.get_secret("LTI_SESSION_SECRET")
     except KeyError:
         raise fastapi.HTTPException(
             status_code=500,
@@ -476,18 +493,20 @@ async def lti_login(
 
     redirect_uri = str(request.url_for("lti_launch"))
 
-    auth_params = urllib.parse.urlencode({
-        "scope": "openid",
-        "response_type": "id_token",
-        "client_id": platform.client_id,
-        "redirect_uri": redirect_uri,
-        "login_hint": login_hint,
-        "lti_message_hint": lti_message_hint,
-        "state": state,
-        "response_mode": "form_post",
-        "nonce": nonce,
-        "prompt": "none",
-    })
+    auth_params = urllib.parse.urlencode(
+        {
+            "scope": "openid",
+            "response_type": "id_token",
+            "client_id": platform.client_id,
+            "redirect_uri": redirect_uri,
+            "login_hint": login_hint,
+            "lti_message_hint": lti_message_hint,
+            "state": state,
+            "response_mode": "form_post",
+            "nonce": nonce,
+            "prompt": "none",
+        }
+    )
 
     auth_url = f"{platform.auth_login_url}?{auth_params}"
     return fastapi_responses.RedirectResponse(
@@ -503,9 +522,7 @@ async def lti_login(
 )
 async def lti_launch(
     request: fastapi.Request,
-    the_installation: (
-        installation.Installation
-    ) = depend_the_installation,
+    the_installation: (installation.Installation) = depend_the_installation,
 ):
     """Receive and validate the LTI id_token from a platform.
 
@@ -523,9 +540,7 @@ async def lti_launch(
         )
 
     try:
-        secret_key = the_installation.get_secret(
-            "LTI_SESSION_SECRET"
-        )
+        secret_key = the_installation.get_secret("LTI_SESSION_SECRET")
     except KeyError:
         raise fastapi.HTTPException(
             status_code=500,
@@ -567,30 +582,18 @@ async def lti_launch(
             detail=str(exc),
         ) from exc
 
-    deployment_id = payload.get(
-        lti_validation.LTI_CLAIM_DEPLOYMENT_ID
-    )
+    deployment_id = payload.get(lti_validation.LTI_CLAIM_DEPLOYMENT_ID)
     try:
-        lti_platform.check_deployment(
-            platform, deployment_id
-        )
+        lti_platform.check_deployment(platform, deployment_id)
     except lti_platform.InvalidLTIDeployment as exc:
         raise fastapi.HTTPException(
             status_code=400,
             detail=str(exc),
         ) from exc
 
-    target_link_uri = payload.get(
-        lti_validation.LTI_CLAIM_TARGET_LINK_URI
-    )
-    context = payload.get(
-        lti_validation.LTI_CLAIM_CONTEXT, {}
-    )
-    course_id = (
-        context.get("id")
-        if isinstance(context, dict)
-        else None
-    )
+    target_link_uri = payload.get(lti_validation.LTI_CLAIM_TARGET_LINK_URI)
+    context = payload.get(lti_validation.LTI_CLAIM_CONTEXT, {})
+    course_id = context.get("id") if isinstance(context, dict) else None
 
     room_id = lti_platform.resolve_room_id(
         platform,
@@ -599,8 +602,7 @@ async def lti_launch(
     )
 
     show_picker = (
-        platform.show_room_picker
-        and room_id == platform.default_room_id
+        platform.show_room_picker and room_id == platform.default_room_id
     )
 
     user_claims = lti_session.claims_from_lti_payload(payload)
@@ -627,8 +629,6 @@ async def lti_launch(
     return fastapi_responses.HTMLResponse(
         html,
         headers={
-            "Content-Security-Policy": (
-                f"frame-ancestors {platform.issuer}"
-            ),
+            "Content-Security-Policy": (f"frame-ancestors {platform.issuer}"),
         },
     )

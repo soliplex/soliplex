@@ -17,20 +17,14 @@ def claims_from_lti_payload(payload: dict) -> dict:
     sub = payload.get("sub", "")
 
     roles = payload.get(lti_validation.LTI_CLAIM_ROLES, [])
-    resource_link = payload.get(
-        lti_validation.LTI_CLAIM_RESOURCE_LINK, {}
-    )
+    resource_link = payload.get(lti_validation.LTI_CLAIM_RESOURCE_LINK, {})
 
     return {
         "sub": sub,
         "email": email or sub,
         "given_name": given_name,
         "family_name": family_name,
-        "name": (
-            name
-            or f"{given_name} {family_name}".strip()
-            or sub
-        ),
+        "name": (name or f"{given_name} {family_name}".strip() or sub),
         "preferred_username": email or sub,
         "lti_roles": roles,
         "lti_resource_link_id": resource_link.get("id", ""),

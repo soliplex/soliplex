@@ -8,24 +8,17 @@ import jwt
 LTI_CLAIM_MESSAGE_TYPE = (
     "https://purl.imsglobal.org/spec/lti/claim/message_type"
 )
-LTI_CLAIM_VERSION = (
-    "https://purl.imsglobal.org/spec/lti/claim/version"
-)
+LTI_CLAIM_VERSION = "https://purl.imsglobal.org/spec/lti/claim/version"
 LTI_CLAIM_DEPLOYMENT_ID = (
     "https://purl.imsglobal.org/spec/lti/claim/deployment_id"
 )
 LTI_CLAIM_RESOURCE_LINK = (
     "https://purl.imsglobal.org/spec/lti/claim/resource_link"
 )
-LTI_CLAIM_ROLES = (
-    "https://purl.imsglobal.org/spec/lti/claim/roles"
-)
-LTI_CLAIM_CONTEXT = (
-    "https://purl.imsglobal.org/spec/lti/claim/context"
-)
+LTI_CLAIM_ROLES = "https://purl.imsglobal.org/spec/lti/claim/roles"
+LTI_CLAIM_CONTEXT = "https://purl.imsglobal.org/spec/lti/claim/context"
 LTI_CLAIM_TARGET_LINK_URI = (
-    "https://purl.imsglobal.org/spec/lti/claim"
-    "/target_link_uri"
+    "https://purl.imsglobal.org/spec/lti/claim/target_link_uri"
 )
 
 LTI_VERSION = "1.3.0"
@@ -52,18 +45,12 @@ class LTIInvalidNonce(LTIValidationError):
 
 class LTIInvalidVersion(LTIValidationError):
     def __init__(self, *, expected, got):
-        super().__init__(
-            f"Expected LTI version {expected!r},"
-            f" got {got!r}"
-        )
+        super().__init__(f"Expected LTI version {expected!r}, got {got!r}")
 
 
 class LTIInvalidMessageType(LTIValidationError):
     def __init__(self, *, expected, got):
-        super().__init__(
-            f"Expected message type {expected!r},"
-            f" got {got!r}"
-        )
+        super().__init__(f"Expected message type {expected!r}, got {got!r}")
 
 
 def _fetch_jwks(key_set_url: str) -> jwt.PyJWKClient:
@@ -113,9 +100,7 @@ def validate_id_token(
 
     version = payload.get(LTI_CLAIM_VERSION)
     if version != LTI_VERSION:
-        raise LTIInvalidVersion(
-            expected=LTI_VERSION, got=version
-        )
+        raise LTIInvalidVersion(expected=LTI_VERSION, got=version)
 
     msg_type = payload.get(LTI_CLAIM_MESSAGE_TYPE)
     if msg_type != LTI_RESOURCE_LINK_REQUEST:

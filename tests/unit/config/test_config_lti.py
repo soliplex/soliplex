@@ -56,8 +56,6 @@ def test_from_yaml_error():
     bad_config = dict(BARE_CONFIG) | {"unknown_field": "bogus"}
 
     with pytest.raises(config_exc.FromYamlException) as exc_info:
-        config_lti.LTIPlatformConfig.from_yaml(
-            CONFIG_PATH, bad_config
-        )
+        config_lti.LTIPlatformConfig.from_yaml(CONFIG_PATH, bad_config)
 
     assert exc_info.value._config_path == CONFIG_PATH
