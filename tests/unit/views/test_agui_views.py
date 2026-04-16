@@ -1489,7 +1489,9 @@ async def test_drive_event_stream_with_skills(rags, ces, dls):
         **drive_kwargs,
     )
 
-    rags.assert_called_once_with(adapter, toolset=skill_ts, **run_stream_kwargs)
+    rags.assert_called_once_with(
+        adapter, toolset=skill_ts, **run_stream_kwargs
+    )
     rags_cm.__aenter__.assert_awaited_once()
     rags_cm.__aexit__.assert_awaited_once()
     ces.assert_called_once_with(merged_stream)
