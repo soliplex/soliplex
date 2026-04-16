@@ -1500,9 +1500,13 @@ async def test_create_async_engine_sqlite_file(tmp_path):
     try:
         # WAL mode is set on the database file
 
-        with sqlite3.connect(str(db_path)) as conn:
-            (mode,) = conn.execute("PRAGMA journal_mode").fetchone()
+        db = sqlite3.connect(str(db_path))
+        try:
+            with db as conn:
+                (mode,) = conn.execute("PRAGMA journal_mode").fetchone()
             assert mode == "wal"
+        finally:
+            db.close()
 
         # Engine works and the event listener fires
         async with engine.begin() as conn:

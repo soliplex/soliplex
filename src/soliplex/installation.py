@@ -59,8 +59,12 @@ def _create_async_engine(url, **kwargs):
         if db_path and db_path != ":memory:":
             connect_args["timeout"] = 30
             kwargs["poolclass"] = NullPool
-            with sqlite3.connect(db_path) as conn:
-                conn.execute("PRAGMA journal_mode=WAL")
+            db = sqlite3.connect(db_path)
+            try:
+                with db as conn:
+                    conn.execute("PRAGMA journal_mode=WAL")
+            finally:
+                db.close()
 
     engine = sqla_asyncio.create_async_engine(
         url,
