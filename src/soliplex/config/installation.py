@@ -93,7 +93,7 @@ def _load_config_yaml(config_path: pathlib.Path) -> dict:
     try:
         with config_path.open() as stream:
             config_yaml = _check_is_dict(
-                yaml.load(stream, yaml.Loader),
+                yaml.safe_load(stream),
             )
 
     except Exception as exc:
