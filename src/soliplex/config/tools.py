@@ -429,10 +429,9 @@ class Stdio_MCP_ClientToolsetConfig:
 
 
 @dataclasses.dataclass(kw_only=True)
-class HTTP_MCP_ClientToolsetConfig:
-    """Configure an MCP client toolset which makes calls over streaming HTTP"""
+class _Remote_MCP_ClientToolsetConfig:
+    """Base config for remote MCP client toolsets (HTTP and SSE)"""
 
-    kind: typing.ClassVar[str] = "http"
     url: str
     headers: dict[str, typing.Any] = _utils._default_dict_field()
 
@@ -459,7 +458,9 @@ class HTTP_MCP_ClientToolsetConfig:
             return cls(**config_dict)
         except Exception as exc:
             raise config_exc.FromYamlException(
-                config_path, "http_mcptc", config_dict
+                config_path,
+                f"{cls.kind}_mcptc",
+                config_dict,
             ) from exc
 
     @property
@@ -495,9 +496,24 @@ class HTTP_MCP_ClientToolsetConfig:
         }
 
 
+@dataclasses.dataclass(kw_only=True)
+class HTTP_MCP_ClientToolsetConfig(_Remote_MCP_ClientToolsetConfig):
+    """Configure an MCP client toolset over streamable HTTP"""
+
+    kind: typing.ClassVar[str] = "http"
+
+
+@dataclasses.dataclass(kw_only=True)
+class SSE_MCP_ClientToolsetConfig(_Remote_MCP_ClientToolsetConfig):
+    """Configure an MCP client toolset over SSE"""
+
+    kind: typing.ClassVar[str] = "sse"
+
+
 MCP_TOOLSET_CONFIG_CLASSES_BY_KIND = {
     "stdio": Stdio_MCP_ClientToolsetConfig,
     "http": HTTP_MCP_ClientToolsetConfig,
+    "sse": SSE_MCP_ClientToolsetConfig,
 }
 
 
@@ -523,7 +539,9 @@ def extract_mcp_client_toolset_configs(
 
 
 MCP_ClientToolsetConfig = (
-    Stdio_MCP_ClientToolsetConfig | HTTP_MCP_ClientToolsetConfig
+    Stdio_MCP_ClientToolsetConfig
+    | HTTP_MCP_ClientToolsetConfig
+    | SSE_MCP_ClientToolsetConfig
 )
 
 MCP_ClientToolsetConfigMap = dict[str, MCP_ClientToolsetConfig]

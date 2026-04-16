@@ -52,7 +52,9 @@ class Stdio_MCP_Client_Toolset(ai_mcp.MCPServerStdio):
         return _filter_tools(offered_tools, self.allowed_tools)
 
 
-class HTTP_MCP_Client_Toolset(ai_mcp.MCPServerStreamableHTTP):
+class _Remote_MCP_Client_Toolset:
+    """Mixin for URL-based MCP client toolsets (HTTP and SSE)."""
+
     def __init__(
         self,
         url: str,
@@ -88,7 +90,22 @@ class HTTP_MCP_Client_Toolset(ai_mcp.MCPServerStreamableHTTP):
         return _filter_tools(offered_tools, self.allowed_tools)
 
 
+class HTTP_MCP_Client_Toolset(
+    _Remote_MCP_Client_Toolset,
+    ai_mcp.MCPServerStreamableHTTP,
+):
+    pass
+
+
+class SSE_MCP_Client_Toolset(
+    _Remote_MCP_Client_Toolset,
+    ai_mcp.MCPServerSSE,
+):
+    pass
+
+
 TOOLSET_CLASS_BY_KIND = {
     "stdio": Stdio_MCP_Client_Toolset,
     "http": HTTP_MCP_Client_Toolset,
+    "sse": SSE_MCP_Client_Toolset,
 }

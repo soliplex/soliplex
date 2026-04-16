@@ -401,6 +401,25 @@ def test_mcp_client_toolset_from_config_w_http():
     assert params["query_params"] == mcp_ct_config.query_params
 
 
+def test_mcp_client_toolset_from_config_w_sse():
+    mcp_ct_config = config_tools.SSE_MCP_ClientToolsetConfig(
+        url="https://example.com/sse",
+        headers={"Authorization": "Bearer env:{BEARER_TOKEN}"},
+        query_params={"foo": "env:not_in_my_environment_really"},
+    )
+
+    toolset_model = models.MCPClientToolset.from_config(mcp_ct_config)
+
+    assert toolset_model.kind == mcp_ct_config.kind
+    assert toolset_model.allowed_tools == mcp_ct_config.allowed_tools
+
+    params = toolset_model.toolset_params
+    assert params["url"] == mcp_ct_config.url
+    # No interpolation on either of these!
+    assert params["headers"] == mcp_ct_config.headers
+    assert params["query_params"] == mcp_ct_config.query_params
+
+
 @pytest.fixture(params=[None, SKILL_META])
 def w_metadata(request):
     return request.param

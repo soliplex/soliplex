@@ -1,6 +1,7 @@
 import contextlib
 import dataclasses
 import pathlib
+import sqlite3
 from logging import config as logging_config
 
 import fastapi
@@ -9,7 +10,10 @@ import pydantic_ai
 from ag_ui import core as agui_core
 from haiku.rag import config as hr_config
 from sqlalchemy import sql as sqla_sql
+from sqlalchemy.engine import make_url
+from sqlalchemy.event import listens_for
 from sqlalchemy.ext import asyncio as sqla_asyncio
+from sqlalchemy.pool import NullPool
 
 from soliplex import agents
 from soliplex import agui as agui_package
@@ -38,6 +42,43 @@ NO_AUTH_MODE_USER_TOKEN = {
     "name": "Phreddy Phlyntstone",
     "email": "phreddy@example.com",
 }
+
+
+def _create_async_engine(url, **kwargs):
+    """Create an async engine with SQLite WAL support.
+
+    For file-based SQLite databases, enables WAL journal mode
+    (persistent), uses NullPool to avoid pool-exhaustion under
+    async concurrency, and sets a 30-second busy timeout so
+    concurrent writers wait rather than raise immediately.
+    """
+    connect_args = {}
+    if "sqlite" in url:
+        connect_args["check_same_thread"] = False
+        db_path = make_url(url).database
+        if db_path and db_path != ":memory:":
+            connect_args["timeout"] = 30
+            kwargs["poolclass"] = NullPool
+            with sqlite3.connect(db_path) as conn:
+                conn.execute("PRAGMA journal_mode=WAL")
+
+    engine = sqla_asyncio.create_async_engine(
+        url,
+        connect_args=connect_args,
+        **kwargs,
+    )
+
+    if "sqlite" in url:
+
+        @listens_for(engine.sync_engine, "connect")
+        def _set_sqlite_pragma(  # pragma: no cover
+            dbapi_connection, connection_record
+        ):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.close()
+
+    return engine
 
 
 @dataclasses.dataclass
@@ -488,7 +529,7 @@ async def lifespan(
 
     apply_logfire_configuration(app, the_installation, disable_logfire_console)
 
-    agui_engine = sqla_asyncio.create_async_engine(
+    agui_engine = _create_async_engine(
         the_installation.thread_persistence_dburi_async,
         json_serializer=util.serialize_sqla_json,
         pool_pre_ping=True,
@@ -498,7 +539,7 @@ async def lifespan(
             agui_schema.Base.metadata.create_all,
         )
 
-    authz_engine = sqla_asyncio.create_async_engine(
+    authz_engine = _create_async_engine(
         the_installation.authorization_dburi_async,
         json_serializer=util.serialize_sqla_json,
         pool_pre_ping=True,

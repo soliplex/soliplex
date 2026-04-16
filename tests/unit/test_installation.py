@@ -1,11 +1,13 @@
 import contextlib
 import dataclasses
+import sqlite3
 from unittest import mock
 
 import fastapi
 import pytest
 import sqlalchemy
 from ag_ui import core as agui_core
+from sqlalchemy import pool as sqla_pool  # NullPool
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
 from soliplex import agents
@@ -887,6 +889,9 @@ async def test_installation_get_agent_for_room(
     mcp_http_streaming_config = mock.create_autospec(
         config_tools.HTTP_MCP_ClientToolsetConfig
     )
+    mcp_sse_config = mock.create_autospec(
+        config_tools.SSE_MCP_ClientToolsetConfig
+    )
 
     r_config = mock.create_autospec(config_rooms.RoomConfig)
     r_config.agent_config = a_config
@@ -907,6 +912,7 @@ async def test_installation_get_agent_for_room(
     mcp_configs = r_config.mcp_client_toolset_configs = {
         "test_stdio": mcp_stdio_config,
         "test_http": mcp_http_streaming_config,
+        "test_sse": mcp_sse_config,
     }
 
     r_configs = {"room_id": r_config}
@@ -997,6 +1003,9 @@ async def test_installation_get_agent_for_completion(
     mcp_http_streaming_config = mock.create_autospec(
         config_tools.HTTP_MCP_ClientToolsetConfig
     )
+    mcp_sse_config = mock.create_autospec(
+        config_tools.SSE_MCP_ClientToolsetConfig
+    )
 
     c_config = mock.create_autospec(config_completions.CompletionConfig)
     c_config.agent_config = a_config
@@ -1007,6 +1016,7 @@ async def test_installation_get_agent_for_completion(
     mcp_configs = c_config.mcp_client_toolset_configs = {
         "test_stdio": mcp_stdio_config,
         "test_http": mcp_http_streaming_config,
+        "test_sse": mcp_sse_config,
     }
 
     c_configs = {"completion_id": c_config}
@@ -1478,3 +1488,53 @@ root:
     alc.assert_called_once_with(app, the_installation, exp_lc_disable)
     srs.assert_called_once_with(the_installation._config.secrets)
     smfr.assert_called_once_with(the_installation)
+
+
+@pytest.mark.asyncio
+async def test_create_async_engine_sqlite_file(tmp_path):
+    db_path = tmp_path / "test.db"
+    url = f"sqlite+aiosqlite:///{db_path}"
+
+    engine = installation._create_async_engine(url)
+
+    try:
+        # WAL mode is set on the database file
+
+        with sqlite3.connect(str(db_path)) as conn:
+            (mode,) = conn.execute("PRAGMA journal_mode").fetchone()
+            assert mode == "wal"
+
+        # Engine works and the event listener fires
+        async with engine.begin() as conn:
+            rows = await conn.exec_driver_sql("PRAGMA synchronous")
+            (value,) = rows.fetchone()
+            # NORMAL = 1
+            assert value == 1
+
+    finally:
+        await engine.dispose()
+
+
+def test_create_async_engine_non_sqlite():
+    url = "postgresql+asyncpg://localhost/testdb"
+
+    with mock.patch.object(sqla_asyncio, "create_async_engine") as cae:
+        engine = installation._create_async_engine(url, pool_pre_ping=True)
+
+    assert engine is cae.return_value
+    cae.assert_called_once_with(
+        url,
+        connect_args={},
+        pool_pre_ping=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_async_engine_memory():
+    url = "sqlite+aiosqlite:///:memory:"
+    engine = installation._create_async_engine(url)
+    try:
+        # In-memory databases should not use NullPool
+        assert not isinstance(engine.pool, sqla_pool.NullPool)
+    finally:
+        await engine.dispose()

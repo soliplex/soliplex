@@ -57,6 +57,13 @@ FULL_COMPLETION_CONFIG_KW = {
             },
             query_params=test_tools.HTTP_MCP_QUERY_PARAMS,
         ),
+        "sse_test": config_tools.SSE_MCP_ClientToolsetConfig(
+            url=test_tools.HTTP_MCP_URL,
+            headers={
+                "Authorization": "Bearer secret:BEARER_TOKEN",
+            },
+            query_params=test_tools.HTTP_MCP_QUERY_PARAMS,
+        ),
     },
 }
 FULL_COMPLETION_CONFIG_YAML = f"""\
@@ -77,6 +84,13 @@ mcp_client_toolsets:
         foo: "bar"
     http_test:
       kind: "http"
+      url: "{test_tools.HTTP_MCP_URL}"
+      headers:
+        Authorization: "Bearer secret:BEARER_TOKEN"
+      query_params:
+        {test_tools.HTTP_MCP_QP_KEY}: "{test_tools.HTTP_MCP_QP_VALUE}"
+    sse_test:
+      kind: "sse"
       url: "{test_tools.HTTP_MCP_URL}"
       headers:
         Authorization: "Bearer secret:BEARER_TOKEN"

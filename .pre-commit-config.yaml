@@ -36,9 +36,5 @@ repos:
     hooks:
       - id: pymarkdown
         args:
-          - "--set"
-          - "extensions.front-matter.enabled=$!True"
-          - "--disable-rules"
-          - "MD013,MD024,MD033,MD036,MD041,MD046"
           - "scan"
         exclude: ^ios/Runner/Assets\.xcassets/
