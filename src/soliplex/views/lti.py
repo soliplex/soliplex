@@ -28,6 +28,9 @@ _CHAT_STYLES = """\
 body{{font-family:system-ui,sans-serif;height:100vh;
   display:flex;flex-direction:column;background:#fafafa}}
 #chat{{flex:1;display:flex;flex-direction:column;min-height:0}}
+#room-header{{padding:.5rem 1rem;background:#fff;
+  border-bottom:1px solid #e0e0e0;font-weight:600;
+  color:#333;font-size:.9rem;display:none}}
 #msgs{{flex:1;overflow-y:auto;padding:1rem}}
 .m{{margin:.5rem 0;padding:.75rem 1rem;border-radius:.75rem;
   max-width:80%;word-wrap:break-word;line-height:1.5}}
@@ -59,6 +62,7 @@ body{{font-family:system-ui,sans-serif;height:100vh;
 """
 
 _CHAT_BODY = """\
+<div id="room-header"></div>
 <div id="msgs"></div>
 <div id="bar">
   <input id="txt" type="text"
@@ -344,10 +348,15 @@ const TOKEN = "{session_token}";
 const BASE  = "{base_url}";
 const DEFAULT_ROOM = "{default_room_id}";
 
-function selectRoom(roomId) {{
+function selectRoom(roomId, roomName) {{
   ROOM = roomId;
   document.getElementById("picker").style.display = "none";
   document.getElementById("chat").style.display = "flex";
+  if (roomName) {{
+    const hdr = document.getElementById("room-header");
+    hdr.textContent = roomName;
+    hdr.style.display = "block";
+  }}
   document.getElementById("txt").focus();
 }}
 
@@ -367,7 +376,8 @@ async function loadRooms() {{
       return;
     }}
     if (entries.length === 1) {{
-      selectRoom(entries[0][0]);
+      selectRoom(entries[0][0],
+        entries[0][1].name || entries[0][0]);
       return;
     }}
     let html = "<h2>Select a room</h2><div class=\\"room-grid\\">";
@@ -382,8 +392,9 @@ async function loadRooms() {{
                 + escHtml(s) + '</span>').join("")
           + "</div>";
       }}
+      const label = escHtml(room.name || rid);
       html += '<div class="room-card" onclick="selectRoom(\\\''
-        + escHtml(rid) + '\\\')">'
+        + escHtml(rid) + '\\\',\\\'' + label + '\\\')">'
         + "<h3>" + escHtml(room.name || rid) + "</h3>"
         + desc + chips + "</div>";
     }}
