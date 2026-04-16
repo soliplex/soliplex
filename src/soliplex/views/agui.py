@@ -38,31 +38,6 @@ depend_the_user_claims = views.depend_the_user_claims
 depend_the_logger = views.depend_the_logger
 
 
-def _find_skill_toolset(
-    agent: pydantic_ai.Agent,
-) -> hs_agent.SkillToolset | None:
-    for toolset in getattr(agent, "toolsets", ()):
-        if isinstance(toolset, hs_agent.SkillToolset):
-            return toolset
-    return None
-
-
-async def _drive_event_stream(
-    *,
-    skill_toolset: hs_agent.SkillToolset | None,
-    agui_adapter: ai_ag_ui.AGUIAdapter,
-    run_stream_kwargs: dict,
-    **drive_kwargs,
-):
-    async with hs_agent.run_agui_stream(
-        agui_adapter,
-        toolset=skill_toolset,
-        **run_stream_kwargs,
-    ) as event_stream:
-        compacted = agui_package.compact_event_stream(event_stream)
-        await drive_llm_stream(llm_stream=compacted, **drive_kwargs)
-
-
 async def _check_user_in_room(
     *,
     room_id: str,
@@ -698,6 +673,31 @@ async def stream_llm_events(event_queue: asyncio.Queue):
         yield event
 
 
+def find_skill_toolset(
+    agent: pydantic_ai.Agent,
+) -> hs_agent.SkillToolset | None:
+    for toolset in getattr(agent, "toolsets", ()):
+        if isinstance(toolset, hs_agent.SkillToolset):
+            return toolset
+    return None
+
+
+async def init_agent_stream(
+    *,
+    skill_toolset: hs_agent.SkillToolset | None,
+    agui_adapter: ai_ag_ui.AGUIAdapter,
+    run_stream_kwargs: dict,
+    **drive_kwargs,
+):
+    async with hs_agent.run_agui_stream(
+        agui_adapter,
+        toolset=skill_toolset,
+        **run_stream_kwargs,
+    ) as event_stream:
+        compacted = agui_package.compact_event_stream(event_stream)
+        await drive_llm_stream(llm_stream=compacted, **drive_kwargs)
+
+
 @util.logfire_span("POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}")
 @router.post("/v1/rooms/{room_id}/agui/{thread_id}/{run_id}")
 async def post_room_agui_thread_id_run_id(
@@ -756,7 +756,7 @@ async def post_room_agui_thread_id_run_id(
         the_logger=the_logger,
     )
 
-    skill_toolset = _find_skill_toolset(agent)
+    skill_toolset = find_skill_toolset(agent)
 
     # We use an unbounded queue here, so that the 'drive_llm_stream'
     # task completes even when the SSE stream gets cancelled due to a
@@ -770,7 +770,7 @@ async def post_room_agui_thread_id_run_id(
 
     bg_tasks = request.app.state.agui_background_tasks
     task = asyncio.create_task(
-        _drive_event_stream(
+        init_agent_stream(
             skill_toolset=skill_toolset,
             agui_adapter=agui_adapter,
             run_stream_kwargs=dict(
