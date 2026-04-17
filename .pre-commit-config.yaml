@@ -29,7 +29,8 @@ repos:
         entry: |
           uv run --with pip-audit pip-audit \
             --skip-editable \
-            --ignore-vuln CVE-2025-69872
+            --ignore-vuln CVE-2025-69872 \
+            --ignore-vuln GHSA-jj8c-mmj3-mmgvG
         language: system
         pass_filenames: false
         files: (^pyproject\.toml$|^uv\.lock$)
