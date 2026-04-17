@@ -26,7 +26,10 @@ repos:
       - id: pip-audit
         name: pip-audit
         #ignore CVE-2025-69872 as not fixed
-        entry: uv run --with pip-audit pip-audit  --ignore-vuln CVE-2025-69872
+        entry: |
+          uv run --with pip-audit pip-audit \
+            --skip-editable \
+            --ignore-vuln CVE-2025-69872
         language: system
         pass_filenames: false
         files: (^pyproject\.toml$|^uv\.lock$)
