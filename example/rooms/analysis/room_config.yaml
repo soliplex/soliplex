@@ -13,7 +13,7 @@ skills:
   skill_configs:
     - kind: "haiku.rag.skills.rag"
       rag_lancedb_stem: "rag"
-    - kind: "haiku.rag.skills.rlm"
+    - kind: "haiku.rag.skills.analysis"
       rag_lancedb_stem: "rag"
 
 allow_mcp: false

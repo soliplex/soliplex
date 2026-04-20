@@ -143,7 +143,7 @@ E.g.:
             - "list_documents"
             - "research"
 
-        - skill_name: "rlm"
+        - skill_name: "analysis"
           kind: "haiku.rag.skill.rag"
           rag_lancedb_stem: "rag"
   ```
@@ -152,7 +152,7 @@ E.g.:
 
 Soliplex provides two such skill configuration classes by default:
 one of kind `haiku.rag.skill.rag` and one of kind
-`haiku.rag.skill.rlm`.  Both of these configurations have options for
+`haiku.rag.skill.analysis`.  Both of these configurations have options for
 configuring the RAG database and RAG client:
 
 - One of the following (exactly one must be provided):
@@ -215,7 +215,7 @@ additional options:
   - `"analysis"` — formerly equivalent to the `haiku.rag.skills.rml`
     skill below.  This feature is no longer supported.
 
-The `haiku.rag.skills.rlm` skill gives the agent an `analyze` tool that
+The `haiku.rag.skills.analysis` skill gives the agent an `analyze` tool that
 iteratively writes and executes Python code in a Docker sandbox with
 access to `haiku.rag` functions (`search`, `list_documents`, `get_document`,
 `llm`, etc.).  Suited for aggregation, multi-document comparison, and

@@ -8,8 +8,8 @@ import warnings
 import pydantic
 from bubble_sandbox import config as bs_config
 from bubble_sandbox import models as bs_models
+from haiku.rag.skills import analysis as hr_skills_analysis
 from haiku.rag.skills import rag as hr_skills_rag
-from haiku.rag.skills import rlm as hr_skills_rlm
 from haiku.skills import agent as hs_agent
 from haiku.skills import discovery as hs_discovery
 from haiku.skills import models as hs_models
@@ -361,11 +361,11 @@ class HR_RAG_SkillConfig(_HR_SkillConfigBase):
 
 
 @dataclasses.dataclass(kw_only=True)
-class HR_RLM_SkillConfig(_HR_SkillConfigBase):
-    """Configuration for an agent skill from 'haiku.rag.skills.rlm"""
+class HR_Analysis_SkillConfig(_HR_SkillConfigBase):
+    """Configuration for an agent skill from 'haiku.rag.skills.analysis"""
 
-    kind: typing.ClassVar[hs_models.SkillSource] = "haiku.rag.skills.rlm"
-    _hr_skill_module = hr_skills_rlm
+    kind: typing.ClassVar[hs_models.SkillSource] = "haiku.rag.skills.analysis"
+    _hr_skill_module = hr_skills_analysis
 
     @classmethod
     def from_yaml(
@@ -461,7 +461,7 @@ SKILL_CONFIG_CLASSES_BY_KIND = {
         FilesystemSkillConfig,
         EntrypointSkillConfig,
         HR_RAG_SkillConfig,
-        HR_RLM_SkillConfig,
+        HR_Analysis_SkillConfig,
         BwrapSandboxSkillConfig,
     ]
 }
@@ -470,7 +470,7 @@ SkillConfigTypes = (
     FilesystemSkillConfig
     | EntrypointSkillConfig
     | HR_RAG_SkillConfig
-    | HR_RLM_SkillConfig
+    | HR_Analysis_SkillConfig
     | BwrapSandboxSkillConfig
 )
 SkillConfigMap = dict[str, SkillConfigTypes]

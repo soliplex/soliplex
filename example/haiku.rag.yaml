@@ -78,7 +78,6 @@ processing:
 
 #search:
 #  limit: 10
-#  max_context_items: 10
 #  max_context_chars: 10000
 #  vector_index_metric: cosine
 #  vector_refine_factor: 30

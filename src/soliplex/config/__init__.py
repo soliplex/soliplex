@@ -42,7 +42,7 @@ from soliplex.config.secrets import (  # noqa F401 API
 )
 from soliplex.config.skills import (  # noqa F401 API
     HR_RAG_SkillConfig,
-    HR_RLM_SkillConfig,
+    HR_Analysis_SkillConfig,
     SkillConfigTypes,
     RoomSkillsConfig,
 )

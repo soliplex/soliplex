@@ -88,7 +88,7 @@ we configured explicitly:
 meta:
   skill_configs:
   - "soliplex.config.HR_RAG_SkillConfig"
-  - "soliplex.config.HR_RLM_SkillConfig"
+  - "soliplex.config.HR_Analysis_SkillConfig"
 ```
 
 ## Registering MCP Server Tool Wrapper Types

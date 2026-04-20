@@ -44,7 +44,7 @@ in the installation configuration file.
 ## Configuring Room-Specific Skills
 
 Soliplex provides two custom skill configuration types, based on the
-skills defined in `haiku.rag.skills.rag` and `haiku.rag.skills.rlm`.
+skills defined in `haiku.rag.skills.rag` and `haiku.rag.skills.analysis`.
 Because these skills require additional parameters available in
 a room configuration, they are defined using the
 [`skill_configs` stanza](rooms.md#skill-configuration)

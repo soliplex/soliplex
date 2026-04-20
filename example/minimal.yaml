@@ -56,12 +56,12 @@ meta:
   # their 'kind'
   #
   # 'soliplex.config.HR_RAG_SkillConfig' and
-  # 'soliplex.config.HR_RLM_SkillConfig' are registered by default,
+  # 'soliplex.config.HR_Analysis_SkillConfig' are registered by default,
   # just as if we configured here:
   #
   # skill_configs:
   # - "soliplex.config.HR_RAG_SkillConfig"
-  # - "soliplex.config.HR_RLM_SkillConfig"
+  # - "soliplex.config.HR_Analysis_SkillConfig"
   #------------------------------------------------------------------------
 
   #------------------------------------------------------------------------

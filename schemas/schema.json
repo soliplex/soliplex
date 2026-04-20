@@ -2,50 +2,6 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
-    "image-generation": {
-      "$defs": {
-        "GeneratedImage": {
-          "properties": {
-            "prompt": {
-              "title": "Prompt",
-              "type": "string"
-            },
-            "path": {
-              "title": "Path",
-              "type": "string"
-            },
-            "width": {
-              "title": "Width",
-              "type": "integer"
-            },
-            "height": {
-              "title": "Height",
-              "type": "integer"
-            }
-          },
-          "required": [
-            "prompt",
-            "path",
-            "width",
-            "height"
-          ],
-          "title": "GeneratedImage",
-          "type": "object"
-        }
-      },
-      "properties": {
-        "images": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/GeneratedImage"
-          },
-          "title": "Images",
-          "type": "array"
-        }
-      },
-      "title": "ImageState",
-      "type": "object"
-    },
     "rag": {
       "$defs": {
         "Citation": {
@@ -123,10 +79,18 @@
           "title": "Citation",
           "type": "object"
         },
-        "DocumentInfo": {
-          "description": "Document info for list_documents response.",
+        "SearchResult": {
+          "description": "Search result with optional provenance information for citations.",
           "properties": {
-            "id": {
+            "content": {
+              "title": "Content",
+              "type": "string"
+            },
+            "score": {
+              "title": "Score",
+              "type": "number"
+            },
+            "chunk_id": {
               "anyOf": [
                 {
                   "type": "string"
@@ -136,57 +100,70 @@
                 }
               ],
               "default": null,
-              "title": "Id"
+              "title": "Chunk Id"
             },
-            "title": {
-              "title": "Title",
-              "type": "string"
+            "document_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Document Id"
             },
-            "uri": {
-              "title": "Uri",
-              "type": "string"
+            "document_uri": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Document Uri"
             },
-            "created": {
-              "title": "Created",
-              "type": "string"
-            }
-          },
-          "required": [
-            "title",
-            "uri",
-            "created"
-          ],
-          "title": "DocumentInfo",
-          "type": "object"
-        },
-        "QAHistoryEntry": {
-          "description": "A Q&A pair with optional cached embedding for similarity matching.",
-          "properties": {
-            "question": {
-              "title": "Question",
-              "type": "string"
+            "document_title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Document Title"
             },
-            "answer": {
-              "title": "Answer",
-              "type": "string"
+            "order": {
+              "default": 0,
+              "title": "Order",
+              "type": "integer"
             },
-            "confidence": {
-              "default": 0.9,
-              "title": "Confidence",
-              "type": "number"
-            },
-            "citations": {
+            "doc_item_refs": {
+              "default": [],
               "items": {
-                "$ref": "#/$defs/Citation"
+                "type": "string"
               },
-              "title": "Citations",
+              "title": "Doc Item Refs",
               "type": "array"
             },
-            "question_embedding": {
+            "page_numbers": {
+              "default": [],
+              "items": {
+                "type": "integer"
+              },
+              "title": "Page Numbers",
+              "type": "array"
+            },
+            "headings": {
               "anyOf": [
                 {
                   "items": {
-                    "type": "number"
+                    "type": "string"
                   },
                   "type": "array"
                 },
@@ -195,37 +172,172 @@
                 }
               ],
               "default": null,
-              "title": "Question Embedding"
+              "title": "Headings"
+            },
+            "labels": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Labels",
+              "type": "array"
             }
           },
           "required": [
-            "question",
-            "answer"
+            "content",
+            "score"
           ],
-          "title": "QAHistoryEntry",
+          "title": "SearchResult",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "citation_index": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Citation"
+          },
+          "title": "Citation Index",
           "type": "object"
         },
-        "ResearchEntry": {
+        "citations": {
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": "Citations",
+          "type": "array"
+        },
+        "document_filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Document Filter"
+        },
+        "searches": {
+          "additionalProperties": {
+            "items": {
+              "$ref": "#/$defs/SearchResult"
+            },
+            "type": "array"
+          },
+          "title": "Searches",
+          "type": "object"
+        }
+      },
+      "title": "RAGState",
+      "type": "object"
+    },
+    "analysis": {
+      "$defs": {
+        "Citation": {
+          "description": "Resolved citation with full metadata for display/visual grounding.\n\nUsed by research graph and chat applications. The optional index field\nsupports UI display ordering in chat contexts.",
           "properties": {
-            "question": {
-              "title": "Question",
+            "index": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Index"
+            },
+            "document_id": {
+              "title": "Document Id",
               "type": "string"
             },
-            "title": {
-              "title": "Title",
+            "chunk_id": {
+              "title": "Chunk Id",
               "type": "string"
             },
-            "executive_summary": {
-              "title": "Executive Summary",
+            "document_uri": {
+              "title": "Document Uri",
+              "type": "string"
+            },
+            "document_title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Document Title"
+            },
+            "page_numbers": {
+              "items": {
+                "type": "integer"
+              },
+              "title": "Page Numbers",
+              "type": "array"
+            },
+            "headings": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Headings"
+            },
+            "content": {
+              "title": "Content",
               "type": "string"
             }
           },
           "required": [
-            "question",
-            "title",
-            "executive_summary"
+            "document_id",
+            "chunk_id",
+            "document_uri",
+            "content"
           ],
-          "title": "ResearchEntry",
+          "title": "Citation",
+          "type": "object"
+        },
+        "CodeExecutionEntry": {
+          "properties": {
+            "code": {
+              "title": "Code",
+              "type": "string"
+            },
+            "stdout": {
+              "title": "Stdout",
+              "type": "string"
+            },
+            "stderr": {
+              "default": "",
+              "title": "Stderr",
+              "type": "string"
+            },
+            "success": {
+              "default": true,
+              "title": "Success",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "stdout"
+          ],
+          "title": "CodeExecutionEntry",
           "type": "object"
         },
         "SearchResult": {
@@ -287,6 +399,11 @@
               "default": null,
               "title": "Document Title"
             },
+            "order": {
+              "default": 0,
+              "title": "Order",
+              "type": "integer"
+            },
             "doc_item_refs": {
               "default": [],
               "items": {
@@ -336,20 +453,6 @@
         }
       },
       "properties": {
-        "citations": {
-          "items": {
-            "$ref": "#/$defs/Citation"
-          },
-          "title": "Citations",
-          "type": "array"
-        },
-        "qa_history": {
-          "items": {
-            "$ref": "#/$defs/QAHistoryEntry"
-          },
-          "title": "Qa History",
-          "type": "array"
-        },
         "document_filter": {
           "anyOf": [
             {
@@ -362,6 +465,30 @@
           "default": null,
           "title": "Document Filter"
         },
+        "executions": {
+          "items": {
+            "$ref": "#/$defs/CodeExecutionEntry"
+          },
+          "title": "Executions",
+          "type": "array"
+        },
+        "citation_index": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Citation"
+          },
+          "title": "Citation Index",
+          "type": "object"
+        },
+        "citations": {
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": "Citations",
+          "type": "array"
+        },
         "searches": {
           "additionalProperties": {
             "items": {
@@ -371,69 +498,9 @@
           },
           "title": "Searches",
           "type": "object"
-        },
-        "documents": {
-          "items": {
-            "$ref": "#/$defs/DocumentInfo"
-          },
-          "title": "Documents",
-          "type": "array"
-        },
-        "reports": {
-          "items": {
-            "$ref": "#/$defs/ResearchEntry"
-          },
-          "title": "Reports",
-          "type": "array"
         }
       },
-      "title": "RAGState",
-      "type": "object"
-    },
-    "rlm": {
-      "$defs": {
-        "AnalysisEntry": {
-          "properties": {
-            "question": {
-              "title": "Question",
-              "type": "string"
-            },
-            "answer": {
-              "title": "Answer",
-              "type": "string"
-            },
-            "program": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Program"
-            }
-          },
-          "required": [
-            "question",
-            "answer"
-          ],
-          "title": "AnalysisEntry",
-          "type": "object"
-        }
-      },
-      "properties": {
-        "analyses": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/AnalysisEntry"
-          },
-          "title": "Analyses",
-          "type": "array"
-        }
-      },
-      "title": "RLMState",
+      "title": "AnalysisState",
       "type": "object"
     }
   }

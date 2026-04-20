@@ -94,7 +94,7 @@ W_FULL_META_INSTALLATION_CONFIG_KW = {
                 config_klass=config_skills.HR_RAG_SkillConfig
             ),
             config_meta.ConfigMeta(
-                config_klass=config_skills.HR_RLM_SkillConfig
+                config_klass=config_skills.HR_Analysis_SkillConfig
             ),
         ],
         "agent_configs": [
@@ -128,7 +128,7 @@ meta:
       wrapper_klass: "soliplex.config.tools.NoArgsMCPWrapper"
   skill_configs:
       - "soliplex.config.skills.HR_RAG_SkillConfig"
-      - "soliplex.config.skills.HR_RLM_SkillConfig"
+      - "soliplex.config.skills.HR_Analysis_SkillConfig"
   agent_configs:
       - "soliplex.config.agents.AgentConfig"
       - "soliplex.config.agents.FactoryAgentConfig"

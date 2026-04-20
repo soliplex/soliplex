@@ -9,8 +9,8 @@ import yaml
 from bubble_sandbox import config as bs_config
 from bubble_sandbox import models as bs_models
 from haiku.rag import config as hr_config
+from haiku.rag.skills import analysis as hr_skills_analysis
 from haiku.rag.skills import rag as hr_skills_rag
-from haiku.rag.skills import rlm as hr_skills_rlm
 from haiku.skills import models as hs_models
 from pydantic_ai.models import openai as openai_models
 from pydantic_ai.providers import ollama as ollama_providers
@@ -796,13 +796,13 @@ def test_hr_rag_skillconfig_from_yaml(
         assert inst.tool_names == []  # See #773
 
 
-def test_hr_rlm_skillconfig_metadata(
+def test_hr_analysis_skillconfig_metadata(
     installation_config,
     haiku_rag_config,
     lancedb,
     config_path,
 ):
-    inst = config_skills.HR_RLM_SkillConfig(
+    inst = config_skills.HR_Analysis_SkillConfig(
         rag_lancedb_override_path=lancedb,
         _haiku_rag_config=haiku_rag_config,
         _config_path=config_path,
@@ -811,16 +811,16 @@ def test_hr_rlm_skillconfig_metadata(
 
     found = inst.skill_metadata
 
-    assert found.name == "rag-rlm"
+    assert found.name == "rag-analysis"
 
 
-def test_hr_rlm_skillconfig_skill(
+def test_hr_analysis_skillconfig_skill(
     installation_config,
     haiku_rag_config,
     lancedb,
     config_path,
 ):
-    inst = config_skills.HR_RLM_SkillConfig(
+    inst = config_skills.HR_Analysis_SkillConfig(
         rag_lancedb_override_path=lancedb,
         _haiku_rag_config=haiku_rag_config,
         _config_path=config_path,
@@ -830,7 +830,7 @@ def test_hr_rlm_skillconfig_skill(
     found = inst.skill
 
     assert isinstance(found, hs_models.Skill)
-    assert found.metadata == hr_skills_rlm.skill_metadata()
+    assert found.metadata == hr_skills_analysis.skill_metadata()
 
 
 @pytest.mark.parametrize(
@@ -844,7 +844,7 @@ def test_hr_rlm_skillconfig_skill(
         ({}, contextlib.nullcontext(0)),
     ],
 )
-def test_hr_rlm_skillconfig_from_yaml(
+def test_hr_analysis_skillconfig_from_yaml(
     lancedb,
     config_path,
     installation_config,
@@ -859,7 +859,7 @@ def test_hr_rlm_skillconfig_from_yaml(
         warnings.catch_warnings(record=True) as warned,
         expectation as expected,
     ):
-        inst = config_skills.HR_RLM_SkillConfig.from_yaml(
+        inst = config_skills.HR_Analysis_SkillConfig.from_yaml(
             installation_config=installation_config,
             config_path=config_path,
             config_dict=config_dict,
@@ -999,7 +999,7 @@ def test_extractskillconfigs(
                 "rag_lancedb_stem": "test-foo",
             },
             {
-                "kind": "haiku.rag.skills.rlm",
+                "kind": "haiku.rag.skills.analysis",
                 "rag_lancedb_stem": "test-bar",
             },
         ]
@@ -1030,8 +1030,10 @@ def test_extractskillconfigs(
         assert isinstance(found["rag"], config_skills.HR_RAG_SkillConfig)
         assert found["rag"].rag_lancedb_stem == "test-foo"
 
-        assert isinstance(found["rag-rlm"], config_skills.HR_RLM_SkillConfig)
-        assert found["rag-rlm"].rag_lancedb_stem == "test-bar"
+        assert isinstance(
+            found["rag-analysis"], config_skills.HR_Analysis_SkillConfig
+        )
+        assert found["rag-analysis"].rag_lancedb_stem == "test-bar"
 
         assert "skill_configs" not in config_dict
 
