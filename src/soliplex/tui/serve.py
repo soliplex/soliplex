@@ -23,17 +23,17 @@ HOST = typer.Option(
 )
 
 PORT = typer.Option(
-    "8002",
+    8002,
     "--port",
     help="Port on which the server runs",
 )
 
 
-@the_cli.callback()
+@the_cli.command()
 def app(
     soliplex_url: str = BACKEND_URL,
     host: str = HOST,
-    port: str = PORT,
+    port: int = PORT,
 ):
     """soliplex TUI server"""
     server = server_module.Server(
