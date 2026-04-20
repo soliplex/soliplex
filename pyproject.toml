@@ -41,7 +41,7 @@ dependencies = [
 [project.scripts]
 soliplex-cli = "soliplex.cli:the_cli"
 soliplex-tui = "soliplex.tui.cli:the_cli"
-soliplex-tui-serve = "soliplex.tui.serve:main"
+soliplex-tui-serve = "soliplex.tui.serve:the_cli"
 
 [dependency-groups]
 dev = [
