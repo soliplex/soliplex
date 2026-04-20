@@ -123,7 +123,6 @@ async def get_auth_system(
 
     refresh_token = tokendict["refresh_token"]
     expires_in = tokendict["expires_in"]
-    refresh_expires_in = tokendict["refresh_expires_in"]
 
     # Handle hash-based routing (e.g., /#/auth/callback)
     # Query params must be placed before the hash fragment for Flutter to see
@@ -136,7 +135,6 @@ async def get_auth_system(
             token=access_token,
             refresh_token=refresh_token,
             expires_in=expires_in,
-            refresh_expires_in=refresh_expires_in,
         )
     )
     return_to = urlparse.urlunparse(

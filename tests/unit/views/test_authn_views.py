@@ -152,7 +152,6 @@ async def test_get_auth_system(
             "access_token": "TOKEN",
             "refresh_token": "RTOKEN",
             "expires_in": "EXPIRES_IN",
-            "refresh_expires_in": "REFRESH_EXPIRES_IN",
         }
 
     if w_error == "authenticate":
@@ -168,14 +167,11 @@ async def test_get_auth_system(
     if w_return_to:
         exp_path = (
             "/another/path?token=TOKEN&refresh_token=RTOKEN"
-            "&expires_in=EXPIRES_IN&refresh_expires_in=REFRESH_EXPIRES_IN"
+            "&expires_in=EXPIRES_IN"
         )
         qs = "return_to=/another/path"
     else:
-        exp_path = (
-            "/?token=TOKEN&refresh_token=RTOKEN"
-            "&expires_in=EXPIRES_IN&refresh_expires_in=REFRESH_EXPIRES_IN"
-        )
+        exp_path = "/?token=TOKEN&refresh_token=RTOKEN&expires_in=EXPIRES_IN"
         qs = ""
 
     request = fastapi.Request(
@@ -195,7 +191,6 @@ async def test_get_auth_system(
             "access_token": "TOKEN",
             "refresh_token": "RTOKEN",
             "expires_in": "EXPIRES_IN",
-            "refresh_expires_in": "REFRESH_EXPIRES_IN",
         }
 
     if w_auth_disabled:
@@ -290,7 +285,6 @@ async def test_get_auth_system_with_hash_routing():
         "access_token": "test_access_token",
         "refresh_token": "test_refresh_token",
         "expires_in": 3600,
-        "refresh_expires_in": 86400,
     }
 
     oauth_app.authorize_access_token = mock.AsyncMock(return_value=tokendict)
@@ -355,7 +349,6 @@ async def test_get_authn_system_without_hash():
         "access_token": "test_access_token",
         "refresh_token": "test_refresh_token",
         "expires_in": 3600,
-        "refresh_expires_in": 86400,
     }
 
     oauth_app.authorize_access_token = mock.AsyncMock(return_value=tokendict)
