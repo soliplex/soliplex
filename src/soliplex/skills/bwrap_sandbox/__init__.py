@@ -91,6 +91,7 @@ async def skill_execute(
     workdir: pathlib.Path | None = None,
     timeout: float = None,  # seconds
     extra_volumes: bs_models.VolumeMap = None,
+    extra_args: list[str] = None,
 ) -> str:
     """Execute a shell command in the working directory.
 
@@ -112,6 +113,7 @@ async def skill_execute(
             workdir=workdir,
             timeout=timeout,
             extra_volumes=extra_volumes,
+            extra_args=extra_args,
         )
     except RuntimeError as e:
         return f"Error: {e}"
@@ -158,6 +160,7 @@ async def skill_execute_script(
     workdir: pathlib.Path | None = None,
     timeout: float = None,  # seconds
     extra_volumes: bs_models.VolumeMap = None,
+    extra_args: list[str] = None,
 ) -> str:
     """Execute a python script in the working directory.
 
@@ -176,6 +179,7 @@ async def skill_execute_script(
             workdir=workdir,
             timeout=timeout,
             extra_volumes=extra_volumes,
+            extra_args=extra_args,
         )
     except RuntimeError as e:
         return f"Error: {e}"
@@ -210,26 +214,38 @@ def get_extra_volumes(
     threads_upload_path: pathlib.Path | None,
     room_id: str,
     thread_id: str,
-):
-    result = {}
+) -> tuple[dict[str, bs_models.VolumeInfo], list[str]]:
+    volume_map = {}
+    extra_args = [
+        # empty room uploads dir
+        "--symlink",
+        "/var/empty",
+        f"/sandbox/volumes/room/{room_id}",
+        # empty thread uploads dir
+        "--symlink",
+        "/var/empty",
+        f"/sandbox/volumes/thread/{thread_id}",
+    ]
 
     if rooms_upload_path is not None:
         room_dir = rooms_upload_path / room_id
         if room_dir.exists():
-            result["room"] = bs_models.VolumeInfo(
+            volume_map["room"] = bs_models.VolumeInfo(
                 host_path=room_dir,
                 writable=False,
             )
+            del extra_args[0:3]
 
     if threads_upload_path is not None:
         thread_dir = threads_upload_path / str(thread_id)
         if thread_dir.exists():
-            result["thread"] = bs_models.VolumeInfo(
+            volume_map["thread"] = bs_models.VolumeInfo(
                 host_path=thread_dir,
                 writable=False,
             )
+            del extra_args[-3:]
 
-    return result
+    return volume_map, extra_args
 
 
 def create_sandbox_toolset(
@@ -310,7 +326,7 @@ def create_sandbox_toolset(
             state.run_id or "",
         )
 
-        extra_volumes = get_extra_volumes(
+        extra_volumes, extra_args = get_extra_volumes(
             rooms_upload_path,
             threads_upload_path,
             state.room_id or "",
@@ -324,6 +340,7 @@ def create_sandbox_toolset(
             workdir=workdir,
             timeout=timeout,
             extra_volumes=extra_volumes,
+            extra_args=extra_args,
         )
 
     @toolset.tool(description=EXECUTE_SCRIPT_DESCRIPTION)
@@ -341,7 +358,7 @@ def create_sandbox_toolset(
             state.run_id or "",
         )
 
-        extra_volumes = get_extra_volumes(
+        extra_volumes, extra_args = get_extra_volumes(
             rooms_upload_path,
             threads_upload_path,
             state.room_id or "",
@@ -355,6 +372,7 @@ def create_sandbox_toolset(
             workdir=workdir,
             timeout=timeout,
             extra_volumes=extra_volumes,
+            extra_args=extra_args,
         )
 
     return toolset

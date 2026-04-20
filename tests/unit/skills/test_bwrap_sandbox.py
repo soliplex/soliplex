@@ -1,3 +1,4 @@
+import itertools
 import pathlib
 import uuid
 from unittest import mock
@@ -158,6 +159,7 @@ async def test_skill_execute_w_errors_truncation(
         workdir=None,
         timeout=None,
         extra_volumes=None,
+        extra_args=None,
     )
 
 
@@ -176,6 +178,9 @@ async def test_skill_execute_w_errors_truncation(
                 ),
             },
         },
+        {
+            "extra_args": ["--foo", 1],
+        },
     ],
 )
 @pytest.mark.parametrize(
@@ -185,7 +190,7 @@ async def test_skill_execute_w_errors_truncation(
         (["/bin/true"], ["/bin/true"]),
     ],
 )
-async def test_skill_execute_w_extra_args(
+async def test_skill_execute_w_non_default_args(
     ctx_w_deps,
     bwrap_sandbox,
     w_command,
@@ -213,6 +218,7 @@ async def test_skill_execute_w_extra_args(
         "workdir": None,
         "timeout": None,
         "extra_volumes": None,
+        "extra_args": None,
     } | w_kw
 
     bwrap_sandbox.execute.assert_awaited_once_with(
@@ -263,6 +269,7 @@ async def test_skill_execute_script_w_errors_truncation(
         workdir=None,
         timeout=None,
         extra_volumes=None,
+        extra_args=None,
     )
 
 
@@ -281,9 +288,12 @@ async def test_skill_execute_script_w_errors_truncation(
                 ),
             },
         },
+        {
+            "extra_args": ["--foo", 1],
+        },
     ],
 )
-async def test_skill_execute_script_w_extra_args(
+async def test_skill_execute_script_w_non_default_args(
     ctx_w_deps,
     bwrap_sandbox,
     w_kw,
@@ -309,6 +319,7 @@ async def test_skill_execute_script_w_extra_args(
         "workdir": None,
         "timeout": None,
         "extra_volumes": None,
+        "extra_args": None,
     } | w_kw
 
     bwrap_sandbox.execute_script.assert_awaited_once_with(
@@ -347,17 +358,22 @@ def test_get_extra_volumes(
     w_room_path,
     w_thread_path,
 ):
-    expected = {}
+    exp_volume_map = {}
+    exp_symlinks = [
+        ("--symlink", "/var/empty", f"/sandbox/volumes/room/{ROOM_ID}"),
+        ("--symlink", "/var/empty", f"/sandbox/volumes/thread/{THREAD_ID}"),
+    ]
 
     if w_room_path is not None:
         ru_path = rooms_upload_path
         if w_room_path:
             room_path = ru_path / ROOM_ID
             room_path.mkdir(parents=True)
-            expected["room"] = bs_models.VolumeInfo(
+            exp_volume_map["room"] = bs_models.VolumeInfo(
                 host_path=room_path,
                 writable=False,
             )
+            exp_symlinks.pop(0)
     else:
         ru_path = None
 
@@ -366,12 +382,16 @@ def test_get_extra_volumes(
         if w_thread_path:
             thread_path = tu_path / str(THREAD_ID)
             thread_path.mkdir(parents=True)
-            expected["thread"] = bs_models.VolumeInfo(
+            exp_volume_map["thread"] = bs_models.VolumeInfo(
                 host_path=thread_path,
                 writable=False,
             )
+            exp_symlinks.pop(-1)
     else:
         tu_path = None
+
+    exp_extra_args = list(itertools.chain(*exp_symlinks))
+    expected = (exp_volume_map, exp_extra_args)
 
     found = skills_bwrap_sandbox.get_extra_volumes(
         ru_path,
@@ -496,6 +516,8 @@ async def test_create_sandbox_toolset_execute(
     else:
         toolset = skills_bwrap_sandbox.create_sandbox_toolset()
 
+    volume_map, extra_args = gev.return_value = ({"foo": object()}, ["--bar"])
+
     sandbox = bs_klass.return_value
     tool = toolset.tools["execute"]
 
@@ -511,7 +533,8 @@ async def test_create_sandbox_toolset_execute(
         "environment_name": None,
         "timeout": None,
         "workdir": gw.return_value,
-        "extra_volumes": gev.return_value,
+        "extra_volumes": volume_map,
+        "extra_args": extra_args,
     } | w_kw
 
     skill_execute.assert_called_once_with(
@@ -582,6 +605,8 @@ async def test_create_sandbox_toolset_execute_script(
     else:
         toolset = skills_bwrap_sandbox.create_sandbox_toolset()
 
+    volume_map, extra_args = gev.return_value = ({"foo": object()}, ["--bar"])
+
     sandbox = bs_klass.return_value
     tool = toolset.tools["execute_script"]
 
@@ -597,7 +622,8 @@ async def test_create_sandbox_toolset_execute_script(
         "environment_name": None,
         "timeout": None,
         "workdir": gw.return_value,
-        "extra_volumes": gev.return_value,
+        "extra_volumes": volume_map,
+        "extra_args": extra_args,
     } | w_kw
 
     skill_execute_script.assert_called_once_with(
