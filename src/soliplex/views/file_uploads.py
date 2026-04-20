@@ -64,7 +64,8 @@ async def get_uploads_room(
             if file_or_sub.is_file():
                 filename = file_or_sub.name
                 filename_urls[filename] = request.url_for(
-                    "/v1/uploads/{room_id}/{filename}",
+                    # View function name, not the route path.
+                    "get_uploads_room_filename",
                     room_id=room_id,
                     filename=filename,
                 )
@@ -74,7 +75,7 @@ async def get_uploads_room(
         uploads=[
             models.FileUpload(
                 filename=key,
-                url=value,
+                url=str(value),  # The two URL types are not compatible
             )
             for key, value in filename_urls.items()
         ],
@@ -230,7 +231,8 @@ async def get_uploads_room_thread(
             if file_or_sub.is_file():
                 filename = file_or_sub.name
                 filename_urls[filename] = request.url_for(
-                    "/v1/uploads/{room_id}/{thread_id}/{filename}",
+                    # View function name, not the route path.
+                    "get_uploads_room_thread_filename",
                     room_id=room_id,
                     thread_id=thread_id,
                     filename=filename,
@@ -242,7 +244,7 @@ async def get_uploads_room_thread(
         uploads=[
             models.FileUpload(
                 filename=key,
-                url=value,
+                url=str(value),  # The two URL types are not compatible
             )
             for key, value in filename_urls.items()
         ],
