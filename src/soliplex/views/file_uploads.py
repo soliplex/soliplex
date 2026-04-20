@@ -83,10 +83,10 @@ async def get_uploads_room(
 
 
 @soliplex_views_util.logfire_span(
-    "GET /v1/uploads/{room_id}/{filename}",
+    "GET /v1/uploads/{room_id}/file/{filename}",
 )
 @router.get(
-    "/v1/uploads/{room_id}/{filename}",
+    "/v1/uploads/{room_id}/file/{filename}",
     response_class=responses.FileResponse,
 )
 async def get_uploads_room_filename(
@@ -190,9 +190,9 @@ async def post_uploads_room(
 
 
 @soliplex_views_util.logfire_span(
-    "GET /v1/uploads/{room_id}/{thread_id}",
+    "GET /v1/uploads/{room_id}/thread/{thread_id}",
 )
-@router.get("/v1/uploads/{room_id}/{thread_id}")
+@router.get("/v1/uploads/{room_id}/thread/{thread_id}")
 async def get_uploads_room_thread(
     request: fastapi.Request,
     room_id: str,
@@ -252,10 +252,10 @@ async def get_uploads_room_thread(
 
 
 @soliplex_views_util.logfire_span(
-    "GET /v1/uploads/{room_id}/{thread_id}/{filename}",
+    "GET /v1/uploads/{room_id}/thread/{thread_id}/file/{filename}",
 )
 @router.get(
-    "/v1/uploads/{room_id}/{thread_id}/{filename}",
+    "/v1/uploads/{room_id}/thread/{thread_id}/file/{filename}",
     response_class=responses.FileResponse,
 )
 async def get_uploads_room_thread_filename(
