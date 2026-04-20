@@ -15,8 +15,8 @@ agent:
 
 tools:
   - tool_name: "soliplex.tools.current_run_info"
+  - tool_name: "soliplex.tools.file_uploads.list_room_file_uploads"
   - tool_name: "soliplex.tools.file_uploads.list_thread_file_uploads"
-  - tool_name: "soliplex.tools.file_uploads.get_thread_file_upload"
 
 skills:
   skill_configs:
