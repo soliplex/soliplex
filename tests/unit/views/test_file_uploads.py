@@ -82,7 +82,9 @@ async def test_get_uploads_room_only(
 ):
     room_uploads_path = uploads_path / "rooms"
     room_path = room_uploads_path / TEST_ROOM_ID
-    ROUTE_NAME = "/v1/uploads/{room_id}/{filename}"
+    # Note: this is the name of the view function, and not the path
+    #       to which it is bound.
+    ROUTE_NAME = "get_uploads_room_filename"
 
     def download_url(name, room_id, filename):
         assert name == ROUTE_NAME
@@ -355,7 +357,9 @@ async def test_get_uploads_room_thread_only(
 ):
     thread_uploads_path = uploads_path / "threads"
     thread_path = thread_uploads_path / str(TEST_THREAD_ID)
-    ROUTE_NAME = "/v1/uploads/{room_id}/{thread_id}/{filename}"
+    # Note: this is the name of the view function, and not the path
+    #       to which it is bound.
+    ROUTE_NAME = "get_uploads_room_thread_filename"
 
     def download_url(name, room_id, thread_id, filename):
         assert name == ROUTE_NAME
