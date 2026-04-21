@@ -15,10 +15,11 @@ AGUI_EventStream = collections.abc.AsyncIterator[agui_core.Event]
 AGUI_State = dict[str, typing.Any]
 
 
-_COMPACTIBLE_TYPES = {
-    agui_core.EventType.TEXT_MESSAGE_CONTENT,
-    agui_core.EventType.THINKING_TEXT_MESSAGE_CONTENT,
-    agui_core.EventType.REASONING_MESSAGE_CONTENT,
+_COMPACTIBLE_TYPES = {  # event_type: compacting_attr
+    agui_core.EventType.TEXT_MESSAGE_CONTENT: "message_id",
+    agui_core.EventType.THINKING_TEXT_MESSAGE_CONTENT: "message_id",
+    agui_core.EventType.REASONING_MESSAGE_CONTENT: "message_id",
+    agui_core.EventType.TOOL_CALL_ARGS: "tool_call_id",
 }
 
 
@@ -470,10 +471,11 @@ class ThreadStorage(abc.ABC):
 async def compact_event_stream(stream: AGUI_EventStream):
     compacting: agui_core.Event = None
     compacting_id: str = None
+    compacting_attr: str = None
 
     async for event in stream:
         if compacting is not None:
-            event_id = getattr(event, "message_id", None)
+            event_id = getattr(event, compacting_attr, None)
             if event.type == compacting.type and event_id == compacting_id:
                 compacting.delta += event.delta
             else:
@@ -482,9 +484,10 @@ async def compact_event_stream(stream: AGUI_EventStream):
                 yield event
 
         else:
-            if event.type in _COMPACTIBLE_TYPES:
+            compacting_attr = _COMPACTIBLE_TYPES.get(event.type)
+            if compacting_attr is not None:
                 compacting = event.model_copy()
-                compacting_id = getattr(event, "message_id", None)
+                compacting_id = getattr(event, compacting_attr, None)
             else:
                 yield event
 

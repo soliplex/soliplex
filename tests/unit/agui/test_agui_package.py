@@ -50,6 +50,36 @@ THINK_CONTENT_ABC = agui_core.ThinkingTextMessageContentEvent(
 )
 THINK_END = agui_core.ThinkingTextMessageEndEvent()
 
+TOOL_CALL_ID = "test-tool-call-id"
+TOOL_CALL_NAME = "test_tool_call_name"
+TOOL_CALL_START = agui_core.ToolCallStartEvent(
+    tool_call_id=TOOL_CALL_ID,
+    tool_call_name=TOOL_CALL_NAME,
+)
+TOOL_CALL_ARGS_A = agui_core.ToolCallArgsEvent(
+    tool_call_id=TOOL_CALL_ID,
+    delta="A ",
+)
+TOOL_CALL_ARGS_B = agui_core.ToolCallArgsEvent(
+    tool_call_id=TOOL_CALL_ID,
+    delta="B ",
+)
+TOOL_CALL_ARGS_C = agui_core.ToolCallArgsEvent(
+    tool_call_id=TOOL_CALL_ID,
+    delta="C",
+)
+TOOL_CALL_ARGS_AB = agui_core.ToolCallArgsEvent(
+    tool_call_id=TOOL_CALL_ID,
+    delta="A B ",
+)
+TOOL_CALL_ARGS_ABC = agui_core.ToolCallArgsEvent(
+    tool_call_id=TOOL_CALL_ID,
+    delta="A B C",
+)
+TOOL_CALL_END = agui_core.ToolCallEndEvent(
+    tool_call_id=TOOL_CALL_ID,
+)
+
 
 TEXT_CONTENT_2_D = agui_core.TextMessageContentEvent(
     message_id=MESSAGE_ID_2,
@@ -140,6 +170,37 @@ OTHER = agui_core.RawEvent(event=None, source="test-raw")
                 OTHER,
                 THINK_CONTENT_C,
                 THINK_END,
+            ],
+        ),
+        (
+            [TOOL_CALL_START, TOOL_CALL_ARGS_A, TOOL_CALL_END],
+            [TOOL_CALL_START, TOOL_CALL_ARGS_A, TOOL_CALL_END],
+        ),
+        (
+            [
+                TOOL_CALL_START,
+                TOOL_CALL_ARGS_A,
+                TOOL_CALL_ARGS_B,
+                TOOL_CALL_ARGS_C,
+                TOOL_CALL_END,
+            ],
+            [TOOL_CALL_START, TOOL_CALL_ARGS_ABC, TOOL_CALL_END],
+        ),
+        (
+            [
+                TOOL_CALL_START,
+                TOOL_CALL_ARGS_A,
+                TOOL_CALL_ARGS_B,
+                OTHER,
+                TOOL_CALL_ARGS_C,
+                TOOL_CALL_END,
+            ],
+            [
+                TOOL_CALL_START,
+                TOOL_CALL_ARGS_AB,
+                OTHER,
+                TOOL_CALL_ARGS_C,
+                TOOL_CALL_END,
             ],
         ),
     ],
