@@ -55,11 +55,12 @@ stated in the conversation).
 
 ## Workflow
 
-1. **Pick an environment.** If the task needs third-party packages,
-   call `list_environments` and choose the one whose description
-   matches the task. Pass its `name` as `environment_name` to
-   `execute_script`. If the task is pure stdlib, you can skip this
-   and use the default.
+1. **Pick an environment.** When first using the sandbox,
+   call `list_environments` to get information on the available
+   environments,    If the task needs third-party packages,
+   choose the one whose description and dependencies match
+   task. Pass its `name` as `environment_name` to
+   `execute_script`.
 
 2. **Discover inputs — only if the task involves uploaded files.**
    List what is in the relevant volume(s) first; do not dump full
@@ -76,8 +77,9 @@ stated in the conversation).
    ```
 
    Then read specific files you actually need. Always check the
-   `room` volume too — it may contain rules or formulas required for
-   a correct answer, not just the obvious `thread` inputs.
+   `/sandbox/volumes/room` volume too — it may contain rules
+   or formulas required for a correct answer, not just the obvious
+   `thread` inputs.
 
 3. **Write a self-contained script** that solves the task. Read its
    inputs from the volumes, apply any rules from room files, and
