@@ -143,18 +143,6 @@ class ThreadMetadata(Base):
     description: Mapped[str | None] = mapped_column()
 
 
-#
-#   Work around https://github.com/ag-ui-protocol/ag-ui/issues/752
-#
-SKIP_EVENT_TYPES = {
-    agui_core.EventType.THINKING_START,
-    agui_core.EventType.THINKING_TEXT_MESSAGE_START,
-    agui_core.EventType.THINKING_TEXT_MESSAGE_CONTENT,
-    agui_core.EventType.THINKING_TEXT_MESSAGE_END,
-    agui_core.EventType.THINKING_END,
-}
-
-
 class Run(Base):
     """Hold information about an AG-UI runs.
 
@@ -274,8 +262,6 @@ class Run(Base):
         return [
             event.to_agui_model()
             for event in await self.awaitable_attrs.events
-            # Work around https://github.com/ag-ui-protocol/ag-ui/issues/752
-            if event.type not in SKIP_EVENT_TYPES
         ]
 
 

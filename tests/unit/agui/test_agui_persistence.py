@@ -1022,13 +1022,6 @@ async def test_threadstorage_save_run_events(
 ):
     ts.return_value = NOW
 
-    # Work around https://github.com/ag-ui-protocol/ag-ui/issues/752
-    exp_events = [
-        event
-        for event in w_agui_events
-        if event.type not in agui_schema.SKIP_EVENT_TYPES
-    ]
-
     ts = agui_persistence.ThreadStorage(the_async_session)
 
     thread = await ts.new_thread(
@@ -1062,7 +1055,7 @@ async def test_threadstorage_save_run_events(
 
     for found_event, exp_event, db_event in zip(
         found_events,
-        exp_events,
+        w_agui_events,
         db_events,
         strict=True,
     ):
