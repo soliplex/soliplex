@@ -57,7 +57,7 @@ stated in the conversation).
 
 1. **Pick an environment.** When first using the sandbox,
    call `list_environments` to get information on the available
-   environments,    If the task needs third-party packages,
+   environments, If the task needs third-party packages,
    choose the one whose description and dependencies match
    task. Pass its `name` as `environment_name` to
    `execute_script`.
