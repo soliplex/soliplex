@@ -358,6 +358,11 @@ def test_get_extra_volumes(
                 host_path=room_path,
                 writable=False,
             )
+        else:
+            expected["room"] = bs_models.VolumeInfo(
+                host_path=None,
+                writable=False,
+            )
     else:
         ru_path = None
 
@@ -368,6 +373,11 @@ def test_get_extra_volumes(
             thread_path.mkdir(parents=True)
             expected["thread"] = bs_models.VolumeInfo(
                 host_path=thread_path,
+                writable=False,
+            )
+        else:
+            expected["thread"] = bs_models.VolumeInfo(
+                host_path=None,
                 writable=False,
             )
     else:

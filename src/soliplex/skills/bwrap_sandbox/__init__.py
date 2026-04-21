@@ -220,12 +220,22 @@ def get_extra_volumes(
                 host_path=room_dir,
                 writable=False,
             )
+        else:
+            result["room"] = bs_models.VolumeInfo(
+                host_path=None,
+                writable=False,
+            )
 
     if threads_upload_path is not None:
         thread_dir = threads_upload_path / str(thread_id)
         if thread_dir.exists():
             result["thread"] = bs_models.VolumeInfo(
                 host_path=thread_dir,
+                writable=False,
+            )
+        else:
+            result["thread"] = bs_models.VolumeInfo(
+                host_path=None,
                 writable=False,
             )
 
