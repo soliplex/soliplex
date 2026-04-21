@@ -1,15 +1,4 @@
-# syntax=docker/dockerfile:1
-FROM python:3.13-slim AS base
-
-ARG APP_UID=1000
-ARG APP_GID=1000
-
-ENV UV_LINK_MODE=copy \
-    UV_COMPILE_BYTECODE=1 \
-    UV_PYTHON_DOWNLOADS=never \
-    UV_PYTHON=python3.13 \
-    SOURCE_DATE_EPOCH=0 \
-    PATH="/app/.venv/bin:$PATH"
+FROM python:3.13-slim AS builder
 
 WORKDIR /app
 
@@ -23,23 +12,7 @@ RUN apt-get update && \
       rsync \
     && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -g ${APP_GID} soliplex && \
-    useradd -u ${APP_UID} -g ${APP_GID} -m -s /bin/bash soliplex
-
-# ---------- builder: install dependencies and package ----------
-FROM base AS builder
-
-COPY --from=ghcr.io/astral-sh/uv:0.11.6 /uv /uvx /bin/
-
-COPY --link pyproject.toml uv.lock ./
-
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-project
-
-COPY --link src/ ./src/
-
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+COPY pyproject.toml /app/pyproject.toml
 
 # Bootstrap sandbox environments
 COPY --link sandbox/environments ./sandbox/environments
@@ -51,35 +24,30 @@ RUN --mount=type=cache,target=/root/.cache/uv \
       fi; \
     done
 
-# ---------- development: full toolchain, expects bind mount ----------
-FROM builder AS development
+COPY src/soliplex /app/src/soliplex
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen
+FROM python:3.13-slim AS runtime
 
-RUN chown -R soliplex:soliplex /app
+WORKDIR /app
 
-USER soliplex
-
-EXPOSE 8000
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ok')"]
-
-CMD ["soliplex-cli", "serve", "--host=0.0.0.0", "--reload=both", "/app/installation"]
-
-# ---------- production: minimal, non-root, default target ----------
-FROM base AS production
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      curl \
+      jq \
+      bash \
+      && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app /app
 
-RUN chown -R soliplex:soliplex /app
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --user -e . --group dev
 
-USER soliplex
+ENV PATH="/root/.local/bin:$PATH"
 
-EXPOSE 8000
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/ok')"]
+EXPOSE 8000 5678
 
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["soliplex-cli", "serve", "--host=0.0.0.0", "/app/installation"]
