@@ -3,6 +3,7 @@ import enum
 import json
 import os
 import pathlib
+import sys
 import typing
 import warnings
 from importlib import metadata as importlib_metadata
@@ -361,133 +362,179 @@ def _find_skill_paths(to_search: pathlib.Path):
 def check_config(
     ctx: typer.Context,
     installation_path: installation_path_type,
+    quiet: bool = typer.Option(
+        False,
+        "-q",
+        "--quiet",
+        help="Show only errors",
+    ),
 ):
     """Check that secrets / env vars can be resolved"""
     the_installation = get_installation(installation_path)
 
-    the_console.line()
-    the_console.rule("Checking secrets")
-    the_console.line()
+    errors = {}
+
+    if quiet:
+        tc_line = lambda *args: None  # noqa E731
+        tc_rule = lambda *args: None  # noqa E731
+        tc_print = lambda *args: None  # noqa E731
+    else:
+        tc_line = the_console.line
+        tc_rule = the_console.rule
+        tc_print = the_console.print
+        tc_print_exception = the_console.print_exception
+
+    tc_line()
+    tc_rule("Checking secrets")
+    tc_line()
     try:
         the_installation.resolve_secrets()
     except secrets.SecretsNotFound as exc:
-        the_console.print("Missing secrets")
-        for secret_name in exc.secret_names.split(","):
-            the_console.print(f"- {secret_name}")
-    else:
-        the_console.print("OK")
+        missing = exc.secret_names.split(",")
+        errors["missing_secrets"] = missing
 
-    the_console.line()
-    the_console.rule("Checking environment")
-    the_console.line()
+        tc_print("Missing secrets")
+        for secret_name in missing:
+            tc_print(f"- {secret_name}")
+    else:
+        tc_print("OK")
+
+    tc_line()
+    tc_rule("Checking environment")
+    tc_line()
     try:
         the_installation.resolve_environment()
     except config_installation.MissingEnvVars as exc:
-        the_console.line()
-        the_console.print("Missing environment variables")
+        missing = exc.env_vars.split(",")
+        errors["missing_env_vars"] = missing
+
+        tc_line()
+        tc_print("Missing environment variables")
         for env_var in exc.env_vars.split(","):
-            the_console.print(f"- {env_var}")
+            tc_print(f"- {env_var}")
     else:
-        the_console.print("OK")
+        tc_print("OK")
 
     # Check that conversion to models doesn't raise
-    the_console.line()
-    the_console.rule("Validating installation model")
-    the_console.line()
+    tc_line()
+    tc_rule("Validating installation model")
+    tc_line()
     try:
         models.Installation.from_config(the_installation._config)
     except Exception as exc:
-        the_console.print(exc)
-    else:
-        the_console.print("OK")
+        errors["installation_model"] = str(exc)
 
-    the_console.line()
-    the_console.rule("Validating OIDC authentication systems")
-    the_console.line()
+        tc_print(exc)
+    else:
+        tc_print("OK")
+
+    tc_line()
+    tc_rule("Validating OIDC authentication systems")
+    tc_line()
     oidc_configs = the_installation._config.oidc_auth_system_configs
     for oidc_config in oidc_configs:
-        the_console.print(f"OIDC system: {oidc_config.id}")
+        tc_print(f"OIDC system: {oidc_config.id}")
         try:
             models.OIDCAuthSystem.from_config(oidc_config)
         except Exception as exc:
-            the_console.print(exc)
-        else:
-            the_console.print("OK")
-        the_console.line()
+            errors.setdefault("oidc", {})[oidc_config.id] = str(exc)
 
-    the_console.line()
-    the_console.rule("Validating room models")
-    the_console.line()
+            tc_print(exc)
+        else:
+            tc_print("OK")
+        tc_line()
+
+    tc_line()
+    tc_rule("Validating room models")
+    tc_line()
     room_configs = the_installation._config.room_configs
+    rag_errors = {}
+
+    def _rag_error(room_config, which, exc):
+        rag_room = rag_errors.setdefault(room_config.id, {})
+        rag_room[which] = str(exc)
+
     for room_config in room_configs.values():
-        the_console.print(f"Room: {room_config.id}")
+        tc_print(f"Room: {room_config.id}")
         try:
             models.Room.from_config(room_config)
         except Exception as exc:
-            the_console.print(exc)
+            errors.setdefault("room", {})[room_config.id] = str(exc)
+
+            tc_print(exc)
         else:
-            the_console.print("OK")
-        the_console.line()
+            tc_print("OK")
+        tc_line()
 
         if isinstance(room_config.agent_config, config_rag._RAGConfigBase):
-            the_console.print("- Checking agent RAG DB")
+            tc_print("- Checking agent RAG DB")
             try:
                 room_config.agent_config.rag_lancedb_path  # noqa B018
             except Exception as exc:
-                the_console.print(exc)
+                _rag_error(room_config, "agent", exc)
+
+                tc_print(exc)
             else:
-                the_console.print("  OK")
-            the_console.line()
+                tc_print("  OK")
+            tc_line()
 
         room_skills = room_config.skills
 
         if room_skills is not None:
             for s_name, s_config in room_skills.skill_configs.items():
                 if isinstance(s_config, config_rag._RAGConfigBase):
-                    the_console.print(f"- Checking skill RAG DB: {s_name}")
+                    tc_print(f"- Checking skill RAG DB: {s_name}")
                     try:
                         s_config.rag_lancedb_path  # noqa B018
                     except Exception as exc:
-                        the_console.print(exc)
+                        _rag_error(room_config, f"skill-{s_name}", exc)
+
+                        tc_print(exc)
                     else:
-                        the_console.print("  OK")
-                    the_console.line()
+                        tc_print("  OK")
+                    tc_line()
 
         for tool_config in room_config.tool_configs.values():
             if isinstance(tool_config, config_rag._RAGConfigBase):
-                the_console.print(
-                    f"- Checking tool RAG DB: {tool_config.tool_name}"
-                )
+                t_name = tool_config.tool_name
+                tc_print(f"- Checking tool RAG DB: {t_name}")
                 try:
                     tool_config.rag_lancedb_path  # noqa B018
                 except Exception as exc:
-                    the_console.print(exc)
-                else:
-                    the_console.print("  OK")
-                the_console.line()
+                    _rag_error(room_config, f"tool-{t_name}", exc)
 
-    the_console.line()
-    the_console.rule("Validating completion models")
-    the_console.line()
+                    tc_print(exc)
+                else:
+                    tc_print("  OK")
+                tc_line()
+
+    if rag_errors:
+        errors["rag"] = rag_errors
+
+    tc_line()
+    tc_rule("Validating completion models")
+    tc_line()
     completion_configs = the_installation._config.completion_configs
 
     for compl_config in completion_configs.values():
-        the_console.print(f"Completion: {compl_config.id}")
+        tc_print(f"Completion: {compl_config.id}")
         try:
             models.Completion.from_config(compl_config)
         except Exception as exc:
-            the_console.print(exc)
-        else:
-            the_console.print("OK")
-        the_console.line()
+            errors.setdefault("completion", {})[compl_config.id] = str(exc)
 
-    the_console.line()
-    the_console.rule("Validating quizzes")
-    the_console.line()
+            tc_print(exc)
+        else:
+            tc_print("OK")
+        tc_line()
+
+    tc_line()
+    tc_rule("Validating quizzes")
+    tc_line()
     for q_path in the_installation._config.quizzes_paths:
-        the_console.print(f"Quizzes path: {q_path}")
+        tc_print(f"Quizzes path: {q_path}")
         for q_file in q_path.glob("*.json"):
-            the_console.print(f"- Question file stem: {q_file.stem}")
+            tc_print(f"- Question file stem: {q_file.stem}")
             q_config = config_quizzes.QuizConfig(
                 id="check",
                 question_file=str(q_file),
@@ -495,62 +542,83 @@ def check_config(
             try:
                 q_config.get_questions()
             except Exception as exc:
-                the_console.print(f"  Invalid quiz file: {exc}")
-            else:
-                the_console.print("  OK")
-        the_console.line()
+                q_error = f"  Invalid quiz file: {exc}"
+                errors.setdefault("quiz", {})[q_file] = q_error
 
-    the_console.line()
-    the_console.rule("Validating Python logging")
-    the_console.line()
+                tc_print(q_error)
+            else:
+                tc_print("  OK")
+        tc_line()
+
+    tc_line()
+    tc_rule("Validating Python logging")
+    tc_line()
     pyl_config = the_installation._config.logging_config_file
     if pyl_config is not None:
-        the_console.print(f"Logging config: {pyl_config}")
+        tc_print(f"Logging config: {pyl_config}")
         try:
             with pyl_config.open() as f:
                 logging_config = yaml.safe_load(f)
-        except yaml.YAMLError:
-            the_console.print_exception()
-        except OSError:
-            the_console.print_exception()
+        except yaml.YAMLError as y_exc:
+            errors["logging"] = str(y_exc)
+
+            tc_print_exception()
+
+        except OSError as os_exc:
+            errors["logging"] = str(os_exc)
+
+            tc_print_exception()
         else:
-            the_console.print(logging_config)
-            the_console.print(
+            tc_print(logging_config)
+            tc_print(
                 f"Headers map: {the_installation._config.logging_headers_map}",
             )
-            the_console.print(
+            tc_print(
                 f"Claims map: {the_installation._config.logging_claims_map}",
             )
-            the_console.print("OK")
+            tc_print("OK")
     else:
-        the_console.print("OK (defaults)")
-    the_console.line()
+        tc_print("OK (defaults)")
+    tc_line()
 
-    the_console.line()
-    the_console.rule("Validating skills")
-    the_console.line()
+    tc_line()
+    tc_rule("Validating skills")
+    tc_line()
+    skills_errors = {}
+
     for skills_path in the_installation._config.filesystem_skills_paths:
-        the_console.print(f"Filesystem skills path: {skills_path}")
+        tc_print(f"Filesystem skills path: {skills_path}")
         for skill_path in _find_skill_paths(skills_path):
-            the_console.print(f"- {skill_path.name}")
-            errors = skill_validator.validate(skill_path)
-            if errors:
-                for error in errors:
-                    the_console.print(f"  {error}")
-            else:
-                the_console.print("  OK")
-        the_console.line()
+            tc_print(f"- {skill_path.name}")
+            skill_errors = skill_validator.validate(skill_path)
+            if skill_errors:
+                sk_errors = skills_errors.setdefault(skill_path, [])
+                for error in skill_errors:
+                    sk_errors.append(str(error))
 
-    the_console.line()
-    the_console.rule("Validating Logfire config")
-    the_console.line()
+                    tc_print(f"  {error}")
+            else:
+                tc_print("  OK")
+        tc_line()
+
+    if skills_errors:
+        errors["skills"] = skills_errors
+
+    tc_line()
+    tc_rule("Validating Logfire config")
+    tc_line()
     l_config = the_installation._config.logfire_config
     if l_config is not None:
-        the_console.print(l_config.as_yaml)
-        the_console.print("OK")
+        tc_print(l_config.as_yaml)
+        tc_print("OK")
     else:
-        the_console.print("OK (defaults)")
-    the_console.line()
+        tc_print("OK (defaults)")
+    tc_line()
+
+    if errors:
+        if quiet:
+            the_console.print_json(data=errors)
+        sys.exit(-1)
 
 
 @the_cli.command(
