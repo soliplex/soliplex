@@ -8,7 +8,6 @@ type is used:
 |---------------|-------------|
 | `"default"`   | Pydantic AI agent with direct LLM access (default) |
 | `"factory"`   | Agent created by a custom Python callable |
-| `"haiku_chat"`| Conversational RAG agent powered by `haiku.rag` |
 
 When `kind` is omitted, it defaults to `"default"`.
 
@@ -40,6 +39,11 @@ agent:
 - `system_prompt` is the "instructions" for the LLM serving the room.
   If it starts with a `./`, it will be treated as a filename in the
   same directory, whose contents will be read in its place.
+
+**Template exception:** When an agent config uses `template_id` to
+inherit from an entry in the installation-level `agent_configs`, both
+`model_name` and `system_prompt` may be omitted locally -- they will be
+supplied by the template.  Any fields set locally override the template.
 
 A minimal configuration, without an external prompt file:
 
@@ -94,6 +98,22 @@ agent:
 
 - `model_settings`: a mapping, whose keys are determined by
   the `provider_type` above (see below).
+
+- `retries` (an integer, default `3`):  number of retries for LLM calls
+  on recoverable errors.
+
+  **NOTE**: this value is stored on the agent configuration and is
+            returned via the public API, but is not currently applied
+            at agent construction time.  See
+            <https://github.com/soliplex/soliplex/issues/926>.
+
+- `agui_feature_names` (a list of strings, default empty):  AG-UI feature
+  names this agent contributes to the room's aggregate feature set.  Each
+  name must be registered in the AG-UI feature registry (typically via a
+  skill or via an entry under `meta.agui_features`; see
+  [meta.md](meta.md#registering-ag-ui-feature-classes)).  The room's
+  effective feature set is the union of features declared on the agent,
+  the room, its tools, and its skills.
 
 ### Example Ollama Configuration
 
@@ -180,6 +200,14 @@ agent:
   passed through to the factory.  The structure is determined by the
   factory implementation.
 
+- `agui_feature_names` (a list of strings, default empty):  AG-UI feature
+  names this agent contributes to the room's aggregate feature set.  Each
+  name must be registered in the AG-UI feature registry (typically via a
+  skill or via an entry under `meta.agui_features`; see
+  [meta.md](meta.md#registering-ag-ui-feature-classes)).  The room's
+  effective feature set is the union of features declared on the agent,
+  the room, its tools, and its skills.
+
 ### Example
 
 ```yaml
@@ -188,41 +216,7 @@ agent:
   factory_name: "mypackage.agents.build_agent"
   with_agent_config: true
   extra_config:
+    # Additional arguments passed to the factory function
     temperature: 0.8
     max_retries: 5
-```
-
-### haiku.rag Configuration
-
-The LLM model, search settings, and other RAG behavior are controlled
-via haiku.rag's own configuration, not via the agent config.  See the
-[haiku.rag configuration page](rag.md) for details.
-
-A room directory may contain a `haiku.rag.yaml` file whose settings
-override the installation-level haiku.rag configuration for that room.
-
-### Example
-
-A full-featured room using `haiku_chat`:
-
-```yaml
-agent:
-  kind: "haiku_chat"
-  rag_lancedb_stem: "rag"
-  rag_features: ["search", "documents", "qa"]
-  preamble: |
-    You are a knowledgeable assistant that answers questions
-    using a document knowledge base.
-  background_context: |
-    This knowledge base contains internal documentation
-    about the Soliplex platform.
-```
-
-A minimal search-only room:
-
-```yaml
-agent:
-  kind: "haiku_chat"
-  rag_lancedb_stem: "rag"
-  rag_features: ["search"]
 ```

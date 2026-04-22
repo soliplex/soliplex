@@ -164,7 +164,7 @@ oidc_paths:
 Non-absolute paths will be evaluated relative to the installation directory.
 
 By default, Soliplex loads provider configurations found under the path
-'./oicd', just as though we had configured:
+'./oidc', just as though we had configured:
 
 ```yaml
 oidc_paths:
@@ -282,8 +282,8 @@ Each path can be either:
 - a directory containing its own `completion_config.yaml` file:  this
   directory will be mapped as a single completion.
 
-- a directory whose immediate subdirectories will be treated as rooms
-  IFF they contain a `room_config.yaml` file.
+- a directory whose immediate subdirectories will be treated as
+  completions IFF they contain a `completion_config.yaml` file.
 
 Non-absolute paths will be evaluated relative to the installation directory.
 
@@ -308,4 +308,4 @@ completion_paths:
 
 ## Logfire Configuration
 
-See the [Solipex logfire configuration](logfire.md) page.
+See the [Soliplex logfire configuration](logfire.md) page.

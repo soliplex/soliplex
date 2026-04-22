@@ -83,8 +83,28 @@ A minimal room configuration must include the above elements, e.g.:
   ```
 
 - `agui_feature_names` (list of strings); if set these values are added
-  to the feature names defined on the individual tools to create an
-  aggregate set for the room.
+  to the feature names defined on the room's agent, tools, and skills
+  to create an aggregate set for the room.
+
+- `logo_image` (a string, default unset) is a path to an image file that
+  the UI can display as the room's logo.  Relative paths are resolved
+  against the room's configuration directory.  The image is served via
+  the `/v1/rooms/{room_id}/image` endpoint.  E.g.:
+
+  ```yaml
+  logo_image: "./logo.png"
+  ```
+
+- `_order` (a string, default unset) overrides the sort key used when
+  listing rooms.  When unset, rooms are sorted by their `id`.  This is
+  an advanced escape hatch -- note the leading underscore in the YAML
+  key, which is deliberate to mark it as an internal override rather
+  than a normal user-facing option.  E.g., to make a room appear first
+  in a list regardless of its `id`:
+
+  ```yaml
+  _order: "000-welcome"
+  ```
 
 ### Agent configuration
 

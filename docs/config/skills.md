@@ -28,7 +28,7 @@ Discovered filesystem skills can be queried using the
 
 ## Configuring Entrypoint Skills
 
-Entrypoint skills are loaded automatically.  There is currently n
+Entrypoint skills are loaded automatically.  There is currently no
 option to configure or suppress this feature.
 
 Discovered entrypoint skills can be queried using the

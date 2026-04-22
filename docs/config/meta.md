@@ -123,7 +123,7 @@ we configured explicitly:
 
 ```yaml
 meta:
-  tool_configs:
+  agent_configs:
   - "soliplex.config.AgentConfig"
 ```
 

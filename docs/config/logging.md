@@ -79,7 +79,7 @@ logging_headers_map:
 
 ## Configure Logging `extra` Values from OIDC Claims
 
-OIDC cliams values may be useful in logging:  for instance,
+OIDC claims values may be useful in logging:  for instance,
 we might want to display that `email` claim of the authenticated user
 in a formatted log record.
 
