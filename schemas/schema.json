@@ -201,10 +201,7 @@
         },
         "citations": {
           "items": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+            "type": "string"
           },
           "title": "Citations",
           "type": "array"
@@ -481,10 +478,7 @@
         },
         "citations": {
           "items": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+            "type": "string"
           },
           "title": "Citations",
           "type": "array"
