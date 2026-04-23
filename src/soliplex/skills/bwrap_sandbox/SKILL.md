@@ -1,102 +1,163 @@
 ---
 name: bwrap-sandbox
 description: |
-    Write and execute Python code (and shell commands) in a bubblewrap
+    This skill runs Python in a bubblewrap
     sandbox. Each run has a persistent working directory and read-only
     access to uploaded files mounted under '/sandbox/volumes'.
 ---
 
 # Sandbox
 
-You are a coding agent with access to a bubblewrap sandbox running
-Python. Use it to do real computation — data analysis, file
-processing, calculations, running scripts — rather than guessing
-answers or describing what code *would* do.
+This skill runs Python in a bubblewrap sandbox.
+Use it to compute results from files.
 
 ## When to use the sandbox
 
-Reach for the sandbox when the task involves:
+Use the sandbox if **any** of these is true:
 
-- Computing a value from data (aggregations, transformations,
-  statistics, derived metrics).
-- Reading, parsing, or summarizing files the user has uploaded.
-- Running Python to verify a claim before stating it as fact.
+- The task references one or mor files uploaded
+  under `sandbox/volumes/thread` or `sandbox/volumes/room`.
+- The task asks for a number, count, table, or other value derived from data.
+- You were about to state a computed result without actually computing it.
 
-Do NOT use the sandbox for questions you can answer directly from
-context (definitions, explanations, looking up something already
-stated in the conversation).
+Do NOT use the sandbox if **any** of these is true:
+
+- The question is about definitions, explanations, or concepts.
+- The answer is a already stated in the conversation.
+- The task is to write code for the user to run, not to execute code yourself.
+- The task is value ("analyze the files", "take a look")
+  with no concrete question. Ask the user what they want to know
+  before running anything.
 
 ## Sandbox file layout
 
-- **Working directory** — `/sandbox/work/` (read/write). Scripts run
-  here. Files written here persist across tool calls within the same
-  run, so you can build on earlier outputs.
-- **Mounted volumes** — `/sandbox/volumes/<name>/` (read-only). The
-  common ones are:
-  - `/sandbox/volumes/thread/` — files the user uploaded to this
-    thread. These are usually the inputs for the task.
-  - `/sandbox/volumes/room/` — files shared across the room. Often
-    contain instructions, reference data, formulas, or business rules
-    that must be applied to answer correctly.
-  - Other named volumes may be present depending on configuration.
+- `/sandbox/work/` — read/write scratch space inside the sandbox.
+  Intermediate artifacts written by a script go here.
+- `/sandbox/volumes/thread/` —  read-only;
+  files the user uploaded to this thread. Usually the inputs for the task.
+- `/sandbox/volumes/room/` — read-only;
+  files shared across the room. Often contain rules, formulas,
+  or reference data required for a correct answer.
 
 ## Tools
 
-- **`list_environments`** — returns available Python environments,
-  each with a `name` and `description`. Call this once at the start
-  if you might need third-party packages, so you can pick the right
-  one.
-- **`execute_script`** — runs a Python script string. This is your
-  primary tool. Pass `environment_name` to select a non-default
-  environment.
-- **`execute`** — runs a shell command. Use only when you need shell
-  functionality: package listing, git, file manipulation with
-  system tools, running non-Python executables.
+- `list_environments()` — returns available Python environments,
+  each with a `name`, `description`, and set of installed `dependencies`.
+- `list_volume_files(volume_name)` — returns a list of absolue paths of files
+  within the given volume (`"thread"` or `"room"`).
+- `run(environment, *command_args)` — run a an arbitrary shell command
+   in the sandbox.
+- `run_python(environment, script_text)` — run a Python script string.
 
 ## Workflow
 
-1. **Pick an environment.** When first using the sandbox,
-   call `list_environments` to get information on the available
-   environments, If the task needs third-party packages,
-   choose the one whose description and dependencies match
-   task. Pass its `name` as `environment_name` to
-   `execute_script`.
-
-2. **Discover inputs — only if the task involves uploaded files.**
-   List what is in the relevant volume(s) first; do not dump full
-   file contents blindly. For example:
+1. **Pick an environment.** Run `list_environments`, which returns a list
+   of dictionaries shaped like:
 
    ```python
-   import pathlib
-   for vol in ['/sandbox/volumes/room', '/sandbox/volumes/thread']:
-       p = pathlib.Path(vol)
-       if p.exists():
-           for f in sorted(p.rglob('*')):
-               if f.is_file():
-                   print(f, f.stat().st_size)
+   {
+      "name": "bare",
+      "description": "Minimal Python",
+      "dependencies": ["pandas"],
+   }
    ```
 
-   Then read specific files you actually need. Always check the
-   `/sandbox/volumes/room` volume too — it may contain rules
-   or formulas required for a correct answer, not just the obvious
-   `thread` inputs.
+   Apply these rules in order:
+   - If the list is empty, stop and tell the user the skill
+     is not configured — do not proceed.
+   - If the list contains exactly one environment, use its `name`.
+   - Otherwise, pick the `name` of the first environment whose `dependencies`
+     include a library the task needs (e.g, `pandas` for tabular data,
+     `numpy` for numeric work, `pillow` for images).  If no environments match,
+     use 'name' of the first entry in the list.
 
-3. **Write a self-contained script** that solves the task. Read its
-   inputs from the volumes, apply any rules from room files, and
-   print results to stdout. Save intermediate artifacts (CSVs,
-   plots, cleaned data) to `/sandbox/work/` when the user might want
-   them or when a later step will reuse them.
+2. **List files in both volumes.**  This step is mandatory — do not skip it,
+   even if the task seems to involve one volume.  Run both:
 
-4. **Iterate on failures.** Read the full error — the root cause is
-   often mid-traceback, not the last line. Change one thing at a
-   time. If the same approach fails three times, stop and try a
-   different strategy rather than retrying variations.
+   ```python
+   list_volume_files("thread")
+   list_volume_files("room")
+   ```
+
+   Each tool prints one absolute path line, or nothing if the volume is empty:
+
+   ```python
+   /sandbox/volumes/thread/orders.csv
+   /sandbox/volumes/thread/notes.txt
+   ```
+
+   If both commands print no files, proceed without inputs.
+
+3. **Read only the files you need.** Do not dump every file — pick the
+   ones the task actually requires. If `room` has any files, read them too:
+   they often contain rules or reference data the task depends on.
+
+   To peek at a file's shape before writing analysis code, use the `run` tool,
+   e.g. `run(environment, "head", "-n", "5", <path>)` (or `"wc", "-l"`,
+   `"file"`, etc.).  For anything beyond a quick peek — parsing, filtering,
+   joining — read it inside a the script call in step 4 rather than running
+   `"cat"` on the whole file.
+
+4. **Run a Python script in the sandbox.** Pass the source as the `script_text`
+   argument to `run_python`:
+
+   ```python
+   run_python(environment, script_text="<python source>")
+   ```
+
+   Write the whole program as a single string, and use real newlines between
+   separate statements. `;` only works for simple statements — compound
+   statements like `def`, `class`, `with`, `for`, `if`, `try` must
+   start on their own line.
+
+   Start from this skeleton and replace the `TODO`:
+
+   ```python
+   from pathlib import Path
+
+   # Inputs (read-only): /sandbox/volumes/thread/, /sandbox/volumes/room/
+   # Scratch (read-write): /sandbox/work/
+
+   # TODO: read inputs, apply any rules from room files, compute `result`.
+
+   print(result)
+   ```
+
+5. **On failure.**
+   - Change exactly one thing per retry.
+   - After 3 failed runs, stop. Report the error to the user (paste the
+     `Exited with code: <N>` line and any traceback), instead of retrying
+     further.
 
 ## Output
 
-- Print what the user asked for to stdout; that is what they will
-  see.
-- For large results, print a summary plus a pointer to the file in
-  `/sandbox/work/` rather than dumping everything.
-- Don't narrate the script ("I will now load the data…") — just run
-  it and report the result.
+- Print the answer to stdout; only stdout is shown to the user.
+- If the answer is more than ~20 rows or lines, print a short summary
+  (head, counts, totals), and write the full detail to a file under
+  `/sandbox/work/`.
+- Do not print narration lines like "Loading data…" or "Processing…".
+  Just run the script.
+- After the script succeeds, report the result to the user
+  in one or two sentences.
+
+## Example
+
+Task: user uploads `orders.csv` and asks "what's the total order value?".
+A full run looks like:
+
+1. `list_environments()` — shows one environment named `default`
+   with `pandas` in its dependencies. Use it.
+
+2. `list_volume_files("thread")` — lists `/sandbox/volumes/thread/orders.csv`.
+   `list_volume_files("room")` — prints no files.
+   Continue with just the thread input.
+
+3. Run:
+
+   ```python
+   run_python("default", script_text="import pandas as pd; df = pd.read_csv('/sandbox/volumes/thread/orders.csv'); print(f\"Total: {df['amount'].sum():.2f}\")"
+   ```
+
+   — prints `Total: 48215.00`.
+
+4. Report to the user: "Total order value: $48,215.00."
