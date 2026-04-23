@@ -107,6 +107,42 @@ async def test_skill_list_environments(
     assert found is bwrap_sandbox.config.list_environments.return_value
 
 
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "volume, expected",
+    [
+        ("thread", ["thread_file.txt"]),
+        ("room", ["room_file.txt"]),
+        ("nonesuch", []),
+    ],
+)
+async def test_skill_list_volume_files(
+    temp_dir,
+    rooms_upload_path,
+    threads_upload_path,
+    bwrap_sandbox,
+    volume,
+    expected,
+):
+    room_upload_path = rooms_upload_path / str(ROOM_ID)
+    room_upload_path.mkdir(parents=True)
+    room_file = room_upload_path / "room_file.txt"
+    room_file.write_text("ROOM FILE")
+
+    thread_upload_path = threads_upload_path / str(THREAD_ID)
+    thread_upload_path.mkdir(parents=True)
+    thread_file = thread_upload_path / "thread_file.txt"
+    thread_file.write_text("THREAD FILE")
+
+    found = await skills_bwrap_sandbox.skill_list_volume_files(
+        volume,
+        room_upload_path=room_upload_path,
+        thread_upload_path=thread_upload_path,
+    )
+
+    assert found == expected
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("w_att_rte", [False, True])
 @pytest.mark.parametrize("w_exit_code", [0, None, 42])
@@ -460,9 +496,9 @@ async def test_create_sandbox_toolset_list_environments(
     skill_list_environments,
     ctx_w_deps,
 ):
-    found = skills_bwrap_sandbox.create_sandbox_toolset()
+    toolset = skills_bwrap_sandbox.create_sandbox_toolset()
     sandbox = bs_klass.return_value
-    tool = found.tools["list_environments"]
+    tool = toolset.tools["list_environments"]
 
     found = await tool.function(ctx=ctx_w_deps)
 
@@ -470,6 +506,39 @@ async def test_create_sandbox_toolset_list_environments(
     skill_list_environments.assert_called_once_with(
         bwrap_sandbox=sandbox,
     )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("w_iconfig", [False, True])
+@mock.patch("soliplex.skills.bwrap_sandbox.skill_list_volume_files")
+async def test_create_sandbox_toolset_list_volume_files(
+    skill_list_volume_files,
+    i_config,
+    ctx_w_deps,
+    rooms_upload_path,
+    threads_upload_path,
+    w_iconfig,
+):
+    if w_iconfig:
+        toolset = skills_bwrap_sandbox.create_sandbox_toolset(
+            installation_config=i_config,
+        )
+    else:
+        toolset = skills_bwrap_sandbox.create_sandbox_toolset()
+
+    tool = toolset.tools["list_volume_files"]
+
+    found = await tool.function(ctx=ctx_w_deps, volume="foo")
+
+    if w_iconfig:
+        assert found is skill_list_volume_files.return_value
+        skill_list_volume_files.assert_called_once_with(
+            volume="foo",
+            room_upload_path=rooms_upload_path / str(ROOM_ID),
+            thread_upload_path=threads_upload_path / str(THREAD_ID),
+        )
+    else:
+        assert found == []
 
 
 @pytest.mark.anyio

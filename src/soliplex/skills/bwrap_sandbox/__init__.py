@@ -1,4 +1,5 @@
 import pathlib
+import typing
 
 import pydantic
 import pydantic_ai
@@ -9,6 +10,8 @@ from haiku.skills import models as hs_models
 from haiku.skills import parser as hs_parser
 from haiku.skills import state as hs_state
 from pydantic_ai import toolsets as ai_toolests
+
+VolumeName = typing.Literal["thread"] | typing.Literal["room"]
 
 SKILL_NAME = "bubble-sandbox"
 SKILL_DESCRIPTION = """\
@@ -84,6 +87,32 @@ completely different strategy.
 - Be careful with destructive commands (`rm -rf`, `drop table`, etc.) — \
 verify the target path/object before executing.
 """
+
+
+LIST_VOLUME_FILES_DESCRIPTION = """
+Return a list of absolute filenames of files in a sandbox volume
+"""
+
+
+async def skill_list_volume_files(
+    volume: VolumeName,
+    room_upload_path: pathlib.Path,
+    thread_upload_path: pathlib.Path,
+) -> list[str]:
+
+    def _list_volume_files(volume_path: pathlib.Path) -> list[str]:
+        return [
+            sub.absolute().name
+            for sub in volume_path.glob("*")
+            if sub.is_file()
+        ]
+
+    if volume == "thread":
+        return _list_volume_files(thread_upload_path)
+    elif volume == "room":
+        return _list_volume_files(room_upload_path)
+    else:
+        return []
 
 
 async def skill_run(
@@ -272,7 +301,8 @@ def create_sandbox_toolset(
             up to this many times. Defaults to 1.
 
     Returns:
-        FunctionToolset with 'list_environments, 'run' and 'run_python' tools.
+        FunctionToolset with thses tools:
+        'list_environments, 'list_volume_files', 'run' and 'run_python'.
     """
     if sandbox_config is None:
         sandbox_config = bs_config.Config()
@@ -306,6 +336,25 @@ def create_sandbox_toolset(
         ctx: pydantic_ai.RunContext,
     ) -> list[EnvironmentInfo]:
         return await skill_list_environments(bwrap_sandbox=bwrap_sandbox)
+
+    @toolset.tool(description=LIST_VOLUME_FILES_DESCRIPTION)
+    async def list_volume_files(
+        ctx: pydantic_ai.RunContext,
+        volume: VolumeName,
+    ) -> list[str]:
+        if installation_config is None:
+            return []
+
+        else:
+            state = ctx.deps.state
+            room_id = state.room_id or ""
+            thread_id = state.thread_id or ""
+
+            return await skill_list_volume_files(
+                volume=volume,
+                room_upload_path=rooms_upload_path / room_id,
+                thread_upload_path=threads_upload_path / thread_id,
+            )
 
     @toolset.tool(description=RUN_DESCRIPTION)
     async def run(
