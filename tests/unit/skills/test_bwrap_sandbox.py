@@ -118,7 +118,7 @@ async def test_skill_list_environments(
         (["/bin/true"], ["/bin/true"]),
     ],
 )
-async def test_skill_execute_w_errors_truncation(
+async def test_skill_run_w_errors_truncation(
     ctx_w_deps,
     bwrap_sandbox,
     w_command,
@@ -145,7 +145,7 @@ async def test_skill_execute_w_errors_truncation(
         if w_exit_code not in [None, 0]:
             expected = f"Command failed (exit code {w_exit_code}):\n{expected}"
 
-    found = await skills_bwrap_sandbox.skill_execute(
+    found = await skills_bwrap_sandbox.skill_run(
         bwrap_sandbox=bwrap_sandbox,
         command=w_command,
     )
@@ -185,7 +185,7 @@ async def test_skill_execute_w_errors_truncation(
         (["/bin/true"], ["/bin/true"]),
     ],
 )
-async def test_skill_execute_w_extra_args(
+async def test_skill_run_w_extra_args(
     ctx_w_deps,
     bwrap_sandbox,
     w_command,
@@ -200,7 +200,7 @@ async def test_skill_execute_w_extra_args(
     )
     expected = "test output"
 
-    found = await skills_bwrap_sandbox.skill_execute(
+    found = await skills_bwrap_sandbox.skill_run(
         bwrap_sandbox=bwrap_sandbox,
         command=w_command,
         **w_kw,
@@ -225,7 +225,7 @@ async def test_skill_execute_w_extra_args(
 @pytest.mark.parametrize("w_att_rte", [False, True])
 @pytest.mark.parametrize("w_exit_code", [0, None, 42])
 @pytest.mark.parametrize("w_truncated", [False, True])
-async def test_skill_execute_script_w_errors_truncation(
+async def test_skill_run_python_w_errors_truncation(
     ctx_w_deps,
     bwrap_sandbox,
     w_truncated,
@@ -233,10 +233,10 @@ async def test_skill_execute_script_w_errors_truncation(
     w_att_rte,
 ):
     if w_att_rte:
-        bwrap_sandbox.execute_script.side_effect = RuntimeError("test")
+        bwrap_sandbox.execute_python.side_effect = RuntimeError("test")
         expected = "Error: test"
     else:
-        bwrap_sandbox.execute_script.return_value = mock.create_autospec(
+        bwrap_sandbox.execute_python.return_value = mock.create_autospec(
             bs_models.ExecuteResult,
             output="test output",
             exit_code=w_exit_code,
@@ -250,14 +250,14 @@ async def test_skill_execute_script_w_errors_truncation(
         if w_exit_code not in [None, 0]:
             expected = f"Command failed (exit code {w_exit_code}):\n{expected}"
 
-    found = await skills_bwrap_sandbox.skill_execute_script(
+    found = await skills_bwrap_sandbox.skill_run_python(
         bwrap_sandbox=bwrap_sandbox,
         script="print('hello')",
     )
 
     assert found == expected
 
-    bwrap_sandbox.execute_script.assert_awaited_once_with(
+    bwrap_sandbox.execute_python.assert_awaited_once_with(
         script="print('hello')",
         environment_name=None,
         workdir=None,
@@ -283,12 +283,12 @@ async def test_skill_execute_script_w_errors_truncation(
         },
     ],
 )
-async def test_skill_execute_script_w_extra_args(
+async def test_skill_run_python_w_extra_args(
     ctx_w_deps,
     bwrap_sandbox,
     w_kw,
 ):
-    bwrap_sandbox.execute_script.return_value = mock.create_autospec(
+    bwrap_sandbox.execute_python.return_value = mock.create_autospec(
         bs_models.ExecuteResult,
         output="test output",
         exit_code=None,
@@ -296,7 +296,7 @@ async def test_skill_execute_script_w_extra_args(
     )
     expected = "test output"
 
-    found = await skills_bwrap_sandbox.skill_execute_script(
+    found = await skills_bwrap_sandbox.skill_run_python(
         bwrap_sandbox=bwrap_sandbox,
         script="print('hello')",
         **w_kw,
@@ -311,7 +311,7 @@ async def test_skill_execute_script_w_extra_args(
         "extra_volumes": None,
     } | w_kw
 
-    bwrap_sandbox.execute_script.assert_awaited_once_with(
+    bwrap_sandbox.execute_python.assert_awaited_once_with(
         script="print('hello')",
         **exp_kw,
     )
@@ -484,11 +484,11 @@ async def test_create_sandbox_toolset_list_environments(
 )
 @mock.patch("soliplex.skills.bwrap_sandbox.get_extra_volumes")
 @mock.patch("soliplex.skills.bwrap_sandbox.get_workdir")
-@mock.patch("soliplex.skills.bwrap_sandbox.skill_execute")
+@mock.patch("soliplex.skills.bwrap_sandbox.skill_run")
 @mock.patch("bubble_sandbox.sandbox.BwrapSandbox")
-async def test_create_sandbox_toolset_execute(
+async def test_create_sandbox_toolset_run(
     bs_klass,
-    skill_execute,
+    skill_run,
     gw,
     gev,
     ctx_w_deps,
@@ -507,7 +507,7 @@ async def test_create_sandbox_toolset_execute(
         toolset = skills_bwrap_sandbox.create_sandbox_toolset()
 
     sandbox = bs_klass.return_value
-    tool = toolset.tools["execute"]
+    tool = toolset.tools["run"]
 
     found = await tool.function(
         ctx=ctx_w_deps,
@@ -515,7 +515,7 @@ async def test_create_sandbox_toolset_execute(
         **w_kw,
     )
 
-    assert found is skill_execute.return_value
+    assert found is skill_run.return_value
 
     exp_kw = {
         "environment_name": None,
@@ -524,7 +524,7 @@ async def test_create_sandbox_toolset_execute(
         "extra_volumes": gev.return_value,
     } | w_kw
 
-    skill_execute.assert_called_once_with(
+    skill_run.assert_called_once_with(
         bwrap_sandbox=sandbox,
         command=["/bin/true"],
         **exp_kw,
@@ -570,11 +570,11 @@ async def test_create_sandbox_toolset_execute(
 )
 @mock.patch("soliplex.skills.bwrap_sandbox.get_extra_volumes")
 @mock.patch("soliplex.skills.bwrap_sandbox.get_workdir")
-@mock.patch("soliplex.skills.bwrap_sandbox.skill_execute_script")
+@mock.patch("soliplex.skills.bwrap_sandbox.skill_run_python")
 @mock.patch("bubble_sandbox.sandbox.BwrapSandbox")
-async def test_create_sandbox_toolset_execute_script(
+async def test_create_sandbox_toolset_run_python(
     bs_klass,
-    skill_execute_script,
+    skill_run_python,
     gw,
     gev,
     ctx_w_deps,
@@ -593,7 +593,7 @@ async def test_create_sandbox_toolset_execute_script(
         toolset = skills_bwrap_sandbox.create_sandbox_toolset()
 
     sandbox = bs_klass.return_value
-    tool = toolset.tools["execute_script"]
+    tool = toolset.tools["run_python"]
 
     found = await tool.function(
         ctx=ctx_w_deps,
@@ -601,7 +601,7 @@ async def test_create_sandbox_toolset_execute_script(
         **w_kw,
     )
 
-    assert found is skill_execute_script.return_value
+    assert found is skill_run_python.return_value
 
     exp_kw = {
         "environment_name": None,
@@ -610,7 +610,7 @@ async def test_create_sandbox_toolset_execute_script(
         "extra_volumes": gev.return_value,
     } | w_kw
 
-    skill_execute_script.assert_called_once_with(
+    skill_run_python.assert_called_once_with(
         bwrap_sandbox=sandbox,
         script="print('hello')",
         **exp_kw,
