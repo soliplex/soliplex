@@ -17,6 +17,12 @@ from soliplex import installation
 from soliplex import util
 from soliplex.config import installation as config_installation
 
+try:
+    import debugpy
+    debugpy.listen(("0.0.0.0", 5678))
+except ImportError:
+    pass
+
 
 def curry_lifespan(
     *,

@@ -1,0 +1,10 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "server_time"
+description = "Use this environment for server time and timezone queries. Provides the server_time module with a now() function that returns UTC time, local time, timezone name, and UTC offset."
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []

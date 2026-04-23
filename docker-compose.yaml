@@ -1,14 +1,25 @@
 services:
+
+  # On Linux, set APP_UID/APP_GID in .env or your shell so that
+  # container-written files match your host user:
+  #
+  #   APP_UID=$(id -u) APP_GID=$(id -g) docker compose up soliplex_dev
+  #
   soliplex_backend:
     build:
       context: .
       dockerfile: Dockerfile
-      target: runtime
+      target: development
     ports:
       - "5678:5678"
       - "8000:8000"
     env_file:
       - .env
+    # Needed to run 'bubblewrap' sandbox
+    privileged: true
+    # XXX: Used this env to test the 'server_time' sandbox environment.
+    environment:
+      - TZ=Pacific/Auckland
     volumes:
       - ./src/soliplex:/app/src/soliplex
       - ./installation:/app/installation

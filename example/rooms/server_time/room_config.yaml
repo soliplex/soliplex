@@ -1,0 +1,16 @@
+id: "server_time"
+name: "Server Time"
+description: "Ask for the current server time and timezone"
+
+suggestions:
+  - "What time is it on the server?"
+  - "What timezone is the server in?"
+
+agent:
+  template_id: "default_chat"
+  system_prompt: "./prompt.txt"
+
+skills:
+  skill_configs:
+    - kind: "bubble-sandbox"
+      default_environment_name: "server_time"
