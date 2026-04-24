@@ -46,11 +46,11 @@ defaults work without adjustment.
 ### Health Check
 
 Both targets include a `HEALTHCHECK` instruction that polls the
-`GET /ok` endpoint:
+`GET /api/ok` endpoint:
 
 ```text
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/ok')"
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/ok')"
 ```
 
 Docker uses this to report container health and to drive restart
