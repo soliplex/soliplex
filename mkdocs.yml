@@ -80,6 +80,7 @@ nav:
       - SQLAlchemy DBURIs: config/dburis.md
       - AI Skills: config/skills.md
   - Usage: usage.md
+  - Environment Variables: environment.md
 markdown_extensions:
   - admonition
   - attr_list

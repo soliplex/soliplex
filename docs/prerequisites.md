@@ -43,6 +43,9 @@ Follow these steps in order for a successful setup.
 
 ### Step 1: Install Python 3.13
 
+**Note**: If you aren't running on a platform which mandates using
+an already-installed Python 3.12, prefer using Python >= 3.13.
+
 #### Windows
 
 ```bash
@@ -181,8 +184,8 @@ If using Option 2, configure `example/haiku.rag.yaml` to use remote processing.
 
 ### Step 7: Configure Environment Variables
 
-See the `Environment Variables` section in the [README](README.md) for
-an explanation of when to configure Soliplex using OS environment variables.
+See [environment](environment.md) for an explanation of when to
+configure Soliplex using OS environment variables.
 
 1. **Copy example environment file**
 
