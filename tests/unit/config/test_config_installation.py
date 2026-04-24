@@ -2450,32 +2450,71 @@ def test_installationconfig_avl_ep_skill_configs_w_existing(
     assert found["skill_2"] == SC_2
 
 
-def test_installationconfig_skill_configs_wo_set(no_skill_discovery):
+def test_installationconfig_skill_configs_permissive_default():
+    # With no '_skill_configs' set and both availability maps populated,
+    # every discovered skill is included.
+    fs_skill = object()
+    ep_skill = object()
+
+    kw = BARE_INSTALLATION_CONFIG_KW.copy()
+    kw["_available_filesystem_skill_configs"] = {
+        test_skills.FILESYSTEM_SKILL_NAME: fs_skill,
+    }
+    kw["_available_entrypoint_skill_configs"] = {
+        test_skills.ENTRYPOINT_SKILL_NAME: ep_skill,
+    }
+
+    i_config = config_installation.InstallationConfig(**kw)
+
+    assert i_config.skill_configs == {
+        test_skills.FILESYSTEM_SKILL_NAME: fs_skill,
+        test_skills.ENTRYPOINT_SKILL_NAME: ep_skill,
+    }
+
+
+def test_installationconfig_skill_configs_empty_availability(
+    no_skill_discovery,
+):
+    # Sanity check: no whitelist + no discovered skills → empty map, and
+    # the loaders are consulted exactly once each via the cached property.
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
 
     i_config = config_installation.InstallationConfig(**kw)
 
     assert i_config.skill_configs == {}
-    # _skill_configs is None → property short-circuits, loaders never run.
-    no_skill_discovery["_load_filesystem_skill_configs"].assert_not_called()
-    no_skill_discovery["_load_entrypoint_skill_configs"].assert_not_called()
+    no_skill_discovery[
+        "_load_filesystem_skill_configs"
+    ].assert_called_once_with(i_config)
+    no_skill_discovery[
+        "_load_entrypoint_skill_configs"
+    ].assert_called_once_with(i_config)
 
 
-def test_installationconfig_skill_configs_w_set():
+def test_installationconfig_skill_configs_w_fs_whitelist():
+    # Filesystem whitelist suppresses non-listed fs skills but leaves
+    # entrypoint skills permissive.
+    fs_skill = object()
+    other_fs = object()
+    ep_skill = object()
+
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
-    skill_config = mock.create_autospec(config_skills._SkillConfigModelBase)
     kw["_skill_configs"] = [
         {"kind": "filesystem", "skill_name": test_skills.SKILL_NAME},
     ]
     kw["_available_filesystem_skill_configs"] = {
-        test_skills.SKILL_NAME: skill_config,
-        "other-skill": object(),
+        test_skills.SKILL_NAME: fs_skill,
+        "other-fs-skill": other_fs,
     }
-    kw["_available_entrypoint_skill_configs"] = {}
+    kw["_available_entrypoint_skill_configs"] = {
+        test_skills.ENTRYPOINT_SKILL_NAME: ep_skill,
+    }
 
     i_config = config_installation.InstallationConfig(**kw)
 
-    assert i_config.skill_configs == {test_skills.SKILL_NAME: skill_config}
+    assert i_config.skill_configs == {
+        test_skills.SKILL_NAME: fs_skill,
+        test_skills.ENTRYPOINT_SKILL_NAME: ep_skill,
+    }
 
 
 def test_installationconfig_skill_configs_memoized():
@@ -2490,7 +2529,66 @@ def test_installationconfig_skill_configs_memoized():
 
 
 def test_resolve_skill_configs_empty():
+    # Empty explicit + empty availability → empty result. Exercises the
+    # permissive-default branch for both kinds (no whitelist → copy
+    # availability), which is empty here.
     assert config_installation.resolve_skill_configs([], {}, {}) == {}
+
+
+def test_resolve_skill_configs_permissive_default_returns_all_available():
+    fs_skill_a = object()
+    fs_skill_b = object()
+    ep_skill = object()
+    available_fs = {"fs-a": fs_skill_a, "fs-b": fs_skill_b}
+    available_ep = {"ep": ep_skill}
+
+    resolved = config_installation.resolve_skill_configs(
+        [],
+        available_fs,
+        available_ep,
+    )
+
+    assert resolved == {
+        "fs-a": fs_skill_a,
+        "fs-b": fs_skill_b,
+        "ep": ep_skill,
+    }
+
+
+def test_resolve_skill_configs_fs_whitelist_leaves_ep_permissive():
+    named_fs = object()
+    other_fs = object()
+    ep_skill = object()
+    explicit = [{"kind": "filesystem", "skill_name": "named-fs"}]
+    available_fs = {"named-fs": named_fs, "other-fs": other_fs}
+    available_ep = {"ep": ep_skill}
+
+    resolved = config_installation.resolve_skill_configs(
+        explicit,
+        available_fs,
+        available_ep,
+    )
+
+    # 'other-fs' is suppressed by the fs whitelist; 'ep' rides the
+    # permissive default because no entrypoint entry appeared in explicit.
+    assert resolved == {"named-fs": named_fs, "ep": ep_skill}
+
+
+def test_resolve_skill_configs_ep_whitelist_leaves_fs_permissive():
+    fs_skill = object()
+    named_ep = object()
+    other_ep = object()
+    explicit = [{"kind": "entrypoint", "skill_name": "named-ep"}]
+    available_fs = {"fs": fs_skill}
+    available_ep = {"named-ep": named_ep, "other-ep": other_ep}
+
+    resolved = config_installation.resolve_skill_configs(
+        explicit,
+        available_fs,
+        available_ep,
+    )
+
+    assert resolved == {"fs": fs_skill, "named-ep": named_ep}
 
 
 def test_resolve_skill_configs_filters_by_kind():

@@ -215,11 +215,14 @@ def resolve_skill_configs(
 ) -> config_skills.SkillConfigMap:
     """Resolve the effective skill map from explicit config + availability.
 
-    'explicit' is the raw 'skill_configs' sequence from the installation
-    YAML: each entry names a 'kind' and a 'skill_name'. Those named skills
-    are looked up in the matching availability map and returned together
-    (entrypoint skills first, so filesystem skills win on name collision,
-    matching the prior in-place resolution order).
+    Each kind (filesystem, entrypoint) is handled independently. If
+    'explicit' names any skill of that kind, it acts as a whitelist:
+    only the named skills are included. If 'explicit' names none of
+    that kind, the permissive default applies: every discovered skill
+    of that kind from the matching availability map is included.
+
+    Entrypoint skills go first in the union so that filesystem skills
+    win on name collision.
     """
     fs_skills = {}
     ep_skills = {}
@@ -232,6 +235,11 @@ def resolve_skill_configs(
             ep_skills[skill_name] = available_ep[skill_name]
         else:  # pragma: NO COVER
             pass
+
+    if not fs_skills:
+        fs_skills = dict(available_fs)
+    if not ep_skills:
+        ep_skills = dict(available_ep)
 
     return ep_skills | fs_skills
 
@@ -618,14 +626,11 @@ class InstallationConfig:
     @property
     def skill_configs(self) -> config_skills.SkillConfigMap:
         if self._resolved_skill_configs is None:
-            if self._skill_configs is None:
-                self._resolved_skill_configs = {}
-            else:
-                self._resolved_skill_configs = resolve_skill_configs(
-                    self._skill_configs,
-                    self.available_filesystem_skill_configs,
-                    self.available_entrypoint_skill_configs,
-                )
+            self._resolved_skill_configs = resolve_skill_configs(
+                self._skill_configs or [],
+                self.available_filesystem_skill_configs,
+                self.available_entrypoint_skill_configs,
+            )
 
         return self._resolved_skill_configs.copy()
 

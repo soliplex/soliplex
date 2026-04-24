@@ -980,6 +980,8 @@ def bare_installation_config():
         room_paths=[],
         completion_paths=[],
         quizzes_paths=[],
+        _available_filesystem_skill_configs={},
+        _available_entrypoint_skill_configs={},
     )
 
 
