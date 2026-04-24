@@ -15,7 +15,8 @@ The Soliplex system provides:
 - **Chat Interface**: Interactive chat with AI models
 - **Document Retrieval**: RAG-powered document search and question answering
 - **Multiple Models**: Support for various AI models through OpenAI API
-- **Real-time Responses**: WebSocket-based real-time communication
+- **Real-time Responses**: [AG-UI](https://docs.ag-ui.com/introduction) streams
+  over [SSE](https://fastapi.tiangolo.com/tutorial/server-sent-events/)
 
 ## Tips
 

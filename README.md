@@ -10,7 +10,7 @@ An AI-powered Retrieval-Augmented Generation (RAG) system with a modern web inte
 - **AI Agent System**: Function calling and tool integration for AI agents
 - **OIDC Authentication**: Enterprise SSO with Keycloak integration
 - **Model Context Protocol (MCP)**: Extended AI capabilities through MCP client or exposing Room as MCP server
-- **Real-time Communication**: WebSocket-based conversation streams
+- **Real-time Communication**: [AG-UI](https://docs.ag-ui.com/introduction) streams over [SSE](https://fastapi.tiangolo.com/tutorial/server-sent-events/)
 - **Quiz System**: Custom quizzes with LLM-based evaluation
 - **Observability**: Logfire integration for monitoring
 

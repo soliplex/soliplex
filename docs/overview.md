@@ -71,7 +71,9 @@ The system consists of three main components:
   - OpenAI API integration
   - Document indexing and retrieval
   - Authentication and authorization
-  - Real-time WebSocket communication
+  - Real-time communication using
+    [AG-UI](https://docs.ag-ui.com/introduction) streams over
+    [SSE](https://fastapi.tiangolo.com/tutorial/server-sent-events/)
 
 ### 2. Frontend Client
 
@@ -97,5 +99,6 @@ The Flutter client lives in its own
 - **RAG Capabilities**: Combines document retrieval with AI generation
 - **Multiple AI Models**: Support for OpenAI and local models
 - **Secure Authentication**: OIDC-based user management
-- **Real-time Chat**: WebSocket-powered interactive communication
+- **Real-time Chat**: [AG-UI](https://docs.ag-ui.com/introduction) streams
+  over [SSE](https://fastapi.tiangolo.com/tutorial/server-sent-events/)
 - **Document Management**: Upload, index, and search through documents

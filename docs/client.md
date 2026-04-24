@@ -41,4 +41,4 @@ The client uses:
 - Flutter 3.35+ with Material Design
 - Riverpod for state management
 - `go_router` for navigation
-- WebSocket connections for real-time chat
+- [AG-UI](https://docs.ag-ui.com/introduction) streams over [SSE](https://fastapi.tiangolo.com/tutorial/server-sent-events/)
