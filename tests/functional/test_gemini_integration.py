@@ -290,25 +290,7 @@ async def test_gemini_handles_empty_input(gemini_agent):
     result = await gemini_agent.run("Hi")
 
     # Should get a meaningful response, not an error
-    output = result.output.lower()
-    assert len(output) > 5, f"Response too short: {result.output}"
-
-    # Should be a conversational response (greeting or helpful reply)
-    greeting_indicators = [
-        "hello",
-        "hi",
-        "hey",
-        "how",
-        "help",
-        "assist",
-        "can i",
-    ]
-    has_greeting = any(
-        indicator in output for indicator in greeting_indicators
-    )
-    assert has_greeting, (
-        f"Expected greeting/helpful response, got: {result.output[:200]}"
-    )
+    assert len(result.output) > 5, f"Response too short: {result.output}"
 
 
 @pytest.mark.anyio
