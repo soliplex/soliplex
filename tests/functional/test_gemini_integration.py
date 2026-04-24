@@ -51,7 +51,7 @@ def anyio_backend():
     return "asyncio"
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 async def close_cached_httpx_client(anyio_backend, monkeypatch):
     """Track and close cached httpx clients created during each test.
 
@@ -99,7 +99,7 @@ def gemini_room_config():
 
 
 @pytest.fixture
-def gemini_agent(gemini_room_config):
+def gemini_agent(gemini_room_config, close_cached_httpx_client):
     """Get the gemini_flash agent configured for testing.
 
     Uses function scope to ensure fresh httpx clients per test,
@@ -366,7 +366,9 @@ async def test_gemini_agent_configuration(gemini_agent):
 
 @pytest.mark.anyio
 @pytest.mark.needs_llm
-async def test_gemini_safety_filter(gemini_room_config):
+async def test_gemini_safety_filter(
+    gemini_room_config, close_cached_httpx_client
+):
     """Verify graceful handling of safety filter rejection.
 
     This test mocks the model to simulate a safety filter rejection
@@ -402,7 +404,7 @@ async def test_gemini_safety_filter(gemini_room_config):
 
 
 @pytest.fixture
-def gemini_app():
+def gemini_app(close_cached_httpx_client):
     config_routing.register_default_routers()
     app = main.create_app("example/installation.yaml", no_auth_mode=True)
     config_routing.add_registered_routers(app)
