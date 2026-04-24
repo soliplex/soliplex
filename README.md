@@ -273,15 +273,15 @@ See `example/` directory for sample configurations.
 
 ### Environment Variables
 
-See the [environment](environment.md) docs for an explanation of when to
-configure Soliplex using OS environment variables.
+See the [environment](docs/server/environment.md) docs for an explanation
+of when to configure Soliplex using OS environment variables.
 
 ## Documentation
 
 Comprehensive documentation is available in the `docs/` directory:
 
 - **[Prerequisites Guide](docs/prerequisites.md)** - Step-by-step installation checklist
-- **[Server Setup](docs/server.md)** - Backend server configuration and CLI reference
+- **[Server Setup](docs/server/index.md)** - Backend server configuration and CLI reference
 - **[Client Setup](docs/client.md)** - Frontend Flutter application setup
 - **[Docker Deployment](docs/docker.md)** - Complete Docker and docker-compose guide
 - **[RAG Setup](docs/rag.md)** - RAG database initialization and management

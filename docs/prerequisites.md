@@ -184,7 +184,7 @@ If using Option 2, configure `example/haiku.rag.yaml` to use remote processing.
 
 ### Step 7: Configure Environment Variables
 
-See [environment](environment.md) for an explanation of when to
+See [this page](server/environment.md) for an explanation of when to
 configure Soliplex using OS environment variables.
 
 1. **Copy example environment file**

@@ -163,7 +163,7 @@ fallback `random_chars` source:
 
 but this configuration should not be used where sessions must survive
 a server restart (the session token will be regenerated), nor when [running
-behind a load balancer](../server.md#running-behind-a-load-balancer).
+behind a load balancer](../server/index.md#running-behind-a-load-balancer).
 
 ### `URL_SAFE_TOKEN_SECRET`
 
@@ -213,7 +213,7 @@ fallback `random_chars` source:
 
 but this configuration should not be used where sessions must survive
 a server restart (the session token will be regenerated), nor when [running
-behind a load balancer](../server.md#running-behind-a-load-balancer).
+behind a load balancer](../server/index.md#running-behind-a-load-balancer).
 
 ## Checking Configured Secrets
 

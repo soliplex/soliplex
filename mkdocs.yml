@@ -59,7 +59,10 @@ nav:
   - Home: index.md
   - Overview: overview.md
   - Setup:
-      - Server: server.md
+      - Prerequisites: prerequisites.md
+      - Server:
+        - Overview: server/index.md
+        - Environment Variables: server/environment.md
       - Client: client.md
       - Docker: docker.md
       - RAG DB: rag.md
@@ -80,7 +83,6 @@ nav:
       - SQLAlchemy DBURIs: config/dburis.md
       - AI Skills: config/skills.md
   - Usage: usage.md
-  - Environment Variables: environment.md
 markdown_extensions:
   - admonition
   - attr_list

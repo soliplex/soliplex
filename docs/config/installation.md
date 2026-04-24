@@ -55,6 +55,10 @@ environment:
 See [this page](environment.md) for documentation on configuring the
 installation environment.
 
+**Note:** this configuration is distinct from adding variables to
+the operating system environment: see [this page](../server/environment.md)
+for that topic.
+
 ## `haiku.rag` Configuration File
 
 The `haiku_rag_config_file` entry points to a YAML file containing

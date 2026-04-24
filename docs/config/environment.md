@@ -52,6 +52,10 @@ Soliplex use these sources, in order of precedence:
 - Value explicitly configured in the installation
 - Value from the OS environment
 
+See the [server environment](../server/environment.md) page for examples
+of configuring operating system environment variables (versus this page,
+which explains how they are used within the Soliplex configuration).
+
 ## Checking Configured Environment Values
 
 The `soliplex-cli` application has a sub-command, `list-environment`.

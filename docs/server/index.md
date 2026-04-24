@@ -17,7 +17,7 @@ to OpenAI and provides RAG functionality.
   A token from logfire ([login here](https://logfire-us.pydantic.dev/login))
   allows for visibility into the application. See:
 
-- [Soliplex Logfire configuration](config/logfire.md)
+- [Soliplex Logfire configuration](../config/logfire.md)
 
 - [Logfire docs on FastAPI integration](https://logfire.pydantic.dev/docs/integrations/web-frameworks/fastapi/)
 
@@ -263,21 +263,21 @@ when running multiple Soliplex server instances behind a load balancer:
   storage (the default), or a filesystem-based storage (`sqlite` does not
   support multiple writers to a shared filesystem database).  Instead,
   configure the SQLAlchemy using a supported relational database
-  server, as described [here](config/dburis.md#thread_persistence_dburi).
+  server, as described [here](../config/dburis.md#thread_persistence_dburi).
 
 - The SQLAlchemy DBURI used to store authorization data should not
   be configured to use the `sqlite` engine, using either the RAM-based
   storage (the default), or a filesystem-based storage (`sqlite` does not
   support multiple writers to a shared filesystem database).  Instead,
   configure the SQLAlchemy using a supported relational database
-  server, as described [here](config/dburis.md#authorization_dburi).
+  server, as described [here](../config/dburis.md#authorization_dburi).
 
-- The [secret](config/secrets.md#session_middleware_token) used to manage
+- The [secret](../config/secrets.md#session_middleware_token) used to manage
   session encryption should not be configured to use a `random_chars` secret
   source, because that value cannot be shared across Soliplex server
   instances.
 
-- The [secret](config/secrets.md#url_safe_token_secret) used to generate
+- The [secret](../config/secrets.md#url_safe_token_secret) used to generate
   bearer tokens for MCP clients should not be configured to use the
   `random_chars` secret source, because that value cannot be shared across
   Soliplex server instances.
