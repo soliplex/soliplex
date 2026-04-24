@@ -73,7 +73,10 @@ The system consists of three main components:
   - Authentication and authorization
   - Real-time WebSocket communication
 
-### 2. Frontend Client (`src/flutter/`)
+### 2. Frontend Client
+
+The Flutter client lives in its own
+[repository](https://github.com/soliplex/frontend).
 
 - **Technology**: Flutter web application
 - **Purpose**: Provides user interface for chat and document interaction

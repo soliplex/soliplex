@@ -11,7 +11,7 @@ chat, and multi-provider LLM support.
 
 **This repository contains the Python backend and TUI only.** The Flutter
 frontend lives in a sibling repo at
-<https://github.com/soliplex/flutter> with its own tooling.
+<https://github.com/soliplex/frontend> with its own tooling.
 
 See `AGENTS.md` for deeper guidance on adding tools, rooms, and API
 endpoints.

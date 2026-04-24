@@ -345,10 +345,12 @@ If you want to use the web UI:
    # Follow instructions at https://flutter.dev/docs/get-started/install
    ```
 
-2. **Navigate to Flutter directory**
+2. **Clone the Flutter client repository**
 
    ```bash
-   cd src/flutter
+   cd ..
+   git clone https://github.com/soliplex/frontend.git
+   cd frontend/
    ```
 
 3. **Install dependencies**

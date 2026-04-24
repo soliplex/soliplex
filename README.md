@@ -38,7 +38,10 @@ Key modules:
 - `mcp_server.py` / `mcp_client.py` - Model Context Protocol integration
 - `tui/` - Terminal user interface
 
-### Frontend (`/src/flutter/`)
+### Frontend
+
+The Flutter client lives in its own
+[repository](https://github.com/soliplex/frontend).
 
 **Flutter 3.35+ / Dart 3.10.0+**
 
@@ -48,13 +51,6 @@ Key modules:
 - **Authentication**: Flutter AppAuth (9.0.1) for OIDC
 - **Real-time**: WebSocket communication
 - **Secure Storage**: Flutter Secure Storage for credentials
-
-Key files:
-- `main.dart` - Application entry point
-- `soliplex_client.dart` - Backend API client
-- `oidc_client.dart` - OIDC authentication client
-- `controllers.dart` - Riverpod state management
-- `configure.dart` - Configuration UI
 
 ### TUI (`src/soliplex/tui`)
 

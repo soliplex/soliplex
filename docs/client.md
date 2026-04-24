@@ -14,8 +14,8 @@ interface for interacting with the RAG system.
 1. Clone the client repository:
 
    ```bash
-   git clone git@github.com:soliplex/soliplex.git
-   cd soliplex/src/flutter
+   git clone git@github.com:soliplex/frontend.git
+   cd frontend/
    ```
 
 2. Install Flutter dependencies:
