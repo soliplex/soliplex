@@ -62,6 +62,7 @@ nav:
       - Prerequisites: prerequisites.md
       - Server:
         - Overview: server/index.md
+        - CLI: server/cli.md
         - Environment Variables: server/environment.md
       - Client: client.md
       - Docker: docker.md

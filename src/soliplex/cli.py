@@ -622,6 +622,143 @@ def check_config(
 
 
 @the_cli.command(
+    "config",
+)
+def config_as_yaml(
+    ctx: typer.Context,
+    installation_path: installation_path_type,
+):
+    """Export the installation config as YAML"""
+    the_installation = get_installation(installation_path)
+
+    try:
+        the_installation.resolve_secrets()
+    except secrets.SecretsNotFound:
+        pass
+
+    try:
+        the_installation.resolve_environment()
+    except config_installation.MissingEnvVars:
+        pass
+
+    exported_yaml = yaml.dump(
+        the_installation._config.as_yaml,
+        sort_keys=False,
+    )
+
+    the_console.print(f"#{'-' * 78}")
+    the_console.print(f"# Source: {installation_path}")
+    the_console.print(f"#{'-' * 78}")
+    the_console.print(exported_yaml)
+
+
+@the_cli.command(
+    "agui-feature-schemas",
+)
+def agui_feature_schemas(
+    ctx: typer.Context,
+    installation_path: installation_path_type,
+):
+    """Export AG-UI feature JSON schemas as JSON"""
+    the_installation = get_installation(installation_path)
+
+    feature_schemas = {
+        feature.name: {
+            "source": str(feature.source),
+            "json_schema": feature.json_schema,
+        }
+        for feature in the_installation._config.agui_features
+    }
+
+    print(json.dumps(feature_schemas))
+
+
+@the_cli.command(
+    "pull-models",
+)
+def pull_models(
+    ctx: typer.Context,
+    installation_path: installation_path_type,
+    ollama_url: str = typer.Option(
+        None,
+        "-u",
+        "--ollama-url",
+        help=(
+            "Ollama API base URL (defaults to 'OLLAMA_BASE_URL' from "
+            "installation enviroment)"
+        ),
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "-n",
+        "--dry-run",
+        help="Show which models would be pulled without actually pulling them",
+    ),
+):
+    """Pull Ollama models referenced in the installation configuration"""
+
+    def on_status(msg, is_error=False):
+        style = "red" if is_error else None
+        the_console.print(f"  {msg}", style=style)
+
+    the_console.line()
+    the_console.rule("Scanning for Ollama models")
+    the_console.line()
+
+    the_installation = get_installation(installation_path)
+    the_installation.resolve_environment()
+    all_provider_info = the_installation.all_provider_info
+    ollama_url_models = all_provider_info["ollama"]
+
+    if ollama_url is not None:
+        ollama_url_models = {
+            ollama_url: ollama_url_models.get(ollama_url, set())
+        }
+
+    for url, model_names in ollama_url_models.items():
+        if not model_names:
+            the_console.rule(f"No Ollama models for URL: {url}")
+            the_console.line()
+
+        else:
+            rest_api = ollama.REST_API(url)
+
+            the_console.rule(f"Pulling Ollama models for URL: {url}")
+            the_console.line()
+            the_console.print(
+                f"Found {len(model_names)} unique Ollama model(s)"
+            )
+            the_console.line()
+
+            for model_name in sorted(model_names):
+                the_console.print(f"  - {model_name}")
+
+            if not dry_run:
+                success_count = 0
+
+                for model_name in sorted(model_names):
+                    the_console.print(f"\nPulling: {model_name}")
+
+                    try:
+                        result = rest_api.pull_model(model_name, stream=False)
+                        status_text = result["status"]
+                    except requests.RequestException as exc:
+                        on_status(str(exc.args), True)
+                    except KeyError:
+                        on_status("No status returned", True)
+                    else:
+                        on_status(status_text, False)
+                        success_count += 1
+
+                the_console.line()
+                the_console.rule(
+                    f"Pulled {success_count}/{len(model_names)} model(s) "
+                    "successfully"
+                )
+                the_console.line()
+
+
+@the_cli.command(
     "list-secrets",
 )
 def list_secrets(
@@ -826,37 +963,6 @@ def list_skills(
         the_console.line()
 
 
-@the_cli.command(
-    "config",
-)
-def config_as_yaml(
-    ctx: typer.Context,
-    installation_path: installation_path_type,
-):
-    """Export the installatin config as YAML"""
-    the_installation = get_installation(installation_path)
-
-    try:
-        the_installation.resolve_secrets()
-    except secrets.SecretsNotFound:
-        pass
-
-    try:
-        the_installation.resolve_environment()
-    except config_installation.MissingEnvVars:
-        pass
-
-    exported_yaml = yaml.dump(
-        the_installation._config.as_yaml,
-        sort_keys=False,
-    )
-
-    the_console.print(f"#{'-' * 78}")
-    the_console.print(f"# Source: {installation_path}")
-    the_console.print(f"#{'-' * 78}")
-    the_console.print(exported_yaml)
-
-
 def _check_ram_dburi(dburi: str, command: str):
     if dburi == config_installation.SYNC_MEMORY_ENGINE_URL:
         the_console.rule("Authorization DB is RAM-based")
@@ -912,7 +1018,7 @@ def clear_admin_users(
         help="Skip check for RAM-based DB",
     ),
 ):
-    """Clear admin user from the installation's authz database."""
+    """Clear admin users from the installation's authz database."""
     the_installation = get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
 
@@ -1029,7 +1135,7 @@ def clear_room_authz(
         help="Skip check for RAM-based DB",
     ),
 ):
-    """Show room ACL entries defined in the installation's authz database."""
+    """Clear room ACL entries from the installation's authz database."""
     the_installation = get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
 
@@ -1128,112 +1234,6 @@ def add_room_user(
         session.commit()
 
     _dump_room_policy(session, room_id)
-
-
-@the_cli.command(
-    "agui-feature-schemas",
-)
-def agui_feature_schemas(
-    ctx: typer.Context,
-    installation_path: installation_path_type,
-):
-    """Export the installatin config as YAML"""
-    the_installation = get_installation(installation_path)
-
-    feature_schemas = {
-        feature.name: {
-            "source": str(feature.source),
-            "json_schema": feature.json_schema,
-        }
-        for feature in the_installation._config.agui_features
-    }
-
-    print(json.dumps(feature_schemas))
-
-
-@the_cli.command(
-    "pull-models",
-)
-def pull_models(
-    ctx: typer.Context,
-    installation_path: installation_path_type,
-    ollama_url: str = typer.Option(
-        None,
-        "-u",
-        "--ollama-url",
-        help=(
-            "Ollama API base URL (defaults to 'OLLAMA_BASE_URL' from "
-            "installation enviroment)"
-        ),
-    ),
-    dry_run: bool = typer.Option(
-        False,
-        "-n",
-        "--dry-run",
-        help="Show which models would be pulled without actually pulling them",
-    ),
-):
-    """Pull Ollama models referenced in the installation configuration"""
-
-    def on_status(msg, is_error=False):
-        style = "red" if is_error else None
-        the_console.print(f"  {msg}", style=style)
-
-    the_console.line()
-    the_console.rule("Scanning for Ollama models")
-    the_console.line()
-
-    the_installation = get_installation(installation_path)
-    the_installation.resolve_environment()
-    all_provider_info = the_installation.all_provider_info
-    ollama_url_models = all_provider_info["ollama"]
-
-    if ollama_url is not None:
-        ollama_url_models = {
-            ollama_url: ollama_url_models.get(ollama_url, set())
-        }
-
-    for url, model_names in ollama_url_models.items():
-        if not model_names:
-            the_console.rule(f"No Ollama models for URL: {url}")
-            the_console.line()
-
-        else:
-            rest_api = ollama.REST_API(url)
-
-            the_console.rule(f"Pulling Ollama models for URL: {url}")
-            the_console.line()
-            the_console.print(
-                f"Found {len(model_names)} unique Ollama model(s)"
-            )
-            the_console.line()
-
-            for model_name in sorted(model_names):
-                the_console.print(f"  - {model_name}")
-
-            if not dry_run:
-                success_count = 0
-
-                for model_name in sorted(model_names):
-                    the_console.print(f"\nPulling: {model_name}")
-
-                    try:
-                        result = rest_api.pull_model(model_name, stream=False)
-                        status_text = result["status"]
-                    except requests.RequestException as exc:
-                        on_status(str(exc.args), True)
-                    except KeyError:
-                        on_status("No status returned", True)
-                    else:
-                        on_status(status_text, False)
-                        success_count += 1
-
-                the_console.line()
-                the_console.rule(
-                    f"Pulled {success_count}/{len(model_names)} model(s) "
-                    "successfully"
-                )
-                the_console.line()
 
 
 if __name__ == "__main__":
