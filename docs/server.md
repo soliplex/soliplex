@@ -250,7 +250,7 @@ curl -X 'GET' \
 To check server health:
 
 ```bash
-curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/api/ok
 ```
 
 ### Running Behind a Load Balancer

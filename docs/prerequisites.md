@@ -326,7 +326,7 @@ In a new terminal, test the API:
 
 ```bash
 # Test health endpoint
-curl http://localhost:8000/health
+curl http://localhost:8000/api/ok
 
 # List rooms
 curl http://localhost:8000/api/v1/rooms
