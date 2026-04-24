@@ -751,7 +751,7 @@ def room_ic():
         quizzes_paths=[],
         _available_filesystem_skill_configs={},
         _available_entrypoint_skill_configs={},
-        _skill_configs={},
+        _resolved_skill_configs={},
     )
 
 
@@ -849,7 +849,7 @@ def test_room_from_config_w_fs_skills(
     default_agent,
     filesystem_skill_config,
 ):
-    room_ic._skill_configs[SKILL_NAME] = filesystem_skill_config
+    room_ic._resolved_skill_configs[SKILL_NAME] = filesystem_skill_config
 
     room_config = config_rooms.RoomConfig(
         id=ROOM_ID,
@@ -875,7 +875,7 @@ def test_room_from_config_w_ep_skills(
     default_agent,
     entrypoint_skill_config,
 ):
-    room_ic._skill_configs[SKILL_NAME] = entrypoint_skill_config
+    room_ic._resolved_skill_configs[SKILL_NAME] = entrypoint_skill_config
 
     room_config = config_rooms.RoomConfig(
         id=ROOM_ID,

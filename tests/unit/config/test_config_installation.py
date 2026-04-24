@@ -1597,8 +1597,6 @@ def test_installationconfig_from_yaml(
         assert exc.value._config_path == config_path
 
     else:
-        patched = {"__doc__": "test_installationconfig_from_yaml"}
-
         if "meta" in expected_kw:
             icmeta_kw = expected_kw.pop("meta")
             expected_kw["meta"] = config_meta.InstallationConfigMeta(
@@ -1620,30 +1618,10 @@ def test_installationconfig_from_yaml(
                 config_path.parent / expected_kw["_haiku_rag_config_file"]
             )
 
-        lfssc = mock.Mock(spec_set=())
-        fs_skill_config = mock.create_autospec(
-            config_skills.FilesystemSkillConfig
+        expected = config_installation.InstallationConfig(
+            **expected_kw,
+            _config_path=config_path,
         )
-        lfssc.return_value = {
-            test_skills.FILESYSTEM_SKILL_NAME: fs_skill_config,
-        }
-        lepsc = mock.Mock(spec_set=())
-        ep_skill_config = mock.create_autospec(
-            config_skills.EntrypointSkillConfig
-        )
-        lepsc.return_value = {
-            test_skills.ENTRYPOINT_SKILL_NAME: ep_skill_config,
-        }
-
-        if "_skill_configs" in expected_kw:
-            patched["_load_filesystem_skill_configs"] = lfssc
-            patched["_load_entrypoint_skill_configs"] = lepsc
-
-        with mock.patch.multiple(config_installation, **patched):
-            expected = config_installation.InstallationConfig(
-                **expected_kw,
-                _config_path=config_path,
-            )
 
         if "upload_path" in expected_kw:
             exp_upload_path = temp_dir / expected_kw["upload_path"]
@@ -1680,11 +1658,10 @@ def test_installationconfig_from_yaml(
 
         expected = dataclasses.replace(expected, room_paths=exp_room_paths)
 
-        with mock.patch.multiple(config_installation, **patched):
-            found = config_installation.InstallationConfig.from_yaml(
-                config_path,
-                config_dict,
-            )
+        found = config_installation.InstallationConfig.from_yaml(
+            config_path,
+            config_dict,
+        )
 
         if "secrets" in expected_kw:
             replaced_secrets = []
@@ -2405,9 +2382,9 @@ def test_installationconfig_skill_configs_wo_set():
 def test_installationconfig_skill_configs_w_set():
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
     skill_config = mock.create_autospec(config_skills._SkillConfigModelBase)
-    kw["_skill_configs"] = {
-        test_skills.SKILL_NAME: skill_config,
-    }
+    kw["_skill_configs"] = [
+        {"kind": "filesystem", "skill_name": test_skills.SKILL_NAME},
+    ]
     kw["_available_filesystem_skill_configs"] = {
         test_skills.SKILL_NAME: skill_config,
         "other-skill": object(),
@@ -2417,6 +2394,76 @@ def test_installationconfig_skill_configs_w_set():
     i_config = config_installation.InstallationConfig(**kw)
 
     assert i_config.skill_configs == {test_skills.SKILL_NAME: skill_config}
+
+
+def test_installationconfig_skill_configs_memoized():
+    kw = BARE_INSTALLATION_CONFIG_KW.copy()
+    cached = {"sentinel": object()}
+    kw["_resolved_skill_configs"] = cached
+
+    i_config = config_installation.InstallationConfig(**kw)
+
+    assert i_config.skill_configs == cached
+    assert i_config.skill_configs is not cached  # property returns a copy
+
+
+def test_resolve_skill_configs_empty():
+    assert config_installation.resolve_skill_configs([], {}, {}) == {}
+
+
+def test_resolve_skill_configs_filters_by_kind():
+    fs_skill = object()
+    ep_skill = object()
+    available_fs = {test_skills.FILESYSTEM_SKILL_NAME: fs_skill}
+    available_ep = {test_skills.ENTRYPOINT_SKILL_NAME: ep_skill}
+    explicit = [
+        {
+            "kind": "filesystem",
+            "skill_name": test_skills.FILESYSTEM_SKILL_NAME,
+        },
+        {
+            "kind": "entrypoint",
+            "skill_name": test_skills.ENTRYPOINT_SKILL_NAME,
+        },
+    ]
+
+    resolved = config_installation.resolve_skill_configs(
+        explicit,
+        available_fs,
+        available_ep,
+    )
+
+    assert resolved == {
+        test_skills.ENTRYPOINT_SKILL_NAME: ep_skill,
+        test_skills.FILESYSTEM_SKILL_NAME: fs_skill,
+    }
+
+
+def test_resolve_skill_configs_filesystem_wins_on_name_conflict():
+    fs_skill = object()
+    ep_skill = object()
+    shared = "shared-name"
+    explicit = [
+        {"kind": "entrypoint", "skill_name": shared},
+        {"kind": "filesystem", "skill_name": shared},
+    ]
+
+    resolved = config_installation.resolve_skill_configs(
+        explicit,
+        {shared: fs_skill},
+        {shared: ep_skill},
+    )
+
+    assert resolved == {shared: fs_skill}
+
+
+def test_resolve_skill_configs_unknown_skill_raises():
+    with pytest.raises(KeyError):
+        config_installation.resolve_skill_configs(
+            [{"kind": "filesystem", "skill_name": "missing"}],
+            {},
+            {},
+        )
 
 
 @pytest.mark.parametrize(
