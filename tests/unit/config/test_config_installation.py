@@ -620,6 +620,85 @@ authorization_dburi:
 """
 
 
+def test_check_is_dict_passes_through_dict():
+    value = {"foo": "bar"}
+
+    assert config_installation._check_is_dict(value) is value
+
+
+@pytest.mark.parametrize("not_a_dict", [None, [], "string", 42])
+def test_check_is_dict_raises_on_non_dict(not_a_dict):
+    with pytest.raises(config_exc.NotADict) as exc_info:
+        config_installation._check_is_dict(not_a_dict)
+
+    assert exc_info.value.found == not_a_dict
+
+
+def test_find_configs_yaml_direct_hit(temp_dir):
+    config_file = temp_dir / "target.yaml"
+    config_file.write_text('id: "direct"')
+
+    found = list(
+        config_installation._find_configs_yaml(temp_dir, "target.yaml")
+    )
+
+    assert found == [(config_file, {"id": "direct"})]
+
+
+def test_find_configs_yaml_walks_subdirs(temp_dir):
+    # No direct hit at 'temp_dir/target.yaml', so subdirectories are walked.
+    dotted = temp_dir / ".hidden"
+    dotted.mkdir()
+    (dotted / "target.yaml").write_text('id: "hidden"')
+
+    empty_subdir = temp_dir / "no-config"
+    empty_subdir.mkdir()
+
+    with_config = temp_dir / "has-config"
+    with_config.mkdir()
+    sub_yaml = with_config / "target.yaml"
+    sub_yaml.write_text('id: "sub"')
+
+    found = list(
+        config_installation._find_configs_yaml(temp_dir, "target.yaml")
+    )
+
+    # Dotted dirs skipped; empty subdir skipped via NoSuchConfig/continue;
+    # only the populated subdir yields a result.
+    assert found == [(sub_yaml, {"id": "sub"})]
+
+
+def test_resolve_file_prefix_w_file_prefix(temp_dir):
+    config_path = temp_dir / "installation.yaml"
+    (temp_dir / "some.file").write_text("")
+
+    found = config_installation.resolve_file_prefix(
+        "file:some.file",
+        config_path,
+    )
+
+    assert found == str((temp_dir / "some.file").resolve())
+
+
+def test_resolve_file_prefix_wo_file_prefix(temp_dir):
+    config_path = temp_dir / "installation.yaml"
+
+    found = config_installation.resolve_file_prefix(
+        "plain-string",
+        config_path,
+    )
+
+    assert found == "plain-string"
+
+
+def test_resolve_file_prefix_non_string(temp_dir):
+    config_path = temp_dir / "installation.yaml"
+
+    found = config_installation.resolve_file_prefix(42, config_path)
+
+    assert found == 42
+
+
 @pytest.mark.parametrize(
     "config_yaml, expected_kw",
     [
