@@ -211,12 +211,18 @@ async def test_gemini_streaming_after_tool(gemini_agent):
 
 @pytest.mark.anyio
 @pytest.mark.needs_llm
-@pytest.mark.xfail(
+@pytest.mark.skip(
     reason="message_history not properly respected by Gemini provider",
-    strict=False,
 )
 async def test_gemini_multiturn_recall(gemini_agent):
-    """Verify Gemini remembers context across turns."""
+    """Verify Gemini remembers context across turns.
+
+    TODO: un-mark this test as skipped if / when we have access to
+          an updated model which can actually do the 'remember' bit.
+          See e.g:
+          https://support.google.com/gemini/thread/392675958
+          https://github.com/google-gemini/gemini-cli/issues/13846
+    """
     # Turn 1: Provide information
     result1 = await gemini_agent.run(
         "My secret project code is ALPHA-7. Please remember it."
