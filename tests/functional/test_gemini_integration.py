@@ -88,7 +88,7 @@ async def close_cached_httpx_client(anyio_backend, monkeypatch):
 @pytest.fixture
 def gemini_room_config():
     """Load the gemini_flash room configuration directly."""
-    installation_path = pathlib.Path("example/installation.yaml")
+    installation_path = pathlib.Path("example/functest_w_gemini.yaml")
     installation_config = config_installation.load_installation(
         installation_path,
     )
@@ -386,7 +386,7 @@ async def test_gemini_safety_filter(
 @pytest.fixture
 def gemini_app(close_cached_httpx_client):
     config_routing.register_default_routers()
-    app = main.create_app("example/installation.yaml", no_auth_mode=True)
+    app = main.create_app("example/functest_w_gemini.yaml", no_auth_mode=True)
     config_routing.add_registered_routers(app)
 
     return app
