@@ -2450,12 +2450,15 @@ def test_installationconfig_avl_ep_skill_configs_w_existing(
     assert found["skill_2"] == SC_2
 
 
-def test_installationconfig_skill_configs_wo_set():
+def test_installationconfig_skill_configs_wo_set(no_skill_discovery):
     kw = BARE_INSTALLATION_CONFIG_KW.copy()
 
     i_config = config_installation.InstallationConfig(**kw)
 
     assert i_config.skill_configs == {}
+    # _skill_configs is None → property short-circuits, loaders never run.
+    no_skill_discovery["_load_filesystem_skill_configs"].assert_not_called()
+    no_skill_discovery["_load_entrypoint_skill_configs"].assert_not_called()
 
 
 def test_installationconfig_skill_configs_w_set():
