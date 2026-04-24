@@ -63,7 +63,7 @@ async def close_cached_httpx_client(anyio_backend, monkeypatch):
     """
     created_clients: set[httpx.AsyncClient] = set()
 
-    original_cached_func = pydantic_ai.models._cached_async_http_client
+    original_cached_func = pydantic_ai.models.cached_async_http_client
 
     def tracked_cached_async_http_client(*args, **kwargs):
         client = original_cached_func(*args, **kwargs)
@@ -72,7 +72,7 @@ async def close_cached_httpx_client(anyio_backend, monkeypatch):
 
     monkeypatch.setattr(
         pydantic_ai.models,
-        "_cached_async_http_client",
+        "cached_async_http_client",
         tracked_cached_async_http_client,
     )
 
@@ -83,8 +83,6 @@ async def close_cached_httpx_client(anyio_backend, monkeypatch):
             await client.aclose()
         except RuntimeError:
             pass
-
-    original_cached_func.cache_clear()
 
 
 @pytest.fixture
