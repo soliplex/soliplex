@@ -1174,6 +1174,7 @@ class InstallationConfig:
         self._available_entrypoint_configs = _load_entrypoint_skill_configs(
             self,
         )
+        self._resolved_skill_configs = None
         self._oidc_auth_system_configs = self._load_oidc_auth_system_configs()
         self._room_configs = self._load_room_configs()
         self._completion_configs = self._load_completion_configs()

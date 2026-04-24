@@ -2614,6 +2614,7 @@ def test_installationconfig_reload_configurations(temp_dir):
     kw["_available_filesystem_skill_configs"] = {}
     kw["_available_entrypoint_skill_configs"] = {}
     kw["_skill_configs"] = ()
+    kw["_resolved_skill_configs"] = {"stale": object()}
     i_config = config_installation.InstallationConfig(
         _config_path=temp_dir / "installation.yaml",
         **kw,
@@ -2663,6 +2664,10 @@ def test_installationconfig_reload_configurations(temp_dir):
     config_patch["_load_entrypoint_skill_configs"].assert_called_once_with(
         i_config,
     )
+
+    # Stale resolved-skills cache must be invalidated so the next access
+    # recomputes against the reloaded availability maps.
+    assert i_config._resolved_skill_configs is None
 
 
 @pytest.fixture
