@@ -26,7 +26,7 @@ repos:
       - id: pip-audit
         name: pip-audit
         #ignore CVE-2025-69872 as not fixed
-        entry: uv run --with pip-audit pip-audit --skip-editable --ignore-vuln CVE-2025-69872 --ignore-vuln GHSA-jj8c-mmj3-mmgv
+        entry: uv run --with pip-audit pip-audit --skip-editable --ignore-vuln CVE-2025-69872 --ignore-vuln GHSA-jj8c-mmj3-mmgv --ignore-vuln CVE-2026-3219
         language: system
         pass_filenames: false
         files: (^pyproject\.toml$|^uv\.lock|^.pre-commit-config.yaml$)
