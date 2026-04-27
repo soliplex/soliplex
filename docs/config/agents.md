@@ -74,6 +74,11 @@ agent:
 - `provider_base_url`: a string, is the base API URL for the agent's LLM
   provider.
 
+  If provided, the value can
+  [interpolate](installation.md#installation-environment-interpolation)
+  installation configuration environment variables, e.g.,
+  `"env:MY_PROVIDER_BASE_URL"`.
+
   If not provided, and `provider_type` is set to `"ollama"`, defaults to
   the value configured in the installation environment as `OLLAMA_BASE_URL`
 
