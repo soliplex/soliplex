@@ -543,6 +543,7 @@ def installation_config():
     environ = {"OLLAMA_BASE_URL": OLLAMA_BASE_URL}
     installation = mock.create_autospec(config_installation.InstallationConfig)
     installation.get_environment = environ.get
+    installation.interpolate_environment = lambda to_interp: to_interp
     return installation
 
 

@@ -582,6 +582,7 @@ def test_agentconfig_get_system_prompt(
             assert agent_config.get_system_prompt() is None
 
 
+@pytest.mark.parametrize("w_iconfig", [False, True])
 @pytest.mark.parametrize(
     "provider_type, kw, expected",
     [
@@ -610,13 +611,14 @@ def test_agentconfig_llm_provider_base_url(
     provider_type,
     kw,
     expected,
+    w_iconfig,
 ):
     ic_environ = {
         "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
         "PROVIDER_BASE_URL": PROVIDER_BASE_URL,
     }
 
-    def _resolve_environment(maybe_key):
+    def _interpolate_environment(maybe_key):
         if maybe_key is not None:
             return (
                 ic_environ[maybe_key[4:]]
@@ -625,13 +627,19 @@ def test_agentconfig_llm_provider_base_url(
             )
 
     installation_config.get_environment = ic_environ.get
-    installation_config.resolve_environment = _resolve_environment
+    installation_config.interpolate_environment = _interpolate_environment
+
+    if w_iconfig:
+        w_iconfig_kwargs = {"_installation_config": installation_config}
+    else:
+        w_iconfig_kwargs = {}
+        expected = kw.get("provider_base_url")
 
     aconfig = config_agents.AgentConfig(
         id="test-agent",
         system_prompt="You are a test",
         provider_type=provider_type,
-        _installation_config=installation_config,
+        **w_iconfig_kwargs,
         **kw,
     )
 
@@ -647,7 +655,7 @@ def test_agentconfig_llm_provider_kw_ollama_w_default_base_url(
 ):
     ic_environ = {"OLLAMA_BASE_URL": OLLAMA_BASE_URL}
     installation_config.get_environment = ic_environ.get
-    installation_config.resolve_environment = lambda value: value
+    installation_config.interpolate_environment = lambda value: value
 
     kw = {}
     expected = {
@@ -683,7 +691,7 @@ def test_agentconfig_llm_provider_kw_ollama_w_explicit_base_url(
     installation_config,
     has_pk,
 ):
-    installation_config.resolve_environment = lambda value: value
+    installation_config.interpolate_environment = lambda value: value
 
     kw = {}
     expected = {
@@ -720,7 +728,7 @@ def test_agentconfig_llm_provider_kw_openai_wo_provider_url(
     installation_config,
     has_pk,
 ):
-    installation_config.resolve_environment = lambda value: value
+    installation_config.interpolate_environment = lambda value: value
 
     kw = {}
     expected = {}
@@ -754,7 +762,7 @@ def test_agentconfig_llm_provider_kw_openai_w_provider_url(
     installation_config,
     has_pk,
 ):
-    installation_config.resolve_environment = lambda value: value
+    installation_config.interpolate_environment = lambda value: value
 
     kw = {}
     expected = {
@@ -791,7 +799,7 @@ def test_agentconfig_llm_provider_kw_google(
     installation_config,
     has_pk,
 ):
-    installation_config.resolve_environment = lambda value: value
+    installation_config.interpolate_environment = lambda value: value
 
     kw = {}
     expected = {}
