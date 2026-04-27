@@ -86,7 +86,7 @@ markers = [
 
 [tool.coverage.run]
 omit = [
-    "src/soliplex/cli.py",
+    "src/soliplex/cli/*.py",
     "src/soliplex/examples.py",
     "src/soliplex/tui.py",
 ]
