@@ -22,6 +22,7 @@ SYSTEM_PROMPT = "You are a test"
 MODEL_NAME = "test-model"
 OTHER_MODEL_NAME = "test-model-other"
 PROVIDER_BASE_URL = "https://provider.example.com/api"
+PROVIDER_BASE_URL_VIA_ENV = "env:PROVIDER_BASE_URL"
 OTHER_PROVIDER_BASE_URL = "https://other-provider.example.com/api"
 OLLAMA_BASE_URL = "https://example.com:12345"
 AGUI_FEATURE_NAME = "test-agui-feature"
@@ -581,6 +582,7 @@ def test_agentconfig_get_system_prompt(
             assert agent_config.get_system_prompt() is None
 
 
+@pytest.mark.parametrize("w_iconfig", [False, True])
 @pytest.mark.parametrize(
     "provider_type, kw, expected",
     [
@@ -588,6 +590,11 @@ def test_agentconfig_get_system_prompt(
         (
             config_agents.LLMProviderType.OLLAMA,
             {"provider_base_url": PROVIDER_BASE_URL},
+            PROVIDER_BASE_URL,
+        ),
+        (
+            config_agents.LLMProviderType.OLLAMA,
+            {"provider_base_url": PROVIDER_BASE_URL_VIA_ENV},
             PROVIDER_BASE_URL,
         ),
         (config_agents.LLMProviderType.OPENAI, {}, None),
@@ -604,15 +611,35 @@ def test_agentconfig_llm_provider_base_url(
     provider_type,
     kw,
     expected,
+    w_iconfig,
 ):
-    ic_environ = {"OLLAMA_BASE_URL": OLLAMA_BASE_URL}
+    ic_environ = {
+        "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+        "PROVIDER_BASE_URL": PROVIDER_BASE_URL,
+    }
+
+    def _interpolate_environment(maybe_key):
+        if maybe_key is not None:
+            return (
+                ic_environ[maybe_key[4:]]
+                if maybe_key.startswith("env:")
+                else maybe_key
+            )
+
     installation_config.get_environment = ic_environ.get
+    installation_config.interpolate_environment = _interpolate_environment
+
+    if w_iconfig:
+        w_iconfig_kwargs = {"_installation_config": installation_config}
+    else:
+        w_iconfig_kwargs = {}
+        expected = kw.get("provider_base_url")
 
     aconfig = config_agents.AgentConfig(
         id="test-agent",
         system_prompt="You are a test",
         provider_type=provider_type,
-        _installation_config=installation_config,
+        **w_iconfig_kwargs,
         **kw,
     )
 
@@ -628,6 +655,7 @@ def test_agentconfig_llm_provider_kw_ollama_w_default_base_url(
 ):
     ic_environ = {"OLLAMA_BASE_URL": OLLAMA_BASE_URL}
     installation_config.get_environment = ic_environ.get
+    installation_config.interpolate_environment = lambda value: value
 
     kw = {}
     expected = {
@@ -663,6 +691,8 @@ def test_agentconfig_llm_provider_kw_ollama_w_explicit_base_url(
     installation_config,
     has_pk,
 ):
+    installation_config.interpolate_environment = lambda value: value
+
     kw = {}
     expected = {
         "base_url": f"{PROVIDER_BASE_URL}/v1",
@@ -698,6 +728,8 @@ def test_agentconfig_llm_provider_kw_openai_wo_provider_url(
     installation_config,
     has_pk,
 ):
+    installation_config.interpolate_environment = lambda value: value
+
     kw = {}
     expected = {}
 
@@ -730,6 +762,8 @@ def test_agentconfig_llm_provider_kw_openai_w_provider_url(
     installation_config,
     has_pk,
 ):
+    installation_config.interpolate_environment = lambda value: value
+
     kw = {}
     expected = {
         "base_url": f"{PROVIDER_BASE_URL}/v1",
@@ -765,6 +799,8 @@ def test_agentconfig_llm_provider_kw_google(
     installation_config,
     has_pk,
 ):
+    installation_config.interpolate_environment = lambda value: value
+
     kw = {}
     expected = {}
 

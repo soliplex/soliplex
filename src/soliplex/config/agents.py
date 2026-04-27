@@ -231,14 +231,18 @@ class AgentConfig:
 
     @property
     def llm_provider_base_url(self) -> str | None:
+        ic = self._installation_config
+
+        if ic is None:
+            return self.provider_base_url
+
         if (
             self.provider_type == LLMProviderType.OLLAMA
             and self.provider_base_url is None
         ):
-            ic = self._installation_config
             return ic.get_environment("OLLAMA_BASE_URL")
         else:
-            return self.provider_base_url
+            return ic.interpolate_environment(self.provider_base_url)
 
     @property
     def llm_provider_kw(self) -> dict:
