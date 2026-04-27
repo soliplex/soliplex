@@ -59,6 +59,26 @@ installation environment.
 the operating system environment: see [this page](../server/environment.md)
 for that topic.
 
+### Installation Environment Interpolation
+
+Certain configuration elements can interpolate values from the installation
+configuration's environment, by spelling their own value as
+`"env:SOME_INSTALLATION_ENVIRONMENT_NAME"`.  Fields which support this
+interpolation:
+
+In the main installation configuration:
+
+- `thread_persistence_dburi_sync`
+- `thread_persistence_dburi_async`
+- `authorization_dburi_sync`
+- `authorization_dburi_async`
+
+In the `agent_configs:` stanza of the main installation configuration,
+or in the `agent_config:` stanza of a completion, room, or skill
+configuration:
+
+- `provider_base_url`
+
 ## `haiku.rag` Configuration File
 
 The `haiku_rag_config_file` entry points to a YAML file containing
