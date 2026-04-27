@@ -266,6 +266,7 @@ def test_get_default_agent_from_configs(
     agent_config.kind = "default"
     agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
     agent_config.model_settings = w_model_settings
+    exp_retries = agent_config.retries = 7  # See #926
 
     if w_capabilities:
         capability = mock.create_autospec(ai_capabilities.AbstractCapability)
@@ -319,6 +320,7 @@ def test_get_default_agent_from_configs(
 
     assert akc_kw["instructions"] == exp_instructions
     assert akc_kw["capabilities"] == exp_capabilities
+    assert akc_kw["retries"] == exp_retries
 
     if w_room_skills:
         build_system_prompt.assert_called_once_with(
