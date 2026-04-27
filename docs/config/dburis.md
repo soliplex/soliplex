@@ -111,3 +111,15 @@ authorization_dburi:
   sync: "postgresql://soliplex:secret:POSTGRES_PASSWORD@/soliplex_authorization"
   async: "postgresql+asyncpg://soliplex:secret:POSTGRES_PASSWORD@/soliplex_authorization"
 ```
+
+## Interpolation
+
+Each of the DBURI values can include values
+[interpolated](installation.md#installation-environment-interpolation)
+from the installation configuration's environment.  E.g:
+
+```yaml
+authorization_dburi:
+  sync: "postgresql://env:SOLIPLEX_AUTHZ_USER:secret:POSTGRES_PASSWORD@/env:SOLIPLEX_AUTHZ_DBNAME"
+  async: "postgresql+asyncpg://env:SOLIPLEX_AUTHZ_USER:secret:POSTGRES_PASSWORD@/env:SOLIPLEX_AUTHZ_DBNAME"
+```
