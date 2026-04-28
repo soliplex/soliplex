@@ -224,8 +224,10 @@ section header and an `OK` / error summary for each:
    runtime model.
 7. **Quizzes** — every `*.json` question file under each configured
    quizzes path loads and parses.
-8. **Skills** — every skill found under each configured filesystem
-   skills path passes `skills_ref` validation.
+8. **Skills** — every configured `skill_config` is checked for
+   load-time validation errors, and every skill found under each
+   configured filesystem skills path is run through the full
+   `skills_ref` validator.
 9. **Python logging** — if a `logging_config_file` is configured, it
    parses as YAML and the logging headers / claims maps are printed.
 10. **Logfire** — the Logfire config (if any) is printed for review.
@@ -768,10 +770,12 @@ soliplex-cli audit quizzes example/
 
 ### `audit skills`
 
-List the Haiku skills declared in the installation configuration,
-showing each skill's kind, identifier, and description — or the
-validation errors produced while loading it. (Replaces the deprecated
-`soliplex-cli list-skills`.)
+List the Haiku skills declared in the installation configuration and
+run two complementary validation passes against them: (1) for each
+configured `skill_config`, surface any errors recorded at load time;
+(2) for each `SKILL.md`-bearing directory found under the configured
+filesystem skills paths, run the full `skills_ref` validator.
+(Replaces the deprecated `soliplex-cli list-skills`.)
 
 ```bash
 soliplex-cli audit [OPTIONS] skills [INSTALLATION_CONFIG_PATH]
@@ -788,8 +792,8 @@ See [Group Options](#group-options) for the available `[OPTIONS]`.
 
 #### Output
 
-For each skill declared in the installation, an entry is printed of the
-form:
+The output has two parts. First, each configured skill is listed with
+its kind, identifier, and description:
 
 ```text
 - [ <kind>:<skill_name>  ]
@@ -800,7 +804,7 @@ form:
 discover or load it); `<skill_name>` is the identifier Soliplex uses
 internally.
 
-If a skill failed validation at load time, its description is replaced
+If a skill recorded errors at load time, its description is replaced
 by a list of errors:
 
 ```text
@@ -810,20 +814,28 @@ by a list of errors:
   - <second error message>
 ```
 
-#### Behavior Notes
+Second, each filesystem skills path is walked, and every discovered
+`SKILL.md` directory is run through the `skills_ref` validator:
 
-- **Validation surface is the configured skill list.** This command
-  reports the validation errors recorded on each `skill_config` at load
-  time. For deeper checks (every skill found under each configured
-  filesystem skills path, run through the full `skills_ref` validator),
-  use `audit all`.
+```text
+Filesystem skills path: <path>
+- <skill_dir_name>
+  OK
+```
+
+If validator errors are reported for a discovered directory, its `OK`
+line is replaced by one line per error.
 
 #### Exit Status
 
-- `0` — every declared skill loaded without validation errors.
-- `1` — at least one skill recorded one or more validation errors. In
-  `--quiet` mode, the per-skill error lists are printed as JSON on
-  stdout before exit.
+- `0` — every configured skill loaded cleanly **and** every filesystem
+  skill directory passed the `skills_ref` validator.
+- `1` — at least one configured skill recorded load-time errors, or at
+  least one filesystem skill directory failed validation. In `--quiet`
+  mode, the errors are printed as JSON on stdout before exit, with two
+  top-level keys: `skills` (per-name configured-skill errors) and
+  `skills_filesystem` (per-path filesystem-validator errors). Either
+  key is omitted if its pass produced no errors.
 
 #### Examples
 

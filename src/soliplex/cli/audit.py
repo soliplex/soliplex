@@ -246,25 +246,7 @@ def audit_all(
     tc_line()
     tc_rule("Validating skills")
     tc_line()
-    skills_errors = {}
-
-    for skills_path in the_installation._config.filesystem_skills_paths:
-        tc_print(f"Filesystem skills path: {skills_path}")
-        for skill_path in _find_skill_paths(skills_path):
-            tc_print(f"- {skill_path.name}")
-            skill_errors = skill_validator.validate(skill_path)
-            if skill_errors:
-                sk_errors = skills_errors.setdefault(skill_path, [])
-                for error in skill_errors:
-                    sk_errors.append(str(error))
-
-                    tc_print(f"  {error}")
-            else:
-                tc_print("  OK")
-        tc_line()
-
-    if skills_errors:
-        errors["skills"] = skills_errors
+    errors |= _audit_skills_section(the_installation, tc_print, tc_line)
 
     tc_line()
     tc_rule("Validating Python logging")
@@ -792,6 +774,77 @@ def _find_skill_paths(to_search: pathlib.Path):
                 pass
 
 
+def _invalid_skill_configs(
+    the_installation: installation.Installation,
+) -> dict:
+    skills_errors: dict[str, list[str]] = {}
+
+    available_skills = the_installation._config.skill_configs
+    for skill_name, skill_config in available_skills.items():
+        skill_errors = getattr(skill_config, "errors", None)
+        if skill_errors:
+            skills_errors[skill_name] = [str(e) for e in skill_errors]
+
+    if skills_errors:
+        return {"skills": skills_errors}
+    return {}
+
+
+def _invalid_filesystem_skills(
+    the_installation: installation.Installation,
+) -> dict:
+    fs_errors: dict[str, list[str]] = {}
+
+    for skills_path in the_installation._config.filesystem_skills_paths:
+        for skill_path in _find_skill_paths(skills_path):
+            skill_errors = skill_validator.validate(skill_path)
+            if skill_errors:
+                fs_errors[str(skill_path)] = [str(e) for e in skill_errors]
+
+    if fs_errors:
+        return {"skills_filesystem": fs_errors}
+    return {}
+
+
+def _audit_skills_section(the_installation, tc_print, tc_line) -> dict:
+    """Print combined configured + filesystem skills audit; return errors."""
+    errors: dict = {}
+
+    invalid = _invalid_skill_configs(the_installation)
+    errors |= invalid
+    config_invalid = invalid.get("skills", {})
+
+    available_skills = the_installation._config.skill_configs
+    for skill_name, skill_config in available_skills.items():
+        tc_print(f"- [ {skill_config.kind}:{skill_name}  ]")
+        skill_errors = config_invalid.get(skill_name)
+        if skill_errors:
+            tc_print("  Validation errors:")
+            for error in skill_errors:
+                tc_print(f"  - {error}")
+        else:
+            tc_print(f"  {skill_config.description}")
+        tc_line()
+
+    fs_invalid = _invalid_filesystem_skills(the_installation)
+    errors |= fs_invalid
+    fs_errors_map = fs_invalid.get("skills_filesystem", {})
+
+    for skills_path in the_installation._config.filesystem_skills_paths:
+        tc_print(f"Filesystem skills path: {skills_path}")
+        for skill_path in _find_skill_paths(skills_path):
+            tc_print(f"- {skill_path.name}")
+            path_errors = fs_errors_map.get(str(skill_path))
+            if path_errors:
+                for error in path_errors:
+                    tc_print(f"  {error}")
+            else:
+                tc_print("  OK")
+        tc_line()
+
+    return errors
+
+
 @app.command("skills")
 def audit_skills(
     ctx: typer.Context,
@@ -810,22 +863,7 @@ def audit_skills(
     tc_rule("Configured Skills")
     tc_line()
 
-    errors = {}
-
-    available_skills = the_installation._config.skill_configs
-    for skill_name, skill_config in available_skills.items():
-        tc_print(f"- [ {skill_config.kind}:{skill_name}  ]")
-        skill_errors = getattr(skill_config, "errors", None)
-        if skill_errors:
-            errors.setdefault("skills", {})[skill_name] = [
-                str(e) for e in skill_errors
-            ]
-            tc_print("  Validation errors:")
-            for error in skill_errors:
-                tc_print(f"  - {error}")
-        else:
-            tc_print(f"  {skill_config.description}")
-        tc_line()
+    errors = _audit_skills_section(the_installation, tc_print, tc_line)
 
     _emit_errors(errors, quiet)
 
