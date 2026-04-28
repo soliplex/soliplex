@@ -162,19 +162,26 @@ If the first positional argument to `soliplex-cli audit` does not name
 one of its subcommands (`all`, `installation`, `secrets`, `environment`,
 `oidc`, `rooms`, `completions`, `quizzes`, `skills`, `logging`,
 `logfire`), it is treated as the `INSTALLATION_CONFIG_PATH` argument to
-`audit all`. In other words, the following two invocations are
-equivalent:
+`audit all`. If no positional argument is given at all (e.g. plain
+`soliplex-cli audit`, or `soliplex-cli audit -q`), `audit all` is still
+invoked and resolves `INSTALLATION_CONFIG_PATH` from the
+`SOLIPLEX_INSTALLATION_PATH` environment variable. The following four
+invocations are equivalent (the latter two require the env var to be
+set):
 
 ```bash
 soliplex-cli audit example/minimal.yaml          # preferred
 soliplex-cli audit all example/minimal.yaml
+SOLIPLEX_INSTALLATION_PATH=example/minimal.yaml \
+    soliplex-cli audit
+SOLIPLEX_INSTALLATION_PATH=example/minimal.yaml \
+    soliplex-cli audit all
 ```
 
-The shorthand is the **preferred spelling** for invoking `audit all`.
-Use the explicit `audit all` form only when you need the
-`SOLIPLEX_INSTALLATION_PATH` env-var fallback (the shorthand requires a
-positional argument; with no positional, `soliplex-cli audit` prints
-group help instead).
+The shorthand is the **preferred spelling** for invoking `audit all`
+in every case — with an explicit path or with the env-var fallback.
+Group help (`soliplex-cli audit --help`) is still reachable via the
+explicit `--help` flag.
 
 ### `audit all`
 
@@ -265,13 +272,13 @@ soliplex-cli audit --quiet example/installation.yaml \
   > audit-errors.json || cat audit-errors.json
 ```
 
-Use the env-var form instead of a positional argument (the canonical
-`audit all` spelling is required here, since the shorthand needs a
-positional path):
+Use the env-var form instead of a positional argument (the shorthand
+also works here — with no positional argument, `audit` dispatches to
+`audit all`, which then reads the path from the env var):
 
 ```bash
 export SOLIPLEX_INSTALLATION_PATH=example/minimal.yaml
-soliplex-cli audit all
+soliplex-cli audit
 ```
 
 ### `audit installation`

@@ -74,8 +74,11 @@ def _get_installation(
 class _AuditGroup(TyperGroup):
     """Default to the 'all' subcommand when none is given.
 
-    Allows 'soliplex-cli audit <path>' as shorthand for
-    'soliplex-cli audit all <path>'.
+    Allows 'soliplex-cli audit', 'soliplex-cli audit -q', and
+    'soliplex-cli audit <path>' as shorthands for the corresponding
+    'soliplex-cli audit all ...' invocation. The path-less forms rely
+    on Typer's ``SOLIPLEX_INSTALLATION_PATH`` envvar fallback on
+    'audit all'.
     """
 
     def parse_args(self, ctx, args):
@@ -85,6 +88,8 @@ class _AuditGroup(TyperGroup):
             if token not in self.commands:
                 args = [*args[:i], "all", *args[i:]]
             break
+        else:
+            args = [*args, "all"]
         return super().parse_args(ctx, args)
 
 
@@ -92,7 +97,6 @@ app = typer.Typer(
     name="audit",
     help=AUDIT_HELP,
     cls=_AuditGroup,
-    no_args_is_help=True,
 )
 
 
