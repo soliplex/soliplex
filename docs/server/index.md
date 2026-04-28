@@ -108,7 +108,7 @@ Each installation configuration includes a number of rooms that
    invalid configuration files.
 
    ```bash
-   soliplex-cli check-config example/<installation config>.yaml
+   soliplex-cli audit installation example/<installation config>.yaml
    ```
 
    The secrets used in the your chosen configuration should be exported as
@@ -126,7 +126,7 @@ Each installation configuration includes a number of rooms that
    an `.env` file):
 
    ```bash
-   soliplex-cli check-config example/minimal.yaml
+   soliplex-cli audit installation example/minimal.yaml
    ```
 
 4. Configure any missing secrets, e.g. by sourcing a `.env` file, or
@@ -138,7 +138,7 @@ Each installation configuration includes a number of rooms that
 
    ```bash
    export OLLAMA_BASE_URL=http://<your-ollama-host>:11434
-   soliplex-cli check-config example/
+   soliplex-cli audit installation example/
    ```
 
 ## Running the Server

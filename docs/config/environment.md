@@ -58,12 +58,12 @@ which explains how they are used within the Soliplex configuration).
 
 ## Checking Configured Environment Values
 
-The `soliplex-cli` application has a sub-command, `list-environment`.
+The `soliplex-cli` application has a sub-command, `audit environment`.
 It loads the configuration, attempts to resolve any values not found, and
 reports them.  For example:
 
 ```bash
-$ soliplex-cli list-environment example/installation.yaml
+$ soliplex-cli audit environment example/installation.yaml
 
 ─────────────────────── Configured environment variables ───────────────────────
 

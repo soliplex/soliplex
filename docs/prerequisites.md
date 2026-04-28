@@ -282,7 +282,7 @@ The RAG database MUST be initialized before starting the server.
 Check for any missing requirements:
 
 ```bash
-soliplex-cli check-config example/minimal.yaml
+soliplex-cli audit installation example/minimal.yaml
 ```
 
 This command will report:
@@ -297,7 +297,7 @@ Fix any reported issues before proceeding.
 Verify your room configuration:
 
 ```bash
-soliplex-cli list-rooms example/minimal.yaml
+soliplex-cli audit rooms example/minimal.yaml
 ```
 
 You should see rooms like:
@@ -410,8 +410,8 @@ haiku-rag --config example/haiku.rag.yaml init --db db/rag/rag.lancedb
 haiku-rag --config example/haiku.rag.yaml add-src --db db/rag/rag.lancedb docs/
 
 # Verify
-soliplex-cli check-config example/minimal.yaml
-soliplex-cli list-rooms example/minimal.yaml
+soliplex-cli audit installation example/minimal.yaml
+soliplex-cli audit rooms example/minimal.yaml
 
 # Run
 soliplex-cli serve example/minimal.yaml --no-auth-mode

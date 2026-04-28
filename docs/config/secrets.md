@@ -217,12 +217,12 @@ behind a load balancer](../server/index.md#running-behind-a-load-balancer).
 
 ## Checking Configured Secrets
 
-The `soliplex-cli` application has a sub-command, `list-secrets`.
+The `soliplex-cli` application has a sub-command, `audit secrets`.
 It loads the configuration, attempts to resolve all the secrets, and
 reports those not found.  E.g.:
 
 ```bash
-$ soliplex-cli list-secrets example/installation.yaml
+$ soliplex-cli audit secrets example/installation.yaml
 
 ───────────────────────────── Configured secrets ──────────────────────────────
 

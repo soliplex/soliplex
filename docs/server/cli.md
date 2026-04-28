@@ -9,6 +9,15 @@ These apply to all `soliplex-cli` subcommands:
 - `-h` / `--help` — show help and exit. Note: on the `serve` subcommand the
   short form `-h` is bound to `--host`; use the long form `--help` there.
 
+## A Note on Renamed Commands
+
+Several subcommands were renamed and regrouped in a recent release.
+The previous flat names (`check-config`, `list-secrets`, `pull-models`,
+etc.) are preserved as hidden aliases so existing scripts continue to
+work, but new scripts should use the grouped form documented below.
+See [Deprecated Command Names](#deprecated-command-names) at the bottom
+of this page for the full mapping.
+
 ## `serve` Command
 
 Run the Soliplex FastAPI backend under uvicorn.
@@ -118,33 +127,43 @@ soliplex-cli serve example/installation.yaml \
   --add-admin-user alice@example.com
 ```
 
-## `check-config`
+## `audit`
+
+The `audit` group bundles read-only validation and listing commands —
+each one inspects some aspect of an installation configuration without
+mutating state. Run `soliplex-cli audit --help` for the full list.
+
+This group replaces the deprecated flat `check-config` / `list-*`
+commands; see [Deprecated Command Names](#deprecated-command-names).
+
+### `audit installation`
 
 Validate an installation configuration: resolve secrets and environment
 variables, instantiate the runtime models, and check the referenced
 resources (RAG databases, quiz files, skills, Python logging config).
 Intended to be run before `serve` (or in CI) to catch missing secrets,
-typos, and broken references up front.
+typos, and broken references up front. (Replaces the deprecated
+`soliplex-cli check-config`.)
 
 ```bash
-soliplex-cli check-config [OPTIONS] [INSTALLATION_CONFIG_PATH]
+soliplex-cli audit installation [OPTIONS] [INSTALLATION_CONFIG_PATH]
 ```
 
-### Positional Argument
+#### Positional Argument
 
 - `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
   May be a YAML file, or a directory containing an `installation.yaml`.
   If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
   variable.
 
-### Options
+#### Options
 
 - `-q` / `--quiet` — suppress the per-section progress output; only
   report problems. When combined with a failing run, the errors are
   emitted as a single JSON document on stdout (suitable for piping into
   `jq` or a CI log parser).
 
-### What Gets Checked
+#### What Gets Checked
 
 The command runs the following validation passes in order, printing a
 section header and an `OK` / error summary for each:
@@ -171,40 +190,940 @@ section header and an `OK` / error summary for each:
    skills path passes `skills_ref` validation.
 10. **Logfire** — the Logfire config (if any) is printed for review.
 
-### Exit Status
+#### Exit Status
 
 - `0` — all sections validated successfully.
 - non-zero — at least one section reported an error. In `--quiet` mode,
   the combined error report is printed as JSON before exit.
 
-### Examples
+#### Examples
 
 Validate the minimal example:
 
 ```bash
-soliplex-cli check-config example/minimal.yaml
+soliplex-cli audit installation example/minimal.yaml
 ```
 
 Validate a directory-style installation (uses `example/installation.yaml`
 within the directory):
 
 ```bash
-soliplex-cli check-config example/
+soliplex-cli audit installation example/
 ```
 
 CI-style invocation — only print output on failure, and capture the
 error JSON:
 
 ```bash
-soliplex-cli check-config example/installation.yaml --quiet \
-  > check-config-errors.json || cat check-config-errors.json
+soliplex-cli audit installation example/installation.yaml --quiet \
+  > audit-errors.json || cat audit-errors.json
 ```
 
 Use the env-var form instead of a positional argument:
 
 ```bash
 export SOLIPLEX_INSTALLATION_PATH=example/minimal.yaml
-soliplex-cli check-config
+soliplex-cli audit installation
+```
+
+### `audit secrets`
+
+List the secrets declared in the installation configuration and report
+whether each one resolves. Useful for auditing a configuration — e.g.,
+confirming that every secret listed in the YAML has at least one working
+source — without exposing the values themselves. (Replaces the
+deprecated `soliplex-cli list-secrets`.)
+
+```bash
+soliplex-cli audit secrets [INSTALLATION_CONFIG_PATH]
+```
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Output
+
+For each secret declared in the installation, one line is printed in the
+form:
+
+```text
+- <secret_name>               OK
+- <secret_name>               MISSING
+```
+
+`OK` means the secret resolved via at least one of its configured
+sources; `MISSING` means no source produced a value.
+
+#### Exit Status
+
+- Always `0`. Unlike `audit installation`, this command does not fail
+  the process when secrets are missing — it is strictly a reporting
+  tool. Use `audit installation` (or `audit installation --quiet` in
+  CI) if you need a non-zero exit on missing secrets.
+
+#### Security Notes
+
+Resolved secret values are never printed — only the secret name and a
+status flag. The command is safe to run in shared terminals or to pipe
+into logs.
+
+#### Examples
+
+List secrets for the minimal example:
+
+```bash
+soliplex-cli audit secrets example/minimal.yaml
+```
+
+Audit a directory-style installation:
+
+```bash
+soliplex-cli audit secrets example/
+```
+
+Quick visual check for anything missing:
+
+```bash
+soliplex-cli audit secrets example/installation.yaml | grep MISSING
+```
+
+### `audit environment`
+
+List the environment variables declared in the installation configuration
+along with their resolved values. Useful for confirming that the values
+Soliplex will see at runtime match your expectations, and — with
+`--verbose` — for diagnosing *why* a particular value was chosen when
+multiple sources are configured. (Replaces the deprecated
+`soliplex-cli list-environment`.)
+
+```bash
+soliplex-cli audit environment [OPTIONS] [INSTALLATION_CONFIG_PATH]
+```
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Options
+
+- `-v` / `--verbose` — after each variable, also list every configured
+  source and its candidate value. The selected source is flagged with a
+  leading `*`; others are flagged with a space.
+
+#### Output
+
+For each environment variable declared in the installation, one line is
+printed in the form:
+
+```text
+- <env_var_name>              : <resolved_value>
+```
+
+If a variable cannot be resolved from any of its configured sources, its
+value is shown as `MISSING`.
+
+With `--verbose`, each variable is followed by its source list:
+
+```text
+- SOLIPLEX_EXAMPLE            : http://localhost:11434
+  *<source_type>              : http://localhost:11434
+   <source_type>              : <other_candidate>
+```
+
+The `*` marks the source whose value was selected; each remaining line
+shows a fallback source that was not used.
+
+#### Exit Status
+
+- Always `0`. Like `audit secrets`, this command does not fail the
+  process when variables are missing — it is strictly a reporting tool.
+  Use `audit installation` (or `audit installation --quiet` in CI) if
+  you need a non-zero exit on missing environment variables.
+
+#### Security Notes
+
+Unlike `audit secrets`, this command **does** print resolved values.
+Environment variables in Soliplex are intended for non-secret
+configuration — anything sensitive should be declared as a secret and
+audited with `audit secrets` instead. Avoid piping `audit environment`
+output into shared logs if any of your environment entries happen to
+contain sensitive values.
+
+#### Examples
+
+List environment variables for the minimal example:
+
+```bash
+soliplex-cli audit environment example/minimal.yaml
+```
+
+Show source details to diagnose which value will win:
+
+```bash
+soliplex-cli audit environment example/installation.yaml --verbose
+```
+
+Audit a directory-style installation:
+
+```bash
+soliplex-cli audit environment example/
+```
+
+Quick visual check for anything missing:
+
+```bash
+soliplex-cli audit environment example/installation.yaml | grep MISSING
+```
+
+### `audit oidc`
+
+List the OIDC authentication providers declared in the installation
+configuration. Useful for confirming which providers will be offered on
+the login screen and what server URLs Soliplex will contact for token
+validation. (Replaces the deprecated
+`soliplex-cli list-oidc-auth-providers`.)
+
+```bash
+soliplex-cli audit oidc [INSTALLATION_CONFIG_PATH]
+```
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Output
+
+For each OIDC provider declared in the installation, a two-line entry
+is printed:
+
+```text
+- [ <provider_id> ] <title>:
+  <server_url>
+```
+
+`<provider_id>` is the key Soliplex uses internally to refer to the
+provider; `<title>` is the human-readable label surfaced to clients; and
+`<server_url>` is the OIDC issuer / discovery base URL.
+
+#### Exit Status
+
+- Always `0`. This command is a reporting tool — it does not contact the
+  OIDC servers and does not fail if a provider is misconfigured. Use
+  `audit installation` to validate that each provider's runtime model is
+  well-formed.
+
+#### Examples
+
+List OIDC providers for the full installation example:
+
+```bash
+soliplex-cli audit oidc example/installation.yaml
+```
+
+Audit a directory-style installation:
+
+```bash
+soliplex-cli audit oidc example/
+```
+
+### `audit rooms`
+
+List the rooms declared in the installation configuration, along with
+their names, descriptions, and any RAG databases they reference
+(including a live document count for each). (Replaces the deprecated
+`soliplex-cli list-rooms`.)
+
+```bash
+soliplex-cli audit rooms [INSTALLATION_CONFIG_PATH]
+```
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Output
+
+For each room declared in the installation, an entry is printed of the
+form:
+
+```text
+- [ <room_id> ] <name>:
+  <description>
+
+   Haiku Rag DBs
+   - <source>              : <db_path>                     <N> documents
+```
+
+`<source>` identifies where the RAG database reference came from within
+the room (for example the agent, a named skill, or a named tool);
+`<db_path>` is shown relative to the current working directory.
+
+Rooms with no RAG configuration omit the "Haiku Rag DBs" block. If a
+configured RAG database file cannot be located, an `Invalid Haiku Rag
+configs` line is printed in place of the document listing. If a
+particular database is present but the document count query fails, the
+count column is shown as `error` rather than a number.
+
+#### Behavior Notes
+
+- **Bypasses authorization.** This command deliberately lists every room
+  configured in the installation, regardless of which rooms any given
+  user would be authorized to see via the normal `get_room_configs`
+  path. It reflects configuration, not per-user visibility.
+- **Tolerant of missing environment variables.** Unresolved entries do
+  not abort the listing — use `audit installation` (or
+  `audit environment`) to validate the environment separately.
+- **Opens each RAG database.** The document count is obtained by
+  opening the LanceDB at each configured `db_path` and issuing a
+  `count_documents` query. Expect the command to be slower than the
+  other `audit` subcommands when many rooms have large RAG databases,
+  and to require read access to those files.
+- **Paths are `cwd`-relative.** The `<db_path>` column depends on where
+  you run the command from; two invocations from different directories
+  may show different-looking (but equivalent) paths.
+
+#### Exit Status
+
+- Always `0`. Per-room errors (missing RAG files, failing count queries)
+  are reported inline and do not fail the process. Use
+  `audit installation` if you need a non-zero exit on configuration
+  problems.
+
+#### Examples
+
+List rooms for the minimal example:
+
+```bash
+soliplex-cli audit rooms example/minimal.yaml
+```
+
+Audit a directory-style installation:
+
+```bash
+soliplex-cli audit rooms example/
+```
+
+Just the room IDs and names, skipping the RAG detail:
+
+```bash
+soliplex-cli audit rooms example/installation.yaml | grep '^- \['
+```
+
+### `audit completions`
+
+List the OpenAI-compatible completion endpoints declared in the
+installation configuration. Each completion exposes a Soliplex agent as
+a `/v1/chat/completions`-style endpoint so that existing OpenAI-client
+code can talk to it unchanged. (Replaces the deprecated
+`soliplex-cli list-completions`.)
+
+```bash
+soliplex-cli audit completions [INSTALLATION_CONFIG_PATH]
+```
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Output
+
+For each completion endpoint declared in the installation, one line is
+printed of the form:
+
+```text
+- [ <completion_id> ] <name>:
+```
+
+`<completion_id>` is the key Soliplex uses internally to refer to the
+endpoint; `<name>` is the human-readable label. Descriptions, model
+bindings, and authorization rules are not shown — use
+`audit installation` (or read the YAML directly) to inspect those.
+
+#### Behavior Notes
+
+- **Bypasses authorization.** Like `audit rooms`, this command
+  deliberately lists every completion configured in the installation,
+  regardless of which endpoints any given user would be authorized to
+  reach at runtime. It reflects configuration, not per-user visibility.
+
+#### Exit Status
+
+- Always `0`. Use `audit installation` if you need a non-zero exit on
+  configuration problems.
+
+#### Examples
+
+List completions for the full installation example:
+
+```bash
+soliplex-cli audit completions example/installation.yaml
+```
+
+Audit a directory-style installation:
+
+```bash
+soliplex-cli audit completions example/
+```
+
+### `audit skills`
+
+List the Haiku skills declared in the installation configuration,
+showing each skill's kind, identifier, and description — or the
+validation errors produced while loading it. (Replaces the deprecated
+`soliplex-cli list-skills`.)
+
+```bash
+soliplex-cli audit skills [INSTALLATION_CONFIG_PATH]
+```
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Output
+
+For each skill declared in the installation, an entry is printed of the
+form:
+
+```text
+- [ <kind>:<skill_name>  ]
+  <description>
+```
+
+`<kind>` names the skill source type (e.g., the mechanism used to
+discover or load it); `<skill_name>` is the identifier Soliplex uses
+internally.
+
+If a skill failed validation at load time, its description is replaced
+by a list of errors:
+
+```text
+- [ <kind>:<skill_name>  ]
+  Validation errors:
+  - <first error message>
+  - <second error message>
+```
+
+#### Behavior Notes
+
+- **Reports validation errors inline, not via exit status.** A skill
+  that fails validation is shown with its error list, but the command
+  still exits `0`. Use `audit installation` (which runs the full
+  `skills_ref` validator against every filesystem skills path) if you
+  need a non-zero exit on broken skills.
+
+#### Exit Status
+
+- Always `0`.
+
+#### Examples
+
+List skills for the full installation example:
+
+```bash
+soliplex-cli audit skills example/installation.yaml
+```
+
+Audit a directory-style installation:
+
+```bash
+soliplex-cli audit skills example/
+```
+
+## `admin-users`
+
+The `admin-users` group manages the installation's admin-user table.
+Admin users are entries in the installation's authorization database,
+keyed by email address. A user whose OIDC-authenticated email matches
+an entry in this table is granted administrator privileges by the
+Soliplex authorization policy engine. The subcommands below read from
+and modify that table directly.
+
+This group replaces the deprecated flat `list-admin-users` /
+`add-admin-user` / `clear-admin-users` commands; see
+[Deprecated Command Names](#deprecated-command-names).
+
+All three subcommands share one safety behavior: they only make sense
+against a *persistent* authorization database (configured via
+`authorization_dburi` in the installation YAML). When the installation
+uses the default in-memory SQLite DB (`sqlite://`), the commands
+detect the RAM-based URI, print a note that the operation would be a
+no-op, and exit. Pass `-s` / `--skip-ram-db-check` to override the
+guard — useful mostly for tests and smoke-diagnostics against a
+throwaway installation.
+
+All three commands share the following conventions:
+
+- Positional argument `INSTALLATION_CONFIG_PATH` — path to the
+  installation configuration. May be a YAML file or a directory
+  containing an `installation.yaml`. If omitted, falls back to the
+  `SOLIPLEX_INSTALLATION_PATH` environment variable.
+- Option `-s` / `--skip-ram-db-check` — bypass the RAM-DB guard
+  described above. The command will still exit immediately if the
+  DBURI does not actually point to a writable database, but the
+  no-op guard is skipped.
+- On completion, the current admin-user list is printed as a single
+  JSON object on stdout:
+
+  ```json
+  {"admin_users": ["alice@example.com", "bob@example.com"]}
+  ```
+
+  Emitted via plain `print(...)` (not Rich), so the output pipes
+  cleanly into `jq` or other tooling.
+- Exit status is always `0`, including when the RAM-DB guard fires.
+
+### `admin-users list`
+
+Dump the current set of admin users from the installation's
+authorization database without changing anything. (Replaces the
+deprecated `soliplex-cli list-admin-users`.)
+
+```bash
+soliplex-cli admin-users list [OPTIONS] [INSTALLATION_CONFIG_PATH]
+```
+
+#### Examples
+
+List admin users for a full installation:
+
+```bash
+soliplex-cli admin-users list example/installation.yaml
+```
+
+Extract just the emails with `jq`:
+
+```bash
+soliplex-cli admin-users list example/installation.yaml \
+  | jq -r '.admin_users[]'
+```
+
+### `admin-users add`
+
+Insert a new admin-user row into the installation's authorization
+database and then dump the resulting list. (Replaces the deprecated
+`soliplex-cli add-admin-user`.)
+
+```bash
+soliplex-cli admin-users add [OPTIONS] INSTALLATION_CONFIG_PATH EMAIL
+```
+
+#### Positional Arguments
+
+- `INSTALLATION_CONFIG_PATH` — as described above.
+- `EMAIL` — the email address to grant admin privileges. This is the
+  value Soliplex will match against the authenticated user's
+  OIDC-asserted email; no format validation is performed by the CLI.
+
+#### Behavior Notes
+
+- **No deduplication.** The command inserts a row unconditionally; if
+  the same email is added twice, two rows are created (whether that
+  is rejected or quietly tolerated depends on the schema of the
+  authorization table you have configured). Use `admin-users list`
+  first if you need to check for an existing entry.
+- **Compare with `serve --add-admin-user`.** The `serve` subcommand's
+  `--add-admin-user` option bootstraps a single admin during startup
+  and is incompatible with `--no-auth-mode`. The standalone
+  `admin-users add` subcommand is for offline / ongoing administration
+  and has no such interaction with `--no-auth-mode`.
+
+#### Examples
+
+Grant admin privileges to a new operator:
+
+```bash
+soliplex-cli admin-users add example/installation.yaml alice@example.com
+```
+
+Add an admin against an ephemeral RAM database (will only last for the
+lifetime of the command; mostly useful for tests):
+
+```bash
+soliplex-cli admin-users add --skip-ram-db-check \
+  example/minimal.yaml alice@example.com
+```
+
+### `admin-users clear`
+
+Remove **every** row from the installation's admin-user table, then
+dump the (now empty) list. (Replaces the deprecated
+`soliplex-cli clear-admin-users`.)
+
+```bash
+soliplex-cli admin-users clear [OPTIONS] [INSTALLATION_CONFIG_PATH]
+```
+
+#### Behavior Notes
+
+- **Destructive.** This command is unconditional: there is no
+  per-email filter, no confirmation prompt, and no backup is taken.
+  If you have multiple admins and only want to remove one, use your
+  database's own tooling — this CLI has no single-user-delete
+  subcommand.
+- **Follow-up required.** After clearing, no user is an admin. If the
+  installation relies on admin privileges for its bootstrap flow
+  (e.g. to configure rooms or seed authorization), re-run
+  `admin-users add` before restarting `serve`.
+
+#### Examples
+
+Drop all admins from a production-style installation:
+
+```bash
+soliplex-cli admin-users clear example/installation.yaml
+```
+
+Wipe-and-seed — start from a known state, then add a single admin:
+
+```bash
+soliplex-cli admin-users clear example/installation.yaml
+soliplex-cli admin-users add example/installation.yaml alice@example.com
+```
+
+## `room-authz`
+
+The `room-authz` group manages per-room authorization policies. Room-
+level authorization lets the installation restrict which users can see
+and interact with a given room, on top of the admin-user mechanism
+described above. The subcommands below read from and modify the per-room
+authorization policy stored in the installation's authorization
+database.
+
+This group replaces the deprecated flat `show-room-authz` /
+`add-room-user` / `clear-room-authz` commands; see
+[Deprecated Command Names](#deprecated-command-names).
+
+### The Model in One Paragraph
+
+Each room's authorization is captured by a `RoomPolicy` row plus zero or
+more `ACLEntry` rows attached to it. A `RoomPolicy` has a
+`default_allow_deny` flag (default: `DENY`) that applies when no ACL
+entry matches the requesting user. An `ACLEntry` has an `allow_deny`
+flag plus a discriminator — one of `everyone`, `authenticated`,
+`preferred_username`, or `email` — used to decide whether it matches
+the caller's token. The first matching entry wins; if none match, the
+policy's `default_allow_deny` is used.
+
+The critical distinction to keep in mind is between **no policy row**
+and **an empty policy row**:
+
+- A room with **no `RoomPolicy` row at all** is treated as **public**:
+  every authenticated user is allowed in. This is the default state of
+  every room on a fresh authz database.
+- A room with a `RoomPolicy` row and **no matching ACL entries** falls
+  through to `default_allow_deny`, which defaults to `DENY` — making
+  the room effectively **private**.
+
+The three commands below create, inspect, populate, and delete these
+rows.
+
+### Shared Conventions
+
+All three commands share the following:
+
+- Positional argument `INSTALLATION_CONFIG_PATH` — as documented in the
+  [`admin-users`](#admin-users) section. If omitted, falls back to
+  `SOLIPLEX_INSTALLATION_PATH`.
+- Positional argument `ROOM_ID` — the `id` of a configured room (the
+  same identifier surfaced by `audit rooms`). The commands do **not**
+  validate that `ROOM_ID` matches any currently-configured room; you
+  can create or inspect a policy for a room that doesn't exist in the
+  YAML, and that policy will continue to sit in the DB until you clear
+  it.
+- Option `-s` / `--skip-ram-db-check` — bypass the RAM-DB guard
+  described under [`admin-users`](#admin-users). When the installation's
+  `authorization_dburi` is the in-memory default (`sqlite://`), the
+  commands treat themselves as a no-op and exit; pass this flag to
+  force them to proceed anyway (useful for tests).
+- On completion, the resulting `RoomPolicy` is dumped as a single JSON
+  object on stdout (emitted via plain `print(...)`, not Rich). If no
+  policy row exists for the room, `null` is printed instead.
+
+  Example output:
+
+  ```json
+  {
+    "room_id": "chat",
+    "default_allow_deny": "AllowDeny.DENY",
+    "acl_entries": [
+      {
+        "allow_deny": "AllowDeny.ALLOW",
+        "everyone": false,
+        "authenticated": false,
+        "preferred_username": null,
+        "email": "alice@example.com"
+      }
+    ]
+  }
+  ```
+
+- Exit status is always `0`, including when the RAM-DB guard fires and
+  when no policy row exists for the room.
+
+### `room-authz show`
+
+Dump the current `RoomPolicy` for a single room without changing it.
+(Replaces the deprecated `soliplex-cli show-room-authz`.)
+
+```bash
+soliplex-cli room-authz show [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
+```
+
+#### Examples
+
+Inspect the policy for the `chat` room:
+
+```bash
+soliplex-cli room-authz show example/installation.yaml chat
+```
+
+Extract just the list of allowed emails with `jq`:
+
+```bash
+soliplex-cli room-authz show example/installation.yaml chat \
+  | jq -r '.acl_entries[] | select(.allow_deny == "AllowDeny.ALLOW") | .email'
+```
+
+A `null` response means no `RoomPolicy` row exists yet — i.e. the room
+is in its default public state:
+
+```bash
+$ soliplex-cli room-authz show example/installation.yaml search
+null
+```
+
+### `room-authz add-user`
+
+Grant a single user access to a room by inserting an `ALLOW`-by-`email`
+ACL entry. If no `RoomPolicy` exists for the room yet, one is created
+with the default `default_allow_deny=DENY` — so **the first call to
+`room-authz add-user` against a previously-public room flips the room
+from "public to all authenticated users" to "private except for this
+one user."** Plan accordingly. (Replaces the deprecated
+`soliplex-cli add-room-user`.)
+
+```bash
+soliplex-cli room-authz add-user [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID EMAIL
+```
+
+#### Positional Arguments
+
+- `INSTALLATION_CONFIG_PATH` — as described above.
+- `ROOM_ID` — as described above.
+- `EMAIL` — the email address to grant access. Matched against the
+  authenticated user's OIDC-asserted email at request time.
+
+#### Behavior Notes
+
+- **Idempotent per email.** Any existing ACL entries for the same email
+  on this room (including `DENY` entries) are deleted before the new
+  `ALLOW` entry is inserted. Running the command twice with the same
+  email leaves exactly one row.
+- **ALLOW + email only.** The CLI offers no way to create a `DENY`
+  entry, an `everyone` / `authenticated` entry, or an entry keyed by
+  `preferred_username`. For those, use your database tooling or edit
+  the installation's authorization seed YAML.
+- **Policy creation side effect.** As noted above, the first call may
+  silently convert a public room to a private-with-one-exception room.
+  Run `room-authz show` beforehand if you're uncertain of the current
+  state.
+
+#### Examples
+
+Grant Alice access to the `chat` room:
+
+```bash
+soliplex-cli room-authz add-user example/installation.yaml chat alice@example.com
+```
+
+Re-run with the same email to confirm idempotence (exactly one ACL
+entry for `alice@example.com` remains):
+
+```bash
+soliplex-cli room-authz add-user example/installation.yaml chat alice@example.com
+```
+
+### `room-authz clear`
+
+Delete the `RoomPolicy` row for a single room (cascades to all of its
+`ACLEntry` rows). By default this returns the room to the
+**public-to-all-authenticated-users** state; pass `--make-room-private`
+to replace the deleted policy with a fresh empty one, which leaves the
+room **closed to everyone**. (Replaces the deprecated
+`soliplex-cli clear-room-authz`.)
+
+```bash
+soliplex-cli room-authz clear [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
+```
+
+#### Options
+
+- `--make-room-private` — after deleting the existing policy, create a
+  new empty `RoomPolicy` (no ACL entries, default `DENY`) so that the
+  room remains inaccessible until new ACL entries are added. Without
+  this flag, the command deletes the policy outright and the room
+  reverts to its default **public** state.
+- `-s` / `--skip-ram-db-check` — see the shared conventions above.
+
+#### Behavior Notes
+
+- **Destructive and unconditional.** There is no per-email filter and
+  no confirmation prompt. If you have five users allowed and only want
+  to revoke one, clearing and re-running `room-authz add-user` for the
+  other four is the only route through this CLI.
+- **`--make-room-private` is not a synonym for "deny everyone".** It
+  works by relying on `default_allow_deny=DENY` on the new empty
+  policy, matching the current database default. If a future schema
+  change alters that default, `--make-room-private` will follow the
+  new default rather than hard-coding `DENY`.
+
+#### Examples
+
+Open the `search` room back up to all authenticated users:
+
+```bash
+soliplex-cli room-authz clear example/installation.yaml search
+```
+
+Wipe the ACL on the `chat` room and lock it down completely:
+
+```bash
+soliplex-cli room-authz clear --make-room-private \
+  example/installation.yaml chat
+```
+
+Clear-and-seed — start from a clean private state, then allow one user
+in:
+
+```bash
+soliplex-cli room-authz clear --make-room-private \
+  example/installation.yaml chat
+soliplex-cli room-authz add-user example/installation.yaml chat alice@example.com
+```
+
+## `ollama`
+
+The `ollama` group bundles subcommands that interact with Ollama servers
+referenced by the installation. Currently a single subcommand,
+`ollama pull`.
+
+This group replaces the deprecated flat `pull-models` command; see
+[Deprecated Command Names](#deprecated-command-names).
+
+### `ollama pull`
+
+Scan the installation for every Ollama model referenced by its agents,
+completions, or tools, and pull each model onto the corresponding Ollama
+server via that server's REST API. Intended to preload a fresh Ollama
+deployment so that the first user-facing request against Soliplex
+doesn't have to wait for a cold-start model download. (Replaces the
+deprecated `soliplex-cli pull-models`.)
+
+```bash
+soliplex-cli ollama pull [OPTIONS] [INSTALLATION_CONFIG_PATH]
+```
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Options
+
+- `-u URL` / `--ollama-url URL` — restrict the scan to a single Ollama
+  base URL. If omitted, the command pulls models on *every* Ollama URL
+  referenced by the installation (installations may point different
+  rooms at different Ollama instances). Defaults to the
+  `OLLAMA_BASE_URL` value in the installation's resolved environment.
+- `-n` / `--dry-run` — scan the installation and print the model list
+  per URL without actually pulling. Useful for verifying what *would*
+  happen before committing to potentially slow downloads.
+
+#### Behavior
+
+For each Ollama URL in scope, the command:
+
+1. Reports the URL and the count of distinct models the installation
+   references at it.
+2. Lists the model names in sorted order.
+3. Unless `--dry-run` is set, pulls each model via Ollama's REST API
+   (`stream=False` — each pull blocks until complete, so no per-chunk
+   progress is shown) and prints the final status line returned by
+   Ollama for each model.
+4. Prints a summary in the form
+   `Pulled <success_count>/<total> model(s) successfully`.
+
+If a URL has no models referenced by the installation, a
+`No Ollama models for URL: <url>` line is printed and nothing is
+pulled for that URL.
+
+#### Behavior Notes
+
+- **Network-heavy and slow.** Each `pull` downloads potentially many
+  gigabytes per model. Use `--dry-run` first if you're unsure what the
+  command will fetch.
+- **Per-model errors are reported inline.** Network failures
+  (`requests.RequestException`) and missing-status responses are shown
+  in red alongside the model name and counted against the success
+  total, but do not abort the overall command. Other models on the
+  same URL will still be pulled.
+- **`--ollama-url` filters, it doesn't inject.** If you pass a URL that
+  the installation doesn't reference, the scan finds an empty model
+  set for it and reports "No Ollama models for URL" — the command
+  won't pull arbitrary models to arbitrary servers.
+- **Non-Ollama providers are ignored.** Models bound to OpenAI, Gemini,
+  or any other non-Ollama provider are not considered here; this
+  command deals strictly with the local-model case.
+
+#### Exit Status
+
+- Always `0`, even when some pulls failed. Check the printed summary
+  (`Pulled X/N …`) to detect partial failure. Use `audit installation`
+  if you need a non-zero exit for configuration problems before
+  pulling.
+
+#### Examples
+
+Preview which models would be pulled, without pulling anything:
+
+```bash
+soliplex-cli ollama pull example/installation.yaml --dry-run
+```
+
+Pull every Ollama model referenced by a full installation:
+
+```bash
+soliplex-cli ollama pull example/installation.yaml
+```
+
+Pull models only for a specific Ollama instance (useful when an
+installation references multiple Ollama URLs):
+
+```bash
+soliplex-cli ollama pull example/installation.yaml \
+  --ollama-url http://ollama.internal:11434
 ```
 
 ## `config`
@@ -265,7 +1184,7 @@ installation.
 
 ### Exit Status
 
-- Always `0`. Use `check-config` if you need a non-zero exit on
+- Always `0`. Use `audit installation` if you need a non-zero exit on
   configuration problems.
 
 ### Examples
@@ -360,868 +1279,32 @@ Snapshot the schemas to a file for client-side code generation:
 soliplex-cli agui-feature-schemas example/ > agui-features.json
 ```
 
-## `pull-models`
-
-Scan the installation for every Ollama model referenced by its agents,
-completions, or tools, and pull each model onto the corresponding Ollama
-server via that server's REST API. Intended to preload a fresh Ollama
-deployment so that the first user-facing request against Soliplex
-doesn't have to wait for a cold-start model download.
-
-```bash
-soliplex-cli pull-models [OPTIONS] [INSTALLATION_CONFIG_PATH]
-```
-
-### Positional Argument
-
-- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
-  May be a YAML file, or a directory containing an `installation.yaml`.
-  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
-  variable.
-
-### Options
-
-- `-u URL` / `--ollama-url URL` — restrict the scan to a single Ollama
-  base URL. If omitted, the command pulls models on *every* Ollama URL
-  referenced by the installation (installations may point different
-  rooms at different Ollama instances). Defaults to the
-  `OLLAMA_BASE_URL` value in the installation's resolved environment.
-- `-n` / `--dry-run` — scan the installation and print the model list
-  per URL without actually pulling. Useful for verifying what *would*
-  happen before committing to potentially slow downloads.
-
-### Behavior
-
-For each Ollama URL in scope, the command:
-
-1. Reports the URL and the count of distinct models the installation
-   references at it.
-2. Lists the model names in sorted order.
-3. Unless `--dry-run` is set, pulls each model via Ollama's REST API
-   (`stream=False` — each pull blocks until complete, so no per-chunk
-   progress is shown) and prints the final status line returned by
-   Ollama for each model.
-4. Prints a summary in the form
-   `Pulled <success_count>/<total> model(s) successfully`.
-
-If a URL has no models referenced by the installation, a
-`No Ollama models for URL: <url>` line is printed and nothing is
-pulled for that URL.
-
-### Behavior Notes
-
-- **Network-heavy and slow.** Each `pull` downloads potentially many
-  gigabytes per model. Use `--dry-run` first if you're unsure what the
-  command will fetch.
-- **Per-model errors are reported inline.** Network failures
-  (`requests.RequestException`) and missing-status responses are shown
-  in red alongside the model name and counted against the success
-  total, but do not abort the overall command. Other models on the
-  same URL will still be pulled.
-- **`--ollama-url` filters, it doesn't inject.** If you pass a URL that
-  the installation doesn't reference, the scan finds an empty model
-  set for it and reports "No Ollama models for URL" — the command
-  won't pull arbitrary models to arbitrary servers.
-- **Non-Ollama providers are ignored.** Models bound to OpenAI, Gemini,
-  or any other non-Ollama provider are not considered here; this
-  command deals strictly with the local-model case.
-
-### Exit Status
-
-- Always `0`, even when some pulls failed. Check the printed summary
-  (`Pulled X/N …`) to detect partial failure. Use `check-config` if
-  you need a non-zero exit for configuration problems before pulling.
-
-### Examples
-
-Preview which models would be pulled, without pulling anything:
-
-```bash
-soliplex-cli pull-models example/installation.yaml --dry-run
-```
-
-Pull every Ollama model referenced by a full installation:
-
-```bash
-soliplex-cli pull-models example/installation.yaml
-```
-
-Pull models only for a specific Ollama instance (useful when an
-installation references multiple Ollama URLs):
-
-```bash
-soliplex-cli pull-models example/installation.yaml \
-  --ollama-url http://ollama.internal:11434
-```
-
-## `list-secrets`
-
-List the secrets declared in the installation configuration and report
-whether each one resolves. Useful for auditing a configuration — e.g.,
-confirming that every secret listed in the YAML has at least one working
-source — without exposing the values themselves.
-
-```bash
-soliplex-cli list-secrets [INSTALLATION_CONFIG_PATH]
-```
-
-### Positional Argument
-
-- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
-  May be a YAML file, or a directory containing an `installation.yaml`.
-  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
-  variable.
-
-### Output
-
-For each secret declared in the installation, one line is printed in the
-form:
-
-```text
-- <secret_name>               OK
-- <secret_name>               MISSING
-```
-
-`OK` means the secret resolved via at least one of its configured
-sources; `MISSING` means no source produced a value.
-
-### Exit Status
-
-- Always `0`. Unlike `check-config`, this command does not fail the
-  process when secrets are missing — it is strictly a reporting tool.
-  Use `check-config` (or `check-config --quiet` in CI) if you need a
-  non-zero exit on missing secrets.
-
-### Security Notes
-
-Resolved secret values are never printed — only the secret name and a
-status flag. The command is safe to run in shared terminals or to pipe
-into logs.
-
-### Examples
-
-List secrets for the minimal example:
-
-```bash
-soliplex-cli list-secrets example/minimal.yaml
-```
-
-Audit a directory-style installation:
-
-```bash
-soliplex-cli list-secrets example/
-```
-
-Quick visual check for anything missing:
-
-```bash
-soliplex-cli list-secrets example/installation.yaml | grep MISSING
-```
-
-## `list-environment`
-
-List the environment variables declared in the installation configuration
-along with their resolved values. Useful for confirming that the values
-Soliplex will see at runtime match your expectations, and — with
-`--verbose` — for diagnosing *why* a particular value was chosen when
-multiple sources are configured.
-
-```bash
-soliplex-cli list-environment [OPTIONS] [INSTALLATION_CONFIG_PATH]
-```
-
-### Positional Argument
-
-- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
-  May be a YAML file, or a directory containing an `installation.yaml`.
-  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
-  variable.
-
-### Options
-
-- `-v` / `--verbose` — after each variable, also list every configured
-  source and its candidate value. The selected source is flagged with a
-  leading `*`; others are flagged with a space.
-
-### Output
-
-For each environment variable declared in the installation, one line is
-printed in the form:
-
-```text
-- <env_var_name>              : <resolved_value>
-```
-
-If a variable cannot be resolved from any of its configured sources, its
-value is shown as `MISSING`.
-
-With `--verbose`, each variable is followed by its source list:
-
-```text
-- SOLIPLEX_EXAMPLE            : http://localhost:11434
-  *<source_type>              : http://localhost:11434
-   <source_type>              : <other_candidate>
-```
-
-The `*` marks the source whose value was selected; each remaining line
-shows a fallback source that was not used.
-
-### Exit Status
-
-- Always `0`. Like `list-secrets`, this command does not fail the process
-  when variables are missing — it is strictly a reporting tool. Use
-  `check-config` (or `check-config --quiet` in CI) if you need a
-  non-zero exit on missing environment variables.
-
-### Security Notes
-
-Unlike `list-secrets`, this command **does** print resolved values.
-Environment variables in Soliplex are intended for non-secret
-configuration — anything sensitive should be declared as a secret and
-audited with `list-secrets` instead. Avoid piping `list-environment`
-output into shared logs if any of your environment entries happen to
-contain sensitive values.
-
-### Examples
-
-List environment variables for the minimal example:
-
-```bash
-soliplex-cli list-environment example/minimal.yaml
-```
-
-Show source details to diagnose which value will win:
-
-```bash
-soliplex-cli list-environment example/installation.yaml --verbose
-```
-
-Audit a directory-style installation:
-
-```bash
-soliplex-cli list-environment example/
-```
-
-Quick visual check for anything missing:
-
-```bash
-soliplex-cli list-environment example/installation.yaml | grep MISSING
-```
-
-## `list-oidc-auth-providers`
-
-List the OIDC authentication providers declared in the installation
-configuration. Useful for confirming which providers will be offered on
-the login screen and what server URLs Soliplex will contact for token
-validation.
-
-```bash
-soliplex-cli list-oidc-auth-providers [INSTALLATION_CONFIG_PATH]
-```
-
-### Positional Argument
-
-- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
-  May be a YAML file, or a directory containing an `installation.yaml`.
-  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
-  variable.
-
-### Output
-
-For each OIDC provider declared in the installation, a two-line entry
-is printed:
-
-```text
-- [ <provider_id> ] <title>:
-  <server_url>
-```
-
-`<provider_id>` is the key Soliplex uses internally to refer to the
-provider; `<title>` is the human-readable label surfaced to clients; and
-`<server_url>` is the OIDC issuer / discovery base URL.
-
-### Exit Status
-
-- Always `0`. This command is a reporting tool — it does not contact the
-  OIDC servers and does not fail if a provider is misconfigured. Use
-  `check-config` to validate that each provider's runtime model is
-  well-formed.
-
-### Examples
-
-List OIDC providers for the full installation example:
-
-```bash
-soliplex-cli list-oidc-auth-providers example/installation.yaml
-```
-
-Audit a directory-style installation:
-
-```bash
-soliplex-cli list-oidc-auth-providers example/
-```
-
-## `list-rooms`
-
-List the rooms declared in the installation configuration, along with
-their names, descriptions, and any RAG databases they reference
-(including a live document count for each).
-
-```bash
-soliplex-cli list-rooms [INSTALLATION_CONFIG_PATH]
-```
-
-### Positional Argument
-
-- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
-  May be a YAML file, or a directory containing an `installation.yaml`.
-  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
-  variable.
-
-### Output
-
-For each room declared in the installation, an entry is printed of the
-form:
-
-```text
-- [ <room_id> ] <name>:
-  <description>
-
-   Haiku Rag DBs
-   - <source>              : <db_path>                     <N> documents
-```
-
-`<source>` identifies where the RAG database reference came from within
-the room (for example the agent, a named skill, or a named tool);
-`<db_path>` is shown relative to the current working directory.
-
-Rooms with no RAG configuration omit the "Haiku Rag DBs" block. If a
-configured RAG database file cannot be located, an `Invalid Haiku Rag
-configs` line is printed in place of the document listing. If a
-particular database is present but the document count query fails, the
-count column is shown as `error` rather than a number.
-
-### Behavior Notes
-
-- **Bypasses authorization.** This command deliberately lists every room
-  configured in the installation, regardless of which rooms any given
-  user would be authorized to see via the normal `get_room_configs`
-  path. It reflects configuration, not per-user visibility.
-- **Tolerant of missing environment variables.** Unresolved entries do
-  not abort the listing — use `check-config` (or `list-environment`)
-  to validate the environment separately.
-- **Opens each RAG database.** The document count is obtained by
-  opening the LanceDB at each configured `db_path` and issuing a
-  `count_documents` query. Expect the command to be slower than the
-  other `list-*` subcommands when many rooms have large RAG databases,
-  and to require read access to those files.
-- **Paths are `cwd`-relative.** The `<db_path>` column depends on where
-  you run the command from; two invocations from different directories
-  may show different-looking (but equivalent) paths.
-
-### Exit Status
-
-- Always `0`. Per-room errors (missing RAG files, failing count queries)
-  are reported inline and do not fail the process. Use `check-config`
-  if you need a non-zero exit on configuration problems.
-
-### Examples
-
-List rooms for the minimal example:
-
-```bash
-soliplex-cli list-rooms example/minimal.yaml
-```
-
-Audit a directory-style installation:
-
-```bash
-soliplex-cli list-rooms example/
-```
-
-Just the room IDs and names, skipping the RAG detail:
-
-```bash
-soliplex-cli list-rooms example/installation.yaml | grep '^- \['
-```
-
-## `list-completions`
-
-List the OpenAI-compatible completion endpoints declared in the
-installation configuration. Each completion exposes a Soliplex agent as
-a `/v1/chat/completions`-style endpoint so that existing OpenAI-client
-code can talk to it unchanged.
-
-```bash
-soliplex-cli list-completions [INSTALLATION_CONFIG_PATH]
-```
-
-### Positional Argument
-
-- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
-  May be a YAML file, or a directory containing an `installation.yaml`.
-  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
-  variable.
-
-### Output
-
-For each completion endpoint declared in the installation, one line is
-printed of the form:
-
-```text
-- [ <completion_id> ] <name>:
-```
-
-`<completion_id>` is the key Soliplex uses internally to refer to the
-endpoint; `<name>` is the human-readable label. Descriptions, model
-bindings, and authorization rules are not shown — use `check-config`
-(or read the YAML directly) to inspect those.
-
-### Behavior Notes
-
-- **Bypasses authorization.** Like `list-rooms`, this command
-  deliberately lists every completion configured in the installation,
-  regardless of which endpoints any given user would be authorized to
-  reach at runtime. It reflects configuration, not per-user visibility.
-
-### Exit Status
-
-- Always `0`. Use `check-config` if you need a non-zero exit on
-  configuration problems.
-
-### Examples
-
-List completions for the full installation example:
-
-```bash
-soliplex-cli list-completions example/installation.yaml
-```
-
-Audit a directory-style installation:
-
-```bash
-soliplex-cli list-completions example/
-```
-
-## `list-skills`
-
-List the Haiku skills declared in the installation configuration,
-showing each skill's kind, identifier, and description — or the
-validation errors produced while loading it.
-
-```bash
-soliplex-cli list-skills [INSTALLATION_CONFIG_PATH]
-```
-
-### Positional Argument
-
-- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
-  May be a YAML file, or a directory containing an `installation.yaml`.
-  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
-  variable.
-
-### Output
-
-For each skill declared in the installation, an entry is printed of the
-form:
-
-```text
-- [ <kind>:<skill_name>  ]
-  <description>
-```
-
-`<kind>` names the skill source type (e.g., the mechanism used to
-discover or load it); `<skill_name>` is the identifier Soliplex uses
-internally.
-
-If a skill failed validation at load time, its description is replaced
-by a list of errors:
-
-```text
-- [ <kind>:<skill_name>  ]
-  Validation errors:
-  - <first error message>
-  - <second error message>
-```
-
-### Behavior Notes
-
-- **Reports validation errors inline, not via exit status.** A skill
-  that fails validation is shown with its error list, but the command
-  still exits `0`. Use `check-config` (which runs the full
-  `skills_ref` validator against every filesystem skills path) if you
-  need a non-zero exit on broken skills.
-
-### Exit Status
-
-- Always `0`.
-
-### Examples
-
-List skills for the full installation example:
-
-```bash
-soliplex-cli list-skills example/installation.yaml
-```
-
-Audit a directory-style installation:
-
-```bash
-soliplex-cli list-skills example/
-```
-
-## Admin Users
-
-Admin users are entries in the installation's authorization database,
-keyed by email address. A user whose OIDC-authenticated email matches
-an entry in this table is granted administrator privileges by the
-Soliplex authorization policy engine. The subcommands below read from
-and modify that table directly.
-
-All three share one safety behavior: they only make sense against a
-*persistent* authorization database (configured via
-`authorization_dburi` in the installation YAML). When the installation
-uses the default in-memory SQLite DB (`sqlite://`), the commands
-detect the RAM-based URI, print a note that the operation would be a
-no-op, and exit. Pass `-s` / `--skip-ram-db-check` to override the
-guard — useful mostly for tests and smoke-diagnostics against a
-throwaway installation.
-
-All three commands share the following conventions:
-
-- Positional argument `INSTALLATION_CONFIG_PATH` — path to the
-  installation configuration. May be a YAML file or a directory
-  containing an `installation.yaml`. If omitted, falls back to the
-  `SOLIPLEX_INSTALLATION_PATH` environment variable.
-- Option `-s` / `--skip-ram-db-check` — bypass the RAM-DB guard
-  described above. The command will still exit immediately if the
-  DBURI does not actually point to a writable database, but the
-  no-op guard is skipped.
-- On completion, the current admin-user list is printed as a single
-  JSON object on stdout:
-
-  ```json
-  {"admin_users": ["alice@example.com", "bob@example.com"]}
-  ```
-
-  Emitted via plain `print(...)` (not Rich), so the output pipes
-  cleanly into `jq` or other tooling.
-- Exit status is always `0`, including when the RAM-DB guard fires.
-
-### `list-admin-users`
-
-Dump the current set of admin users from the installation's
-authorization database without changing anything.
-
-```bash
-soliplex-cli list-admin-users [OPTIONS] [INSTALLATION_CONFIG_PATH]
-```
-
-#### Examples
-
-List admin users for a full installation:
-
-```bash
-soliplex-cli list-admin-users example/installation.yaml
-```
-
-Extract just the emails with `jq`:
-
-```bash
-soliplex-cli list-admin-users example/installation.yaml \
-  | jq -r '.admin_users[]'
-```
-
-### `add-admin-user`
-
-Insert a new admin-user row into the installation's authorization
-database and then dump the resulting list.
-
-```bash
-soliplex-cli add-admin-user [OPTIONS] INSTALLATION_CONFIG_PATH EMAIL
-```
-
-#### Positional Arguments
-
-- `INSTALLATION_CONFIG_PATH` — as described above.
-- `EMAIL` — the email address to grant admin privileges. This is the
-  value Soliplex will match against the authenticated user's
-  OIDC-asserted email; no format validation is performed by the CLI.
-
-#### Behavior Notes
-
-- **No deduplication.** The command inserts a row unconditionally; if
-  the same email is added twice, two rows are created (whether that
-  is rejected or quietly tolerated depends on the schema of the
-  authorization table you have configured). Use `list-admin-users`
-  first if you need to check for an existing entry.
-- **Compare with `serve --add-admin-user`.** The `serve` subcommand's
-  `--add-admin-user` option bootstraps a single admin during startup
-  and is incompatible with `--no-auth-mode`. The standalone
-  `add-admin-user` subcommand is for offline / ongoing administration
-  and has no such interaction with `--no-auth-mode`.
-
-#### Examples
-
-Grant admin privileges to a new operator:
-
-```bash
-soliplex-cli add-admin-user example/installation.yaml alice@example.com
-```
-
-Add an admin against an ephemeral RAM database (will only last for the
-lifetime of the command; mostly useful for tests):
-
-```bash
-soliplex-cli add-admin-user --skip-ram-db-check \
-  example/minimal.yaml alice@example.com
-```
-
-### `clear-admin-users`
-
-Remove **every** row from the installation's admin-user table, then
-dump the (now empty) list.
-
-```bash
-soliplex-cli clear-admin-users [OPTIONS] [INSTALLATION_CONFIG_PATH]
-```
-
-#### Behavior Notes
-
-- **Destructive.** This command is unconditional: there is no
-  per-email filter, no confirmation prompt, and no backup is taken.
-  If you have multiple admins and only want to remove one, use your
-  database's own tooling — this CLI has no single-user-delete
-  subcommand.
-- **Follow-up required.** After clearing, no user is an admin. If the
-  installation relies on admin privileges for its bootstrap flow
-  (e.g. to configure rooms or seed authorization), re-run
-  `add-admin-user` before restarting `serve`.
-
-#### Examples
-
-Drop all admins from a production-style installation:
-
-```bash
-soliplex-cli clear-admin-users example/installation.yaml
-```
-
-Wipe-and-seed — start from a known state, then add a single admin:
-
-```bash
-soliplex-cli clear-admin-users example/installation.yaml
-soliplex-cli add-admin-user example/installation.yaml alice@example.com
-```
-
-## Room Authorization
-
-Room-level authorization lets the installation restrict which users can
-see and interact with a given room, on top of the admin-user mechanism
-above. The subcommands below read from and modify the per-room
-authorization policy stored in the installation's authorization
-database.
-
-### The Model in One Paragraph
-
-Each room's authorization is captured by a `RoomPolicy` row plus zero or
-more `ACLEntry` rows attached to it. A `RoomPolicy` has a
-`default_allow_deny` flag (default: `DENY`) that applies when no ACL
-entry matches the requesting user. An `ACLEntry` has an `allow_deny`
-flag plus a discriminator — one of `everyone`, `authenticated`,
-`preferred_username`, or `email` — used to decide whether it matches
-the caller's token. The first matching entry wins; if none match, the
-policy's `default_allow_deny` is used.
-
-The critical distinction to keep in mind is between **no policy row**
-and **an empty policy row**:
-
-- A room with **no `RoomPolicy` row at all** is treated as **public**:
-  every authenticated user is allowed in. This is the default state of
-  every room on a fresh authz database.
-- A room with a `RoomPolicy` row and **no matching ACL entries** falls
-  through to `default_allow_deny`, which defaults to `DENY` — making
-  the room effectively **private**.
-
-The three commands below create, inspect, populate, and delete these
-rows.
-
-### Shared Conventions
-
-All three commands share the following:
-
-- Positional argument `INSTALLATION_CONFIG_PATH` — as documented in the
-  Admin Users section. If omitted, falls back to
-  `SOLIPLEX_INSTALLATION_PATH`.
-- Positional argument `ROOM_ID` — the `id` of a configured room (the
-  same identifier surfaced by `list-rooms`). The commands do **not**
-  validate that `ROOM_ID` matches any currently-configured room; you
-  can create or inspect a policy for a room that doesn't exist in the
-  YAML, and that policy will continue to sit in the DB until you clear
-  it.
-- Option `-s` / `--skip-ram-db-check` — bypass the RAM-DB guard
-  described under [Admin Users](#admin-users). When the installation's
-  `authorization_dburi` is the in-memory default (`sqlite://`), the
-  commands treat themselves as a no-op and exit; pass this flag to
-  force them to proceed anyway (useful for tests).
-- On completion, the resulting `RoomPolicy` is dumped as a single JSON
-  object on stdout (emitted via plain `print(...)`, not Rich). If no
-  policy row exists for the room, `null` is printed instead.
-
-  Example output:
-
-  ```json
-  {
-    "room_id": "chat",
-    "default_allow_deny": "AllowDeny.DENY",
-    "acl_entries": [
-      {
-        "allow_deny": "AllowDeny.ALLOW",
-        "everyone": false,
-        "authenticated": false,
-        "preferred_username": null,
-        "email": "alice@example.com"
-      }
-    ]
-  }
-  ```
-
-- Exit status is always `0`, including when the RAM-DB guard fires and
-  when no policy row exists for the room.
-
-### `show-room-authz`
-
-Dump the current `RoomPolicy` for a single room without changing it.
-
-```bash
-soliplex-cli show-room-authz [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
-```
-
-#### Examples
-
-Inspect the policy for the `chat` room:
-
-```bash
-soliplex-cli show-room-authz example/installation.yaml chat
-```
-
-Extract just the list of allowed emails with `jq`:
-
-```bash
-soliplex-cli show-room-authz example/installation.yaml chat \
-  | jq -r '.acl_entries[] | select(.allow_deny == "AllowDeny.ALLOW") | .email'
-```
-
-A `null` response means no `RoomPolicy` row exists yet — i.e. the room
-is in its default public state:
-
-```bash
-$ soliplex-cli show-room-authz example/installation.yaml search
-null
-```
-
-### `add-room-user`
-
-Grant a single user access to a room by inserting an `ALLOW`-by-`email`
-ACL entry. If no `RoomPolicy` exists for the room yet, one is created
-with the default `default_allow_deny=DENY` — so **the first call to
-`add-room-user` against a previously-public room flips the room from
-"public to all authenticated users" to "private except for this one
-user."** Plan accordingly.
-
-```bash
-soliplex-cli add-room-user [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID EMAIL
-```
-
-#### Positional Arguments
-
-- `INSTALLATION_CONFIG_PATH` — as described above.
-- `ROOM_ID` — as described above.
-- `EMAIL` — the email address to grant access. Matched against the
-  authenticated user's OIDC-asserted email at request time.
-
-#### Behavior Notes
-
-- **Idempotent per email.** Any existing ACL entries for the same email
-  on this room (including `DENY` entries) are deleted before the new
-  `ALLOW` entry is inserted. Running the command twice with the same
-  email leaves exactly one row.
-- **ALLOW + email only.** The CLI offers no way to create a `DENY`
-  entry, an `everyone` / `authenticated` entry, or an entry keyed by
-  `preferred_username`. For those, use your database tooling or edit
-  the installation's authorization seed YAML.
-- **Policy creation side effect.** As noted above, the first call may
-  silently convert a public room to a private-with-one-exception room.
-  Run `show-room-authz` beforehand if you're uncertain of the current
-  state.
-
-#### Examples
-
-Grant Alice access to the `chat` room:
-
-```bash
-soliplex-cli add-room-user example/installation.yaml chat alice@example.com
-```
-
-Re-run with the same email to confirm idempotence (exactly one ACL
-entry for `alice@example.com` remains):
-
-```bash
-soliplex-cli add-room-user example/installation.yaml chat alice@example.com
-```
-
-### `clear-room-authz`
-
-Delete the `RoomPolicy` row for a single room (cascades to all of its
-`ACLEntry` rows). By default this returns the room to the
-**public-to-all-authenticated-users** state; pass `--make-room-private`
-to replace the deleted policy with a fresh empty one, which leaves the
-room **closed to everyone**.
-
-```bash
-soliplex-cli clear-room-authz [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
-```
-
-#### Options
-
-- `--make-room-private` — after deleting the existing policy, create a
-  new empty `RoomPolicy` (no ACL entries, default `DENY`) so that the
-  room remains inaccessible until new ACL entries are added. Without
-  this flag, the command deletes the policy outright and the room
-  reverts to its default **public** state.
-- `-s` / `--skip-ram-db-check` — see the shared conventions above.
-
-#### Behavior Notes
-
-- **Destructive and unconditional.** There is no per-email filter and
-  no confirmation prompt. If you have five users allowed and only want
-  to revoke one, clearing and re-running `add-room-user` for the other
-  four is the only route through this CLI.
-- **`--make-room-private` is not a synonym for "deny everyone".** It
-  works by relying on `default_allow_deny=DENY` on the new empty
-  policy, matching the current database default. If a future schema
-  change alters that default, `--make-room-private` will follow the
-  new default rather than hard-coding `DENY`.
-
-#### Examples
-
-Open the `search` room back up to all authenticated users:
-
-```bash
-soliplex-cli clear-room-authz example/installation.yaml search
-```
-
-Wipe the ACL on the `chat` room and lock it down completely:
-
-```bash
-soliplex-cli clear-room-authz --make-room-private \
-  example/installation.yaml chat
-```
-
-Clear-and-seed — start from a clean private state, then allow one user
-in:
-
-```bash
-soliplex-cli clear-room-authz --make-room-private \
-  example/installation.yaml chat
-soliplex-cli add-room-user example/installation.yaml chat alice@example.com
-```
+## Deprecated Command Names
+
+Prior releases exposed each subcommand as a flat top-level name
+(`check-config`, `list-secrets`, `pull-models`, etc.). Those names are
+preserved as **hidden aliases** — existing scripts continue to work — but
+they no longer appear in `soliplex-cli --help` and may be removed in a
+future major release. New scripts should use the grouped form.
+
+| Deprecated                    | Use instead                |
+|-------------------------------|----------------------------|
+| `check-config`                | `audit installation`       |
+| `list-secrets`                | `audit secrets`            |
+| `list-environment`            | `audit environment`        |
+| `list-oidc-auth-providers`    | `audit oidc`               |
+| `list-rooms`                  | `audit rooms`              |
+| `list-completions`            | `audit completions`        |
+| `list-skills`                 | `audit skills`             |
+| `list-admin-users`            | `admin-users list`         |
+| `add-admin-user`              | `admin-users add`          |
+| `clear-admin-users`           | `admin-users clear`        |
+| `show-room-authz`             | `room-authz show`          |
+| `add-room-user`               | `room-authz add-user`      |
+| `clear-room-authz`            | `room-authz clear`         |
+| `pull-models`                 | `ollama pull`              |
+
+The `serve --add-admin-user` option on the `serve` subcommand is **not**
+affected by this rename: it remains spelled `--add-admin-user` and is
+distinct from the standalone `admin-users add` subcommand (see the note
+under [`admin-users add`](#admin-users-add)).
