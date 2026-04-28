@@ -9,6 +9,7 @@ import typer
 import yaml
 from haiku.rag import client as hr_client
 from skills_ref import validator as skill_validator
+from typer.core import TyperGroup
 
 from soliplex import models
 from soliplex import secrets
@@ -55,9 +56,31 @@ def _find_skill_paths(to_search: pathlib.Path):
 
 AUDIT_HELP = "Audit the installation configuration"
 
+
+class _AuditGroup(TyperGroup):
+    """Default to the 'installation' subcommand when none is given.
+
+    Allows 'soliplex-cli audit <path>' as shorthand for
+    'soliplex-cli audit installation <path>'.
+    """
+
+    def parse_args(self, ctx, args):
+        first_positional = next(
+            (a for a in args if not a.startswith("-")),
+            None,
+        )
+        if (
+            first_positional is not None
+            and first_positional not in self.commands
+        ):
+            args = ["installation", *args]
+        return super().parse_args(ctx, args)
+
+
 app = typer.Typer(
     name="audit",
     help=AUDIT_HELP,
+    cls=_AuditGroup,
     no_args_is_help=True,
 )
 

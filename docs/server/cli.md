@@ -136,6 +136,25 @@ mutating state. Run `soliplex-cli audit --help` for the full list.
 This group replaces the deprecated flat `check-config` / `list-*`
 commands; see [Deprecated Command Names](#deprecated-command-names).
 
+### Default Subcommand
+
+If the first positional argument to `soliplex-cli audit` does not name
+one of its subcommands (`installation`, `secrets`, `environment`,
+`oidc`, `rooms`, `completions`, `skills`), it is treated as the
+`INSTALLATION_CONFIG_PATH` argument to `audit installation`. In other
+words, the following two invocations are equivalent:
+
+```bash
+soliplex-cli audit example/minimal.yaml          # preferred
+soliplex-cli audit installation example/minimal.yaml
+```
+
+The shorthand is the **preferred spelling** for invoking
+`audit installation`. Use the explicit `audit installation` form only
+when you need the `SOLIPLEX_INSTALLATION_PATH` env-var fallback (the
+shorthand requires a positional argument; with no positional,
+`soliplex-cli audit` prints group help instead).
+
 ### `audit installation`
 
 Validate an installation configuration: resolve secrets and environment
@@ -146,8 +165,14 @@ typos, and broken references up front. (Replaces the deprecated
 `soliplex-cli check-config`.)
 
 ```bash
+# preferred:
+soliplex-cli audit [OPTIONS] INSTALLATION_CONFIG_PATH
+# canonical (equivalent) form:
 soliplex-cli audit installation [OPTIONS] [INSTALLATION_CONFIG_PATH]
 ```
+
+See [Default Subcommand](#default-subcommand) for the rules that make
+the first form a shortcut for the second.
 
 #### Positional Argument
 
@@ -201,25 +226,27 @@ section header and an `OK` / error summary for each:
 Validate the minimal example:
 
 ```bash
-soliplex-cli audit installation example/minimal.yaml
+soliplex-cli audit example/minimal.yaml
 ```
 
 Validate a directory-style installation (uses `example/installation.yaml`
 within the directory):
 
 ```bash
-soliplex-cli audit installation example/
+soliplex-cli audit example/
 ```
 
 CI-style invocation — only print output on failure, and capture the
 error JSON:
 
 ```bash
-soliplex-cli audit installation example/installation.yaml --quiet \
+soliplex-cli audit example/installation.yaml --quiet \
   > audit-errors.json || cat audit-errors.json
 ```
 
-Use the env-var form instead of a positional argument:
+Use the env-var form instead of a positional argument (the canonical
+`audit installation` spelling is required here, since the shorthand
+needs a positional path):
 
 ```bash
 export SOLIPLEX_INSTALLATION_PATH=example/minimal.yaml
@@ -1289,7 +1316,7 @@ future major release. New scripts should use the grouped form.
 
 | Deprecated                    | Use instead                |
 |-------------------------------|----------------------------|
-| `check-config`                | `audit installation`       |
+| `check-config`                | `audit` (or `audit installation`) |
 | `list-secrets`                | `audit secrets`            |
 | `list-environment`            | `audit environment`        |
 | `list-oidc-auth-providers`    | `audit oidc`               |
