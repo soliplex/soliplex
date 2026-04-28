@@ -160,9 +160,9 @@ example/minimal.yaml`.
 
 If the first positional argument to `soliplex-cli audit` does not name
 one of its subcommands (`installation`, `secrets`, `environment`,
-`oidc`, `rooms`, `completions`, `skills`), it is treated as the
-`INSTALLATION_CONFIG_PATH` argument to `audit installation`. In other
-words, the following two invocations are equivalent:
+`oidc`, `rooms`, `completions`, `quizzes`, `skills`), it is treated as
+the `INSTALLATION_CONFIG_PATH` argument to `audit installation`. In
+other words, the following two invocations are equivalent:
 
 ```bash
 soliplex-cli audit example/minimal.yaml          # preferred
@@ -655,6 +655,62 @@ Audit a directory-style installation:
 
 ```bash
 soliplex-cli audit completions example/
+```
+
+### `audit quizzes`
+
+List the quiz question files declared in the installation configuration,
+and validate that each `*.json` file under each configured quizzes path
+loads and parses cleanly.
+
+```bash
+soliplex-cli audit [OPTIONS] quizzes [INSTALLATION_CONFIG_PATH]
+```
+
+See [Group Options](#group-options) for the available `[OPTIONS]`.
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Output
+
+Each configured quizzes path is printed once as a header, followed by a
+`- Question file: <name>` row for each `*.json` file found under that
+path:
+
+```text
+Quiz path: <path>
+- Question file: <name>
+  OK
+```
+
+`<path>` is a directory configured in the installation's
+`quizzes_paths`; `<name>` is the question file's full filename. If a
+quiz file fails to load or parse, the `OK` line is replaced by
+`Invalid quiz file: <message>`.
+
+#### Exit Status
+
+- `0` — every quiz file loaded and parsed.
+- `1` — at least one quiz file failed to load or parse. In `--quiet`
+  mode, the per-file errors are printed as JSON on stdout before exit.
+
+#### Examples
+
+List quizzes for the full installation example:
+
+```bash
+soliplex-cli audit quizzes example/installation.yaml
+```
+
+Audit a directory-style installation:
+
+```bash
+soliplex-cli audit quizzes example/
 ```
 
 ### `audit skills`

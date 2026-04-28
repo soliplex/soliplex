@@ -258,23 +258,25 @@ def audit_installation(
     tc_line()
     tc_rule("Validating quizzes")
     tc_line()
-    for q_path in the_installation._config.quizzes_paths:
-        tc_print(f"Quizzes path: {q_path}")
-        for q_file in q_path.glob("*.json"):
-            tc_print(f"- Question file stem: {q_file.stem}")
-            q_config = config_quizzes.QuizConfig(
-                id="check",
-                question_file=str(q_file),
-            )
-            try:
-                q_config.get_questions()
-            except Exception as exc:
-                q_error = f"  Invalid quiz file: {exc}"
-                errors.setdefault("quiz", {})[q_file] = q_error
 
-                tc_print(q_error)
-            else:
-                tc_print("  OK")
+    invalid = _invalid_quizzes(the_installation)
+    errors |= invalid
+    invalid_quizzes = invalid.get("quizzes", {})
+
+    seen_path = None
+    for q_path, q_file, _q_config in _iter_quiz_configs(the_installation):
+        if q_path != seen_path:
+            tc_print(f"Quiz path: {q_path}")
+            seen_path = q_path
+
+        tc_print(f"- Question file: {q_file.name}")
+        exc = invalid_quizzes.get(str(q_path), {}).get(q_file.name)
+
+        if exc:
+            q_error = f"  Invalid quiz file: {exc}"
+            tc_print(q_error)
+        else:
+            tc_print("  OK")
         tc_line()
 
     tc_line()
@@ -683,6 +685,76 @@ def audit_completions(
         exc = invalid_completions.get(compl_config.id)
         if exc is not None:
             tc_print(f"  ERROR: {exc}")
+        else:
+            tc_print("  OK")
+        tc_line()
+
+    _emit_errors(errors, quiet)
+
+
+def _iter_quiz_configs(the_installation):
+    for q_path in the_installation._config.quizzes_paths:
+        for q_file in q_path.glob("*.json"):
+            yield (
+                q_path,
+                q_file,
+                config_quizzes.QuizConfig(
+                    id="check",
+                    question_file=str(q_file),
+                ),
+            )
+
+
+def _invalid_quizzes(the_installation: installation.Installation) -> dict:
+    errors = {}
+
+    for q_path, q_file, q_config in _iter_quiz_configs(the_installation):
+        try:
+            q_config.get_questions()
+        except Exception as exc:
+            q_error = f"{exc}"
+            quizzes_errors = errors.setdefault("quizzes", {})
+            q_path_errors = quizzes_errors.setdefault(str(q_path), {})
+            q_path_errors[q_file.name] = q_error
+
+    return errors
+
+
+@app.command("quizzes")
+def audit_quizzes(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+):
+    """List quizzes defined in the installation"""
+    quiet = ctx.obj["quiet"]
+    the_installation = cli_util.get_installation(
+        installation_path,
+        auditing=True,
+    )
+    errors = {}
+
+    invalid = _invalid_quizzes(the_installation)
+    errors |= invalid
+    invalid_quizzes = invalid.get("quizzes", {})
+
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured Quizzes")
+    tc_line()
+
+    seen_path = None
+    for q_path, q_file, _q_config in _iter_quiz_configs(the_installation):
+        if q_path != seen_path:
+            tc_print(f"Quiz path: {q_path}")
+            seen_path = q_path
+
+        tc_print(f"- Question file: {q_file.name}")
+        exc = invalid_quizzes.get(str(q_path), {}).get(q_file.name)
+
+        if exc:
+            q_error = f"  Invalid quiz file: {exc}"
+            tc_print(q_error)
         else:
             tc_print("  OK")
         tc_line()
