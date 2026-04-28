@@ -160,9 +160,10 @@ example/minimal.yaml`.
 
 If the first positional argument to `soliplex-cli audit` does not name
 one of its subcommands (`all`, `installation`, `secrets`, `environment`,
-`oidc`, `rooms`, `completions`, `quizzes`, `skills`, `logging`), it is
-treated as the `INSTALLATION_CONFIG_PATH` argument to `audit all`. In
-other words, the following two invocations are equivalent:
+`oidc`, `rooms`, `completions`, `quizzes`, `skills`, `logging`,
+`logfire`), it is treated as the `INSTALLATION_CONFIG_PATH` argument to
+`audit all`. In other words, the following two invocations are
+equivalent:
 
 ```bash
 soliplex-cli audit example/minimal.yaml          # preferred
@@ -914,6 +915,61 @@ configure one:
 
 ```bash
 soliplex-cli audit logging example/minimal.yaml
+```
+
+### `audit logfire`
+
+Show the Logfire configuration referenced by the installation. This
+subcommand performs no validation that can fail — it is a read-only
+view of the YAML body that Soliplex would hand to Logfire at startup.
+
+```bash
+soliplex-cli audit [OPTIONS] logfire [INSTALLATION_CONFIG_PATH]
+```
+
+See [Group Options](#group-options) for the available `[OPTIONS]`.
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Output
+
+If the installation does not configure a `logfire_config`, a single
+line is printed:
+
+```text
+OK (defaults)
+```
+
+Otherwise, the configured Logfire body is printed as YAML, followed by
+`OK`:
+
+```text
+<parsed YAML body>
+OK
+```
+
+#### Exit Status
+
+- Always `0`.
+
+#### Examples
+
+Show the Logfire body for an installation that defines one:
+
+```bash
+soliplex-cli audit logfire example/installation-openai.yaml
+```
+
+Confirm the defaults branch for an installation that does not configure
+Logfire:
+
+```bash
+soliplex-cli audit logfire example/minimal.yaml
 ```
 
 ## `admin-users`

@@ -278,12 +278,7 @@ def audit_all(
     tc_line()
     tc_rule("Validating Logfire config")
     tc_line()
-    l_config = the_installation._config.logfire_config
-    if l_config is not None:
-        tc_print(l_config.as_yaml)
-        tc_print("OK")
-    else:
-        tc_print("OK (defaults)")
+    errors |= _audit_logfire_section(the_installation, tc_print)
     tc_line()
 
     _emit_errors(errors, quiet)
@@ -929,5 +924,40 @@ def audit_logging(
                 f"Claims map: {the_installation._config.logging_claims_map}",
             )
             tc_print("OK")
+
+    _emit_errors(errors, quiet)
+
+
+def _audit_logfire_section(the_installation, tc_print) -> dict:
+    """Print the configured Logfire config; return collected errors."""
+    l_config = the_installation._config.logfire_config
+    if l_config is not None:
+        tc_print(l_config.as_yaml)
+        tc_print("OK")
+    else:
+        tc_print("OK (defaults)")
+    return {}
+
+
+@app.command("logfire")
+def audit_logfire(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+):
+    """Show the Logfire config defined in the installation"""
+    quiet = ctx.obj["quiet"]
+    the_installation = cli_util.get_installation(
+        installation_path,
+        auditing=True,
+    )
+    errors = {}
+
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured Logfire")
+    tc_line()
+
+    errors |= _audit_logfire_section(the_installation, tc_print)
 
     _emit_errors(errors, quiet)
