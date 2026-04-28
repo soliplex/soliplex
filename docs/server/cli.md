@@ -205,24 +205,27 @@ first form a shortcut for the second.
 
 #### What Gets Checked
 
-The command runs the following validation passes in order, printing a
-section header and an `OK` / error summary for each:
+The command runs the following validation passes in order. Each pass
+prints the same body it would print under its focused subcommand
+(`audit secrets`, `audit environment`, etc.) — see those sections
+below for output details and JSON-error shapes.
 
 1. **Installation model** — the top-level installation config converts
    cleanly to its runtime model.
-2. **Secrets** — every secret declared in the installation resolves via
-   its configured sources.
-3. **Environment** — every environment variable required by the
-   installation is either configured in the YAML or present in the OS
-   environment.
-4. **OIDC authentication systems** — each configured OIDC provider
-   converts cleanly to its runtime model.
-5. **Rooms** — each room converts cleanly to its runtime model. For
-   each RAG-bearing sub-config (the room's agent, named skills, named
-   tools), the referenced LanceDB path is resolved separately and
-   reported on its own status line.
-6. **Completions** — each completion endpoint converts cleanly to its
-   runtime model.
+2. **Secrets** — every declared secret is listed with an `OK` or
+   `MISSING` flag.
+3. **Environment** — every declared environment variable is listed
+   with its resolved value (or `MISSING`).
+4. **OIDC authentication systems** — every configured OIDC provider
+   is listed with its title and server URL; an `ERROR:` line is
+   appended on runtime-model failure.
+5. **Rooms** — every room is listed with its description, plus a
+   per-RAG-source row for each agent / named-skill / named-tool that
+   has a RAG database. Each LanceDB is opened and a live document
+   count is issued (so this pass requires read access to the RAG
+   files and may be slow against many large databases).
+6. **Completions** — every completion endpoint is listed with its
+   name; runtime-model failures are flagged with `ERROR:`.
 7. **Quizzes** — every `*.json` question file under each configured
    quizzes path loads and parses.
 8. **Skills** — every configured `skill_config` is checked for
@@ -294,7 +297,7 @@ See [Group Options](#group-options) for the available `[OPTIONS]`.
 
 #### Output
 
-A single status line under a "Validating installation model" header:
+A single status line under a "Configured installation model" header:
 
 ```text
 OK

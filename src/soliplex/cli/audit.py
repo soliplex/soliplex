@@ -59,11 +59,23 @@ def _emit_errors(errors, quiet):
         sys.exit(1)
 
 
+def _get_installation(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+) -> installation.Installation:
+    """Load the installation once per invocation, caching on ``ctx.obj``."""
+    cached = ctx.obj.get("the_installation")
+    if cached is None:
+        cached = cli_util.get_installation(installation_path, auditing=True)
+        ctx.obj["the_installation"] = cached
+    return cached
+
+
 class _AuditGroup(TyperGroup):
-    """Default to the 'installation' subcommand when none is given.
+    """Default to the 'all' subcommand when none is given.
 
     Allows 'soliplex-cli audit <path>' as shorthand for
-    'soliplex-cli audit installation <path>'.
+    'soliplex-cli audit all <path>'.
     """
 
     def parse_args(self, ctx, args):
@@ -101,185 +113,18 @@ def audit_all(
     installation_path: types.installation_path_type,
 ):
     quiet = ctx.obj["quiet"]
-    the_installation = cli_util.get_installation(
-        installation_path,
-        auditing=True,
-    )
-    errors = {}
+    errors: dict = {}
 
-    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
-
-    # Check that conversion to models doesn't raise
-    tc_line()
-    tc_rule("Validating installation model")
-    tc_line()
-    errors = _invalid_installation(the_installation)
-    exc = errors.get("installation_model")
-    if exc:
-        tc_print(f"ERROR: {exc}")
-    else:
-        tc_print("OK")
-
-    tc_line()
-    tc_rule("Checking secrets")
-    tc_line()
-    missing = _missing_secrets(the_installation)
-    errors |= missing
-
-    if missing:
-        tc_print("Missing secrets")
-        for secret_name in missing["missing_secrets"]:
-            tc_print(f"- {secret_name}")
-    else:
-        tc_print("OK")
-
-    tc_line()
-    tc_rule("Checking environment")
-    tc_line()
-    missing = _missing_env_vars(the_installation)
-    errors |= missing
-
-    if missing:
-        tc_line()
-        tc_print("Missing environment variables")
-        for env_var in missing["missing_env_vars"]:
-            tc_print(f"- {env_var}")
-    else:
-        tc_print("OK")
-
-    tc_line()
-    tc_rule("Validating OIDC authentication systems")
-    tc_line()
-    invalid = _invalid_oidc_auth_providers(the_installation)
-    errors |= invalid
-
-    oidc_configs = the_installation.oidc_auth_system_configs
-    invalid_providers = invalid.get("oidc", {})
-
-    for oidc_config in oidc_configs:
-        tc_print(f"OIDC system: {oidc_config.id}")
-        exc = invalid_providers.get(oidc_config.id)
-        if exc is not None:
-            tc_print(exc)
-        else:
-            tc_print("OK")
-        tc_line()
-
-    tc_line()
-    tc_rule("Validating rooms")
-    tc_line()
-    invalid = _invalid_rooms(the_installation)
-    errors |= invalid
-    invalid_rooms = invalid.get("room", {})
-
-    rag_invalid = _invalid_room_rag_dbs(the_installation)
-    errors |= rag_invalid
-    rag_invalid_rooms = rag_invalid.get("rag", {})
-
-    room_configs = the_installation._config.room_configs
-
-    for room_config in room_configs.values():
-        tc_line()
-        tc_print(f"Room: {room_config.id}")
-        exc = invalid_rooms.get(room_config.id)
-        if exc is not None:
-            tc_print(exc)
-        else:
-            tc_print("OK")
-
-        per_room = rag_invalid_rooms.get(room_config.id, {})
-        candidates = list(_iter_room_rag_candidates(room_config))
-
-        if candidates:
-            tc_line()
-            tc_print("  Haiku Rag DBs")
-
-            for source, _cfg in candidates:
-                tc_print(f"  - {source} RAG DB")
-                exc = per_room.get(source)
-                if exc is not None:
-                    tc_print(f"    {exc}")
-                else:
-                    tc_print("    OK")
-
-    tc_line()
-    tc_rule("Validating completions")
-    tc_line()
-    completion_configs = the_installation._config.completion_configs
-    invalid = _invalid_completions(the_installation)
-    errors |= invalid
-    invalid_completions = invalid.get("completions", {})
-
-    for compl_config in completion_configs.values():
-        tc_print(f"Completion: {compl_config.id}")
-        exc = invalid_completions.get(compl_config.id)
-        if exc is not None:
-            tc_print(f"  {exc}")
-        else:
-            tc_print("  OK")
-        tc_line()
-
-    tc_line()
-    tc_rule("Validating quizzes")
-    tc_line()
-
-    invalid = _invalid_quizzes(the_installation)
-    errors |= invalid
-    invalid_quizzes = invalid.get("quizzes", {})
-
-    seen_path = None
-    for q_path, q_file, _q_config in _iter_quiz_configs(the_installation):
-        if q_path != seen_path:
-            tc_print(f"Quiz path: {q_path}")
-            seen_path = q_path
-
-        tc_print(f"- Question file: {q_file.name}")
-        exc = invalid_quizzes.get(str(q_path), {}).get(q_file.name)
-
-        if exc:
-            q_error = f"  Invalid quiz file: {exc}"
-            tc_print(q_error)
-        else:
-            tc_print("  OK")
-        tc_line()
-
-    tc_line()
-    tc_rule("Validating skills")
-    tc_line()
-    errors |= _audit_skills_section(the_installation, tc_print, tc_line)
-
-    tc_line()
-    tc_rule("Validating Python logging")
-    tc_line()
-
-    invalid = _invalid_logging(the_installation)
-    errors |= invalid
-
-    pyl_config = the_installation._config.logging_config_file
-    if pyl_config is None:
-        tc_print("OK (defaults)")
-    else:
-        tc_print(f"Logging config: {pyl_config}")
-        exc = invalid.get("logging")
-        if exc is not None:
-            tc_print(exc)
-        else:
-            logging_config = _load_logging_config(the_installation)
-            tc_print(logging_config)
-            tc_print(
-                f"Headers map: {the_installation._config.logging_headers_map}",
-            )
-            tc_print(
-                f"Claims map: {the_installation._config.logging_claims_map}",
-            )
-            tc_print("OK")
-    tc_line()
-
-    tc_line()
-    tc_rule("Validating Logfire config")
-    tc_line()
-    errors |= _audit_logfire_section(the_installation, tc_print)
-    tc_line()
+    errors |= _audit_installation_section(ctx, installation_path)
+    errors |= _audit_secrets_section(ctx, installation_path)
+    errors |= _audit_environment_section(ctx, installation_path)
+    errors |= _audit_oidc_section(ctx, installation_path)
+    errors |= _audit_rooms_section(ctx, installation_path)
+    errors |= _audit_completions_section(ctx, installation_path)
+    errors |= _audit_quizzes_section(ctx, installation_path)
+    errors |= _audit_skills_section(ctx, installation_path)
+    errors |= _audit_logging_section(ctx, installation_path)
+    errors |= _audit_logfire_section(ctx, installation_path)
 
     _emit_errors(errors, quiet)
 
@@ -297,6 +142,28 @@ def _invalid_installation(
     return errors
 
 
+def _audit_installation_section(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+) -> dict:
+    """Print the installation-model section (rule header + OK/ERROR)."""
+    quiet = ctx.obj["quiet"]
+    the_installation = _get_installation(ctx, installation_path)
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured installation model")
+    tc_line()
+
+    errors = _invalid_installation(the_installation)
+    exc = errors.get("installation_model")
+    if exc:
+        tc_print(f"ERROR: {exc}")
+    else:
+        tc_print("OK")
+    return errors
+
+
 @app.command("installation")
 def audit_installation(
     ctx: typer.Context,
@@ -304,22 +171,8 @@ def audit_installation(
 ):
     """Check that the installation config renders as a model"""
     quiet = ctx.obj["quiet"]
-    the_installation = cli_util.get_installation(
-        installation_path,
-        auditing=True,
-    )
-
-    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
-
-    tc_line()
-    tc_rule("Validating installation model")
-    tc_line()
-    errors = _invalid_installation(the_installation)
-    exc = errors.get("installation_model")
-    if exc:
-        tc_print(f"ERROR: {exc}")
-    else:
-        tc_print("OK")
+    errors = _audit_installation_section(ctx, installation_path)
+    _emit_errors(errors, quiet)
 
 
 def _missing_secrets(the_installation: installation.Installation) -> dict:
@@ -331,29 +184,22 @@ def _missing_secrets(the_installation: installation.Installation) -> dict:
     return {}
 
 
-@app.command("secrets")
-def audit_secrets(
+def _audit_secrets_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):
-    """List secrets defined in the installation"""
+) -> dict:
+    """Print the secrets section (rule header + per-secret OK/MISSING)."""
     quiet = ctx.obj["quiet"]
-    the_installation = cli_util.get_installation(
-        installation_path,
-        auditing=True,
-    )
-    errors = {}
-
-    missing = _missing_secrets(the_installation)
-    errors |= missing
-
+    the_installation = _get_installation(ctx, installation_path)
     tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
 
     tc_line()
     tc_rule("Configured secrets")
     tc_line()
 
-    missing_names = set(missing.get("missing_secrets", ()))
+    errors = _missing_secrets(the_installation)
+    missing_names = set(errors.get("missing_secrets", ()))
+
     for secret_config in the_installation._config.secrets:
         flag = (
             "MISSING" if secret_config.secret_name in missing_names else "OK"
@@ -361,7 +207,17 @@ def audit_secrets(
         tc_print(f"- {secret_config.secret_name:25} {flag}")
 
     tc_print()
+    return errors
 
+
+@app.command("secrets")
+def audit_secrets(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+):
+    """List secrets defined in the installation"""
+    quiet = ctx.obj["quiet"]
+    errors = _audit_secrets_section(ctx, installation_path)
     _emit_errors(errors, quiet)
 
 
@@ -374,40 +230,23 @@ def _missing_env_vars(the_installation: installation.Installation) -> dict:
     return {}
 
 
-@app.command("environment")
-def audit_environment(
+def _audit_environment_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-    verbose: bool = typer.Option(
-        False,
-        "--verbose",
-        "-v",
-        help="""\
-Show available sources, and which is selected.
-""",
-    ),
-):
-    """List environment variables defined in the installation"""
+    *,
+    verbose: bool = False,
+) -> dict:
+    """Print the environment section (rule header + per-var listing)."""
     quiet = ctx.obj["quiet"]
-    the_installation = cli_util.get_installation(
-        installation_path,
-        auditing=True,
-    )
-    errors = _missing_env_vars(the_installation)
-    if errors:
-        missing = set(errors["missing_env_vars"])
-    else:
-        missing = set()
-
+    the_installation = _get_installation(ctx, installation_path)
     tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
 
     tc_line()
-    tc_rule("Configured environment variables")
+    tc_rule("Configured environment")
     tc_line()
 
-    errors = {}
-    if missing:
-        errors["missing_env_vars"] = sorted(missing)
+    errors = _missing_env_vars(the_installation)
+    missing = set(errors.get("missing_env_vars", ()))
 
     for key, value in the_installation._config.environment.items():
         if key in missing:
@@ -427,7 +266,29 @@ Show available sources, and which is selected.
         tc_print()
 
     tc_print()
+    return errors
 
+
+@app.command("environment")
+def audit_environment(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="""\
+Show available sources, and which is selected.
+""",
+    ),
+):
+    """List environment variables defined in the installation"""
+    quiet = ctx.obj["quiet"]
+    errors = _audit_environment_section(
+        ctx,
+        installation_path,
+        verbose=verbose,
+    )
     _emit_errors(errors, quiet)
 
 
@@ -445,28 +306,21 @@ def _invalid_oidc_auth_providers(
     return errors
 
 
-@app.command("oidc")
-def audit_oidc_auth_providers(
+def _audit_oidc_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):
-    """List OIDC Auth Providers defined in the installation"""
+) -> dict:
+    """Print the OIDC section (rule header + per-provider listing)."""
     quiet = ctx.obj["quiet"]
-    the_installation = cli_util.get_installation(
-        installation_path,
-        auditing=True,
-    )
-    errors = {}
-    invalid = _invalid_oidc_auth_providers(the_installation)
-    errors |= invalid
-
+    the_installation = _get_installation(ctx, installation_path)
     tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
 
     tc_line()
-    tc_rule("Configured OIDC Auth Providers")
+    tc_rule("Configured OIDC authentication systems")
     tc_line()
 
-    invalid_providers = invalid.get("oidc", {})
+    errors = _invalid_oidc_auth_providers(the_installation)
+    invalid_providers = errors.get("oidc", {})
 
     for oidc_config in the_installation.oidc_auth_system_configs:
         tc_print(f"- [ {oidc_config.id} ] {oidc_config.title}: ")
@@ -476,6 +330,17 @@ def audit_oidc_auth_providers(
             tc_print(f"  ERROR: {exc}")
         tc_line()
 
+    return errors
+
+
+@app.command("oidc")
+def audit_oidc_auth_providers(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+):
+    """List OIDC Auth Providers defined in the installation"""
+    quiet = ctx.obj["quiet"]
+    errors = _audit_oidc_section(ctx, installation_path)
     _emit_errors(errors, quiet)
 
 
@@ -544,25 +409,21 @@ def _invalid_room_rag_dbs(
     return {}
 
 
-@app.command("rooms")
-def audit_rooms(
+def _audit_rooms_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):
-    """List rooms defined in the installation"""
+) -> dict:
+    """Print the rooms section (rule header + per-room RAG validity/counts)."""
     quiet = ctx.obj["quiet"]
-    the_installation = cli_util.get_installation(
-        installation_path,
-        auditing=True,
-    )
-
+    the_installation = _get_installation(ctx, installation_path)
     tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
 
     tc_line()
-    tc_rule("Configured Rooms")
+    tc_rule("Configured rooms")
     tc_line()
 
-    errors = {}
+    errors: dict = {}
+
     invalid = _invalid_rooms(the_installation)
     errors |= invalid
     invalid_rooms = invalid.get("room", {})
@@ -610,6 +471,17 @@ def audit_rooms(
                 tc_print()
         tc_line()
 
+    return errors
+
+
+@app.command("rooms")
+def audit_rooms(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+):
+    """List rooms defined in the installation"""
+    quiet = ctx.obj["quiet"]
+    errors = _audit_rooms_section(ctx, installation_path)
     _emit_errors(errors, quiet)
 
 
@@ -630,31 +502,23 @@ def _invalid_completions(
     return errors
 
 
-@app.command("completions")
-def audit_completions(
+def _audit_completions_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):
-    """List completions defined in the installation"""
+) -> dict:
+    """Print the completions section (rule header + per-completion entry)."""
     quiet = ctx.obj["quiet"]
-    the_installation = cli_util.get_installation(
-        installation_path,
-        auditing=True,
-    )
-    errors = {}
-    invalid = _invalid_completions(the_installation)
-    errors |= invalid
-
+    the_installation = _get_installation(ctx, installation_path)
     tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
 
     tc_line()
-    tc_rule("Configured Completions")
+    tc_rule("Configured completions")
     tc_line()
 
-    # Deliberately bypass auth check done by 'get_room_configs' here.
-    available_completions = the_installation._config.completion_configs
-    invalid_completions = invalid.get("completions", {})
+    errors = _invalid_completions(the_installation)
+    invalid_completions = errors.get("completions", {})
 
+    available_completions = the_installation._config.completion_configs
     for compl_config in available_completions.values():
         tc_print(f"- [ {compl_config.id} ] {compl_config.name}: ")
         exc = invalid_completions.get(compl_config.id)
@@ -664,6 +528,17 @@ def audit_completions(
             tc_print("  OK")
         tc_line()
 
+    return errors
+
+
+@app.command("completions")
+def audit_completions(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+):
+    """List completions defined in the installation"""
+    quiet = ctx.obj["quiet"]
+    errors = _audit_completions_section(ctx, installation_path)
     _emit_errors(errors, quiet)
 
 
@@ -695,28 +570,21 @@ def _invalid_quizzes(the_installation: installation.Installation) -> dict:
     return errors
 
 
-@app.command("quizzes")
-def audit_quizzes(
+def _audit_quizzes_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):
-    """List quizzes defined in the installation"""
+) -> dict:
+    """Print the quizzes section (rule header + per-file OK / Invalid)."""
     quiet = ctx.obj["quiet"]
-    the_installation = cli_util.get_installation(
-        installation_path,
-        auditing=True,
-    )
-    errors = {}
-
-    invalid = _invalid_quizzes(the_installation)
-    errors |= invalid
-    invalid_quizzes = invalid.get("quizzes", {})
-
+    the_installation = _get_installation(ctx, installation_path)
     tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
 
     tc_line()
-    tc_rule("Configured Quizzes")
+    tc_rule("Configured quizzes")
     tc_line()
+
+    errors = _invalid_quizzes(the_installation)
+    invalid_quizzes = errors.get("quizzes", {})
 
     seen_path = None
     for q_path, q_file, _q_config in _iter_quiz_configs(the_installation):
@@ -728,12 +596,22 @@ def audit_quizzes(
         exc = invalid_quizzes.get(str(q_path), {}).get(q_file.name)
 
         if exc:
-            q_error = f"  Invalid quiz file: {exc}"
-            tc_print(q_error)
+            tc_print(f"  Invalid quiz file: {exc}")
         else:
             tc_print("  OK")
         tc_line()
 
+    return errors
+
+
+@app.command("quizzes")
+def audit_quizzes(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+):
+    """List quizzes defined in the installation"""
+    quiet = ctx.obj["quiet"]
+    errors = _audit_quizzes_section(ctx, installation_path)
     _emit_errors(errors, quiet)
 
 
@@ -801,8 +679,19 @@ def _invalid_filesystem_skills(
     return {}
 
 
-def _audit_skills_section(the_installation, tc_print, tc_line) -> dict:
-    """Print combined configured + filesystem skills audit; return errors."""
+def _audit_skills_section(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+) -> dict:
+    """Print the skills section (rule header + configured + filesystem)."""
+    quiet = ctx.obj["quiet"]
+    the_installation = _get_installation(ctx, installation_path)
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured skills")
+    tc_line()
+
     errors: dict = {}
 
     invalid = _invalid_skill_configs(the_installation)
@@ -847,19 +736,7 @@ def audit_skills(
 ):
     """List skills defined in the installation"""
     quiet = ctx.obj["quiet"]
-    the_installation = cli_util.get_installation(
-        installation_path,
-        auditing=True,
-    )
-
-    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
-
-    tc_line()
-    tc_rule("Configured Skills")
-    tc_line()
-
-    errors = _audit_skills_section(the_installation, tc_print, tc_line)
-
+    errors = _audit_skills_section(ctx, installation_path)
     _emit_errors(errors, quiet)
 
 
@@ -884,6 +761,43 @@ def _invalid_logging(the_installation: installation.Installation) -> dict:
     return {}
 
 
+def _audit_logging_section(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+) -> dict:
+    """Print the Python-logging section (rule header + config or defaults)."""
+    quiet = ctx.obj["quiet"]
+    the_installation = _get_installation(ctx, installation_path)
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured Python logging")
+    tc_line()
+
+    errors = _invalid_logging(the_installation)
+
+    pyl_config = the_installation._config.logging_config_file
+    if pyl_config is None:
+        tc_print("OK (defaults)")
+        return errors
+
+    tc_print(f"Logging config: {pyl_config}")
+    exc = errors.get("logging")
+    if exc is not None:
+        tc_print(exc)
+    else:
+        logging_config = _load_logging_config(the_installation)
+        tc_print(logging_config)
+        tc_print(
+            f"Headers map: {the_installation._config.logging_headers_map}",
+        )
+        tc_print(
+            f"Claims map: {the_installation._config.logging_claims_map}",
+        )
+        tc_print("OK")
+    return errors
+
+
 @app.command("logging")
 def audit_logging(
     ctx: typer.Context,
@@ -891,45 +805,23 @@ def audit_logging(
 ):
     """Show the Python-logging config defined in the installation"""
     quiet = ctx.obj["quiet"]
-    the_installation = cli_util.get_installation(
-        installation_path,
-        auditing=True,
-    )
-    errors = {}
-
-    invalid = _invalid_logging(the_installation)
-    errors |= invalid
-
-    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
-
-    tc_line()
-    tc_rule("Configured Logging")
-    tc_line()
-
-    pyl_config = the_installation._config.logging_config_file
-    if pyl_config is None:
-        tc_print("OK (defaults)")
-    else:
-        tc_print(f"Logging config: {pyl_config}")
-        exc = invalid.get("logging")
-        if exc is not None:
-            tc_print(exc)
-        else:
-            logging_config = _load_logging_config(the_installation)
-            tc_print(logging_config)
-            tc_print(
-                f"Headers map: {the_installation._config.logging_headers_map}",
-            )
-            tc_print(
-                f"Claims map: {the_installation._config.logging_claims_map}",
-            )
-            tc_print("OK")
-
+    errors = _audit_logging_section(ctx, installation_path)
     _emit_errors(errors, quiet)
 
 
-def _audit_logfire_section(the_installation, tc_print) -> dict:
-    """Print the configured Logfire config; return collected errors."""
+def _audit_logfire_section(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+) -> dict:
+    """Print the Logfire section (rule header + config or defaults)."""
+    quiet = ctx.obj["quiet"]
+    the_installation = _get_installation(ctx, installation_path)
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured Logfire")
+    tc_line()
+
     l_config = the_installation._config.logfire_config
     if l_config is not None:
         tc_print(l_config.as_yaml)
@@ -946,18 +838,5 @@ def audit_logfire(
 ):
     """Show the Logfire config defined in the installation"""
     quiet = ctx.obj["quiet"]
-    the_installation = cli_util.get_installation(
-        installation_path,
-        auditing=True,
-    )
-    errors = {}
-
-    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
-
-    tc_line()
-    tc_rule("Configured Logfire")
-    tc_line()
-
-    errors |= _audit_logfire_section(the_installation, tc_print)
-
+    errors = _audit_logfire_section(ctx, installation_path)
     _emit_errors(errors, quiet)
