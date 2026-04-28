@@ -727,14 +727,12 @@ This group replaces the deprecated flat `list-admin-users` /
 `add-admin-user` / `clear-admin-users` commands; see
 [Deprecated Command Names](#deprecated-command-names).
 
-All three subcommands share one safety behavior: they only make sense
-against a *persistent* authorization database (configured via
-`authorization_dburi` in the installation YAML). When the installation
-uses the default in-memory SQLite DB (`sqlite://`), the commands
-detect the RAM-based URI, print a note that the operation would be a
-no-op, and exit. Pass `-s` / `--skip-ram-db-check` to override the
-guard — useful mostly for tests and smoke-diagnostics against a
-throwaway installation.
+These subcommands only make sense against a *persistent* authorization
+database (configured via `authorization_dburi` in the installation
+YAML). When the installation uses the default in-memory SQLite DB
+(`sqlite://`), each command detects the RAM-based URI, prints a note
+that the operation would be a no-op, and exits with status `1` without
+touching the database. There is no override.
 
 All three commands share the following conventions:
 
@@ -742,10 +740,6 @@ All three commands share the following conventions:
   installation configuration. May be a YAML file or a directory
   containing an `installation.yaml`. If omitted, falls back to the
   `SOLIPLEX_INSTALLATION_PATH` environment variable.
-- Option `-s` / `--skip-ram-db-check` — bypass the RAM-DB guard
-  described above. The command will still exit immediately if the
-  DBURI does not actually point to a writable database, but the
-  no-op guard is skipped.
 - On completion, the current admin-user list is printed as a single
   JSON object on stdout:
 
@@ -755,7 +749,7 @@ All three commands share the following conventions:
 
   Emitted via plain `print(...)` (not Rich), so the output pipes
   cleanly into `jq` or other tooling.
-- Exit status is always `0`, including when the RAM-DB guard fires.
+- Exit status is `0` on success, or `1` when the RAM-DB guard fires.
 
 ### `admin-users list`
 
@@ -818,14 +812,6 @@ Grant admin privileges to a new operator:
 
 ```bash
 soliplex-cli admin-users add example/installation.yaml alice@example.com
-```
-
-Add an admin against an ephemeral RAM database (will only last for the
-lifetime of the command; mostly useful for tests):
-
-```bash
-soliplex-cli admin-users add --skip-ram-db-check \
-  example/minimal.yaml alice@example.com
 ```
 
 ### `admin-users clear`
@@ -915,11 +901,11 @@ All three commands share the following:
   can create or inspect a policy for a room that doesn't exist in the
   YAML, and that policy will continue to sit in the DB until you clear
   it.
-- Option `-s` / `--skip-ram-db-check` — bypass the RAM-DB guard
-  described under [`admin-users`](#admin-users). When the installation's
-  `authorization_dburi` is the in-memory default (`sqlite://`), the
-  commands treat themselves as a no-op and exit; pass this flag to
-  force them to proceed anyway (useful for tests).
+- As with `admin-users`, when the installation's `authorization_dburi`
+  is the in-memory default (`sqlite://`), each command detects the
+  RAM-based URI, prints a note that the operation would be a no-op,
+  and exits with status `1` without touching the database. There is
+  no override.
 - On completion, the resulting `RoomPolicy` is dumped as a single JSON
   object on stdout (emitted via plain `print(...)`, not Rich). If no
   policy row exists for the room, `null` is printed instead.
@@ -942,8 +928,8 @@ All three commands share the following:
   }
   ```
 
-- Exit status is always `0`, including when the RAM-DB guard fires and
-  when no policy row exists for the room.
+- Exit status is `0` on success (including when no policy row exists
+  for the room), or `1` when the RAM-DB guard fires.
 
 ### `room-authz show`
 
@@ -1048,7 +1034,6 @@ soliplex-cli room-authz clear [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
   room remains inaccessible until new ACL entries are added. Without
   this flag, the command deletes the policy outright and the room
   reverts to its default **public** state.
-- `-s` / `--skip-ram-db-check` — see the shared conventions above.
 
 #### Behavior Notes
 

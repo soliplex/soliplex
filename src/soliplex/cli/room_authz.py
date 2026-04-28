@@ -48,19 +48,12 @@ def show_room_authz(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
     room_id: str,
-    skip_ram_db_check: bool = typer.Option(
-        False,
-        "-s",
-        "--skip-ram-db-check",
-        help="Skip check for RAM-based DB",
-    ),
 ):
     """Show room ACL entries defined in the installation's authz database."""
     the_installation = cli_util.get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
 
-    if not skip_ram_db_check:
-        cli_util._check_ram_dburi(dburi, "room-authz show")
+    cli_util._check_ram_dburi(dburi, "room-authz show")
 
     session = authz_schema.get_session(engine_url=dburi, init_schema=True)
 
@@ -77,19 +70,12 @@ def clear_room_authz(
         "--make-room-private",
         help="Make room private",
     ),
-    skip_ram_db_check: bool = typer.Option(
-        False,
-        "-s",
-        "--skip-ram-db-check",
-        help="Skip check for RAM-based DB",
-    ),
 ):
     """Clear room ACL entries from the installation's authz database."""
     the_installation = cli_util.get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
 
-    if not skip_ram_db_check:
-        cli_util._check_ram_dburi(dburi, "room-authz clear")
+    cli_util._check_ram_dburi(dburi, "room-authz clear")
 
     session = authz_schema.get_session(engine_url=dburi, init_schema=True)
 
@@ -131,19 +117,12 @@ def add_room_user(
     installation_path: types.installation_path_type,
     room_id: str,
     user_email: str,
-    skip_ram_db_check: bool = typer.Option(
-        False,
-        "-s",
-        "--skip-ram-db-check",
-        help="Skip check for RAM-based DB",
-    ),
 ):
     """Add a user to the ACL for a room."""
     the_installation = cli_util.get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
 
-    if not skip_ram_db_check:
-        cli_util._check_ram_dburi(dburi, "room-authz add-user")
+    cli_util._check_ram_dburi(dburi, "room-authz add-user")
 
     session = authz_schema.get_session(engine_url=dburi, init_schema=True)
 

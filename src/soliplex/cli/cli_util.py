@@ -26,4 +26,4 @@ def _check_ram_dburi(dburi: str, command: str):
     if dburi == config_installation.SYNC_MEMORY_ENGINE_URL:
         the_console.rule("Authorization DB is RAM-based")
         the_console.print(f"'{command}' is a no-op with a RAM-based database")
-        raise typer.Exit()
+        raise typer.Exit(1)

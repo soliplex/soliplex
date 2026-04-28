@@ -33,19 +33,12 @@ def _dump_admin_users(session):
 def list_admin_users(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-    skip_ram_db_check: bool = typer.Option(
-        False,
-        "-s",
-        "--skip-ram-db-check",
-        help="Skip check for RAM-based DB",
-    ),
 ):
     """Show admin users defined in the installation's authz database."""
     the_installation = cli_util.get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
 
-    if not skip_ram_db_check:
-        cli_util._check_ram_dburi(dburi, "admin-users list")
+    cli_util._check_ram_dburi(dburi, "admin-users list")
 
     session = authz_schema.get_session(engine_url=dburi, init_schema=True)
     _dump_admin_users(session)
@@ -55,19 +48,12 @@ def list_admin_users(
 def clear_admin_users(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-    skip_ram_db_check: bool = typer.Option(
-        False,
-        "-s",
-        "--skip-ram-db-check",
-        help="Skip check for RAM-based DB",
-    ),
 ):
     """Clear admin users from the installation's authz database."""
     the_installation = cli_util.get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
 
-    if not skip_ram_db_check:
-        cli_util._check_ram_dburi(dburi, "admin-users clear")
+    cli_util._check_ram_dburi(dburi, "admin-users clear")
 
     session = authz_schema.get_session(engine_url=dburi, init_schema=True)
 
@@ -84,19 +70,12 @@ def add_admin_user(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
     admin_user_email: str,
-    skip_ram_db_check: bool = typer.Option(
-        False,
-        "-s",
-        "--skip-ram-db-check",
-        help="Skip check for RAM-based DB",
-    ),
 ):
     """Add an admin user to the installation's authz database."""
     the_installation = cli_util.get_installation(installation_path)
     dburi = the_installation.authorization_dburi_sync
 
-    if not skip_ram_db_check:
-        cli_util._check_ram_dburi(dburi, "admin-users add")
+    cli_util._check_ram_dburi(dburi, "admin-users add")
 
     session = authz_schema.get_session(engine_url=dburi, init_schema=True)
 
