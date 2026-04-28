@@ -218,8 +218,8 @@ section header and an `OK` / error summary for each:
 #### Exit Status
 
 - `0` — all sections validated successfully.
-- non-zero — at least one section reported an error. In `--quiet` mode,
-  the combined error report is printed as JSON before exit.
+- `1` — at least one section reported an error. In `--quiet` mode, the
+  combined error report is printed as JSON on stdout before exit.
 
 #### Examples
 
@@ -262,7 +262,7 @@ source — without exposing the values themselves. (Replaces the
 deprecated `soliplex-cli list-secrets`.)
 
 ```bash
-soliplex-cli audit secrets [INSTALLATION_CONFIG_PATH]
+soliplex-cli audit secrets [OPTIONS] [INSTALLATION_CONFIG_PATH]
 ```
 
 #### Positional Argument
@@ -271,6 +271,13 @@ soliplex-cli audit secrets [INSTALLATION_CONFIG_PATH]
   May be a YAML file, or a directory containing an `installation.yaml`.
   If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
   variable.
+
+#### Options
+
+- `-q` / `--quiet` — suppress the per-secret listing; only report
+  problems. When combined with a failing run, the errors are emitted as
+  a single JSON document on stdout (suitable for piping into `jq` or a
+  CI log parser).
 
 #### Output
 
@@ -287,10 +294,9 @@ sources; `MISSING` means no source produced a value.
 
 #### Exit Status
 
-- Always `0`. Unlike `audit installation`, this command does not fail
-  the process when secrets are missing — it is strictly a reporting
-  tool. Use `audit installation` (or `audit installation --quiet` in
-  CI) if you need a non-zero exit on missing secrets.
+- `0` — every declared secret resolved.
+- `1` — at least one declared secret is missing. In `--quiet` mode, the
+  list of missing secrets is printed as JSON on stdout before exit.
 
 #### Security Notes
 
@@ -343,6 +349,11 @@ soliplex-cli audit environment [OPTIONS] [INSTALLATION_CONFIG_PATH]
 - `-v` / `--verbose` — after each variable, also list every configured
   source and its candidate value. The selected source is flagged with a
   leading `*`; others are flagged with a space.
+- `-q` / `--quiet` — suppress the per-variable listing; only report
+  problems. When combined with a failing run, the errors are emitted as
+  a single JSON document on stdout (suitable for piping into `jq` or a
+  CI log parser). Mutually compatible with `--verbose`, but the verbose
+  source breakdown is also suppressed.
 
 #### Output
 
@@ -369,10 +380,10 @@ shows a fallback source that was not used.
 
 #### Exit Status
 
-- Always `0`. Like `audit secrets`, this command does not fail the
-  process when variables are missing — it is strictly a reporting tool.
-  Use `audit installation` (or `audit installation --quiet` in CI) if
-  you need a non-zero exit on missing environment variables.
+- `0` — every declared environment variable resolved.
+- `1` — at least one declared environment variable is missing. In
+  `--quiet` mode, the list of missing variables is printed as JSON on
+  stdout before exit.
 
 #### Security Notes
 
@@ -412,13 +423,14 @@ soliplex-cli audit environment example/installation.yaml | grep MISSING
 ### `audit oidc`
 
 List the OIDC authentication providers declared in the installation
-configuration. Useful for confirming which providers will be offered on
+configuration, and validate that each one converts cleanly to its
+runtime model. Useful for confirming which providers will be offered on
 the login screen and what server URLs Soliplex will contact for token
 validation. (Replaces the deprecated
 `soliplex-cli list-oidc-auth-providers`.)
 
 ```bash
-soliplex-cli audit oidc [INSTALLATION_CONFIG_PATH]
+soliplex-cli audit oidc [OPTIONS] [INSTALLATION_CONFIG_PATH]
 ```
 
 #### Positional Argument
@@ -427,6 +439,13 @@ soliplex-cli audit oidc [INSTALLATION_CONFIG_PATH]
   May be a YAML file, or a directory containing an `installation.yaml`.
   If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
   variable.
+
+#### Options
+
+- `-q` / `--quiet` — suppress the per-provider listing; only report
+  problems. When combined with a failing run, the errors are emitted as
+  a single JSON document on stdout (suitable for piping into `jq` or a
+  CI log parser).
 
 #### Output
 
@@ -440,14 +459,22 @@ is printed:
 
 `<provider_id>` is the key Soliplex uses internally to refer to the
 provider; `<title>` is the human-readable label surfaced to clients; and
-`<server_url>` is the OIDC issuer / discovery base URL.
+`<server_url>` is the OIDC issuer / discovery base URL. If the provider
+fails runtime-model validation, an `ERROR: <message>` line is appended
+to its entry.
+
+#### Behavior Notes
+
+- **Validation is offline.** The command does not contact the OIDC
+  server itself; it only checks that the YAML-declared configuration
+  converts cleanly to the runtime model.
 
 #### Exit Status
 
-- Always `0`. This command is a reporting tool — it does not contact the
-  OIDC servers and does not fail if a provider is misconfigured. Use
-  `audit installation` to validate that each provider's runtime model is
-  well-formed.
+- `0` — every declared OIDC provider validated.
+- `1` — at least one provider failed runtime-model validation. In
+  `--quiet` mode, the per-provider errors are printed as JSON on stdout
+  before exit.
 
 #### Examples
 
@@ -471,7 +498,7 @@ their names, descriptions, and any RAG databases they reference
 `soliplex-cli list-rooms`.)
 
 ```bash
-soliplex-cli audit rooms [INSTALLATION_CONFIG_PATH]
+soliplex-cli audit rooms [OPTIONS] [INSTALLATION_CONFIG_PATH]
 ```
 
 #### Positional Argument
@@ -480,6 +507,13 @@ soliplex-cli audit rooms [INSTALLATION_CONFIG_PATH]
   May be a YAML file, or a directory containing an `installation.yaml`.
   If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
   variable.
+
+#### Options
+
+- `-q` / `--quiet` — suppress the per-room listing; only report
+  problems. When combined with a failing run, the errors are emitted as
+  a single JSON document on stdout (suitable for piping into `jq` or a
+  CI log parser).
 
 #### Output
 
@@ -524,10 +558,11 @@ count column is shown as `error` rather than a number.
 
 #### Exit Status
 
-- Always `0`. Per-room errors (missing RAG files, failing count queries)
-  are reported inline and do not fail the process. Use
-  `audit installation` if you need a non-zero exit on configuration
-  problems.
+- `0` — every room's RAG configuration resolved and every document
+  count completed.
+- `1` — at least one room had a missing RAG file (`Invalid Haiku Rag
+  configs`) or a failing `count_documents` query. In `--quiet` mode,
+  the per-room errors are printed as JSON on stdout before exit.
 
 #### Examples
 
@@ -552,13 +587,14 @@ soliplex-cli audit rooms example/installation.yaml | grep '^- \['
 ### `audit completions`
 
 List the OpenAI-compatible completion endpoints declared in the
-installation configuration. Each completion exposes a Soliplex agent as
-a `/v1/chat/completions`-style endpoint so that existing OpenAI-client
+installation configuration, and validate that each one converts cleanly
+to its runtime model. Each completion exposes a Soliplex agent as a
+`/v1/chat/completions`-style endpoint so that existing OpenAI-client
 code can talk to it unchanged. (Replaces the deprecated
 `soliplex-cli list-completions`.)
 
 ```bash
-soliplex-cli audit completions [INSTALLATION_CONFIG_PATH]
+soliplex-cli audit completions [OPTIONS] [INSTALLATION_CONFIG_PATH]
 ```
 
 #### Positional Argument
@@ -567,6 +603,13 @@ soliplex-cli audit completions [INSTALLATION_CONFIG_PATH]
   May be a YAML file, or a directory containing an `installation.yaml`.
   If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
   variable.
+
+#### Options
+
+- `-q` / `--quiet` — suppress the per-completion listing; only report
+  problems. When combined with a failing run, the errors are emitted as
+  a single JSON document on stdout (suitable for piping into `jq` or a
+  CI log parser).
 
 #### Output
 
@@ -580,7 +623,9 @@ printed of the form:
 `<completion_id>` is the key Soliplex uses internally to refer to the
 endpoint; `<name>` is the human-readable label. Descriptions, model
 bindings, and authorization rules are not shown — use
-`audit installation` (or read the YAML directly) to inspect those.
+`audit installation` (or read the YAML directly) to inspect those. If
+the completion fails runtime-model validation, an `ERROR: <message>`
+line is appended to its entry.
 
 #### Behavior Notes
 
@@ -591,8 +636,10 @@ bindings, and authorization rules are not shown — use
 
 #### Exit Status
 
-- Always `0`. Use `audit installation` if you need a non-zero exit on
-  configuration problems.
+- `0` — every declared completion validated.
+- `1` — at least one completion failed runtime-model validation. In
+  `--quiet` mode, the per-completion errors are printed as JSON on
+  stdout before exit.
 
 #### Examples
 
@@ -616,7 +663,7 @@ validation errors produced while loading it. (Replaces the deprecated
 `soliplex-cli list-skills`.)
 
 ```bash
-soliplex-cli audit skills [INSTALLATION_CONFIG_PATH]
+soliplex-cli audit skills [OPTIONS] [INSTALLATION_CONFIG_PATH]
 ```
 
 #### Positional Argument
@@ -625,6 +672,13 @@ soliplex-cli audit skills [INSTALLATION_CONFIG_PATH]
   May be a YAML file, or a directory containing an `installation.yaml`.
   If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
   variable.
+
+#### Options
+
+- `-q` / `--quiet` — suppress the per-skill listing; only report
+  problems. When combined with a failing run, the errors are emitted as
+  a single JSON document on stdout (suitable for piping into `jq` or a
+  CI log parser).
 
 #### Output
 
@@ -652,15 +706,18 @@ by a list of errors:
 
 #### Behavior Notes
 
-- **Reports validation errors inline, not via exit status.** A skill
-  that fails validation is shown with its error list, but the command
-  still exits `0`. Use `audit installation` (which runs the full
-  `skills_ref` validator against every filesystem skills path) if you
-  need a non-zero exit on broken skills.
+- **Validation surface is the configured skill list.** This command
+  reports the validation errors recorded on each `skill_config` at load
+  time. For deeper checks (every skill found under each configured
+  filesystem skills path, run through the full `skills_ref` validator),
+  use `audit installation`.
 
 #### Exit Status
 
-- Always `0`.
+- `0` — every declared skill loaded without validation errors.
+- `1` — at least one skill recorded one or more validation errors. In
+  `--quiet` mode, the per-skill error lists are printed as JSON on
+  stdout before exit.
 
 #### Examples
 

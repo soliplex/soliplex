@@ -57,6 +57,39 @@ def _find_skill_paths(to_search: pathlib.Path):
 AUDIT_HELP = "Audit the installation configuration"
 
 
+_QUIET_OPTION = typer.Option(
+    False,
+    "-q",
+    "--quiet",
+    help="Show only errors",
+)
+
+
+def _quiet_console_funcs(quiet):
+    """Return ``(line, rule, print, print_exception)`` callables.
+
+    When ``quiet`` is true the returned callables are no-ops, suppressing
+    human-focused output.
+    """
+    if quiet:
+        noop = lambda *args, **kwargs: None  # noqa E731
+        return noop, noop, noop, noop
+    return (
+        the_console.line,
+        the_console.rule,
+        the_console.print,
+        the_console.print_exception,
+    )
+
+
+def _emit_errors(errors, quiet):
+    """Emit a JSON error report (in quiet mode) and exit ``1`` if any."""
+    if errors:
+        if quiet:
+            the_console.print_json(data=errors)
+        sys.exit(1)
+
+
 class _AuditGroup(TyperGroup):
     """Default to the 'installation' subcommand when none is given.
 
@@ -92,26 +125,15 @@ app = typer.Typer(
 def audit_installation(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-    quiet: bool = typer.Option(
-        False,
-        "-q",
-        "--quiet",
-        help="Show only errors",
-    ),
+    quiet: bool = _QUIET_OPTION,
 ):
     the_installation = cli_util.get_installation(installation_path)
 
     errors = {}
 
-    if quiet:
-        tc_line = lambda *args: None  # noqa E731
-        tc_rule = lambda *args: None  # noqa E731
-        tc_print = lambda *args: None  # noqa E731
-    else:
-        tc_line = the_console.line
-        tc_rule = the_console.rule
-        tc_print = the_console.print
-        tc_print_exception = the_console.print_exception
+    tc_line, tc_rule, tc_print, tc_print_exception = _quiet_console_funcs(
+        quiet
+    )
 
     tc_line()
     tc_rule("Checking secrets")
@@ -344,16 +366,14 @@ def audit_installation(
         tc_print("OK (defaults)")
     tc_line()
 
-    if errors:
-        if quiet:
-            the_console.print_json(data=errors)
-        sys.exit(-1)
+    _emit_errors(errors, quiet)
 
 
 @app.command("secrets")
 def audit_secrets(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
+    quiet: bool = _QUIET_OPTION,
 ):
     """List secrets defined in the installation"""
     the_installation = cli_util.get_installation(installation_path)
@@ -364,15 +384,23 @@ def audit_secrets(
     else:
         missing = set()
 
-    the_console.line()
-    the_console.rule("Configured secrets")
-    the_console.line()
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured secrets")
+    tc_line()
+
+    errors = {}
+    if missing:
+        errors["missing_secrets"] = sorted(missing)
 
     for secret_config in the_installation._config.secrets:
         flag = "MISSING" if secret_config.secret_name in missing else "OK"
-        the_console.print(f"- {secret_config.secret_name:25} {flag}")
+        tc_print(f"- {secret_config.secret_name:25} {flag}")
 
-    the_console.print()
+    tc_print()
+
+    _emit_errors(errors, quiet)
 
 
 @app.command("environment")
@@ -387,6 +415,7 @@ def audit_environment(
 Show available sources, and which is selected.
 """,
     ),
+    quiet: bool = _QUIET_OPTION,
 ):
     """List environment variables defined in the installation"""
     the_installation = cli_util.get_installation(installation_path)
@@ -397,46 +426,66 @@ Show available sources, and which is selected.
     else:
         missing = set()
 
-    the_console.line()
-    the_console.rule("Configured environment variables")
-    the_console.line()
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured environment variables")
+    tc_line()
+
+    errors = {}
+    if missing:
+        errors["missing_env_vars"] = sorted(missing)
 
     for key, value in the_installation._config.environment.items():
         if key in missing:
             value = "MISSING"
 
-        the_console.print(f"- {key:25}: {value}")
+        tc_print(f"- {key:25}: {value}")
 
         if verbose:
             for i_source, source in enumerate(
                 the_installation.get_environment_sources(key)
             ):
                 mark = " " if i_source else "*"
-                the_console.print(
+                tc_print(
                     f"  {mark}{str(source.source_type):24}: {source.value}"
                 )
 
-        the_console.print()
+        tc_print()
 
-    the_console.print()
+    tc_print()
+
+    _emit_errors(errors, quiet)
 
 
 @app.command("oidc")
 def audit_oidc_auth_providers(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
+    quiet: bool = _QUIET_OPTION,
 ):
     """List OIDC Auth Providers defined in the installation"""
     the_installation = cli_util.get_installation(installation_path)
 
-    the_console.line()
-    the_console.rule("Configured OIDC Auth Providers")
-    the_console.line()
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured OIDC Auth Providers")
+    tc_line()
+
+    errors = {}
 
     for oidc_config in the_installation.oidc_auth_system_configs:
-        the_console.print(f"- [ {oidc_config.id} ] {oidc_config.title}: ")
-        the_console.print(f"  {oidc_config.server_url}")
-        the_console.line()
+        tc_print(f"- [ {oidc_config.id} ] {oidc_config.title}: ")
+        tc_print(f"  {oidc_config.server_url}")
+        try:
+            models.OIDCAuthSystem.from_config(oidc_config)
+        except Exception as exc:
+            errors.setdefault("oidc", {})[oidc_config.id] = str(exc)
+            tc_print(f"  ERROR: {exc}")
+        tc_line()
+
+    _emit_errors(errors, quiet)
 
 
 async def _async_count(rag):
@@ -457,6 +506,7 @@ def _count_rag_documents(rag: hr_client.HaikuRAG):
 def audit_rooms(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
+    quiet: bool = _QUIET_OPTION,
 ):
     """List rooms defined in the installation"""
     the_installation = cli_util.get_installation(installation_path)
@@ -465,79 +515,111 @@ def audit_rooms(
     except config_installation.MissingEnvVars:
         pass
 
-    the_console.line()
-    the_console.rule("Configured Rooms")
-    the_console.line()
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured Rooms")
+    tc_line()
+
+    errors = {}
 
     # Deliberately bypass auth check done by 'get_room_configs' here.
     available_rooms = the_installation._config.room_configs
     cwd = pathlib.Path.cwd()
 
     for room_config in available_rooms.values():
-        the_console.print(f"- [ {room_config.id} ] {room_config.name}: ")
-        the_console.print(f"  {room_config.description}")
+        tc_print(f"- [ {room_config.id} ] {room_config.name}: ")
+        tc_print(f"  {room_config.description}")
         try:
             hrc_kws = list(
                 room_config.list_haiku_rag_client_kw(include_source=True)
             )
         except config_rag.RagDbFileNotFound as exc:
-            the_console.log("   Invalid Haiku Rag configs")
-            the_console.print(str(exc))
+            errors.setdefault("rag", {})[room_config.id] = str(exc)
+            tc_print("   Invalid Haiku Rag configs")
+            tc_print(str(exc))
         else:
             if hrc_kws:
-                the_console.print()
-                the_console.print("   Haiku Rag DBs")
+                tc_print()
+                tc_print("   Haiku Rag DBs")
                 for hr_client_kw in hrc_kws:
                     source = hr_client_kw.pop("source")
                     db_path = hr_client_kw["db_path"].relative_to(cwd)
                     rag = hr_client.HaikuRAG(**hr_client_kw)
                     count = _count_rag_documents(rag)
-                    the_console.print(
-                        f"   - {source:20}: {str(db_path):30} {count}"
-                    )
-                    the_console.print()
-        the_console.line()
+                    if count == "error":
+                        room_rag_errors = errors.setdefault(
+                            "rag_count", {}
+                        ).setdefault(room_config.id, {})
+                        room_rag_errors[source] = "count failed"
+                    tc_print(f"   - {source:20}: {str(db_path):30} {count}")
+                    tc_print()
+        tc_line()
+
+    _emit_errors(errors, quiet)
 
 
 @app.command("completions")
 def audit_completions(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
+    quiet: bool = _QUIET_OPTION,
 ):
     """List completions defined in the installation"""
     the_installation = cli_util.get_installation(installation_path)
 
-    the_console.line()
-    the_console.rule("Configured Completions")
-    the_console.line()
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured Completions")
+    tc_line()
+
+    errors = {}
 
     # Deliberately bypass auth check done by 'get_room_configs' here.
     available_completions = the_installation._config.completion_configs
     for compl_config in available_completions.values():
-        the_console.print(f"- [ {compl_config.id} ] {compl_config.name}: ")
-        the_console.line()
+        tc_print(f"- [ {compl_config.id} ] {compl_config.name}: ")
+        try:
+            models.Completion.from_config(compl_config)
+        except Exception as exc:
+            errors.setdefault("completion", {})[compl_config.id] = str(exc)
+            tc_print(f"  ERROR: {exc}")
+        tc_line()
+
+    _emit_errors(errors, quiet)
 
 
 @app.command("skills")
 def audit_skills(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
+    quiet: bool = _QUIET_OPTION,
 ):
     """List skills defined in the installation"""
     the_installation = cli_util.get_installation(installation_path)
 
-    the_console.line()
-    the_console.rule("Configured Skills")
-    the_console.line()
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured Skills")
+    tc_line()
+
+    errors = {}
 
     available_skills = the_installation._config.skill_configs
     for skill_name, skill_config in available_skills.items():
-        the_console.print(f"- [ {skill_config.kind}:{skill_name}  ]")
-        errors = getattr(skill_config, "errors", None)
-        if errors:
-            the_console.print("  Validation errors:")
-            for error in errors:
-                the_console.print(f"  - {error}")
+        tc_print(f"- [ {skill_config.kind}:{skill_name}  ]")
+        skill_errors = getattr(skill_config, "errors", None)
+        if skill_errors:
+            errors.setdefault("skills", {})[skill_name] = [
+                str(e) for e in skill_errors
+            ]
+            tc_print("  Validation errors:")
+            for error in skill_errors:
+                tc_print(f"  - {error}")
         else:
-            the_console.print(f"  {skill_config.description}")
-        the_console.line()
+            tc_print(f"  {skill_config.description}")
+        tc_line()
+
+    _emit_errors(errors, quiet)
