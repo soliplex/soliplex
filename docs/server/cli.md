@@ -138,7 +138,7 @@ commands; see [Deprecated Command Names](#deprecated-command-names).
 **Tolerant of missing environment variables.** All `audit` subcommands
 load the installation in an audit-only mode that swallows
 `MissingEnvVars` during initial config resolution, so unresolved
-entries never abort the listing. Use `audit installation` (or `audit
+entries never abort the listing. Use `audit all` (or `audit
 environment`) to validate the environment separately.
 
 ### Group Options
@@ -159,24 +159,23 @@ example/minimal.yaml`.
 ### Default Subcommand
 
 If the first positional argument to `soliplex-cli audit` does not name
-one of its subcommands (`installation`, `secrets`, `environment`,
-`oidc`, `rooms`, `completions`, `quizzes`, `logging`, `skills`), it is
-treated as the `INSTALLATION_CONFIG_PATH` argument to `audit
-installation`. In other words, the following two invocations are
-equivalent:
+one of its subcommands (`all`, `secrets`, `environment`, `oidc`,
+`rooms`, `completions`, `quizzes`, `logging`, `skills`), it is treated
+as the `INSTALLATION_CONFIG_PATH` argument to `audit all`. In other
+words, the following two invocations are equivalent:
 
 ```bash
 soliplex-cli audit example/minimal.yaml          # preferred
-soliplex-cli audit installation example/minimal.yaml
+soliplex-cli audit all example/minimal.yaml
 ```
 
-The shorthand is the **preferred spelling** for invoking
-`audit installation`. Use the explicit `audit installation` form only
-when you need the `SOLIPLEX_INSTALLATION_PATH` env-var fallback (the
-shorthand requires a positional argument; with no positional,
-`soliplex-cli audit` prints group help instead).
+The shorthand is the **preferred spelling** for invoking `audit all`.
+Use the explicit `audit all` form only when you need the
+`SOLIPLEX_INSTALLATION_PATH` env-var fallback (the shorthand requires a
+positional argument; with no positional, `soliplex-cli audit` prints
+group help instead).
 
-### `audit installation`
+### `audit all`
 
 Validate an installation configuration: resolve secrets and environment
 variables, instantiate the runtime models, and check the referenced
@@ -189,7 +188,7 @@ typos, and broken references up front. (Replaces the deprecated
 # preferred:
 soliplex-cli audit [OPTIONS] INSTALLATION_CONFIG_PATH
 # canonical (equivalent) form:
-soliplex-cli audit [OPTIONS] installation [INSTALLATION_CONFIG_PATH]
+soliplex-cli audit [OPTIONS] all [INSTALLATION_CONFIG_PATH]
 ```
 
 See [Group Options](#group-options) for the available `[OPTIONS]`, and
@@ -261,12 +260,12 @@ soliplex-cli audit --quiet example/installation.yaml \
 ```
 
 Use the env-var form instead of a positional argument (the canonical
-`audit installation` spelling is required here, since the shorthand
-needs a positional path):
+`audit all` spelling is required here, since the shorthand needs a
+positional path):
 
 ```bash
 export SOLIPLEX_INSTALLATION_PATH=example/minimal.yaml
-soliplex-cli audit installation
+soliplex-cli audit all
 ```
 
 ### `audit secrets`
@@ -626,7 +625,7 @@ entry is printed:
 `<completion_id>` is the key Soliplex uses internally to refer to the
 endpoint; `<name>` is the human-readable label. Descriptions, model
 bindings, and authorization rules are not shown — use
-`audit installation` (or read the YAML directly) to inspect those. If
+`audit all` (or read the YAML directly) to inspect those. If
 the completion fails runtime-model validation, the `OK` line is
 replaced by `ERROR: <message>`.
 
@@ -829,7 +828,7 @@ by a list of errors:
   reports the validation errors recorded on each `skill_config` at load
   time. For deeper checks (every skill found under each configured
   filesystem skills path, run through the full `skills_ref` validator),
-  use `audit installation`.
+  use `audit all`.
 
 #### Exit Status
 
@@ -1288,9 +1287,8 @@ pulled for that URL.
 #### Exit Status
 
 - Always `0`, even when some pulls failed. Check the printed summary
-  (`Pulled X/N …`) to detect partial failure. Use `audit installation`
-  if you need a non-zero exit for configuration problems before
-  pulling.
+  (`Pulled X/N …`) to detect partial failure. Use `audit all` if you
+  need a non-zero exit for configuration problems before pulling.
 
 #### Examples
 
@@ -1372,7 +1370,7 @@ installation.
 
 ### Exit Status
 
-- Always `0`. Use `audit installation` if you need a non-zero exit on
+- Always `0`. Use `audit all` if you need a non-zero exit on
   configuration problems.
 
 ### Examples
@@ -1477,7 +1475,7 @@ future major release. New scripts should use the grouped form.
 
 | Deprecated                    | Use instead                |
 |-------------------------------|----------------------------|
-| `check-config`                | `audit` (or `audit installation`) |
+| `check-config`                | `audit` (or `audit all`)   |
 | `list-secrets`                | `audit secrets`            |
 | `list-environment`            | `audit environment`        |
 | `list-oidc-auth-providers`    | `audit oidc`               |

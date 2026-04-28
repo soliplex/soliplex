@@ -60,7 +60,7 @@ def _hidden_alias(name, func):
 
 
 _hidden_alias("pull-models", ollama.pull_models)
-_hidden_alias("check-config", audit.audit_installation)
+_hidden_alias("check-config", audit.audit_all)
 _hidden_alias("list-secrets", audit.audit_secrets)
 _hidden_alias("list-environment", audit.audit_environment)
 _hidden_alias("list-oidc-auth-providers", audit.audit_oidc_auth_providers)

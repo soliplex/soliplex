@@ -55,7 +55,7 @@ def _find_skill_paths(to_search: pathlib.Path):
                 pass
 
 
-AUDIT_HELP = "Audit the installation configuration"
+AUDIT_HELP = "Audit a Soliplex installation configuration"
 
 
 _QUIET_OPTION = typer.Option(
@@ -103,7 +103,7 @@ class _AuditGroup(TyperGroup):
             if token.startswith("-"):
                 continue
             if token not in self.commands:
-                args = [*args[:i], "installation", *args[i:]]
+                args = [*args[:i], "all", *args[i:]]
             break
         return super().parse_args(ctx, args)
 
@@ -125,10 +125,10 @@ def _audit_callback(
 
 
 @app.command(
-    "installation",
+    "all",
     help=AUDIT_HELP,
 )
-def audit_installation(
+def audit_all(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
 ):
