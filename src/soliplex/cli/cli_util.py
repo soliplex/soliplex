@@ -13,12 +13,19 @@ the_console = console.Console()
 
 def get_installation(
     installation_path: pathlib.Path,
+    auditing: bool = False,
 ) -> installation.Installation:
 
     if installation_path.is_dir():
         installation_path = installation_path / "installation.yaml"
     i_config = config_installation.load_installation(installation_path)
-    i_config.reload_configurations()
+
+    try:
+        i_config.reload_configurations()
+    except config_installation.MissingEnvVars:
+        if not auditing:
+            raise
+
     return installation.Installation(i_config)
 
 

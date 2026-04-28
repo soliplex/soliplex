@@ -135,6 +135,12 @@ mutating state. Run `soliplex-cli audit --help` for the full list.
 This group replaces the deprecated flat `check-config` / `list-*`
 commands; see [Deprecated Command Names](#deprecated-command-names).
 
+**Tolerant of missing environment variables.** All `audit` subcommands
+load the installation in an audit-only mode that swallows
+`MissingEnvVars` during initial config resolution, so unresolved
+entries never abort the listing. Use `audit installation` (or `audit
+environment`) to validate the environment separately.
+
 ### Group Options
 
 These options apply to every `audit` subcommand and must be placed
@@ -211,8 +217,9 @@ section header and an `OK` / error summary for each:
 4. **OIDC authentication systems** — each configured OIDC provider
    converts cleanly to its runtime model.
 5. **Rooms** — each room converts cleanly to its runtime model. For
-   rooms (and their skills / tools) that use RAG, the referenced
-   LanceDB path is also resolved.
+   each RAG-bearing sub-config (the room's agent, named skills, named
+   tools), the referenced LanceDB path is resolved separately and
+   reported on its own status line.
 6. **Completions** — each completion endpoint converts cleanly to its
    runtime model.
 7. **Quizzes** — every `*.json` question file under each configured
@@ -520,14 +527,24 @@ form:
 ```
 
 `<source>` identifies where the RAG database reference came from within
-the room (for example the agent, a named skill, or a named tool);
-`<db_path>` is shown relative to the current working directory.
+the room — `agent`, `skill:<name>`, or `tool:<name>`. `<db_path>` is
+shown relative to the current working directory.
 
-Rooms with no RAG configuration omit the "Haiku Rag DBs" block. If a
-configured RAG database file cannot be located, an `Invalid Haiku Rag
-configs` line is printed in place of the document listing. If a
-particular database is present but the document count query fails, the
-count column is shown as `error` rather than a number.
+If `Room.from_config(...)` fails for a room (i.e. the room cannot be
+converted to its runtime model), an extra line is printed beneath the
+room header before the "Haiku Rag DBs" block:
+
+```text
+  ERROR: <message>
+```
+
+Rooms with no RAG configuration omit the "Haiku Rag DBs" block.
+Within the block, each RAG-bearing sub-config (the agent, a named
+skill, or a named tool) gets its own row — successes and failures are
+intermixed. If a configured RAG database file cannot be located, that
+row is replaced by `- <source>: ERROR: <message>`. If the database
+is present but the `count_documents` query fails, the count column is
+shown as `error` rather than a number.
 
 #### Behavior Notes
 
@@ -535,9 +552,6 @@ count column is shown as `error` rather than a number.
   configured in the installation, regardless of which rooms any given
   user would be authorized to see via the normal `get_room_configs`
   path. It reflects configuration, not per-user visibility.
-- **Tolerant of missing environment variables.** Unresolved entries do
-  not abort the listing — use `audit installation` (or
-  `audit environment`) to validate the environment separately.
 - **Opens each RAG database.** The document count is obtained by
   opening the LanceDB at each configured `db_path` and issuing a
   `count_documents` query. Expect the command to be slower than the
@@ -549,11 +563,12 @@ count column is shown as `error` rather than a number.
 
 #### Exit Status
 
-- `0` — every room's RAG configuration resolved and every document
-  count completed.
-- `1` — at least one room had a missing RAG file (`Invalid Haiku Rag
-  configs`) or a failing `count_documents` query. In `--quiet` mode,
-  the per-room errors are printed as JSON on stdout before exit.
+- `0` — every room's runtime model converted, every RAG configuration
+  resolved, and every document count completed.
+- `1` — at least one room failed runtime-model validation, had a
+  missing RAG file, or had a failing `count_documents` query. In
+  `--quiet` mode, the per-room errors are printed as JSON on stdout
+  before exit.
 
 #### Examples
 
@@ -599,19 +614,20 @@ See [Group Options](#group-options) for the available `[OPTIONS]`.
 
 #### Output
 
-For each completion endpoint declared in the installation, one line is
-printed of the form:
+For each completion endpoint declared in the installation, a two-line
+entry is printed:
 
 ```text
 - [ <completion_id> ] <name>:
+  OK
 ```
 
 `<completion_id>` is the key Soliplex uses internally to refer to the
 endpoint; `<name>` is the human-readable label. Descriptions, model
 bindings, and authorization rules are not shown — use
 `audit installation` (or read the YAML directly) to inspect those. If
-the completion fails runtime-model validation, an `ERROR: <message>`
-line is appended to its entry.
+the completion fails runtime-model validation, the `OK` line is
+replaced by `ERROR: <message>`.
 
 #### Behavior Notes
 
