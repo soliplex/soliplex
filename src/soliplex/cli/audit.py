@@ -66,7 +66,7 @@ app = typer.Typer(
     "installation",
     help=AUDIT_HELP,
 )
-def check_config(
+def audit_installation(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
     quiet: bool = typer.Option(
@@ -328,7 +328,7 @@ def check_config(
 
 
 @app.command("secrets")
-def list_secrets(
+def audit_secrets(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
 ):
@@ -353,7 +353,7 @@ def list_secrets(
 
 
 @app.command("environment")
-def list_environment(
+def audit_environment(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
     verbose: bool = typer.Option(
@@ -399,7 +399,7 @@ Show available sources, and which is selected.
 
 
 @app.command("oidc")
-def list_oidc_auth_providers(
+def audit_oidc_auth_providers(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
 ):
@@ -431,7 +431,7 @@ def _count_rag_documents(rag: hr_client.HaikuRAG):
 
 
 @app.command("rooms")
-def list_rooms(
+def audit_rooms(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
 ):
@@ -477,7 +477,7 @@ def list_rooms(
 
 
 @app.command("completions")
-def list_completions(
+def audit_completions(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
 ):
@@ -496,7 +496,7 @@ def list_completions(
 
 
 @app.command("skills")
-def list_skills(
+def audit_skills(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
 ):
