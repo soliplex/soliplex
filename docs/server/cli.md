@@ -160,7 +160,7 @@ example/minimal.yaml`.
 
 If the first positional argument to `soliplex-cli audit` does not name
 one of its subcommands (`all`, `installation`, `secrets`, `environment`,
-`oidc`, `rooms`, `completions`, `quizzes`, `logging`, `skills`), it is
+`oidc`, `rooms`, `completions`, `quizzes`, `skills`, `logging`), it is
 treated as the `INSTALLATION_CONFIG_PATH` argument to `audit all`. In
 other words, the following two invocations are equivalent:
 
@@ -224,10 +224,10 @@ section header and an `OK` / error summary for each:
    runtime model.
 7. **Quizzes** — every `*.json` question file under each configured
    quizzes path loads and parses.
-8. **Python logging** — if a `logging_config_file` is configured, it
-   parses as YAML and the logging headers / claims maps are printed.
-9. **Skills** — every skill found under each configured filesystem
+8. **Skills** — every skill found under each configured filesystem
    skills path passes `skills_ref` validation.
+9. **Python logging** — if a `logging_config_file` is configured, it
+   parses as YAML and the logging headers / claims maps are printed.
 10. **Logfire** — the Logfire config (if any) is printed for review.
 
 #### Exit Status
@@ -766,71 +766,6 @@ Audit a directory-style installation:
 soliplex-cli audit quizzes example/
 ```
 
-### `audit logging`
-
-Show the Python-logging configuration referenced by the installation,
-and validate that the configured YAML file (if any) loads and parses.
-
-```bash
-soliplex-cli audit [OPTIONS] logging [INSTALLATION_CONFIG_PATH]
-```
-
-See [Group Options](#group-options) for the available `[OPTIONS]`.
-
-#### Positional Argument
-
-- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
-  May be a YAML file, or a directory containing an `installation.yaml`.
-  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
-  variable.
-
-#### Output
-
-If the installation does not configure a `logging_config_file`, a single
-line is printed:
-
-```text
-OK (defaults)
-```
-
-Otherwise, the configured path is shown along with the parsed YAML and
-the installation's request-headers / token-claims maps:
-
-```text
-Logging config: <path>
-<parsed YAML as a Python dict>
-Headers map: <headers_map>
-Claims map: <claims_map>
-OK
-```
-
-If the file cannot be opened or fails to parse as YAML, the listing is
-truncated after the path and the error message is printed in place of
-the parsed body and `OK` line.
-
-#### Exit Status
-
-- `0` — no logging file configured, or the configured file loaded and
-  parsed cleanly.
-- `1` — the configured `logging_config_file` could not be opened or
-  failed to parse as YAML. In `--quiet` mode, the error is printed as
-  JSON (under the key `logging`) on stdout before exit.
-
-#### Examples
-
-Show the logging config for an installation that defines one:
-
-```bash
-soliplex-cli audit logging example/installation-openai.yaml
-```
-
-Confirm the default-logging path for an installation that does not
-configure one:
-
-```bash
-soliplex-cli audit logging example/minimal.yaml
-```
-
 ### `audit skills`
 
 List the Haiku skills declared in the installation configuration,
@@ -902,6 +837,71 @@ Audit a directory-style installation:
 
 ```bash
 soliplex-cli audit skills example/
+```
+
+### `audit logging`
+
+Show the Python-logging configuration referenced by the installation,
+and validate that the configured YAML file (if any) loads and parses.
+
+```bash
+soliplex-cli audit [OPTIONS] logging [INSTALLATION_CONFIG_PATH]
+```
+
+See [Group Options](#group-options) for the available `[OPTIONS]`.
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Output
+
+If the installation does not configure a `logging_config_file`, a single
+line is printed:
+
+```text
+OK (defaults)
+```
+
+Otherwise, the configured path is shown along with the parsed YAML and
+the installation's request-headers / token-claims maps:
+
+```text
+Logging config: <path>
+<parsed YAML as a Python dict>
+Headers map: <headers_map>
+Claims map: <claims_map>
+OK
+```
+
+If the file cannot be opened or fails to parse as YAML, the listing is
+truncated after the path and the error message is printed in place of
+the parsed body and `OK` line.
+
+#### Exit Status
+
+- `0` — no logging file configured, or the configured file loaded and
+  parsed cleanly.
+- `1` — the configured `logging_config_file` could not be opened or
+  failed to parse as YAML. In `--quiet` mode, the error is printed as
+  JSON (under the key `logging`) on stdout before exit.
+
+#### Examples
+
+Show the logging config for an installation that defines one:
+
+```bash
+soliplex-cli audit logging example/installation-openai.yaml
+```
+
+Confirm the default-logging path for an installation that does not
+configure one:
+
+```bash
+soliplex-cli audit logging example/minimal.yaml
 ```
 
 ## `admin-users`

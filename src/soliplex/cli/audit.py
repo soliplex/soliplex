@@ -23,38 +23,6 @@ from soliplex.config import rag as config_rag
 the_console = cli_util.the_console
 
 
-def _find_skill_paths(to_search: pathlib.Path):
-    """Yield a sequence of skill paths under 'to_search'
-
-    Yielded values are paths, suitable for passing to
-    'skill_parser.read_properties'.
-
-    If 'to_search' has its own copy of 'SKILL.md', just yield the one
-    config parsed from it.
-
-    Otherwise, iterate over immediate subdirectories, yielding configs
-    parsed from any which have copies of 'SKILL.md'
-    """
-    filename = "SKILL.md"
-    config_file = to_search / filename
-
-    if config_file.is_file():
-        yield to_search
-
-    else:
-        for sub in sorted(to_search.glob("*")):
-            # See #233
-            if sub.name.startswith("."):
-                continue
-
-            if sub.is_dir():
-                sub_config = sub / filename
-                if sub_config.is_file():
-                    yield sub
-            else:  # pragma: NO COVER
-                pass
-
-
 AUDIT_HELP = "Audit a Soliplex installation configuration"
 
 
@@ -276,6 +244,29 @@ def audit_all(
         tc_line()
 
     tc_line()
+    tc_rule("Validating skills")
+    tc_line()
+    skills_errors = {}
+
+    for skills_path in the_installation._config.filesystem_skills_paths:
+        tc_print(f"Filesystem skills path: {skills_path}")
+        for skill_path in _find_skill_paths(skills_path):
+            tc_print(f"- {skill_path.name}")
+            skill_errors = skill_validator.validate(skill_path)
+            if skill_errors:
+                sk_errors = skills_errors.setdefault(skill_path, [])
+                for error in skill_errors:
+                    sk_errors.append(str(error))
+
+                    tc_print(f"  {error}")
+            else:
+                tc_print("  OK")
+        tc_line()
+
+    if skills_errors:
+        errors["skills"] = skills_errors
+
+    tc_line()
     tc_rule("Validating Python logging")
     tc_line()
 
@@ -301,29 +292,6 @@ def audit_all(
             )
             tc_print("OK")
     tc_line()
-
-    tc_line()
-    tc_rule("Validating skills")
-    tc_line()
-    skills_errors = {}
-
-    for skills_path in the_installation._config.filesystem_skills_paths:
-        tc_print(f"Filesystem skills path: {skills_path}")
-        for skill_path in _find_skill_paths(skills_path):
-            tc_print(f"- {skill_path.name}")
-            skill_errors = skill_validator.validate(skill_path)
-            if skill_errors:
-                sk_errors = skills_errors.setdefault(skill_path, [])
-                for error in skill_errors:
-                    sk_errors.append(str(error))
-
-                    tc_print(f"  {error}")
-            else:
-                tc_print("  OK")
-        tc_line()
-
-    if skills_errors:
-        errors["skills"] = skills_errors
 
     tc_line()
     tc_rule("Validating Logfire config")
@@ -792,6 +760,76 @@ def audit_quizzes(
     _emit_errors(errors, quiet)
 
 
+def _find_skill_paths(to_search: pathlib.Path):
+    """Yield a sequence of skill paths under 'to_search'
+
+    Yielded values are paths, suitable for passing to
+    'skill_parser.read_properties'.
+
+    If 'to_search' has its own copy of 'SKILL.md', just yield the one
+    config parsed from it.
+
+    Otherwise, iterate over immediate subdirectories, yielding configs
+    parsed from any which have copies of 'SKILL.md'
+    """
+    filename = "SKILL.md"
+    config_file = to_search / filename
+
+    if config_file.is_file():
+        yield to_search
+
+    else:
+        for sub in sorted(to_search.glob("*")):
+            # See #233
+            if sub.name.startswith("."):
+                continue
+
+            if sub.is_dir():
+                sub_config = sub / filename
+                if sub_config.is_file():
+                    yield sub
+            else:  # pragma: NO COVER
+                pass
+
+
+@app.command("skills")
+def audit_skills(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+):
+    """List skills defined in the installation"""
+    quiet = ctx.obj["quiet"]
+    the_installation = cli_util.get_installation(
+        installation_path,
+        auditing=True,
+    )
+
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured Skills")
+    tc_line()
+
+    errors = {}
+
+    available_skills = the_installation._config.skill_configs
+    for skill_name, skill_config in available_skills.items():
+        tc_print(f"- [ {skill_config.kind}:{skill_name}  ]")
+        skill_errors = getattr(skill_config, "errors", None)
+        if skill_errors:
+            errors.setdefault("skills", {})[skill_name] = [
+                str(e) for e in skill_errors
+            ]
+            tc_print("  Validation errors:")
+            for error in skill_errors:
+                tc_print(f"  - {error}")
+        else:
+            tc_print(f"  {skill_config.description}")
+        tc_line()
+
+    _emit_errors(errors, quiet)
+
+
 def _load_logging_config(the_installation):
     """Return parsed Python-logging YAML, or ``None`` when none is configured.
 
@@ -853,43 +891,5 @@ def audit_logging(
                 f"Claims map: {the_installation._config.logging_claims_map}",
             )
             tc_print("OK")
-
-    _emit_errors(errors, quiet)
-
-
-@app.command("skills")
-def audit_skills(
-    ctx: typer.Context,
-    installation_path: types.installation_path_type,
-):
-    """List skills defined in the installation"""
-    quiet = ctx.obj["quiet"]
-    the_installation = cli_util.get_installation(
-        installation_path,
-        auditing=True,
-    )
-
-    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
-
-    tc_line()
-    tc_rule("Configured Skills")
-    tc_line()
-
-    errors = {}
-
-    available_skills = the_installation._config.skill_configs
-    for skill_name, skill_config in available_skills.items():
-        tc_print(f"- [ {skill_config.kind}:{skill_name}  ]")
-        skill_errors = getattr(skill_config, "errors", None)
-        if skill_errors:
-            errors.setdefault("skills", {})[skill_name] = [
-                str(e) for e in skill_errors
-            ]
-            tc_print("  Validation errors:")
-            for error in skill_errors:
-                tc_print(f"  - {error}")
-        else:
-            tc_print(f"  {skill_config.description}")
-        tc_line()
 
     _emit_errors(errors, quiet)
