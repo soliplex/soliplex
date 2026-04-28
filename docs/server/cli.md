@@ -136,6 +136,21 @@ mutating state. Run `soliplex-cli audit --help` for the full list.
 This group replaces the deprecated flat `check-config` / `list-*`
 commands; see [Deprecated Command Names](#deprecated-command-names).
 
+### Group Options
+
+These options apply to every `audit` subcommand and must be placed
+**before** the subcommand name (i.e., `soliplex-cli audit -q secrets
+example/minimal.yaml`, *not* `soliplex-cli audit secrets
+example/minimal.yaml -q`). They also work with the
+[shorthand](#default-subcommand): `soliplex-cli audit -q
+example/minimal.yaml`.
+
+- `-q` / `--quiet` — suppress per-subcommand human-focused output (the
+  section headers and per-item listings). When combined with a failing
+  run, the errors are emitted as a single JSON document on stdout
+  (suitable for piping into `jq` or a CI log parser); each subcommand
+  documents its own JSON shape under "Exit Status".
+
 ### Default Subcommand
 
 If the first positional argument to `soliplex-cli audit` does not name
@@ -168,11 +183,12 @@ typos, and broken references up front. (Replaces the deprecated
 # preferred:
 soliplex-cli audit [OPTIONS] INSTALLATION_CONFIG_PATH
 # canonical (equivalent) form:
-soliplex-cli audit installation [OPTIONS] [INSTALLATION_CONFIG_PATH]
+soliplex-cli audit [OPTIONS] installation [INSTALLATION_CONFIG_PATH]
 ```
 
-See [Default Subcommand](#default-subcommand) for the rules that make
-the first form a shortcut for the second.
+See [Group Options](#group-options) for the available `[OPTIONS]`, and
+[Default Subcommand](#default-subcommand) for the rules that make the
+first form a shortcut for the second.
 
 #### Positional Argument
 
@@ -180,13 +196,6 @@ the first form a shortcut for the second.
   May be a YAML file, or a directory containing an `installation.yaml`.
   If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
   variable.
-
-#### Options
-
-- `-q` / `--quiet` — suppress the per-section progress output; only
-  report problems. When combined with a failing run, the errors are
-  emitted as a single JSON document on stdout (suitable for piping into
-  `jq` or a CI log parser).
 
 #### What Gets Checked
 
@@ -240,7 +249,7 @@ CI-style invocation — only print output on failure, and capture the
 error JSON:
 
 ```bash
-soliplex-cli audit example/installation.yaml --quiet \
+soliplex-cli audit --quiet example/installation.yaml \
   > audit-errors.json || cat audit-errors.json
 ```
 
@@ -262,8 +271,10 @@ source — without exposing the values themselves. (Replaces the
 deprecated `soliplex-cli list-secrets`.)
 
 ```bash
-soliplex-cli audit secrets [OPTIONS] [INSTALLATION_CONFIG_PATH]
+soliplex-cli audit [OPTIONS] secrets [INSTALLATION_CONFIG_PATH]
 ```
+
+See [Group Options](#group-options) for the available `[OPTIONS]`.
 
 #### Positional Argument
 
@@ -271,13 +282,6 @@ soliplex-cli audit secrets [OPTIONS] [INSTALLATION_CONFIG_PATH]
   May be a YAML file, or a directory containing an `installation.yaml`.
   If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
   variable.
-
-#### Options
-
-- `-q` / `--quiet` — suppress the per-secret listing; only report
-  problems. When combined with a failing run, the errors are emitted as
-  a single JSON document on stdout (suitable for piping into `jq` or a
-  CI log parser).
 
 #### Output
 
@@ -334,8 +338,10 @@ multiple sources are configured. (Replaces the deprecated
 `soliplex-cli list-environment`.)
 
 ```bash
-soliplex-cli audit environment [OPTIONS] [INSTALLATION_CONFIG_PATH]
+soliplex-cli audit [OPTIONS] environment [-v] [INSTALLATION_CONFIG_PATH]
 ```
+
+See [Group Options](#group-options) for the available `[OPTIONS]`.
 
 #### Positional Argument
 
@@ -348,12 +354,8 @@ soliplex-cli audit environment [OPTIONS] [INSTALLATION_CONFIG_PATH]
 
 - `-v` / `--verbose` — after each variable, also list every configured
   source and its candidate value. The selected source is flagged with a
-  leading `*`; others are flagged with a space.
-- `-q` / `--quiet` — suppress the per-variable listing; only report
-  problems. When combined with a failing run, the errors are emitted as
-  a single JSON document on stdout (suitable for piping into `jq` or a
-  CI log parser). Mutually compatible with `--verbose`, but the verbose
-  source breakdown is also suppressed.
+  leading `*`; others are flagged with a space. Suppressed by the
+  group-level `-q` / `--quiet`.
 
 #### Output
 
@@ -430,8 +432,10 @@ validation. (Replaces the deprecated
 `soliplex-cli list-oidc-auth-providers`.)
 
 ```bash
-soliplex-cli audit oidc [OPTIONS] [INSTALLATION_CONFIG_PATH]
+soliplex-cli audit [OPTIONS] oidc [INSTALLATION_CONFIG_PATH]
 ```
+
+See [Group Options](#group-options) for the available `[OPTIONS]`.
 
 #### Positional Argument
 
@@ -439,13 +443,6 @@ soliplex-cli audit oidc [OPTIONS] [INSTALLATION_CONFIG_PATH]
   May be a YAML file, or a directory containing an `installation.yaml`.
   If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
   variable.
-
-#### Options
-
-- `-q` / `--quiet` — suppress the per-provider listing; only report
-  problems. When combined with a failing run, the errors are emitted as
-  a single JSON document on stdout (suitable for piping into `jq` or a
-  CI log parser).
 
 #### Output
 
@@ -498,8 +495,10 @@ their names, descriptions, and any RAG databases they reference
 `soliplex-cli list-rooms`.)
 
 ```bash
-soliplex-cli audit rooms [OPTIONS] [INSTALLATION_CONFIG_PATH]
+soliplex-cli audit [OPTIONS] rooms [INSTALLATION_CONFIG_PATH]
 ```
+
+See [Group Options](#group-options) for the available `[OPTIONS]`.
 
 #### Positional Argument
 
@@ -507,13 +506,6 @@ soliplex-cli audit rooms [OPTIONS] [INSTALLATION_CONFIG_PATH]
   May be a YAML file, or a directory containing an `installation.yaml`.
   If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
   variable.
-
-#### Options
-
-- `-q` / `--quiet` — suppress the per-room listing; only report
-  problems. When combined with a failing run, the errors are emitted as
-  a single JSON document on stdout (suitable for piping into `jq` or a
-  CI log parser).
 
 #### Output
 
@@ -594,8 +586,10 @@ code can talk to it unchanged. (Replaces the deprecated
 `soliplex-cli list-completions`.)
 
 ```bash
-soliplex-cli audit completions [OPTIONS] [INSTALLATION_CONFIG_PATH]
+soliplex-cli audit [OPTIONS] completions [INSTALLATION_CONFIG_PATH]
 ```
+
+See [Group Options](#group-options) for the available `[OPTIONS]`.
 
 #### Positional Argument
 
@@ -603,13 +597,6 @@ soliplex-cli audit completions [OPTIONS] [INSTALLATION_CONFIG_PATH]
   May be a YAML file, or a directory containing an `installation.yaml`.
   If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
   variable.
-
-#### Options
-
-- `-q` / `--quiet` — suppress the per-completion listing; only report
-  problems. When combined with a failing run, the errors are emitted as
-  a single JSON document on stdout (suitable for piping into `jq` or a
-  CI log parser).
 
 #### Output
 
@@ -663,8 +650,10 @@ validation errors produced while loading it. (Replaces the deprecated
 `soliplex-cli list-skills`.)
 
 ```bash
-soliplex-cli audit skills [OPTIONS] [INSTALLATION_CONFIG_PATH]
+soliplex-cli audit [OPTIONS] skills [INSTALLATION_CONFIG_PATH]
 ```
+
+See [Group Options](#group-options) for the available `[OPTIONS]`.
 
 #### Positional Argument
 
@@ -672,13 +661,6 @@ soliplex-cli audit skills [OPTIONS] [INSTALLATION_CONFIG_PATH]
   May be a YAML file, or a directory containing an `installation.yaml`.
   If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
   variable.
-
-#### Options
-
-- `-q` / `--quiet` — suppress the per-skill listing; only report
-  problems. When combined with a failing run, the errors are emitted as
-  a single JSON document on stdout (suitable for piping into `jq` or a
-  CI log parser).
 
 #### Output
 

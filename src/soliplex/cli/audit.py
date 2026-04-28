@@ -98,15 +98,12 @@ class _AuditGroup(TyperGroup):
     """
 
     def parse_args(self, ctx, args):
-        first_positional = next(
-            (a for a in args if not a.startswith("-")),
-            None,
-        )
-        if (
-            first_positional is not None
-            and first_positional not in self.commands
-        ):
-            args = ["installation", *args]
+        for i, token in enumerate(args):
+            if token.startswith("-"):
+                continue
+            if token not in self.commands:
+                args = [*args[:i], "installation", *args[i:]]
+            break
         return super().parse_args(ctx, args)
 
 
@@ -118,6 +115,14 @@ app = typer.Typer(
 )
 
 
+@app.callback()
+def _audit_callback(
+    ctx: typer.Context,
+    quiet: bool = _QUIET_OPTION,
+):
+    ctx.obj = {"quiet": quiet}
+
+
 @app.command(
     "installation",
     help=AUDIT_HELP,
@@ -125,8 +130,8 @@ app = typer.Typer(
 def audit_installation(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-    quiet: bool = _QUIET_OPTION,
 ):
+    quiet = ctx.obj["quiet"]
     the_installation = cli_util.get_installation(installation_path)
 
     errors = {}
@@ -373,9 +378,9 @@ def audit_installation(
 def audit_secrets(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-    quiet: bool = _QUIET_OPTION,
 ):
     """List secrets defined in the installation"""
+    quiet = ctx.obj["quiet"]
     the_installation = cli_util.get_installation(installation_path)
     try:
         the_installation.resolve_secrets()
@@ -415,9 +420,9 @@ def audit_environment(
 Show available sources, and which is selected.
 """,
     ),
-    quiet: bool = _QUIET_OPTION,
 ):
     """List environment variables defined in the installation"""
+    quiet = ctx.obj["quiet"]
     the_installation = cli_util.get_installation(installation_path)
     try:
         the_installation.resolve_environment()
@@ -462,9 +467,9 @@ Show available sources, and which is selected.
 def audit_oidc_auth_providers(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-    quiet: bool = _QUIET_OPTION,
 ):
     """List OIDC Auth Providers defined in the installation"""
+    quiet = ctx.obj["quiet"]
     the_installation = cli_util.get_installation(installation_path)
 
     tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
@@ -506,9 +511,9 @@ def _count_rag_documents(rag: hr_client.HaikuRAG):
 def audit_rooms(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-    quiet: bool = _QUIET_OPTION,
 ):
     """List rooms defined in the installation"""
+    quiet = ctx.obj["quiet"]
     the_installation = cli_util.get_installation(installation_path)
     try:
         the_installation.resolve_environment()
@@ -563,9 +568,9 @@ def audit_rooms(
 def audit_completions(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-    quiet: bool = _QUIET_OPTION,
 ):
     """List completions defined in the installation"""
+    quiet = ctx.obj["quiet"]
     the_installation = cli_util.get_installation(installation_path)
 
     tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
@@ -594,9 +599,9 @@ def audit_completions(
 def audit_skills(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-    quiet: bool = _QUIET_OPTION,
 ):
     """List skills defined in the installation"""
+    quiet = ctx.obj["quiet"]
     the_installation = cli_util.get_installation(installation_path)
 
     tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
