@@ -9,7 +9,7 @@ import typer
 import yaml
 from haiku.rag import client as hr_client
 from skills_ref import validator as skill_validator
-from typer.core import TyperGroup
+from typer import core as typer_core
 
 from soliplex import installation
 from soliplex import models
@@ -34,6 +34,10 @@ _QUIET_OPTION = typer.Option(
 )
 
 
+def _noop(*args, **kwargs):  # pragma: NO COVER
+    return None
+
+
 def _quiet_console_funcs(quiet):
     """Return ``(line, rule, print, print_exception)`` callables.
 
@@ -41,8 +45,7 @@ def _quiet_console_funcs(quiet):
     human-focused output.
     """
     if quiet:
-        noop = lambda *args, **kwargs: None  # noqa E731
-        return noop, noop, noop, noop
+        return _noop, _noop, _noop, _noop
     return (
         the_console.line,
         the_console.rule,
@@ -71,7 +74,7 @@ def _get_installation(
     return cached
 
 
-class _AuditGroup(TyperGroup):
+class _AuditGroup(typer_core.TyperGroup):
     """Default to the 'all' subcommand when none is given.
 
     Allows 'soliplex-cli audit', 'soliplex-cli audit -q', and
