@@ -93,7 +93,7 @@ Incompatible with '--no-auth-mode'.
     ),
     host: str = typer.Option(
         "127.0.0.1",
-        "-h",
+        "-H",
         "--host",
         help="Bind socket to this host",
     ),

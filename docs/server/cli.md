@@ -6,12 +6,11 @@ These apply to all `soliplex-cli` subcommands:
 
 - `-v` / `--version` — show installed version (plus git tag / branch / hash
   when run from a source checkout) and exit.
-- `-h` / `--help` — show help and exit. Note: on the `serve` subcommand the
-  short form `-h` is bound to `--host`; use the long form `--help` there.
+- `-h` / `--help` — show help and exit.
 
 ## A Note on Renamed Commands
 
-Several subcommands were renamed and regrouped in a recent release.
+Several subcommands were renamed and regrouped after the `0.62.x` release.
 The previous flat names (`check-config`, `list-secrets`, `pull-models`,
 etc.) are preserved as hidden aliases so existing scripts continue to
 work, but new scripts should use the grouped form documented below.
@@ -35,7 +34,7 @@ soliplex-cli serve [OPTIONS] [INSTALLATION_CONFIG_PATH]
 
 ### Network Options
 
-- `-h HOST` / `--host HOST` — bind to this host (default: `127.0.0.1`).
+- `-H HOST` / `--host HOST` — bind to this host (default: `127.0.0.1`).
   Use `0.0.0.0` to accept connections on any interface.
 - `-p PORT` / `--port PORT` — listen on this port (default: `8000`).
 - `--uds PATH` — bind to a Unix domain socket instead of a TCP address.
