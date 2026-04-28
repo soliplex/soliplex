@@ -139,9 +139,7 @@ def audit_installation(
     )
     errors = {}
 
-    tc_line, tc_rule, tc_print, tc_print_exception = _quiet_console_funcs(
-        quiet
-    )
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
 
     tc_line()
     tc_rule("Checking secrets")
@@ -282,22 +280,20 @@ def audit_installation(
     tc_line()
     tc_rule("Validating Python logging")
     tc_line()
+
+    invalid = _invalid_logging(the_installation)
+    errors |= invalid
+
     pyl_config = the_installation._config.logging_config_file
-    if pyl_config is not None:
+    if pyl_config is None:
+        tc_print("OK (defaults)")
+    else:
         tc_print(f"Logging config: {pyl_config}")
-        try:
-            with pyl_config.open() as f:
-                logging_config = yaml.safe_load(f)
-        except yaml.YAMLError as y_exc:
-            errors["logging"] = str(y_exc)
-
-            tc_print_exception()
-
-        except OSError as os_exc:
-            errors["logging"] = str(os_exc)
-
-            tc_print_exception()
+        exc = invalid.get("logging")
+        if exc is not None:
+            tc_print(exc)
         else:
+            logging_config = _load_logging_config(the_installation)
             tc_print(logging_config)
             tc_print(
                 f"Headers map: {the_installation._config.logging_headers_map}",
@@ -306,8 +302,6 @@ def audit_installation(
                 f"Claims map: {the_installation._config.logging_claims_map}",
             )
             tc_print("OK")
-    else:
-        tc_print("OK (defaults)")
     tc_line()
 
     tc_line()
@@ -758,6 +752,71 @@ def audit_quizzes(
         else:
             tc_print("  OK")
         tc_line()
+
+    _emit_errors(errors, quiet)
+
+
+def _load_logging_config(the_installation):
+    """Return parsed Python-logging YAML, or ``None`` when none is configured.
+
+    Raises ``yaml.YAMLError`` or ``OSError`` if the configured file cannot
+    be opened or parsed.
+    """
+    pyl_config = the_installation._config.logging_config_file
+    if pyl_config is None:
+        return None
+    with pyl_config.open() as f:
+        return yaml.safe_load(f)
+
+
+def _invalid_logging(the_installation: installation.Installation) -> dict:
+    try:
+        _load_logging_config(the_installation)
+    except (yaml.YAMLError, OSError) as exc:
+        return {"logging": str(exc)}
+    return {}
+
+
+@app.command("logging")
+def audit_logging(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+):
+    """Show the Python-logging config defined in the installation"""
+    quiet = ctx.obj["quiet"]
+    the_installation = cli_util.get_installation(
+        installation_path,
+        auditing=True,
+    )
+    errors = {}
+
+    invalid = _invalid_logging(the_installation)
+    errors |= invalid
+
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured Logging")
+    tc_line()
+
+    pyl_config = the_installation._config.logging_config_file
+    if pyl_config is None:
+        tc_print("OK (defaults)")
+    else:
+        tc_print(f"Logging config: {pyl_config}")
+        exc = invalid.get("logging")
+        if exc is not None:
+            tc_print(exc)
+        else:
+            logging_config = _load_logging_config(the_installation)
+            tc_print(logging_config)
+            tc_print(
+                f"Headers map: {the_installation._config.logging_headers_map}",
+            )
+            tc_print(
+                f"Claims map: {the_installation._config.logging_claims_map}",
+            )
+            tc_print("OK")
 
     _emit_errors(errors, quiet)
 
