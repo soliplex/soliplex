@@ -141,6 +141,17 @@ def audit_all(
 
     tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
 
+    # Check that conversion to models doesn't raise
+    tc_line()
+    tc_rule("Validating installation model")
+    tc_line()
+    errors = _invalid_installation(the_installation)
+    exc = errors.get("installation_model")
+    if exc:
+        tc_print(f"ERROR: {exc}")
+    else:
+        tc_print("OK")
+
     tc_line()
     tc_rule("Checking secrets")
     tc_line()
@@ -165,19 +176,6 @@ def audit_all(
         tc_print("Missing environment variables")
         for env_var in missing["missing_env_vars"]:
             tc_print(f"- {env_var}")
-    else:
-        tc_print("OK")
-
-    # Check that conversion to models doesn't raise
-    tc_line()
-    tc_rule("Validating installation model")
-    tc_line()
-    try:
-        models.Installation.from_config(the_installation._config)
-    except Exception as exc:
-        errors["installation_model"] = str(exc)
-
-        tc_print(exc)
     else:
         tc_print("OK")
 
@@ -339,6 +337,44 @@ def audit_all(
     tc_line()
 
     _emit_errors(errors, quiet)
+
+
+def _invalid_installation(
+    the_installation: installation.Installation,
+) -> dict:
+    errors = {}
+
+    try:
+        models.Installation.from_config(the_installation._config)
+    except Exception as exc:
+        errors["installation_model"] = str(exc)
+
+    return errors
+
+
+@app.command("installation")
+def audit_installation(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+):
+    """Check that the installation config renders as a model"""
+    quiet = ctx.obj["quiet"]
+    the_installation = cli_util.get_installation(
+        installation_path,
+        auditing=True,
+    )
+
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Validating installation model")
+    tc_line()
+    errors = _invalid_installation(the_installation)
+    exc = errors.get("installation_model")
+    if exc:
+        tc_print(f"ERROR: {exc}")
+    else:
+        tc_print("OK")
 
 
 def _missing_secrets(the_installation: installation.Installation) -> dict:

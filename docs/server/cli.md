@@ -159,10 +159,10 @@ example/minimal.yaml`.
 ### Default Subcommand
 
 If the first positional argument to `soliplex-cli audit` does not name
-one of its subcommands (`all`, `secrets`, `environment`, `oidc`,
-`rooms`, `completions`, `quizzes`, `logging`, `skills`), it is treated
-as the `INSTALLATION_CONFIG_PATH` argument to `audit all`. In other
-words, the following two invocations are equivalent:
+one of its subcommands (`all`, `installation`, `secrets`, `environment`,
+`oidc`, `rooms`, `completions`, `quizzes`, `logging`, `skills`), it is
+treated as the `INSTALLATION_CONFIG_PATH` argument to `audit all`. In
+other words, the following two invocations are equivalent:
 
 ```bash
 soliplex-cli audit example/minimal.yaml          # preferred
@@ -207,13 +207,13 @@ first form a shortcut for the second.
 The command runs the following validation passes in order, printing a
 section header and an `OK` / error summary for each:
 
-1. **Secrets** — every secret declared in the installation resolves via
+1. **Installation model** — the top-level installation config converts
+   cleanly to its runtime model.
+2. **Secrets** — every secret declared in the installation resolves via
    its configured sources.
-2. **Environment** — every environment variable required by the
+3. **Environment** — every environment variable required by the
    installation is either configured in the YAML or present in the OS
    environment.
-3. **Installation model** — the top-level installation config converts
-   cleanly to its runtime model.
 4. **OIDC authentication systems** — each configured OIDC provider
    converts cleanly to its runtime model.
 5. **Rooms** — each room converts cleanly to its runtime model. For
@@ -266,6 +266,59 @@ positional path):
 ```bash
 export SOLIPLEX_INSTALLATION_PATH=example/minimal.yaml
 soliplex-cli audit all
+```
+
+### `audit installation`
+
+Validate that the top-level installation config converts cleanly to its
+runtime model. This is the same check `audit all` runs first, exposed
+as a focused subcommand for callers that want a quick model-only smoke
+test without re-resolving secrets, opening RAG databases, or walking
+skill paths.
+
+```bash
+soliplex-cli audit [OPTIONS] installation [INSTALLATION_CONFIG_PATH]
+```
+
+See [Group Options](#group-options) for the available `[OPTIONS]`.
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Output
+
+A single status line under a "Validating installation model" header:
+
+```text
+OK
+```
+
+If `models.Installation.from_config(...)` raises, the `OK` is replaced
+by `ERROR: <message>`.
+
+#### Exit Status
+
+- `0` — the installation config rendered as a model.
+- `1` — model construction raised. In `--quiet` mode, the error is
+  printed as JSON (under the key `installation_model`) on stdout before
+  exit.
+
+#### Examples
+
+Quick model-validity check on the minimal example:
+
+```bash
+soliplex-cli audit installation example/minimal.yaml
+```
+
+Audit a directory-style installation:
+
+```bash
+soliplex-cli audit installation example/
 ```
 
 ### `audit secrets`
