@@ -21,14 +21,20 @@ cp -R example installation
 ```
 Notice that by default, `soliplex` will look for a `installation.yaml` file inside the `installation` folder. You can either change this with your own command for starting `soliplex-cli` or simply by making sure your config is properly made inside this file.
 
-Once built, start the process:
+Now you need to initialize your Database. Notice that this step is *only needed once*, on initial setup:
+```
+$ docker compose run --rm soliplex_indexer haiku-rag --config=/app/installation/haiku.rag.yaml init --db=/app/db/rag/rag.lancedb
+```
+
+At this point, you can start the stack:
 ```
 $ docker compose up
 ```
 
 ### Debugging
 
-`debugpy` is included as a `dev` dependency for soliplex, and it should listen on port `5678`. There is already a `.vscode/launch.json` included at the root of the repo, so if you are using VSCode, after the process is up, you can go to the `Debug` tab in VSCode and connect to the running process.
+`debugpy` is included as a `dev` dependency for soliplex. It is not enabled by default, as it conflicts with the hot reload feature.
+
 
 ### Sandboxed python modules
 
@@ -41,7 +47,9 @@ Automatically, a `haiku.rag.lancedb` will be created in `db/rag` folder. And aut
 
 ### Running haiku.rag commands manually
 
-You can jump inside the docker container with `docker compose run soliplex_backend /bin/bash` and manually run `haiku-rag` commands.
+If you want to jump into the running container and execute `haiku-rag` commands manually, you can do so with `docker compose exec soliplex_backend /bin/bash` and from here run `haiku-rag` commands.
+
+Alternatively, you can start a new, separate container, with `docker compose run soliplex_backend /bin/bash` and run `haiku-rag` commands.
 
 
 ## Frontend

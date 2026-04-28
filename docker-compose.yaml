@@ -5,6 +5,40 @@ services:
   #
   #   APP_UID=$(id -u) APP_GID=$(id -g) docker compose up soliplex_dev
   #
+
+  docling-serve:
+    image: quay.io/docling-project/docling-serve:latest
+    restart: unless-stopped
+    networks:
+      - soliplex_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+      start_interval: 5s
+
+  soliplex_indexer:
+    image: ghcr.io/ggozad/haiku.rag-slim:0.43.1
+    command:
+      - haiku-rag
+      - --config=/app/installation/haiku.rag.yaml
+      - serve
+      - --monitor
+      - --db=/app/db/rag/rag.lancedb
+    env_file:
+      - .env
+    depends_on:
+      docling-serve:
+        condition: service_healthy
+    volumes:
+      - ./installation:/app/installation:ro
+      - ./db:/app/db
+      - ./documents:/app/docs
+    networks:
+      - soliplex_net
+
   soliplex_backend:
     build:
       context: .
@@ -25,12 +59,15 @@ services:
       - ./installation:/app/installation
       - ./db:/app/db
       - ./sandbox/workdirs:/app/sandbox/workdirs
-      - ./documents:/app/documents
+      - ./documents:/app/docs
       - ./uploads:/app/uploads
       - ./tests:/app/tests
-      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - soliplex_net
+    depends_on:
+      docling-serve:
+        condition: service_healthy
+    restart: unless-stopped
 
   # If you want to test the soliplex frontend (https://github.com/soliplex/frontend)
   # Clone it into src/frontend and uncomment the "soliplex_frontend" service below.

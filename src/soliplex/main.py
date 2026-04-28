@@ -17,13 +17,6 @@ from soliplex import installation
 from soliplex import util
 from soliplex.config import installation as config_installation
 
-try:  # pragma:  NO COVER
-    import debugpy
-
-    debugpy.listen(("0.0.0.0", 5678))
-except ImportError:  # pragma:  NO COVER
-    pass
-
 
 def curry_lifespan(
     *,
