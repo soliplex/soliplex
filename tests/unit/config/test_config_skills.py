@@ -188,6 +188,14 @@ def test_derivedskillconfigmodel_model_or_name(
             gmfc.assert_not_called()
 
 
+def test_derivedskillconfigmodel_extra_parameters(
+    derived_skillconfigmodel_klass,
+):
+    derived = derived_skillconfigmodel_klass()
+
+    assert derived.extra_parameters == {}
+
+
 class SkillTypeTest(pydantic.BaseModel):
     pass
 
@@ -246,6 +254,7 @@ def test_filesystemskillconfig_ctor(
     assert skill_config.metadata == w_metadata_kw.get("metadata", {})
     assert skill_config.errors == []
     assert skill_config.path == skill_path
+    assert skill_config.extra_parameters == {"path": skill_path}
 
 
 def test_filesystemskillconfig_ctor_w_errors(skill_path):
@@ -493,6 +502,7 @@ def test_entrypointskillconfig_ctor(w_metadata_kw, exp_allowed_tools):
     assert skill_config.compatibility == w_metadata_kw.get("compatibility")
     assert skill_config.allowed_tools == exp_allowed_tools
     assert skill_config.metadata == w_metadata_kw.get("metadata", {})
+    assert skill_config.extra_parameters == {}
 
 
 def test_entrypointskillconfig_from_skill_preserves_original():
@@ -672,6 +682,7 @@ def test__hrskillconfigbase_skill_metadata(derived_hrskillconfig):
     assert inst.compatibility is skill_metadata.compatibility
     assert inst.allowed_tools is skill_metadata.allowed_tools
     assert inst.metadata is skill_metadata.metadata
+    assert inst.extra_parameters == {"rag_lancedb_path": inst.rag_lancedb_path}
 
 
 def test__hrskillconfigbase_agui_skill_namespace(derived_hrskillconfig):
@@ -892,6 +903,7 @@ TEST_EXEC_TIMEOUT_SECS = 60
             {
                 "id": TEST_SKILL_CONFIG_ID,
                 "default_environment_name": TEST_DEFAULT_ENVIRONMENT,
+                "allowed_environments": [TEST_DEFAULT_ENVIRONMENT],
                 "sandbox_config": {
                     "execution_timeout_seconds": TEST_EXEC_TIMEOUT_SECS,
                 },
@@ -928,6 +940,22 @@ def test_bwrapsandboxskillconfig_from_yaml(
             **sb_config,
         )
         assert inst.sandbox_config == exp_config
+
+        if "default_environment_name" in w_config:
+            assert (
+                inst.extra_parameters["default_environment_name"]
+                == w_config["default_environment_name"]
+            )
+        else:
+            assert inst.extra_parameters["default_environment_name"] == "bare"
+
+        if "allowed_environments" in w_config:
+            assert (
+                inst.extra_parameters["allowed_environments"]
+                == w_config["allowed_environments"]
+            )
+        else:
+            assert "allowed_environments" not in inst.extra_parameters
 
 
 def test_bwrapsandboxskillconfig_agui_feature_names():

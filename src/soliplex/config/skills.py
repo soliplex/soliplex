@@ -109,6 +109,10 @@ class _SkillConfigModelBase:
 
         return None
 
+    @property
+    def extra_parameters(self) -> dict[str, typing.Any]:
+        return {}
+
 
 class _SkillPropertiesFromMetadata(typing.Protocol):
     @property
@@ -257,6 +261,10 @@ class FilesystemSkillConfig(_DiscoveredSkillConfigBase):
             model=self.model_or_name,
         )
 
+    @property
+    def extra_parameters(self) -> dict[str, typing.Any]:
+        return {"path": self._skill_path}
+
 
 @dataclasses.dataclass(kw_only=True)
 class EntrypointSkillConfig(_DiscoveredSkillConfigBase):
@@ -316,6 +324,10 @@ class _HR_SkillConfigBase(
             db_path=self.rag_lancedb_path,
             config=self.haiku_rag_config,
         )
+
+    @property
+    def extra_parameters(self) -> dict[str, typing.Any]:
+        return self.get_extra_parameters()
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -447,6 +459,15 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
         )
         skill._factory = sk_bwrap_sandbox.create_bwrap_sandbox_skill
         return skill
+
+    @property
+    def extra_parameters(self) -> dict[str, typing.Any]:
+        result = {"default_environment_name": self.default_environment_name}
+
+        if self.allowed_environments is not None:
+            result["allowed_environments"] = self.allowed_environments
+
+        return result
 
 
 feature_registry = config_agui.AGUI_FEATURES_BY_NAME

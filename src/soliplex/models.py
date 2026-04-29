@@ -153,14 +153,21 @@ class Skill(pydantic.BaseModel):
     metadata: SkillMetadata = None
     state_type_schema: dict[str, typing.Any] | None = None
     state_namespace: str | None = None
+    extra_parameters: dict[str, typing.Any] = {}
 
     @classmethod
     def from_config(cls, skill_config: config_skills.SkillConfigTypes):
         kwargs = {}
+
         if skill_config.state_type is not None:
             kwargs["state_type_schema"] = (
                 skill_config.state_type.model_json_schema()
             )
+
+        extra_parameters = skill_config.extra_parameters
+        if extra_parameters:
+            kwargs["extra_parameters"] = extra_parameters
+
         return cls(
             source=skill_config.source,
             name=skill_config.name,
