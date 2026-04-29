@@ -8,6 +8,7 @@ from unittest import mock
 import pydantic
 import pytest
 from ag_ui import core as agui_core
+from haiku.rag.skills import rag as hr_skills_rag
 from haiku.skills import models as hs_models
 
 from soliplex import agui as agui_package
@@ -21,6 +22,7 @@ from soliplex.config import rooms as config_rooms
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
+from soliplex.skills import bwrap_sandbox as sk_bwrap_sandbox
 
 NOW = datetime.datetime.now(datetime.UTC)
 
@@ -492,6 +494,7 @@ def test_skill_from_config_w_fssc(filesystem_skill_config):
         assert found.state_type_schema is None
 
     assert found.state_namespace == filesystem_skill_config.state_namespace
+    assert found.extra_parameters == {"path": filesystem_skill_config.path}
 
 
 @pytest.fixture
@@ -531,6 +534,65 @@ def test_skill_from_config_w_epsc(entrypoint_skill_config):
     assert found.metadata == entrypoint_skill_config.metadata
     assert found.state_type_schema == StateModelTest.model_json_schema()
     assert found.state_namespace == SKILL_STATE_NAMESPACE
+    assert found.extra_parameters == {}
+
+
+@pytest.fixture
+def hr_rag_skill_config(temp_dir):
+    rag_path = temp_dir / "rag.lancedb"
+    rag_path.mkdir()
+
+    return config_skills.HR_RAG_SkillConfig(
+        rag_lancedb_override_path=rag_path,
+    )
+
+
+def test_skill_from_config_w_hrrsc(hr_rag_skill_config):
+    found = models.Skill.from_config(hr_rag_skill_config)
+
+    assert found.source == hs_models.SkillSource.ENTRYPOINT
+    assert found.name == hr_rag_skill_config.name
+    assert found.description == hr_rag_skill_config.description
+    assert found.license == hr_rag_skill_config.license
+    assert found.compatibility == hr_rag_skill_config.compatibility
+    assert found.allowed_tools == " ".join(
+        hr_rag_skill_config.allowed_tools,
+    )
+    assert found.metadata == hr_rag_skill_config.metadata
+    assert (
+        found.state_type_schema == hr_skills_rag.STATE_TYPE.model_json_schema()
+    )
+    assert found.state_namespace == hr_skills_rag.STATE_NAMESPACE
+    assert found.extra_parameters == {
+        "rag_lancedb_path": hr_rag_skill_config.rag_lancedb_path,
+    }
+
+
+@pytest.fixture
+def bwrap_sandbox_skill_config(temp_dir):
+    return config_skills.BwrapSandboxSkillConfig()
+
+
+def test_skill_from_config_w_bwssc(bwrap_sandbox_skill_config):
+    found = models.Skill.from_config(bwrap_sandbox_skill_config)
+
+    assert found.source == hs_models.SkillSource.ENTRYPOINT
+    assert found.name == bwrap_sandbox_skill_config.name
+    assert found.description == bwrap_sandbox_skill_config.description
+    assert found.license == bwrap_sandbox_skill_config.license
+    assert found.compatibility == bwrap_sandbox_skill_config.compatibility
+    assert found.allowed_tools == " ".join(
+        bwrap_sandbox_skill_config.allowed_tools,
+    )
+    assert found.metadata == bwrap_sandbox_skill_config.metadata
+    assert (
+        found.state_type_schema
+        == sk_bwrap_sandbox.STATE_TYPE.model_json_schema()
+    )
+    assert found.state_namespace == sk_bwrap_sandbox.STATE_NAMESPACE
+    assert found.extra_parameters == {
+        "default_environment": "bare",
+    }
 
 
 @pytest.fixture(params=[None, AGENT_RETRIES])
@@ -1269,6 +1331,15 @@ def test_aguirunmetadata_from_run_metadata(run_metadata, exp_label):
         assert found is None
     else:
         assert found.label == exp_label
+
+
+@pytest.mark.parametrize("w_kwargs", [{}, {"limit": 1}, {"since": NOW}])
+def test_aguifeedbackqueryterms_as_dict(w_kwargs):
+    afqt = models.AGUI_FeedbackQueryTerms(**w_kwargs)
+
+    found = afqt.as_dict
+
+    assert found == w_kwargs
 
 
 def test_aguirunusage_from_tuple():

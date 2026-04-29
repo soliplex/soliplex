@@ -188,6 +188,14 @@ def test_derivedskillconfigmodel_model_or_name(
             gmfc.assert_not_called()
 
 
+def test_derivedskillconfigmodel_extra_parameters(
+    derived_skillconfigmodel_klass,
+):
+    derived = derived_skillconfigmodel_klass()
+
+    assert derived.extra_parameters == {}
+
+
 class SkillTypeTest(pydantic.BaseModel):
     pass
 
@@ -246,6 +254,7 @@ def test_filesystemskillconfig_ctor(
     assert skill_config.metadata == w_metadata_kw.get("metadata", {})
     assert skill_config.errors == []
     assert skill_config.path == skill_path
+    assert skill_config.extra_parameters == {"path": skill_path}
 
 
 def test_filesystemskillconfig_ctor_w_errors(skill_path):
@@ -493,6 +502,7 @@ def test_entrypointskillconfig_ctor(w_metadata_kw, exp_allowed_tools):
     assert skill_config.compatibility == w_metadata_kw.get("compatibility")
     assert skill_config.allowed_tools == exp_allowed_tools
     assert skill_config.metadata == w_metadata_kw.get("metadata", {})
+    assert skill_config.extra_parameters == {}
 
 
 def test_entrypointskillconfig_from_skill_preserves_original():
@@ -672,6 +682,7 @@ def test__hrskillconfigbase_skill_metadata(derived_hrskillconfig):
     assert inst.compatibility is skill_metadata.compatibility
     assert inst.allowed_tools is skill_metadata.allowed_tools
     assert inst.metadata is skill_metadata.metadata
+    assert inst.extra_parameters == {"rag_lancedb_path": inst.rag_lancedb_path}
 
 
 def test__hrskillconfigbase_agui_skill_namespace(derived_hrskillconfig):
@@ -891,7 +902,8 @@ TEST_EXEC_TIMEOUT_SECS = 60
         (
             {
                 "id": TEST_SKILL_CONFIG_ID,
-                "default_environment_name": TEST_DEFAULT_ENVIRONMENT,
+                "default_environment": TEST_DEFAULT_ENVIRONMENT,
+                "allowed_environments": [TEST_DEFAULT_ENVIRONMENT],
                 "sandbox_config": {
                     "execution_timeout_seconds": TEST_EXEC_TIMEOUT_SECS,
                 },
@@ -917,8 +929,8 @@ def test_bwrapsandboxskillconfig_from_yaml(
 
     if not isinstance(expected, pytest.ExceptionInfo):
         assert inst.id == w_config.get("id")
-        assert inst.default_environment_name == w_config.get(
-            "default_environment_name",
+        assert inst.default_environment == w_config.get(
+            "default_environment",
             "bare",
         )
         assert isinstance(inst.sandbox_config, bs_config.Config)
@@ -929,6 +941,22 @@ def test_bwrapsandboxskillconfig_from_yaml(
         )
         assert inst.sandbox_config == exp_config
 
+        if "default_environment" in w_config:
+            assert (
+                inst.extra_parameters["default_environment"]
+                == w_config["default_environment"]
+            )
+        else:
+            assert inst.extra_parameters["default_environment"] == "bare"
+
+        if "allowed_environments" in w_config:
+            assert (
+                inst.extra_parameters["allowed_environments"]
+                == w_config["allowed_environments"]
+            )
+        else:
+            assert "allowed_environments" not in inst.extra_parameters
+
 
 def test_bwrapsandboxskillconfig_agui_feature_names():
     bssc = config_skills.BwrapSandboxSkillConfig()
@@ -938,6 +966,7 @@ def test_bwrapsandboxskillconfig_agui_feature_names():
     assert found == sk_bwrap_sandbox.STATE_NAMESPACE
 
 
+@pytest.mark.parametrize("w_allowed_environments", [None, ["one"]])
 @pytest.mark.parametrize(
     "w_volumes",
     [
@@ -949,13 +978,15 @@ def test_bwrapsandboxskillconfig_agui_feature_names():
 def test_bwrapsandboxskillconfig_skill(
     cbss,
     w_volumes,
+    w_allowed_environments,
 ):
     installation_config = mock.create_autospec(
         config_installation.InstallationConfig
     )
     bssc = config_skills.BwrapSandboxSkillConfig(
         id=TEST_SKILL_CONFIG_ID,
-        default_environment_name=TEST_DEFAULT_ENVIRONMENT,
+        default_environment=TEST_DEFAULT_ENVIRONMENT,
+        allowed_environments=w_allowed_environments,
         sandbox_config=bs_config.Config(
             execution_timeout_seconds=TEST_EXEC_TIMEOUT_SECS,
         ),
@@ -969,7 +1000,8 @@ def test_bwrapsandboxskillconfig_skill(
 
     cbss.assert_called_once_with(
         id=bssc.id,
-        default_environment_name=bssc.default_environment_name,
+        default_environment=bssc.default_environment,
+        allowed_environments=w_allowed_environments,
         sandbox_config=bssc.sandbox_config,
         volumes=w_volumes,
         installation_config=installation_config,

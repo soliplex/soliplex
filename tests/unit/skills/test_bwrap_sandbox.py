@@ -17,6 +17,14 @@ ROOM_ID = "test_room"
 THREAD_ID = uuid.uuid4()
 RUN_ID = uuid.uuid4()
 
+ONE_ENVIRONMENT = mock.create_autospec(bs_models.EnvironmentInfo)
+ONE_ENVIRONMENT.name = "one"  # mock quirk
+
+ANOTHER_ENVIRONMENT = mock.create_autospec(bs_models.EnvironmentInfo)
+ANOTHER_ENVIRONMENT.name = "another"  # mock quirk
+
+ALL_ENVIRONMENTS = [ONE_ENVIRONMENT, ANOTHER_ENVIRONMENT]
+
 
 @pytest.fixture
 def ctx_w_deps():
@@ -96,15 +104,26 @@ def i_config(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "kwargs, expected",
+    [
+        ({}, ALL_ENVIRONMENTS),
+        ({"allowed_environments": ["one"]}, [ONE_ENVIRONMENT]),
+    ],
+)
 async def test_skill_list_environments(
     bwrap_sandbox,
+    kwargs,
+    expected,
 ):
+    bwrap_sandbox.config.list_environments.return_value = ALL_ENVIRONMENTS
 
     found = await skills_bwrap_sandbox.skill_list_environments(
         bwrap_sandbox=bwrap_sandbox,
+        **kwargs,
     )
 
-    assert found is bwrap_sandbox.config.list_environments.return_value
+    assert found == expected
 
 
 @pytest.mark.anyio
@@ -135,7 +154,7 @@ async def test_skill_list_volume_files(
     thread_file.write_text("THREAD FILE")
 
     found = await skills_bwrap_sandbox.skill_list_volume_files(
-        volume,
+        volume=volume,
         room_upload_path=room_upload_path,
         thread_upload_path=thread_upload_path,
     )
@@ -436,7 +455,7 @@ def test_get_extra_volumes(
         {},
         {"id": "test-toolset-id"},
         {"max_retries": 17},
-        {"default_environment_name": "test-environment"},
+        {"default_environment": "test-environment"},
         {"sandbox_config": bs_config.Config(max_output_chars=100)},
         {
             "volumes": {
@@ -446,6 +465,7 @@ def test_get_extra_volumes(
                 ),
             },
         },
+        {"allowed_environments": ["one"]},
     ],
 )
 @mock.patch("bubble_sandbox.sandbox.BwrapSandbox")
@@ -480,23 +500,36 @@ def test_create_sandbox_toolset(
         exp_config = sandbox_config
 
     exp_sandbox_kw = {
-        "default_environment_name": "bare",
+        "default_environment": "bare",
         "config": exp_config,
         "volumes": {},
-    } | w_kwargs
+    } | {
+        key: value
+        for key, value in w_kwargs.items()
+        if key != "allowed_environments"
+    }
 
     bs_klass.assert_called_once_with(**exp_sandbox_kw)
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_kwargs, exp_allowed_environments",
+    [
+        ({}, None),
+        ({"allowed_environments": ["one"]}, ["one"]),
+    ],
+)
 @mock.patch("soliplex.skills.bwrap_sandbox.skill_list_environments")
 @mock.patch("bubble_sandbox.sandbox.BwrapSandbox")
 async def test_create_sandbox_toolset_list_environments(
     bs_klass,
     skill_list_environments,
     ctx_w_deps,
+    w_kwargs,
+    exp_allowed_environments,
 ):
-    toolset = skills_bwrap_sandbox.create_sandbox_toolset()
+    toolset = skills_bwrap_sandbox.create_sandbox_toolset(**w_kwargs)
     sandbox = bs_klass.return_value
     tool = toolset.tools["list_environments"]
 
@@ -505,6 +538,7 @@ async def test_create_sandbox_toolset_list_environments(
     assert found is skill_list_environments.return_value
     skill_list_environments.assert_called_once_with(
         bwrap_sandbox=sandbox,
+        allowed_environments=exp_allowed_environments,
     )
 
 
@@ -720,7 +754,7 @@ async def test_create_sandbox_toolset_run_python(
         {},
         {"id": "test-toolset-id"},
         {"max_retries": 17},
-        {"default_environment_name": "test-environment"},
+        {"default_environment": "test-environment"},
         {"sandbox_config": bs_config.Config(max_output_chars=100)},
         {
             "volumes": {
@@ -769,7 +803,8 @@ def test_create_bwrap_sandbox_skill(psm, csts, w_kwargs, w_iconfig, i_config):
     exp_toolset_kw = (
         {
             "id": None,
-            "default_environment_name": "bare",
+            "default_environment": "bare",
+            "allowed_environments": None,
             "sandbox_config": None,
             "volumes": None,
             "max_retries": 1,

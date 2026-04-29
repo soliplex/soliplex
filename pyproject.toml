@@ -17,7 +17,7 @@ dependencies = [
     "ag-ui-protocol >= 0.1.16, < 0.1.18",
     "aiosqlite",
     "authlib",
-    "bubble-sandbox >= 0.9.0, < 0.10",
+    "bubble-sandbox >= 0.10.0, < 0.11",
     "fastapi",
     "fastmcp >= 2.14.0, < 2.15",
     "fakeredis != 2.35.0",  # brownbag
