@@ -1,0 +1,8 @@
+id: "tic_tac_toe"
+name: "Tic-Tac-Toe"
+description: "Play tic-tac-toe against the agent"
+agent:
+  kind: "factory"
+  factory_name: "soliplex.skills.tic_tac_toe.skill.tic_tac_toe_agent_factory"
+  with_agent_config: true
+allow_mcp: false
