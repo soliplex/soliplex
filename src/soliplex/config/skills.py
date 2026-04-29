@@ -401,6 +401,7 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
 
     id: str | None = None
     default_environment_name: str = "bare"
+    allowed_environments: sk_bwrap_sandbox.AllowedEnvironments = None
     sandbox_config: bs_config.Config = None
     volumes: bs_models.VolumeMap = _default_dict_field()
 
@@ -439,6 +440,7 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
         skill = sk_bwrap_sandbox.create_bwrap_sandbox_skill(
             id=self.id,
             default_environment_name=self.default_environment_name,
+            allowed_environments=self.allowed_environments,
             sandbox_config=self.sandbox_config,
             volumes=self.volumes,
             installation_config=self._installation_config,

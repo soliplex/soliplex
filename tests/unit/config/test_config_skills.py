@@ -938,6 +938,7 @@ def test_bwrapsandboxskillconfig_agui_feature_names():
     assert found == sk_bwrap_sandbox.STATE_NAMESPACE
 
 
+@pytest.mark.parametrize("w_allowed_environments", [None, ["one"]])
 @pytest.mark.parametrize(
     "w_volumes",
     [
@@ -949,6 +950,7 @@ def test_bwrapsandboxskillconfig_agui_feature_names():
 def test_bwrapsandboxskillconfig_skill(
     cbss,
     w_volumes,
+    w_allowed_environments,
 ):
     installation_config = mock.create_autospec(
         config_installation.InstallationConfig
@@ -956,6 +958,7 @@ def test_bwrapsandboxskillconfig_skill(
     bssc = config_skills.BwrapSandboxSkillConfig(
         id=TEST_SKILL_CONFIG_ID,
         default_environment_name=TEST_DEFAULT_ENVIRONMENT,
+        allowed_environments=w_allowed_environments,
         sandbox_config=bs_config.Config(
             execution_timeout_seconds=TEST_EXEC_TIMEOUT_SECS,
         ),
@@ -970,6 +973,7 @@ def test_bwrapsandboxskillconfig_skill(
     cbss.assert_called_once_with(
         id=bssc.id,
         default_environment_name=bssc.default_environment_name,
+        allowed_environments=w_allowed_environments,
         sandbox_config=bssc.sandbox_config,
         volumes=w_volumes,
         installation_config=installation_config,

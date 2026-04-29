@@ -47,11 +47,19 @@ configured.
 environment depends.
 """
 
+AllowedEnvironments = list[str] | None
+
 
 async def skill_list_environments(
+    *,
     bwrap_sandbox: bs_sandbox.BwrapSandbox,
+    allowed_environments: AllowedEnvironments = None,
 ) -> list[EnvironmentInfo]:
-    return bwrap_sandbox.config.list_environments()
+    candidates = bwrap_sandbox.config.list_environments()
+    if allowed_environments is not None:
+        return [env for env in candidates if env.name in allowed_environments]
+    else:
+        return candidates
 
 
 RUN_DESCRIPTION = """\
@@ -95,6 +103,7 @@ Return a list of absolute filenames of files in a sandbox volume
 
 
 async def skill_list_volume_files(
+    *,
     volume: VolumeName,
     room_upload_path: pathlib.Path,
     thread_upload_path: pathlib.Path,
@@ -116,6 +125,7 @@ async def skill_list_volume_files(
 
 
 async def skill_run(
+    *,
     bwrap_sandbox: bs_sandbox.BwrapSandbox,
     command: str | list[str],
     environment_name: str = None,
@@ -183,6 +193,7 @@ completely different strategy.
 
 
 async def skill_run_python(
+    *,
     bwrap_sandbox: bs_sandbox.BwrapSandbox,
     script: str,
     environment_name: str = None,
@@ -274,8 +285,10 @@ def get_extra_volumes(
 
 
 def create_sandbox_toolset(
+    *,
     id: str | None = None,
     default_environment_name: str = "bare",
+    allowed_environments: AllowedEnvironments = None,
     sandbox_config: bs_config.Config | None = None,
     volumes: bs_models.VolumeMap | None = None,
     max_retries: int = 1,
@@ -335,7 +348,10 @@ def create_sandbox_toolset(
     async def list_environments(
         ctx: pydantic_ai.RunContext,
     ) -> list[EnvironmentInfo]:
-        return await skill_list_environments(bwrap_sandbox=bwrap_sandbox)
+        return await skill_list_environments(
+            bwrap_sandbox=bwrap_sandbox,
+            allowed_environments=allowed_environments,
+        )
 
     @toolset.tool(description=LIST_VOLUME_FILES_DESCRIPTION)
     async def list_volume_files(
@@ -423,7 +439,9 @@ def create_sandbox_toolset(
 
 def create_bwrap_sandbox_skill(
     id: str = None,
+    *,
     default_environment_name: str = "bare",
+    allowed_environments: AllowedEnvironments = None,
     sandbox_config: bs_config.Config | None = None,
     volumes: bs_models.VolumeMap | None = None,
     max_retries: int = 1,
@@ -437,6 +455,7 @@ def create_bwrap_sandbox_skill(
     toolset = create_sandbox_toolset(
         id=id,
         default_environment_name=default_environment_name,
+        allowed_environments=allowed_environments,
         sandbox_config=sandbox_config,
         volumes=volumes,
         max_retries=max_retries,
