@@ -86,7 +86,14 @@ markers = [
 
 [tool.coverage.run]
 omit = [
-    "src/soliplex/cli/*.py",
+    "src/soliplex/cli/__init__.py",
+    "src/soliplex/cli/audit.py",
+    "src/soliplex/cli/admin_users.py",
+    "src/soliplex/cli/cli_util.py",
+    "src/soliplex/cli/ollama.py",
+    "src/soliplex/cli/room_authz.py",
+    "src/soliplex/cli/serve.py",
+
     "src/soliplex/examples.py",
     "src/soliplex/tui.py",
 ]
@@ -120,6 +127,7 @@ select = [
     "PT",
 ]
 ignore = [
+    "PT019",  # incorrecly flags '@mock.patch' args as fixtures
 ]
 
 [tool.ruff.lint.isort]
