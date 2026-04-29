@@ -241,8 +241,9 @@ class AgentConfig:
             and self.provider_base_url is None
         ):
             return ic.get_environment("OLLAMA_BASE_URL")
-        else:
-            return ic.interpolate_environment(self.provider_base_url)
+        if self.provider_base_url is None:
+            return None
+        return ic.interpolate_environment(self.provider_base_url)
 
     @property
     def llm_provider_kw(self) -> dict:
