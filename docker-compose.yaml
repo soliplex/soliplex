@@ -1,65 +1,133 @@
 services:
 
-  soliplex_backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    #network_mode: "host" # only works on linux
-    ports:
-      - "8000:8000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    # Needed to run 'bubblewrap' sandbox
-    privileged: true
-    env_file:
-      - .env
-    command:
-      - soliplex-cli
-      - serve
-      - --host=0.0.0.0
-      - --no-auth-mode
-      - /app/installation/minimal.yaml
-    volumes:
-      - ./example:/app/installation
-      - ./db:/app/db
-      - ./sandbox/workdirs:/app/sandbox/workdirs
-      - ./uploads:/app/uploads
-
-  # Example: development service with hot reloading and bind-mounted source.
-  #
-  #   docker compose up soliplex_dev
-  #
   # On Linux, set APP_UID/APP_GID in .env or your shell so that
   # container-written files match your host user:
   #
   #   APP_UID=$(id -u) APP_GID=$(id -g) docker compose up soliplex_dev
   #
-  soliplex_dev:
+
+  docling-serve:
+    image: quay.io/docling-project/docling-serve:latest
+    restart: unless-stopped
+    networks:
+      - soliplex_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+      start_interval: 5s
+
+  soliplex_indexer:
+    image: ghcr.io/ggozad/haiku.rag-slim:0.43.1
+    command:
+      - haiku-rag
+      - --config=/app/installation/haiku.rag.yaml
+      - serve
+      - --monitor
+      - --db=/app/db/rag/rag.lancedb
+    env_file:
+      - .env
+    depends_on:
+      docling-serve:
+        condition: service_healthy
+    volumes:
+      - ./installation:/app/installation:ro
+      - ./db:/app/db
+      - ./documents:/app/docs
+    networks:
+      - soliplex_net
+
+  soliplex_backend:
     build:
       context: .
       dockerfile: Dockerfile
       target: development
-      args:
-        APP_UID: ${APP_UID:-1000}
-        APP_GID: ${APP_GID:-1000}
     ports:
+      - "5678:5678"
       - "8000:8000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    privileged: true
     env_file:
       - .env
-    command:
-      - soliplex-cli
-      - serve
-      - --host=0.0.0.0
-      - --reload=both
-      - --no-auth-mode
-      - /app/installation/minimal.yaml
+    # Needed to run 'bubblewrap' sandbox
+    privileged: true
+    # XXX: Used this env to test the 'server_time' sandbox environment.
+    environment:
+      - TZ=Pacific/Auckland
     volumes:
       - ./src/soliplex:/app/src/soliplex
-      - ./tests:/app/tests
-      - ./example:/app/installation
+      - ./installation:/app/installation
       - ./db:/app/db
       - ./sandbox/workdirs:/app/sandbox/workdirs
+      - ./documents:/app/docs
       - ./uploads:/app/uploads
+      - ./tests:/app/tests
+    networks:
+      - soliplex_net
+    depends_on:
+      docling-serve:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # If you want to test the soliplex frontend (https://github.com/soliplex/frontend)
+  # Clone it into src/frontend and uncomment the "soliplex_frontend" service below.
+
+  # soliplex_frontend:
+  #   build:
+  #     context: ./src/frontend
+  #     dockerfile: Dockerfile
+  #     target: dev
+  #   ports:
+  #     - "9000:9000"
+  #   volumes:
+  #     - ./src/frontend:/app
+  #   networks:
+  #     - soliplex_net
+
+  # If you want to test the embeddable chat widget (https://github.com/soliplex/chatbot/)
+  # Clone it into src/chatbot and uncomment "chatbot_builder", "chatbot_dev" and "chatbot_widget" services below.
+
+  # chatbot_builder:
+  #   build:
+  #     context: ./src/chatbot
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "35729:35729"
+  #   volumes:
+  #     - ./src/chatbot:/app
+  #     - /app/node_modules
+  #   environment:
+  #     - ESBUILD_POLL=true
+  #   networks:
+  #     - soliplex_net
+
+  # chatbot_dev:
+  #   build:
+  #     context: ./src/chatbot
+  #     dockerfile: Dockerfile
+  #   command: npm run dev
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - ./src/chatbot:/app
+  #     - /app/node_modules
+  #   environment:
+  #     - WATCHPACK_POLLING=true
+  #   networks:
+  #     - soliplex_net
+
+  # chatbot_widget:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "8080:80"
+  #   volumes:
+  #     - ./src/chatbot/public:/usr/share/nginx/html:ro
+  #     - ./src/chatbot/nginx-widget.conf:/etc/nginx/conf.d/default.conf:ro
+  #   depends_on:
+  #     - chatbot_builder
+  #   networks:
+  #     - soliplex_net
+
+networks:
+  soliplex_net:
+    driver: bridge

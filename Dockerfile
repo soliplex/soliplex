@@ -55,7 +55,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM builder AS development
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen
+    uv sync --frozen --group dev
 
 RUN chown -R soliplex:soliplex /app
 

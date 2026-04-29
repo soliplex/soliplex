@@ -9,12 +9,11 @@ storage:
   vacuum_retention_seconds: 86400
 
 # This section is used to configure how files are added to the RAG
-# database.  It is not currently working for the 'haiku-rag serve --monitor'
-# usecase (see https://github.com/ggozad/haiku.rag/issues/132).
+# database.
 monitor:
   directories: ["docs"]
   ignore_patterns: ["*.png"]
-  include_patterns: ["*.md"]
+  include_patterns: ["*.md", "*.pdf"]
 
 # This section is for configuring LanceDB in various "remote" modes.
 # Leave it commented out to use local filesystem databases.
@@ -83,9 +82,8 @@ processing:
 #  vector_refine_factor: 30
 
 providers:
-  # The docling-serve url if you have not installed the full haiku.rag package.
   docling_serve:
-    base_url: http://localhost:5001
+    base_url: http://docling-serve:5001
 
   #
   #  Leave the 'ollama' section commented out to allow it's base URL to be
