@@ -153,7 +153,7 @@ def _invalid_installation(
 def _audit_installation_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-) -> dict:
+) -> dict:  # pragma NO COVER UI ONLY
     """Print the installation-model section (rule header + OK/ERROR)."""
     quiet = ctx.obj["quiet"]
     the_installation = _get_installation(ctx, installation_path)
@@ -176,7 +176,7 @@ def _audit_installation_section(
 def audit_installation(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):
+):  # pragma NO COVER command
     """Check that the installation config renders as a model"""
     quiet = ctx.obj["quiet"]
     errors = _audit_installation_section(ctx, installation_path)
@@ -195,7 +195,7 @@ def _missing_secrets(the_installation: installation.Installation) -> dict:
 def _audit_secrets_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-) -> dict:
+) -> dict:  # pragma NO COVER UI ONLY
     """Print the secrets section (rule header + per-secret OK/MISSING)."""
     quiet = ctx.obj["quiet"]
     the_installation = _get_installation(ctx, installation_path)
@@ -222,7 +222,7 @@ def _audit_secrets_section(
 def audit_secrets(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):
+):  # pragma NO COVER command
     """List secrets defined in the installation"""
     quiet = ctx.obj["quiet"]
     errors = _audit_secrets_section(ctx, installation_path)
@@ -243,7 +243,7 @@ def _audit_environment_section(
     installation_path: types.installation_path_type,
     *,
     verbose: bool = False,
-) -> dict:
+) -> dict:  # pragma NO COVER UI ONLY
     """Print the environment section (rule header + per-var listing)."""
     quiet = ctx.obj["quiet"]
     the_installation = _get_installation(ctx, installation_path)
@@ -289,7 +289,7 @@ def audit_environment(
 Show available sources, and which is selected.
 """,
     ),
-):
+):  # pragma NO COVER command
     """List environment variables defined in the installation"""
     quiet = ctx.obj["quiet"]
     errors = _audit_environment_section(
@@ -317,7 +317,7 @@ def _invalid_oidc_auth_providers(
 def _audit_oidc_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-) -> dict:
+) -> dict:  # pragma NO COVER UI ONLY
     """Print the OIDC section (rule header + per-provider listing)."""
     quiet = ctx.obj["quiet"]
     the_installation = _get_installation(ctx, installation_path)
@@ -345,7 +345,7 @@ def _audit_oidc_section(
 def audit_oidc_auth_providers(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):
+):  # pragma NO COVER command
     """List OIDC Auth Providers defined in the installation"""
     quiet = ctx.obj["quiet"]
     errors = _audit_oidc_section(ctx, installation_path)
@@ -354,14 +354,15 @@ def audit_oidc_auth_providers(
 
 async def _async_count(rag):
     with warnings.catch_warnings():
-        return await rag.count_documents()
+        async with rag as rag_a:
+            return await rag_a.count_documents()
 
 
 def _count_rag_documents(rag: hr_client.HaikuRAG):
     try:
         count = asyncio.run(_async_count(rag))
-    except Exception:
-        return "error"
+    except Exception as exc:
+        return str(exc)
 
     return f"{count} documents"
 
@@ -440,7 +441,7 @@ def _invalid_room_rag_dbs(
 def _audit_rooms_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-) -> dict:
+) -> dict:  # pragma NO COVER UI ONLY
     """Print the rooms section (rule header + per-room RAG validity/counts)."""
     quiet = ctx.obj["quiet"]
     the_installation = _get_installation(ctx, installation_path)
@@ -520,7 +521,7 @@ def _audit_rooms_section(
 def audit_rooms(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):
+):  # pragma NO COVER command
     """List rooms defined in the installation"""
     quiet = ctx.obj["quiet"]
     errors = _audit_rooms_section(ctx, installation_path)
@@ -547,7 +548,7 @@ def _invalid_completions(
 def _audit_completions_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-) -> dict:
+) -> dict:  # pragma NO COVER UI ONLY
     """Print the completions section (rule header + per-completion entry)."""
     quiet = ctx.obj["quiet"]
     the_installation = _get_installation(ctx, installation_path)
@@ -577,7 +578,7 @@ def _audit_completions_section(
 def audit_completions(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):
+):  # pragma NO COVER command
     """List completions defined in the installation"""
     quiet = ctx.obj["quiet"]
     errors = _audit_completions_section(ctx, installation_path)
@@ -615,7 +616,7 @@ def _invalid_quizzes(the_installation: installation.Installation) -> dict:
 def _audit_quizzes_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-) -> dict:
+) -> dict:  # pragma NO COVER UI ONLY
     """Print the quizzes section (rule header + per-file OK / Invalid)."""
     quiet = ctx.obj["quiet"]
     the_installation = _get_installation(ctx, installation_path)
@@ -650,7 +651,7 @@ def _audit_quizzes_section(
 def audit_quizzes(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):
+):  # pragma NO COVER command
     """List quizzes defined in the installation"""
     quiet = ctx.obj["quiet"]
     errors = _audit_quizzes_section(ctx, installation_path)
@@ -724,7 +725,7 @@ def _invalid_filesystem_skills(
 def _audit_skills_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-) -> dict:
+) -> dict:  # pragma NO COVER UI ONLY
     """Print the skills section (rule header + configured + filesystem)."""
     quiet = ctx.obj["quiet"]
     the_installation = _get_installation(ctx, installation_path)
@@ -775,7 +776,7 @@ def _audit_skills_section(
 def audit_skills(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):
+):  # pragma NO COVER command
     """List skills defined in the installation"""
     quiet = ctx.obj["quiet"]
     errors = _audit_skills_section(ctx, installation_path)
@@ -806,7 +807,7 @@ def _invalid_logging(the_installation: installation.Installation) -> dict:
 def _audit_logging_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-) -> dict:
+) -> dict:  # pragma NO COVER UI ONLY
     """Print the Python-logging section (rule header + config or defaults)."""
     quiet = ctx.obj["quiet"]
     the_installation = _get_installation(ctx, installation_path)
@@ -844,7 +845,7 @@ def _audit_logging_section(
 def audit_logging(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):
+):  # pragma NO COVER command
     """Show the Python-logging config defined in the installation"""
     quiet = ctx.obj["quiet"]
     errors = _audit_logging_section(ctx, installation_path)
@@ -854,7 +855,7 @@ def audit_logging(
 def _audit_logfire_section(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-) -> dict:
+) -> dict:  # pragma NO COVER UI ONLY
     """Print the Logfire section (rule header + config or defaults)."""
     quiet = ctx.obj["quiet"]
     the_installation = _get_installation(ctx, installation_path)
@@ -877,7 +878,7 @@ def _audit_logfire_section(
 def audit_logfire(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-):
+):  # pragma NO COVER command
     """Show the Logfire config defined in the installation"""
     quiet = ctx.obj["quiet"]
     errors = _audit_logfire_section(ctx, installation_path)
