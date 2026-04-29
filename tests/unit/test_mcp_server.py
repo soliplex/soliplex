@@ -4,13 +4,12 @@ from unittest import mock
 import pytest
 from fastmcp import tools as fmcp_tools
 
-from soliplex import installation
 from soliplex import mcp_server
-from soliplex.config import installation as config_installation
 from soliplex.config import rooms as config_rooms
 from soliplex.config import tools as config_tools
 
 ROOM_ID = "testing"
+URL_SAFE_TOKEN_SECRET_KEY = "really, seriously seekrit"
 
 
 def tool_for_testing():
@@ -144,31 +143,33 @@ def test_room_mcp_tools(mcp_tool, tool_configs, exp_mcp_tools, allow_mcp):
         assert len(found) == 0
 
 
-@pytest.mark.parametrize("w_max_age", [3600, "3600"])
+@pytest.mark.parametrize("w_auth_disabled", [False, True])
 @mock.patch("soliplex.mcp_server.room_mcp_tools")
 @mock.patch("soliplex.mcp_auth.FastMCPTokenProvider")
 @mock.patch("fastmcp.server.FastMCP")
-def test_setup_mcp_for_rooms(fmcp_klass, fmtp_klass, rmt, w_max_age):
-    i_config = mock.create_autospec(config_installation.InstallationConfig)
-    i_config.room_configs = room_configs = {
+def test_setup_mcp_for_rooms(
+    fmcp_klass,
+    fmtp_klass,
+    rmt,
+    w_auth_disabled,
+):
+    available_rooms = {
         "room1": mock.create_autospec(config_rooms.RoomConfig, allow_mcp=True),
         "room2": mock.create_autospec(config_rooms.RoomConfig, allow_mcp=True),
         "room3": mock.create_autospec(
             config_rooms.RoomConfig, allow_mcp=False
         ),
     }
-    the_installation = mock.create_autospec(installation.Installation)
-    the_installation._config = i_config
-    the_installation.get_environment.return_value = w_max_age
+    max_age = 7200
 
-    if isinstance(w_max_age, str):
-        exp_max_age = int(w_max_age)
-    else:
-        exp_max_age = w_max_age
+    found = mcp_server.setup_mcp_for_rooms(
+        available_rooms=available_rooms,
+        auth_disabled=w_auth_disabled,
+        url_safe_token_secret=URL_SAFE_TOKEN_SECRET_KEY,
+        max_token_age_secs=max_age,
+    )
 
-    found = mcp_server.setup_mcp_for_rooms(the_installation)
-
-    assert set(found) == set(room_configs) - set(["room3"])  # keys
+    assert set(found) == set(available_rooms) - set(["room3"])  # keys
 
     for f_key, f_mcp_http in found.items():
         assert f_mcp_http is fmcp_klass.return_value.http_app.return_value
@@ -178,18 +179,14 @@ def test_setup_mcp_for_rooms(fmcp_klass, fmtp_klass, rmt, w_max_age):
             )
             in fmcp_klass.call_args_list
         )
-        assert mock.call(room_configs[f_key]) in rmt.call_args_list
+        assert mock.call(available_rooms[f_key]) in rmt.call_args_list
 
         assert (
             mock.call(
                 room_id=f_key,
-                the_installation=the_installation,
-                max_age=exp_max_age,
+                auth_disabled=w_auth_disabled,
+                secret_key=URL_SAFE_TOKEN_SECRET_KEY,
+                max_age=max_age,
             )
             in fmtp_klass.call_args_list
         )
-
-    the_installation.get_environment.assert_called_once_with(
-        "MCP_TOKEN_MAX_AGE",
-        3600,
-    )

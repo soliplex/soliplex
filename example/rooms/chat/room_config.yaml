@@ -31,4 +31,4 @@ skills:
     - kind: "haiku.rag.skills.rag"
       rag_lancedb_stem: "rag"
 
-allow_mcp: false
+allow_mcp: true

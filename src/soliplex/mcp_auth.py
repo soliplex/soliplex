@@ -1,10 +1,8 @@
-from __future__ import annotations  # forward refs
+from __future__ import annotations
 
 from fastmcp.server.auth import auth as fmcp_server_auth
 from itsdangerous import url_safe as id_url_safe
 from mcp.server.auth import provider as mcp_auth_provider
-
-from soliplex import installation
 
 
 def generate_url_safe_token(secret_key: str, salt: str, **kw) -> str:
@@ -73,13 +71,14 @@ class FastMCPTokenProvider(fmcp_server_auth.TokenVerifier):
     def __init__(
         self,
         room_id: str,
-        the_installation: installation.Installation,
+        auth_disabled: bool,
+        secret_key: str,
         max_age: int = None,
     ):
         self.room_id = room_id
+        self.auth_disabled = auth_disabled
+        self.secret_key = secret_key
         self.max_age = max_age
-        self.auth_disabled = the_installation.auth_disabled
-        self.secret_key = the_installation.get_secret("URL_SAFE_TOKEN_SECRET")
 
         super().__init__()
 

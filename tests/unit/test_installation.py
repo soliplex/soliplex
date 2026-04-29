@@ -40,7 +40,9 @@ SECRET_CONFIG_1 = config_secrets.SecretConfig(secret_name=SECRET_NAME_1)
 SECRET_CONFIG_2 = config_secrets.SecretConfig(secret_name=SECRET_NAME_2)
 MISS_ERROR = object()
 OLLAMA_BASE_URL = "http://ollama.example.com:11434"
+URL_SAFE_TOKEN_SECRET_KEY = "really, seriously seekrit"
 
+ROOM_ID = "test-room"
 THREAD_ID = "test-agui-thread"
 RUN_ID = "test-agui-run"
 
@@ -1344,6 +1346,7 @@ def mcp_apps():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("w_max_age", [7200, "7200"])
 @pytest.mark.parametrize("w_add_admin_user", [None, ADMIN_USER_EMAIL])
 @pytest.mark.parametrize(
     "w_ic_logging_config",
@@ -1385,19 +1388,34 @@ async def test_lifespan(
     w_log_config_file,
     w_ic_logging_config,
     w_add_admin_user,
+    w_max_age,
 ):
     INSTALLATION_PATH = "/path/to/installation"
+    ASYNC_ENGINE_URL = config_installation.ASYNC_MEMORY_ENGINE_URL
 
     smfr.return_value = mcp_apps
 
+    r_config = mock.create_autospec(config_rooms.RoomConfig)
+    s_config = mock.create_autospec(
+        config_secrets.SecretConfig,
+        resolved=URL_SAFE_TOKEN_SECRET_KEY,
+    )
+
+    ic_environment = {
+        "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+        "MCP_TOKEN_MAX_AGE": w_max_age,
+    }
     i_config = mock.create_autospec(
         config_installation.InstallationConfig,
         secrets=(),
+        secrets_map={"URL_SAFE_TOKEN_SECRET": s_config},
         oidc_paths=["oidc"],
-        environment={"OLLAMA_BASE_URL": OLLAMA_BASE_URL},
+        room_configs={ROOM_ID: r_config},
+        environment=ic_environment,
+        get_environment=ic_environment.get,
         logging_config=w_ic_logging_config,
-        thread_persistence_dburi_async=config_installation.ASYNC_MEMORY_ENGINE_URL,
-        authorization_dburi_async=config_installation.ASYNC_MEMORY_ENGINE_URL,
+        thread_persistence_dburi_async=ASYNC_ENGINE_URL,
+        authorization_dburi_async=ASYNC_ENGINE_URL,
     )
     load_installation.return_value = i_config
     app = mock.create_autospec(fastapi.FastAPI)
@@ -1487,7 +1505,12 @@ root:
 
     alc.assert_called_once_with(app, the_installation, exp_lc_disable)
     srs.assert_called_once_with(the_installation._config.secrets)
-    smfr.assert_called_once_with(the_installation)
+    smfr.assert_called_once_with(
+        available_rooms={ROOM_ID: r_config},
+        auth_disabled=True,
+        url_safe_token_secret=URL_SAFE_TOKEN_SECRET_KEY,
+        max_token_age_secs=7200,
+    )
 
 
 @pytest.mark.asyncio

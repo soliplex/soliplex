@@ -4,7 +4,6 @@ import pytest
 from mcp.server.auth import provider as mcp_auth_provider
 
 from soliplex import mcp_auth
-from soliplex.config import installation as config_installation
 
 URL_SAFE_TOKEN_SECRET_KEY = "really, seriously seekrit"
 URL_SAFE_TOKEN_SALT = "testing"
@@ -72,31 +71,29 @@ def test_validate_url_safe_token(idusts_klass, w_max_age, w_valid):
     )
 
 
-@pytest.fixture
-def the_installation():
-    return mock.create_autospec(config_installation.InstallationConfig)
-
-
 @pytest.mark.parametrize("w_max_age", [None, 3600])
 @pytest.mark.parametrize("w_auth_disabled", [False, True])
-def test_fmcptokenprovider_ctor(the_installation, w_auth_disabled, w_max_age):
-    the_installation.auth_disabled = w_auth_disabled
+def test_fmcptokenprovider_ctor(w_auth_disabled, w_max_age):
+    auth_disabled = w_auth_disabled
 
     if w_max_age is not None:
         found = mcp_auth.FastMCPTokenProvider(
-            ROOM_ID, the_installation, max_age=w_max_age
+            room_id=ROOM_ID,
+            auth_disabled=auth_disabled,
+            secret_key=URL_SAFE_TOKEN_SECRET_KEY,
+            max_age=w_max_age,
         )
     else:
-        found = mcp_auth.FastMCPTokenProvider(ROOM_ID, the_installation)
+        found = mcp_auth.FastMCPTokenProvider(
+            room_id=ROOM_ID,
+            auth_disabled=auth_disabled,
+            secret_key=URL_SAFE_TOKEN_SECRET_KEY,
+        )
 
     assert found.room_id == ROOM_ID
     assert found.max_age == w_max_age
     assert found.auth_disabled == w_auth_disabled
-    assert found.secret_key == the_installation.get_secret.return_value
-
-    the_installation.get_secret.assert_called_once_with(
-        "URL_SAFE_TOKEN_SECRET"
-    )
+    assert found.secret_key == URL_SAFE_TOKEN_SECRET_KEY
 
 
 @pytest.mark.anyio
@@ -106,7 +103,6 @@ def test_fmcptokenprovider_ctor(the_installation, w_auth_disabled, w_max_age):
 @mock.patch("soliplex.mcp_auth.validate_url_safe_token")
 async def test_fmcptokenprovider_verify_token(
     vust,
-    the_installation,
     w_auth_disabled,
     w_max_age,
     w_hit,
@@ -117,17 +113,21 @@ async def test_fmcptokenprovider_verify_token(
         "email": "bharney@example.com",
     }
 
-    the_installation.auth_disabled = w_auth_disabled
-    the_installation.get_secret.return_value = URL_SAFE_TOKEN_SECRET_KEY
+    auth_disabled = w_auth_disabled
 
     if w_max_age is not None:
         fmtp = mcp_auth.FastMCPTokenProvider(
-            ROOM_ID,
-            the_installation,
+            room_id=ROOM_ID,
+            auth_disabled=auth_disabled,
+            secret_key=URL_SAFE_TOKEN_SECRET_KEY,
             max_age=w_max_age,
         )
     else:
-        fmtp = mcp_auth.FastMCPTokenProvider(ROOM_ID, the_installation)
+        fmtp = mcp_auth.FastMCPTokenProvider(
+            room_id=ROOM_ID,
+            auth_disabled=auth_disabled,
+            secret_key=URL_SAFE_TOKEN_SECRET_KEY,
+        )
 
     if w_hit:
         vust.return_value = REAL_USER

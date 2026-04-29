@@ -568,8 +568,28 @@ async def lifespan(
         "authorization_engine": authz_engine,
     }
 
+    # Extract room configs FBO mcp_server.setup_mcp_for_rooms
+    available_rooms = the_installation._config.room_configs
+
+    # Extract values needed by the FastMCPTokenProvider
+    auth_disabled = the_installation.auth_disabled
+    url_safe_token_secret = the_installation.get_secret(
+        "URL_SAFE_TOKEN_SECRET"
+    )
+    max_token_age_secs = the_installation.get_environment(
+        "MCP_TOKEN_MAX_AGE",
+        3600,
+    )
+    if isinstance(max_token_age_secs, str):
+        max_token_age_secs = int(max_token_age_secs)
+
     async with contextlib.AsyncExitStack() as stack:
-        mcp_apps = mcp_server.setup_mcp_for_rooms(the_installation)
+        mcp_apps = mcp_server.setup_mcp_for_rooms(
+            available_rooms=available_rooms,
+            auth_disabled=auth_disabled,
+            url_safe_token_secret=url_safe_token_secret,
+            max_token_age_secs=max_token_age_secs,
+        )
 
         for mcp_name, mcp_app in mcp_apps.items():
             mcp_lifespan = mcp_app.lifespan(app)

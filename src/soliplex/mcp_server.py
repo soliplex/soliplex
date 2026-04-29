@@ -5,7 +5,6 @@ import inspect
 from fastmcp import server as fmcp_server
 from fastmcp import tools as fmcp_tools
 
-from soliplex import installation
 from soliplex import mcp_auth
 from soliplex.config import rooms as config_rooms
 from soliplex.config import tools as config_tools
@@ -61,25 +60,32 @@ def room_mcp_tools(
     return tools
 
 
-def setup_mcp_for_rooms(the_installation: installation.Installation):
+def setup_mcp_for_rooms(
+    available_rooms: list[config_rooms.RoomConfig],
+    auth_disabled: bool,
+    url_safe_token_secret: str,
+    max_token_age_secs: int | str,
+):
     """Setup MCP servers for all available rooms.
 
     Args:
-        the_installation: dict created via the fastapi app's lifespan:
-                          key 'the_rooms' holds the installation's
-                          RoomConfigs instance with loaded room configurations
+        available_rooms:
+            list of room configs in the installation
+
+        auth_disabled:
+            whether the installation is running in '--no-auth-mode'
+
+        url_safe_token_secret:
+            the 'URL_SAFE_TOKEN_SECRET' installation secret
+
+        max_token_age_secs:
+            installation's environment value for 'MCP_TOKEN_MAX_AGE',
+            already converted (if needed) to an integer.
 
     Returns:
         mcp_apps dict
     """
     mcp_apps = {}
-
-    # Deliberately bypass auth check done by 'get_room_configs' here.
-    available_rooms = the_installation._config.room_configs
-    max_age = the_installation.get_environment("MCP_TOKEN_MAX_AGE", 3600)
-
-    if isinstance(max_age, str):
-        max_age = int(max_age)
 
     for key, room_config in available_rooms.items():
         if room_config.allow_mcp:
@@ -88,8 +94,10 @@ def setup_mcp_for_rooms(the_installation: installation.Installation):
                 tools=room_mcp_tools(room_config),
                 auth=mcp_auth.FastMCPTokenProvider(
                     room_id=key,
-                    the_installation=the_installation,
-                    max_age=max_age,
+                    # the_installation=the_installation,
+                    auth_disabled=auth_disabled,
+                    secret_key=url_safe_token_secret,
+                    max_age=max_token_age_secs,
                 ),
             )
 
