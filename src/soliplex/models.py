@@ -604,7 +604,7 @@ class AGUI_RunMetadata(pydantic.BaseModel):
     @classmethod
     def from_run_meta(
         cls,
-        a_run_meta: agui_package.RunMeta | None,
+        a_run_meta: agui_package.RunMetadata | None,
     ):
         if a_run_meta is not None:
             return cls(
