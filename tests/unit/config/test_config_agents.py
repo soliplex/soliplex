@@ -27,6 +27,14 @@ OTHER_PROVIDER_BASE_URL = "https://other-provider.example.com/api"
 OLLAMA_BASE_URL = "https://example.com:12345"
 AGUI_FEATURE_NAME = "test-agui-feature"
 
+MODEL = "testing"
+BASE_URL = "https://example.com:12345"
+API_KEY = "DEADBEEF"
+OLLAMA_PROVIDER_KW = {"base_url": BASE_URL}
+OPENAI_PROVIDER_KW = {"base_url": BASE_URL, "api_key": API_KEY}
+GOOGLE_PROVIDER_KW = {"api_key": API_KEY}
+MODEL_SETTINGS = {"temperature": 0.875}
+
 BOGUS_AGENT_CONFIG_YAML = ""
 
 W_KIND_AGENT_CONFIG_KW = dict(
@@ -1128,3 +1136,96 @@ def test_extract_agent_configs(
     )
 
     assert found == expected
+
+
+@pytest.mark.parametrize("w_model_settings", [None, MODEL_SETTINGS])
+@pytest.mark.parametrize(
+    "provider_type, llm_provider_kw",
+    [
+        (config_agents.LLMProviderType.OLLAMA, OLLAMA_PROVIDER_KW),
+        (config_agents.LLMProviderType.OPENAI, OPENAI_PROVIDER_KW),
+        (config_agents.LLMProviderType.GOOGLE, GOOGLE_PROVIDER_KW),
+    ],
+)
+@mock.patch("pydantic_ai.providers.google.GoogleProvider")
+@mock.patch("pydantic_ai.providers.ollama.OllamaProvider")
+@mock.patch("pydantic_ai.providers.openai.OpenAIProvider")
+@mock.patch("pydantic_ai.models.google.GoogleModel")
+@mock.patch("pydantic_ai.models.openai.OpenAIChatModel")
+def test_get_model_from_config(
+    oai_model_klass,
+    google_model_klass,
+    oai_provider_klass,
+    oll_provider_klass,
+    google_provider_klass,
+    provider_type,
+    llm_provider_kw,
+    w_model_settings,
+):
+    agent_config = mock.create_autospec(config_agents.AgentConfig)
+    agent_config.kind = "default"
+    agent_config.id = AGENT_ID
+    agent_config.model_name = MODEL
+    agent_config.get_system_prompt.return_value = SYSTEM_PROMPT
+    agent_config.model_settings = w_model_settings
+    agent_config.provider_type = provider_type
+    agent_config.llm_provider_kw = llm_provider_kw
+
+    model = config_agents.get_model_from_config(agent_config=agent_config)
+
+    if provider_type == config_agents.LLMProviderType.GOOGLE:
+        assert model is google_model_klass.return_value
+        if w_model_settings:
+            google_model_klass.assert_called_once_with(
+                model_name=MODEL,
+                settings=w_model_settings,
+                provider=google_provider_klass.return_value,
+            )
+        else:
+            google_model_klass.assert_called_once_with(
+                model_name=MODEL,
+                provider=google_provider_klass.return_value,
+            )
+        google_provider_klass.assert_called_once_with(**llm_provider_kw)
+
+        oai_model_klass.assert_not_called()
+        oai_provider_klass.assert_not_called()
+        oll_provider_klass.assert_not_called()
+
+    elif provider_type == config_agents.LLMProviderType.OPENAI:
+        assert model is oai_model_klass.return_value
+        if w_model_settings:
+            oai_model_klass.assert_called_once_with(
+                model_name=MODEL,
+                settings=w_model_settings,
+                provider=oai_provider_klass.return_value,
+            )
+        else:
+            oai_model_klass.assert_called_once_with(
+                model_name=MODEL,
+                provider=oai_provider_klass.return_value,
+            )
+        oai_provider_klass.assert_called_once_with(**llm_provider_kw)
+
+        oll_provider_klass.assert_not_called()
+        google_model_klass.assert_not_called()
+        google_provider_klass.assert_not_called()
+
+    else:
+        assert model is oai_model_klass.return_value
+        if w_model_settings:
+            oai_model_klass.assert_called_once_with(
+                model_name=MODEL,
+                settings=w_model_settings,
+                provider=oll_provider_klass.return_value,
+            )
+        else:
+            oai_model_klass.assert_called_once_with(
+                model_name=MODEL,
+                provider=oll_provider_klass.return_value,
+            )
+        oll_provider_klass.assert_called_once_with(**llm_provider_kw)
+
+        oai_provider_klass.assert_not_called()
+        google_model_klass.assert_not_called()
+        google_provider_klass.assert_not_called()

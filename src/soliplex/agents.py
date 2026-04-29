@@ -9,14 +9,7 @@ from haiku.skills import agent as hs_agent
 from haiku.skills import prompts as hs_prompts
 from pydantic_ai import agent as ai_agent
 from pydantic_ai import mcp as ai_mcp
-from pydantic_ai import models as ai_models
-from pydantic_ai import settings as ai_settings
 from pydantic_ai import tools as ai_tools
-from pydantic_ai.models import google as google_models
-from pydantic_ai.models import openai as openai_models
-from pydantic_ai.providers import google as google_providers
-from pydantic_ai.providers import ollama as ollama_providers
-from pydantic_ai.providers import openai as openai_providers
 
 from soliplex import agui as agui_package
 from soliplex import mcp_client
@@ -88,44 +81,6 @@ def make_mcp_client_toolset(
     return toolset_klass(**toolset_config.tool_kwargs)
 
 
-def get_model_from_config(
-    *,
-    agent_config: config_agents.AgentConfig,
-) -> ai_models.Model:
-    provider_kw = agent_config.llm_provider_kw
-
-    model_settings_kw = {}
-
-    if agent_config.model_settings:
-        model_settings_kw["settings"] = ai_settings.ModelSettings(
-            **agent_config.model_settings,
-        )
-
-    if agent_config.provider_type == config_agents.LLMProviderType.GOOGLE:
-        provider = google_providers.GoogleProvider(**provider_kw)
-        return google_models.GoogleModel(
-            model_name=agent_config.model_name,
-            provider=provider,
-            **model_settings_kw,
-        )
-
-    elif agent_config.provider_type == config_agents.LLMProviderType.OLLAMA:
-        provider_kw["api_key"] = "dummy"
-        provider = ollama_providers.OllamaProvider(**provider_kw)
-        return openai_models.OpenAIChatModel(
-            model_name=agent_config.model_name,
-            provider=provider,
-            **model_settings_kw,
-        )
-    else:
-        provider = openai_providers.OpenAIProvider(**provider_kw)
-        return openai_models.OpenAIChatModel(
-            model_name=agent_config.model_name,
-            provider=provider,
-            **model_settings_kw,
-        )
-
-
 def get_default_agent_from_configs(
     *,
     agent_config: config_agents.AgentConfig,
@@ -134,7 +89,7 @@ def get_default_agent_from_configs(
     skill_toolset_config: SkillToolsetConfig | None = None,
 ) -> SoliplexAgent:
     """Build a Pydantic AI agent from a config"""
-    model = get_model_from_config(agent_config=agent_config)
+    model = config_agents.get_model_from_config(agent_config=agent_config)
 
     tools = [
         make_ai_tool(tool_config) for tool_config in tool_configs.values()

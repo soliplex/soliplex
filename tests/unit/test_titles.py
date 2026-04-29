@@ -145,7 +145,7 @@ class TestGenerateTitle:
     @pytest.mark.anyio
     @pytest.mark.parametrize("assistant_text", ["", "Hi there!"])
     @mock.patch("pydantic_ai.Agent")
-    @mock.patch("soliplex.agents.get_model_from_config")
+    @mock.patch("soliplex.config.agents.get_model_from_config")
     async def test_generate_title(
         self, get_model_from_config, agent_klass, assistant_text
     ):
@@ -175,7 +175,7 @@ class TestGenerateTitle:
 
     @pytest.mark.anyio
     @mock.patch("pydantic_ai.Agent")
-    @mock.patch("soliplex.agents.get_model_from_config")
+    @mock.patch("soliplex.config.agents.get_model_from_config")
     async def test_returns_none(self, get_model_from_config, agent_klass):
         run_result = mock.MagicMock()
         run_result.output = titles.ThreadTitle(title=None)

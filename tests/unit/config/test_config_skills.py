@@ -163,7 +163,7 @@ GMFC_RETURN_VALUE = object()
         ),
     ],
 )
-@mock.patch("soliplex.agents.get_model_from_config")
+@mock.patch("soliplex.config.agents.get_model_from_config")
 def test_derivedskillconfigmodel_model_or_name(
     gmfc,
     derived_skillconfigmodel_klass,
@@ -422,7 +422,7 @@ def test_filesystemskillconfig_agui_feature_names(skill_path, w_kw):
         ),
     ],
 )
-@mock.patch("soliplex.agents.get_model_from_config")
+@mock.patch("soliplex.config.agents.get_model_from_config")
 def test_filesystemskillconfig_skill(
     gmfc,
     skill_path,
@@ -596,7 +596,7 @@ def test_entrypointskillconfig_agui_feature_names(w_kw):
         ),
     ],
 )
-@mock.patch("soliplex.agents.get_model_from_config")
+@mock.patch("soliplex.config.agents.get_model_from_config")
 def test_entrypointskillconfig_skill(
     gmfc,
     skill_path,
@@ -1224,7 +1224,7 @@ def test_roomskillsconfig_skill_preambles(
         ),
     ],
 )
-@mock.patch("soliplex.agents.get_model_from_config")
+@mock.patch("soliplex.config.agents.get_model_from_config")
 def test_roomskillsconfig_skill_toolset(
     gmfc,
     installation_config,

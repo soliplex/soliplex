@@ -6,7 +6,6 @@ import pydantic_ai
 from ag_ui import core as agui_core
 from sqlalchemy.ext import asyncio as sqla_asyncio
 
-from soliplex import agents
 from soliplex.agui import persistence as agui_persistence
 from soliplex.config import agents as config_agents
 
@@ -63,7 +62,7 @@ async def generate_title(
     messages: list[agui_core.Message],
     assistant_text: str = "",
 ) -> str | None:
-    model = agents.get_model_from_config(agent_config=agent_config)
+    model = config_agents.get_model_from_config(agent_config=agent_config)
     agent = pydantic_ai.Agent(
         model=model,
         output_type=ThreadTitle,

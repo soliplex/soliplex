@@ -8,8 +8,14 @@ import typing
 from collections import abc
 
 from pydantic_ai import capabilities as ai_capabilities
+from pydantic_ai import models as ai_models
 from pydantic_ai import settings as ai_settings
 from pydantic_ai.agent import abstract as ai_ag_abstract
+from pydantic_ai.models import google as google_models
+from pydantic_ai.models import openai as openai_models
+from pydantic_ai.providers import google as google_providers
+from pydantic_ai.providers import ollama as ollama_providers
+from pydantic_ai.providers import openai as openai_providers
 
 from soliplex.agui import features as agui_features_module  # noqa F401
 
@@ -400,3 +406,42 @@ def extract_agent_config(
         config_path,
         config_dict,
     )
+
+
+def get_model_from_config(
+    *,
+    agent_config: AgentConfig,
+) -> ai_models.Model:
+    provider_kw = agent_config.llm_provider_kw
+
+    model_settings_kw = {}
+
+    if agent_config.model_settings:
+        model_settings_kw["settings"] = ai_settings.ModelSettings(
+            **agent_config.model_settings,
+        )
+
+    if agent_config.provider_type == LLMProviderType.GOOGLE:
+        provider = google_providers.GoogleProvider(**provider_kw)
+        return google_models.GoogleModel(
+            model_name=agent_config.model_name,
+            provider=provider,
+            **model_settings_kw,
+        )
+
+    elif agent_config.provider_type == LLMProviderType.OLLAMA:
+        provider_kw["api_key"] = "dummy"
+        provider = ollama_providers.OllamaProvider(**provider_kw)
+        return openai_models.OpenAIChatModel(
+            model_name=agent_config.model_name,
+            provider=provider,
+            **model_settings_kw,
+        )
+
+    else:
+        provider = openai_providers.OpenAIProvider(**provider_kw)
+        return openai_models.OpenAIChatModel(
+            model_name=agent_config.model_name,
+            provider=provider,
+            **model_settings_kw,
+        )
