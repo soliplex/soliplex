@@ -902,7 +902,7 @@ TEST_EXEC_TIMEOUT_SECS = 60
         (
             {
                 "id": TEST_SKILL_CONFIG_ID,
-                "default_environment_name": TEST_DEFAULT_ENVIRONMENT,
+                "default_environment": TEST_DEFAULT_ENVIRONMENT,
                 "allowed_environments": [TEST_DEFAULT_ENVIRONMENT],
                 "sandbox_config": {
                     "execution_timeout_seconds": TEST_EXEC_TIMEOUT_SECS,
@@ -929,8 +929,8 @@ def test_bwrapsandboxskillconfig_from_yaml(
 
     if not isinstance(expected, pytest.ExceptionInfo):
         assert inst.id == w_config.get("id")
-        assert inst.default_environment_name == w_config.get(
-            "default_environment_name",
+        assert inst.default_environment == w_config.get(
+            "default_environment",
             "bare",
         )
         assert isinstance(inst.sandbox_config, bs_config.Config)
@@ -941,13 +941,13 @@ def test_bwrapsandboxskillconfig_from_yaml(
         )
         assert inst.sandbox_config == exp_config
 
-        if "default_environment_name" in w_config:
+        if "default_environment" in w_config:
             assert (
-                inst.extra_parameters["default_environment_name"]
-                == w_config["default_environment_name"]
+                inst.extra_parameters["default_environment"]
+                == w_config["default_environment"]
             )
         else:
-            assert inst.extra_parameters["default_environment_name"] == "bare"
+            assert inst.extra_parameters["default_environment"] == "bare"
 
         if "allowed_environments" in w_config:
             assert (
@@ -985,7 +985,7 @@ def test_bwrapsandboxskillconfig_skill(
     )
     bssc = config_skills.BwrapSandboxSkillConfig(
         id=TEST_SKILL_CONFIG_ID,
-        default_environment_name=TEST_DEFAULT_ENVIRONMENT,
+        default_environment=TEST_DEFAULT_ENVIRONMENT,
         allowed_environments=w_allowed_environments,
         sandbox_config=bs_config.Config(
             execution_timeout_seconds=TEST_EXEC_TIMEOUT_SECS,
@@ -1000,7 +1000,7 @@ def test_bwrapsandboxskillconfig_skill(
 
     cbss.assert_called_once_with(
         id=bssc.id,
-        default_environment_name=bssc.default_environment_name,
+        default_environment=bssc.default_environment,
         allowed_environments=w_allowed_environments,
         sandbox_config=bssc.sandbox_config,
         volumes=w_volumes,

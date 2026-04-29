@@ -455,7 +455,7 @@ def test_get_extra_volumes(
         {},
         {"id": "test-toolset-id"},
         {"max_retries": 17},
-        {"default_environment_name": "test-environment"},
+        {"default_environment": "test-environment"},
         {"sandbox_config": bs_config.Config(max_output_chars=100)},
         {
             "volumes": {
@@ -500,7 +500,7 @@ def test_create_sandbox_toolset(
         exp_config = sandbox_config
 
     exp_sandbox_kw = {
-        "default_environment_name": "bare",
+        "default_environment": "bare",
         "config": exp_config,
         "volumes": {},
     } | {
@@ -754,7 +754,7 @@ async def test_create_sandbox_toolset_run_python(
         {},
         {"id": "test-toolset-id"},
         {"max_retries": 17},
-        {"default_environment_name": "test-environment"},
+        {"default_environment": "test-environment"},
         {"sandbox_config": bs_config.Config(max_output_chars=100)},
         {
             "volumes": {
@@ -803,7 +803,7 @@ def test_create_bwrap_sandbox_skill(psm, csts, w_kwargs, w_iconfig, i_config):
     exp_toolset_kw = (
         {
             "id": None,
-            "default_environment_name": "bare",
+            "default_environment": "bare",
             "allowed_environments": None,
             "sandbox_config": None,
             "volumes": None,

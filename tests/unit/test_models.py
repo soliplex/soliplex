@@ -591,7 +591,7 @@ def test_skill_from_config_w_bwssc(bwrap_sandbox_skill_config):
     )
     assert found.state_namespace == sk_bwrap_sandbox.STATE_NAMESPACE
     assert found.extra_parameters == {
-        "default_environment_name": "bare",
+        "default_environment": "bare",
     }
 
 

@@ -287,7 +287,7 @@ def get_extra_volumes(
 def create_sandbox_toolset(
     *,
     id: str | None = None,
-    default_environment_name: str = "bare",
+    default_environment: str = "bare",
     allowed_environments: AllowedEnvironments = None,
     sandbox_config: bs_config.Config | None = None,
     volumes: bs_models.VolumeMap | None = None,
@@ -302,7 +302,7 @@ def create_sandbox_toolset(
     Args:
         id: Optional unique ID for the toolset.
 
-        default_environment_name: name of default configured environment
+        default_environment: name of default configured environment
 
         sandbox_config: bubble_sandbox configuration
 
@@ -337,7 +337,7 @@ def create_sandbox_toolset(
         volumes = {}
 
     bwrap_sandbox = bs_sandbox.BwrapSandbox(
-        default_environment_name=default_environment_name,
+        default_environment=default_environment,
         config=sandbox_config,
         volumes=volumes,
     )
@@ -440,7 +440,7 @@ def create_sandbox_toolset(
 def create_bwrap_sandbox_skill(
     id: str = None,
     *,
-    default_environment_name: str = "bare",
+    default_environment: str = "bare",
     allowed_environments: AllowedEnvironments = None,
     sandbox_config: bs_config.Config | None = None,
     volumes: bs_models.VolumeMap | None = None,
@@ -454,7 +454,7 @@ def create_bwrap_sandbox_skill(
 
     toolset = create_sandbox_toolset(
         id=id,
-        default_environment_name=default_environment_name,
+        default_environment=default_environment,
         allowed_environments=allowed_environments,
         sandbox_config=sandbox_config,
         volumes=volumes,

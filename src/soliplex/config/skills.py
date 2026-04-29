@@ -412,7 +412,7 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
     state_namespace: str | None = sk_bwrap_sandbox.STATE_NAMESPACE
 
     id: str | None = None
-    default_environment_name: str = "bare"
+    default_environment: str = "bare"
     allowed_environments: sk_bwrap_sandbox.AllowedEnvironments = None
     sandbox_config: bs_config.Config = None
     volumes: bs_models.VolumeMap = _default_dict_field()
@@ -435,6 +435,10 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
                 **sandbox_config_dict,
             )
 
+            de_name = config_dict.pop("default_environment_name", None)
+            if de_name is not None:  # pragma: NO COVER forward-compat
+                config_dict["default_environment"] = de_name
+
             return cls(**config_dict)
         except Exception as exc:
             raise config_exc.FromYamlException(
@@ -451,7 +455,7 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
     def skill(self) -> hs_models.Skill:
         skill = sk_bwrap_sandbox.create_bwrap_sandbox_skill(
             id=self.id,
-            default_environment_name=self.default_environment_name,
+            default_environment=self.default_environment,
             allowed_environments=self.allowed_environments,
             sandbox_config=self.sandbox_config,
             volumes=self.volumes,
@@ -461,8 +465,12 @@ class BwrapSandboxSkillConfig(_SkillPropertiesFromMetadata):
         return skill
 
     @property
+    def default_environment_name(self) -> str:
+        return self.default_environment  # pragma: NO COVER deprecated alias
+
+    @property
     def extra_parameters(self) -> dict[str, typing.Any]:
-        result = {"default_environment_name": self.default_environment_name}
+        result = {"default_environment": self.default_environment}
 
         if self.allowed_environments is not None:
             result["allowed_environments"] = self.allowed_environments
