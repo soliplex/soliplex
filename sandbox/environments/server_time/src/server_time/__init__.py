@@ -1,4 +1,4 @@
-"""Hour — a simple module that returns the current server time."""
+"""server_time — a simple module that returns the current server time."""
 
 from datetime import UTC
 from datetime import datetime

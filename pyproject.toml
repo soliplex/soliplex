@@ -20,7 +20,7 @@ dependencies = [
     "bubble-sandbox >= 0.7.0, < 0.8",
     "fastapi",
     "fastmcp >= 2.14.0, < 2.15",
-    "fakeredis != 2.35.0",  # brownbag
+    "fakeredis != 2.35.0", # brownbag
     "greenlet",
     "haiku.rag-slim >= 0.40.0, < 0.41",
     "haiku-skills >= 0.14.0, < 0.15",
@@ -36,6 +36,8 @@ dependencies = [
     "trio",
     "uvicorn[standard]",
     "certifi >= 2025.11.12",
+    "ruff>=0.15.10",
+    "fpdf2>=2.8.7",
 ]
 
 [project.scripts]
@@ -53,7 +55,6 @@ dev = [
     "ruff >= 0.15.6, < 0.16",
     "skills-ref",
     "trio >= 0.33.0, < 0.34",
-    "debugpy",
 ]
 docs = [
     "mkdocs>=1.6.1",

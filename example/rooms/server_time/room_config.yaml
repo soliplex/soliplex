@@ -13,4 +13,3 @@ agent:
 skills:
   skill_configs:
     - kind: "bubble-sandbox"
-      default_environment_name: "server_time"

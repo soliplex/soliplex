@@ -60,45 +60,98 @@ policies and Compose `depends_on` conditions.
 
 The repository includes a `.dockerignore` file that excludes `.git`,
 `.venv`, `__pycache__`, `.env`, test suites, documentation sources, and
-runtime data directories (`db/`, `uploads/`). This keeps the build
+runtime data directories (`db/`, `documents/`, `uploads/`). This keeps the build
 context small and prevents secrets from leaking into the image.
 
 ## Docker Compose
 
-The `docker-compose.yaml` defines two backend services:
+In the `docker-compose.yaml` you can find 3 services for soliplex usage or development, these are:
+- `docling-serve`
+- `soliplex_indexer`
+- `soliplex_backend`
 
-### `soliplex_backend` (production)
+In addition, there are additional services commented out, that are included as conveninence to quickly build and use the frontends to interact with soliplex. These are:
+- `soliplex_frontend`
+- `chatbot_builder`
+- `chatbot_dev`
+- `chatbot_widget`
 
-Builds the default **production** target. Configuration is mounted from
-the host; source code is baked into the image.
+### `docling-serve` and `soliplex_indexer`
 
+These two services work together to index documents into a RAG database. This database needs to be manually initialized:
 ```bash
-docker compose up soliplex_backend
+$ docker compose run --rm soliplex_indexer haiku-rag --config=/app/installation/haiku.rag.yaml init --db=/app/db/rag/rag.lancedb
 ```
 
-### `soliplex_dev` (development)
+After this, when the stack is up, the documents inside `documents/` are automatically picked up and indexed into the RAG database.
 
-Builds the **development** target with hot reloading and bind-mounted
-source code so that edits on the host take effect immediately.
+### `soliplex_backend`
 
+This is the main service which executes the `soliplex` backend, as the name obviously implies.
+
+This service requires a few environment variables set in order to work, copy the `.env.example` as `.env` and assign needed values to the relevant variables.(see [Environment Variables](#environment-variables) below).
+
+After this, you can start the stack:
 ```bash
-docker compose up soliplex_dev
+$ docker compose up
 ```
 
 On Linux, pass your UID/GID so that files written by the container are
 owned by your host user:
 
 ```bash
-APP_UID=$(id -u) APP_GID=$(id -g) docker compose up soliplex_dev
+$ APP_UID=$(id -u) APP_GID=$(id -g) docker compose up
 ```
 
-The development service:
+### `soliplex_frontend` (Optional)
 
-- Bind-mounts `./src/soliplex` into the container (live code changes)
-- Bind-mounts `./tests` for in-container test runs
-- Runs with `--reload=both` so uvicorn restarts on Python or YAML
-  config changes
-- Uses `--no-auth-mode` for convenience
+This optional service is included as a convenience to quickly be able to have the [Flutter frontend](https://github.com/soliplex/frontend) running locally, connected with the `soliplex_backend` service.
+In order to do so, clone the repo in `src/frontend` and uncomment the lines in the `docker-compose.yaml` and start the stack with:
+```bash
+$ docker compose up
+```
+
+Once the services are up, you can access the GUI from a web browser, by visiting http://localhost:9000
+The soliplex backend can be reached at http://localhost:8000
+
+### `chatbot_dev` (Optional)
+
+This optional service is included as a convenience to develop the embeddable [chat widget](https://github.com/soliplex/chatbot).
+Notice that this widget was implemented using React, and it is completely independent from the `soliplex_frontend` service.
+In order to use it, clone the repo in `src/chatbot` and uncomment the lines for this service in the `docker-compose.yaml` finally start the stack with:
+```bash
+$ docker compose up
+```
+
+Once all services are up, you can access the React app from a web browser, by visiting http://localhost:3000
+The soliplex backend can be reached at http://localhost:8000
+Since this is React in dev mode, changes to the code are applied live and don't require any restarts.
+
+### `chatbot_builder` and `chatbot_widget` (Optional)
+
+These 2 services are intended to be used together and are independent from the `soliplex_frontend` and `chatbot_dev` services mentioned before.
+It shares the same codebase and repo from `chatbot_dev` (`src/chatbot`) but instead of starting react in dev mode, it is intended to test the embeddable widget in production mode, by compiling the source and serving it with an nginx container.
+
+In order to use it, clone the repo in `src/chatbot` and uncomment the lines for these services in the `docker-compose.yaml` finally start the stack with:
+```bash
+$ docker compose up
+```
+
+Once all services are up, you can visit http://localhost:8080/ to open the website, with the compiled JS embedded. Changes to the code, will reload the whole page.
+
+The soliplex backend can be reached at http://localhost:8000
+
+### Sandboxed python modules
+
+You can include Python modules, to be executed in rooms in their own sandbox. A "server_time" is included as example at `sandbox/environments/server_time`, configured to be used in the `example/rooms/server_time` room. It is important to notice that a proper description should be included in the `pyproject.toml` for your module, in order for the AI agent to pass the correct `environment_name` to the `execute_script` call.
+Notice that changes to these modules will require a `docker compose build` in order for the code to be updated and used.
+You can uncomment the:
+```
+    # environment:
+    #   - TZ=Pacific/Auckland
+```
+lines in the `docker-compose.yaml` file in order to test that the python code is actually being called.
+
 
 ### Configuration
 
@@ -133,32 +186,19 @@ The development service:
    - Thread persistence database
    - Room authorization database
 
-### Common Commands
+### Running haiku.rag commands manually
 
-```bash
-# Start production backend
-docker compose up soliplex_backend
+If you want to jump into the running container and execute `haiku-rag` commands manually, you can do so with `docker compose exec soliplex_backend /bin/bash` and from here run `haiku-rag` commands.
 
-# Start development backend with hot reload
-docker compose up soliplex_dev
-
-# Rebuild after dependency changes
-docker compose up --build soliplex_backend
-
-# Run in detached mode
-docker compose up -d soliplex_backend
-
-# View logs
-docker compose logs -f soliplex_backend
-
-# Stop all services
-docker compose down
-```
+Alternatively, you can start a new, separate container, with `docker compose run soliplex_backend /bin/bash` and run `haiku-rag` commands.
 
 ### Accessing the Application
 
 - **Backend API**: <http://localhost:8000>
 - **API Documentation**: <http://localhost:8000/docs>
+- **Flutter frontend (Optional)**: <http://localhost:9000>
+- **Embeddable widget (Optional, React dev mode)**: <http://localhost:3000>
+- **Embeddable widget (Optional, Nginx prod mode)**: <http://localhost:8080>
 
 ## Building Custom Docker Images
 
@@ -220,14 +260,6 @@ When running Ollama or other services on your host machine, use
 OLLAMA_BASE_URL=http://host.docker.internal:11434
 ```
 
-On Linux, you may need to add this to `docker-compose.yaml` (already
-included):
-
-```yaml
-extra_hosts:
-  - "host.docker.internal:host-gateway"
-```
-
 ## Volume Mounts
 
 ### Configuration Files (`./example:/app/installation`)
@@ -251,57 +283,32 @@ Persists application data:
 **Important**: Initialize the RAG database before first run (see RAG
 Setup below).
 
+### Documents Files (`./documents:/app/docs`)
+
+Documents inside this folder will be automatically picked up and indexed into the RAG database.
+
+**Important**: Initialize the RAG database before first run (see RAG
+Setup below).
+
 ### Source Code (`./src/soliplex:/app/src/soliplex`)
 
-Only used by the `soliplex_dev` service. Bind-mounts your working tree
-into the container so that edits are picked up by the uvicorn reloader.
+Bind-mounts your working tree into the container so that edits are picked up by the uvicorn reloader.
 
 ### Tests (`./tests:/app/tests`)
 
-Only used by the `soliplex_dev` service. Allows running the test suite
+Only used by the `soliplex_backend` service. Allows running the test suite
 inside the container:
 
 ```bash
-docker compose run --rm soliplex_dev uv run pytest
+docker compose run --rm soliplex_backend uv run pytest
 ```
 
 ## RAG Database Setup in Docker
 
 The RAG database must be initialized before starting the backend server.
 
-### Option 1: Initialize on Host (Recommended)
-
-Initialize the database on your host machine before running Docker:
-
 ```bash
-# Install haiku-rag (full version for ingestion)
-uv pip install haiku-rag
-
-# Set Ollama URL
-export OLLAMA_BASE_URL=http://localhost:11434
-
-# Initialize and populate RAG database
-haiku-rag --config example/haiku.rag.yaml init --db db/rag/rag.lancedb
-haiku-rag --config example/haiku.rag.yaml add-src --db db/rag/rag.lancedb docs/
-```
-
-The `./db` directory will be mounted into the container with the
-initialized database.
-
-### Option 2: Initialize in Container
-
-Run initialization inside the backend container:
-
-```bash
-# Start container with shell
-docker compose run --rm soliplex_backend /bin/bash
-
-# Inside container
-export OLLAMA_BASE_URL=http://host.docker.internal:11434
-pip install haiku-rag  # Install full version
-haiku-rag --config /app/installation/haiku.rag.yaml init --db /app/db/rag/rag.lancedb
-haiku-rag --config /app/installation/haiku.rag.yaml add-src --db /app/db/rag/rag.lancedb /app/docs/
-exit
+$ docker compose run --rm soliplex_indexer haiku-rag --config=/app/installation/haiku.rag.yaml init --db=/app/db/rag/rag.lancedb
 ```
 
 ## Common Issues
@@ -347,7 +354,7 @@ If you encounter permission errors with mounted volumes on Linux, ensure
 the container user's UID matches your host user:
 
 ```bash
-APP_UID=$(id -u) APP_GID=$(id -g) docker compose up --build soliplex_dev
+APP_UID=$(id -u) APP_GID=$(id -g) docker compose up --build soliplex_backend
 ```
 
 For existing directories:

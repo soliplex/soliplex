@@ -33,7 +33,7 @@ services:
       docling-serve:
         condition: service_healthy
     volumes:
-      - ./installation:/app/installation:ro
+      - ./example:/app/installation:ro
       - ./db:/app/db
       - ./documents:/app/docs
     networks:
@@ -45,18 +45,17 @@ services:
       dockerfile: Dockerfile
       target: development
     ports:
-      - "5678:5678"
       - "8000:8000"
     env_file:
       - .env
     # Needed to run 'bubblewrap' sandbox
     privileged: true
     # XXX: Used this env to test the 'server_time' sandbox environment.
-    environment:
-      - TZ=Pacific/Auckland
+    # environment:
+    #   - TZ=Pacific/Auckland
     volumes:
       - ./src/soliplex:/app/src/soliplex
-      - ./installation:/app/installation
+      - ./example:/app/installation
       - ./db:/app/db
       - ./sandbox/workdirs:/app/sandbox/workdirs
       - ./documents:/app/docs
