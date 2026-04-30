@@ -5,7 +5,9 @@ from unittest import mock
 
 import yaml
 
-from soliplex import config
+from soliplex.config import agents as config_agents
+from soliplex.config import installation as config_installation
+from soliplex.config import rooms as config_rooms
 
 ROOM_CONFIG_PATH = (
     pathlib.Path(__file__).resolve().parents[2]
@@ -17,14 +19,16 @@ ROOM_CONFIG_PATH = (
 
 
 def test_moodle_tools_room_config_loads():
-    installation_config = mock.create_autospec(config.InstallationConfig)
+    installation_config = mock.create_autospec(
+        config_installation.InstallationConfig,
+    )
     installation_config.get_environment.return_value = None
     installation_config.agent_configs = []
 
     with ROOM_CONFIG_PATH.open() as f:
         config_dict = yaml.safe_load(f)
 
-    room = config.RoomConfig.from_yaml(
+    room = config_rooms.RoomConfig.from_yaml(
         installation_config,
         ROOM_CONFIG_PATH,
         config_dict,
@@ -36,7 +40,7 @@ def test_moodle_tools_room_config_loads():
     assert room.mcp_client_toolset_configs == {}
 
     agent_cfg = room.agent_config
-    assert isinstance(agent_cfg, config.FactoryAgentConfig)
+    assert isinstance(agent_cfg, config_agents.FactoryAgentConfig)
     assert agent_cfg.factory_name == (
         "soliplex.moodle.agent.moodle_tools_agent_factory"
     )

@@ -47,7 +47,7 @@ def _build_agent():
     agent_config = _make_agent_config()
 
     with mock.patch(
-        "soliplex.moodle.agent.agents.get_model_from_factory_config",
+        "soliplex.moodle.agent.config_agents.get_model_from_factory_config",
         return_value=TestModel(),
     ):
         return moodle_tools_agent_factory(agent_config)
@@ -115,7 +115,7 @@ def test_factory_accepts_skill_toolset_config():
 
     agent_config = _make_agent_config()
     with mock.patch(
-        "soliplex.moodle.agent.agents.get_model_from_factory_config",
+        "soliplex.moodle.agent.config_agents.get_model_from_factory_config",
         return_value=TestModel(),
     ):
         agent = moodle_tools_agent_factory(
@@ -147,7 +147,7 @@ def test_factory_wires_skill_toolset():
 
     agent_config = _make_agent_config()
     with mock.patch(
-        "soliplex.moodle.agent.agents.get_model_from_factory_config",
+        "soliplex.moodle.agent.config_agents.get_model_from_factory_config",
         return_value=TestModel(),
     ):
         agent = moodle_tools_agent_factory(
@@ -185,7 +185,7 @@ def test_factory_skips_colliding_external_skill():
 
     agent_config = _make_agent_config()
     with mock.patch(
-        "soliplex.moodle.agent.agents.get_model_from_factory_config",
+        "soliplex.moodle.agent.config_agents.get_model_from_factory_config",
         return_value=TestModel(),
     ):
         # Should not raise — colliding skill is skipped
