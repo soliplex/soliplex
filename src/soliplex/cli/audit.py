@@ -16,6 +16,7 @@ from soliplex import models
 from soliplex import secrets
 from soliplex.cli import cli_util
 from soliplex.cli import types
+from soliplex.config import agui as config_agui
 from soliplex.config import installation as config_installation
 from soliplex.config import quizzes as config_quizzes
 from soliplex.config import rag as config_rag
@@ -394,6 +395,26 @@ def _iter_room_rag_candidates(room_config):
             yield f"tool:{tool_config.tool_name}", tool_config
 
 
+def _invalid_room_agui_features(
+    the_installation: installation.Installation,
+) -> dict:
+    feature_errors: dict[str, list[str]] = {}
+    registry = config_agui.AGUI_FEATURES_BY_NAME
+
+    for room_config in the_installation._config.room_configs.values():
+        missing = [
+            name
+            for name in room_config.agui_feature_names
+            if name not in registry
+        ]
+        if missing:
+            feature_errors[room_config.id] = missing
+
+    if feature_errors:
+        return {"agui_features": feature_errors}
+    return {}
+
+
 def _invalid_room_rag_dbs(
     the_installation: installation.Installation,
 ) -> dict:
@@ -439,6 +460,10 @@ def _audit_rooms_section(
     errors |= rag_invalid
     rag_invalid_rooms = rag_invalid.get("rag", {})
 
+    feature_invalid = _invalid_room_agui_features(the_installation)
+    errors |= feature_invalid
+    feature_invalid_rooms = feature_invalid.get("agui_features", {})
+
     # Deliberately bypass auth check done by 'get_room_configs' here.
     available_rooms = the_installation._config.room_configs
     cwd = pathlib.Path.cwd()
@@ -450,6 +475,16 @@ def _audit_rooms_section(
         room_exc = invalid_rooms.get(room_config.id)
         if room_exc is not None:
             tc_print(f"  ERROR: {room_exc}")
+
+        room_features = room_config.agui_feature_names
+        if room_features:
+            unregistered = set(feature_invalid_rooms.get(room_config.id, ()))
+            tc_print()
+            tc_print("   AG-UI features")
+            for feature_name in room_features:
+                flag = "UNREGISTERED" if feature_name in unregistered else "OK"
+                tc_print(f"   - {feature_name:30}: {flag}")
+            tc_print()
 
         per_room_rag = rag_invalid_rooms.get(room_config.id, {})
         candidates = list(_iter_room_rag_candidates(room_config))

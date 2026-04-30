@@ -562,9 +562,11 @@ soliplex-cli audit oidc example/
 ### `audit rooms`
 
 List the rooms declared in the installation configuration, along with
-their names, descriptions, and any RAG databases they reference
-(including a live document count for each). (Replaces the deprecated
-`soliplex-cli list-rooms`.)
+their names, descriptions, the AG-UI feature names each room aggregates
+(checked against the
+[AG-UI feature registry](../config/agui.md)), and any RAG databases
+they reference (including a live document count for each). (Replaces
+the deprecated `soliplex-cli list-rooms`.)
 
 ```bash
 soliplex-cli audit [OPTIONS] rooms [INSTALLATION_CONFIG_PATH]
@@ -588,6 +590,9 @@ form:
 - [ <room_id> ] <name>:
   <description>
 
+   AG-UI features
+   - <feature_name>                : OK
+
    Haiku Rag DBs
    - <source>              : <db_path>                     <N> documents
 ```
@@ -598,11 +603,20 @@ shown relative to the current working directory.
 
 If `Room.from_config(...)` fails for a room (i.e. the room cannot be
 converted to its runtime model), an extra line is printed beneath the
-room header before the "Haiku Rag DBs" block:
+room header before the "AG-UI features" block:
 
 ```text
   ERROR: <message>
 ```
+
+Rooms with no AG-UI features in their aggregate set
+([agent](../config/agents.md) ∪ room ∪ tools ∪ skills) omit the
+"AG-UI features" block. Within the block, each feature name is checked
+against the [AG-UI feature registry](../config/agui.md) and flagged
+either `OK` or `UNREGISTERED`. An `UNREGISTERED` flag means a name in
+the room's aggregate set has no corresponding registration; the server
+will raise `KeyError` when synthesizing initial AG-UI state for a new
+thread in that room.
 
 Rooms with no RAG configuration omit the "Haiku Rag DBs" block.
 Within the block, each RAG-bearing sub-config (the agent, a named
@@ -629,12 +643,14 @@ shown as `error` rather than a number.
 
 #### Exit Status
 
-- `0` — every room's runtime model converted, every RAG configuration
+- `0` — every room's runtime model converted, every aggregated AG-UI
+  feature name resolved against the registry, every RAG configuration
   resolved, and every document count completed.
-- `1` — at least one room failed runtime-model validation, had a
-  missing RAG file, or had a failing `count_documents` query. In
-  `--quiet` mode, the per-room errors are printed as JSON on stdout
-  before exit.
+- `1` — at least one room failed runtime-model validation, referenced
+  an unregistered AG-UI feature name, had a missing RAG file, or had
+  a failing `count_documents` query. In `--quiet` mode, the per-room
+  errors are printed as JSON on stdout before exit; unregistered
+  feature names appear under the `agui_features` key.
 
 #### Examples
 

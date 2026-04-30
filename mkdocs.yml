@@ -83,6 +83,7 @@ nav:
       - Console logging: config/logging.md
       - SQLAlchemy DBURIs: config/dburis.md
       - AI Skills: config/skills.md
+      - AGUI Features: config/agui.md
   - Usage: usage.md
 markdown_extensions:
   - admonition

@@ -107,18 +107,13 @@ agent:
 - `retries` (an integer, default `3`):  number of retries for LLM calls
   on recoverable errors.
 
-  **NOTE**: this value is stored on the agent configuration and is
-            returned via the public API, but is not currently applied
-            at agent construction time.  See
-            <https://github.com/soliplex/soliplex/issues/926>.
-
 - `agui_feature_names` (a list of strings, default empty):  AG-UI feature
   names this agent contributes to the room's aggregate feature set.  Each
-  name must be registered in the AG-UI feature registry (typically via a
-  skill or via an entry under `meta.agui_features`; see
-  [meta.md](meta.md#registering-ag-ui-feature-classes)).  The room's
-  effective feature set is the union of features declared on the agent,
-  the room, its tools, and its skills.
+  name must be registered in the AG-UI feature registry; see
+  [AG-UI Features](agui.md) for the registration paths and the
+  [`meta.agui_features`](meta.md#registering-ag-ui-feature-classes) stanza
+  for the YAML form.  The room's effective feature set is the union of
+  features declared on the agent, the room, its tools, and its skills.
 
 ### Example Ollama Configuration
 
@@ -207,11 +202,11 @@ agent:
 
 - `agui_feature_names` (a list of strings, default empty):  AG-UI feature
   names this agent contributes to the room's aggregate feature set.  Each
-  name must be registered in the AG-UI feature registry (typically via a
-  skill or via an entry under `meta.agui_features`; see
-  [meta.md](meta.md#registering-ag-ui-feature-classes)).  The room's
-  effective feature set is the union of features declared on the agent,
-  the room, its tools, and its skills.
+  name must be registered in the AG-UI feature registry; see
+  [AG-UI Features](agui.md) for the registration paths and the
+  [`meta.agui_features`](meta.md#registering-ag-ui-feature-classes) stanza
+  for the YAML form.  The room's effective feature set is the union of
+  features declared on the agent, the room, its tools, and its skills.
 
 ### Example
 
@@ -224,4 +219,6 @@ agent:
     # Additional arguments passed to the factory function
     temperature: 0.8
     max_retries: 5
+  agui_feature_names:
+    - "myfeature"
 ```

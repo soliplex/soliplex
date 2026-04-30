@@ -11,6 +11,9 @@ room.
 
 ## Registering AG-UI Feature Classes
 
+See [AG-UI Features](agui.md) for the full registry lifecycle; this
+section covers only the YAML stanza.
+
 The `meta.agui_features` section registers AG-UI feature types so that
 they can be referenced by their `name`.  Each feature is a contract
 between the client application and the server, defining the schema for
