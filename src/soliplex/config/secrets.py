@@ -5,8 +5,6 @@ import pathlib
 import re
 import typing
 
-from soliplex.agui import features as agui_features_module  # noqa F401
-
 from . import _utils
 
 _no_repr_no_compare_none = _utils._no_repr_no_compare_none

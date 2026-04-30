@@ -16,8 +16,6 @@ from haiku.rag import config as hr_config
 from haiku.skills import discovery as hs_discovery
 from haiku.skills import models as hs_models
 
-from soliplex.agui import features as agui_features_module  # noqa F401
-
 from . import _utils
 from . import agents as config_agents
 from . import agui as config_agui

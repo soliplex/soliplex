@@ -17,8 +17,6 @@ from pydantic_ai.providers import google as google_providers
 from pydantic_ai.providers import ollama as ollama_providers
 from pydantic_ai.providers import openai as openai_providers
 
-from soliplex.agui import features as agui_features_module  # noqa F401
-
 from . import _utils
 from . import exceptions
 

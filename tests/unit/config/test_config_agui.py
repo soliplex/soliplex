@@ -1,9 +1,8 @@
 import contextlib
 from unittest import mock
 
+import _test_features as agui_features
 import pytest
-
-from soliplex.agui import features as agui_features
 
 NoRaise = contextlib.nullcontext()
 

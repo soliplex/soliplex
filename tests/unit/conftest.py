@@ -2,9 +2,9 @@ import pathlib
 import tempfile
 from unittest import mock
 
+import _test_features as agui_features
 import pytest
 
-from soliplex.agui import features as agui_features
 from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import authsystem as config_authsystem

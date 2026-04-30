@@ -4,7 +4,7 @@ This directory contains JSON schemas for AG-UI features defined in the backend.
 
 ## About
 
-These schemas are automatically generated from Pydantic models in `src/soliplex/agui/features.py` and define the contract between the Soliplex backend and frontend applications.
+These schemas are automatically generated from the Pydantic feature models registered under `meta.agui_features` in an installation's YAML config, and define the contract between the Soliplex backend and frontend applications.
 
 ## Generating Schemas
 

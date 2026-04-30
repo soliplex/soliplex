@@ -1,4 +1,4 @@
-"""Features defined by soliplex"""
+"""Test-only feature models for AG-UI tests."""
 
 import pydantic
 

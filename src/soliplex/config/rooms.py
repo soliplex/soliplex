@@ -4,8 +4,6 @@ import dataclasses
 import pathlib
 import typing
 
-from soliplex.agui import features as agui_features_module  # noqa F401
-
 from . import _utils
 from . import agents as config_agents
 from . import exceptions as config_exc

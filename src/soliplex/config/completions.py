@@ -3,8 +3,6 @@ from __future__ import annotations  # forward refs in typing decls
 import dataclasses
 import pathlib
 
-from soliplex.agui import features as agui_features_module  # noqa F401
-
 from . import _utils
 from . import agents as config_agents
 from . import tools as config_tools

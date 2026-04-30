@@ -5,6 +5,7 @@ import functools
 import uuid
 from unittest import mock
 
+import _test_features as agui_features
 import fastapi
 import pytest
 from ag_ui import core as agui_core
@@ -15,7 +16,6 @@ from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex import loggers
 from soliplex import models
-from soliplex.agui import features as agui_features
 from soliplex.config import agui as config_agui
 from soliplex.config import rooms as config_rooms
 from soliplex.views import agui as agui_views

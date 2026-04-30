@@ -15,7 +15,6 @@ from haiku.skills import discovery as hs_discovery
 from haiku.skills import models as hs_models
 from pydantic_ai import models as ai_models
 
-from soliplex.agui import features as agui_features_module  # noqa F401
 from soliplex.config import agui as config_agui
 from soliplex.skills import bwrap_sandbox as sk_bwrap_sandbox
 

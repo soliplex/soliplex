@@ -4,13 +4,13 @@ import dataclasses
 import pathlib
 from unittest import mock
 
+import _test_features as agui_features
 import pytest
 import yaml
 from haiku.rag import config as hr_config_module
 from haiku.skills import models as hs_models
 
 from soliplex import secrets
-from soliplex.agui import features as agui_features
 from soliplex.config import agents as config_agents
 from soliplex.config import authsystem as config_authsystem
 from soliplex.config import exceptions as config_exc
@@ -116,7 +116,7 @@ id: "{INSTALLATION_ID}"
 meta:
   agui_features:
       - name: "{test_meta.AGUI_FEATURE_NAME_FOR_META}"
-        model_klass: "soliplex.agui.features.EmptyFeatureModel"
+        model_klass: "_test_features.EmptyFeatureModel"
         source: "server"
   tool_configs:
     - "test_config_installation.FauxToolConfig"

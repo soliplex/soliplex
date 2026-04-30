@@ -72,7 +72,7 @@ tui = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = "."
+pythonpath = [".", "tests/unit"]
 python_files = "test_*.py"
 # skip 'tests/functional' by default
 testpaths = ["tests/unit"]

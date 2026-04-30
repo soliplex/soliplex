@@ -7,8 +7,6 @@ import os
 import pathlib
 import random
 
-from soliplex.agui import features as agui_features_module  # noqa F401
-
 from . import _utils
 from . import agents
 from . import exceptions

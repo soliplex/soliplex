@@ -6,8 +6,6 @@ import typing
 
 import logfire
 
-from soliplex.agui import features as agui_features_module  # noqa F401
-
 from . import _utils
 from . import exceptions as config_exc
 

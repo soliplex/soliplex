@@ -4,11 +4,11 @@ import dataclasses
 import typing
 from unittest import mock
 
+import _test_features as agui_features
 import pytest
 import yaml
 
 from soliplex import secrets
-from soliplex.agui import features as agui_features
 from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
 from soliplex.config import meta as config_meta
@@ -59,7 +59,7 @@ W_AGUI_FEATURES_ICMETA_YAML = f"""\
 meta:
   agui_features:
       - name: "{AGUI_FEATURE_NAME_FOR_META}"
-        model_klass: "soliplex.agui.features.EmptyFeatureModel"
+        model_klass: "_test_features.EmptyFeatureModel"
         source: "server"
 """
 
@@ -199,7 +199,7 @@ FULL_ICMETA_YAML = f"""\
 meta:
   agui_features:
       - name: "{AGUI_FEATURE_NAME_FOR_META}"
-        model_klass: "soliplex.agui.features.EmptyFeatureModel"
+        model_klass: "_test_features.EmptyFeatureModel"
         source: "server"
   tool_configs:
     - "test_config_meta.FauxToolConfig"
