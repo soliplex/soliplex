@@ -1528,15 +1528,21 @@ async def test_create_async_engine_sqlite_file(tmp_path):
             with db as conn:
                 (mode,) = conn.execute("PRAGMA journal_mode").fetchone()
             assert mode == "wal"
+
         finally:
             db.close()
 
         # Engine works and the event listener fires
         async with engine.begin() as conn:
             rows = await conn.exec_driver_sql("PRAGMA synchronous")
-            (value,) = rows.fetchone()
+            (sync,) = rows.fetchone()
             # NORMAL = 1
-            assert value == 1
+            assert sync == 1
+
+            # Test https://github.com/soliplex/soliplex/issues/950
+            rows = await conn.exec_driver_sql("PRAGMA foreign_keys")
+            (fkeys,) = rows.fetchone()
+            assert fkeys == 1
 
     finally:
         await engine.dispose()
@@ -1563,5 +1569,12 @@ async def test_create_async_engine_memory():
     try:
         # In-memory databases should not use NullPool
         assert not isinstance(engine.pool, sqla_pool.NullPool)
+
+        # Engine works and the event listener fires
+        async with engine.begin() as conn:
+            # Test https://github.com/soliplex/soliplex/issues/950
+            rows = await conn.exec_driver_sql("PRAGMA foreign_keys")
+            (fkeys,) = rows.fetchone()
+            assert fkeys == 1
     finally:
         await engine.dispose()

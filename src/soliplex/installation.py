@@ -78,9 +78,14 @@ def _create_async_engine(url, **kwargs):
         def _set_sqlite_pragma(  # pragma: no cover
             dbapi_connection, connection_record
         ):
-            cursor = dbapi_connection.cursor()
-            cursor.execute("PRAGMA synchronous=NORMAL")
-            cursor.close()
+            cursor_sync = dbapi_connection.cursor()
+            cursor_sync.execute("PRAGMA synchronous=NORMAL")
+            cursor_sync.close()
+
+            # Fix https://github.com/soliplex/soliplex/issues/950
+            cursor_fk = dbapi_connection.cursor()
+            cursor_fk.execute("PRAGMA foreign_keys=ON")
+            cursor_fk.close()
 
     return engine
 
