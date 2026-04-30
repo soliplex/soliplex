@@ -22,15 +22,49 @@ class TestStartGame:
         result = skill.start_game(state={}, rng=rng)
         new_state = _apply_metadata({}, result.metadata)
         game = new_state["game"]
-        assert game["board"] == [
-            [None, None, None],
-            [None, None, None],
-            [None, None, None],
-        ]
-        assert game["moves"] == []
+        # Turn is always "user" after start_game: if the random pick
+        # lands on agent, start_game pre-plays the agent's opening
+        # move and flips turn back to user.
+        assert game["turn"] == "user"
         assert game["winner"] is None
         assert game["winning_line"] is None
-        assert game["turn"] in ("user", "agent")
+        # moves is empty when the user goes first; one agent move
+        # otherwise.
+        assert len(game["moves"]) in (0, 1)
+
+    def test_user_first_starts_with_empty_board(self):
+        # Find a seed that picks "user" first.
+        for seed in range(10):
+            if random.Random(seed).choice(["user", "agent"]) == "user":
+                result = skill.start_game(state={}, rng=random.Random(seed))
+                new_state = _apply_metadata({}, result.metadata)
+                game = new_state["game"]
+                assert game["moves"] == []
+                assert game["board"] == [[None] * 3 for _ in range(3)]
+                return
+        raise AssertionError(  # noqa: TRY003
+            "no seed picked user in 10 tries",
+        )
+
+    def test_agent_first_pre_plays_opening_move(self):
+        # Find a seed that picks "agent" first.
+        for seed in range(10):
+            if random.Random(seed).choice(["user", "agent"]) == "agent":
+                result = skill.start_game(state={}, rng=random.Random(seed))
+                new_state = _apply_metadata({}, result.metadata)
+                game = new_state["game"]
+                assert len(game["moves"]) == 1
+                assert game["moves"][0]["player"] == "agent"
+                assert game["moves"][0]["mark"] == "O"
+                # Board reflects the agent's opening move.
+                ar, ac = game["moves"][0]["row"], game["moves"][0]["col"]
+                assert game["board"][ar][ac] == "O"
+                # Turn handed to the user.
+                assert game["turn"] == "user"
+                return
+        raise AssertionError(  # noqa: TRY003
+            "no seed picked agent in 10 tries",
+        )
 
     def test_clears_inbox(self):
         # The wire delta must not re-introduce inbox keys; the

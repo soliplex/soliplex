@@ -142,7 +142,27 @@ def start_game(
     rng: random.Random | None = None,
 ) -> pydantic_ai.ToolReturn:
     rng = rng or random.Random()
-    after = _state_with(state, game=_empty_game(rng=rng))
+    new_game = _empty_game(rng=rng)
+    # If the random first-turn pick lands on the agent, play the
+    # agent's opening move now so the user always meets a board on
+    # which it is their turn.
+    if new_game["turn"] == "agent":
+        board = _list_board_to_tuple(new_game["board"])
+        agent_row, agent_col = engine.pick_agent_move(board, rng)
+        board_after = engine.apply_move(
+            board, agent_row, agent_col, _AGENT_MARK,
+        )
+        new_game["board"] = _board_to_lists(board_after)
+        new_game["moves"] = [
+            {
+                "player": "agent",
+                "row": agent_row,
+                "col": agent_col,
+                "mark": _AGENT_MARK,
+            },
+        ]
+        new_game["turn"] = "user"
+    after = _state_with(state, game=new_game)
     after = _clear_inbox_slice(after)
     return _wrap(state, after)
 
