@@ -87,3 +87,12 @@ def test_post_rooms_roomid_agui_etc(client_no_llm):
     response = client_no_llm.delete(
         f"/api/v1/rooms/{room_id}/agui/{thread_id}",
     )
+
+    # Exercise https://github.com/soliplex/soliplex/issues/950
+    # New thread after thread deletion triggers bogus sqlite3
+    # behaviour without a 'PRAGMA foreign_keys=ON' on each connection.
+    response = client_no_llm.post(
+        f"/api/v1/rooms/{room_id}/agui",
+        json=new_thread_request,
+    )
+    assert response.status_code == 200
