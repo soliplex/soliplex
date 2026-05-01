@@ -549,7 +549,10 @@ class InstallationConfig:
                 if len(two_or_one) == 2:
                     yield self._resolve_environment_var(two_or_one[1])
 
-        return "".join(resolved_tokens(value))
+        if isinstance(value, str):
+            return "".join(resolved_tokens(value))
+        else:
+            return value
 
     #
     # Global haiku-rag configuration

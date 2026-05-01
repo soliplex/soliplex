@@ -1204,6 +1204,7 @@ RaiseUnknownEnvVar = pytest.raises(
 @pytest.mark.parametrize(
     "value, environment, expectation, exp_value",
     [
+        (None, {}, NoRaise, None),
         ("No env var here", {}, NoRaise, "No env var here"),
         ("Foo env:UNKNOWN", {}, RaiseUnknownEnvVar, None),
         (
