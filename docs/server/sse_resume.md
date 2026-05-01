@@ -58,8 +58,7 @@ data: {<json-encoded AG-UI event>}
   pass through without an `id:` prefix — they do not consume an
   index and cannot be resumed against.
 
-`add_sse_event_ids()` in
-[src/soliplex/views/streaming.py](../src/soliplex/views/streaming.py)
+`soliplex.views.streaming.add_sse_event_ids()`
 is the only place ids are written; on reconnect it is re-entered with
 `start_index = after_index + 1` so the replayed stream picks up
 exactly where the client left off.
@@ -69,8 +68,7 @@ exactly where the client left off.
 ### Normal first-connect path
 
 `POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}` (no
-`Last-Event-ID`) — see
-[src/soliplex/views/agui.py](../src/soliplex/views/agui.py):
+`Last-Event-ID`)
 
 1. Authorize the user for the room.
 2. Persist the `RunAgentInput` via `add_run_input()`.
@@ -97,7 +95,7 @@ the full tail, including events written after it disconnected.
 ### Reconnect path
 
 When the request carries a `Last-Event-ID: {run_id}:{N}` header,
-[`post_room_agui_thread_id_run_id`](../src/soliplex/views/agui.py)
+`soliplex.views.agui.post_room_agui_thread_id_run_id`
 takes a completely different path:
 
 1. `parse_last_event_id()` splits on the final `:` and extracts
@@ -135,8 +133,9 @@ thread_id_                created
 finished (nullable)
 ```
 
-See `Run` and `RunEvent` in
-[src/soliplex/agui/schema.py](../src/soliplex/agui/schema.py). Notes:
+See `soliplex.agui.schema.Run` and `soliplex.agui.schema.RunEvent`
+
+Notes:
 
 - Retention is **indefinite** — no TTL. Events live until the
   parent `run` or `thread` row is deleted (both cascade).
@@ -155,11 +154,6 @@ See `Run` and `RunEvent` in
   if the DB write fails, the error is logged but the event is
   still pushed to the live queue. The client sees it; a reconnect
   would not. This is a tradeoff in favor of live responsiveness.
-
-## Client side
-
-The Flutter client is in
-[frontend/packages/soliplex_client/lib/src/http/agui_stream_client.dart](../../frontend/packages/soliplex_client/lib/src/http/agui_stream_client.dart).
 
 ### Tracking the last seen id
 
@@ -309,23 +303,13 @@ sequenceDiagram
 
 | Concern | File | Symbols |
 |---|---|---|
-| Endpoint dispatch & Last-Event-ID parse | [src/soliplex/views/agui.py](../src/soliplex/views/agui.py) | `parse_last_event_id`, `post_room_agui_thread_id_run_id` |
-| Background event pump + DB writes | [src/soliplex/views/agui.py](../src/soliplex/views/agui.py) | `drive_llm_stream`, `save_single_event`, `finish_run` |
-| SSE id injection & DB replay | [src/soliplex/views/streaming.py](../src/soliplex/views/streaming.py) | `add_sse_event_ids`, `stream_from_db` |
-| Event persistence API | [src/soliplex/agui/persistence.py](../src/soliplex/agui/persistence.py) | `ThreadStorage.save_single_event`, `list_run_events_after`, `is_run_finished`, `finish_run` |
-| Storage schema | [src/soliplex/agui/schema.py](../src/soliplex/agui/schema.py) | `Run`, `RunEvent` |
-| Unit tests | tests/unit/views/test_agui_views.py | `test_post_room_agui_reconnect` |
-| End-to-end tests | tests/functional/test_agui_thread.py | `test_sse_resume_with_last_event_id` |
-
-### Frontend
-
-| Concern | File | Symbols |
-|---|---|---|
-| SSE client + resume loop | frontend/packages/soliplex_client/lib/src/http/agui_stream_client.dart | `AgUiStreamClient.runAgent` |
-| Retry config + typed status | frontend/packages/soliplex_client/lib/src/http/resume_policy.dart | `ResumePolicy`, `ReconnectEvent`, `ReconnectStatus` |
-| Session bridging | frontend/packages/soliplex_agent/lib/src/runtime/agent_session.dart | `AgentSession.reconnectStatus` |
-| Thread view state | frontend/lib/src/modules/room/thread_view_state.dart | `ThreadViewState.reconnectStatus` |
-| Toast widget | frontend/lib/src/modules/room/ui/room_screen.dart | `_ReconnectBanner` |
+| Endpoint dispatch & Last-Event-ID parse | `src/soliplex/views/agui.py` | `parse_last_event_id`, `post_room_agui_thread_id_run_id` |
+| Background event pump + DB writes | `src/soliplex/views/agui.py` | `drive_llm_stream`, `save_single_event`, `finish_run` |
+| SSE id injection & DB replay | `src/soliplex/views/streaming.py` | `add_sse_event_ids`, `stream_from_db` |
+| Event persistence API | `src/soliplex/agui/persistence.py` | `ThreadStorage.save_single_event`, `list_run_events_after`, `is_run_finished`, `finish_run` |
+| Storage schema | `src/soliplex/agui/schema.py` | `Run`, `RunEvent` |
+| Unit tests | `tests/unit/views/test_agui_views.py` | `test_post_room_agui_reconnect` |
+| End-to-end tests | `tests/functional/test_agui_thread.py` | `test_sse_resume_with_last_event_id` |
 
 ## Design notes and limits
 
