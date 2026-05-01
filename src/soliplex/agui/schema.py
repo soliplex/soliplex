@@ -353,10 +353,6 @@ class RunEvent(Base):
     'run' is a many-to-one relationship to 'Run'
 
     'data' is the dumped state of the event.
-
-    'event_index' is a monotonically-increasing integer scoped to a
-    run, used for deterministic ordering and SSE reconnect via
-    Last-Event-ID.
     """
 
     __tablename__ = "run_event"
@@ -369,11 +365,8 @@ class RunEvent(Base):
 
     run_id_: Mapped[int] = mapped_column(
         ForeignKey("run.id_", ondelete="CASCADE"),
-        index=True,
     )
     run: Mapped[Run] = relationship(back_populates="events")
-
-    event_index: Mapped[int] = mapped_column(default=0)
 
     data: Mapped[JSON_Mapped_From] = mapped_column()
 

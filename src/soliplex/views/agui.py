@@ -586,7 +586,6 @@ async def save_single_event(
     thread_id: str,
     run_id: str,
     event,
-    event_index: int,
 ):
     """Save a single event to the database.
 
@@ -603,7 +602,6 @@ async def save_single_event(
             thread_id=thread_id,
             run_id=run_id,
             event=event,
-            event_index=event_index,
         )
 
 
@@ -672,7 +670,6 @@ async def drive_llm_stream(
                         thread_id=thread_id,
                         run_id=run_id,
                         event=event,
-                        event_index=event_index,
                     )
                 except sqla_exc.SQLAlchemyError as sa_exc:
                     logfire.error(

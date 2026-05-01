@@ -1090,7 +1090,6 @@ async def test_threadstorage_save_single_event(the_async_session):
         thread_id=thread_id,
         run_id=run_id,
         event=event_0,
-        event_index=0,
     )
 
     await the_async_session.commit()
@@ -1101,7 +1100,6 @@ async def test_threadstorage_save_single_event(the_async_session):
         thread_id=thread_id,
         run_id=run_id,
         event=event_1,
-        event_index=1,
     )
 
     await the_async_session.commit()

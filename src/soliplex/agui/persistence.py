@@ -347,7 +347,6 @@ class ThreadStorage(agui_package.ThreadStorage):
         thread_id: str,
         run_id: str,
         event: agui_core.Event,
-        event_index: int,
     ) -> None:
         """Save a single event for a run (incremental persistence)"""
         await self._session.commit()
@@ -366,7 +365,6 @@ class ThreadStorage(agui_package.ThreadStorage):
                 agui_schema.RunEvent(
                     run=run,
                     data=data,
-                    event_index=event_index,
                 )
             )
 
@@ -402,7 +400,10 @@ class ThreadStorage(agui_package.ThreadStorage):
         run_id: str,
         after_index: int,
     ) -> list[tuple[int, agui_core.Event]]:
-        """Return events with event_index > after_index"""
+        """Return events[after_index + 1:]
+
+        Each element is a (event_index, event) tuple.
+        """
         await self._session.commit()
 
         async with self.session as session:
@@ -414,19 +415,13 @@ class ThreadStorage(agui_package.ThreadStorage):
                 session=session,
             )
 
-            query = (
-                sqla_sql.select(agui_schema.RunEvent)
-                .where(agui_schema.RunEvent.run == run)
-                .where(
-                    agui_schema.RunEvent.event_index > after_index,
-                )
-                .order_by(agui_schema.RunEvent.event_index)
-            )
-
-            result = await session.scalars(query)
+            events = await run.awaitable_attrs.events
+            first_unseen = after_index + 1
+            unseen_events = events[first_unseen:]
 
             return [
-                (row.event_index, row.to_agui_model()) for row in result.all()
+                (first_unseen + i_unseen, unseen_event.to_agui_model())
+                for i_unseen, unseen_event in enumerate(unseen_events)
             ]
 
     async def is_run_finished(

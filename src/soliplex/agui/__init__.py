@@ -370,7 +370,6 @@ class ThreadStorage(abc.ABC):
         thread_id: str,
         run_id: str,
         event: agui_core.Event,
-        event_index: int,
     ) -> None:
         """Save a single event for a run (incremental persistence)"""
 
@@ -395,7 +394,7 @@ class ThreadStorage(abc.ABC):
         run_id: str,
         after_index: int,
     ) -> list[tuple[int, agui_core.Event]]:
-        """Return events with event_index > after_index
+        """Return events[after_index + 1:]
 
         Each element is a (event_index, event) tuple.
         """

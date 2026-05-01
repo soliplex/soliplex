@@ -1083,7 +1083,6 @@ async def test_save_single_event_helper(a_session, t_storage):
         thread_id=TEST_THREAD_ID_STR,
         run_id=TEST_RUN_ID_STR,
         event=event,
-        event_index=7,
     )
 
     the_threads.save_single_event.assert_called_once_with(
@@ -1092,7 +1091,6 @@ async def test_save_single_event_helper(a_session, t_storage):
         thread_id=TEST_THREAD_ID_STR,
         run_id=TEST_RUN_ID_STR,
         event=event,
-        event_index=7,
     )
 
     t_storage.assert_called_once_with(w_session)
@@ -1228,16 +1226,14 @@ async def test_drive_llm_stream(
     assert await event_queue.get() is None  # sentinel
 
     # Each event should have been saved incrementally
-    assert sse.call_count == len(expected)
-    for i_call, exp_event in enumerate(expected):
-        sse.assert_any_call(
+    for sse_call, exp_event in zip(sse.call_args_list, expected, strict=True):
+        assert sse_call == mock.call(
             sqla_engine,
             user_name=USER_NAME,
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID_STR,
             run_id=TEST_RUN_ID_STR,
             event=exp_event,
-            event_index=i_call,
         )
 
     fr.assert_called_once_with(
