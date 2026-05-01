@@ -326,9 +326,8 @@ sequenceDiagram
   reconnect after such a failure will skip them.
 - **Polling cost.** Reconnect readers poll every 200 ms. For
   long-lived resumes against a slow agent, this is cheap
-  (indexed query on `event_index`) but non-zero; an event-driven
-  notification would be more efficient at the cost of added
-  complexity.
+  but non-zero; an event-driven notification would be more efficient
+  at the cost of added complexity.
 - **Crash recovery is partial.** A server crash mid-run leaves
   `run.finished` unset. A reconnecting client will poll forever
   (modulo its own retry budget). There is no watchdog that
