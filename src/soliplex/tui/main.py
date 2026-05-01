@@ -1100,6 +1100,9 @@ class RoomView(t_screen.Screen):
             if line:
                 decoded = line.decode("utf-8")
 
+                if decoded.startswith("id:"):  # SSE event indx
+                    continue
+
                 if decoded.startswith(":"):  # comment, i.e., keepalive
                     continue
 
