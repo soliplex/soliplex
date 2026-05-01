@@ -18,13 +18,22 @@ meta:
   # Register AG-UI feature models so that they can be referenced by
   # their 'name'
   #
-  # 'haiku.rag.agents.chat.state.ChatSessionState' is registered by
-  # default, just as if we configured here:
+  # By default, 'haiku.rag' skills register two features ('rag' and
+  # 'analysis'), and the 'bwrap_sandbox' skill registers one
+  # ('bubble-sandbox'), # just as if we configured here:
   #
   # agui_features:
   #
-  # - name: "haiku.rag.chat"
-  #   model_klass: "haiku.rag.agents.chat.state.ChatSessionState"
+  # - name: "rag"
+  #   model_klass: "haiku.rag.skills.rag.RAGState"
+  #   source: "server"
+  #
+  # - name: "analysis"
+  #   model_klass: "haiku.rag.skills.analysis.AnalysisState"
+  #   source: "server"
+  #
+  # - name: "bubble-sandbox"
+  #   model_klass: "soliplex.skills.bwrap_sandbox.SandboxState"
   #   source: "server"
   #------------------------------------------------------------------------
 
@@ -42,26 +51,28 @@ meta:
   # Register MCP client toolset configuration types so that they can be
   # referenced by their 'kind'.
   #
-  # 'soliplex.config.Stdio_MCP_ClientToolsetConfig' and
-  # 'soliplex.config.HTTP_MCP_ClientToolsetConfig' are registered by default,
-  # just as if we configured here:
+  # 'soliplex.config.tools.Stdio_MCP_ClientToolsetConfig' and
+  # 'soliplex.config.tools.HTTP_MCP_ClientToolsetConfig' are registered
+  # by default, just as if we configured here:
   #
   # mcp_toolset_configs:
-  # - "soliplex.config.Stdio_MCP_ClientToolsetConfig"
-  # - "soliplex.config.HTTP_MCP_ClientToolsetConfig"
+  # - "soliplex.config.tools.Stdio_MCP_ClientToolsetConfig"
+  # - "soliplex.config.tools.HTTP_MCP_ClientToolsetConfig"
   #------------------------------------------------------------------------
 
   #------------------------------------------------------------------------
   # Register skill configuration types so that they can be referenced by
   # their 'kind'
   #
-  # 'soliplex.config.HR_RAG_SkillConfig' and
-  # 'soliplex.config.HR_Analysis_SkillConfig' are registered by default,
-  # just as if we configured here:
+  # 'soliplex.config.skills.HR_RAG_SkillConfig',
+  # 'soliplex.config.skills.HR_Analysis_SkillConfig', and
+  # 'soliplex.config.skills.BwrapSandboxSkillConfig'
+  # are registered by default, just as if we configured here:
   #
   # skill_configs:
-  # - "soliplex.config.HR_RAG_SkillConfig"
-  # - "soliplex.config.HR_Analysis_SkillConfig"
+  # - "soliplex.config.skills.HR_RAG_SkillConfig"
+  # - "soliplex.config.skills.HR_Analysis_SkillConfig"
+  # - "soliplex.config.skills.BwrapSandboxSkillConfig"
   #------------------------------------------------------------------------
 
   #------------------------------------------------------------------------
@@ -79,12 +90,13 @@ meta:
   # Register agent configuration types so that they can be referenced by
   # their 'kind'
   #
-  # 'soliplex.config.AgentConfig' and 'soliplex.config.FactoryAgentConfig'
-  # are registered by default, just as if we configured here:
+  # 'soliplex.config.agents.AgentConfig' and
+  # 'soliplex.config.agents.FactoryAgentConfig' are registered by default,
+  # just as if we configured here:
   #
   # agent_configs:
-  # - "soliplex.config.AgentConfig"
-  # - "soliplex.config.FactoryAgentConfig"
+  # - "soliplex.config.agents.AgentConfig"
+  # - "soliplex.config.agents.FactoryAgentConfig"
   #------------------------------------------------------------------------
 
   #------------------------------------------------------------------------
@@ -94,13 +106,13 @@ meta:
   # functions in 'soliplex.secrets', just as if we configured here:
   #
   # secret_sources:
-  # - config_klass: "soliplex.config.EnvVarSecretSource"
+  # - config_klass: "soliplex.config.secrets.EnvVarSecretSource"
   #   registered_func: "soliplex.secrets.get_env_var_secret"
-  # - config_klass: "soliplex.config.FilePathSecretSource"
+  # - config_klass: "soliplex.config.secrets.FilePathSecretSource"
   #   registered_func: "soliplex.secrets.get_file_path_secret"
-  # - config_klass: "soliplex.config.SubprocessSecretSource"
+  # - config_klass: "soliplex.config.secrets.SubprocessSecretSource"
   #   registered_func: "soliplex.secrets.get_subprocess_secret"
-  # - config_klass: "soliplex.config.RandomCharsSecretSource"
+  # - config_klass: "soliplex.config.secrets.RandomCharsSecretSource"
   #   registered_func: "soliplex.secrets.get_random_chars_secret"
   #------------------------------------------------------------------------
 
