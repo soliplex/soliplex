@@ -2703,6 +2703,36 @@ def test_installationconfig_threads_upload_path(
     assert found == expected
 
 
+@pytest.mark.parametrize(
+    "w_kwargs, expected",
+    [
+        (BARE_INSTALLATION_CONFIG_KW.copy(), None),
+        (W_SANDBOX_INSTALLATION_CONFIG_KW.copy(), "sandbox/workdirs"),
+    ],
+)
+def test_installationconfig_sandbox_workdirs_path(
+    temp_dir,
+    w_kwargs,
+    expected,
+):
+    config_path = w_kwargs["_config_path"] = temp_dir / "installation.yaml"
+
+    sandbox_config = w_kwargs.get("sandbox_config")
+    if sandbox_config is not None:
+        workdirs_path = sandbox_config._workdirs_path
+        sandbox_config._workdirs_path = pathlib.Path(workdirs_path)
+        sandbox_config._config_path = config_path
+
+    if expected is not None:
+        expected = temp_dir / expected
+
+    i_config = config_installation.InstallationConfig(**w_kwargs)
+
+    found = i_config.sandbox_workdirs_path
+
+    assert found == expected
+
+
 def test_installationconfig_reload_configurations(temp_dir):
     existing = object()
 

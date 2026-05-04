@@ -526,6 +526,16 @@ def test_installation_threads_upload_path():
     assert the_installation.threads_upload_path is i_config.threads_upload_path
 
 
+def test_installation_sandbox_workdirs_path():
+    i_config = mock.create_autospec(config_installation.InstallationConfig)
+    the_installation = installation.Installation(i_config)
+
+    assert (
+        the_installation.sandbox_workdirs_path
+        is i_config.sandbox_workdirs_path
+    )
+
+
 def test_installation_logfire_config():
     i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)

@@ -28,6 +28,9 @@ UPLOADS_GET_ROOM_THREAD_FILE = "uploads get room thread file"
 UPLOADS_POST_ROOM = "uploads post room"
 UPLOADS_POST_ROOM_THREAD = "uploads post room thread"
 
+WORKDIRS_GET_ROOM_THREAD_RUN = "workdirs get room thread run"
+WORKDIRS_GET_ROOM_THREAD_RUN_FILE = "workdirs get room thread run file"
+
 AUTHN_LOGGER_NAME = "soliplex.authn"
 AUTHN_NO_AUTH_MODE = "soliplex server in no-auth mode"
 AUTHN_JWT_INVALID = "JWT validation failed"

@@ -665,6 +665,13 @@ class InstallationConfig:
     #
     sandbox_config: SandboxConfig | None = None
 
+    @property
+    def sandbox_workdirs_path(self) -> pathlib.Path | None:
+        if self.sandbox_config is None:
+            return None
+        else:
+            return self.sandbox_config.workdirs_path
+
     #
     # Path(s) to OIDC Authentication System configs
     #

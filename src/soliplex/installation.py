@@ -200,6 +200,10 @@ class Installation:
         return self._config.threads_upload_path
 
     @property
+    def sandbox_workdirs_path(self) -> pathlib.Path | None:
+        return self._config.sandbox_workdirs_path
+
+    @property
     def logfire_config(self) -> config_logfire.LogfireConfig | None:
         return self._config.logfire_config
 

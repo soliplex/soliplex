@@ -586,6 +586,18 @@ class ThreadUploads(pydantic.BaseModel):
     uploads: list[FileUpload]
 
 
+class WorkdirFile(pydantic.BaseModel):
+    filename: str
+    url: pydantic.HttpUrl
+
+
+class RunWorkdirFiles(pydantic.BaseModel):
+    room_id: str
+    thread_id: str
+    run_id: str
+    files: list[WorkdirFile]
+
+
 # ----------------------------------------------------------------------------
 #   AG-UI-related models
 # ----------------------------------------------------------------------------
