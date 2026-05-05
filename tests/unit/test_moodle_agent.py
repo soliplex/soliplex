@@ -854,12 +854,58 @@ async def test_get_cohort_members_tool():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_cohort_members")
 
-    resp = _mock_response([{"cohortid": 1, "userids": [3, 4]}])
-    with _patch_httpx(resp):
+    members_resp = [{"cohortid": 1, "userids": [3, 4]}]
+    users_resp = [
+        {
+            "id": 3,
+            "username": "u1",
+            "firstname": "Alice",
+            "lastname": "Johnson",
+            "fullname": "Alice Johnson",
+            "email": "alice@example.com",
+        },
+        {
+            "id": 4,
+            "username": "u2",
+            "firstname": "Bob",
+            "lastname": "Smith",
+            "fullname": "Bob Smith",
+            "email": "bob@example.com",
+        },
+    ]
+    responses = [members_resp, users_resp]
+
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+
+    call_idx = 0
+
+    def make_response(data):
+        r = mock.MagicMock(spec=httpx.Response)
+        r.status_code = 200
+        r.json.return_value = data
+        r.raise_for_status.return_value = None
+        return r
+
+    async def post_side_effect(*_args, **_kwargs):
+        nonlocal call_idx
+        resp = make_response(responses[call_idx])
+        call_idx += 1
+        return resp
+
+    mock_client.post.side_effect = post_side_effect
+
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
         result = json.loads(await fn(1))
 
     assert result["cohortid"] == 1
-    assert result["userids"] == [3, 4]
+    assert len(result["members"]) == 2
+    assert result["members"][0]["fullname"] == "Alice Johnson"
+    assert result["members"][1]["fullname"] == "Bob Smith"
 
 
 @pytest.mark.asyncio
@@ -872,7 +918,21 @@ async def test_get_cohort_members_tool_empty():
         result = json.loads(await fn(999))
 
     assert result["cohortid"] == 999
-    assert result["userids"] == []
+    assert result["members"] == []
+
+
+@pytest.mark.asyncio
+async def test_get_cohort_members_tool_no_userids():
+    """Cohort exists but has no members — skip user enrichment."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_cohort_members")
+
+    resp = _mock_response([{"cohortid": 1, "userids": []}])
+    with _patch_httpx(resp):
+        result = json.loads(await fn(1))
+
+    assert result["cohortid"] == 1
+    assert result["members"] == []
 
 
 @pytest.mark.asyncio
@@ -909,6 +969,51 @@ async def test_get_cohort_members_tool_error():
         result = json.loads(await fn(999))
 
     assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_cohort_members_user_enrichment_error_fallback():
+    """If the user-enrichment call fails, fall back to bare userids."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_cohort_members")
+
+    members_resp = [{"cohortid": 1, "userids": [3, 4]}]
+    error_resp = {
+        "exception": "moodle_exception",
+        "errorcode": "err",
+        "message": "fail",
+    }
+    responses = [members_resp, error_resp]
+
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+
+    call_idx = 0
+
+    def make_response(data):
+        r = mock.MagicMock(spec=httpx.Response)
+        r.status_code = 200
+        r.json.return_value = data
+        r.raise_for_status.return_value = None
+        return r
+
+    async def post_side_effect(*_args, **_kwargs):
+        nonlocal call_idx
+        resp = make_response(responses[call_idx])
+        call_idx += 1
+        return resp
+
+    mock_client.post.side_effect = post_side_effect
+
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(1))
+
+    assert result["cohortid"] == 1
+    assert result["members"] == [{"id": 3}, {"id": 4}]
 
 
 # -----------------------------------------------------------------
@@ -3143,7 +3248,10 @@ async def test_create_department_tool_preview():
     result = json.loads(await fn(name="Finance", idnumber="FIN"))
 
     assert "preview" in result
-    assert result["department"]["name"] == "Finance"
+    assert result["name"] == "Finance"
+    assert result["idnumber"] == "FIN"
+    assert result["action"] == "create_department"
+    assert "instructions" in result
 
 
 @pytest.mark.asyncio
@@ -3155,8 +3263,8 @@ async def test_create_department_tool_preview_with_optional():
         await fn(name="Security", parent="ENG", description="Sec team")
     )
 
-    assert result["department"]["parent"] == "ENG"
-    assert result["department"]["description"] == "Sec team"
+    assert result["parent"] == "ENG"
+    assert result["description"] == "Sec team"
 
 
 @pytest.mark.asyncio

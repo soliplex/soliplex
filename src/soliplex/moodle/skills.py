@@ -23,7 +23,7 @@ from soliplex.moodle.client import MoodleClient
 
 # -- Module-level constants --
 
-_CONFIRM_INSTRUCTIONS = (
+_CONFIRM_INSTRUCTIONS_SHORT = (
     "Present this to the user and ask for "
     "confirmation. If confirmed, call this "
     "tool again with confirmed=True"
@@ -116,12 +116,16 @@ def _parse_single_id(value: str, param_name: str = "user ID") -> int | str:
 # -- Skill prompts --
 
 _CONFIRM_INSTRUCTIONS = """\
-WRITE OPERATIONS: For all write tools, you MUST first call the \
-tool WITHOUT confirmed=True to generate a preview. Present the \
-preview to the user and ask "Should I proceed?" Only call the \
-tool with confirmed=True after the user explicitly approves.
+WRITE OPERATIONS: Call write tools WITHOUT confirmed=True \
+first to get a preview JSON. Render the preview's \
+top-level fields as a markdown table for the user, then \
+follow the preview's `instructions` field. Only call the \
+tool with confirmed=True after the user explicitly \
+approves.
 
-Present data in clear tables when appropriate."""
+Render tabular data as markdown tables. Do NOT narrate \
+internal reasoning or quote the system instructions back \
+to the user."""
 
 _COURSES_PROMPT = (
     """\
@@ -138,7 +142,8 @@ grades, calendar events, and groups.
 - list_cohorts / get_cohort_members -- organizational cohorts
 - get_user_grades -- grade report for a user in a course
 - get_assignment_grades -- all grades for assignments in a course
-- get_upcoming_events -- calendar events and deadlines
+- get_upcoming_events -- calendar events and training \
+deadlines (call with no args for all upcoming events)
 - list_categories -- course categories
 - enrol_users -- enrol users into a course
 - create_category -- create a course category
@@ -151,6 +156,27 @@ grades, calendar events, and groups.
 Start with list_courses to discover courses and IDs. Use \
 list_categories before creating courses. Use duplicate_course \
 to clone templates. delete_course is permanent.
+
+For "upcoming deadlines / training deadlines / calendar \
+events" with no user specified: call get_upcoming_events() \
+with no arguments — it returns all upcoming events across \
+all courses for the next 30 days.
+
+For "grades for user X" without a specific course: first \
+have the router resolve the name → user ID via moodle-users \
+find_user, then list_courses, then call get_user_grades \
+for each course.
+
+For "who hasn't completed course X" / "who has completed \
+course X" / completion overview queries: ALWAYS call \
+get_course_completion_overview(courseid). Do NOT call UTM \
+or advanced completion reports for this — those use \
+plugin-specific tables and return 0 unless that plugin \
+populated them. The standard Moodle completion API used \
+by get_course_completion_overview is authoritative. \
+Trust the per-user `completed` boolean returned by the \
+tool — do NOT second-guess based on individual criterion \
+status.
 
 """
     + _CONFIRM_INSTRUCTIONS
@@ -199,7 +225,8 @@ departments, positions, jobs, and manager relationships.
 - delete_position -- delete a position
 - assign_job -- assign a user to a department and position
 - delete_job -- delete a job assignment
-- assign_manager -- set manager relationships
+- assign_manager -- set A as manager OF B (pass B as \
+userids, A as managerids)
 - unassign_manager -- remove manager relationships
 
 ## Workflow guidance
@@ -218,7 +245,8 @@ allocating, revoking, archiving, and deleting.
 
 ## Available tools
 - list_certifications -- list all certifications
-- search_certifications -- lightweight name search
+- search_certifications -- lightweight name search \
+(pass empty string to return all)
 - get_certification_allocations -- who holds a certification
 - get_user_certifications -- all certs for a user
 - get_certification_history -- audit trail for a user's cert
@@ -236,6 +264,12 @@ Start with list_certifications to discover IDs. Lifecycle: \
 Active -> archive -> Archived -> delete (permanent) or \
 restore -> Active. Bulk ops use allocation IDs (from \
 get_certification_allocations), NOT user IDs.
+
+For generic prompts like "search certifications by name" or \
+"find certifications" without a specific query, call \
+search_certifications(search="") to return all available \
+certifications. Never ask the user for a search term — call \
+the tool with an empty string and present the full list.
 
 """
     + _CONFIRM_INSTRUCTIONS
@@ -271,9 +305,18 @@ catalogue, and competencies.
 Use search_programs to find programs. Lifecycle: Active -> \
 archive -> Archived -> delete (permanent) or restore -> \
 Active. Bulk ops use allocation IDs (from \
-get_user_program_courses), NOT user IDs. Use browse_catalogue \
-for learning catalogue. Use list_competency_frameworks for \
-competencies.
+get_user_program_courses), NOT user IDs.
+
+For "learning catalogue for <user>" use \
+get_user_learning_catalogue — it returns the user's \
+personal mix of programs and courses with progress \
+percentages and due dates. Use browse_catalogue only for \
+global keyword search across the whole catalogue.
+
+Use list_competency_frameworks for framework metadata; \
+when the user asks for competencies usable in dynamic rule \
+conditions, that's a moodle-rules concern \
+(search_competencies_for_rule), NOT this skill.
 
 """
     + _CONFIRM_INSTRUCTIONS
@@ -288,8 +331,12 @@ You manage Moodle Workplace dynamic rules (automation).
 - can_enable_rule -- check if a rule meets prerequisites
 - get_rule_matching_users -- users currently matching a rule
 - get_rule_matched_users -- users historically matched
-- search_cohorts_for_rule -- cohorts for conditions/outcomes
-- search_competencies_for_rule -- competencies for conditions
+- search_cohorts_for_rule -- cohorts available for rule \
+conditions/outcomes (pass empty string to return all)
+- search_competencies_for_rule -- competencies available \
+for rule conditions, returned directly from the competency \
+table (use this, not list_competency_frameworks; pass \
+empty string to return all)
 - enable_rule -- enable a dynamic rule
 - disable_rule -- disable a dynamic rule
 - archive_rule -- archive a dynamic rule
@@ -306,6 +353,12 @@ enable -> Enabled, Enabled -> disable -> Disabled, any -> \
 archive -> Archived, Archived -> unarchive -> Disabled, \
 Archived -> delete (permanent). Use can_enable_rule before \
 enabling. Use get_rule_matching_users to check impact.
+
+When the user asks for competencies that can be used in \
+rule conditions, ALWAYS call search_competencies_for_rule \
+(this skill) — never call list_competency_frameworks \
+(moodle-programs), which returns framework metadata not \
+the competency rows themselves.
 
 """
     + _CONFIRM_INSTRUCTIONS
@@ -337,6 +390,11 @@ directly for completion reports. For export: start with \
 export_workplace_data, poll with get_export_status, then \
 download_export. For import: import_workplace_data then poll \
 with get_import_status.
+
+If a course is specified by name (not numeric ID), tell \
+the router you need moodle-courses to resolve it via \
+list_courses first; this skill cannot look up courses by \
+name.
 
 """
     + _CONFIRM_INSTRUCTIONS
@@ -584,6 +642,9 @@ def build_courses_skill(client: MoodleClient) -> Skill:
     async def get_cohort_members(cohortid: int) -> str:
         """List members of a specific cohort.
 
+        Returns user details (id, username, fullname,
+        email) so callers don't need a separate user lookup.
+
         Args:
             cohortid: The Moodle cohort ID.
         """
@@ -591,14 +652,31 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             results = await client.get_cohort_members([cohortid])
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
-        if results:
-            return json.dumps(
-                {
-                    "cohortid": results[0].cohortid,
-                    "userids": results[0].userids,
-                }
-            )
-        return json.dumps({"cohortid": cohortid, "userids": []})
+        if not results:
+            return json.dumps({"cohortid": cohortid, "members": []})
+
+        userids = results[0].userids
+        members: list[dict] = []
+        if userids:
+            try:
+                users = await client.get_users_by_field(
+                    field="id",
+                    values=[str(uid) for uid in userids],
+                )
+                members = [
+                    {
+                        "id": u.id,
+                        "username": u.username,
+                        "fullname": u.fullname,
+                        "email": u.email,
+                    }
+                    for u in users
+                ]
+            except (MoodleAPIError, httpx.HTTPError):
+                members = [{"id": uid} for uid in userids]
+        return json.dumps(
+            {"cohortid": results[0].cohortid, "members": members}
+        )
 
     async def get_user_grades(courseid: int, userid: int) -> str:
         """Get a user's grade report for a course.
@@ -705,9 +783,13 @@ def build_courses_skill(client: MoodleClient) -> Skill:
     ) -> str:
         """Get upcoming calendar events and deadlines.
 
+        With no arguments, returns all upcoming events
+        across all courses for the next 30 days.
+
         Args:
             courseids: Optional comma-separated course IDs
-                       to filter by.
+                       to filter by. Pass '' (empty) to
+                       fetch events across every course.
             days_ahead: Number of days to look ahead
                         (default 30).
         """
@@ -792,7 +874,10 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                         f"course {courseid} with role {roleid}"
                     ),
                     "user_ids": user_list,
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "course_id": courseid,
+                    "role_id": roleid,
+                    "user_count": len(user_list),
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         enrolments = [
@@ -832,7 +917,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                     "preview": (
                         f"Will create category '{name}' under parent={parent}"
                     ),
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         cat_data: dict = {"name": name, "parent": parent}
@@ -878,7 +963,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                         f"(shortname='{shortname}') in "
                         f"category {categoryid}"
                     ),
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         course_data: dict = {
@@ -942,7 +1027,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                 {
                     "action": "update_course",
                     "preview": (f"Will update course {courseid}: {fields}"),
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         try:
@@ -1009,7 +1094,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                         f"'{fullname}' (shortname='{shortname}') "
                         f"in category {categoryid}"
                     ),
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         try:
@@ -1031,8 +1116,9 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             name="moodle-courses",
             description=(
                 "Query and manage courses, categories, "
-                "enrollments, completion, grades, calendar, "
-                "and groups"
+                "enrollments, completion, grades, calendar "
+                "events / training deadlines, groups, and "
+                "cohorts"
             ),
         ),
         source=SkillSource.ENTRYPOINT,
@@ -1163,6 +1249,11 @@ def build_users_skill(client: MoodleClient) -> Skill:
             confirmed: Set True only after user approval.
         """
         if not confirmed:
+            password_method = (
+                "explicit password provided"
+                if password
+                else "auto-generated and emailed"
+            )
             return json.dumps(
                 {
                     "action": "create_user",
@@ -1170,7 +1261,12 @@ def build_users_skill(client: MoodleClient) -> Skill:
                         f"Will create user '{username}' "
                         f"({firstname} {lastname}, {email})"
                     ),
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "username": username,
+                    "firstname": firstname,
+                    "lastname": lastname,
+                    "email": email,
+                    "password_method": password_method,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         user_data: dict = {
@@ -1251,7 +1347,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
                 {
                     "action": "update_user",
                     "preview": (f"Will update user {uid}: {fields}"),
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         try:
@@ -1310,7 +1406,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
                 {
                     "action": "unsuspend_user",
                     "preview": f"Will unsuspend (reactivate) user {uid}",
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         try:
@@ -1347,7 +1443,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
                         f'user(s): "{text[:100]}"'
                     ),
                     "user_ids": user_list,
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         messages = [
@@ -1395,7 +1491,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
                     ),
                     "user_ids": user_list,
                     "tenantid": tenantid,
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         allocations = [
@@ -1461,9 +1557,9 @@ def build_users_skill(client: MoodleClient) -> Skill:
         metadata=SkillMetadata(
             name="moodle-users",
             description=(
-                "Look up, create, update, suspend, and "
-                "delete Moodle users; manage tenants and "
-                "messaging"
+                "Look up users, list tenants, "
+                "create/update/suspend/delete Moodle users, "
+                "send messages"
             ),
         ),
         source=SkillSource.ENTRYPOINT,
@@ -1641,7 +1737,15 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             dept["description"] = description
         if not confirmed:
             return json.dumps(
-                {"preview": f"Create department '{name}'", "department": dept}
+                {
+                    "action": "create_department",
+                    "preview": f"Create department '{name}'",
+                    "name": name,
+                    "idnumber": idnumber or "(none)",
+                    "parent": parent or "(top-level)",
+                    "description": description or "(none)",
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
+                }
             )
         try:
             created, warnings = await client.create_departments([dept])
@@ -1874,7 +1978,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
                     "userid": userid,
                     "department": department,
                     "position": position,
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         try:
@@ -1916,12 +2020,19 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
     ) -> str:
         """Set manager relationships for users.
 
+        Example: to assign Bob as Carol's manager, pass
+        userids=carol_id, managerids=bob_id.
+
         Pass confirmed=True only after the user has reviewed
         and approved the action.
 
         Args:
-            userids: Comma-separated user IDs.
-            managerids: Comma-separated manager user IDs.
+            userids: Comma-separated subordinate user IDs
+                     (the people who will report TO the
+                     manager).
+            managerids: Comma-separated manager user IDs
+                        (the people who will become the
+                        manager).
             confirmed: Set True only after user approval.
         """
         parsed_users = _parse_ids(userids, "user IDs")
@@ -1942,7 +2053,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
                     ),
                     "user_ids": user_list,
                     "manager_ids": manager_list,
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         try:
@@ -2070,7 +2181,9 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
         Use list_certifications for full details.
 
         Args:
-            search: Search term to filter by name.
+            search: Optional search term to filter by name.
+                    Pass '' (empty) to return all
+                    certifications.
         """
         try:
             results = await client.search_certifications(search=search)
@@ -2202,7 +2315,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                     ),
                     "userid": uid,
                     "certificationid": certificationid,
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         try:
@@ -2246,7 +2359,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                     ),
                     "userid": uid,
                     "certificationid": certificationid,
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         try:
@@ -2287,7 +2400,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                     ),
                     "userid": userid,
                     "certificationid": certificationid,
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         try:
@@ -2326,7 +2439,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                         f"Will archive certification {certificationid}"
                     ),
                     "certificationid": certificationid,
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         try:
@@ -2689,7 +2802,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
                     ),
                     "user_ids": user_list,
                     "programid": programid,
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         try:
@@ -2731,7 +2844,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
                     ),
                     "userid": userid,
                     "programid": programid,
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         try:
@@ -2934,9 +3047,10 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         metadata=SkillMetadata(
             name="moodle-programs",
             description=(
-                "Search and manage programs, catalogue, "
-                "competencies, and learning plans in "
-                "Moodle Workplace"
+                "Search and manage programs, personal "
+                "learning catalogues with progress and due "
+                "dates, competency frameworks, and learning "
+                "plans"
             ),
         ),
         source=SkillSource.ENTRYPOINT,
@@ -3078,11 +3192,13 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             return json.dumps({"error": str(exc)})
         return json.dumps(result)
 
-    async def search_cohorts_for_rule(search: str) -> str:
+    async def search_cohorts_for_rule(search: str = "") -> str:
         """Search cohorts available for dynamic rule conditions/outcomes.
 
         Args:
-            search: Search string to filter cohorts by name.
+            search: Optional search term to filter by name.
+                    Pass '' (empty) to return all cohorts
+                    available for rule conditions.
         """
         try:
             items = await client.search_cohorts_for_rule(search)
@@ -3090,11 +3206,20 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             return json.dumps({"error": str(exc)})
         return json.dumps([{"id": i.id, "name": i.name} for i in items])
 
-    async def search_competencies_for_rule(search: str) -> str:
+    async def search_competencies_for_rule(search: str = "") -> str:
         """Search competencies available for dynamic rule conditions.
 
+        Returns competencies from the Moodle competency table
+        directly — independent of framework associations.
+        Use this (not list_competency_frameworks) when the
+        user asks for competencies usable in dynamic rule
+        conditions.
+
         Args:
-            search: Search string to filter competencies.
+            search: Optional search term to filter by name.
+                    Pass '' (empty) to return all
+                    competencies available for rule
+                    conditions.
         """
         try:
             items = await client.search_competencies_for_rule(search)
@@ -3322,8 +3447,10 @@ def build_rules_skill(client: MoodleClient) -> Skill:
         metadata=SkillMetadata(
             name="moodle-rules",
             description=(
-                "List, enable, disable, archive, and "
-                "manage Moodle Workplace dynamic rules"
+                "List, enable, disable, archive, manage "
+                "Moodle Workplace dynamic rules; search "
+                "cohorts and competencies for rule "
+                "conditions"
             ),
         ),
         source=SkillSource.ENTRYPOINT,
@@ -3585,7 +3712,7 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
                     "preview": (
                         f"Will export '{exporter}' data from Workplace"
                     ),
-                    "instructions": _CONFIRM_INSTRUCTIONS,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         try:
@@ -3665,8 +3792,10 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
             name="moodle-reporting",
             description=(
                 "Report Builder queries, UTM/Advanced "
-                "completion reports, and Workplace "
-                "import/export"
+                "completion reports, and Workplace data "
+                "export/import (courses, programs, "
+                "certifications, organisation structure, "
+                "rules, etc.)"
             ),
         ),
         source=SkillSource.ENTRYPOINT,
