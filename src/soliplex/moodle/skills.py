@@ -13,6 +13,7 @@ import re
 import time
 
 import httpx
+import logfire
 from haiku.skills.models import Skill
 from haiku.skills.models import SkillMetadata
 from haiku.skills.models import SkillSource
@@ -364,8 +365,22 @@ Start with list_dynamic_rules to discover rules. Tools accept \
 either rule_id or rule_name. State machine: Disabled -> \
 enable -> Enabled, Enabled -> disable -> Disabled, any -> \
 archive -> Archived, Archived -> unarchive -> Disabled, \
-Archived -> delete (permanent). Use can_enable_rule before \
-enabling. Use get_rule_matching_users to check impact.
+Archived -> delete (permanent).
+
+For preview-mode write operations (enable_rule, \
+disable_rule, archive_rule, unarchive_rule, delete_rule, \
+duplicate_rule, delete_rule_condition, \
+delete_rule_outcome), you MUST call the write tool itself \
+with confirmed=False to get the structured preview JSON. \
+Do NOT describe the action from list_dynamic_rules / \
+can_enable_rule output alone — those tools' results don't \
+include the `action` / `instructions` keys the router \
+needs to reconstruct the confirm step. Example flow for \
+"enable rule X":
+1. list_dynamic_rules(search="X") to resolve the rule ID.
+2. (Optional) can_enable_rule(rule_id=N) to check prereqs.
+3. enable_rule(rule_id=N, confirmed=False) — this returns \
+the preview JSON. Return that JSON unchanged.
 
 When the user asks for competencies that can be used in \
 rule conditions, ALWAYS call search_competencies_for_rule \
@@ -1356,13 +1371,19 @@ def build_users_skill(client: MoodleClient) -> Skill:
             )
         if not confirmed:
             fields = {k: v for k, v in updates.items() if k != "id"}
-            return json.dumps(
-                {
-                    "action": "update_user",
-                    "preview": (f"Will update user {uid}: {fields}"),
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
-                }
-            )
+            payload = {
+                "action": "update_user",
+                "preview": (f"Will update user {uid}: {fields}"),
+                "user_id": uid,
+                "changes": fields,
+                "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
+            }
+            # Promote each changed field to a top-level key so the
+            # LLM can render the preview as a Field/Value table
+            # without re-interpreting the nested `changes` dict.
+            for k, v in fields.items():
+                payload[k] = v
+            return json.dumps(payload)
         try:
             await client.update_users([updates])
         except (MoodleAPIError, httpx.HTTPError) as exc:
@@ -3257,12 +3278,23 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             rule_name: Rule name (alternative to rule_id).
             confirmed: Set True only after user approval.
         """
+        logfire.info(
+            "enable_rule called: rule_id={ri} rule_name={rn} confirmed={c}",
+            ri=rule_id,
+            rn=rule_name,
+            c=confirmed,
+        )
         resolved = await _resolve_rule_id(rule_id, rule_name)
         if isinstance(resolved, str):
             return resolved
         if not confirmed:
             return json.dumps(
-                {"preview": f"Enable dynamic rule id={resolved}"}
+                {
+                    "action": "enable_rule",
+                    "preview": f"Enable dynamic rule id={resolved}",
+                    "rule_id": resolved,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
+                }
             )
         try:
             result = await client.enable_rule(resolved)
@@ -3289,7 +3321,12 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             return resolved
         if not confirmed:
             return json.dumps(
-                {"preview": f"Disable dynamic rule id={resolved}"}
+                {
+                    "action": "disable_rule",
+                    "preview": f"Disable dynamic rule id={resolved}",
+                    "rule_id": resolved,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
+                }
             )
         try:
             result = await client.disable_rule(resolved)
@@ -3317,7 +3354,12 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             return resolved
         if not confirmed:
             return json.dumps(
-                {"preview": f"Archive dynamic rule id={resolved}"}
+                {
+                    "action": "archive_rule",
+                    "preview": f"Archive dynamic rule id={resolved}",
+                    "rule_id": resolved,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
+                }
             )
         try:
             result = await client.archive_rule(resolved)
@@ -3345,7 +3387,12 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             return resolved
         if not confirmed:
             return json.dumps(
-                {"preview": f"Unarchive dynamic rule id={resolved}"}
+                {
+                    "action": "unarchive_rule",
+                    "preview": f"Unarchive dynamic rule id={resolved}",
+                    "rule_id": resolved,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
+                }
             )
         try:
             result = await client.unarchive_rule(resolved)
@@ -3372,7 +3419,12 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             return resolved
         if not confirmed:
             return json.dumps(
-                {"preview": f"DELETE dynamic rule id={resolved}"}
+                {
+                    "action": "delete_rule",
+                    "preview": f"DELETE dynamic rule id={resolved}",
+                    "rule_id": resolved,
+                    "instructions": _CONFIRM_INSTRUCTIONS_WARNING,
+                }
             )
         try:
             result = await client.delete_rule(resolved)
@@ -3400,7 +3452,12 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             return resolved
         if not confirmed:
             return json.dumps(
-                {"preview": f"Duplicate dynamic rule id={resolved}"}
+                {
+                    "action": "duplicate_rule",
+                    "preview": f"Duplicate dynamic rule id={resolved}",
+                    "rule_id": resolved,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
+                }
             )
         try:
             result = await client.duplicate_rule(resolved)
@@ -3421,9 +3478,12 @@ def build_rules_skill(client: MoodleClient) -> Skill:
         if not confirmed:
             return json.dumps(
                 {
+                    "action": "delete_rule_condition",
                     "preview": (
                         f"Delete condition id={instanceid} from dynamic rule"
                     ),
+                    "instanceid": instanceid,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         try:
@@ -3445,9 +3505,12 @@ def build_rules_skill(client: MoodleClient) -> Skill:
         if not confirmed:
             return json.dumps(
                 {
+                    "action": "delete_rule_outcome",
                     "preview": (
                         f"Delete outcome id={instanceid} from dynamic rule"
                     ),
+                    "instanceid": instanceid,
+                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         try:
