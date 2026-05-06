@@ -116,12 +116,25 @@ def _parse_single_id(value: str, param_name: str = "user ID") -> int | str:
 # -- Skill prompts --
 
 _CONFIRM_INSTRUCTIONS = """\
-WRITE OPERATIONS: Call write tools WITHOUT confirmed=True \
-first to get a preview JSON. Render the preview's \
-top-level fields as a markdown table for the user, then \
-follow the preview's `instructions` field. Only call the \
-tool with confirmed=True after the user explicitly \
-approves.
+WRITE OPERATIONS:
+
+Case A — request does NOT mention confirmed=True:
+Call the write tool with confirmed=False (preview mode). \
+Return the preview JSON unchanged so the router can show \
+it to the user.
+
+Case B — request EXPLICITLY says "confirmed=True" or \
+"with confirmed=True" or includes the parameter list \
+verbatim from a prior preview:
+Call the write tool with confirmed=True and ALL the \
+parameters listed in the request. The router has already \
+gotten user approval; do NOT preview again. Return the \
+real tool result.
+
+NEVER call a write tool with confirmed=False after the \
+request explicitly contained "confirmed=True" — that \
+silently re-previews the action and the user thinks it \
+succeeded when nothing changed.
 
 Render tabular data as markdown tables. Do NOT narrate \
 internal reasoning or quote the system instructions back \

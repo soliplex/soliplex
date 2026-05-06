@@ -706,14 +706,23 @@ async def drive_llm_stream(
                 logfire.info("Stream status: {status}", status=status)
 
             if status == "FINISHED" and title_agent_config is not None:
-                await titles.maybe_generate_title(
-                    title_agent_config=title_agent_config,
-                    threads_engine=sqla_engine,
-                    room_id=room_id,
-                    thread_id=thread_id,
-                    user_name=user_name,
-                    messages=messages,
-                    event_list=event_list,
+                # Fire-and-forget: title generation must not block the
+                # `drive_llm_stream` background task from returning. If we
+                # `await` it here, the SQLite write transaction stays open
+                # and any subsequent user prompt on this thread waits
+                # behind the writer lock — preview→confirm flows hang
+                # until title-gen completes (potentially seconds to
+                # minutes on a local LLM).
+                asyncio.create_task(
+                    titles.maybe_generate_title(
+                        title_agent_config=title_agent_config,
+                        threads_engine=sqla_engine,
+                        room_id=room_id,
+                        thread_id=thread_id,
+                        user_name=user_name,
+                        messages=messages,
+                        event_list=event_list,
+                    )
                 )
 
 

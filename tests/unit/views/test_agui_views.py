@@ -1259,6 +1259,9 @@ async def test_drive_llm_stream(
     )
 
     if should_generate_title:
+        # Title generation is fire-and-forget via asyncio.create_task,
+        # so yield to the event loop to let the task actually run.
+        await asyncio.sleep(0)
         maybe_gen_title.assert_awaited_once_with(
             title_agent_config=title_agent_config,
             threads_engine=sqla_engine,

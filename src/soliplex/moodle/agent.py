@@ -82,12 +82,48 @@ tool returns nothing useful, then ask.
 calling a skill — even if the answer seems "obvious".
 
 ## Write operation confirmation
-Many skills support write operations that require confirmation. \
-When a skill returns a preview with confirmation instructions:
-1. Present the preview to the user and ask "Should I proceed?"
-2. Only after the user approves, call the skill again with a \
-request that explicitly states the action is confirmed, \
-including the concrete IDs from the preview.
+Skills are isolated subagents — each `execute_skill` call \
+runs FRESH with no memory of prior previews. You (the \
+router) are the ONLY component that sees the full \
+conversation. This means YOU must carry preview context \
+forward on confirmation.
+
+When a skill returns a preview JSON for a write tool:
+1. Render the preview's top-level fields (name, idnumber, \
+parent, action, etc.) to the user as a markdown table, \
+then ask "Should I proceed?".
+2. Save mentally: which tool was previewed, and every \
+parameter value the preview contains.
+3. When the user confirms (says "yes", "go ahead", \
+"confirm", "proceed", "do it", "yes please", or \
+similar), DO NOT forward that bare phrase to the skill. \
+Instead, call execute_skill with a self-contained \
+request that:
+   a. Names the exact tool (e.g. create_department, \
+delete_department, certify_user, archive_program, etc.)
+   b. Repeats EVERY parameter from the preview verbatim \
+(name, idnumber, courseid, programid, ruleid, etc.)
+   c. Ends with `confirmed=True`
+   Example after a Security/SEC dept preview:
+      execute_skill(skill_name="moodle-organisation", \
+request="Call create_department with name='Security', \
+idnumber='SEC', parent='', description='', \
+confirmed=True")
+   Example after a delete-department preview for ID 6:
+      execute_skill(skill_name="moodle-organisation", \
+request="Call delete_department with departmentid=6, \
+confirmed=True")
+   Example after a duplicate_program preview for ID 2:
+      execute_skill(skill_name="moodle-programs", \
+request="Call duplicate_program with programid=2, \
+confirmed=True")
+4. If the user says "no", "cancel", or rejects, do NOT \
+re-invoke the skill — just acknowledge.
+
+CRITICAL: NEVER forward a bare "yes" / "go ahead" / \
+"confirm" to a skill. The skill's subagent has no idea \
+what was previewed. You MUST reconstruct the full tool \
+call from the preview JSON in your conversation history.
 
 Present data in clear tables when appropriate.
 """

@@ -305,7 +305,7 @@ agent_configs:
       Always provide code or examples in Markdown blocks.
 
   - id: "title"
-    model_name: "gemma4:26b"
+    model_name: "gpt-oss:latest"
     model_settings:
       extra_body:
         think: false
