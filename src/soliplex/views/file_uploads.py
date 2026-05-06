@@ -439,7 +439,8 @@ async def get_workdirs_room_thread_run(
     "/v1/workdirs/{room_id}/thread/{thread_id}/run/{run_id}/file/{filename}"
 )
 @router.get(
-    "/v1/workdirs/{room_id}/thread/{thread_id}/run/{run_id}/file/{filename}"
+    "/v1/workdirs/{room_id}/thread/{thread_id}/run/{run_id}/file/{filename}",
+    response_class=responses.FileResponse,
 )
 async def get_workdirs_room_thread_run_filename(
     room_id: str,
@@ -450,7 +451,7 @@ async def get_workdirs_room_thread_run_filename(
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn_package.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
-) -> models.RunWorkdirFiles:
+) -> str:  # file path, converted to file response by FastAPI
     """Return a list of files uploaded to the thread"""
     thread_id = str(thread_id)
     run_id = str(run_id)
