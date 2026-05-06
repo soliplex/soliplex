@@ -13,7 +13,6 @@ import re
 import time
 
 import httpx
-import logfire
 from haiku.skills.models import Skill
 from haiku.skills.models import SkillMetadata
 from haiku.skills.models import SkillSource
@@ -3278,12 +3277,6 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             rule_name: Rule name (alternative to rule_id).
             confirmed: Set True only after user approval.
         """
-        logfire.info(
-            "enable_rule called: rule_id={ri} rule_name={rn} confirmed={c}",
-            ri=rule_id,
-            rn=rule_name,
-            c=confirmed,
-        )
         resolved = await _resolve_rule_id(rule_id, rule_name)
         if isinstance(resolved, str):
             return resolved
