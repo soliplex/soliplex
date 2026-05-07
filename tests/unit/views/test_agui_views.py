@@ -5,7 +5,7 @@ import functools
 import uuid
 from unittest import mock
 
-import _test_features as agui_features
+import _fixtures as agui_features
 import fastapi
 import pytest
 from ag_ui import core as agui_core

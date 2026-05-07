@@ -115,39 +115,6 @@ async def test_get_courses_empty(client):
 
 
 # ---------------------------------------------------------------
-# get_courses_by_field
-# ---------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_get_courses_by_field(client):
-    resp = _mock_response(
-        {
-            "courses": [
-                {
-                    "id": 2,
-                    "shortname": "test",
-                    "fullname": "Test Course",
-                }
-            ]
-        }
-    )
-    with _patch_httpx(resp):
-        courses = await client.get_courses_by_field("shortname", "test")
-
-    assert len(courses) == 1
-    assert courses[0].shortname == "test"
-
-
-@pytest.mark.asyncio
-async def test_get_courses_by_field_no_filter(client):
-    resp = _mock_response({"courses": []})
-    with _patch_httpx(resp):
-        courses = await client.get_courses_by_field()
-    assert courses == []
-
-
-# ---------------------------------------------------------------
 # get_users_by_field
 # ---------------------------------------------------------------
 
@@ -288,14 +255,58 @@ async def test_client_passes_verify_to_httpx():
     resp = _mock_response([])
     mock_client = mock.AsyncMock()
     mock_client.post.return_value = resp
-    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
     with mock.patch(
         "soliplex.moodle.client.httpx.AsyncClient",
         return_value=mock_client,
     ) as async_client_cls:
         await c.get_courses()
-    async_client_cls.assert_called_once_with(verify=False)
+    async_client_cls.assert_called_once_with(
+        timeout=httpx.Timeout(30.0),
+        verify=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_client_reuses_httpx_across_calls():
+    """Verify the persistent client is reused across _call invocations."""
+    c = MoodleClient(base_url=BASE_URL, token=TOKEN)
+    resp = _mock_response([])
+    mock_client = mock.AsyncMock()
+    mock_client.post.return_value = resp
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ) as async_client_cls:
+        await c.get_courses()
+        await c.get_courses()
+    async_client_cls.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_client_aclose():
+    """aclose() closes the underlying client and resets it."""
+    c = MoodleClient(base_url=BASE_URL, token=TOKEN)
+    resp = _mock_response([])
+    mock_client = mock.AsyncMock()
+    mock_client.post.return_value = resp
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        await c.get_courses()
+        assert c._http is mock_client
+        await c.aclose()
+    mock_client.aclose.assert_awaited_once()
+    assert c._http is None
+
+
+@pytest.mark.asyncio
+async def test_client_aclose_without_http():
+    """aclose() before any HTTP call is a no-op."""
+    c = MoodleClient(base_url=BASE_URL, token=TOKEN)
+    assert c._http is None
+    await c.aclose()
+    assert c._http is None
 
 
 # ---------------------------------------------------------------
@@ -1052,15 +1063,6 @@ async def test_deallocate_user_from_program_returns_dict(client):
     assert result == {"warnings": []}
 
 
-@pytest.mark.asyncio
-async def test_reset_program_progress(client):
-    resp = _mock_response(None)
-    with _patch_httpx(resp):
-        result = await client.reset_program_progress(programuserid=10)
-
-    assert result == {"result": True}
-
-
 # ---------------------------------------------------------------
 # Deeper Certification Management
 # ---------------------------------------------------------------
@@ -1445,15 +1447,6 @@ async def test_get_program_content_with_userid(client):
         result = await client.get_program_content(programid=1, userid=3)
 
     assert result == {"sets": [], "courses": []}
-
-
-@pytest.mark.asyncio
-async def test_reset_program_progress_non_dict(client):
-    resp = _mock_response(True)
-    with _patch_httpx(resp):
-        result = await client.reset_program_progress(programuserid=10)
-
-    assert result == {"result": True}
 
 
 @pytest.mark.asyncio
@@ -2165,26 +2158,6 @@ async def test_get_potential_parent_positions_non_list(client):
 
 
 @pytest.mark.asyncio
-async def test_update_job(client):
-    resp = _mock_response({"status": True})
-    with _patch_httpx(resp):
-        result = await client.update_job(
-            3, "ENG", "DEV", startdate=1000, enddate=2000
-        )
-
-    assert result == {"status": True}
-
-
-@pytest.mark.asyncio
-async def test_update_job_non_dict(client):
-    resp = _mock_response([])
-    with _patch_httpx(resp):
-        result = await client.update_job(3, "ENG", "DEV")
-
-    assert result == {"status": True}
-
-
-@pytest.mark.asyncio
 async def test_delete_job(client):
     resp = _mock_response(None)
     with _patch_httpx(resp):
@@ -2338,64 +2311,6 @@ async def test_update_program_visibility_returns_dict(client):
 
 
 @pytest.mark.asyncio
-async def test_enrol_user_to_program_course(client):
-    resp = _mock_response(None)
-    with _patch_httpx(resp):
-        result = await client.enrol_user_to_program_course(
-            courseid=2, programid=1
-        )
-
-    assert result == {"result": True}
-
-
-@pytest.mark.asyncio
-async def test_enrol_user_to_program_course_returns_dict(client):
-    resp = _mock_response({"result": True})
-    with _patch_httpx(resp):
-        result = await client.enrol_user_to_program_course(
-            courseid=2, programid=1
-        )
-
-    assert result == {"result": True}
-
-
-@pytest.mark.asyncio
-async def test_delete_program_set(client):
-    resp = _mock_response(None)
-    with _patch_httpx(resp):
-        result = await client.delete_program_set(setid=5)
-
-    assert result == {"result": True}
-
-
-@pytest.mark.asyncio
-async def test_delete_program_set_returns_dict(client):
-    resp = _mock_response({"result": True})
-    with _patch_httpx(resp):
-        result = await client.delete_program_set(setid=5)
-
-    assert result == {"result": True}
-
-
-@pytest.mark.asyncio
-async def test_delete_program_course(client):
-    resp = _mock_response(None)
-    with _patch_httpx(resp):
-        result = await client.delete_program_course(programcourseid=10)
-
-    assert result == {"result": True}
-
-
-@pytest.mark.asyncio
-async def test_delete_program_course_returns_dict(client):
-    resp = _mock_response({"result": True})
-    with _patch_httpx(resp):
-        result = await client.delete_program_course(programcourseid=10)
-
-    assert result == {"result": True}
-
-
-@pytest.mark.asyncio
 async def test_bulk_deallocate_program_users(client):
     resp = _mock_response({"successcount": 3, "skippedcount": 1})
     with _patch_httpx(resp):
@@ -2436,30 +2351,6 @@ async def test_bulk_reset_program_progress_non_dict(client):
     resp = _mock_response(True)
     with _patch_httpx(resp):
         result = await client.bulk_reset_program_progress(programuserids=[10])
-
-    assert result.successcount == 0
-    assert result.skippedcount == 0
-
-
-@pytest.mark.asyncio
-async def test_recalculate_program_completions(client):
-    resp = _mock_response({"successcount": 5, "skippedcount": 2})
-    with _patch_httpx(resp):
-        result = await client.recalculate_program_completions(
-            programuserids=[10, 11, 12, 13, 14, 15, 16]
-        )
-
-    assert result.successcount == 5
-    assert result.skippedcount == 2
-
-
-@pytest.mark.asyncio
-async def test_recalculate_program_completions_non_dict(client):
-    resp = _mock_response(True)
-    with _patch_httpx(resp):
-        result = await client.recalculate_program_completions(
-            programuserids=[10]
-        )
 
     assert result.successcount == 0
     assert result.skippedcount == 0

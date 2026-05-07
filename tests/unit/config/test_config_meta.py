@@ -4,7 +4,7 @@ import dataclasses
 import typing
 from unittest import mock
 
-import _test_features as agui_features
+import _fixtures as agui_features
 import pytest
 import yaml
 
@@ -65,7 +65,7 @@ W_AGUI_FEATURES_ICMETA_YAML = f"""\
 meta:
   agui_features:
       - name: "{AGUI_FEATURE_NAME_FOR_META}"
-        model_klass: "_test_features.EmptyFeatureModel"
+        model_klass: "_fixtures.EmptyFeatureModel"
         source: "server"
 """
 
@@ -228,7 +228,7 @@ FULL_ICMETA_YAML = f"""\
 meta:
   agui_features:
       - name: "{AGUI_FEATURE_NAME_FOR_META}"
-        model_klass: "_test_features.EmptyFeatureModel"
+        model_klass: "_fixtures.EmptyFeatureModel"
         source: "server"
   tool_configs:
     - "test_config_meta.FauxToolConfig"

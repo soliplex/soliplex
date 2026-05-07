@@ -86,6 +86,9 @@ markers = [
 ]
 
 [tool.coverage.run]
+# CLI entrypoints and demo modules are exercised via integration tests
+# / manual invocation, not unit tests, so they're excluded from the
+# 100% unit-test coverage requirement.
 omit = [
     "src/soliplex/cli/__init__.py",
     "src/soliplex/cli/serve.py",

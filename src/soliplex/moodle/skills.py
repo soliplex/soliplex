@@ -8,6 +8,7 @@ mechanism changes.
 
 from __future__ import annotations
 
+import functools
 import json
 import re
 import time
@@ -20,6 +21,26 @@ from haiku.skills.models import SkillSource
 from soliplex.moodle.client import MAX_RESULTS
 from soliplex.moodle.client import MoodleAPIError
 from soliplex.moodle.client import MoodleClient
+
+
+def _moodle_tool(fn):
+    """Decorator that catches Moodle/HTTP errors and returns JSON.
+
+    Wraps an async tool function so that any ``MoodleAPIError`` or
+    ``httpx.HTTPError`` raised during the call is serialized as a
+    JSON ``{"error": "..."}`` string. This collapses the boilerplate
+    try/except that would otherwise repeat at every tool function.
+    """
+
+    @functools.wraps(fn)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await fn(*args, **kwargs)
+        except (MoodleAPIError, httpx.HTTPError) as exc:
+            return json.dumps({"error": str(exc)})
+
+    return wrapper
+
 
 # -- Module-level constants --
 
@@ -35,6 +56,29 @@ _CONFIRM_INSTRUCTIONS_WARNING = (
     "confirmed, call this tool again with "
     "confirmed=True"
 )
+
+
+def _preview(
+    action: str,
+    preview: str,
+    *,
+    warning: bool = False,  # noqa: U100  # kept for call-site clarity
+    **fields,
+) -> dict:
+    """Build a write-tool preview dict for the first call.
+
+    Returns the standard ``{action, preview, **fields}`` shape used
+    by every preview-then-confirm tool. The skill subagent's prompt
+    (Case A vs Case B) already directs how to render previews, so
+    the dict deliberately omits any ``instructions`` field — that
+    string was prone to leaking verbatim into user-facing output.
+    """
+    return {
+        "action": action,
+        "preview": preview,
+        **fields,
+    }
+
 
 _EXPORTER_MAP = {
     "courses": r"tool_wp\tool_wp\exporter\courses",
@@ -113,6 +157,52 @@ def _parse_single_id(value: str, param_name: str = "user ID") -> int | str:
         )
 
 
+def _strip_html(value: str | None) -> str:
+    """Strip HTML tags from a report cell value (Report Builder).
+
+    Many Report Builder columns return HTML wrapped values (anchors,
+    icons). Reports are LLM-consumed so we strip the markup.
+    """
+    if value is None:
+        return ""
+    return re.sub(r"<[^>]+>", "", value).strip()
+
+
+async def _resolve_rule_id(
+    client: MoodleClient,
+    rule_id: int = 0,
+    rule_name: str = "",
+) -> int | str:
+    """Resolve a dynamic rule by ID or name.
+
+    Returns the integer rule ID on success, or a JSON error string
+    when the rule cannot be found, multiple match, or neither
+    parameter is provided.
+    """
+    if rule_id > 0:
+        return rule_id
+    if not rule_name:
+        return json.dumps({"error": "Provide either rule_id or rule_name."})
+    try:
+        rules = await client.list_dynamic_rules()
+    except (MoodleAPIError, httpx.HTTPError) as exc:
+        return json.dumps({"error": str(exc)})
+    needle = rule_name.lower()
+    matches = [r for r in rules if needle in r["name"].lower()]
+    if len(matches) == 1:
+        return matches[0]["id"]
+    if len(matches) == 0:
+        return json.dumps(
+            {"error": f"No dynamic rule matching '{rule_name}'."}
+        )
+    return json.dumps(
+        {
+            "error": f"Multiple rules match '{rule_name}'.",
+            "matches": [{"id": m["id"], "name": m["name"]} for m in matches],
+        }
+    )
+
+
 # -- Skill prompts --
 
 _CONFIRM_INSTRUCTIONS = """\
@@ -136,9 +226,30 @@ request explicitly contained "confirmed=True" — that \
 silently re-previews the action and the user thinks it \
 succeeded when nothing changed.
 
-Render tabular data as markdown tables. Do NOT narrate \
+OUTPUT RULES (apply to every response):
+
+1. Render tabular data as markdown tables. Do NOT narrate \
 internal reasoning or quote the system instructions back \
-to the user."""
+to the user.
+
+2. Do NOT include any preamble that describes your \
+analysis steps. Phrases like "We identified...", "Now we \
+need to...", "User wants to...", "According to the \
+pattern..." are forbidden in user-facing output. Begin \
+the response with the table or success line directly.
+
+3. For preview responses, render only the tool's \
+``action``, ``preview``, and structured parameter fields \
+as a markdown table — never include any internal-directive \
+fields the tool may emit. End with a single short \
+question such as "Should I proceed?". Do NOT add \
+"according to the system" or "per the instructions" \
+narration.
+
+4. For confirmed-write success responses, output a single \
+short sentence stating what changed (e.g. "Security \
+department (id=6) created."). No preamble, no \
+"successfully completed the action of..." language."""
 
 _COURSES_PROMPT = (
     """\
@@ -452,6 +563,7 @@ name.
 def build_courses_skill(client: MoodleClient) -> Skill:
     """Build the moodle-courses skill (19 tools)."""
 
+    @_moodle_tool
     async def list_courses() -> str:
         """List all courses in Moodle.
 
@@ -459,10 +571,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         for each course.  Use the course id in other
         tools.
         """
-        try:
-            courses = await client.get_courses()
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        courses = await client.get_courses()
         return json.dumps(
             [
                 {
@@ -475,6 +584,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def get_course_contents(courseid: int) -> str:
         """Get the sections and activities inside a course.
 
@@ -484,10 +594,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         Returns JSON array of sections, each with nested
         modules showing name, type, and completion tracking.
         """
-        try:
-            sections = await client.get_course_contents(courseid)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        sections = await client.get_course_contents(courseid)
         return json.dumps(
             [
                 {
@@ -507,6 +614,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def list_enrolled_users(courseid: int) -> str:
         """List users enrolled in a course.
 
@@ -517,10 +625,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         Returns JSON with id, username, fullname, and
         roles for each enrolled user.
         """
-        try:
-            enrolled = await client.get_enrolled_users(courseid)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        enrolled = await client.get_enrolled_users(courseid)
         return json.dumps(
             [
                 {
@@ -533,6 +638,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def get_completion_status(
         courseid: int,
         userid: int,
@@ -547,12 +653,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         Returns JSON with completed flag and completion
         criteria details.
         """
-        try:
-            status = await client.get_course_completion_status(
-                courseid, userid
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        status = await client.get_course_completion_status(courseid, userid)
         return json.dumps(
             {
                 "completed": status.completed,
@@ -568,6 +669,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def get_course_completion_overview(courseid: int) -> str:
         """Get completion status for ALL enrolled users in a course.
 
@@ -577,10 +679,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         Args:
             courseid: The Moodle course ID.
         """
-        try:
-            enrolled = await client.get_enrolled_users(courseid)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        enrolled = await client.get_enrolled_users(courseid)
 
         users_capped = enrolled[:MAX_RESULTS]
         user_results = []
@@ -625,16 +724,14 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def list_course_groups(courseid: int) -> str:
         """List groups within a course.
 
         Args:
             courseid: The Moodle course ID.
         """
-        try:
-            groups = await client.get_course_groups(courseid)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        groups = await client.get_course_groups(courseid)
         return json.dumps(
             [
                 {
@@ -646,16 +743,14 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def get_group_members(groupid: int) -> str:
         """List members of a specific group.
 
         Args:
             groupid: The Moodle group ID.
         """
-        try:
-            results = await client.get_group_members([groupid])
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        results = await client.get_group_members([groupid])
         if results:
             return json.dumps(
                 {
@@ -665,12 +760,10 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             )
         return json.dumps({"groupid": groupid, "userids": []})
 
+    @_moodle_tool
     async def list_cohorts() -> str:
         """List all organizational cohorts."""
-        try:
-            cohorts = await client.get_cohorts()
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        cohorts = await client.get_cohorts()
         return json.dumps(
             [
                 {
@@ -682,6 +775,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def get_cohort_members(cohortid: int) -> str:
         """List members of a specific cohort.
 
@@ -691,10 +785,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         Args:
             cohortid: The Moodle cohort ID.
         """
-        try:
-            results = await client.get_cohort_members([cohortid])
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        results = await client.get_cohort_members([cohortid])
         if not results:
             return json.dumps({"cohortid": cohortid, "members": []})
 
@@ -721,6 +812,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             {"cohortid": results[0].cohortid, "members": members}
         )
 
+    @_moodle_tool
     async def get_user_grades(courseid: int, userid: int) -> str:
         """Get a user's grade report for a course.
 
@@ -728,10 +820,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             courseid: The Moodle course ID.
             userid: The Moodle user ID.
         """
-        try:
-            raw = await client.get_user_grades(courseid, userid)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        raw = await client.get_user_grades(courseid, userid)
         tables = raw.get("tables", [])
         items = []
         for table in tables:
@@ -771,6 +860,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                         )
         return json.dumps(items)
 
+    @_moodle_tool
     async def get_assignment_grades(courseid: int) -> str:
         """Get all grades for assignments in a course.
 
@@ -780,10 +870,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         Args:
             courseid: The Moodle course ID.
         """
-        try:
-            sections = await client.get_course_contents(courseid)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        sections = await client.get_course_contents(courseid)
 
         assign_ids = []
         for section in sections:
@@ -796,10 +883,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                 {"message": "No assignments found in this course"}
             )
 
-        try:
-            raw = await client.get_assignment_grades(assign_ids)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        raw = await client.get_assignment_grades(assign_ids)
 
         assignments = raw.get("assignments", [])
         result = []
@@ -820,6 +904,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             )
         return json.dumps(result)
 
+    @_moodle_tool
     async def get_upcoming_events(
         courseids: str = "",
         days_ahead: int = 30,
@@ -841,18 +926,15 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             cids = [int(c.strip()) for c in courseids.split(",") if c.strip()]
         now = int(time.time())
         end = now + days_ahead * 86400
-        try:
-            # The calendar API only returns course events when
-            # course IDs are explicitly provided.  When the caller
-            # doesn't specify any, fetch all courses first.
-            if cids is None:
-                all_courses = await client.get_courses()
-                cids = [c.id for c in all_courses if c.id != 1]
-            events = await client.get_calendar_events(
-                courseids=cids, timestart=now, timeend=end
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        # The calendar API only returns course events when
+        # course IDs are explicitly provided.  When the caller
+        # doesn't specify any, fetch all courses first.
+        if cids is None:
+            all_courses = await client.get_courses()
+            cids = [c.id for c in all_courses if c.id != 1]
+        events = await client.get_calendar_events(
+            courseids=cids, timestart=now, timeend=end
+        )
         return json.dumps(
             [
                 {
@@ -867,12 +949,10 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def list_categories() -> str:
         """List all course categories."""
-        try:
-            cats = await client.get_categories()
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        cats = await client.get_categories()
         return json.dumps(
             [
                 {
@@ -887,6 +967,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def enrol_users(
         userids: str,
         courseid: int,
@@ -920,17 +1001,13 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                     "course_id": courseid,
                     "role_id": roleid,
                     "user_count": len(user_list),
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         enrolments = [
             {"userid": uid, "courseid": courseid, "roleid": roleid}
             for uid in user_list
         ]
-        try:
-            result = await client.enrol_users(enrolments)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.enrol_users(enrolments)
         return json.dumps(
             {
                 "success": True,
@@ -939,6 +1016,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def create_category(
         name: str,
         parent: int = 0,
@@ -960,16 +1038,12 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                     "preview": (
                         f"Will create category '{name}' under parent={parent}"
                     ),
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         cat_data: dict = {"name": name, "parent": parent}
         if description:
             cat_data["description"] = description
-        try:
-            result = await client.create_categories([cat_data])
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.create_categories([cat_data])
         return json.dumps(
             {
                 "success": True,
@@ -977,6 +1051,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def create_course(
         fullname: str,
         shortname: str,
@@ -1006,7 +1081,6 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                         f"(shortname='{shortname}') in "
                         f"category {categoryid}"
                     ),
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         course_data: dict = {
@@ -1018,10 +1092,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         }
         if summary:
             course_data["summary"] = summary
-        try:
-            result = await client.create_courses([course_data])
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.create_courses([course_data])
         return json.dumps(
             {
                 "success": True,
@@ -1031,6 +1102,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def update_course(
         courseid: int,
         fullname: str = "",
@@ -1070,15 +1142,12 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                 {
                     "action": "update_course",
                     "preview": (f"Will update course {courseid}: {fields}"),
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            await client.update_courses([updates])
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        await client.update_courses([updates])
         return json.dumps({"success": True, "courseid": courseid})
 
+    @_moodle_tool
     async def delete_course(
         courseid: int,
         confirmed: bool = False,
@@ -1099,17 +1168,14 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                         f"WARNING: Will PERMANENTLY delete "
                         f"course {courseid}. This cannot be undone."
                     ),
-                    "instructions": _CONFIRM_INSTRUCTIONS_WARNING,
                 }
             )
-        try:
-            result = await client.delete_courses([courseid])
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.delete_courses([courseid])
         return json.dumps(
             {"success": True, "deleted_courseid": courseid, "result": result}
         )
 
+    @_moodle_tool
     async def duplicate_course(
         courseid: int,
         fullname: str,
@@ -1137,15 +1203,11 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                         f"'{fullname}' (shortname='{shortname}') "
                         f"in category {categoryid}"
                     ),
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            result = await client.duplicate_course(
-                courseid, fullname, shortname, categoryid, visible
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.duplicate_course(
+            courseid, fullname, shortname, categoryid, visible
+        )
         return json.dumps(
             {
                 "success": True,
@@ -1198,6 +1260,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
 def build_users_skill(client: MoodleClient) -> Skill:
     """Build the moodle-users skill (9 tools)."""
 
+    @_moodle_tool
     async def find_user(field: str, value: str) -> str:
         """Look up a Moodle user by field.
 
@@ -1214,30 +1277,27 @@ def build_users_skill(client: MoodleClient) -> Skill:
         exact_fields = {"username", "email", "id", "idnumber"}
         name_fields = {"name", "firstname", "lastname"}
 
-        try:
-            if field in exact_fields:
-                users = await client.get_users_by_field(field, [value])
-            elif field in name_fields:
-                if field == "name":
-                    parts = value.split(None, 1)
-                    criteria = [("firstname", parts[0])]
-                    if len(parts) > 1:
-                        criteria.append(("lastname", parts[1]))
-                else:
-                    criteria = [(field, value)]
-                users = await client.search_users(criteria)
+        if field in exact_fields:
+            users = await client.get_users_by_field(field, [value])
+        elif field in name_fields:
+            if field == "name":
+                parts = value.split(None, 1)
+                criteria = [("firstname", parts[0])]
+                if len(parts) > 1:
+                    criteria.append(("lastname", parts[1]))
             else:
-                return json.dumps(
-                    {
-                        "error": (
-                            f"Unsupported field: '{field}'. "
-                            f"Use one of: "
-                            f"{sorted(exact_fields | name_fields)}"
-                        )
-                    }
-                )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+                criteria = [(field, value)]
+            users = await client.search_users(criteria)
+        else:
+            return json.dumps(
+                {
+                    "error": (
+                        f"Unsupported field: '{field}'. "
+                        f"Use one of: "
+                        f"{sorted(exact_fields | name_fields)}"
+                    )
+                }
+            )
         return json.dumps(
             [
                 {
@@ -1250,12 +1310,10 @@ def build_users_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def list_tenants() -> str:
         """List all organizational tenants."""
-        try:
-            tenants = await client.get_tenants()
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        tenants = await client.get_tenants()
         return json.dumps(
             [
                 {
@@ -1269,6 +1327,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def create_user(
         username: str,
         firstname: str,
@@ -1309,7 +1368,6 @@ def build_users_skill(client: MoodleClient) -> Skill:
                     "lastname": lastname,
                     "email": email,
                     "password_method": password_method,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         user_data: dict = {
@@ -1322,10 +1380,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
             user_data["password"] = password
         else:
             user_data["createpassword"] = 1 if createpassword else 0
-        try:
-            result = await client.create_users([user_data])
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.create_users([user_data])
         return json.dumps(
             {
                 "success": True,
@@ -1335,6 +1390,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def update_user(
         userid: str,
         firstname: str = "",
@@ -1406,17 +1462,14 @@ def build_users_skill(client: MoodleClient) -> Skill:
                 "user": user_label,
                 "user_id": uid,
                 "changes": fields,
-                "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
             }
             for k, v in fields.items():
                 payload[k] = v
             return json.dumps(payload)
-        try:
-            await client.update_users([updates])
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        await client.update_users([updates])
         return json.dumps({"success": True, "userid": uid, "user": user_label})
 
+    @_moodle_tool
     async def delete_user(
         userid: str,
         confirmed: bool = False,
@@ -1440,15 +1493,12 @@ def build_users_skill(client: MoodleClient) -> Skill:
                         f"WARNING: Will PERMANENTLY delete "
                         f"user {uid}. This cannot be undone."
                     ),
-                    "instructions": _CONFIRM_INSTRUCTIONS_WARNING,
                 }
             )
-        try:
-            await client.delete_users([uid])
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        await client.delete_users([uid])
         return json.dumps({"success": True, "deleted_userid": uid})
 
+    @_moodle_tool
     async def unsuspend_user(
         userid: str,
         confirmed: bool = False,
@@ -1467,15 +1517,12 @@ def build_users_skill(client: MoodleClient) -> Skill:
                 {
                     "action": "unsuspend_user",
                     "preview": f"Will unsuspend (reactivate) user {uid}",
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            await client.update_users([{"id": uid, "suspended": 0}])
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        await client.update_users([{"id": uid, "suspended": 0}])
         return json.dumps({"success": True, "unsuspended_userid": uid})
 
+    @_moodle_tool
     async def send_message(
         userids: str,
         text: str,
@@ -1504,17 +1551,13 @@ def build_users_skill(client: MoodleClient) -> Skill:
                         f'user(s): "{text[:100]}"'
                     ),
                     "user_ids": user_list,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         messages = [
             {"touserid": uid, "text": text, "textformat": 0}
             for uid in user_list
         ]
-        try:
-            result = await client.send_messages(messages)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.send_messages(messages)
         return json.dumps(
             {
                 "success": True,
@@ -1523,6 +1566,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def allocate_users_to_tenant(
         userids: str,
         tenantid: int,
@@ -1552,16 +1596,12 @@ def build_users_skill(client: MoodleClient) -> Skill:
                     ),
                     "user_ids": user_list,
                     "tenantid": tenantid,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
         allocations = [
             {"userid": uid, "tenantid": tenantid} for uid in user_list
         ]
-        try:
-            result = await client.allocate_users_to_tenant(allocations)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.allocate_users_to_tenant(allocations)
         return json.dumps(
             {
                 "success": True,
@@ -1571,6 +1611,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def suspend_users(
         userids: str,
         confirmed: bool = False,
@@ -1599,13 +1640,9 @@ def build_users_skill(client: MoodleClient) -> Skill:
                         f"specific tenant. User IDs: {user_list}"
                     ),
                     "user_ids": user_list,
-                    "instructions": _CONFIRM_INSTRUCTIONS_WARNING,
                 }
             )
-        try:
-            result = await client.suspend_tenant_users(user_list)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.suspend_tenant_users(user_list)
         return json.dumps(
             {
                 "success": True,
@@ -1647,16 +1684,14 @@ def build_users_skill(client: MoodleClient) -> Skill:
 def build_organisation_skill(client: MoodleClient) -> Skill:
     """Build the moodle-organisation skill (15 tools)."""
 
+    @_moodle_tool
     async def list_departments(search: str = "") -> str:
         """List organisational departments.
 
         Args:
             search: Optional search string (default "" = all).
         """
-        try:
-            depts = await client.get_departments(search)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        depts = await client.get_departments(search)
         return json.dumps(
             [
                 {
@@ -1669,16 +1704,14 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def list_positions(search: str = "") -> str:
         """List organisational positions.
 
         Args:
             search: Optional search string (default "" = all).
         """
-        try:
-            positions = await client.get_positions(search)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        positions = await client.get_positions(search)
         return json.dumps(
             [
                 {
@@ -1691,6 +1724,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def get_team_members(
         departmentid: int = 0,
         positionid: int = 0,
@@ -1706,12 +1740,9 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             positionid: Optional position ID to filter.
             search: Optional name search string.
         """
-        try:
-            members = await client.get_department_members(
-                departmentid, positionid, search
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        members = await client.get_department_members(
+            departmentid, positionid, search
+        )
         return json.dumps(
             [
                 {
@@ -1724,6 +1755,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def get_potential_parent_departments(
         search: str = "",
         departmentid: int = 0,
@@ -1737,16 +1769,14 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             search: Search string to filter results.
             departmentid: Department ID being edited (0 for new).
         """
-        try:
-            parents = await client.get_potential_parent_departments(
-                search=search, departmentid=departmentid
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        parents = await client.get_potential_parent_departments(
+            search=search, departmentid=departmentid
+        )
         return json.dumps(
             [{"id": p.id, "name": p.name, "path": p.path} for p in parents]
         )
 
+    @_moodle_tool
     async def get_potential_parent_positions(
         search: str = "",
         positionid: int = 0,
@@ -1760,16 +1790,14 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             search: Search string to filter results.
             positionid: Position ID being edited (0 for new).
         """
-        try:
-            parents = await client.get_potential_parent_positions(
-                search=search, positionid=positionid
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        parents = await client.get_potential_parent_positions(
+            search=search, positionid=positionid
+        )
         return json.dumps(
             [{"id": p.id, "name": p.name, "path": p.path} for p in parents]
         )
 
+    @_moodle_tool
     async def create_department(
         name: str,
         idnumber: str = "",
@@ -1805,13 +1833,9 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
                     "idnumber": idnumber or "(none)",
                     "parent": parent or "(top-level)",
                     "description": description or "(none)",
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            created, warnings = await client.create_departments([dept])
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        created, warnings = await client.create_departments([dept])
         return json.dumps(
             {
                 "created": [
@@ -1822,6 +1846,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def update_department(
         idnumber: str,
         name: str = "",
@@ -1852,10 +1877,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             return json.dumps(
                 {"preview": f"Update department '{idnumber}'", "changes": dept}
             )
-        try:
-            updated, warnings = await client.update_departments([dept])
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        updated, warnings = await client.update_departments([dept])
         return json.dumps(
             {
                 "updated": [
@@ -1865,6 +1887,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def delete_department(
         department_id: int,
         confirmed: bool = False,
@@ -1881,12 +1904,10 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             return json.dumps(
                 {"preview": f"Delete department id={department_id}"}
             )
-        try:
-            result = await client.delete_department(department_id)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.delete_department(department_id)
         return json.dumps(result)
 
+    @_moodle_tool
     async def create_position(
         name: str,
         idnumber: str = "",
@@ -1925,10 +1946,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             return json.dumps(
                 {"preview": f"Create position '{name}'", "position": pos}
             )
-        try:
-            created, warnings = await client.create_positions([pos])
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        created, warnings = await client.create_positions([pos])
         return json.dumps(
             {
                 "created": [
@@ -1939,6 +1957,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def update_position(
         idnumber: str,
         name: str = "",
@@ -1977,10 +1996,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             return json.dumps(
                 {"preview": f"Update position '{idnumber}'", "changes": pos}
             )
-        try:
-            updated, warnings = await client.update_positions([pos])
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        updated, warnings = await client.update_positions([pos])
         return json.dumps(
             {
                 "updated": [
@@ -1990,6 +2006,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def delete_position(
         position_id: int,
         confirmed: bool = False,
@@ -2004,12 +2021,10 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         """
         if not confirmed:
             return json.dumps({"preview": f"Delete position id={position_id}"})
-        try:
-            result = await client.delete_position(position_id)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.delete_position(position_id)
         return json.dumps(result)
 
+    @_moodle_tool
     async def assign_job(
         userid: int,
         department: str,
@@ -2039,13 +2054,9 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
                     "userid": userid,
                     "department": department,
                     "position": position,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            result = await client.create_job(userid, department, position)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.create_job(userid, department, position)
         return json.dumps(
             {
                 "success": True,
@@ -2056,6 +2067,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def delete_job(
         job_id: int,
         confirmed: bool = False,
@@ -2068,12 +2080,10 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         """
         if not confirmed:
             return json.dumps({"preview": f"Delete job id={job_id}"})
-        try:
-            result = await client.delete_job(job_id)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.delete_job(job_id)
         return json.dumps(result)
 
+    @_moodle_tool
     async def assign_manager(
         userids: str,
         managerids: str,
@@ -2114,13 +2124,9 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
                     ),
                     "user_ids": user_list,
                     "manager_ids": manager_list,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            result = await client.assign_managers(user_list, manager_list)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.assign_managers(user_list, manager_list)
         return json.dumps(
             {
                 "success": True,
@@ -2130,6 +2136,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def unassign_manager(
         userids: str,
         managerids: str,
@@ -2163,12 +2170,9 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
                     "unassign_all": unassign_all,
                 }
             )
-        try:
-            result = await client.unassign_managers(
-                uid_list, mid_list, unassign_all=unassign_all
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.unassign_managers(
+            uid_list, mid_list, unassign_all=unassign_all
+        )
         return json.dumps(result)
 
     return Skill(
@@ -2210,6 +2214,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
 def build_certifications_skill(client: MoodleClient) -> Skill:
     """Build the moodle-certifications skill (13 tools)."""
 
+    @_moodle_tool
     async def list_certifications(tenantid: int = 0) -> str:
         """List all certifications in the system.
 
@@ -2217,10 +2222,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
             tenantid: Optional tenant ID to filter by
                       (default 0 = all tenants).
         """
-        try:
-            certs = await client.get_certifications(tenantid)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        certs = await client.get_certifications(tenantid)
         return json.dumps(
             [
                 {
@@ -2233,6 +2235,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def search_certifications(
         search: str = "",
     ) -> str:
@@ -2246,14 +2249,12 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                     Pass '' (empty) to return all
                     certifications.
         """
-        try:
-            results = await client.search_certifications(search=search)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        results = await client.search_certifications(search=search)
         return json.dumps(
             [{"id": c.id, "fullname": c.fullname} for c in results]
         )
 
+    @_moodle_tool
     async def get_certification_allocations(
         certificationid: int,
     ) -> str:
@@ -2262,12 +2263,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
         Args:
             certificationid: The certification ID.
         """
-        try:
-            allocs = await client.get_certification_allocations(
-                certificationid
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        allocs = await client.get_certification_allocations(certificationid)
         return json.dumps(
             [
                 {
@@ -2281,16 +2277,14 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def get_user_certifications(userid: int) -> str:
         """Get all certifications for a specific user.
 
         Args:
             userid: The Moodle user ID.
         """
-        try:
-            allocs = await client.get_user_certification_allocations(userid)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        allocs = await client.get_user_certification_allocations(userid)
         return json.dumps(
             [
                 {
@@ -2303,6 +2297,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def get_certification_history(
         certificationid: int,
         userid: int,
@@ -2313,12 +2308,9 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
             certificationid: The certification ID.
             userid: The Moodle user ID.
         """
-        try:
-            entries = await client.get_certification_user_log(
-                certificationid, userid
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        entries = await client.get_certification_user_log(
+            certificationid, userid
+        )
         return json.dumps(
             [
                 {
@@ -2330,6 +2322,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def get_certification_user_details(
         certificationid: int,
         userid: int,
@@ -2340,14 +2333,12 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
             certificationid: The certification ID.
             userid: The Moodle user ID.
         """
-        try:
-            details = await client.get_certification_user_allocation(
-                certificationid, userid
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        details = await client.get_certification_user_allocation(
+            certificationid, userid
+        )
         return json.dumps(details)
 
+    @_moodle_tool
     async def certify_user(
         userid: str,
         certificationid: int,
@@ -2376,13 +2367,9 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                     ),
                     "userid": uid,
                     "certificationid": certificationid,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            result = await client.certify_user(certificationid, uid)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.certify_user(certificationid, uid)
         return json.dumps(
             {
                 "success": True,
@@ -2392,6 +2379,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def revoke_certification(
         userid: str,
         certificationid: int,
@@ -2420,13 +2408,9 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                     ),
                     "userid": uid,
                     "certificationid": certificationid,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            result = await client.revoke_certification(certificationid, uid)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.revoke_certification(certificationid, uid)
         return json.dumps(
             {
                 "success": True,
@@ -2436,6 +2420,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def deallocate_user_from_certification(
         userid: int,
         certificationid: int,
@@ -2461,15 +2446,11 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                     ),
                     "userid": userid,
                     "certificationid": certificationid,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            result = await client.deallocate_user_from_certification(
-                certificationid, userid
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.deallocate_user_from_certification(
+            certificationid, userid
+        )
         return json.dumps(
             {
                 "success": True,
@@ -2479,6 +2460,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def archive_certification(
         certificationid: int,
         confirmed: bool = False,
@@ -2500,13 +2482,9 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                         f"Will archive certification {certificationid}"
                     ),
                     "certificationid": certificationid,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            result = await client.archive_certification(certificationid)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.archive_certification(certificationid)
         return json.dumps(
             {
                 "success": True,
@@ -2515,6 +2493,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def delete_certification(
         certification_id: int,
         confirmed: bool = False,
@@ -2536,12 +2515,10 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                     "preview": (f"DELETE certification id={certification_id}"),
                 }
             )
-        try:
-            result = await client.delete_certification(certification_id)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.delete_certification(certification_id)
         return json.dumps(result)
 
+    @_moodle_tool
     async def restore_certification(
         certification_id: int,
         confirmed: bool = False,
@@ -2565,12 +2542,10 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                     ),
                 }
             )
-        try:
-            result = await client.restore_certification(certification_id)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.restore_certification(certification_id)
         return json.dumps(result)
 
+    @_moodle_tool
     async def bulk_deallocate_certification_users(
         allocation_ids: str,
         confirmed: bool = False,
@@ -2597,10 +2572,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
                     "allocation_ids": parsed,
                 }
             )
-        try:
-            result = await client.bulk_deallocate_certification_users(parsed)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.bulk_deallocate_certification_users(parsed)
         return json.dumps(result.model_dump())
 
     return Skill(
@@ -2639,6 +2611,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
 def build_programs_skill(client: MoodleClient) -> Skill:
     """Build the moodle-programs skill (19 tools)."""
 
+    @_moodle_tool
     async def search_programs(search: str = "") -> str:
         """Search for learning programs by name.
 
@@ -2646,10 +2619,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             search: Optional search string to filter
                     programs (default "" = all).
         """
-        try:
-            programs = await client.search_programs(search)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        programs = await client.search_programs(search)
         return json.dumps(
             [
                 {
@@ -2660,16 +2630,14 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def get_user_program_courses(userid: int) -> str:
         """Get courses in a user's assigned programs with progress.
 
         Args:
             userid: The Moodle user ID.
         """
-        try:
-            courses = await client.get_user_program_courses(userid)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        courses = await client.get_user_program_courses(userid)
         return json.dumps(
             [
                 {
@@ -2682,30 +2650,26 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def search_courses_for_program(search: str = "") -> str:
         """Search for courses eligible for programs.
 
         Args:
             search: Optional search string (default "" = all).
         """
-        try:
-            courses = await client.search_courses_for_program(search)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        courses = await client.search_courses_for_program(search)
         return json.dumps(
             [{"id": c.id, "fullname": c.fullname} for c in courses]
         )
 
+    @_moodle_tool
     async def browse_catalogue(query: str = "") -> str:
         """Search the course/program catalogue.
 
         Args:
             query: Optional search query (default "" = all).
         """
-        try:
-            items = await client.get_catalogue_page(query)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        items = await client.get_catalogue_page(query)
         return json.dumps(
             [
                 {
@@ -2717,6 +2681,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def get_user_learning_catalogue(
         userid: int = 0,
         search: str = "",
@@ -2727,10 +2692,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             userid: The Moodle user ID (0 = current user).
             search: Optional search string.
         """
-        try:
-            items = await client.get_user_catalogue(userid, search)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        items = await client.get_user_catalogue(userid, search)
         return json.dumps(
             [
                 {
@@ -2746,6 +2708,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def get_program_content(
         programid: int,
         userid: int = 0,
@@ -2756,18 +2719,13 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             programid: The program ID.
             userid: Optional user ID (0 = current user).
         """
-        try:
-            content = await client.get_program_content(programid, userid)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        content = await client.get_program_content(programid, userid)
         return json.dumps(content)
 
+    @_moodle_tool
     async def list_competency_frameworks() -> str:
         """List all competency frameworks."""
-        try:
-            frameworks = await client.get_competency_frameworks()
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        frameworks = await client.get_competency_frameworks()
         return json.dumps(
             [
                 {
@@ -2781,16 +2739,14 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def get_user_learning_plans(userid: int) -> str:
         """Get a user's learning plans.
 
         Args:
             userid: The Moodle user ID.
         """
-        try:
-            plans = await client.get_user_learning_plans(userid)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        plans = await client.get_user_learning_plans(userid)
         return json.dumps(
             [
                 {
@@ -2804,6 +2760,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def get_user_competency(
         userid: int,
         competencyid: int,
@@ -2814,26 +2771,22 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             userid: The Moodle user ID.
             competencyid: The competency ID.
         """
-        try:
-            summary = await client.get_user_competency_summary(
-                userid, competencyid
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        summary = await client.get_user_competency_summary(
+            userid, competencyid
+        )
         return json.dumps(summary)
 
+    @_moodle_tool
     async def get_course_competencies(courseid: int) -> str:
         """Get competencies linked to a course.
 
         Args:
             courseid: The Moodle course ID.
         """
-        try:
-            competencies = await client.get_course_competencies(courseid)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        competencies = await client.get_course_competencies(courseid)
         return json.dumps(competencies)
 
+    @_moodle_tool
     async def allocate_users_to_program(
         userids: str,
         programid: int,
@@ -2863,15 +2816,9 @@ def build_programs_skill(client: MoodleClient) -> Skill:
                     ),
                     "user_ids": user_list,
                     "programid": programid,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            result = await client.allocate_users_to_program(
-                programid, user_list
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.allocate_users_to_program(programid, user_list)
         return json.dumps(
             {
                 "success": True,
@@ -2881,6 +2828,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def deallocate_user_from_program(
         userid: int,
         programid: int,
@@ -2905,15 +2853,9 @@ def build_programs_skill(client: MoodleClient) -> Skill:
                     ),
                     "userid": userid,
                     "programid": programid,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            result = await client.deallocate_user_from_program(
-                programid, userid
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.deallocate_user_from_program(programid, userid)
         return json.dumps(
             {
                 "success": True,
@@ -2923,6 +2865,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def archive_program(
         program_id: int,
         confirmed: bool = False,
@@ -2938,12 +2881,10 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         """
         if not confirmed:
             return json.dumps({"preview": f"Archive program id={program_id}"})
-        try:
-            result = await client.archive_program(program_id)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.archive_program(program_id)
         return json.dumps(result)
 
+    @_moodle_tool
     async def restore_program(
         program_id: int,
         confirmed: bool = False,
@@ -2959,12 +2900,10 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         """
         if not confirmed:
             return json.dumps({"preview": f"Restore program id={program_id}"})
-        try:
-            result = await client.restore_program(program_id)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.restore_program(program_id)
         return json.dumps(result)
 
+    @_moodle_tool
     async def delete_program(
         program_id: int,
         confirmed: bool = False,
@@ -2981,12 +2920,10 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         """
         if not confirmed:
             return json.dumps({"preview": f"DELETE program id={program_id}"})
-        try:
-            result = await client.delete_program(program_id)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.delete_program(program_id)
         return json.dumps(result)
 
+    @_moodle_tool
     async def duplicate_program(
         program_id: int,
         confirmed: bool = False,
@@ -3004,10 +2941,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             return json.dumps(
                 {"preview": f"Duplicate program id={program_id}"}
             )
-        try:
-            dup = await client.duplicate_program(program_id)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        dup = await client.duplicate_program(program_id)
         return json.dumps(
             {
                 "duplicatedprogramid": dup.duplicatedprogramid,
@@ -3015,6 +2949,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def update_program_visibility(
         program_id: int,
         visible: int,
@@ -3034,14 +2969,10 @@ def build_programs_skill(client: MoodleClient) -> Skill:
                     "preview": (f"Set program id={program_id} to {label}"),
                 }
             )
-        try:
-            result = await client.update_program_visibility(
-                program_id, visible
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.update_program_visibility(program_id, visible)
         return json.dumps(result)
 
+    @_moodle_tool
     async def bulk_deallocate_program_users(
         allocation_ids: str,
         confirmed: bool = False,
@@ -3066,12 +2997,10 @@ def build_programs_skill(client: MoodleClient) -> Skill:
                     "allocation_ids": parsed,
                 }
             )
-        try:
-            result = await client.bulk_deallocate_program_users(parsed)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.bulk_deallocate_program_users(parsed)
         return json.dumps(result.model_dump())
 
+    @_moodle_tool
     async def bulk_reset_program_progress(
         allocation_ids: str,
         confirmed: bool = False,
@@ -3098,10 +3027,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
                     "allocation_ids": parsed,
                 }
             )
-        try:
-            result = await client.bulk_reset_program_progress(parsed)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.bulk_reset_program_progress(parsed)
         return json.dumps(result.model_dump())
 
     return Skill(
@@ -3148,45 +3074,9 @@ def build_programs_skill(client: MoodleClient) -> Skill:
 def build_rules_skill(client: MoodleClient) -> Skill:
     """Build the moodle-rules skill (14 tools)."""
 
-    # -- Private helpers (local to this builder) --
-
-    async def _resolve_rule_id(
-        rule_id: int = 0, rule_name: str = ""
-    ) -> int | str:
-        """Resolve a dynamic rule by ID or name.
-
-        Returns the integer rule ID on success, or a JSON error
-        string when the rule cannot be found.
-        """
-        if rule_id > 0:
-            return rule_id
-        if not rule_name:
-            return json.dumps(
-                {"error": "Provide either rule_id or rule_name."}
-            )
-        try:
-            rules = await client.list_dynamic_rules()
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
-        needle = rule_name.lower()
-        matches = [r for r in rules if needle in r["name"].lower()]
-        if len(matches) == 1:
-            return matches[0]["id"]
-        if len(matches) == 0:
-            return json.dumps(
-                {"error": f"No dynamic rule matching '{rule_name}'."}
-            )
-        return json.dumps(
-            {
-                "error": f"Multiple rules match '{rule_name}'.",
-                "matches": [
-                    {"id": m["id"], "name": m["name"]} for m in matches
-                ],
-            }
-        )
-
     # -- Tool functions --
 
+    @_moodle_tool
     async def list_dynamic_rules() -> str:
         """List all dynamic rules with names, IDs, and status.
 
@@ -3195,12 +3085,10 @@ def build_rules_skill(client: MoodleClient) -> Skill:
         Use the rule ID or name from this list for other dynamic
         rule tools.
         """
-        try:
-            rules = await client.list_dynamic_rules()
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        rules = await client.list_dynamic_rules()
         return json.dumps(rules)
 
+    @_moodle_tool
     async def can_enable_rule(rule_id: int = 0, rule_name: str = "") -> str:
         """Check whether a dynamic rule meets prerequisites to be enabled.
 
@@ -3208,15 +3096,13 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             rule_id: Moodle dynamic rule ID.
             rule_name: Rule name (alternative to rule_id).
         """
-        resolved = await _resolve_rule_id(rule_id, rule_name)
+        resolved = await _resolve_rule_id(client, rule_id, rule_name)
         if isinstance(resolved, str):
             return resolved
-        try:
-            result = await client.can_enable_rule(resolved)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.can_enable_rule(resolved)
         return json.dumps(result)
 
+    @_moodle_tool
     async def get_rule_matching_users(
         rule_id: int = 0, rule_name: str = ""
     ) -> str:
@@ -3226,15 +3112,13 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             rule_id: Moodle dynamic rule ID.
             rule_name: Rule name (alternative to rule_id).
         """
-        resolved = await _resolve_rule_id(rule_id, rule_name)
+        resolved = await _resolve_rule_id(client, rule_id, rule_name)
         if isinstance(resolved, str):
             return resolved
-        try:
-            result = await client.count_matching_users(resolved)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.count_matching_users(resolved)
         return json.dumps(result)
 
+    @_moodle_tool
     async def get_rule_matched_users(
         rule_id: int = 0, rule_name: str = ""
     ) -> str:
@@ -3244,15 +3128,13 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             rule_id: Moodle dynamic rule ID.
             rule_name: Rule name (alternative to rule_id).
         """
-        resolved = await _resolve_rule_id(rule_id, rule_name)
+        resolved = await _resolve_rule_id(client, rule_id, rule_name)
         if isinstance(resolved, str):
             return resolved
-        try:
-            result = await client.count_matched_users(resolved)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.count_matched_users(resolved)
         return json.dumps(result)
 
+    @_moodle_tool
     async def search_cohorts_for_rule(search: str = "") -> str:
         """Search cohorts available for dynamic rule conditions/outcomes.
 
@@ -3261,12 +3143,10 @@ def build_rules_skill(client: MoodleClient) -> Skill:
                     Pass '' (empty) to return all cohorts
                     available for rule conditions.
         """
-        try:
-            items = await client.search_cohorts_for_rule(search)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        items = await client.search_cohorts_for_rule(search)
         return json.dumps([{"id": i.id, "name": i.name} for i in items])
 
+    @_moodle_tool
     async def search_competencies_for_rule(search: str = "") -> str:
         """Search competencies available for dynamic rule conditions.
 
@@ -3282,14 +3162,12 @@ def build_rules_skill(client: MoodleClient) -> Skill:
                     competencies available for rule
                     conditions.
         """
-        try:
-            items = await client.search_competencies_for_rule(search)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        items = await client.search_competencies_for_rule(search)
         return json.dumps(
             [{"id": i.id, "shortname": i.shortname} for i in items]
         )
 
+    @_moodle_tool
     async def enable_rule(
         rule_id: int = 0,
         rule_name: str = "",
@@ -3305,7 +3183,7 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             rule_name: Rule name (alternative to rule_id).
             confirmed: Set True only after user approval.
         """
-        resolved = await _resolve_rule_id(rule_id, rule_name)
+        resolved = await _resolve_rule_id(client, rule_id, rule_name)
         if isinstance(resolved, str):
             return resolved
         if not confirmed:
@@ -3314,15 +3192,12 @@ def build_rules_skill(client: MoodleClient) -> Skill:
                     "action": "enable_rule",
                     "preview": f"Enable dynamic rule id={resolved}",
                     "rule_id": resolved,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            result = await client.enable_rule(resolved)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.enable_rule(resolved)
         return json.dumps(result)
 
+    @_moodle_tool
     async def disable_rule(
         rule_id: int = 0,
         rule_name: str = "",
@@ -3337,7 +3212,7 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             rule_name: Rule name (alternative to rule_id).
             confirmed: Set True only after user approval.
         """
-        resolved = await _resolve_rule_id(rule_id, rule_name)
+        resolved = await _resolve_rule_id(client, rule_id, rule_name)
         if isinstance(resolved, str):
             return resolved
         if not confirmed:
@@ -3346,15 +3221,12 @@ def build_rules_skill(client: MoodleClient) -> Skill:
                     "action": "disable_rule",
                     "preview": f"Disable dynamic rule id={resolved}",
                     "rule_id": resolved,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            result = await client.disable_rule(resolved)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.disable_rule(resolved)
         return json.dumps(result)
 
+    @_moodle_tool
     async def archive_rule(
         rule_id: int = 0,
         rule_name: str = "",
@@ -3370,7 +3242,7 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             rule_name: Rule name (alternative to rule_id).
             confirmed: Set True only after user approval.
         """
-        resolved = await _resolve_rule_id(rule_id, rule_name)
+        resolved = await _resolve_rule_id(client, rule_id, rule_name)
         if isinstance(resolved, str):
             return resolved
         if not confirmed:
@@ -3379,15 +3251,12 @@ def build_rules_skill(client: MoodleClient) -> Skill:
                     "action": "archive_rule",
                     "preview": f"Archive dynamic rule id={resolved}",
                     "rule_id": resolved,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            result = await client.archive_rule(resolved)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.archive_rule(resolved)
         return json.dumps(result)
 
+    @_moodle_tool
     async def unarchive_rule(
         rule_id: int = 0,
         rule_name: str = "",
@@ -3403,7 +3272,7 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             rule_name: Rule name (alternative to rule_id).
             confirmed: Set True only after user approval.
         """
-        resolved = await _resolve_rule_id(rule_id, rule_name)
+        resolved = await _resolve_rule_id(client, rule_id, rule_name)
         if isinstance(resolved, str):
             return resolved
         if not confirmed:
@@ -3412,15 +3281,12 @@ def build_rules_skill(client: MoodleClient) -> Skill:
                     "action": "unarchive_rule",
                     "preview": f"Unarchive dynamic rule id={resolved}",
                     "rule_id": resolved,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            result = await client.unarchive_rule(resolved)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.unarchive_rule(resolved)
         return json.dumps(result)
 
+    @_moodle_tool
     async def delete_rule(
         rule_id: int = 0,
         rule_name: str = "",
@@ -3435,7 +3301,7 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             rule_name: Rule name (alternative to rule_id).
             confirmed: Set True only after user approval.
         """
-        resolved = await _resolve_rule_id(rule_id, rule_name)
+        resolved = await _resolve_rule_id(client, rule_id, rule_name)
         if isinstance(resolved, str):
             return resolved
         if not confirmed:
@@ -3444,15 +3310,12 @@ def build_rules_skill(client: MoodleClient) -> Skill:
                     "action": "delete_rule",
                     "preview": f"DELETE dynamic rule id={resolved}",
                     "rule_id": resolved,
-                    "instructions": _CONFIRM_INSTRUCTIONS_WARNING,
                 }
             )
-        try:
-            result = await client.delete_rule(resolved)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.delete_rule(resolved)
         return json.dumps(result)
 
+    @_moodle_tool
     async def duplicate_rule(
         rule_id: int = 0,
         rule_name: str = "",
@@ -3468,7 +3331,7 @@ def build_rules_skill(client: MoodleClient) -> Skill:
             rule_name: Rule name (alternative to rule_id).
             confirmed: Set True only after user approval.
         """
-        resolved = await _resolve_rule_id(rule_id, rule_name)
+        resolved = await _resolve_rule_id(client, rule_id, rule_name)
         if isinstance(resolved, str):
             return resolved
         if not confirmed:
@@ -3477,15 +3340,12 @@ def build_rules_skill(client: MoodleClient) -> Skill:
                     "action": "duplicate_rule",
                     "preview": f"Duplicate dynamic rule id={resolved}",
                     "rule_id": resolved,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            result = await client.duplicate_rule(resolved)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.duplicate_rule(resolved)
         return json.dumps(result)
 
+    @_moodle_tool
     async def delete_rule_condition(
         instanceid: int,
         confirmed: bool = False,
@@ -3504,15 +3364,12 @@ def build_rules_skill(client: MoodleClient) -> Skill:
                         f"Delete condition id={instanceid} from dynamic rule"
                     ),
                     "instanceid": instanceid,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            result = await client.delete_condition(instanceid)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.delete_condition(instanceid)
         return json.dumps(result)
 
+    @_moodle_tool
     async def delete_rule_outcome(
         instanceid: int,
         confirmed: bool = False,
@@ -3531,13 +3388,9 @@ def build_rules_skill(client: MoodleClient) -> Skill:
                         f"Delete outcome id={instanceid} from dynamic rule"
                     ),
                     "instanceid": instanceid,
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            result = await client.delete_outcome(instanceid)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.delete_outcome(instanceid)
         return json.dumps(result)
 
     return Skill(
@@ -3579,12 +3432,7 @@ def build_rules_skill(client: MoodleClient) -> Skill:
 def build_reporting_skill(client: MoodleClient) -> Skill:
     """Build the moodle-reporting skill (11 tools)."""
 
-    def _strip_html(value: str | None) -> str:
-        """Strip HTML tags from a report cell value."""
-        if value is None:
-            return ""
-        return re.sub(r"<[^>]+>", "", value).strip()
-
+    @_moodle_tool
     async def list_reports() -> str:
         """List all custom reports available in Report Builder.
 
@@ -3592,10 +3440,7 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
         modification time for each report. Use the report
         id in get_report_data to retrieve actual data.
         """
-        try:
-            reports = await client.list_reports()
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        reports = await client.list_reports()
         return json.dumps(
             [
                 {
@@ -3608,6 +3453,7 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
             ]
         )
 
+    @_moodle_tool
     async def get_report_data(
         reportid: int,
         page: int = 0,
@@ -3625,12 +3471,9 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
             page: Page number for pagination (default 0).
             perpage: Rows per page (default 50, max 100).
         """
-        try:
-            details, data = await client.retrieve_report(
-                reportid, page=page, perpage=perpage
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        details, data = await client.retrieve_report(
+            reportid, page=page, perpage=perpage
+        )
         return json.dumps(
             {
                 "report_name": details.name,
@@ -3645,6 +3488,7 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def get_utm_report(
         courseid: int,
         departmentid: int = 0,
@@ -3660,14 +3504,11 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
             departmentid: Optional department ID to filter by.
             completionstatus: 0=all, 1=completed, 2=not completed.
         """
-        try:
-            rows, totalcount = await client.get_utm_report(
-                courseid,
-                departmentid=departmentid,
-                completionstatus=completionstatus,
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        rows, totalcount = await client.get_utm_report(
+            courseid,
+            departmentid=departmentid,
+            completionstatus=completionstatus,
+        )
         return json.dumps(
             {
                 "rows": [
@@ -3686,6 +3527,7 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def get_adv_comp_report(
         courseid: int,
         completionstatus: int = 0,
@@ -3699,13 +3541,10 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
             courseid: The Moodle course ID.
             completionstatus: 0=all, 1=completed, 2=not completed.
         """
-        try:
-            rows, totalcount = await client.get_adv_comp_report(
-                courseid,
-                completionstatus=completionstatus,
-            )
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        rows, totalcount = await client.get_adv_comp_report(
+            courseid,
+            completionstatus=completionstatus,
+        )
         return json.dumps(
             {
                 "rows": [
@@ -3724,16 +3563,14 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def get_export_status(export_id: int) -> str:
         """Check the progress of a Workplace export job.
 
         Args:
             export_id: The export job ID.
         """
-        try:
-            status = await client.get_export_status(export_id)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        status = await client.get_export_status(export_id)
         return json.dumps(
             {
                 "status": status.status,
@@ -3744,28 +3581,24 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def download_export(export_id: int) -> str:
         """Get download info for a completed Workplace export.
 
         Args:
             export_id: The export job ID.
         """
-        try:
-            result = await client.get_export_file(export_id)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.get_export_file(export_id)
         return json.dumps(result)
 
+    @_moodle_tool
     async def get_import_status(import_id: int) -> str:
         """Check the progress of a Workplace import job.
 
         Args:
             import_id: The import job ID.
         """
-        try:
-            status = await client.get_import_status(import_id)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        status = await client.get_import_status(import_id)
         return json.dumps(
             {
                 "status": status.status,
@@ -3776,6 +3609,7 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
             }
         )
 
+    @_moodle_tool
     async def export_workplace_data(
         exporter: str,
         confirmed: bool = False,
@@ -3809,15 +3643,12 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
                     "preview": (
                         f"Will export '{exporter}' data from Workplace"
                     ),
-                    "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
                 }
             )
-        try:
-            result = await client.perform_export(resolved)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.perform_export(resolved)
         return json.dumps({"success": True, "result": result})
 
+    @_moodle_tool
     async def import_workplace_data(
         confirmed: bool = False,
     ) -> str:
@@ -3839,15 +3670,12 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
                         "import. This can modify programs, "
                         "certifications, and org structure."
                     ),
-                    "instructions": _CONFIRM_INSTRUCTIONS_WARNING,
                 }
             )
-        try:
-            result = await client.perform_import()
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.perform_import()
         return json.dumps({"success": True, "result": result})
 
+    @_moodle_tool
     async def delete_export(
         export_id: int,
         confirmed: bool = False,
@@ -3860,12 +3688,10 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
         """
         if not confirmed:
             return json.dumps({"preview": f"Delete export id={export_id}"})
-        try:
-            result = await client.delete_export(export_id)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.delete_export(export_id)
         return json.dumps(result)
 
+    @_moodle_tool
     async def delete_import(
         import_id: int,
         confirmed: bool = False,
@@ -3878,10 +3704,7 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
         """
         if not confirmed:
             return json.dumps({"preview": f"Delete import id={import_id}"})
-        try:
-            result = await client.delete_import(import_id)
-        except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+        result = await client.delete_import(import_id)
         return json.dumps(result)
 
     return Skill(

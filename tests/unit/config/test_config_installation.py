@@ -4,7 +4,7 @@ import dataclasses
 import pathlib
 from unittest import mock
 
-import _test_features as agui_features
+import _fixtures as agui_features
 import pytest
 import yaml
 from haiku.rag import config as hr_config_module
@@ -116,7 +116,7 @@ id: "{INSTALLATION_ID}"
 meta:
   agui_features:
       - name: "{test_meta.AGUI_FEATURE_NAME_FOR_META}"
-        model_klass: "_test_features.EmptyFeatureModel"
+        model_klass: "_fixtures.EmptyFeatureModel"
         source: "server"
   tool_configs:
     - "test_config_installation.FauxToolConfig"

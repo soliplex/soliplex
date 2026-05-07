@@ -23,7 +23,11 @@ class LTIPlatformConfig:
     client_id: str
     deployment_ids: list[str] = _default_list_field()
     auth_login_url: str
-    auth_token_url: str
+    # Platform's OAuth2 token endpoint, used for LTI back-channel
+    # service calls (AGS, NRPS, etc.). Soliplex does not yet make
+    # those calls, so the field is read at config load but not used
+    # at runtime. Optional; populate when adding back-channel features.
+    auth_token_url: str = ""
     key_set_url: str
     default_room_id: str
     course_room_map: dict[str, str] = _default_dict_field()

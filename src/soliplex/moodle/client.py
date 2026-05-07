@@ -58,6 +58,16 @@ MAX_RESULTS = 100
 
 # Regex for stripping HTML tags in report data.
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
+_LI_RE = re.compile(r"<li[^>]*>(.*?)</li>", re.DOTALL)
+
+
+def _parse_li_texts(col: str) -> list[str]:
+    """Extract plain-text items from an HTML ``<li>`` list.
+
+    Used to parse condition/action columns from the dynamic rules
+    system report, which renders each entry as an ``<li>``.
+    """
+    return [_HTML_TAG_RE.sub("", t).strip() for t in _LI_RE.findall(col)]
 
 
 def _to_dict(raw, default=None):
@@ -101,6 +111,21 @@ class MoodleClient:
         self.token = token or os.environ["MOODLE_API_TOKEN"]
         self._endpoint = f"{self.base_url}/webservice/rest/server.php"
         self._verify = verify
+        self._http: httpx.AsyncClient | None = None
+
+    def _get_http(self) -> httpx.AsyncClient:
+        if self._http is None:
+            client_kw: dict = {"timeout": httpx.Timeout(30.0)}
+            if self._verify is not None:
+                client_kw["verify"] = self._verify
+            self._http = httpx.AsyncClient(**client_kw)
+        return self._http
+
+    async def aclose(self) -> None:
+        """Close the underlying HTTP client."""
+        if self._http is not None:
+            await self._http.aclose()
+            self._http = None
 
     async def _call(
         self,
@@ -114,12 +139,9 @@ class MoodleClient:
             "moodlewsrestformat": "json",
             **params,
         }
-        client_kw = {}
-        if self._verify is not None:
-            client_kw["verify"] = self._verify
-        async with httpx.AsyncClient(**client_kw) as http:
-            resp = await http.post(self._endpoint, data=data)
-            resp.raise_for_status()
+        http = self._get_http()
+        resp = await http.post(self._endpoint, data=data)
+        resp.raise_for_status()
 
         result = resp.json()
 
@@ -144,23 +166,6 @@ class MoodleClient:
         raw = await self._call("core_course_get_courses")
         courses = [Course.model_validate(c) for c in raw]
         return courses[:MAX_RESULTS]
-
-    async def get_courses_by_field(
-        self,
-        field: str = "",
-        value: str = "",
-    ) -> list[Course]:
-        """Filter courses via ``core_course_get_courses_by_field``.
-
-        Results are truncated to ``MAX_RESULTS``.
-        """
-        params: dict[str, str] = {}
-        if field:
-            params["field"] = field
-            params["value"] = value
-        raw = await self._call("core_course_get_courses_by_field", **params)
-        course_list = raw.get("courses", [])
-        return [Course.model_validate(c) for c in course_list][:MAX_RESULTS]
 
     # ---------------------------------------------------------------
     # User functions
@@ -594,17 +599,6 @@ class MoodleClient:
         )
         return _to_dict(raw)
 
-    async def reset_program_progress(self, programuserid: int) -> dict:
-        """Reset program progress via ``tool_program_reset_program_progress``.
-
-        Takes the allocation ID (``programuserid``), not the user ID.
-        """
-        raw = await self._call(
-            "tool_program_reset_program_progress",
-            programuserid=programuserid,
-        )
-        return _to_dict(raw)
-
     # ---------------------------------------------------------------
     # Deeper Certification Management (Workplace)
     # ---------------------------------------------------------------
@@ -688,31 +682,6 @@ class MoodleClient:
         )
         return _to_dict(raw)
 
-    async def enrol_user_to_program_course(
-        self, courseid: int, programid: int
-    ) -> dict:
-        """Enrol user to course in program context via
-        ``tool_program_enrol_user_to_course``."""
-        raw = await self._call(
-            "tool_program_enrol_user_to_course",
-            courseid=courseid,
-            programid=programid,
-        )
-        return _to_dict(raw)
-
-    async def delete_program_set(self, setid: int) -> dict:
-        """Delete a course set via ``tool_program_delete_set``."""
-        raw = await self._call("tool_program_delete_set", setid=setid)
-        return _to_dict(raw)
-
-    async def delete_program_course(self, programcourseid: int) -> dict:
-        """Remove a course from program via ``tool_program_delete_course``."""
-        raw = await self._call(
-            "tool_program_delete_course",
-            programcourseid=programcourseid,
-        )
-        return _to_dict(raw)
-
     async def bulk_deallocate_program_users(
         self, programuserids: list[int]
     ) -> BulkOperationResult:
@@ -735,22 +704,6 @@ class MoodleClient:
             params[f"programuserids[{i}]"] = pid
         raw = await self._call(
             "tool_program_bulk_reset_program_progress", **params
-        )
-        if isinstance(raw, dict):
-            return BulkOperationResult.model_validate(raw)
-        return BulkOperationResult()
-
-    async def recalculate_program_completions(
-        self, programuserids: list[int]
-    ) -> BulkOperationResult:
-        """Recalculate completions via
-        ``tool_program_recalculate_program_user_completions``."""
-        params: dict[str, int] = {}
-        for i, pid in enumerate(programuserids):
-            params[f"programuserids[{i}]"] = pid
-        raw = await self._call(
-            "tool_program_recalculate_program_user_completions",
-            **params,
         )
         if isinstance(raw, dict):
             return BulkOperationResult.model_validate(raw)
@@ -1082,25 +1035,6 @@ class MoodleClient:
 
     # -- Job & Manager Management --
 
-    async def update_job(
-        self,
-        userid: int,
-        department_idnumber: str,
-        position_idnumber: str,
-        startdate: int = 0,
-        enddate: int = 0,
-    ) -> dict:
-        """Update a job assignment via ``tool_organisation_update_job``."""
-        raw = await self._call(
-            "tool_organisation_update_job",
-            userid=userid,
-            jobdepartment=department_idnumber,
-            jobposition=position_idnumber,
-            startdate=startdate,
-            enddate=enddate,
-        )
-        return raw if isinstance(raw, dict) else {"status": True}
-
     async def delete_job(self, job_id: int) -> dict:
         """Delete a job assignment via ``tool_organisation_job_delete``."""
         raw = await self._call("tool_organisation_job_delete", id=job_id)
@@ -1410,12 +1344,8 @@ class MoodleClient:
             m_name = re.search(r'data-value="([^"]+)"', name_col)
             name = html_mod.unescape(m_name.group(1)) if m_name else ""
 
-            def _li_texts(col: str) -> list[str]:
-                items = re.findall(r"<li[^>]*>(.*?)</li>", col, re.DOTALL)
-                return [_HTML_TAG_RE.sub("", t).strip() for t in items]
-
-            conditions = _li_texts(cols[3]) if len(cols) > 3 else []
-            actions = _li_texts(cols[4]) if len(cols) > 4 else []
+            conditions = _parse_li_texts(cols[3]) if len(cols) > 3 else []
+            actions = _parse_li_texts(cols[4]) if len(cols) > 4 else []
             results.append(
                 {
                     "id": rule_id,

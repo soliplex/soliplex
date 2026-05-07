@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import pydantic_ai
 from haiku.skills import prompts as hs_prompts
-from haiku.skills.agent import SkillToolset
 
 from soliplex import agents
 from soliplex import config
 from soliplex.config import agents as config_agents
+from soliplex.config.skills import SoliplexSkillToolset
 from soliplex.moodle.client import MoodleClient
 from soliplex.moodle.skills import build_certifications_skill
 from soliplex.moodle.skills import build_courses_skill
@@ -141,10 +141,11 @@ Present data in clear tables when appropriate.
 
 def moodle_tools_agent_factory(
     agent_config: config.FactoryAgentConfig,
+    *,
     tool_configs: agents.ToolConfigMap = None,  # noqa: U100
     mcp_client_toolset_configs: (config.MCP_ClientToolsetConfigMap) = None,  # noqa: U100
     skill_toolset_config: (agents.SkillToolsetConfig | None) = None,
-) -> pydantic_ai.Agent:
+) -> agents.SoliplexAgent:
     """Create a Moodle Workplace router agent with skills.
 
     Builds seven domain-specific Moodle skills and exposes them
@@ -202,7 +203,7 @@ def moodle_tools_agent_factory(
                 all_skills.append(ext_toolset.registry.get(name))
 
     # -- Assemble router agent ------------------------------
-    toolset = SkillToolset(skills=all_skills, use_subagents=True)
+    toolset = SoliplexSkillToolset(skills=all_skills, use_subagents=True)
     instructions = hs_prompts.build_system_prompt(
         preamble=MOODLE_ROUTER_PROMPT,
         skill_catalog=toolset.skill_catalog,

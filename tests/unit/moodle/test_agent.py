@@ -65,7 +65,7 @@ def _build_skills():
     from soliplex.moodle.skills import build_users_skill
 
     client = MoodleClient(base_url=BASE_URL, token=TOKEN, verify=False)
-    return [
+    skills = [
         build_courses_skill(client),
         build_users_skill(client),
         build_organisation_skill(client),
@@ -74,17 +74,34 @@ def _build_skills():
         build_rules_skill(client),
         build_reporting_skill(client),
     ]
+    return client, skills
 
 
 # Cache skills across tests for speed (stateless closures)
+_CACHED_CLIENT = None
 _CACHED_SKILLS = None
 
 
 def _get_skills():
-    global _CACHED_SKILLS
+    global _CACHED_CLIENT, _CACHED_SKILLS
     if _CACHED_SKILLS is None:
-        _CACHED_SKILLS = _build_skills()
+        _CACHED_CLIENT, _CACHED_SKILLS = _build_skills()
     return _CACHED_SKILLS
+
+
+@pytest.fixture(autouse=True)
+def _reset_cached_http():
+    """Reset the cached MoodleClient's lazy http connection between tests.
+
+    The skills cache holds a single MoodleClient instance whose
+    `_http` attribute is created lazily. Once created, it bypasses
+    any subsequent `httpx.AsyncClient` patches set up by tests.
+    Clearing it before each test forces the next `_call` to go
+    through the (now-patched) `httpx.AsyncClient` constructor.
+    """
+    if _CACHED_CLIENT is not None:
+        _CACHED_CLIENT._http = None
+    return
 
 
 def _get_tool_fn(agent_or_skills, name):
@@ -1419,7 +1436,7 @@ async def test_enrol_users_tool_preview():
     assert result["action"] == "enrol_users"
     assert result["user_ids"] == [3, 4]
     assert "preview" in result
-    assert "instructions" in result
+    assert "instructions" not in result
 
 
 @pytest.mark.asyncio
@@ -1680,7 +1697,7 @@ async def test_certify_user_tool_preview():
     assert result["userid"] == 3
     assert result["certificationid"] == 1
     assert "preview" in result
-    assert "instructions" in result
+    assert "instructions" not in result
 
 
 @pytest.mark.asyncio
@@ -1858,7 +1875,7 @@ async def test_allocate_users_to_program_tool_preview():
     assert result["user_ids"] == [3, 4, 5]
     assert result["programid"] == 1
     assert "preview" in result
-    assert "instructions" in result
+    assert "instructions" not in result
 
 
 @pytest.mark.asyncio
@@ -2117,7 +2134,7 @@ async def test_deallocate_user_from_program_tool_preview():
 
     assert result["action"] == "deallocate_user_from_program"
     assert "preview" in result
-    assert "instructions" in result
+    assert "instructions" not in result
 
 
 @pytest.mark.asyncio
@@ -3251,7 +3268,7 @@ async def test_create_department_tool_preview():
     assert result["name"] == "Finance"
     assert result["idnumber"] == "FIN"
     assert result["action"] == "create_department"
-    assert "instructions" in result
+    assert "instructions" not in result
 
 
 @pytest.mark.asyncio
@@ -6074,3 +6091,34 @@ async def test_delete_import_tool_error():
         result = json.loads(await fn(import_id=1, confirmed=True))
 
     assert "error" in result
+
+
+# -----------------------------------------------------------------
+# Module-level helpers
+# -----------------------------------------------------------------
+
+
+def test_preview_helper_basic():
+    from soliplex.moodle.skills import _preview
+
+    result = _preview("create_x", "Will create X", foo=1, bar="b")
+    assert result["action"] == "create_x"
+    assert result["preview"] == "Will create X"
+    assert result["foo"] == 1
+    assert result["bar"] == "b"
+    # Preview dict deliberately omits an `instructions` field —
+    # see _preview() docstring; the skill prompt (Case A/B) is
+    # the single source of truth for confirmation handling.
+    assert "instructions" not in result
+
+
+def test_preview_helper_warning_accepts_flag():
+    from soliplex.moodle.skills import _preview
+
+    # `warning=True` is preserved as a kwarg for call-site clarity
+    # (destructive ops self-document their intent) but no longer
+    # alters the dict shape.
+    result = _preview("delete_x", "Will delete X", warning=True)
+    assert result["action"] == "delete_x"
+    assert result["preview"] == "Will delete X"
+    assert "instructions" not in result

@@ -1,7 +1,7 @@
 import contextlib
 from unittest import mock
 
-import _test_features as agui_features
+import _fixtures as agui_features
 import pytest
 
 NoRaise = contextlib.nullcontext()

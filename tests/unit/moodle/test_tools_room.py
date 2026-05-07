@@ -10,7 +10,7 @@ from soliplex.config import installation as config_installation
 from soliplex.config import rooms as config_rooms
 
 ROOM_CONFIG_PATH = (
-    pathlib.Path(__file__).resolve().parents[2]
+    pathlib.Path(__file__).resolve().parents[3]
     / "example"
     / "rooms"
     / "moodle-tools"

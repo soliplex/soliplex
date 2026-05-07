@@ -77,12 +77,6 @@ def _make_request(
     return request
 
 
-@pytest.mark.anyio
-async def test_get_lti_jwks():
-    found = await lti_views.get_lti_jwks()
-    assert found == {"keys": []}
-
-
 class TestReadParams:
     @pytest.mark.anyio
     async def test_get(self):
