@@ -5285,6 +5285,64 @@ async def test_update_user_tool_preview():
 
 
 @pytest.mark.asyncio
+async def test_update_user_tool_preview_no_user_found_fallback():
+    """Preview falls back to '#N' when get_users_by_field is empty."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_user")
+
+    resp = _mock_response([])  # empty list — user not found
+    with _patch_httpx(resp):
+        result = json.loads(await fn(userid="99", department="QA"))
+
+    assert result["user"] == "#99"
+    assert "#99" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_update_user_tool_preview_includes_fullname():
+    """Preview should resolve userid to fullname for nicer display."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_user")
+
+    user_resp = [
+        {
+            "id": 7,
+            "username": "doc_test",
+            "firstname": "Documentation",
+            "lastname": "User",
+            "fullname": "Documentation User",
+            "email": "doctest@example.com",
+        },
+    ]
+
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+
+    def make_response(data):
+        r = mock.MagicMock(spec=httpx.Response)
+        r.status_code = 200
+        r.json.return_value = data
+        r.raise_for_status.return_value = None
+        return r
+
+    mock_client.post.return_value = make_response(user_resp)
+
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(
+            await fn(userid="7", department="Quality Assurance")
+        )
+
+    assert "Documentation User" in result["preview"]
+    assert result["user"] == "Documentation User (#7)"
+    assert result["user_id"] == 7
+    assert result["department"] == "Quality Assurance"
+
+
+@pytest.mark.asyncio
 async def test_update_user_tool_confirmed():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "update_user")

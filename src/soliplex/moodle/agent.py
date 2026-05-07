@@ -73,6 +73,16 @@ list_certifications; never ask the user for a search \
 term — return all)
 - "what dynamic rules exist" → moodle-rules \
 (list_dynamic_rules)
+- "update user N and change their department/email/name/\
+etc." → moodle-users (update_user). The user.department \
+field is a free-form string on the user profile; do NOT \
+interpret this as a request to create or look up a \
+Workplace organisation department.
+- "create department X" / "delete department Y" / \
+"assign manager" / "list departments" → \
+moodle-organisation. The Workplace organisation \
+department is a separate concept from the per-user \
+department string.
 
 ## Anti-patterns (do NOT do these)
 - Do NOT ask the user clarifying questions when a tool \

@@ -215,6 +215,22 @@ Use find_user to look up users by name/username/email. When \
 searching by name, use field='name'. create_user requires \
 username, firstname, lastname, email. delete_user is permanent.
 
+For update_user: the `department` parameter is a free-form \
+string field on the user profile (mdl_user.department), NOT \
+a foreign key into Workplace's tool_organisation_department \
+table. Do NOT call list_departments or try to "find" the \
+department in the org structure — just pass the literal \
+string the user provided.
+
+When update_user returns a preview JSON, the rendered \
+preview MUST identify the user by their full name plus ID \
+(e.g. "Documentation User (#7)"). The preview JSON \
+includes a `user` field with this exact label — use it in \
+your heading. Do NOT abbreviate to just "user 7" or omit \
+the user entirely. Required heading format:
+"Here's a preview of changes for **<user>**:" \
+where <user> is the JSON's `user` field verbatim.
+
 """
     + _CONFIRM_INSTRUCTIONS
 )
@@ -1368,18 +1384,30 @@ def build_users_skill(client: MoodleClient) -> Skill:
             return json.dumps(
                 {"error": "No fields to update. Provide at least one field."}
             )
+        # Look up the user's display name so the preview can show
+        # "Documentation User (#7)" instead of just "#7". Best-effort:
+        # if the lookup fails for any reason we still produce a
+        # usable preview with the bare ID.
+        user_label = f"#{uid}"
+        try:
+            users = await client.get_users_by_field(
+                field="id", values=[str(uid)]
+            )
+            if users:
+                user_label = f"{users[0].fullname} (#{uid})"
+        except Exception:  # noqa: BLE001 - intentionally broad
+            pass
+
         if not confirmed:
             fields = {k: v for k, v in updates.items() if k != "id"}
             payload = {
                 "action": "update_user",
-                "preview": (f"Will update user {uid}: {fields}"),
+                "preview": (f"Will update {user_label} with: {fields}"),
+                "user": user_label,
                 "user_id": uid,
                 "changes": fields,
                 "instructions": _CONFIRM_INSTRUCTIONS_SHORT,
             }
-            # Promote each changed field to a top-level key so the
-            # LLM can render the preview as a Field/Value table
-            # without re-interpreting the nested `changes` dict.
             for k, v in fields.items():
                 payload[k] = v
             return json.dumps(payload)
@@ -1387,7 +1415,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
             await client.update_users([updates])
         except (MoodleAPIError, httpx.HTTPError) as exc:
             return json.dumps({"error": str(exc)})
-        return json.dumps({"success": True, "userid": uid})
+        return json.dumps({"success": True, "userid": uid, "user": user_label})
 
     async def delete_user(
         userid: str,
