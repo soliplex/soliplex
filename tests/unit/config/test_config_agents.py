@@ -10,7 +10,6 @@ import pytest
 import yaml
 from pydantic_ai import capabilities as ai_capabilities
 from pydantic_ai import settings as ai_settings
-from pydantic_ai.profiles import openai as openai_profiles
 
 from soliplex.config import agents as config_agents
 from soliplex.config import exceptions as config_exc
@@ -1283,25 +1282,8 @@ def test_get_model_from_config(
                 "model_name": MODEL,
             },
         ),
-        (
-            "ollama_thinking",
-            {
-                "provider_type": "ollama",
-                "model_name": MODEL,
-                "thinking_field": "reasoning",
-            },
-        ),
-        (
-            "openai_thinking",
-            {
-                "provider_type": "openai",
-                "model_name": MODEL,
-                "thinking_field": "reasoning",
-            },
-        ),
     ],
 )
-@mock.patch("soliplex.config.agents._resolve_thinking_profile")
 @mock.patch("pydantic_ai.providers.google.GoogleProvider")
 @mock.patch("pydantic_ai.providers.ollama.OllamaProvider")
 @mock.patch("pydantic_ai.providers.openai.OpenAIProvider")
@@ -1313,7 +1295,6 @@ def test_get_model_from_factory_config(
     oai_provider_klass,
     oll_provider_klass,
     google_provider_klass,
-    resolve_thinking,
     provider_type,
     extra_config,
 ):
@@ -1327,10 +1308,6 @@ def test_get_model_from_factory_config(
 
     effective_provider = extra_config.get("provider_type", "ollama")
     effective_model = extra_config.get("model_name", "gpt-oss:latest")
-    thinking_field = extra_config.get("thinking_field")
-    expected_profile = (
-        resolve_thinking.return_value if thinking_field else None
-    )
 
     if effective_provider == "google":
         assert model is google_model_klass.return_value
@@ -1340,14 +1317,12 @@ def test_get_model_from_factory_config(
         )
         oai_model_klass.assert_not_called()
         oll_provider_klass.assert_not_called()
-        resolve_thinking.assert_not_called()
 
     elif effective_provider == "ollama":
         assert model is oai_model_klass.return_value
         oai_model_klass.assert_called_once_with(
             model_name=effective_model,
             provider=oll_provider_klass.return_value,
-            profile=expected_profile,
         )
         oai_provider_klass.assert_not_called()
         google_model_klass.assert_not_called()
@@ -1358,14 +1333,10 @@ def test_get_model_from_factory_config(
         oai_model_klass.assert_called_once_with(
             model_name=effective_model,
             provider=oai_provider_klass.return_value,
-            profile=expected_profile,
         )
         oll_provider_klass.assert_not_called()
         google_model_klass.assert_not_called()
         google_provider_klass.assert_not_called()
-
-    if thinking_field and effective_provider != "google":
-        resolve_thinking.assert_called_once()
 
 
 def test_get_model_settings_from_factory_config_with_settings():
@@ -1376,26 +1347,3 @@ def test_get_model_settings_from_factory_config_with_settings():
     result = config_agents.get_model_settings_from_factory_config(agent_config)
     assert result is not None
     assert result["temperature"] == 0.7
-
-
-def test_resolve_thinking_profile_with_base():
-    provider = mock.MagicMock()
-    base_profile = openai_profiles.OpenAIModelProfile()
-    provider.model_profile.return_value = base_profile
-
-    result = config_agents._resolve_thinking_profile(
-        provider, "gemma4:26b", "reasoning"
-    )
-    assert result.supports_thinking is True
-    assert result.openai_chat_thinking_field == "reasoning"
-
-
-def test_resolve_thinking_profile_no_base():
-    provider = mock.MagicMock()
-    provider.model_profile.return_value = None
-
-    result = config_agents._resolve_thinking_profile(
-        provider, "gemma4:26b", "reasoning"
-    )
-    assert result.supports_thinking is True
-    assert result.openai_chat_thinking_field == "reasoning"

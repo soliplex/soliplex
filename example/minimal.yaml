@@ -284,10 +284,7 @@ haiku_rag_config_file: "./haiku.rag.yaml"
 
 agent_configs:
   - id: "default_chat"
-    model_name: "gemma4:26b"
-    model_settings:
-      extra_body:
-        think: false
+    model_name: "gpt-oss:latest"
     system_prompt: |
       You are an expert AI assistant specializing in information retrieval.
 
@@ -306,9 +303,6 @@ agent_configs:
 
   - id: "title"
     model_name: "gpt-oss:latest"
-    model_settings:
-      extra_body:
-        think: false
 
 title_agent_config_id: "title"
 

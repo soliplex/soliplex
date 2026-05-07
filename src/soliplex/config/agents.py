@@ -13,7 +13,6 @@ from pydantic_ai import settings as ai_settings
 from pydantic_ai.agent import abstract as ai_ag_abstract
 from pydantic_ai.models import google as google_models
 from pydantic_ai.models import openai as openai_models
-from pydantic_ai.profiles import openai as openai_profiles
 from pydantic_ai.providers import google as google_providers
 from pydantic_ai.providers import ollama as ollama_providers
 from pydantic_ai.providers import openai as openai_providers
@@ -460,33 +459,6 @@ def get_model_settings_from_factory_config(
     return ai_settings.ModelSettings(**ms)
 
 
-def _resolve_thinking_profile(
-    provider: openai_providers.OpenAIProvider
-    | ollama_providers.OllamaProvider,
-    model_name: str,
-    thinking_field: str,
-) -> openai_profiles.OpenAIModelProfile:
-    """Build a model profile with thinking enabled.
-
-    Clones the provider's default profile for *model_name*
-    and overrides the thinking-related fields so that
-    pydantic-ai correctly parses the model's reasoning
-    output.
-
-    This lets any local model declare its thinking field
-    name via ``extra_config["thinking_field"]`` without
-    needing upstream pydantic-ai support.
-    """
-    base = provider.model_profile(model_name)
-    if base is None:
-        base = openai_profiles.OpenAIModelProfile()
-    return dataclasses.replace(
-        base,
-        supports_thinking=True,
-        openai_chat_thinking_field=thinking_field,
-    )
-
-
 def get_model_from_factory_config(
     agent_config: FactoryAgentConfig,
 ) -> ai_models.Model:
@@ -495,21 +467,12 @@ def get_model_from_factory_config(
     Uses ``extra_config`` keys ``provider_type``,
     ``model_name``, ``provider_base_url``, and
     ``provider_key`` to construct the model.
-
-    Optional ``extra_config`` keys:
-
-    * ``thinking_field`` — name of the JSON field the
-      model uses for chain-of-thought output (e.g.
-      ``"thinking"`` for Gemma 4).  When set, the
-      returned model's profile is patched to enable
-      thinking support so pydantic-ai can parse it.
     """
     ic = agent_config._installation_config
     extra = agent_config.extra_config
 
     provider_type = extra.get("provider_type", "ollama")
     model_name = extra.get("model_name", "gpt-oss:latest")
-    thinking_field = extra.get("thinking_field")
 
     if provider_type == "google":
         provider_kw: dict[str, str] = {}
@@ -535,16 +498,9 @@ def get_model_from_factory_config(
         }
         provider = ollama_providers.OllamaProvider(**ollama_kw)
 
-        profile = None
-        if thinking_field:
-            profile = _resolve_thinking_profile(
-                provider, model_name, thinking_field
-            )
-
         return openai_models.OpenAIChatModel(
             model_name=model_name,
             provider=provider,
-            profile=profile,
         )
 
     # openai
@@ -557,14 +513,7 @@ def get_model_from_factory_config(
         oai_kw["api_key"] = ic.get_secret(provider_key)
     provider = openai_providers.OpenAIProvider(**oai_kw)
 
-    profile = None
-    if thinking_field:
-        profile = _resolve_thinking_profile(
-            provider, model_name, thinking_field
-        )
-
     return openai_models.OpenAIChatModel(
         model_name=model_name,
         provider=provider,
-        profile=profile,
     )
