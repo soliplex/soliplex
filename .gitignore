@@ -1,5 +1,6 @@
 .env
 venv/
+.venv
 .python-version
 
 #Python

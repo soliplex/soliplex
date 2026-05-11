@@ -92,6 +92,7 @@ def clear_room_authz(
 
         before_entries = len(session.query(authz_schema.ACLEntry).all())
 
+        should_remove = 0
         if policy is not None:
             # for acl_entry in policy.acl_entries:
             #    session.delete(acl_entry)
