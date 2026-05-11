@@ -43,6 +43,7 @@ def version_callback(value: bool):
 
 @the_cli.callback()
 def app(
+    ctx: typer.Context,
     _version: bool = typer.Option(
         False,
         "-v",
@@ -52,6 +53,11 @@ def app(
     ),
 ):
     """soliplex CLI - RAG system"""
+    # Hidden audit aliases (check-config, list-secrets, ...) skip the
+    # audit group's _audit_callback, so ctx.obj would otherwise be None
+    # when those commands try to read ctx.obj["quiet"].
+    ctx.ensure_object(dict)
+    ctx.obj.setdefault("quiet", False)
 
 
 # Hidden backward-compatibility aliases

@@ -359,12 +359,17 @@ async def _async_count(rag):
 
 
 def _count_rag_documents(rag: hr_client.HaikuRAG):
+    """Return ``(display, error)`` for the RAG document count.
+
+    On success, ``error`` is ``None``. On failure, ``error`` carries the
+    exception message so the caller can record it in the audit report.
+    """
     try:
         count = asyncio.run(_async_count(rag))
     except Exception as exc:
-        return str(exc)
+        return f"ERROR: {exc}", str(exc)
 
-    return f"{count} documents"
+    return f"{count} documents", None
 
 
 def _invalid_rooms(the_installation: installation.Installation) -> dict:
@@ -504,13 +509,15 @@ def _audit_rooms_section(
                         config=cfg.haiku_rag_config,
                         read_only=True,
                     )
-                    count = _count_rag_documents(rag)
-                    if count == "error":
+                    count_display, count_error = _count_rag_documents(rag)
+                    if count_error is not None:
                         room_rag_errors = errors.setdefault(
                             "rag_count", {}
                         ).setdefault(room_config.id, {})
-                        room_rag_errors[source] = "count failed"
-                    tc_print(f"   - {source:20}: {str(db_path):30} {count}")
+                        room_rag_errors[source] = count_error
+                    tc_print(
+                        f"   - {source:20}: {str(db_path):30} {count_display}"
+                    )
                 tc_print()
         tc_line()
 

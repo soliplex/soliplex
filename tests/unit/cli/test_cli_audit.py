@@ -411,9 +411,9 @@ async def test__async_count(w_count):
 @pytest.mark.parametrize(
     "w_count, exp_result",
     [
-        (0, "0 documents"),
-        (5, "5 documents"),
-        (None, "boom"),
+        (0, ("0 documents", None)),
+        (5, ("5 documents", None)),
+        (None, ("ERROR: boom", "boom")),
     ],
 )
 def test__count_rag_documents(w_count, exp_result):
@@ -422,7 +422,7 @@ def test__count_rag_documents(w_count, exp_result):
 
     if w_count is None:
         rag_a.count_documents = mock.AsyncMock(
-            side_effect=RuntimeError(exp_result),
+            side_effect=RuntimeError("boom"),
         )
     else:
         rag_a.count_documents = mock.AsyncMock(return_value=w_count)
