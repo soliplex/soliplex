@@ -472,7 +472,6 @@ def _audit_rooms_section(
 
     # Deliberately bypass auth check done by 'get_room_configs' here.
     available_rooms = the_installation._config.room_configs
-    cwd = pathlib.Path.cwd()
 
     for room_config in available_rooms.values():
         tc_print(f"- [ {room_config.id} ] {room_config.name}: ")
@@ -503,7 +502,6 @@ def _audit_rooms_section(
                 if exc is not None:
                     tc_print(f"   - {source:20}: ERROR: {exc}")
                 else:
-                    db_path = cfg.rag_lancedb_path.relative_to(cwd)
                     rag = hr_client.HaikuRAG(
                         db_path=cfg.rag_lancedb_path,
                         config=cfg.haiku_rag_config,
@@ -516,7 +514,8 @@ def _audit_rooms_section(
                         ).setdefault(room_config.id, {})
                         room_rag_errors[source] = count_error
                     tc_print(
-                        f"   - {source:20}: {str(db_path):30} {count_display}"
+                        f"   - {source:20}: "
+                        f"{str(cfg.rag_lancedb_path):30} {count_display}"
                     )
                 tc_print()
         tc_line()
