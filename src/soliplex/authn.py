@@ -1,5 +1,6 @@
 """Soliplex authentication support"""
 
+import logging
 import typing
 
 import fastapi
@@ -9,6 +10,8 @@ from authlib.integrations import starlette_client
 from fastapi import security
 
 from soliplex import installation
+
+_logger = logging.getLogger(__name__)
 
 UserClaims = dict[str, typing.Any]
 
@@ -94,6 +97,27 @@ def authenticate(
                     )
                     if claims is not None:
                         return claims
+            else:
+                # Legacy bridge: token minted before S1 added
+                # _platform_id.  Validate with the most conservative
+                # TTL across all platforms so a legacy token cannot
+                # outlive the shortest configured TTL.  Remove this
+                # branch after the warning below goes silent for a
+                # full deploy cycle.
+                conservative_ttl = min(p.session_ttl for p in lti_platforms)
+                claims = lti_session.validate_session_token(
+                    secret_key,
+                    token,
+                    max_age=conservative_ttl,
+                )
+                if claims is not None:
+                    _logger.warning(
+                        "Accepted legacy LTI session token without "
+                        "_platform_id (sub=%r); re-launch will mint "
+                        "a current token.",
+                        claims.get("sub", "<unknown>"),
+                    )
+                    return claims
 
     raise fastapi.HTTPException(
         status_code=401,

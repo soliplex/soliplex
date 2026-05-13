@@ -263,10 +263,13 @@ def test_authenticate_lti_fallback_miss(vst, peek, vat, with_auth_systems):
 def test_authenticate_lti_unsigned_token_rejected(
     vst, peek, vat, with_auth_systems
 ):
-    """A token with a bad signature can't be peeked → 401 without
-    falling back to any platform's TTL."""
+    """A token with no _platform_id and a bad signature: the legacy
+    bridge tries validate with the most conservative TTL, and that
+    also returns None (because the signature is bad), so we still
+    raise 401."""
     vat.return_value = None
     peek.return_value = None
+    vst.return_value = None
 
     platform = _make_lti_platform()
     the_installation = mock.create_autospec(installation.Installation)
@@ -279,7 +282,111 @@ def test_authenticate_lti_unsigned_token_rejected(
         authn.authenticate(the_installation, "tok")
 
     assert exc.value.status_code == 401
-    vst.assert_not_called()
+    # Bridge attempted validation with the (only) platform's TTL.
+    vst.assert_called_once_with(LTI_SECRET, "tok", max_age=3600)
+
+
+@mock.patch("soliplex.authn.validate_access_token")
+@mock.patch("soliplex.lti.session.peek_platform_id")
+@mock.patch("soliplex.lti.session.validate_session_token")
+def test_authenticate_lti_legacy_token_accepted_with_min_ttl(
+    vst, peek, vat, with_auth_systems, caplog
+):
+    """A legacy token (no _platform_id) is bridged using the SHORTEST
+    registered platform's TTL, so it cannot outlive that bound (S1)."""
+    vat.return_value = None
+    peek.return_value = None
+    vst.return_value = {"sub": "legacy-user", "email": "u@x"}
+
+    short = config_lti.LTIPlatformConfig(
+        id="short-platform",
+        issuer="https://short.example.com",
+        client_id="tool-short",
+        auth_login_url="https://short.example.com/auth",
+        auth_token_url="https://short.example.com/token",
+        key_set_url="https://short.example.com/certs",
+        default_room_id="room-1",
+        session_ttl=300,
+    )
+    long = config_lti.LTIPlatformConfig(
+        id="long-platform",
+        issuer="https://long.example.com",
+        client_id="tool-long",
+        auth_login_url="https://long.example.com/auth",
+        auth_token_url="https://long.example.com/token",
+        key_set_url="https://long.example.com/certs",
+        default_room_id="room-1",
+        session_ttl=86400,
+    )
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.auth_disabled = False
+    the_installation.oidc_auth_system_configs = with_auth_systems
+    the_installation.lti_platform_configs = [short, long]
+    the_installation.get_secret.return_value = LTI_SECRET
+
+    with caplog.at_level("WARNING", logger="soliplex.authn"):
+        found = authn.authenticate(the_installation, "tok")
+
+    assert found == {"sub": "legacy-user", "email": "u@x"}
+    # The min-TTL across registered platforms — preserves S1.
+    vst.assert_called_once_with(LTI_SECRET, "tok", max_age=300)
+    # Operators can detect lingering legacy traffic.
+    assert any(
+        "legacy LTI session token" in rec.message
+        and "legacy-user" in rec.getMessage()
+        for rec in caplog.records
+    )
+
+
+@mock.patch("soliplex.authn.validate_access_token")
+@mock.patch("soliplex.lti.session.peek_platform_id")
+@mock.patch("soliplex.lti.session.validate_session_token")
+def test_authenticate_lti_legacy_token_expired_rejected(
+    vst, peek, vat, with_auth_systems, caplog
+):
+    """A legacy token that's older than the conservative TTL → 401,
+    no warning emitted."""
+    vat.return_value = None
+    peek.return_value = None
+    vst.return_value = None
+
+    short = config_lti.LTIPlatformConfig(
+        id="short-platform",
+        issuer="https://short.example.com",
+        client_id="tool-short",
+        auth_login_url="https://short.example.com/auth",
+        auth_token_url="https://short.example.com/token",
+        key_set_url="https://short.example.com/certs",
+        default_room_id="room-1",
+        session_ttl=300,
+    )
+    long = config_lti.LTIPlatformConfig(
+        id="long-platform",
+        issuer="https://long.example.com",
+        client_id="tool-long",
+        auth_login_url="https://long.example.com/auth",
+        auth_token_url="https://long.example.com/token",
+        key_set_url="https://long.example.com/certs",
+        default_room_id="room-1",
+        session_ttl=86400,
+    )
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.auth_disabled = False
+    the_installation.oidc_auth_system_configs = with_auth_systems
+    the_installation.lti_platform_configs = [short, long]
+    the_installation.get_secret.return_value = LTI_SECRET
+
+    with caplog.at_level("WARNING", logger="soliplex.authn"):
+        with pytest.raises(fastapi.HTTPException) as exc:
+            authn.authenticate(the_installation, "tok")
+
+    assert exc.value.status_code == 401
+    vst.assert_called_once_with(LTI_SECRET, "tok", max_age=300)
+    assert not any(
+        "legacy LTI session token" in rec.message for rec in caplog.records
+    )
 
 
 @mock.patch("soliplex.authn.validate_access_token")
