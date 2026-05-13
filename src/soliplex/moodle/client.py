@@ -70,6 +70,19 @@ def _parse_li_texts(col: str) -> list[str]:
     return [_HTML_TAG_RE.sub("", t).strip() for t in _LI_RE.findall(col)]
 
 
+def _warnings_message(warnings: list[dict]) -> str:
+    """Render a list of Moodle warning dicts as a single user-facing
+    error string.  Each entry has ``item``, ``warningcode``, and
+    ``message``; we surface the message so the LLM/user knows what
+    went wrong."""
+    parts = []
+    for w in warnings:
+        item = w.get("item", "")
+        msg = w.get("message", w.get("warningcode", "unknown error"))
+        parts.append(f"{item}: {msg}" if item else msg)
+    return "; ".join(parts) or "operation rejected"
+
+
 def _to_dict(raw, default=None):
     """Coerce an API response to a dict.
 
@@ -890,7 +903,14 @@ class MoodleClient:
     async def create_departments(
         self, departments: list[dict]
     ) -> tuple[list[CreatedEntity], list[dict]]:
-        """Create departments via ``tool_organisation_create_departments``."""
+        """Create departments via ``tool_organisation_create_departments``.
+
+        Moodle write endpoints can return HTTP 200 with an empty
+        ``result`` array and a populated ``warnings`` array when the
+        operation was rejected (e.g. parent not found).  Surface
+        those as ``MoodleAPIError`` so the tool wrapper's status
+        field reflects reality instead of confabulating success.
+        """
         params: dict[str, str | int] = {}
         for i, d in enumerate(departments):
             params[f"departments[{i}][name]"] = d["name"]
@@ -905,7 +925,14 @@ class MoodleClient:
         result = [
             CreatedEntity.model_validate(r) for r in raw.get("result", [])
         ]
-        return result, raw.get("warnings", [])
+        warnings = raw.get("warnings", [])
+        if not result and warnings:
+            raise MoodleAPIError(
+                message=_warnings_message(warnings),
+                errorcode=warnings[0].get("warningcode", ""),
+                exception="warnings_only",
+            )
+        return result, warnings
 
     async def update_departments(
         self, departments: list[dict]
@@ -925,7 +952,14 @@ class MoodleClient:
         result = [
             UpdatedEntity.model_validate(r) for r in raw.get("result", [])
         ]
-        return result, raw.get("warnings", [])
+        warnings = raw.get("warnings", [])
+        if not result and warnings:
+            raise MoodleAPIError(
+                message=_warnings_message(warnings),
+                errorcode=warnings[0].get("warningcode", ""),
+                exception="warnings_only",
+            )
+        return result, warnings
 
     async def delete_department(self, department_id: int) -> dict:
         """Delete a department via ``tool_organisation_department_delete``."""
@@ -977,7 +1011,14 @@ class MoodleClient:
         result = [
             CreatedEntity.model_validate(r) for r in raw.get("result", [])
         ]
-        return result, raw.get("warnings", [])
+        warnings = raw.get("warnings", [])
+        if not result and warnings:
+            raise MoodleAPIError(
+                message=_warnings_message(warnings),
+                errorcode=warnings[0].get("warningcode", ""),
+                exception="warnings_only",
+            )
+        return result, warnings
 
     async def update_positions(
         self, positions: list[dict]
@@ -1003,7 +1044,14 @@ class MoodleClient:
         result = [
             UpdatedEntity.model_validate(r) for r in raw.get("result", [])
         ]
-        return result, raw.get("warnings", [])
+        warnings = raw.get("warnings", [])
+        if not result and warnings:
+            raise MoodleAPIError(
+                message=_warnings_message(warnings),
+                errorcode=warnings[0].get("warningcode", ""),
+                exception="warnings_only",
+            )
+        return result, warnings
 
     async def delete_position(self, position_id: int) -> dict:
         """Delete a position via ``tool_organisation_position_delete``."""

@@ -24,20 +24,39 @@ from soliplex.moodle.client import MoodleClient
 
 
 def _moodle_tool(fn):
-    """Decorator that catches Moodle/HTTP errors and returns JSON.
+    """Decorator that catches Moodle/HTTP errors and adds status fields.
 
-    Wraps an async tool function so that any ``MoodleAPIError`` or
-    ``httpx.HTTPError`` raised during the call is serialized as a
-    JSON ``{"error": "..."}`` string. This collapses the boilerplate
-    try/except that would otherwise repeat at every tool function.
+    Wraps an async tool function so that:
+
+    * Any ``MoodleAPIError`` or ``httpx.HTTPError`` raised during the
+      call is serialized as ``{"status": "error", "error": "..."}``.
+    * When the wrapped tool was invoked with ``confirmed=True`` (i.e.
+      a real write op, not a preview), a ``"status": "ok"`` key is
+      injected into the returned JSON object so the LLM has an
+      unambiguous success marker.  Read tools and preview branches
+      are left untouched.
+
+    Tools that already emit an explicit ``status`` key (e.g. the
+    delete wrappers that surface a "not found" error) are passed
+    through verbatim.
     """
 
     @functools.wraps(fn)
     async def wrapper(*args, **kwargs):
         try:
-            return await fn(*args, **kwargs)
+            result = await fn(*args, **kwargs)
         except (MoodleAPIError, httpx.HTTPError) as exc:
-            return json.dumps({"error": str(exc)})
+            return json.dumps({"status": "error", "error": str(exc)})
+
+        if kwargs.get("confirmed") is True:
+            try:
+                payload = json.loads(result)
+            except (TypeError, ValueError):
+                return result
+            if isinstance(payload, dict) and "status" not in payload:
+                payload["status"] = "ok"
+                return json.dumps(payload)
+        return result
 
     return wrapper
 
@@ -210,10 +229,20 @@ question such as "Should I proceed?". Do NOT add \
 "according to the system" or "per the instructions" \
 narration.
 
-4. For confirmed-write success responses, output a single \
-short sentence stating what changed (e.g. "Security \
-department (id=6) created."). No preamble, no \
-"successfully completed the action of..." language."""
+4. For confirmed-write success responses (results containing \
+``"status": "ok"``), output a single short sentence stating \
+what changed (e.g. "Security department created."). No \
+preamble, no "successfully completed the action of..." \
+language.  Use only fields that appear in the tool result; \
+do not invent IDs or other identifiers.
+
+5. Result-status check (applies to write tools only).  If a \
+tool result contains ``"status": "error"``, report the failure \
+to the user.  Include the error message from the result so \
+the user knows what went wrong.  NEVER claim a write \
+operation succeeded, and NEVER invent IDs, unless the result \
+contains ``"status": "ok"`` (see rule 4).  Read tools do not \
+emit a status field and are unaffected by this rule."""
 
 _COURSES_PROMPT = (
     """\
@@ -1655,16 +1684,22 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         Args:
             search: Optional search string (default "" = all).
         """
-        depts = await client.get_departments(search)
+        filtered = await client.get_departments(search)
+        # Resolve parent idnumbers from the FULL list so children
+        # outside the search filter still report their parent
+        # correctly.
+        all_depts = (
+            filtered if not search else await client.get_departments("")
+        )
+        id_to_idnumber = {d.id: d.idnumber for d in all_depts}
         return json.dumps(
             [
                 {
-                    "id": d.id,
                     "name": d.name,
-                    "parentid": d.parentid,
                     "idnumber": d.idnumber,
+                    "parent": id_to_idnumber.get(d.parentid, ""),
                 }
-                for d in depts
+                for d in filtered
             ]
         )
 
@@ -1675,16 +1710,22 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         Args:
             search: Optional search string (default "" = all).
         """
-        positions = await client.get_positions(search)
+        filtered = await client.get_positions(search)
+        # Resolve parent idnumbers from the FULL list so children
+        # outside the search filter still report their parent
+        # correctly.
+        all_positions = (
+            filtered if not search else await client.get_positions("")
+        )
+        id_to_idnumber = {p.id: p.idnumber for p in all_positions}
         return json.dumps(
             [
                 {
-                    "id": p.id,
                     "name": p.name,
-                    "parentid": p.parentid,
                     "idnumber": p.idnumber,
+                    "parent": id_to_idnumber.get(p.parentid, ""),
                 }
-                for p in positions
+                for p in filtered
             ]
         )
 
@@ -1803,8 +1844,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         return json.dumps(
             {
                 "created": [
-                    {"id": c.id, "name": c.name, "idnumber": c.idnumber}
-                    for c in created
+                    {"name": c.name, "idnumber": c.idnumber} for c in created
                 ],
                 "warnings": warnings,
             }
@@ -1844,16 +1884,14 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         updated, warnings = await client.update_departments([dept])
         return json.dumps(
             {
-                "updated": [
-                    {"id": u.id, "idnumber": u.idnumber} for u in updated
-                ],
+                "updated": [{"idnumber": u.idnumber} for u in updated],
                 "warnings": warnings,
             }
         )
 
     @_moodle_tool
     async def delete_department(
-        department_id: int,
+        idnumber: str,
         confirmed: bool = False,
     ) -> str:
         """Delete a department. REQUIRES USER CONFIRMATION.
@@ -1861,15 +1899,22 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         The department must not have any jobs in its hierarchy.
 
         Args:
-            department_id: Moodle internal department ID.
+            idnumber: Department idnumber.
             confirmed: Set True only after user approval.
         """
         if not confirmed:
+            return json.dumps({"preview": f"Delete department '{idnumber}'"})
+        depts = await client.get_departments(idnumber)
+        match = next((d for d in depts if d.idnumber == idnumber), None)
+        if match is None:
             return json.dumps(
-                {"preview": f"Delete department id={department_id}"}
+                {
+                    "status": "error",
+                    "error": (f"No department with idnumber {idnumber!r}"),
+                }
             )
-        result = await client.delete_department(department_id)
-        return json.dumps(result)
+        result = await client.delete_department(match.id)
+        return json.dumps({"status": "ok", "result": result})
 
     @_moodle_tool
     async def create_position(
@@ -1914,8 +1959,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         return json.dumps(
             {
                 "created": [
-                    {"id": c.id, "name": c.name, "idnumber": c.idnumber}
-                    for c in created
+                    {"name": c.name, "idnumber": c.idnumber} for c in created
                 ],
                 "warnings": warnings,
             }
@@ -1963,16 +2007,14 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         updated, warnings = await client.update_positions([pos])
         return json.dumps(
             {
-                "updated": [
-                    {"id": u.id, "idnumber": u.idnumber} for u in updated
-                ],
+                "updated": [{"idnumber": u.idnumber} for u in updated],
                 "warnings": warnings,
             }
         )
 
     @_moodle_tool
     async def delete_position(
-        position_id: int,
+        idnumber: str,
         confirmed: bool = False,
     ) -> str:
         """Delete a position. REQUIRES USER CONFIRMATION.
@@ -1980,13 +2022,22 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         The position must not have any jobs assigned.
 
         Args:
-            position_id: Moodle internal position ID.
+            idnumber: Position idnumber.
             confirmed: Set True only after user approval.
         """
         if not confirmed:
-            return json.dumps({"preview": f"Delete position id={position_id}"})
-        result = await client.delete_position(position_id)
-        return json.dumps(result)
+            return json.dumps({"preview": f"Delete position '{idnumber}'"})
+        positions = await client.get_positions(idnumber)
+        match = next((p for p in positions if p.idnumber == idnumber), None)
+        if match is None:
+            return json.dumps(
+                {
+                    "status": "error",
+                    "error": (f"No position with idnumber {idnumber!r}"),
+                }
+            )
+        result = await client.delete_position(match.id)
+        return json.dumps({"status": "ok", "result": result})
 
     @_moodle_tool
     async def assign_job(

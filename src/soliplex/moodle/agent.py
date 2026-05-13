@@ -119,9 +119,9 @@ delete_department, certify_user, archive_program, etc.)
 request="Call create_department with name='Security', \
 idnumber='SEC', parent='', description='', \
 confirmed=True")
-   Example after a delete-department preview for ID 6:
+   Example after a delete-department preview for SEC:
       execute_skill(skill_name="moodle-organisation", \
-request="Call delete_department with departmentid=6, \
+request="Call delete_department with idnumber='SEC', \
 confirmed=True")
    Example after a duplicate_program preview for ID 2:
       execute_skill(skill_name="moodle-programs", \
@@ -134,6 +134,25 @@ CRITICAL: NEVER forward a bare "yes" / "go ahead" / \
 "confirm" to a skill. The skill's subagent has no idea \
 what was previewed. You MUST reconstruct the full tool \
 call from the preview JSON in your conversation history.
+
+## Reporting results to the user
+
+After a confirmed write, the skill returns JSON.  The result \
+status is unambiguous and you MUST honour it:
+
+- ``"status": "ok"`` — the write succeeded.  Report it in one \
+short sentence using ONLY values that appear in the result.  \
+Do NOT invent IDs or names.
+- ``"status": "error"`` — the write FAILED.  Surface the \
+failure to the user, including the error message.  NEVER \
+claim success.  NEVER fabricate IDs.
+- No status field — the result is from a read tool or a \
+preview.  Render it as a table or as a confirmation request.
+
+Even a bare ``execute_skill`` result with no recognisable \
+content does NOT mean "succeeded" — if you don't see \
+``"status": "ok"`` in the skill output, the write did not \
+happen.
 
 Present data in clear tables when appropriate.
 """

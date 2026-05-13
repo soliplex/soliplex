@@ -2410,13 +2410,69 @@ async def test_list_departments_tool():
     fn = _get_tool_fn(skills, "list_departments")
 
     resp = _mock_response(
-        {"departments": [{"id": 1, "name": "Engineering"}], "positions": []}
+        {
+            "departments": [
+                {
+                    "id": 1,
+                    "name": "Engineering",
+                    "idnumber": "ENG",
+                    "parentid": 0,
+                }
+            ],
+            "positions": [],
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
 
     assert len(result) == 1
     assert result[0]["name"] == "Engineering"
+    assert result[0]["idnumber"] == "ENG"
+    assert result[0]["parent"] == ""
+    # Integer IDs must not leak — the LLM should never see them.
+    assert "id" not in result[0]
+    assert "parentid" not in result[0]
+
+
+@pytest.mark.asyncio
+async def test_list_departments_tool_resolves_parent_idnumber_under_search():
+    """The parent idnumber lookup uses the FULL department list,
+    not the search-filtered one, so a sub-department reports its
+    parent correctly even when the parent itself doesn't match the
+    search filter."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_departments")
+
+    # Both http calls (search-filtered + unfiltered) return the same
+    # mock; the wrapper applies its own client-side search filter on
+    # top via get_departments.  That filter is substring of `name`.
+    resp = _mock_response(
+        {
+            "departments": [
+                {
+                    "id": 1,
+                    "name": "Engineering",
+                    "idnumber": "ENG",
+                    "parentid": 0,
+                },
+                {
+                    "id": 2,
+                    "name": "Engineering Operations",
+                    "idnumber": "ENGOPS",
+                    "parentid": 1,
+                },
+            ],
+            "positions": [],
+        }
+    )
+    with _patch_httpx(resp):
+        # Search for "Operations" → only the child matches, but the
+        # parent must still be resolved to "ENG".
+        result = json.loads(await fn(search="Operations"))
+
+    assert len(result) == 1
+    assert result[0]["idnumber"] == "ENGOPS"
+    assert result[0]["parent"] == "ENG"
 
 
 @pytest.mark.asyncio
@@ -2443,13 +2499,27 @@ async def test_list_positions_tool():
     fn = _get_tool_fn(skills, "list_positions")
 
     resp = _mock_response(
-        {"departments": [], "positions": [{"id": 1, "name": "Manager"}]}
+        {
+            "departments": [],
+            "positions": [
+                {
+                    "id": 1,
+                    "name": "Manager",
+                    "idnumber": "MGR",
+                    "parentid": 0,
+                }
+            ],
+        }
     )
     with _patch_httpx(resp):
         result = json.loads(await fn())
 
     assert len(result) == 1
     assert result[0]["name"] == "Manager"
+    assert result[0]["idnumber"] == "MGR"
+    assert result[0]["parent"] == ""
+    assert "id" not in result[0]
+    assert "parentid" not in result[0]
 
 
 @pytest.mark.asyncio
@@ -3343,6 +3413,77 @@ async def test_create_department_tool_error():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tool_name,kwargs,response_key",
+    [
+        (
+            "create_department",
+            {"name": "X", "parent": "BAD", "confirmed": True},
+            "departments",
+        ),
+        (
+            "update_department",
+            {"idnumber": "X", "parent": "BAD", "confirmed": True},
+            "departments",
+        ),
+        (
+            "create_position",
+            {"name": "X", "parent": "BAD", "confirmed": True},
+            "positions",
+        ),
+        (
+            "update_position",
+            {"idnumber": "X", "parent": "BAD", "confirmed": True},
+            "positions",
+        ),
+    ],
+)
+async def test_org_write_tool_surfaces_warnings_as_error(
+    tool_name, kwargs, response_key
+):
+    """Moodle write endpoints can return HTTP 200 with empty
+    result + populated warnings (e.g. ``errorparentnotfound``).
+    The client raises MoodleAPIError so the wrapper's status
+    field reflects the failure instead of confabulating success."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, tool_name)
+
+    resp = _mock_response(
+        {
+            "result": [],
+            "warnings": [
+                {
+                    "item": "X",
+                    "warningcode": "errorparentnotfound",
+                    "message": "Parent not found",
+                }
+            ],
+        }
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(**kwargs))
+
+    assert result["status"] == "error"
+    assert "Parent not found" in result["error"]
+
+
+def test_warnings_message_renders_items_and_falls_back_on_empty():
+    from soliplex.moodle.client import _warnings_message
+
+    assert _warnings_message([]) == "operation rejected"
+    assert (
+        _warnings_message([{"item": "X", "message": "Parent not found"}])
+        == "X: Parent not found"
+    )
+    # Missing 'item' → no prefix.
+    assert _warnings_message([{"message": "bare msg"}]) == "bare msg"
+    # Missing 'message' → fall back to warningcode → fall back to
+    # "unknown error".
+    assert _warnings_message([{"warningcode": "code1"}]) == "code1"
+    assert _warnings_message([{}]) == "unknown error"
+
+
+@pytest.mark.asyncio
 async def test_update_department_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "update_department")
@@ -3406,7 +3547,7 @@ async def test_delete_department_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_department")
 
-    result = json.loads(await fn(department_id=10))
+    result = json.loads(await fn(idnumber="ENG"))
 
     assert "preview" in result
 
@@ -3416,11 +3557,30 @@ async def test_delete_department_tool_confirmed():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_department")
 
-    resp = _mock_response(None)
+    # Both http calls (get_departments lookup + delete_department) hit
+    # the same mock response.  The lookup parses .departments; the
+    # delete API takes whatever and is coerced to {"result": True} by
+    # `_to_dict`.
+    resp = _mock_response(
+        {"departments": [{"id": 1, "idnumber": "ENG", "name": "Eng"}]}
+    )
     with _patch_httpx(resp):
-        result = json.loads(await fn(department_id=10, confirmed=True))
+        result = json.loads(await fn(idnumber="ENG", confirmed=True))
 
-    assert result == {"result": True}
+    assert result["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_delete_department_tool_not_found():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_department")
+
+    resp = _mock_response({"departments": []})
+    with _patch_httpx(resp):
+        result = json.loads(await fn(idnumber="MISSING", confirmed=True))
+
+    assert result["status"] == "error"
+    assert "MISSING" in result["error"]
 
 
 @pytest.mark.asyncio
@@ -3436,8 +3596,9 @@ async def test_delete_department_tool_error():
         }
     )
     with _patch_httpx(resp):
-        result = json.loads(await fn(department_id=10, confirmed=True))
+        result = json.loads(await fn(idnumber="ENG", confirmed=True))
 
+    assert result["status"] == "error"
     assert "error" in result
 
 
@@ -3612,9 +3773,22 @@ async def test_delete_position_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_position")
 
-    result = json.loads(await fn(position_id=5))
+    result = json.loads(await fn(idnumber="ENG"))
 
     assert "preview" in result
+
+
+@pytest.mark.asyncio
+async def test_delete_position_tool_not_found():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_position")
+
+    resp = _mock_response({"positions": []})
+    with _patch_httpx(resp):
+        result = json.loads(await fn(idnumber="MISSING", confirmed=True))
+
+    assert result["status"] == "error"
+    assert "MISSING" in result["error"]
 
 
 @pytest.mark.asyncio
@@ -3622,11 +3796,13 @@ async def test_delete_position_tool_confirmed():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_position")
 
-    resp = _mock_response(None)
+    resp = _mock_response(
+        {"positions": [{"id": 5, "idnumber": "ENG", "name": "Eng"}]}
+    )
     with _patch_httpx(resp):
-        result = json.loads(await fn(position_id=5, confirmed=True))
+        result = json.loads(await fn(idnumber="ENG", confirmed=True))
 
-    assert result == {"result": True}
+    assert result["status"] == "ok"
 
 
 @pytest.mark.asyncio
@@ -3642,8 +3818,9 @@ async def test_delete_position_tool_error():
         }
     )
     with _patch_httpx(resp):
-        result = json.loads(await fn(position_id=5, confirmed=True))
+        result = json.loads(await fn(idnumber="ENG", confirmed=True))
 
+    assert result["status"] == "error"
     assert "error" in result
 
 
@@ -3666,7 +3843,7 @@ async def test_delete_job_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(await fn(job_id=42, confirmed=True))
 
-    assert result == {"result": True}
+    assert result == {"status": "ok", "result": True}
 
 
 @pytest.mark.asyncio
@@ -3781,7 +3958,7 @@ async def test_archive_program_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(await fn(program_id=7, confirmed=True))
 
-    assert result == {"result": True}
+    assert result == {"status": "ok", "result": True}
 
 
 @pytest.mark.asyncio
@@ -3822,7 +3999,7 @@ async def test_restore_program_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(await fn(program_id=7, confirmed=True))
 
-    assert result == {"result": True}
+    assert result == {"status": "ok", "result": True}
 
 
 @pytest.mark.asyncio
@@ -3863,7 +4040,7 @@ async def test_delete_program_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(await fn(program_id=7, confirmed=True))
 
-    assert result == {"result": True}
+    assert result == {"status": "ok", "result": True}
 
 
 @pytest.mark.asyncio
@@ -3959,7 +4136,7 @@ async def test_update_program_visibility_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(await fn(program_id=7, visible=1, confirmed=True))
 
-    assert result == {"result": True}
+    assert result == {"status": "ok", "result": True}
 
 
 @pytest.mark.asyncio
@@ -4104,7 +4281,7 @@ async def test_delete_certification_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(await fn(certification_id=3, confirmed=True))
 
-    assert result == {"result": True}
+    assert result == {"status": "ok", "result": True}
 
 
 @pytest.mark.asyncio
@@ -4145,7 +4322,7 @@ async def test_restore_certification_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(await fn(certification_id=3, confirmed=True))
 
-    assert result == {"result": True}
+    assert result == {"status": "ok", "result": True}
 
 
 @pytest.mark.asyncio
@@ -4877,7 +5054,7 @@ async def test_enable_rule_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(await fn(rule_id=5, confirmed=True))
 
-    assert result == {"result": True}
+    assert result == {"status": "ok", "result": True}
 
 
 @pytest.mark.asyncio
@@ -4918,7 +5095,7 @@ async def test_disable_rule_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(await fn(rule_id=5, confirmed=True))
 
-    assert result == {"result": True}
+    assert result == {"status": "ok", "result": True}
 
 
 @pytest.mark.asyncio
@@ -4959,7 +5136,7 @@ async def test_archive_rule_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(await fn(rule_id=5, confirmed=True))
 
-    assert result == {"result": True}
+    assert result == {"status": "ok", "result": True}
 
 
 @pytest.mark.asyncio
@@ -5000,7 +5177,7 @@ async def test_unarchive_rule_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(await fn(rule_id=5, confirmed=True))
 
-    assert result == {"result": True}
+    assert result == {"status": "ok", "result": True}
 
 
 @pytest.mark.asyncio
@@ -5041,7 +5218,7 @@ async def test_delete_rule_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(await fn(rule_id=5, confirmed=True))
 
-    assert result == {"result": True}
+    assert result == {"status": "ok", "result": True}
 
 
 @pytest.mark.asyncio
@@ -5082,7 +5259,7 @@ async def test_duplicate_rule_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(await fn(rule_id=5, confirmed=True))
 
-    assert result == {"result": True}
+    assert result == {"status": "ok", "result": True}
 
 
 @pytest.mark.asyncio
@@ -5123,7 +5300,7 @@ async def test_delete_rule_condition_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(await fn(instanceid=10, confirmed=True))
 
-    assert result == {"result": True}
+    assert result == {"status": "ok", "result": True}
 
 
 @pytest.mark.asyncio
@@ -5164,7 +5341,7 @@ async def test_delete_rule_outcome_tool_confirmed():
     with _patch_httpx(resp):
         result = json.loads(await fn(instanceid=10, confirmed=True))
 
-    assert result == {"result": True}
+    assert result == {"status": "ok", "result": True}
 
 
 @pytest.mark.asyncio
@@ -6111,3 +6288,87 @@ async def test_delete_import_tool_error():
         result = json.loads(await fn(import_id=1, confirmed=True))
 
     assert "error" in result
+
+
+def test_confirm_instructions_includes_status_rule():
+    """The shared _CONFIRM_INSTRUCTIONS prompt teaches every skill
+    agent to (a) emit success only when the result has
+    ``"status": "ok"`` and (b) report failures when the result has
+    ``"status": "error"`` — without inventing IDs."""
+    from soliplex.moodle import skills as moodle_skills
+
+    text = moodle_skills._CONFIRM_INSTRUCTIONS
+
+    assert '"status": "ok"' in text
+    assert '"status": "error"' in text
+    assert "NEVER claim a write operation succeeded" in text
+    assert "NEVER invent IDs" in text
+
+
+@pytest.mark.asyncio
+async def test_moodle_tool_injects_status_ok_on_confirmed_write():
+    """The decorator auto-injects status:ok into confirmed-write
+    JSON returns so the LLM has an unambiguous success marker."""
+    from soliplex.moodle import skills as moodle_skills
+
+    @moodle_skills._moodle_tool
+    async def fake_write(confirmed: bool = False) -> str:
+        return json.dumps({"created": [{"name": "X"}]})
+
+    result = json.loads(await fake_write(confirmed=True))
+    assert result["status"] == "ok"
+    assert result["created"] == [{"name": "X"}]
+
+
+@pytest.mark.asyncio
+async def test_moodle_tool_does_not_inject_status_on_preview():
+    """Preview branches must not get status:ok."""
+    from soliplex.moodle import skills as moodle_skills
+
+    @moodle_skills._moodle_tool
+    async def fake_write(confirmed: bool = False) -> str:
+        return json.dumps({"preview": "test"})
+
+    result = json.loads(await fake_write(confirmed=False))
+    assert "status" not in result
+
+
+@pytest.mark.asyncio
+async def test_moodle_tool_does_not_inject_status_on_read_tool():
+    """Read tools (no `confirmed` argument) must not get status:ok."""
+    from soliplex.moodle import skills as moodle_skills
+
+    @moodle_skills._moodle_tool
+    async def fake_read() -> str:
+        return json.dumps([{"name": "X"}])
+
+    result = json.loads(await fake_read())
+    assert result == [{"name": "X"}]
+
+
+@pytest.mark.asyncio
+async def test_moodle_tool_preserves_explicit_status():
+    """Tools that already emit a status field are passed through."""
+    from soliplex.moodle import skills as moodle_skills
+
+    @moodle_skills._moodle_tool
+    async def fake_write(confirmed: bool = False) -> str:
+        return json.dumps({"status": "error", "error": "not found"})
+
+    result = json.loads(await fake_write(confirmed=True))
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_moodle_tool_passes_through_non_json_result():
+    """A tool that returns a non-JSON value on a confirmed write is
+    passed through verbatim — the decorator only injects status
+    into JSON objects."""
+    from soliplex.moodle import skills as moodle_skills
+
+    @moodle_skills._moodle_tool
+    async def fake_write(confirmed: bool = False):
+        return None  # not a JSON string
+
+    result = await fake_write(confirmed=True)
+    assert result is None
