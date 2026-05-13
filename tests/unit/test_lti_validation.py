@@ -21,27 +21,39 @@ BASE_PAYLOAD = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _reset_jwks_cache():
+    """Module-level JWKS-client cache must not leak between tests."""
+    lti_validation._jwks_clients.clear()
+    lti_validation._jwks_lock = None
+    yield
+    lti_validation._jwks_clients.clear()
+    lti_validation._jwks_lock = None
+
+
 @pytest.fixture
 def mock_jwks_client():
+    """A PyJWKClient stand-in pre-installed in the module cache."""
     client = mock.create_autospec(jwt.PyJWKClient)
     key = mock.Mock()
     key.key = "fake-signing-key"
     client.get_signing_key_from_jwt.return_value = key
+    lti_validation._jwks_clients[KEY_SET_URL] = client
     return client
 
 
 class TestValidateIdToken:
-    def test_valid_token(self, mock_jwks_client):
+    @pytest.mark.anyio
+    async def test_valid_token(self, mock_jwks_client):
         with mock.patch("jwt.decode") as jwtd:
             jwtd.return_value = dict(BASE_PAYLOAD)
 
-            found = lti_validation.validate_id_token(
+            found = await lti_validation.validate_id_token(
                 "fake-token",
                 key_set_url=KEY_SET_URL,
                 issuer=ISSUER,
                 client_id=CLIENT_ID,
                 expected_nonce=NONCE,
-                jwks_client=mock_jwks_client,
             )
 
         assert found["sub"] == "user-123"
@@ -61,21 +73,22 @@ class TestValidateIdToken:
             leeway=30,
         )
 
-    def test_expired_token(self, mock_jwks_client):
+    @pytest.mark.anyio
+    async def test_expired_token(self, mock_jwks_client):
         with mock.patch("jwt.decode") as jwtd:
             jwtd.side_effect = jwt.ExpiredSignatureError
 
             with pytest.raises(lti_validation.LTITokenExpired):
-                lti_validation.validate_id_token(
+                await lti_validation.validate_id_token(
                     "fake-token",
                     key_set_url=KEY_SET_URL,
                     issuer=ISSUER,
                     client_id=CLIENT_ID,
                     expected_nonce=NONCE,
-                    jwks_client=mock_jwks_client,
                 )
 
-    def test_invalid_token(self, mock_jwks_client):
+    @pytest.mark.anyio
+    async def test_invalid_token(self, mock_jwks_client):
         with mock.patch("jwt.decode") as jwtd:
             jwtd.side_effect = jwt.InvalidTokenError("bad")
 
@@ -83,48 +96,48 @@ class TestValidateIdToken:
                 lti_validation.LTIValidationError,
                 match="bad",
             ):
-                lti_validation.validate_id_token(
+                await lti_validation.validate_id_token(
                     "fake-token",
                     key_set_url=KEY_SET_URL,
                     issuer=ISSUER,
                     client_id=CLIENT_ID,
                     expected_nonce=NONCE,
-                    jwks_client=mock_jwks_client,
                 )
 
-    def test_bad_nonce(self, mock_jwks_client):
+    @pytest.mark.anyio
+    async def test_bad_nonce(self, mock_jwks_client):
         with mock.patch("jwt.decode") as jwtd:
             payload = dict(BASE_PAYLOAD)
             payload["nonce"] = "wrong-nonce"
             jwtd.return_value = payload
 
             with pytest.raises(lti_validation.LTIInvalidNonce):
-                lti_validation.validate_id_token(
+                await lti_validation.validate_id_token(
                     "fake-token",
                     key_set_url=KEY_SET_URL,
                     issuer=ISSUER,
                     client_id=CLIENT_ID,
                     expected_nonce=NONCE,
-                    jwks_client=mock_jwks_client,
                 )
 
-    def test_bad_version(self, mock_jwks_client):
+    @pytest.mark.anyio
+    async def test_bad_version(self, mock_jwks_client):
         with mock.patch("jwt.decode") as jwtd:
             payload = dict(BASE_PAYLOAD)
             payload[lti_validation.LTI_CLAIM_VERSION] = "2.0"
             jwtd.return_value = payload
 
             with pytest.raises(lti_validation.LTIInvalidVersion):
-                lti_validation.validate_id_token(
+                await lti_validation.validate_id_token(
                     "fake-token",
                     key_set_url=KEY_SET_URL,
                     issuer=ISSUER,
                     client_id=CLIENT_ID,
                     expected_nonce=NONCE,
-                    jwks_client=mock_jwks_client,
                 )
 
-    def test_bad_message_type(self, mock_jwks_client):
+    @pytest.mark.anyio
+    async def test_bad_message_type(self, mock_jwks_client):
         with mock.patch("jwt.decode") as jwtd:
             payload = dict(BASE_PAYLOAD)
             payload[lti_validation.LTI_CLAIM_MESSAGE_TYPE] = (
@@ -133,27 +146,92 @@ class TestValidateIdToken:
             jwtd.return_value = payload
 
             with pytest.raises(lti_validation.LTIInvalidMessageType):
-                lti_validation.validate_id_token(
+                await lti_validation.validate_id_token(
                     "fake-token",
                     key_set_url=KEY_SET_URL,
                     issuer=ISSUER,
                     client_id=CLIENT_ID,
                     expected_nonce=NONCE,
-                    jwks_client=mock_jwks_client,
                 )
 
-    def test_no_jwks_client_fetches(self):
-        """When jwks_client is None, _fetch_jwks is called"""
-        with (
-            mock.patch("soliplex.lti.validation._fetch_jwks") as fetch,
-            mock.patch("jwt.decode") as jwtd,
-        ):
-            key = mock.Mock()
-            key.key = "key"
-            fetch.return_value.get_signing_key_from_jwt.return_value = key
-            jwtd.return_value = dict(BASE_PAYLOAD)
 
-            lti_validation.validate_id_token(
+class TestJwksClientCache:
+    @pytest.mark.anyio
+    async def test_first_call_creates_and_caches(self):
+        with mock.patch("soliplex.lti.validation.jwt.PyJWKClient") as klass:
+            client = await lti_validation._get_jwks_client(KEY_SET_URL)
+
+        klass.assert_called_once_with(KEY_SET_URL, cache_keys=True)
+        assert client is klass.return_value
+        assert lti_validation._jwks_clients[KEY_SET_URL] is client
+
+    @pytest.mark.anyio
+    async def test_subsequent_call_reuses_cached_client(self):
+        with mock.patch("soliplex.lti.validation.jwt.PyJWKClient") as klass:
+            first = await lti_validation._get_jwks_client(KEY_SET_URL)
+            second = await lti_validation._get_jwks_client(KEY_SET_URL)
+
+        klass.assert_called_once()
+        assert first is second
+
+    @pytest.mark.anyio
+    async def test_distinct_urls_get_distinct_clients(self):
+        url_b = "https://other.example.com/mod/lti/certs.php"
+        with mock.patch("soliplex.lti.validation.jwt.PyJWKClient") as klass:
+            klass.side_effect = ["client-a", "client-b"]
+            a = await lti_validation._get_jwks_client(KEY_SET_URL)
+            b = await lti_validation._get_jwks_client(url_b)
+
+        assert a == "client-a"
+        assert b == "client-b"
+        assert klass.call_count == 2
+
+    @pytest.mark.anyio
+    async def test_double_checked_locking_avoids_duplicate_construction(self):
+        """Simulate the race where a second coroutine wins the cache-miss
+        check, then waits on the lock, then finds the key already present."""
+
+        class _PrePopulatingLock:
+            """anyio.Lock stand-in that inserts the entry on acquire."""
+
+            def __init__(self, prebuilt):
+                self._prebuilt = prebuilt
+
+            async def __aenter__(self):
+                lti_validation._jwks_clients[KEY_SET_URL] = self._prebuilt
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+        prebuilt = mock.Mock(name="prebuilt-client")
+        lti_validation._jwks_lock = _PrePopulatingLock(prebuilt)
+
+        with mock.patch("soliplex.lti.validation.jwt.PyJWKClient") as klass:
+            result = await lti_validation._get_jwks_client(KEY_SET_URL)
+
+        assert result is prebuilt
+        klass.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_validate_does_not_stall_event_loop(self, mock_jwks_client):
+        """The blocking JWKS lookup is offloaded via anyio.to_thread."""
+        with (
+            mock.patch("jwt.decode") as jwtd,
+            mock.patch(
+                "soliplex.lti.validation.anyio.to_thread.run_sync"
+            ) as run_sync,
+        ):
+            jwtd.return_value = dict(BASE_PAYLOAD)
+            key = mock.Mock(key="k")
+
+            async def _passthrough(fn, *args):
+                return fn(*args)
+
+            run_sync.side_effect = _passthrough
+            mock_jwks_client.get_signing_key_from_jwt.return_value = key
+
+            await lti_validation.validate_id_token(
                 "fake-token",
                 key_set_url=KEY_SET_URL,
                 issuer=ISSUER,
@@ -161,11 +239,6 @@ class TestValidateIdToken:
                 expected_nonce=NONCE,
             )
 
-            fetch.assert_called_once_with(KEY_SET_URL)
-
-
-def test_fetch_jwks():
-    with mock.patch("soliplex.lti.validation.jwt.PyJWKClient") as mock_cls:
-        client = lti_validation._fetch_jwks(KEY_SET_URL)
-        mock_cls.assert_called_once_with(KEY_SET_URL, cache_keys=True)
-        assert client is mock_cls.return_value
+            run_sync.assert_called_once_with(
+                mock_jwks_client.get_signing_key_from_jwt, "fake-token"
+            )

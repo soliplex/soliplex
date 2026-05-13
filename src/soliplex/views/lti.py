@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import urllib.parse
 
 import fastapi
@@ -17,6 +18,17 @@ from soliplex.lti import validation as lti_validation
 router = fastapi.APIRouter(prefix="/lti", tags=["lti"])
 
 depend_the_installation = installation.depend_the_installation
+
+
+def _embed_safe_json(payload: dict) -> str:
+    """Serialise *payload* for safe embedding in an HTML <script> tag.
+
+    The ``</`` -> ``<\\/`` rewrite prevents a ``</script>`` substring
+    from ever appearing inside the JSON block and terminating the
+    enclosing tag prematurely. JSON consumers ignore the backslash
+    inside string literals, so the parsed value is unchanged.
+    """
+    return json.dumps(payload).replace("</", "<\\/")
 
 
 # ----------------------------------------------------------------
@@ -153,6 +165,12 @@ async def lti_launch(
 
     nonce, platform_id = decoded
 
+    if not lti_nonce.consume_nonce(nonce):
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail=loggers.LTI_NONCE_REPLAY,
+        )
+
     lti_platforms = the_installation.lti_platform_configs
     platform = lti_platform.find_platform_by_id(lti_platforms, platform_id)
 
@@ -163,7 +181,7 @@ async def lti_launch(
         )
 
     try:
-        payload = lti_validation.validate_id_token(
+        payload = await lti_validation.validate_id_token(
             id_token,
             key_set_url=platform.key_set_url,
             issuer=platform.issuer,
@@ -204,27 +222,47 @@ async def lti_launch(
         secret_key,
         user_claims,
         "" if show_picker else room_id,
+        platform.id,
     )
 
     base_url = str(request.base_url).rstrip("/")
     if show_picker:
-        html = _PICKER_CHAT_PAGE.format(
-            session_token=session_token,
-            base_url=base_url,
-            default_room_id=room_id,
+        config_json = _embed_safe_json(
+            {
+                "token": session_token,
+                "base": base_url,
+                "default_room": room_id,
+            }
         )
+        html = _PICKER_CHAT_PAGE.format(config_json=config_json)
     else:
-        html = _CHAT_PAGE.format(
-            room_id=room_id,
-            session_token=session_token,
-            base_url=base_url,
+        config_json = _embed_safe_json(
+            {
+                "room": room_id,
+                "token": session_token,
+                "base": base_url,
+            }
         )
+        html = _CHAT_PAGE.format(config_json=config_json)
 
+    # CSP: defence-in-depth around the iframe-embedded chat page.
+    # 'unsafe-inline' is required today because all <script>/<style>
+    # blocks are inline; a follow-up could introduce per-request CSP
+    # nonces to drop that. cdn.jsdelivr.net is allowed for marked.js
+    # only, and the script tag carries an SRI hash (see _MARKED_CDN).
+    csp = "; ".join(
+        [
+            "default-src 'self'",
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+            "style-src 'self' 'unsafe-inline'",
+            "connect-src 'self'",
+            "img-src 'self' data:",
+            f"frame-ancestors {platform.issuer}",
+        ]
+    )
     return fastapi_responses.HTMLResponse(
         html,
-        headers={
-            "Content-Security-Policy": (f"frame-ancestors {platform.issuer}"),
-        },
+        headers={"Content-Security-Policy": csp},
     )
 
 
@@ -455,9 +493,17 @@ document.getElementById("txt")
   }});
 """
 
+# Pinned marked.js (15.0.7) + SRI hash so a CDN compromise can't
+# silently swap in arbitrary JS inside the LTI iframe. Recompute the
+# hash when bumping the version:
+#   curl -sL https://cdn.jsdelivr.net/npm/marked@<VER>/marked.min.js \
+#     | openssl dgst -sha384 -binary | openssl base64 -A
 _MARKED_CDN = (
-    '<script src="https://cdn.jsdelivr.net/npm/'
-    'marked@15/marked.min.js"></script>'
+    "<script "
+    'src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js" '
+    'integrity="sha384-H+hy9ULve6xfxRkWIh/YOtvDdpXgV2fmAGQk'
+    'IDTxIgZwNoaoBal14Di2YTMR6MzR" '
+    'crossorigin="anonymous"></script>'
 )
 
 _CHAT_PAGE = (
@@ -484,10 +530,14 @@ _CHAT_PAGE = (
     + _CHAT_BODY
     + """\
 </div>
+<script id="lti-config" type="application/json">{config_json}</script>
 <script>
-const ROOM  = "{room_id}";
-const TOKEN = "{session_token}";
-const BASE  = "{base_url}";
+const _cfg = JSON.parse(
+  document.getElementById("lti-config").textContent
+);
+let ROOM = _cfg.room;
+const TOKEN = _cfg.token;
+const BASE = _cfg.base;
 """
     + _CHAT_SCRIPT
     + """\
@@ -552,11 +602,15 @@ _PICKER_CHAT_PAGE = (
     + _CHAT_BODY
     + """\
 </div>
+<script id="lti-config" type="application/json">{config_json}</script>
 <script>
-let ROOM  = "";
-const TOKEN = "{session_token}";
-const BASE  = "{base_url}";
-const DEFAULT_ROOM = "{default_room_id}";
+const _cfg = JSON.parse(
+  document.getElementById("lti-config").textContent
+);
+let ROOM = "";
+const TOKEN = _cfg.token;
+const BASE = _cfg.base;
+const DEFAULT_ROOM = _cfg.default_room;
 
 function selectRoom(roomId, roomName) {{
   ROOM = roomId;

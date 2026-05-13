@@ -2871,6 +2871,8 @@ platforms:
   - id: "moodle-workplace"
     issuer: "https://moodle.example.com"
     client_id: "soliplex-lti-tool"
+    deployment_ids:
+      - "1"
     auth_login_url: "https://moodle.example.com/auth.php"
     auth_token_url: "https://moodle.example.com/token.php"
     key_set_url: "https://moodle.example.com/certs.php"
@@ -2973,3 +2975,18 @@ def test_installationconfig_lti_property_lazy(temp_dir):
     assert first == ["platform"]
     assert second == ["platform"]
     load.assert_called_once()
+
+
+def test_installationconfig_register_cleanup_appends():
+    """register_cleanup adds the callback to _cleanup_callbacks."""
+    i_config = config_installation.InstallationConfig(
+        **BARE_INSTALLATION_CONFIG_KW,
+    )
+
+    cb_a = mock.AsyncMock()
+    cb_b = mock.AsyncMock()
+
+    i_config.register_cleanup(cb_a)
+    i_config.register_cleanup(cb_b)
+
+    assert i_config._cleanup_callbacks == [cb_a, cb_b]

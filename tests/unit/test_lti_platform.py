@@ -135,3 +135,36 @@ class TestResolveRoomId:
         # After rstrip("/"), URL ends in /chat, so parts[-2]
         # is "lti", not "chat" → falls to default
         assert found == DEFAULT_ROOM
+
+    @pytest.mark.parametrize(
+        "evil",
+        [
+            'x";alert(1);//',  # JS string-literal breakout attempt
+            "../../etc/passwd",  # path traversal
+            "room with spaces",
+            "room.with.dots",
+            "<script>",  # raw HTML
+            "%2Fescaped",
+            "",
+        ],
+    )
+    def test_target_link_uri_unsafe_room_falls_through(self, evil):
+        """A target_link_uri whose room segment fails the safe-charset
+        check must fall through to course_room_map / default_room_id
+        instead of being echoed into the rendered HTML."""
+        p = _make_platform()
+        found = lti_platform.resolve_room_id(
+            p,
+            target_link_uri=f"https://soliplex.example.com/lti/chat/{evil}",
+        )
+        assert found == DEFAULT_ROOM
+
+    def test_course_room_map_value_validated(self):
+        """A misconfigured course_room_map entry (containing characters
+        outside the safe charset) falls through to the default rather
+        than rendering the value into the page."""
+        p = _make_platform(
+            course_room_map={"101": 'broken";alert(1);//'},
+        )
+        found = lti_platform.resolve_room_id(p, course_id="101")
+        assert found == DEFAULT_ROOM

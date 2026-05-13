@@ -44,42 +44,6 @@ def _moodle_tool(fn):
 
 # -- Module-level constants --
 
-_CONFIRM_INSTRUCTIONS_SHORT = (
-    "Present this to the user and ask for "
-    "confirmation. If confirmed, call this "
-    "tool again with confirmed=True"
-)
-
-_CONFIRM_INSTRUCTIONS_WARNING = (
-    "Present this WARNING to the user and "
-    "ask for explicit confirmation. If "
-    "confirmed, call this tool again with "
-    "confirmed=True"
-)
-
-
-def _preview(
-    action: str,
-    preview: str,
-    *,
-    warning: bool = False,  # noqa: U100  # kept for call-site clarity
-    **fields,
-) -> dict:
-    """Build a write-tool preview dict for the first call.
-
-    Returns the standard ``{action, preview, **fields}`` shape used
-    by every preview-then-confirm tool. The skill subagent's prompt
-    (Case A vs Case B) already directs how to render previews, so
-    the dict deliberately omits any ``instructions`` field — that
-    string was prone to leaking verbatim into user-facing output.
-    """
-    return {
-        "action": action,
-        "preview": preview,
-        **fields,
-    }
-
-
 _EXPORTER_MAP = {
     "courses": r"tool_wp\tool_wp\exporter\courses",
     "users": r"tool_wp\tool_wp\exporter\users",

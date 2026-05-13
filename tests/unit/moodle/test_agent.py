@@ -127,6 +127,26 @@ def test_factory_returns_agent():
     assert isinstance(agent, pydantic_ai.Agent)
 
 
+def test_factory_registers_client_cleanup():
+    """MoodleClient.aclose must be registered with the installation
+    so the persistent httpx.AsyncClient is closed at app shutdown."""
+    from soliplex.moodle.agent import moodle_tools_agent_factory
+
+    agent_config = _make_agent_config()
+    with mock.patch(
+        "soliplex.moodle.agent.config_agents.get_model_from_factory_config",
+        return_value=TestModel(),
+    ):
+        moodle_tools_agent_factory(agent_config)
+
+    ic = agent_config._installation_config
+    ic.register_cleanup.assert_called_once()
+    (cb,), _ = ic.register_cleanup.call_args
+    # The registered callback is the bound MoodleClient.aclose method.
+    assert callable(cb)
+    assert cb.__name__ == "aclose"
+
+
 def test_factory_accepts_skill_toolset_config():
     from soliplex.moodle.agent import moodle_tools_agent_factory
 
@@ -6091,34 +6111,3 @@ async def test_delete_import_tool_error():
         result = json.loads(await fn(import_id=1, confirmed=True))
 
     assert "error" in result
-
-
-# -----------------------------------------------------------------
-# Module-level helpers
-# -----------------------------------------------------------------
-
-
-def test_preview_helper_basic():
-    from soliplex.moodle.skills import _preview
-
-    result = _preview("create_x", "Will create X", foo=1, bar="b")
-    assert result["action"] == "create_x"
-    assert result["preview"] == "Will create X"
-    assert result["foo"] == 1
-    assert result["bar"] == "b"
-    # Preview dict deliberately omits an `instructions` field —
-    # see _preview() docstring; the skill prompt (Case A/B) is
-    # the single source of truth for confirmation handling.
-    assert "instructions" not in result
-
-
-def test_preview_helper_warning_accepts_flag():
-    from soliplex.moodle.skills import _preview
-
-    # `warning=True` is preserved as a kwarg for call-site clarity
-    # (destructive ops self-document their intent) but no longer
-    # alters the dict shape.
-    result = _preview("delete_x", "Will delete X", warning=True)
-    assert result["action"] == "delete_x"
-    assert result["preview"] == "Will delete X"
-    assert "instructions" not in result

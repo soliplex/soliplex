@@ -122,6 +122,17 @@ def _create_async_engine(url, **kwargs):
 class Installation:
     _config: config_installation.InstallationConfig
 
+    def register_cleanup(self, callback) -> None:
+        """Register an async callback to run during FastAPI shutdown.
+
+        Used by factory agents that build resources (e.g. persistent
+        httpx clients) whose lifecycle should match the app's. The
+        underlying list lives on the wrapped `InstallationConfig` so
+        factory functions (which only receive the config) can also
+        register cleanup directly.
+        """
+        self._config.register_cleanup(callback)
+
     def get_secret(self, secret_name) -> str:
         secret_config = self._config.secrets_map[secret_name]
         return secrets.get_secret(secret_config)
@@ -640,6 +651,13 @@ async def lifespan(
             mcp_lifespan = mcp_app.lifespan(app)
             await stack.enter_async_context(mcp_lifespan)
             app.mount(f"/mcp/{mcp_name}", mcp_app, name=f"mcp_{mcp_name}")
+
+        # Register cleanup callbacks collected during factory-agent
+        # construction (e.g. MoodleClient.aclose for the moodle-tools
+        # room). They fire in reverse order on stack exit, before the
+        # DB engines below are disposed.
+        for cb in i_config._cleanup_callbacks:
+            stack.push_async_callback(cb)
 
         yield context
 

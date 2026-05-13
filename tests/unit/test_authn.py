@@ -6,6 +6,7 @@ import pytest
 
 from soliplex import authn
 from soliplex import installation
+from soliplex.config import lti as config_lti
 
 OIDC_CLIENT_PEM_PATH = "/dev/null"
 AUTHSYSTEM_ID = "testing"
@@ -211,10 +212,12 @@ def _make_lti_platform(session_ttl=3600):
 
 
 @mock.patch("soliplex.authn.validate_access_token")
+@mock.patch("soliplex.lti.session.peek_platform_id")
 @mock.patch("soliplex.lti.session.validate_session_token")
-def test_authenticate_lti_fallback_hit(vst, vat, with_auth_systems):
+def test_authenticate_lti_fallback_hit(vst, peek, vat, with_auth_systems):
     """LTI session token accepted after OIDC miss"""
     vat.return_value = None
+    peek.return_value = "moodle"
     vst.return_value = LTI_CLAIMS
 
     platform = _make_lti_platform()
@@ -227,14 +230,18 @@ def test_authenticate_lti_fallback_hit(vst, vat, with_auth_systems):
     found = authn.authenticate(the_installation, "tok")
 
     assert found is LTI_CLAIMS
+    peek.assert_called_once_with(LTI_SECRET, "tok")
+    # The platform's session_ttl (3600 by default) drives the age check.
     vst.assert_called_once_with(LTI_SECRET, "tok", max_age=3600)
 
 
 @mock.patch("soliplex.authn.validate_access_token")
+@mock.patch("soliplex.lti.session.peek_platform_id")
 @mock.patch("soliplex.lti.session.validate_session_token")
-def test_authenticate_lti_fallback_miss(vst, vat, with_auth_systems):
+def test_authenticate_lti_fallback_miss(vst, peek, vat, with_auth_systems):
     """LTI session token miss still raises 401"""
     vat.return_value = None
+    peek.return_value = "moodle"
     vst.return_value = None
 
     platform = _make_lti_platform()
@@ -248,6 +255,104 @@ def test_authenticate_lti_fallback_miss(vst, vat, with_auth_systems):
         authn.authenticate(the_installation, "tok")
 
     assert exc.value.status_code == 401
+
+
+@mock.patch("soliplex.authn.validate_access_token")
+@mock.patch("soliplex.lti.session.peek_platform_id")
+@mock.patch("soliplex.lti.session.validate_session_token")
+def test_authenticate_lti_unsigned_token_rejected(
+    vst, peek, vat, with_auth_systems
+):
+    """A token with a bad signature can't be peeked → 401 without
+    falling back to any platform's TTL."""
+    vat.return_value = None
+    peek.return_value = None
+
+    platform = _make_lti_platform()
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.auth_disabled = False
+    the_installation.oidc_auth_system_configs = with_auth_systems
+    the_installation.lti_platform_configs = [platform]
+    the_installation.get_secret.return_value = LTI_SECRET
+
+    with pytest.raises(fastapi.HTTPException) as exc:
+        authn.authenticate(the_installation, "tok")
+
+    assert exc.value.status_code == 401
+    vst.assert_not_called()
+
+
+@mock.patch("soliplex.authn.validate_access_token")
+@mock.patch("soliplex.lti.session.peek_platform_id")
+@mock.patch("soliplex.lti.session.validate_session_token")
+def test_authenticate_lti_token_for_unknown_platform(
+    vst, peek, vat, with_auth_systems
+):
+    """A token signed with the secret but naming a platform we no
+    longer have configured → 401 without calling validate."""
+    vat.return_value = None
+    peek.return_value = "deleted-platform"
+
+    platform = _make_lti_platform()
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.auth_disabled = False
+    the_installation.oidc_auth_system_configs = with_auth_systems
+    the_installation.lti_platform_configs = [platform]
+    the_installation.get_secret.return_value = LTI_SECRET
+
+    with pytest.raises(fastapi.HTTPException) as exc:
+        authn.authenticate(the_installation, "tok")
+
+    assert exc.value.status_code == 401
+    vst.assert_not_called()
+
+
+@mock.patch("soliplex.authn.validate_access_token")
+@mock.patch("soliplex.lti.session.peek_platform_id")
+@mock.patch("soliplex.lti.session.validate_session_token")
+def test_authenticate_lti_ttl_isolated_across_platforms(
+    vst, peek, vat, with_auth_systems
+):
+    """A token issued by a SHORT-TTL platform must be validated with
+    that platform's TTL even when other platforms have longer TTLs.
+    This is the multi-platform TTL bypass the reviewer flagged.
+    """
+    vat.return_value = None
+    # Token was minted by the short-TTL platform.
+    peek.return_value = "short-platform"
+
+    short = config_lti.LTIPlatformConfig(
+        id="short-platform",
+        issuer="https://short.example.com",
+        client_id="tool-short",
+        auth_login_url="https://short.example.com/auth",
+        auth_token_url="https://short.example.com/token",
+        key_set_url="https://short.example.com/certs",
+        default_room_id="room-1",
+        session_ttl=300,  # 5 minutes
+    )
+    long = config_lti.LTIPlatformConfig(
+        id="long-platform",
+        issuer="https://long.example.com",
+        client_id="tool-long",
+        auth_login_url="https://long.example.com/auth",
+        auth_token_url="https://long.example.com/token",
+        key_set_url="https://long.example.com/certs",
+        default_room_id="room-1",
+        session_ttl=86400,  # 24 hours
+    )
+
+    the_installation = mock.create_autospec(installation.Installation)
+    the_installation.auth_disabled = False
+    the_installation.oidc_auth_system_configs = with_auth_systems
+    the_installation.lti_platform_configs = [short, long]
+    the_installation.get_secret.return_value = LTI_SECRET
+
+    vst.return_value = LTI_CLAIMS
+    authn.authenticate(the_installation, "tok")
+
+    # Validation used the short-platform's TTL, not the longer one.
+    vst.assert_called_once_with(LTI_SECRET, "tok", max_age=300)
 
 
 @mock.patch("soliplex.authn.validate_access_token")

@@ -7,6 +7,7 @@ from fastapi import responses as fastapi_responses
 from soliplex import installation
 from soliplex import loggers
 from soliplex.config import lti as config_lti
+from soliplex.lti import nonce as lti_nonce
 from soliplex.lti import validation as lti_validation
 from soliplex.views import lti as lti_views
 from tests.unit.conftest import LTI_TEST_CLIENT_ID as CLIENT_ID
@@ -52,6 +53,14 @@ def _make_installation(platforms=None):
     )
     inst.get_secret.return_value = SECRET_KEY
     return inst
+
+
+@pytest.fixture(autouse=True)
+def _reset_lti_nonce_cache():
+    """Each launch test consumes the same fixture nonce; isolate them."""
+    lti_nonce._seen_nonces.clear()
+    yield
+    lti_nonce._seen_nonces.clear()
 
 
 def _make_request(
@@ -230,11 +239,24 @@ class TestLtiLaunch:
         assert found.status_code == 200
 
         csp = dict(found.headers).get("content-security-policy")
-        assert csp == f"frame-ancestors {ISSUER}"
+        assert f"frame-ancestors {ISSUER}" in csp
+        # Defence-in-depth directives that are not 'frame-ancestors'.
+        assert "default-src 'self'" in csp
+        assert "https://cdn.jsdelivr.net" in csp  # script-src for marked
+        assert "connect-src 'self'" in csp
 
         body = found.body.decode()
         assert DEFAULT_ROOM in body
         assert SESSION_TOKEN in body
+        # SRI on the marked.js CDN script.
+        assert 'integrity="sha384-' in body
+        assert 'crossorigin="anonymous"' in body
+        assert "marked@15.0.7" in body
+        # Values are emitted via a single JSON-config <script> tag,
+        # never inlined into JS string literals.
+        assert '<script id="lti-config" type="application/json">' in body
+        assert f'const ROOM  = "{DEFAULT_ROOM}"' not in body
+        assert f'const TOKEN = "{SESSION_TOKEN}"' not in body
 
         val_tok.assert_called_once_with(
             "fake-jwt",
@@ -394,6 +416,35 @@ class TestLtiLaunch:
 
         assert exc.value.status_code == 500
         assert exc.value.detail == loggers.LTI_SECRET_NOT_CONFIGURED
+
+    @pytest.mark.anyio
+    @mock.patch("soliplex.lti.session.mint_session_token")
+    @mock.patch("soliplex.lti.validation.validate_id_token")
+    @mock.patch("soliplex.lti.nonce.decode_state")
+    async def test_replay_rejected(self, dec_state, val_tok, mint_tok):
+        """A second launch with the same nonce is rejected."""
+        dec_state.return_value = (NONCE, PLATFORM_ID)
+        val_tok.return_value = dict(self.LTI_PAYLOAD)
+        mint_tok.return_value = SESSION_TOKEN
+
+        request = _make_request(
+            method="POST",
+            form_data={
+                "id_token": "fake-jwt",
+                "state": STATE,
+            },
+        )
+        the_installation = _make_installation()
+
+        first = await lti_views.lti_launch(request, the_installation)
+        assert first.status_code == 200
+
+        # Replay the exact same form-post — should now 400 even though
+        # the JWT itself is still nominally valid.
+        with pytest.raises(fastapi.HTTPException) as exc:
+            await lti_views.lti_launch(request, the_installation)
+        assert exc.value.status_code == 400
+        assert exc.value.detail == loggers.LTI_NONCE_REPLAY
 
 
 class TestLtiLaunchPicker:
@@ -577,5 +628,6 @@ class TestLtiLaunchPicker:
         await lti_views.lti_launch(request, the_installation)
 
         mint_tok.assert_called_once()
-        _, _, room_id_arg = mint_tok.call_args[0]
+        _, _, room_id_arg, platform_id_arg = mint_tok.call_args[0]
         assert room_id_arg == ""
+        assert platform_id_arg == PLATFORM_ID

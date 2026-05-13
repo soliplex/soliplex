@@ -362,6 +362,19 @@ class InstallationConfig:
         _utils._default_list_field()
     )
 
+    # Cleanup callbacks registered by factory agents during startup.
+    # Drained by ``installation.lifespan`` on shutdown, before the
+    # DB engines are disposed. Not serialised from YAML.
+    _cleanup_callbacks: list = dataclasses.field(
+        default_factory=list,
+        repr=False,
+        compare=False,
+    )
+
+    def register_cleanup(self, callback) -> None:
+        """Append an async shutdown callback (see ``Installation``)."""
+        self._cleanup_callbacks.append(callback)
+
     def resolve_app_routers(self):
         config_routing.register_default_routers()
         for ar_meta in self.app_router_operations:

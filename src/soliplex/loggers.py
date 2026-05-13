@@ -81,6 +81,7 @@ ROOM_UNKNOWN_CHUNK_ID = "unknown chunk id: %s"
 
 LTI_UNKNOWN_PLATFORM = "unknown LTI platform"
 LTI_INVALID_LAUNCH = "invalid LTI launch request"
+LTI_NONCE_REPLAY = "LTI nonce already consumed"
 LTI_SECRET_NOT_CONFIGURED = "LTI_SESSION_SECRET not configured"
 
 

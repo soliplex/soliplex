@@ -45,10 +45,23 @@ class LTIPlatformConfig:
         try:
             config_dict = dict(config_dict)
             config_dict["_config_path"] = config_path
-            return cls(**config_dict)
+            instance = cls(**config_dict)
         except Exception as exc:
             raise config_exc.FromYamlException(
                 config_path,
                 "lti_platform",
                 config_dict,
             ) from exc
+
+        # Defended at config load rather than at launch time: an empty
+        # deployment_ids list silently rejects every LTI launch and is
+        # almost always a misconfiguration the operator wants to know
+        # about immediately.
+        if not instance.deployment_ids:
+            raise config_exc.FromYamlException(
+                config_path,
+                "lti_platform",
+                config_dict,
+            ) from ValueError("deployment_ids must contain at least one entry")
+
+        return instance

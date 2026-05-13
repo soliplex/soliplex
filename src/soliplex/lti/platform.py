@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
+import re
+
 from soliplex.config import lti as config_lti
+
+# Room IDs flow into a JSON config block in the rendered HTML and
+# are referenced from URLs and JS. Restrict to a safe subset of the
+# alphabet to keep them from breaking template substitution or
+# leaking into JS as code if a future change ever re-introduces
+# direct interpolation. The actual room-ID space in soliplex
+# installation configs is already a subset of this character class.
+_ROOM_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 class UnknownLTIPlatform(KeyError):
@@ -72,9 +82,18 @@ def resolve_room_id(
     if target_link_uri is not None:
         parts = target_link_uri.rstrip("/").split("/")
         if len(parts) >= 2 and parts[-2] == "chat":
-            return parts[-1]
+            candidate = parts[-1]
+            if _ROOM_ID_RE.match(candidate):
+                return candidate
+            # Malformed segment — fall through to course_room_map/default
+            # rather than echo attacker-controlled input back into the
+            # rendered HTML page.
 
     if course_id is not None and course_id in platform.course_room_map:
-        return platform.course_room_map[course_id]
+        candidate = platform.course_room_map[course_id]
+        if _ROOM_ID_RE.match(candidate):
+            return candidate
+        # Misconfigured map entry — fall through to default.
 
+    # default_room_id is operator-controlled at config-load time; trust it.
     return platform.default_room_id

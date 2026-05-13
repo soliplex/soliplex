@@ -1443,6 +1443,7 @@ async def test_lifespan(
         logging_config=w_ic_logging_config,
         thread_persistence_dburi_async=ASYNC_ENGINE_URL,
         authorization_dburi_async=ASYNC_ENGINE_URL,
+        _cleanup_callbacks=[],
     )
     load_installation.return_value = i_config
     app = mock.create_autospec(fastapi.FastAPI)
@@ -1597,3 +1598,95 @@ async def test_create_async_engine_memory():
             assert fkeys == 1
     finally:
         await engine.dispose()
+
+
+def test_installation_register_cleanup_delegates_to_config():
+    """Installation.register_cleanup pushes onto the wrapped config."""
+    i_config = mock.create_autospec(
+        config_installation.InstallationConfig,
+        _cleanup_callbacks=[],
+    )
+    the_installation = installation.Installation(i_config)
+
+    cb = mock.AsyncMock()
+    the_installation.register_cleanup(cb)
+
+    i_config.register_cleanup.assert_called_once_with(cb)
+
+
+@pytest.mark.asyncio
+@mock.patch("soliplex.installation.add_no_auth_user_as_admin")
+@mock.patch("soliplex.installation.add_user_as_admin")
+@mock.patch("soliplex.installation.apply_logfire_configuration")
+@mock.patch("soliplex.secrets.resolve_secrets")
+@mock.patch("soliplex.mcp_server.setup_mcp_for_rooms")
+@mock.patch("soliplex.config.routing.add_registered_routers")
+@mock.patch("soliplex.config.installation.load_installation")
+@mock.patch("logging.config.dictConfig")
+async def test_lifespan_drains_cleanup_callbacks(
+    _lcdc,
+    load_installation,
+    _arr,
+    smfr,
+    _srs,
+    _alc,
+    _auaa,
+    _anauaa,
+    mcp_apps,
+):
+    """Registered cleanup callbacks fire on lifespan exit."""
+    cb_a = mock.AsyncMock()
+    cb_b = mock.AsyncMock()
+    cb_order = []
+
+    async def _cb_a():
+        cb_order.append("a")
+
+    async def _cb_b():
+        cb_order.append("b")
+
+    cb_a.side_effect = _cb_a
+    cb_b.side_effect = _cb_b
+
+    ASYNC_ENGINE_URL = config_installation.ASYNC_MEMORY_ENGINE_URL
+    r_config = mock.create_autospec(config_rooms.RoomConfig)
+    s_config = mock.create_autospec(
+        config_secrets.SecretConfig,
+        resolved=URL_SAFE_TOKEN_SECRET_KEY,
+    )
+    ic_environment = {
+        "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+        "MCP_TOKEN_MAX_AGE": 3600,
+    }
+    i_config = mock.create_autospec(
+        config_installation.InstallationConfig,
+        secrets=(),
+        secrets_map={"URL_SAFE_TOKEN_SECRET": s_config},
+        oidc_paths=[],
+        room_configs={ROOM_ID: r_config},
+        environment=ic_environment,
+        get_environment=ic_environment.get,
+        logging_config=None,
+        thread_persistence_dburi_async=ASYNC_ENGINE_URL,
+        authorization_dburi_async=ASYNC_ENGINE_URL,
+        _cleanup_callbacks=[cb_a, cb_b],
+    )
+    load_installation.return_value = i_config
+    smfr.return_value = mcp_apps
+    app = mock.create_autospec(fastapi.FastAPI)
+
+    found = [
+        item
+        async for item in installation.lifespan(
+            app,
+            installation_path="/path/to/installation",
+            no_auth_mode=True,
+        )
+    ]
+
+    # Lifespan completed; both callbacks ran in reverse order (the
+    # AsyncExitStack semantics).
+    assert len(found) == 1
+    cb_a.assert_awaited_once()
+    cb_b.assert_awaited_once()
+    assert cb_order == ["b", "a"]

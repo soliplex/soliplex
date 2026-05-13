@@ -176,6 +176,9 @@ def moodle_tools_agent_factory(
     token = ic.get_secret(extra["moodle_api_token"])
     verify = extra.get("moodle_verify_ssl")
     client = MoodleClient(base_url=base_url, token=token, verify=verify)
+    # Persistent httpx.AsyncClient inside `client` survives across
+    # tool calls; close it on FastAPI shutdown.
+    ic.register_cleanup(client.aclose)
 
     model = config_agents.get_model_from_factory_config(agent_config)
     model_settings = config_agents.get_model_settings_from_factory_config(

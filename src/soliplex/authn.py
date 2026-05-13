@@ -67,6 +67,7 @@ def authenticate(
     # Try LTI session tokens
     lti_platforms = the_installation.lti_platform_configs
     if lti_platforms:
+        from soliplex.lti import platform as lti_platform
         from soliplex.lti import session as lti_session
 
         try:
@@ -75,14 +76,24 @@ def authenticate(
             secret_key = None
 
         if secret_key is not None:
-            for platform in lti_platforms:
-                claims = lti_session.validate_session_token(
-                    secret_key,
-                    token,
-                    max_age=platform.session_ttl,
+            # Peek at the token to find the platform that minted it,
+            # then validate with that platform's session_ttl only.
+            # Trying every platform's TTL in a loop would let a token
+            # issued by a short-TTL platform be accepted after expiry
+            # by a long-TTL platform.
+            platform_id = lti_session.peek_platform_id(secret_key, token)
+            if platform_id is not None:
+                platform = lti_platform.find_platform_by_id(
+                    lti_platforms, platform_id
                 )
-                if claims is not None:
-                    return claims
+                if platform is not None:
+                    claims = lti_session.validate_session_token(
+                        secret_key,
+                        token,
+                        max_age=platform.session_ttl,
+                    )
+                    if claims is not None:
+                        return claims
 
     raise fastapi.HTTPException(
         status_code=401,

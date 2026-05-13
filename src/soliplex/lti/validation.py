@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import anyio
 import jwt
 
 # LTI 1.3 claim URIs
@@ -46,28 +47,53 @@ class LTIInvalidMessageType(LTIValidationError):
         super().__init__(f"Expected message type {expected!r}, got {got!r}")
 
 
-def _fetch_jwks(key_set_url: str) -> jwt.PyJWKClient:
-    """Return a caching PyJWKClient for the platform JWKS"""
-    return jwt.PyJWKClient(key_set_url, cache_keys=True)
+# Module-level cache of PyJWKClient instances keyed by JWKS URL.
+# Each client's internal `cache_keys=True` cache is then preserved
+# across requests (instead of being thrown away with the client when
+# validation returns, which is what happened before this was cached).
+# JWKS-rotation cadence is presumed slower than process restart; if
+# that ever changes, add a TTL or external invalidation hook.
+_jwks_clients: dict[str, jwt.PyJWKClient] = {}
+_jwks_lock: anyio.Lock | None = None
 
 
-def validate_id_token(
+async def _get_jwks_client(key_set_url: str) -> jwt.PyJWKClient:
+    """Return the cached PyJWKClient for *key_set_url*, creating it
+    on first request. The lock prevents two concurrent first-request
+    coroutines from racing to construct duplicate clients."""
+    if key_set_url in _jwks_clients:
+        return _jwks_clients[key_set_url]
+    global _jwks_lock
+    if _jwks_lock is None:
+        _jwks_lock = anyio.Lock()
+    async with _jwks_lock:
+        if key_set_url not in _jwks_clients:
+            _jwks_clients[key_set_url] = jwt.PyJWKClient(
+                key_set_url, cache_keys=True
+            )
+    return _jwks_clients[key_set_url]
+
+
+async def validate_id_token(
     id_token: str,
     *,
     key_set_url: str,
     issuer: str,
     client_id: str,
     expected_nonce: str,
-    jwks_client: jwt.PyJWKClient | None = None,
 ) -> dict:
     """Validate an LTI 1.3 id_token and return the payload.
 
-    Raises LTIValidationError subclasses on failure.
+    Raises LTIValidationError subclasses on failure. The JWKS fetch
+    (which ``PyJWKClient`` performs with blocking ``urllib.request``
+    on first key lookup) is offloaded to a worker thread so the
+    event loop is not stalled during launch.
     """
-    if jwks_client is None:
-        jwks_client = _fetch_jwks(key_set_url)
+    jwks_client = await _get_jwks_client(key_set_url)
 
-    signing_key = jwks_client.get_signing_key_from_jwt(id_token)
+    signing_key = await anyio.to_thread.run_sync(
+        jwks_client.get_signing_key_from_jwt, id_token
+    )
 
     try:
         payload = jwt.decode(

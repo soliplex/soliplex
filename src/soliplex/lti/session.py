@@ -36,14 +36,44 @@ def mint_session_token(
     secret_key: str,
     user_claims: dict,
     room_id: str,
+    platform_id: str,
 ) -> str:
-    """Create a signed LTI session token"""
-    payload = dict(user_claims) | {"_room_id": room_id}
+    """Create a signed LTI session token.
+
+    ``platform_id`` is embedded as ``_platform_id`` so that the
+    auth layer can look up the issuing platform's ``session_ttl``
+    on validation (rather than trying every platform's TTL and
+    accepting the longest one).
+    """
+    payload = dict(user_claims) | {
+        "_room_id": room_id,
+        "_platform_id": platform_id,
+    }
     return mcp_auth.generate_url_safe_token(
         secret_key,
         LTI_SESSION_SALT,
         **payload,
     )
+
+
+def peek_platform_id(secret_key: str, token: str) -> str | None:
+    """Return the ``_platform_id`` from a token, or None if invalid.
+
+    Validates the HMAC signature but does not enforce ``max_age`` —
+    the caller looks up the platform first, then re-validates with
+    the platform-specific TTL via ``validate_session_token``.
+    """
+    # max_age=None on itsdangerous skips age check while keeping
+    # signature verification.
+    claims = mcp_auth.validate_url_safe_token(
+        secret_key,
+        LTI_SESSION_SALT,
+        token,
+        max_age=None,
+    )
+    if claims is None:
+        return None
+    return claims.get("_platform_id")
 
 
 def validate_session_token(
@@ -53,7 +83,9 @@ def validate_session_token(
 ) -> dict | None:
     """Validate an LTI session token.
 
-    Returns UserClaims on success, None on failure.
+    Returns UserClaims on success, None on failure. Strips the
+    internal ``_room_id`` / ``_platform_id`` fields so the returned
+    claims dict carries only user-facing identity.
     """
     claims = mcp_auth.validate_url_safe_token(
         secret_key,
@@ -64,4 +96,5 @@ def validate_session_token(
     if claims is None:
         return None
     claims.pop("_room_id", None)
+    claims.pop("_platform_id", None)
     return claims
