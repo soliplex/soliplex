@@ -2409,20 +2409,19 @@ async def test_list_departments_tool():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "list_departments")
 
+    # local_soliplex_list_departments returns a flat list with
+    # real idnumber + parentid.
     resp = _mock_response(
-        {
-            "departments": [
-                {
-                    "id": 1,
-                    "name": "Engineering",
-                    "idnumber": "ENG",
-                    "parentid": 0,
-                }
-            ],
-            "positions": [],
-        }
+        [
+            {
+                "id": 1,
+                "name": "Engineering",
+                "idnumber": "ENG",
+                "parentid": 0,
+            }
+        ]
     )
-    with _patch_httpx(resp):
+    with _patch_httpx(resp) as patched:
         result = json.loads(await fn())
 
     assert len(result) == 1
@@ -2432,47 +2431,50 @@ async def test_list_departments_tool():
     # Integer IDs must not leak — the LLM should never see them.
     assert "id" not in result[0]
     assert "parentid" not in result[0]
+    # Single Moodle round-trip.
+    assert patched.return_value.post.call_count == 1
 
 
 @pytest.mark.asyncio
 async def test_list_departments_tool_resolves_parent_idnumber_under_search():
-    """The parent idnumber lookup uses the FULL department list,
-    not the search-filtered one, so a sub-department reports its
-    parent correctly even when the parent itself doesn't match the
-    search filter."""
+    """Parent idnumber resolution uses the full list, not the
+    search-filtered one — even when the parent's name doesn't
+    match the filter — and is done in a single Moodle round-trip.
+
+    NOTE: because the wrapper always fetches the full list
+    (search=""), the server-side search filter is no longer
+    relevant; the wrapper does its own name-substring filter
+    after the fetch.  We mock the FULL list and verify the
+    wrapper's client-side filter returns just the child."""
     skills = _get_skills()
     fn = _get_tool_fn(skills, "list_departments")
 
-    # Both http calls (search-filtered + unfiltered) return the same
-    # mock; the wrapper applies its own client-side search filter on
-    # top via get_departments.  That filter is substring of `name`.
     resp = _mock_response(
-        {
-            "departments": [
-                {
-                    "id": 1,
-                    "name": "Engineering",
-                    "idnumber": "ENG",
-                    "parentid": 0,
-                },
-                {
-                    "id": 2,
-                    "name": "Engineering Operations",
-                    "idnumber": "ENGOPS",
-                    "parentid": 1,
-                },
-            ],
-            "positions": [],
-        }
+        [
+            {
+                "id": 1,
+                "name": "Engineering",
+                "idnumber": "ENG",
+                "parentid": 0,
+            },
+            {
+                "id": 2,
+                "name": "Operations",
+                "idnumber": "OPS",
+                "parentid": 1,
+            },
+        ]
     )
-    with _patch_httpx(resp):
+    with _patch_httpx(resp) as patched:
         # Search for "Operations" → only the child matches, but the
         # parent must still be resolved to "ENG".
         result = json.loads(await fn(search="Operations"))
 
     assert len(result) == 1
-    assert result[0]["idnumber"] == "ENGOPS"
+    assert result[0]["idnumber"] == "OPS"
     assert result[0]["parent"] == "ENG"
+    # Single Moodle round-trip.
+    assert patched.return_value.post.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -2499,19 +2501,16 @@ async def test_list_positions_tool():
     fn = _get_tool_fn(skills, "list_positions")
 
     resp = _mock_response(
-        {
-            "departments": [],
-            "positions": [
-                {
-                    "id": 1,
-                    "name": "Manager",
-                    "idnumber": "MGR",
-                    "parentid": 0,
-                }
-            ],
-        }
+        [
+            {
+                "id": 1,
+                "name": "Manager",
+                "idnumber": "MGR",
+                "parentid": 0,
+            }
+        ]
     )
-    with _patch_httpx(resp):
+    with _patch_httpx(resp) as patched:
         result = json.loads(await fn())
 
     assert len(result) == 1
@@ -2520,6 +2519,40 @@ async def test_list_positions_tool():
     assert result[0]["parent"] == ""
     assert "id" not in result[0]
     assert "parentid" not in result[0]
+    # Single Moodle round-trip.
+    assert patched.return_value.post.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_list_positions_tool_resolves_parent_idnumber_under_search():
+    """Parent idnumber resolution for positions: full list fetched
+    once, wrapper applies its own client-side filter."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_positions")
+
+    resp = _mock_response(
+        [
+            {
+                "id": 1,
+                "name": "Manager",
+                "idnumber": "MGR",
+                "parentid": 0,
+            },
+            {
+                "id": 2,
+                "name": "Senior Manager",
+                "idnumber": "SRMGR",
+                "parentid": 1,
+            },
+        ]
+    )
+    with _patch_httpx(resp) as patched:
+        result = json.loads(await fn(search="Senior"))
+
+    assert len(result) == 1
+    assert result[0]["idnumber"] == "SRMGR"
+    assert result[0]["parent"] == "MGR"
+    assert patched.return_value.post.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -3557,12 +3590,18 @@ async def test_delete_department_tool_confirmed():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_department")
 
-    # Both http calls (get_departments lookup + delete_department) hit
-    # the same mock response.  The lookup parses .departments; the
-    # delete API takes whatever and is coerced to {"result": True} by
-    # `_to_dict`.
+    # Both http calls (full-list lookup + delete) hit the same mock
+    # response.  The lookup parses local_soliplex_list_departments'
+    # flat list shape; the delete API is coerced to {"result": True}.
     resp = _mock_response(
-        {"departments": [{"id": 1, "idnumber": "ENG", "name": "Eng"}]}
+        [
+            {
+                "id": 1,
+                "name": "Engineering",
+                "idnumber": "ENG",
+                "parentid": 0,
+            }
+        ]
     )
     with _patch_httpx(resp):
         result = json.loads(await fn(idnumber="ENG", confirmed=True))
@@ -3571,11 +3610,24 @@ async def test_delete_department_tool_confirmed():
 
 
 @pytest.mark.asyncio
-async def test_delete_department_tool_not_found():
+async def test_delete_department_tool_not_found_exact_match_only():
+    """Resolution is by idnumber EXACT match (not name substring).
+    A department whose NAME contains the search string but whose
+    idnumber doesn't match must not be deleted.  This is the B1
+    correctness fix."""
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_department")
 
-    resp = _mock_response({"departments": []})
+    resp = _mock_response(
+        [
+            {
+                "id": 5,
+                "name": "Missing Person Department",
+                "idnumber": "PERSON",
+                "parentid": 0,
+            }
+        ]
+    )
     with _patch_httpx(resp):
         result = json.loads(await fn(idnumber="MISSING", confirmed=True))
 
@@ -3779,11 +3831,23 @@ async def test_delete_position_tool_preview():
 
 
 @pytest.mark.asyncio
-async def test_delete_position_tool_not_found():
+async def test_delete_position_tool_not_found_exact_match_only():
+    """Resolution is by idnumber EXACT match.  A position whose
+    NAME contains the search string but idnumber doesn't match
+    must not be deleted.  B1 correctness for positions."""
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_position")
 
-    resp = _mock_response({"positions": []})
+    resp = _mock_response(
+        [
+            {
+                "id": 5,
+                "name": "Missing Person Position",
+                "idnumber": "PERSON",
+                "parentid": 0,
+            }
+        ]
+    )
     with _patch_httpx(resp):
         result = json.loads(await fn(idnumber="MISSING", confirmed=True))
 
@@ -3797,10 +3861,17 @@ async def test_delete_position_tool_confirmed():
     fn = _get_tool_fn(skills, "delete_position")
 
     resp = _mock_response(
-        {"positions": [{"id": 5, "idnumber": "ENG", "name": "Eng"}]}
+        [
+            {
+                "id": 5,
+                "name": "Engineer",
+                "idnumber": "ENG-POS",
+                "parentid": 0,
+            }
+        ]
     )
     with _patch_httpx(resp):
-        result = json.loads(await fn(idnumber="ENG", confirmed=True))
+        result = json.loads(await fn(idnumber="ENG-POS", confirmed=True))
 
     assert result["status"] == "ok"
 

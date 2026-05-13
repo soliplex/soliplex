@@ -1683,15 +1683,22 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
 
         Args:
             search: Optional search string (default "" = all).
+
+        Implementation note: Moodle's underlying endpoint always
+        returns the full department set (search filtering is purely
+        client-side), so we fetch once and filter in-process.  The
+        MAX_RESULTS cap in ``client.get_departments`` applies to the
+        unfiltered set; a search that should match items past the
+        cap will miss them — same pre-existing limitation that
+        already affects parent resolution.
         """
-        filtered = await client.get_departments(search)
-        # Resolve parent idnumbers from the FULL list so children
-        # outside the search filter still report their parent
-        # correctly.
-        all_depts = (
-            filtered if not search else await client.get_departments("")
-        )
+        all_depts = await client.get_departments("")
         id_to_idnumber = {d.id: d.idnumber for d in all_depts}
+        if search:
+            search_lower = search.lower()
+            filtered = [d for d in all_depts if search_lower in d.name.lower()]
+        else:
+            filtered = all_depts
         return json.dumps(
             [
                 {
@@ -1709,15 +1716,24 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
 
         Args:
             search: Optional search string (default "" = all).
+
+        Implementation note: Moodle's underlying endpoint always
+        returns the full position set (search filtering is purely
+        client-side), so we fetch once and filter in-process.  The
+        MAX_RESULTS cap in ``client.get_positions`` applies to the
+        unfiltered set; a search that should match items past the
+        cap will miss them — same pre-existing limitation that
+        already affects parent resolution.
         """
-        filtered = await client.get_positions(search)
-        # Resolve parent idnumbers from the FULL list so children
-        # outside the search filter still report their parent
-        # correctly.
-        all_positions = (
-            filtered if not search else await client.get_positions("")
-        )
+        all_positions = await client.get_positions("")
         id_to_idnumber = {p.id: p.idnumber for p in all_positions}
+        if search:
+            search_lower = search.lower()
+            filtered = [
+                p for p in all_positions if search_lower in p.name.lower()
+            ]
+        else:
+            filtered = all_positions
         return json.dumps(
             [
                 {
@@ -1904,7 +1920,11 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         """
         if not confirmed:
             return json.dumps({"preview": f"Delete department '{idnumber}'"})
-        depts = await client.get_departments(idnumber)
+        # Fetch every department, exact-match the idnumber.  Filtering
+        # the server-side search by idnumber would be wrong — that
+        # search is name-based, and idnumber is often unrelated to
+        # the name (e.g. "ENG" / "Engineering").
+        depts = await client.get_departments("")
         match = next((d for d in depts if d.idnumber == idnumber), None)
         if match is None:
             return json.dumps(
@@ -2027,7 +2047,10 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         """
         if not confirmed:
             return json.dumps({"preview": f"Delete position '{idnumber}'"})
-        positions = await client.get_positions(idnumber)
+        # Same rationale as delete_department: search the full set
+        # then exact-match the idnumber.  The server-side search is
+        # name-based.
+        positions = await client.get_positions("")
         match = next((p for p in positions if p.idnumber == idnumber), None)
         if match is None:
             return json.dumps(

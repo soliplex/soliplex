@@ -1135,19 +1135,31 @@ async def test_archive_certification_returns_dict(client):
 
 @pytest.mark.asyncio
 async def test_get_departments(client):
+    # local_soliplex_list_departments returns a flat list of
+    # {id, name, idnumber, parentid} dicts.
     resp = _mock_response(
-        {"departments": [{"id": 1, "name": "Engineering"}], "positions": []}
+        [
+            {
+                "id": 1,
+                "name": "Engineering",
+                "idnumber": "ENG",
+                "parentid": 0,
+            }
+        ]
     )
     with _patch_httpx(resp):
         depts = await client.get_departments()
 
     assert len(depts) == 1
     assert depts[0].name == "Engineering"
+    assert depts[0].idnumber == "ENG"
 
 
 @pytest.mark.asyncio
-async def test_get_departments_non_dict(client):
-    resp = _mock_response([])
+async def test_get_departments_non_list(client):
+    """If the plugin endpoint returns a non-list (e.g. an error
+    dict that slipped past the exception check), return []."""
+    resp = _mock_response({"unexpected": "shape"})
     with _patch_httpx(resp):
         depts = await client.get_departments()
 
@@ -1156,53 +1168,75 @@ async def test_get_departments_non_dict(client):
 
 @pytest.mark.asyncio
 async def test_get_departments_with_search(client):
+    """Search is filtered server-side by the local_soliplex plugin;
+    the client just passes the parameter through."""
     resp = _mock_response(
-        {
-            "departments": [
-                {"id": 1, "name": "Engineering"},
-                {"id": 2, "name": "Operations"},
-            ]
-        }
+        [
+            {
+                "id": 1,
+                "name": "Engineering",
+                "idnumber": "ENG",
+                "parentid": 0,
+            }
+        ]
     )
-    with _patch_httpx(resp):
+    with _patch_httpx(resp) as patched:
         depts = await client.get_departments(search="eng")
 
     assert len(depts) == 1
     assert depts[0].name == "Engineering"
+    # Confirm we forwarded the search arg to Moodle.
+    sent = patched.return_value.post.call_args
+    body = sent.kwargs.get("data") or sent.args[-1]
+    assert body["search"] == "eng"
 
 
 @pytest.mark.asyncio
 async def test_get_positions(client):
     resp = _mock_response(
-        {"departments": [], "positions": [{"id": 1, "name": "Manager"}]}
+        [
+            {
+                "id": 1,
+                "name": "Manager",
+                "idnumber": "MGR",
+                "parentid": 0,
+            }
+        ]
     )
     with _patch_httpx(resp):
         positions = await client.get_positions()
 
     assert len(positions) == 1
     assert positions[0].name == "Manager"
+    assert positions[0].idnumber == "MGR"
 
 
 @pytest.mark.asyncio
 async def test_get_positions_with_search(client):
     resp = _mock_response(
-        {
-            "positions": [
-                {"id": 1, "name": "Manager"},
-                {"id": 2, "name": "Engineer"},
-            ]
-        }
+        [
+            {
+                "id": 2,
+                "name": "Engineer",
+                "idnumber": "ENG-POS",
+                "parentid": 0,
+            }
+        ]
     )
-    with _patch_httpx(resp):
+    with _patch_httpx(resp) as patched:
         positions = await client.get_positions(search="eng")
 
     assert len(positions) == 1
     assert positions[0].name == "Engineer"
+    sent = patched.return_value.post.call_args
+    body = sent.kwargs.get("data") or sent.args[-1]
+    assert body["search"] == "eng"
 
 
 @pytest.mark.asyncio
-async def test_get_positions_non_dict(client):
-    resp = _mock_response([])
+async def test_get_positions_non_list(client):
+    """If the plugin endpoint returns a non-list, return []."""
+    resp = _mock_response({"unexpected": "shape"})
     with _patch_httpx(resp):
         positions = await client.get_positions()
 

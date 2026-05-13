@@ -72,9 +72,19 @@ def _parse_li_texts(col: str) -> list[str]:
 
 def _warnings_message(warnings: list[dict]) -> str:
     """Render a list of Moodle warning dicts as a single user-facing
-    error string.  Each entry has ``item``, ``warningcode``, and
-    ``message``; we surface the message so the LLM/user knows what
-    went wrong."""
+    error string.
+
+    Each entry has ``item``, ``warningcode``, and ``message``; we
+    surface the message so the LLM/user knows what went wrong.
+
+    Used by the ``not result and warnings`` failure path on
+    ``create_departments`` / ``update_departments`` /
+    ``create_positions`` / ``update_positions``.  Those methods are
+    only ever called with a **single-element** list today, so the
+    "all-items-failed" semantics are unambiguous.  Future batch
+    callers (multi-item submission with per-item warnings on
+    partial success) would need explicit per-item error reporting —
+    that case is not covered here."""
     parts = []
     for w in warnings:
         item = w.get("item", "")
@@ -774,35 +784,29 @@ class MoodleClient:
     # ---------------------------------------------------------------
 
     async def get_departments(self, search: str = "") -> list[Department]:
-        """List departments via ``tool_organisation_get_teams_tab_filters``."""
+        """List departments via ``local_soliplex_list_departments``.
+
+        Backed by the ``local_soliplex`` plugin (raw SQL read of
+        ``tool_organisation_department``) because Moodle's stock
+        ``tool_organisation_get_teams_tab_filters`` endpoint
+        hard-codes a SELECT list that excludes ``idnumber``.  Without
+        idnumber the agent can't drive Moodle's create/update/delete
+        writes (which key off idnumber for parent resolution).
+        """
         raw = await self._call(
-            "tool_organisation_get_teams_tab_filters",
+            "local_soliplex_list_departments", search=search
         )
-        depts = []
-        if isinstance(raw, dict):
-            depts = raw.get("departments", [])
-        if search:
-            search_lower = search.lower()
-            depts = [
-                d for d in depts if search_lower in d.get("name", "").lower()
-            ]
+        depts = raw if isinstance(raw, list) else []
         return [Department.model_validate(d) for d in depts][:MAX_RESULTS]
 
     async def get_positions(self, search: str = "") -> list[Position]:
-        """List positions via ``tool_organisation_get_teams_tab_filters``."""
-        raw = await self._call(
-            "tool_organisation_get_teams_tab_filters",
-        )
-        positions = []
-        if isinstance(raw, dict):
-            positions = raw.get("positions", [])
-        if search:
-            search_lower = search.lower()
-            positions = [
-                p
-                for p in positions
-                if search_lower in p.get("name", "").lower()
-            ]
+        """List positions via ``local_soliplex_list_positions``.
+
+        See ``get_departments`` for the rationale on using the custom
+        plugin endpoint instead of the deprecated Moodle one.
+        """
+        raw = await self._call("local_soliplex_list_positions", search=search)
+        positions = raw if isinstance(raw, list) else []
         return [Position.model_validate(p) for p in positions][:MAX_RESULTS]
 
     async def get_department_members(
@@ -926,6 +930,9 @@ class MoodleClient:
             CreatedEntity.model_validate(r) for r in raw.get("result", [])
         ]
         warnings = raw.get("warnings", [])
+        # Single-item submission today: empty result + any warning
+        # means the operation was rejected.  See _warnings_message
+        # docstring for the batch-write caveat.
         if not result and warnings:
             raise MoodleAPIError(
                 message=_warnings_message(warnings),
@@ -953,6 +960,9 @@ class MoodleClient:
             UpdatedEntity.model_validate(r) for r in raw.get("result", [])
         ]
         warnings = raw.get("warnings", [])
+        # Single-item submission today: empty result + any warning
+        # means the operation was rejected.  See _warnings_message
+        # docstring for the batch-write caveat.
         if not result and warnings:
             raise MoodleAPIError(
                 message=_warnings_message(warnings),
@@ -1012,6 +1022,9 @@ class MoodleClient:
             CreatedEntity.model_validate(r) for r in raw.get("result", [])
         ]
         warnings = raw.get("warnings", [])
+        # Single-item submission today: empty result + any warning
+        # means the operation was rejected.  See _warnings_message
+        # docstring for the batch-write caveat.
         if not result and warnings:
             raise MoodleAPIError(
                 message=_warnings_message(warnings),
@@ -1045,6 +1058,9 @@ class MoodleClient:
             UpdatedEntity.model_validate(r) for r in raw.get("result", [])
         ]
         warnings = raw.get("warnings", [])
+        # Single-item submission today: empty result + any warning
+        # means the operation was rejected.  See _warnings_message
+        # docstring for the batch-write caveat.
         if not result and warnings:
             raise MoodleAPIError(
                 message=_warnings_message(warnings),
