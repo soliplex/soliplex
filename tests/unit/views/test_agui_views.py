@@ -2284,3 +2284,90 @@ async def test_post_agui_resolve_recent_feedback(
     the_logger.debug.assert_called_once_with(
         loggers.AGUI_POST_RESOLVE_RECENT_FEEDBACK,
     )
+
+
+# -----------------------------------------------------------------
+# F5 — Harmony-format control-token stripping in event stream
+# -----------------------------------------------------------------
+
+
+def test_strip_harmony_removes_channel_tokens():
+    """Harmony control tokens never reach the client."""
+    from soliplex.views import agui as agui_views
+
+    assert (
+        agui_views._strip_harmony("Hello<|channel|>commentaryworld")
+        == "Helloworld"
+    )
+    assert agui_views._strip_harmony("<|message|>foo<|end|>") == "foo"
+    assert agui_views._strip_harmony("<|return|>") == ""
+
+
+def test_strip_harmony_preserves_plain_text():
+    """Non-Harmony text passes through unchanged."""
+    from soliplex.views import agui as agui_views
+
+    plain = (
+        "Here are the departments: Engineering (ENG), "
+        "Operations (OPS).  Anything else?"
+    )
+    assert agui_views._strip_harmony(plain) == plain
+
+
+def test_sanitise_event_mutates_delta_in_place():
+    """When the event's delta contains Harmony tokens, _sanitise_event
+    mutates the event so downstream persistence + title-gen see the
+    sanitised text."""
+    from soliplex.views import agui as agui_views
+
+    ev = agui_core.TextMessageContentEvent(
+        message_id="m1",
+        delta="ok<|channel|>commentaryextra",
+    )
+    agui_views._sanitise_event(ev)
+    assert ev.delta == "okextra"
+
+
+def test_sanitise_event_mutates_content_in_place():
+    """Events that emit `content` (e.g. assistant message events
+    at the persistence layer) also get sanitised."""
+    from soliplex.views import agui as agui_views
+
+    ev = mock.MagicMock(spec=["delta", "content"])
+    ev.delta = None
+    ev.content = "hi<|end|>"
+    agui_views._sanitise_event(ev)
+    assert ev.content == "hi"
+
+
+def test_sanitise_event_leaves_clean_content_alone():
+    """A `content` field without Harmony tokens isn't mutated."""
+    from soliplex.views import agui as agui_views
+
+    ev = mock.MagicMock(spec=["delta", "content"])
+    ev.delta = None
+    ev.content = "clean message"
+    agui_views._sanitise_event(ev)
+    assert ev.content == "clean message"
+
+
+def test_sanitise_event_leaves_clean_events_alone():
+    """Events without Harmony tokens aren't mutated."""
+    from soliplex.views import agui as agui_views
+
+    ev = agui_core.TextMessageContentEvent(
+        message_id="m1",
+        delta="clean text",
+    )
+    agui_views._sanitise_event(ev)
+    assert ev.delta == "clean text"
+
+
+def test_sanitise_event_handles_no_delta_no_content():
+    """Events without delta/content (e.g. lifecycle events) pass
+    through cleanly."""
+    from soliplex.views import agui as agui_views
+
+    ev = agui_core.RunStartedEvent(thread_id="t", run_id="r")
+    # Should not raise.
+    agui_views._sanitise_event(ev)

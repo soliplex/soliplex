@@ -6443,3 +6443,191 @@ async def test_moodle_tool_passes_through_non_json_result():
 
     result = await fake_write(confirmed=True)
     assert result is None
+
+
+# -----------------------------------------------------------------
+# F1–F4, F6 prompt-content & docstring assertions
+# -----------------------------------------------------------------
+
+
+def test_rules_prompt_includes_matching_users_and_can_enable_guidance():
+    """F1 + F3: the rules skill's prompt must steer the agent to
+    get_rule_matching_users for "how many users match" queries and
+    to can_enable_rule for "can X be enabled" checks."""
+    from soliplex.moodle import skills as moodle_skills
+
+    text = moodle_skills._RULES_PROMPT
+    assert "get_rule_matching_users" in text
+    assert "how many users match" in text
+    assert "can_enable_rule" in text
+
+
+def test_router_prompt_includes_new_routing_examples():
+    """F2 + F3: the router prompt teaches "competency frameworks" →
+    moodle-programs (not moodle-rules) and "can X rule be enabled" →
+    moodle-rules.can_enable_rule."""
+    from soliplex.moodle import agent as moodle_agent
+
+    text = moodle_agent.MOODLE_ROUTER_PROMPT
+    assert "competency frameworks" in text
+    assert "list_competency_frameworks" in text
+    assert "can_enable_rule" in text
+    assert "can X rule be enabled" in text
+
+
+def test_organisation_prompt_includes_team_members_workflow():
+    """F4: the organisation skill's prompt teaches the agent to
+    call get_team_members directly with name/idnumber instead of
+    chaining through list_departments."""
+    from soliplex.moodle import skills as moodle_skills
+
+    text = moodle_skills._ORGANISATION_PROMPT
+    assert "get_team_members" in text
+    # Cross-reference: tells the agent to avoid the looping pattern.
+    assert "Do NOT" in text or "do NOT" in text
+
+
+def test_delete_department_docstring_mentions_idnumber_lookup():
+    """F6: delete_department's docstring must nudge the agent to
+    look up the idnumber via list_departments when only the
+    department name is known."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_department")
+    doc = " ".join((fn.__doc__ or "").split())  # flatten whitespace
+    assert "list_departments" in doc
+    assert "only accepts idnumber" in doc
+
+
+def test_delete_position_docstring_mentions_idnumber_lookup():
+    """F6 (positions): same guidance as delete_department."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_position")
+    doc = " ".join((fn.__doc__ or "").split())
+    assert "list_positions" in doc
+    assert "only accepts idnumber" in doc
+
+
+# -----------------------------------------------------------------
+# F4 — get_team_members name-based resolution
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_team_members_resolves_department_by_idnumber():
+    """F4: passing department=<idnumber> resolves to the integer
+    id internally via list_departments before calling the system
+    report.  Confirms two POST calls were made."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_team_members")
+
+    # Same mock answers BOTH http calls — first is
+    # local_soliplex_list_departments, second is the report.
+    resp = _mock_response(
+        [
+            {
+                "id": 1,
+                "name": "Engineering",
+                "idnumber": "ENG",
+                "parentid": 0,
+            }
+        ]
+    )
+    with _patch_httpx(resp) as patched:
+        result = json.loads(await fn(department="ENG"))
+
+    # Two round-trips: dept lookup + system report (returning the
+    # same mock — yields [] members since report shape differs).
+    assert patched.return_value.post.call_count == 2
+    assert isinstance(result, list)
+
+
+@pytest.mark.asyncio
+async def test_get_team_members_resolves_department_by_name():
+    """F4: passing department=<name> resolves to the integer id."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_team_members")
+
+    resp = _mock_response(
+        [
+            {
+                "id": 1,
+                "name": "Engineering",
+                "idnumber": "ENG",
+                "parentid": 0,
+            }
+        ]
+    )
+    with _patch_httpx(resp) as patched:
+        result = json.loads(await fn(department="Engineering"))
+
+    assert patched.return_value.post.call_count == 2
+    assert isinstance(result, list)
+
+
+@pytest.mark.asyncio
+async def test_get_team_members_department_not_found():
+    """F4: unknown department returns a structured error."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_team_members")
+
+    resp = _mock_response(
+        [
+            {
+                "id": 1,
+                "name": "Engineering",
+                "idnumber": "ENG",
+                "parentid": 0,
+            }
+        ]
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(department="NOSUCH"))
+
+    assert result["status"] == "error"
+    assert "NOSUCH" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_team_members_resolves_position_by_idnumber():
+    """F4: same resolution applies to position=<idnumber>."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_team_members")
+
+    resp = _mock_response(
+        [
+            {
+                "id": 3,
+                "name": "Engineer",
+                "idnumber": "ENG-POS",
+                "parentid": 0,
+            }
+        ]
+    )
+    with _patch_httpx(resp) as patched:
+        result = json.loads(await fn(position="ENG-POS"))
+
+    assert patched.return_value.post.call_count == 2
+    assert isinstance(result, list)
+
+
+@pytest.mark.asyncio
+async def test_get_team_members_position_not_found():
+    """F4: unknown position returns a structured error."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_team_members")
+
+    resp = _mock_response(
+        [
+            {
+                "id": 1,
+                "name": "Manager",
+                "idnumber": "MGR",
+                "parentid": 0,
+            }
+        ]
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(position="NOSUCH"))
+
+    assert result["status"] == "error"
+    assert "NOSUCH" in result["error"]

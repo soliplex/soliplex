@@ -73,6 +73,17 @@ list_certifications; never ask the user for a search \
 term — return all)
 - "what dynamic rules exist" → moodle-rules \
 (list_dynamic_rules)
+- "can X rule be enabled" / "is X rule enableable" / \
+"verify X rule" → moodle-rules (can_enable_rule with \
+rule_name=X)
+- "how many users match X rule" / "count of users for X \
+rule" / "matching users for X" → moodle-rules \
+(get_rule_matching_users with rule_name=X)
+- "competency frameworks" / "list frameworks" / "what \
+competency frameworks exist" → moodle-programs \
+(list_competency_frameworks).  Do NOT route to moodle-rules \
+— that skill's search_competencies_for_rule is only for \
+finding individual competencies usable as rule conditions.
 - "update user N and change their department/email/name/\
 etc." → moodle-users (update_user). The user.department \
 field is a free-form string on the user profile; do NOT \

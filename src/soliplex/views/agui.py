@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import re
 
 import fastapi
 import logfire
@@ -28,6 +29,52 @@ from soliplex.config import agents as config_agents
 from soliplex.config import agui as config_agui
 from soliplex.config import rooms as config_rooms
 from soliplex.views import streaming as streaming_views
+
+# gpt-oss models emit "Harmony" format control tokens
+# (``<|channel|>analysis``, ``<|message|>``, ``<|end|>``, etc.)
+# inside the assistant's free-text turns.  These are an
+# implementation detail of the model's prompt format and should
+# never reach the client.  Strip them from text deltas at the
+# AG-UI emission point.  Cosmetic only; if the format evolves we
+# may need to extend this regex.
+#
+# The pattern recognises two shapes:
+#   1. Bare markers: ``<|start|>`` / ``<|message|>`` / ``<|end|>`` /
+#      ``<|return|>`` / ``<|constrain|>``.
+#   2. The ``<|channel|>`` marker optionally followed by ONE of the
+#      known channel labels (``analysis`` / ``commentary`` /
+#      ``final``).  Limiting the trailing label to that closed set
+#      avoids eating subsequent content words.
+_HARMONY_TOKEN_RE = re.compile(
+    r"<\|(?:start|message|end|return|constrain)\|>"
+    r"|<\|channel\|>(?:analysis|commentary|final)?"
+)
+
+
+def _strip_harmony(text: str) -> str:
+    return _HARMONY_TOKEN_RE.sub("", text)
+
+
+def _sanitise_event(event):
+    """Strip Harmony tokens from text-content deltas in place.
+
+    AG-UI events are pydantic models; we mutate ``delta`` /
+    ``content`` rather than reconstructing the event so other
+    downstream consumers (persistence, title-gen) see the same
+    sanitised text.
+    """
+    delta = getattr(event, "delta", None)
+    if isinstance(delta, str) and delta:
+        cleaned = _strip_harmony(delta)
+        if cleaned != delta:
+            event.delta = cleaned
+    content = getattr(event, "content", None)
+    if isinstance(content, str) and content:
+        cleaned = _strip_harmony(content)
+        if cleaned != content:
+            event.content = cleaned
+    return event
+
 
 router = fastapi.APIRouter(tags=["rooms"])
 
@@ -644,6 +691,7 @@ async def drive_llm_stream(
         event_index = 0
         try:
             async for event in llm_stream:
+                event = _sanitise_event(event)
                 event_list.append(event)
                 await event_queue.put(event)
 

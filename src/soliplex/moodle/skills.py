@@ -367,6 +367,12 @@ Use get_potential_parent_departments/positions before creating \
 or moving. Always set an idnumber when creating \
 departments/positions so they can be referenced in updates.
 
+For "who is in the X department" / "team members for X" / \
+"members of X department" — call get_team_members directly \
+with department=X (the department name or idnumber).  Do \
+NOT chain through list_departments first — the tool resolves \
+the name/idnumber internally to find the matching members.
+
 """
     + _CONFIRM_INSTRUCTIONS
 )
@@ -485,6 +491,18 @@ either rule_id or rule_name. State machine: Disabled -> \
 enable -> Enabled, Enabled -> disable -> Disabled, any -> \
 archive -> Archived, Archived -> unarchive -> Disabled, \
 Archived -> delete (permanent).
+
+For "how many users match X" / "count of users matching X" / \
+"matching users for rule X" — call get_rule_matching_users \
+(NOT list_cohorts or get_cohort_members).  The rule's \
+conditions may include cohorts, competencies, or any other \
+field; this tool returns the user count without you needing \
+to introspect the conditions.
+
+For "can X rule be enabled" / "is X rule enableable" / \
+"verify X" — call can_enable_rule (NOT enable_rule with \
+confirmed=False).  This checks prerequisites without changing \
+state.
 
 For preview-mode write operations (enable_rule, \
 disable_rule, archive_rule, unarchive_rule, delete_rule, \
@@ -1747,20 +1765,75 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
 
     @_moodle_tool
     async def get_team_members(
-        departmentid: int = 0,
-        positionid: int = 0,
+        department: str = "",
+        position: str = "",
         search: str = "",
     ) -> str:
         """Find users by department, position, or name.
 
-        Returns all users matching the filters (not scoped to
-        a particular manager).
+        Returns all users matching the filters (not scoped to a
+        particular manager).  Resolve ``department`` / ``position``
+        from the caller-friendly name or idnumber internally —
+        callers never need to know the integer IDs Moodle uses
+        downstream.
 
         Args:
-            departmentid: Optional department ID to filter.
-            positionid: Optional position ID to filter.
-            search: Optional name search string.
+            department: Optional department name or idnumber to
+                filter by.
+            position: Optional position name or idnumber to filter
+                by.
+            search: Optional user-name search string (matches
+                firstname/lastname).
         """
+        departmentid = 0
+        positionid = 0
+
+        if department:
+            depts = await client.get_departments("")
+            target = department.lower()
+            match = next(
+                (
+                    d
+                    for d in depts
+                    if d.idnumber == department or d.name.lower() == target
+                ),
+                None,
+            )
+            if match is None:
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "error": (
+                            f"No department matches {department!r} "
+                            f"(by idnumber or name)"
+                        ),
+                    }
+                )
+            departmentid = match.id
+
+        if position:
+            positions = await client.get_positions("")
+            target = position.lower()
+            match = next(
+                (
+                    p
+                    for p in positions
+                    if p.idnumber == position or p.name.lower() == target
+                ),
+                None,
+            )
+            if match is None:
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "error": (
+                            f"No position matches {position!r} "
+                            f"(by idnumber or name)"
+                        ),
+                    }
+                )
+            positionid = match.id
+
         members = await client.get_department_members(
             departmentid, positionid, search
         )
@@ -1914,6 +1987,12 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
 
         The department must not have any jobs in its hierarchy.
 
+        If the user named the department by name (e.g. "the
+        Security department") and you don't already know the
+        idnumber, FIRST call ``list_departments`` to look it up;
+        the response includes the idnumber.  This tool only
+        accepts idnumber — it does not resolve names.
+
         Args:
             idnumber: Department idnumber.
             confirmed: Set True only after user approval.
@@ -2040,6 +2119,11 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         """Delete a position. REQUIRES USER CONFIRMATION.
 
         The position must not have any jobs assigned.
+
+        If the user named the position by name and you don't
+        already know the idnumber, FIRST call ``list_positions``
+        to look it up; the response includes the idnumber.  This
+        tool only accepts idnumber — it does not resolve names.
 
         Args:
             idnumber: Position idnumber.
@@ -3145,6 +3229,12 @@ def build_rules_skill(client: MoodleClient) -> Skill:
         rule_id: int = 0, rule_name: str = ""
     ) -> str:
         """Count users currently matching a dynamic rule's conditions.
+
+        Use this for any "how many users match X" or "count of
+        users for rule X" question.  Do NOT call list_cohorts or
+        get_cohort_members instead — the rule may include cohort
+        conditions but the user-count answer requires this tool,
+        not manual condition inspection.
 
         Args:
             rule_id: Moodle dynamic rule ID.
