@@ -381,16 +381,30 @@ class MoodleClient:
     # ---------------------------------------------------------------
 
     async def enrol_users(self, enrolments: list[dict]) -> dict:
-        """Enrol users via ``enrol_manual_enrol_users``."""
+        """Enrol users via ``enrol_manual_enrol_users``.
+
+        Returns ``{"warnings": []}`` on success.  Raises
+        ``MoodleAPIError`` when Moodle responds with warnings —
+        the enrol endpoint silently rejects bad enrolments by
+        returning HTTP 200 with a populated ``warnings`` array
+        (e.g. user already enrolled, course not found, missing
+        capability) instead of an exception.  Surface those as
+        errors so the wrapper's status field reflects reality.
+        """
         params: dict[str, str | int] = {}
         for i, e in enumerate(enrolments):
             params[f"enrolments[{i}][roleid]"] = e["roleid"]
             params[f"enrolments[{i}][userid]"] = e["userid"]
             params[f"enrolments[{i}][courseid]"] = e["courseid"]
         raw = await self._call("enrol_manual_enrol_users", **params)
-        if raw is None:
-            return {"warnings": []}
-        return raw if isinstance(raw, dict) else {"warnings": []}
+        if isinstance(raw, dict) and raw.get("warnings"):
+            warnings = raw["warnings"]
+            raise MoodleAPIError(
+                message=_warnings_message(warnings),
+                errorcode=warnings[0].get("warningcode", ""),
+                exception="warnings_only",
+            )
+        return {"warnings": []}
 
     async def send_messages(self, messages: list[dict]) -> list[dict]:
         """Send messages via ``core_message_send_instant_messages``."""
@@ -811,17 +825,18 @@ class MoodleClient:
 
     async def get_department_members(
         self,
-        departmentid: int = 0,
-        positionid: int = 0,
         search: str = "",
     ) -> list[DepartmentMember]:
-        """Get users by department/position via the Workplace jobs system
-        report.
+        """Get every user with a Workplace job assignment via the
+        Workplace jobs system report.
 
         Uses ``core_reportbuilder_retrieve_system_report`` with the
-        ``tool_organisation`` jobs report.  Results are not scoped to
-        the token owner's direct reports — all matching users are
-        returned.  No custom plugin required.
+        ``tool_organisation`` jobs report.  The system report
+        endpoint accepts no filter parameters, so department /
+        position filtering is the caller's job — this function
+        returns every row the report can see, with an optional
+        client-side user-name search applied.  Results are not
+        scoped to the token owner's direct reports.
         """
         raw = await self._call(
             "core_reportbuilder_retrieve_system_report",
@@ -852,12 +867,6 @@ class MoodleClient:
             fullname = _HTML_TAG_RE.sub("", cols[0]).strip()
             dept_name = cols[1].strip()
             pos_name = cols[2].strip()
-            # Apply client-side filters (the system report
-            # doesn't accept department/position/search params).
-            if departmentid and dept_name == "":
-                continue
-            if positionid and pos_name == "":
-                continue
             if needle and needle not in fullname.lower():
                 continue
             parts = fullname.split(None, 1)
@@ -1500,6 +1509,12 @@ class MoodleClient:
         """Update courses via ``core_course_update_courses``.
 
         Each dict must contain ``id`` and any fields to update.
+        Raises ``MoodleAPIError`` when Moodle returns warnings —
+        the update endpoint silently rejects bad updates by
+        returning HTTP 200 with a populated ``warnings`` array
+        (shortname collision, capability error, etc.) instead of
+        an exception.  Surface those as errors so the wrapper's
+        status field reflects reality.
         """
         params: dict[str, str | int] = {}
         for i, c in enumerate(courses):
@@ -1507,7 +1522,12 @@ class MoodleClient:
                 params[f"courses[{i}][{key}]"] = val
         raw = await self._call("core_course_update_courses", **params)
         if isinstance(raw, dict) and raw.get("warnings"):
-            return raw
+            warnings = raw["warnings"]
+            raise MoodleAPIError(
+                message=_warnings_message(warnings),
+                errorcode=warnings[0].get("warningcode", ""),
+                exception="warnings_only",
+            )
         return None
 
     async def delete_courses(

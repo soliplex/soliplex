@@ -6631,3 +6631,272 @@ async def test_get_team_members_position_not_found():
 
     assert result["status"] == "error"
     assert "NOSUCH" in result["error"]
+
+
+# -----------------------------------------------------------------
+# Third-pass review fixes (B1 + SF1 + SF2)
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_team_members_filters_to_requested_department():
+    """B1: the wrapper must filter the report's all-staff result to
+    only the requested department.  Previously the broken
+    client-side filter let through every row from every other
+    department; the wrapper now filters on
+    ``departmentname == match.name``."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_team_members")
+
+    # The same mock answers BOTH http calls.  The first call is
+    # list_departments and yields one dept; the second is the system
+    # report.  Since _mock_response returns the same JSON for every
+    # POST, the report parser sees the dept list as `data.rows`
+    # which is missing — it falls back to [].  To exercise the
+    # filter we need two distinct mock responses.
+    list_resp = _mock_response(
+        [
+            {
+                "id": 1,
+                "name": "Engineering",
+                "idnumber": "ENG",
+                "parentid": 0,
+            },
+            {
+                "id": 2,
+                "name": "Operations",
+                "idnumber": "OPS",
+                "parentid": 0,
+            },
+        ]
+    )
+    # Mock client where the first POST gets the dept list and the
+    # second POST gets the multi-dept report rows.
+    report_payload = {
+        "data": {
+            "headers": ["Full name with link", "Department", "Position"],
+            "rows": [
+                {
+                    "columns": [
+                        '<a href="/user/profile.php?id=3">Alice Johnson</a>',
+                        "Engineering",
+                        "Manager",
+                    ],
+                },
+                {
+                    "columns": [
+                        '<a href="/user/profile.php?id=4">Bob Smith</a>',
+                        "Operations",
+                        "Engineer",
+                    ],
+                },
+            ],
+            "totalrowcount": 2,
+        },
+        "warnings": [],
+    }
+    report_resp = _mock_response(report_payload)
+
+    mock_client = mock.AsyncMock()
+    mock_client.post.side_effect = [list_resp, report_resp]
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(department="Engineering"))
+
+    # The wrapper filtered out Bob (Operations); only Alice survives.
+    assert len(result) == 1
+    assert result[0]["userid"] == 3
+    assert result[0]["departmentname"] == "Engineering"
+
+
+@pytest.mark.asyncio
+async def test_get_team_members_filters_to_requested_position():
+    """B1: same filter applies for position."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_team_members")
+
+    list_resp = _mock_response(
+        [
+            {
+                "id": 1,
+                "name": "Manager",
+                "idnumber": "MGR",
+                "parentid": 0,
+            },
+            {
+                "id": 2,
+                "name": "Engineer",
+                "idnumber": "ENG-POS",
+                "parentid": 0,
+            },
+        ]
+    )
+    report_payload = {
+        "data": {
+            "headers": ["Full name with link", "Department", "Position"],
+            "rows": [
+                {
+                    "columns": [
+                        '<a href="/user/profile.php?id=3">Alice Johnson</a>',
+                        "Engineering",
+                        "Manager",
+                    ],
+                },
+                {
+                    "columns": [
+                        '<a href="/user/profile.php?id=4">Bob Smith</a>',
+                        "Engineering",
+                        "Engineer",
+                    ],
+                },
+            ],
+            "totalrowcount": 2,
+        },
+        "warnings": [],
+    }
+    report_resp = _mock_response(report_payload)
+
+    mock_client = mock.AsyncMock()
+    mock_client.post.side_effect = [list_resp, report_resp]
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(position="Engineer"))
+
+    # Only Bob (Engineer) survives; Alice (Manager) is filtered out.
+    assert len(result) == 1
+    assert result[0]["userid"] == 4
+    assert result[0]["positionname"] == "Engineer"
+
+
+@pytest.mark.asyncio
+async def test_get_team_members_ambiguous_department():
+    """SF2: when the query matches multiple departments, the
+    wrapper surfaces an error listing the candidates so the caller
+    can disambiguate by idnumber."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_team_members")
+
+    # Two departments both have the literal lowercase string
+    # "engineering" — one via name, the other via idnumber.
+    resp = _mock_response(
+        [
+            {
+                "id": 1,
+                "name": "Engineering",
+                "idnumber": "ENG",
+                "parentid": 0,
+            },
+            {
+                "id": 2,
+                "name": "Other",
+                "idnumber": "engineering",
+                "parentid": 0,
+            },
+        ]
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(department="engineering"))
+
+    assert result["status"] == "error"
+    assert "Multiple" in result["error"]
+    assert {m["idnumber"] for m in result["matches"]} == {"ENG", "engineering"}
+
+
+@pytest.mark.asyncio
+async def test_get_team_members_ambiguous_position():
+    """SF2: ambiguity surfaces for position too."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_team_members")
+
+    resp = _mock_response(
+        [
+            {
+                "id": 1,
+                "name": "Manager",
+                "idnumber": "MGR",
+                "parentid": 0,
+            },
+            {
+                "id": 2,
+                "name": "Other",
+                "idnumber": "manager",
+                "parentid": 0,
+            },
+        ]
+    )
+    with _patch_httpx(resp):
+        result = json.loads(await fn(position="manager"))
+
+    assert result["status"] == "error"
+    assert "Multiple" in result["error"]
+    assert {m["idnumber"] for m in result["matches"]} == {"MGR", "manager"}
+
+
+@pytest.mark.asyncio
+async def test_update_course_tool_propagates_warnings():
+    """SF1: when Moodle returns a warnings response on
+    update_courses (shortname collision, capability error), the
+    decorator catches MoodleAPIError and the wrapper output gets
+    status=error.  No silent ✅."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_course")
+
+    resp = _mock_response(
+        {
+            "warnings": [
+                {
+                    "item": "shortname",
+                    "warningcode": "shortnametaken",
+                    "message": "Shortname is already in use",
+                }
+            ]
+        }
+    )
+    with _patch_httpx(resp):
+        result = json.loads(
+            await fn(courseid=5, shortname="DUP", confirmed=True)
+        )
+
+    assert result["status"] == "error"
+    assert "Shortname is already in use" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_enrol_users_tool_propagates_warnings():
+    """SF1 audit: same fix for enrol_users — when Moodle silently
+    rejects an enrol (user already enrolled, course not found, etc.)
+    the wrapper now reports status=error instead of confabulating
+    success."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "enrol_users")
+
+    resp = _mock_response(
+        {
+            "warnings": [
+                {
+                    "item": "3",
+                    "warningcode": "alreadyenroled",
+                    "message": "User is already enrolled",
+                }
+            ]
+        }
+    )
+    with _patch_httpx(resp):
+        result = json.loads(
+            await fn(
+                userids="3",
+                courseid=2,
+                confirmed=True,
+            )
+        )
+
+    assert result["status"] == "error"
+    assert "already enrolled" in result["error"]

@@ -1018,12 +1018,11 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             {"userid": uid, "courseid": courseid, "roleid": roleid}
             for uid in user_list
         ]
-        result = await client.enrol_users(enrolments)
+        await client.enrol_users(enrolments)
         return json.dumps(
             {
                 "success": True,
                 "enrolled": len(user_list),
-                "warnings": result.get("warnings", []),
             }
         )
 
@@ -1772,10 +1771,16 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         """Find users by department, position, or name.
 
         Returns all users matching the filters (not scoped to a
-        particular manager).  Resolve ``department`` / ``position``
-        from the caller-friendly name or idnumber internally —
-        callers never need to know the integer IDs Moodle uses
-        downstream.
+        particular manager).  ``department`` / ``position`` are
+        resolved by exact (case-insensitive) name or idnumber
+        match.  If a query string is ambiguous (e.g. matches
+        multiple departments) the wrapper surfaces an error
+        listing the candidates so the caller can disambiguate by
+        idnumber.  Members are filtered by the resolved
+        department's / position's canonical name against the
+        Workplace jobs system report — the report endpoint
+        accepts no filter parameters, so filtering happens
+        client-side here in the wrapper.
 
         Args:
             department: Optional department name or idnumber to
@@ -1785,21 +1790,18 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             search: Optional user-name search string (matches
                 firstname/lastname).
         """
-        departmentid = 0
-        positionid = 0
+        department_match = None
+        position_match = None
 
         if department:
             depts = await client.get_departments("")
             target = department.lower()
-            match = next(
-                (
-                    d
-                    for d in depts
-                    if d.idnumber == department or d.name.lower() == target
-                ),
-                None,
-            )
-            if match is None:
+            matches = [
+                d
+                for d in depts
+                if d.idnumber == department or d.name.lower() == target
+            ]
+            if len(matches) == 0:
                 return json.dumps(
                     {
                         "status": "error",
@@ -1809,20 +1811,31 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
                         ),
                     }
                 )
-            departmentid = match.id
+            if len(matches) > 1:
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "error": (
+                            f"Multiple departments match "
+                            f"{department!r}; specify by idnumber."
+                        ),
+                        "matches": [
+                            {"name": d.name, "idnumber": d.idnumber}
+                            for d in matches
+                        ],
+                    }
+                )
+            department_match = matches[0]
 
         if position:
             positions = await client.get_positions("")
             target = position.lower()
-            match = next(
-                (
-                    p
-                    for p in positions
-                    if p.idnumber == position or p.name.lower() == target
-                ),
-                None,
-            )
-            if match is None:
+            matches = [
+                p
+                for p in positions
+                if p.idnumber == position or p.name.lower() == target
+            ]
+            if len(matches) == 0:
                 return json.dumps(
                     {
                         "status": "error",
@@ -1832,11 +1845,31 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
                         ),
                     }
                 )
-            positionid = match.id
+            if len(matches) > 1:
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "error": (
+                            f"Multiple positions match {position!r}; "
+                            f"specify by idnumber."
+                        ),
+                        "matches": [
+                            {"name": p.name, "idnumber": p.idnumber}
+                            for p in matches
+                        ],
+                    }
+                )
+            position_match = matches[0]
 
-        members = await client.get_department_members(
-            departmentid, positionid, search
-        )
+        members = await client.get_department_members(search)
+        if department_match is not None:
+            target = department_match.name.lower()
+            members = [
+                m for m in members if m.departmentname.lower() == target
+            ]
+        if position_match is not None:
+            target = position_match.name.lower()
+            members = [m for m in members if m.positionname.lower() == target]
         return json.dumps(
             [
                 {

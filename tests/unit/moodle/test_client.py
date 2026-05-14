@@ -609,20 +609,23 @@ async def test_enrol_users(client):
 
 
 @pytest.mark.asyncio
-async def test_enrol_users_returns_dict(client):
+async def test_enrol_users_raises_on_warnings(client):
+    """Moodle returns 200 with a warnings array when the enrol was
+    silently rejected (user already enrolled, course not found, etc.).
+    The client raises MoodleAPIError so the wrapper's status field
+    reflects the real failure instead of confabulating success."""
     resp = _mock_response({"warnings": [{"message": "already enrolled"}]})
     with _patch_httpx(resp):
-        result = await client.enrol_users(
-            [{"userid": 3, "courseid": 2, "roleid": 5}]
-        )
-
-    assert result == {"warnings": [{"message": "already enrolled"}]}
+        with pytest.raises(MoodleAPIError, match="already enrolled"):
+            await client.enrol_users(
+                [{"userid": 3, "courseid": 2, "roleid": 5}]
+            )
 
 
 @pytest.mark.asyncio
-async def test_enrol_users_returns_non_dict(client):
+async def test_enrol_users_returns_empty_on_non_dict(client):
     # When the API returns a non-dict (e.g. a list), fall back to
-    # empty warnings
+    # empty warnings.
     resp = _mock_response([])
     with _patch_httpx(resp):
         result = await client.enrol_users(
@@ -1645,14 +1648,17 @@ async def test_get_department_members_malformed_row(client):
 
 
 @pytest.mark.asyncio
-async def test_get_department_members_dept_position_filter(client):
-    """Client-side departmentid/positionid filters skip empty values."""
+async def test_get_department_members_returns_all_rows(client):
+    """The client function takes no dept/position filters — it
+    returns every row the report can see.  Department / position
+    filtering is the wrapper's job (see test_agent for the
+    name-based wrapper-side filter)."""
     resp = _mock_response(
         _jobs_report_response(
             [
                 [
                     '<a href="?id=3">Alice Johnson</a>',
-                    "",
+                    "Engineering",
                     "Manager",
                     "",
                     "",
@@ -1660,8 +1666,8 @@ async def test_get_department_members_dept_position_filter(client):
                 ],
                 [
                     '<a href="?id=4">Bob Smith</a>',
-                    "Engineering",
-                    "",
+                    "Operations",
+                    "Engineer",
                     "",
                     "",
                     "",
@@ -1670,18 +1676,12 @@ async def test_get_department_members_dept_position_filter(client):
         )
     )
     with _patch_httpx(resp):
-        members_dept = await client.get_department_members(departmentid=1)
+        members = await client.get_department_members()
 
-    # Alice has empty dept, should be skipped; Bob has dept but empty pos
-    assert len(members_dept) == 1
-    assert members_dept[0].userid == 4
-
-    with _patch_httpx(resp):
-        members_pos = await client.get_department_members(positionid=1)
-
-    # Alice has position but empty dept; Bob has empty position, skipped
-    assert len(members_pos) == 1
-    assert members_pos[0].userid == 3
+    # Both rows come back — no client-side dept/position filter.
+    assert len(members) == 2
+    assert {m.userid for m in members} == {3, 4}
+    assert {m.departmentname for m in members} == {"Engineering", "Operations"}
 
 
 # ---------------------------------------------------------------
@@ -2953,12 +2953,27 @@ async def test_update_courses(client):
 
 
 @pytest.mark.asyncio
-async def test_update_courses_with_warnings(client):
-    raw = {"warnings": [{"item": "fullname", "message": "ignored"}]}
-    resp = _mock_response(raw)
+async def test_update_courses_raises_on_warnings(client):
+    """Moodle returns 200 with a warnings array when the update was
+    silently rejected (shortname collision, capability error, etc.).
+    The client raises MoodleAPIError so the wrapper's status field
+    reflects reality."""
+    resp = _mock_response(
+        {
+            "warnings": [
+                {
+                    "item": "shortname",
+                    "warningcode": "shortnametaken",
+                    "message": "Shortname is already in use",
+                }
+            ]
+        }
+    )
     with _patch_httpx(resp):
-        result = await client.update_courses([{"id": 5, "fullname": "Bad"}])
-    assert result == raw
+        with pytest.raises(
+            MoodleAPIError, match="Shortname is already in use"
+        ):
+            await client.update_courses([{"id": 5, "shortname": "DUP"}])
 
 
 @pytest.mark.asyncio
