@@ -32,7 +32,7 @@
     root = builtins.dirOf config.devenv.root;
   in {
     serve.exec = ''
-      exec uv run soliplex-cli serve ${root}/example/minimal.yaml --no-auth-mode --port 8555 "$@"
+      exec uv run soliplex-cli serve ${config.devenv.root}/installation.yaml --no-auth-mode --port 8555 "$@"
     '';
 
     init-rag.exec = ''
@@ -48,7 +48,7 @@
     '';
 
     audit.exec = ''
-      exec uv run soliplex-cli audit ${root}/example/minimal.yaml "$@"
+      exec uv run soliplex-cli audit ${config.devenv.root}/installation.yaml "$@"
     '';
 
     init.exec = ''
