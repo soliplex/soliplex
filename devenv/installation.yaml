@@ -253,6 +253,7 @@ agent_configs:
   - id: "default_chat"
     model_name: "gpt-oss:20b"
     provider_type: openai
+    provider_base_url: "https://ollama.com"
     provider_key: "secret:OLLAMA_API_KEY"
     system_prompt: |
       You are an expert AI assistant specializing in information retrieval.
@@ -264,6 +265,7 @@ agent_configs:
   - id: "alternate_chat"
     model_name: "gpt-oss:20b"
     provider_type: openai
+    provider_base_url: "https://ollama.com"
     provider_key: "secret:OLLAMA_API_KEY"
     system_prompt: |
       You are an expert AI assistant specializing in information retrieval.
@@ -275,6 +277,7 @@ agent_configs:
   - id: "title"
     model_name: "gpt-oss:20b"
     provider_type: openai
+    provider_base_url: "https://ollama.com"
     provider_key: "secret:OLLAMA_API_KEY"
 
 title_agent_config_id: "title"
