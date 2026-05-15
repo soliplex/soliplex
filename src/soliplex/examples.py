@@ -13,6 +13,7 @@ from ag_ui import core as agui_core
 from pydantic_ai import messages as ai_messages
 from pydantic_ai import output as ai_output
 from pydantic_ai import run as ai_run
+from pydantic_ai import result as ai_result
 from pydantic_ai import tools as ai_tools
 from pydantic_ai.models import openai as openai_models
 from pydantic_ai.providers import ollama as ollama_providers
@@ -168,7 +169,7 @@ class FauxAgent:
     ):
         yield FauxAgentRun(prompt, self)
 
-    async def run_stream_events(
+    async def _run_stream_events(
         self,
         output_type: ai_output.OutputSpec[typing.Any] | None = None,
         message_history: MessageHistory | None = None,
@@ -245,7 +246,7 @@ class FauxAgent:
             )
 
             yield ai_messages.FunctionToolResultEvent(
-                result=ai_messages.ToolReturnPart(
+                part=ai_messages.ToolReturnPart(
                     tool_name=tool_name,
                     tool_call_id=tc_part.tool_call_id,
                     content=result.return_value,
@@ -267,6 +268,30 @@ class FauxAgent:
         )
 
         yield ai_run.AgentRunResultEvent(result=text_part.content)
+
+    def run_stream_events(
+        self,
+        output_type: ai_output.OutputSpec[typing.Any] | None = None,
+        message_history: MessageHistory | None = None,
+        deferred_tool_results: pydantic_ai.DeferredToolResults | None = None,
+        deps: ai_tools.AgentDepsT = None,
+        # model=model,
+        # model_settings=model_settings,
+        # toolsets=toolsets,
+        # builtin_tools=builtin_tools,
+        # infer_name=infer_name,
+        # usage_limits=usage_limits,
+        # usage=usage,
+        **kwargs,
+    ) -> ai_result.AgentEventStream[NativeEvent]:
+        return ai_result.AgentEventStream(
+            self._run_stream_events(
+                output_type=output_type,
+                message_history=message_history,
+                deferred_tool_results=deferred_tool_results,
+                deps=deps,
+            )
+        )
 
 
 def faux_agent_factory(
