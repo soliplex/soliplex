@@ -17,6 +17,7 @@ pyvenv.cfg
 
 # database files
 db/
+installation/
 
 # misc
 tmp/
@@ -35,3 +36,7 @@ site/
 uploads/
 sandbox/workdirs/
 .claude/
+
+# devenv
+devenv/.devenv/
+devenv/devenv.lock
