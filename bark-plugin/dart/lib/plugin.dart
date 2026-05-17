@@ -1,4 +1,4 @@
-import 'package:bark_frontend/tools/tool_plugin.dart';
+import 'package:bark_plugin_api/bark_plugin_api.dart';
 import 'soliplex_tools.dart';
 
 class SoliplexPlugin extends ToolPlugin {
