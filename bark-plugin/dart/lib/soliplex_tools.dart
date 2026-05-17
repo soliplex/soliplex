@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:bark_frontend/utils/backend_url.dart';
+import 'package:bark_plugin_api/bark_plugin_api.dart';
 
 /// Cached Soliplex URL fetched from the Bark backend config.
 String? _soliplexUrl;
