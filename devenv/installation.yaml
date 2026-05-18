@@ -251,9 +251,9 @@ haiku_rag_config_file: "./haiku.rag.yaml"
 
 agent_configs:
   - id: "default_chat"
-    model_name: "gpt-oss:20b"
+    model_name: "bizon/gemma4-26b"
     provider_type: openai
-    provider_base_url: "https://ollama.com"
+    provider_base_url: "http://100.122.115.33:4001"
     provider_key: "secret:OLLAMA_API_KEY"
     system_prompt: |
       You are an expert AI assistant specializing in information retrieval.
@@ -263,9 +263,9 @@ agent_configs:
       Always provide code or examples in Markdown blocks.
 
   - id: "alternate_chat"
-    model_name: "gpt-oss:20b"
+    model_name: "bizon/gemma4-26b"
     provider_type: openai
-    provider_base_url: "https://ollama.com"
+    provider_base_url: "http://100.122.115.33:4001"
     provider_key: "secret:OLLAMA_API_KEY"
     system_prompt: |
       You are an expert AI assistant specializing in information retrieval.
@@ -275,9 +275,9 @@ agent_configs:
       Always provide code or examples in Markdown blocks.
 
   - id: "title"
-    model_name: "gpt-oss:20b"
+    model_name: "bizon/gemma4-26b"
     provider_type: openai
-    provider_base_url: "https://ollama.com"
+    provider_base_url: "http://100.122.115.33:4001"
     provider_key: "secret:OLLAMA_API_KEY"
 
 title_agent_config_id: "title"

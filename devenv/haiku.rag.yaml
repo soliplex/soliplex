@@ -14,18 +14,18 @@ monitor:
 
 embeddings:
   model:
-    name: qwen3-embedding:4b
+    name: qwen3-embedding-4b
     provider: ollama
     vector_dim: 2560
 
 qa:
   model:
-    name: gpt-oss:latest
+    name: bizon/gemma4-26b
     provider: ollama
 
 research:
   model:
-    name: gpt-oss:latest
+    name: bizon/gemma4-26b
     provider: ollama
   max_iterations: 2
   max_concurrency: 1
@@ -40,7 +40,7 @@ providers:
     base_url: http://localhost:5001
 
   ollama:
-    base_url: http://localhost:11434
+    base_url: http://100.122.115.33:4001
 
   vllm:
     embeddings_base_url: ""
