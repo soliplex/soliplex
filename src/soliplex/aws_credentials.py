@@ -2,9 +2,9 @@
 
 Lance-io reads AWS credentials from ``os.environ`` directly, and
 botocore's default provider chain does the same.  Soliplex's ``.env``
-handling keeps values in the installation config (``_from_dotenv``) and
-does not mutate ``os.environ``, so credentials placed there never reach
-lance or botocore.
+handling keeps values in the installation config (``_from_dotenv``)
+and does not mutate ``os.environ``, so credentials placed there never
+reach lance or botocore.
 
 When the optional ``botocore`` dependency is installed
 (``soliplex[aws]``), this module:
@@ -24,6 +24,16 @@ The resolver is re-called on every ``haiku_rag_config`` access (see
 ``soliplex.config.rag``); refreshable credentials (SSO, AssumeRole,
 IMDS) re-fetch automatically inside ``get_frozen_credentials`` when
 they expire.
+
+**Region caveat:** lance requires ``region`` in ``storage_options`` to
+address S3 — without it, lance often fails with "Bucket not found"
+even when credentials are valid.  Neither raw botocore nor boto3's
+``Session.region_name`` reads ``AWS_REGION`` (they only read
+``AWS_DEFAULT_REGION`` / profile config).  ``_resolve_region`` below
+checks both env vars explicitly so a ``.env``-supplied ``AWS_REGION``
+reaches lance.  Make sure one of ``AWS_REGION`` /
+``AWS_DEFAULT_REGION`` is set somewhere botocore (or our bridge) can
+find it.
 """
 
 from __future__ import annotations
@@ -35,10 +45,10 @@ import typing
 logger = logging.getLogger(__name__)
 
 
-# AWS env vars that botocore's EnvProvider (and lance) read directly
-# from ``os.environ``.  When found in a soliplex ``.env`` file, these
-# are bridged into the process environment so both botocore and lance
-# can see them.
+# AWS env vars that the AWS SDKs (and lance) read directly from
+# ``os.environ``.  When found in a soliplex ``.env`` file, these are
+# bridged into the process environment so both botocore and lance can
+# see them.
 _BRIDGED_AWS_ENV_KEYS = (
     "AWS_ACCESS_KEY_ID",
     "AWS_SECRET_ACCESS_KEY",
@@ -60,7 +70,7 @@ def resolve_aws_storage_options(
 ) -> dict[str, str]:
     """Return AWS creds shaped for ``lancedb.storage_options``, or {}.
 
-    Returns an empty dict if ``botocore`` is not installed or no
+    Returns an empty dict if ``boto3`` is not installed or no
     credentials are available from the default provider chain.
 
     ``extra_env`` is an optional supplementary mapping (typically the
@@ -80,9 +90,9 @@ def resolve_aws_storage_options(
         import botocore.session
     except ImportError:
         logger.warning(
-            "botocore not installed; cannot resolve AWS credentials for "
-            "S3 LanceDB. Install with 'uv add soliplex[aws]' or set "
-            "lancedb.storage_options explicitly in haiku.rag.yaml."
+            "botocore not installed; cannot resolve AWS credentials "
+            "for S3 LanceDB. Install with 'uv add soliplex[aws]' or "
+            "set lancedb.storage_options explicitly in haiku.rag.yaml."
         )
         return {}
 
@@ -107,9 +117,18 @@ def resolve_aws_storage_options(
     region = _resolve_region(session)
     if region:
         result["region"] = region
+    else:
+        logger.warning(
+            "No AWS region found (checked botocore "
+            "session.get_config_variable('region'), AWS_REGION env, "
+            "AWS_DEFAULT_REGION env). Lance will likely fail with "
+            "'Bucket not found' — set AWS_REGION in your .env or "
+            "installation environment, or pin lancedb.storage_options "
+            "region in haiku.rag.yaml."
+        )
 
-    logger.debug(
-        "Resolved AWS storage_options keys: %s",
+    logger.info(
+        "Resolved AWS storage_options for lancedb (keys: %s)",
         sorted(result),
     )
     return result
@@ -123,10 +142,9 @@ def _resolve_region(session) -> str | None:
     lance often fails with "Bucket not found" even when credentials are
     valid.
 
-    Raw ``botocore.session.get_session().get_config_variable('region')``
-    only checks ``AWS_DEFAULT_REGION`` and profile config — it ignores
-    ``AWS_REGION`` (which is the env var that ``boto3`` and most other
-    AWS tooling honor).  We check both env vars explicitly so a
+    Neither raw ``botocore`` nor ``boto3.session.Session().region_name``
+    reads ``AWS_REGION``; both only read ``AWS_DEFAULT_REGION`` (or the
+    active profile config).  We check both env vars explicitly so a
     ``.env``-supplied ``AWS_REGION`` reaches lance.
     """
     region = session.get_config_variable("region")
@@ -158,9 +176,10 @@ _SESSION: typing.Any = None
 def _get_session(factory):
     """Return a cached botocore session built by 'factory'.
 
-    Caching the session preserves botocore's internal credential-provider
-    cache (and the ``RefreshableCredentials`` it returns) across calls, so
-    refresh-on-expiry works without us tracking expirations ourselves.
+    Caching the session preserves botocore's internal credential-
+    provider cache (and the ``RefreshableCredentials`` it returns)
+    across calls, so refresh-on-expiry works without us tracking
+    expirations ourselves.
     """
     global _SESSION
     if _SESSION is None:

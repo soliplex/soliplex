@@ -253,6 +253,21 @@ works for soliplex S3 rooms exactly the way it works for the
 happens and lance falls back to its own credential lookup against
 whatever `os.environ` contained at process start.
 
+> **REQUIRED: AWS_REGION (or AWS_DEFAULT_REGION) must be set.**  Lance
+> needs an explicit `region` in `storage_options` to address the right
+> S3 endpoint; without it, lance fails with `Bucket not found` even
+> when credentials are otherwise valid (the failure mode is a HEAD
+> bucket 404 / unfollowed 301 redirect).  Be aware of a botocore quirk:
+> `session.get_config_variable("region")` only reads
+> `AWS_DEFAULT_REGION`, NOT `AWS_REGION` — so does `boto3`'s
+> `Session.region_name`.  Soliplex works around this by explicitly
+> checking `AWS_REGION` and `AWS_DEFAULT_REGION` in `os.environ` (after
+> bridging from `.env`) when the session-level lookup returns `None`.
+> If you see a `WARNING` in the server logs about "No AWS region
+> found", set one of these env vars in your installation's `.env`,
+> export it before launching the server, or pin
+> `lancedb.storage_options.region` in `haiku.rag.yaml` (see below).
+
 To bypass the auto-resolution entirely, set `lancedb.storage_options`
 explicitly in a room-level `haiku.rag.yaml`; soliplex never overwrites
 user-supplied storage options:
