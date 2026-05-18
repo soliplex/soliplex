@@ -296,3 +296,70 @@ async def get_chunk_visualization(
         document_uri=chunk.document_uri,
         images_base_64=base64_images,
     )
+
+
+@util.logfire_span("GET /v1/rooms/{room_id}/search")
+@router.get("/v1/rooms/{room_id}/search")
+async def get_search(
+    query: str,
+    room_id: str,
+    search_type: models.SearchType = "hybrid",
+    the_installation: installation.Installation = depend_the_installation,
+    the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
+    the_user_claims: authn.UserClaims = depend_the_user_claims,
+    the_logger: loggers.LogWrapper = depend_the_logger,
+) -> models.SearchResults:
+    """Return a set of page images for a chunk, highlighting the chunk text"""
+    the_logger.debug(loggers.ROOM_GET_SEARCH)
+
+    try:
+        room_config = await the_installation.get_room_config(
+            room_id=room_id,
+            user=the_user_claims,
+            the_authz_policy=the_authz_policy,
+            the_logger=the_logger,
+        )
+    except KeyError:
+        # auth error logged in 'get_room_config'
+        # but this could be just a missing room
+        the_logger.exception(loggers.ROOM_UNKNOWN_ROOM_ID, room_id)
+        raise fastapi.HTTPException(
+            status_code=404,
+            detail=loggers.ROOM_UNKNOWN_ROOM_ID % room_id,
+        ) from None
+
+    aggregate_hits = []
+
+    for hr_client_kw in room_config.list_haiku_rag_client_kw(
+        include_source=True,
+    ):
+        source_tag = hr_client_kw.pop("source")
+        source = models.SearchSource.from_source_tag(source_tag)
+
+        async with rag_client.HaikuRAG(**hr_client_kw) as rag:
+            hits = await rag.search(
+                query=query,
+                search_type=search_type,
+            )
+
+        for hit in hits:
+            aggregate_hits.append(
+                models.SearchHit(
+                    source=source,
+                    content=hit.content,
+                    score=hit.score,
+                    chunk_id=hit.chunk_id,
+                    document_id=hit.document_id,
+                    document_uri=hit.document_uri,
+                    document_title=hit.document_title,
+                    headings=hit.headings,
+                    page_numbers=hit.page_numbers,
+                    labels=hit.labels,
+                )
+            )
+
+    return models.SearchResults(
+        query=query,
+        search_type=search_type,
+        hits=aggregate_hits,
+    )
