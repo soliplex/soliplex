@@ -8,9 +8,11 @@ import typing
 import pydantic
 from ag_ui import core as agui_core
 
+from haiku.rag.store.models import chunk as hr_chunk
+
 try:
-    from haiku.rag.client.models import SearchType
-except ImportError:  # haiku-rag-slim <= 0.47
+    SearchType = hr_chunk.SearchType
+except AttributeError:  # haiku-rag-slim <= 0.47
     SearchType = typing.Literal["vector", "fts", "hybrid"]
 
 from haiku.skills import models as hs_models
