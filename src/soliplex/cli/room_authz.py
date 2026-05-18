@@ -133,6 +133,22 @@ def _dump(ctx, session, room_id):
         _dump_room_policy(session, room_id)
 
 
+def _room_policy_as_jsonable(policy):
+    """Render a RoomPolicy (or None) as a JSON-serializable dict.
+
+    AllowDeny values are emitted as their member names ('ALLOW' /
+    'DENY') rather than the default 'AllowDeny.ALLOW' /
+    'AllowDeny.DENY' string form.
+    """
+    if policy is None:
+        return None
+    to_dump = policy.as_model.model_dump()
+    to_dump["default_allow_deny"] = to_dump["default_allow_deny"].name
+    for dump_ae in to_dump["acl_entries"]:
+        dump_ae["allow_deny"] = dump_ae["allow_deny"].name
+    return to_dump
+
+
 def _dump_room_policy(session, room_id):  # pragma NO COVER UI ONLY
     with session:
         policy = (
@@ -144,15 +160,7 @@ def _dump_room_policy(session, room_id):  # pragma NO COVER UI ONLY
             )
             .first()
         )
-
-        if policy is None:
-            to_dump = policy
-        else:
-            to_dump = policy.as_model.model_dump()
-            to_dump["default_allow_deny"] = str(to_dump["default_allow_deny"])
-
-            for dump_ae in to_dump["acl_entries"]:
-                dump_ae["allow_deny"] = str(dump_ae["allow_deny"])
+        to_dump = _room_policy_as_jsonable(policy)
 
     print(json.dumps(to_dump))
 

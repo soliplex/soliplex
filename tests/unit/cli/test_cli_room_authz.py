@@ -5,6 +5,7 @@ from unittest import mock
 import pytest
 import typer
 
+from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex.cli import room_authz as cli_room_authz
 from soliplex.config import installation as config_installation
@@ -216,6 +217,83 @@ def test__dump(
     else:
         _dump_room_policy.assert_called_once_with(session, "room-1")
         _human_dump_room_policy.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "w_dumped, exp_jsonable",
+    [
+        # No policy row -> passes through as None.
+        (None, None),
+        # Empty policy: default-DENY, no ACL entries.
+        (
+            {
+                "room_id": "chat",
+                "default_allow_deny": authz_package.AllowDeny.DENY,
+                "acl_entries": [],
+            },
+            {
+                "room_id": "chat",
+                "default_allow_deny": "DENY",
+                "acl_entries": [],
+            },
+        ),
+        # Populated policy: both 'default_allow_deny' and each entry's
+        # 'allow_deny' must be emitted as their bare member names, not
+        # as the 'AllowDeny.<NAME>' default 'str()' form.
+        (
+            {
+                "room_id": "chat",
+                "default_allow_deny": authz_package.AllowDeny.ALLOW,
+                "acl_entries": [
+                    {
+                        "allow_deny": authz_package.AllowDeny.ALLOW,
+                        "everyone": False,
+                        "authenticated": False,
+                        "preferred_username": None,
+                        "email": "alice@example.com",
+                    },
+                    {
+                        "allow_deny": authz_package.AllowDeny.DENY,
+                        "everyone": True,
+                        "authenticated": False,
+                        "preferred_username": None,
+                        "email": None,
+                    },
+                ],
+            },
+            {
+                "room_id": "chat",
+                "default_allow_deny": "ALLOW",
+                "acl_entries": [
+                    {
+                        "allow_deny": "ALLOW",
+                        "everyone": False,
+                        "authenticated": False,
+                        "preferred_username": None,
+                        "email": "alice@example.com",
+                    },
+                    {
+                        "allow_deny": "DENY",
+                        "everyone": True,
+                        "authenticated": False,
+                        "preferred_username": None,
+                        "email": None,
+                    },
+                ],
+            },
+        ),
+    ],
+)
+def test__room_policy_as_jsonable(w_dumped, exp_jsonable):
+    if w_dumped is None:
+        policy = None
+    else:
+        policy = mock.Mock()
+        policy.as_model.model_dump.return_value = w_dumped
+
+    found = cli_room_authz._room_policy_as_jsonable(policy)
+
+    assert found == exp_jsonable
 
 
 # _human_dump_room_policy: ui only

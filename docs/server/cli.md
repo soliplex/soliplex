@@ -1269,10 +1269,10 @@ All six commands share the following:
   ```json
   {
     "room_id": "chat",
-    "default_allow_deny": "AllowDeny.DENY",
+    "default_allow_deny": "DENY",
     "acl_entries": [
       {
-        "allow_deny": "AllowDeny.ALLOW",
+        "allow_deny": "ALLOW",
         "everyone": false,
         "authenticated": false,
         "preferred_username": null,
@@ -1334,7 +1334,7 @@ Extract just the list of allowed emails with `jq`:
 
 ```bash
 soliplex-cli room-authz show example/installation.yaml chat \
-  | jq -r '.acl_entries[] | select(.allow_deny == "AllowDeny.ALLOW") | .email'
+  | jq -r '.acl_entries[] | select(.allow_deny == "ALLOW") | .email'
 ```
 
 A `null` response means no `RoomPolicy` row exists yet — i.e. the room
