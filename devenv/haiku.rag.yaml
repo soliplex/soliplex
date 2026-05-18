@@ -17,7 +17,8 @@ embeddings:
     name: qwen3-embedding-4b
     provider: ollama
     vector_dim: 2560
-    base_url: http://bizon:4001
+    # should be pointing at bizon but cant use bizon on arctor
+    base_url: http://98.169.237.157:11434
 
 qa:
   model:
