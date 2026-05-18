@@ -877,6 +877,7 @@ class InstallationAuthorization(pydantic.BaseModel):
 class ChunkVisualization(pydantic.BaseModel):
     """Page images for a chunk, with chunk text highlighted"""
 
+    source: RAGSource
     chunk_id: str
     document_uri: str | None
     images_base_64: list[str]

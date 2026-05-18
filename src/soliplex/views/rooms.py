@@ -256,23 +256,23 @@ async def get_chunk_visualization(
         ) from None
 
     images = None
-    hr_client_kw = _get_haiku_rag_client_kw(room_config)
+    for hr_client_kw in room_config.list_haiku_rag_client_kw():
+        source_tag = hr_client_kw.pop("source")
+        source = models.RAGSource.from_source_tag(source_tag)
 
-    if hr_client_kw is not None:
         async with rag_client.HaikuRAG(**hr_client_kw) as rag:
             chunk = await rag.chunk_repository.get_by_id(chunk_id)
 
-            if not chunk:
-                the_logger.error(
-                    loggers.ROOM_UNKNOWN_CHUNK_ID,
-                    chunk_id,
-                )
-                raise fastapi.HTTPException(
-                    status_code=404,
-                    detail=loggers.ROOM_UNKNOWN_CHUNK_ID % chunk_id,
-                ) from None
+            if chunk:
+                images = await rag.visualize_chunk(chunk)
+                break  # first hit wins
 
-            images = await rag.visualize_chunk(chunk)
+    else:
+        the_logger.error(loggers.ROOM_UNKNOWN_CHUNK_ID, chunk_id)
+        raise fastapi.HTTPException(
+            status_code=404,
+            detail=loggers.ROOM_UNKNOWN_CHUNK_ID % chunk_id,
+        ) from None
 
     # Convert PIL images to base64
     base64_images = []
@@ -291,6 +291,7 @@ async def get_chunk_visualization(
         base64_images.append(base64.b64encode(buffer.read()).decode("utf-8"))
 
     return models.ChunkVisualization(
+        source=source,
         chunk_id=chunk_id,
         document_uri=chunk.document_uri,
         images_base_64=base64_images,
