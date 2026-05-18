@@ -1144,9 +1144,8 @@ described above. The subcommands below read from and modify the per-room
 authorization policy stored in the installation's authorization
 database.
 
-This group replaces the deprecated flat `show-room-authz` /
-`add-room-user` / `clear-room-authz` commands; see
-[Deprecated Command Names](#deprecated-command-names).
+This group replaces the deprecated flat `show-room-authz` command;
+see [Deprecated Command Names](#deprecated-command-names).
 
 ### The Model in One Paragraph
 
@@ -1169,22 +1168,26 @@ and **an empty policy row**:
   through to `default_allow_deny`, which defaults to `DENY` — making
   the room effectively **private**.
 
-The three commands below create, inspect, populate, and delete these
+The six commands below create, inspect, edit, and populate these
 rows.
 
 ### Shared Conventions
 
-All three commands share the following:
+All six commands share the following:
 
 - Positional argument `INSTALLATION_CONFIG_PATH` — as documented in the
   [`admin-users`](#admin-users) section. If omitted, falls back to
   `SOLIPLEX_INSTALLATION_PATH`.
 - Positional argument `ROOM_ID` — the `id` of a configured room (the
-  same identifier surfaced by `audit rooms`). The commands do **not**
-  validate that `ROOM_ID` matches any currently-configured room; you
-  can create or inspect a policy for a room that doesn't exist in the
-  YAML, and that policy will continue to sit in the DB until you clear
-  it.
+  same identifier surfaced by `audit rooms`). The commands validate
+  that `ROOM_ID` matches a room in the installation YAML; an
+  unknown id prints an error (with the list of configured rooms,
+  when any are defined) and exits with status `1` without touching
+  the authorization database. The read-only [`show`](#room-authz-show)
+  command supports an `--allow-stale` escape hatch for inspecting
+  policies left behind by removed or renamed rooms; the other
+  commands do not, so cleanup of stale rows still requires direct
+  database tooling.
 - As with `admin-users`, when the installation's `authorization_dburi`
   is the in-memory default (`sqlite://`), each command detects the
   RAM-based URI, prints a note that the operation would be a no-op,
@@ -1212,8 +1215,27 @@ All three commands share the following:
   }
   ```
 
+- The `-v` / `--verbose` and `-q` / `--quiet` flags at the
+  **group** level (`soliplex-cli room-authz -v <subcommand> …`)
+  toggle between the default JSON dump and a human-focused,
+  Rich-rendered summary. Resolution: `--quiet` always forces JSON;
+  `--verbose` (without `--quiet`) forces the human summary; with
+  neither, the per-deployment default applies (currently JSON, set
+  via `_DEFAULT_VERBOSE` in `cli/room_authz.py`). `--quiet` is
+  intended as the override for scripts in a deployment that has
+  flipped the default to verbose. Example verbose output:
+
+  ```text
+  ─── Room policy: chat ───
+  Default: DENY (private -- denies callers that don't match an ALLOW entry).
+  ACL entries (2):
+    1. ALLOW  email=alice@example.com
+    2. DENY   everyone
+  ```
+
 - Exit status is `0` on success (including when no policy row exists
-  for the room), or `1` when the RAM-DB guard fires.
+  for the room), or `1` when the RAM-DB guard fires or `ROOM_ID`
+  doesn't match a configured room.
 
 ### `room-authz show`
 
@@ -1223,6 +1245,15 @@ Dump the current `RoomPolicy` for a single room without changing it.
 ```bash
 soliplex-cli room-authz show [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
 ```
+
+#### Options
+
+- `--allow-stale` — skip the configured-room check that the rest of
+  the `room-authz` commands enforce. `show` will dump whatever
+  policy row (if any) exists in the authorization database for the
+  given `ROOM_ID`, even when the id isn't present in the
+  installation's current YAML. Useful for inspecting stale policies
+  left behind by a room rename or removal.
 
 #### Examples
 
@@ -1247,112 +1278,410 @@ $ soliplex-cli room-authz show example/installation.yaml search
 null
 ```
 
-### `room-authz add-user`
-
-Grant a single user access to a room by inserting an `ALLOW`-by-`email`
-ACL entry. If no `RoomPolicy` exists for the room yet, one is created
-with the default `default_allow_deny=DENY` — so **the first call to
-`room-authz add-user` against a previously-public room flips the room
-from "public to all authenticated users" to "private except for this
-one user."** Plan accordingly. (Replaces the deprecated
-`soliplex-cli add-room-user`.)
+Inspect a stale policy for a room that has since been removed from
+the YAML — without `--allow-stale` this would exit with status `1`:
 
 ```bash
-soliplex-cli room-authz add-user [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID EMAIL
+soliplex-cli room-authz show --allow-stale \
+  example/installation.yaml old-room-id
 ```
 
-#### Positional Arguments
+### `room-authz make-private`
 
-- `INSTALLATION_CONFIG_PATH` — as described above.
-- `ROOM_ID` — as described above.
-- `EMAIL` — the email address to grant access. Matched against the
-  authenticated user's OIDC-asserted email at request time.
+Ensure a room is private by inserting an empty `RoomPolicy` row
+(`default_allow_deny=DENY`, no ACL entries) when none exists for the
+room. Idempotent for rooms that are already private; refuses to
+silently overwrite an existing public-by-policy room unless
+`--update` is passed.
 
-#### Behavior Notes
-
-- **Idempotent per email.** Any existing ACL entries for the same email
-  on this room (including `DENY` entries) are deleted before the new
-  `ALLOW` entry is inserted. Running the command twice with the same
-  email leaves exactly one row.
-- **ALLOW + email only.** The CLI offers no way to create a `DENY`
-  entry, an `everyone` / `authenticated` entry, or an entry keyed by
-  `preferred_username`. For those, use your database tooling or edit
-  the installation's authorization seed YAML.
-- **Policy creation side effect.** As noted above, the first call may
-  silently convert a public room to a private-with-one-exception room.
-  Run `room-authz show` beforehand if you're uncertain of the current
-  state.
-
-#### Examples
-
-Grant Alice access to the `chat` room:
+This is the non-destructive counterpart to `clear --make-room-private`:
+no existing ACL entries are deleted by this command.
 
 ```bash
-soliplex-cli room-authz add-user example/installation.yaml chat alice@example.com
-```
-
-Re-run with the same email to confirm idempotence (exactly one ACL
-entry for `alice@example.com` remains):
-
-```bash
-soliplex-cli room-authz add-user example/installation.yaml chat alice@example.com
-```
-
-### `room-authz clear`
-
-Delete the `RoomPolicy` row for a single room (cascades to all of its
-`ACLEntry` rows). By default this returns the room to the
-**public-to-all-authenticated-users** state; pass `--make-room-private`
-to replace the deleted policy with a fresh empty one, which leaves the
-room **closed to everyone**. (Replaces the deprecated
-`soliplex-cli clear-room-authz`.)
-
-```bash
-soliplex-cli room-authz clear [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
+soliplex-cli room-authz make-private [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
 ```
 
 #### Options
 
-- `--make-room-private` — after deleting the existing policy, create a
-  new empty `RoomPolicy` (no ACL entries, default `DENY`) so that the
-  room remains inaccessible until new ACL entries are added. Without
-  this flag, the command deletes the policy outright and the room
-  reverts to its default **public** state.
+- `--update` — when an existing `RoomPolicy` row is found with
+  `default_allow_deny=ALLOW`, flip it in place to `DENY`. ACL entries
+  are preserved either way. Without this flag, encountering an
+  `ALLOW` policy is treated as an error (see Exit Status below).
 
 #### Behavior Notes
 
-- **Destructive and unconditional.** There is no per-email filter and
-  no confirmation prompt. If you have five users allowed and only want
-  to revoke one, clearing and re-running `room-authz add-user` for the
-  other four is the only route through this CLI.
-- **`--make-room-private` is not a synonym for "deny everyone".** It
-  works by relying on `default_allow_deny=DENY` on the new empty
-  policy, matching the current database default. If a future schema
-  change alters that default, `--make-room-private` will follow the
-  new default rather than hard-coding `DENY`.
+- **Non-destructive.** ACL entries are never deleted. If a
+  `RoomPolicy` already exists and is already private
+  (`default_allow_deny=DENY`), the command is a no-op and the
+  existing policy — including all its ACL entries — is dumped
+  unchanged.
+- **Public-no-row vs. public-by-policy.** A room with no policy row
+  at all is the default public state; this command transitions it
+  directly to private (`DENY`, no entries) without needing
+  `--update`. A room with an explicit policy whose
+  `default_allow_deny=ALLOW` is a deliberately public-by-policy
+  room — the command refuses to flip it without `--update`, so an
+  operator who relied on the explicit ALLOW isn't silently overridden.
+- **Pairs with `add-acl-entry`.** Run `make-private` first to lock
+  the room down, then use
+  [`add-acl-entry`](#room-authz-add-acl-entry) to grant access to
+  specific users.
+
+#### Exit Status
+
+- `0` on success — policy created, already private, or successfully
+  flipped to `DENY` under `--update`.
+- `1` when the existing policy has `default_allow_deny=ALLOW` and
+  `--update` is not passed, or when the RAM-DB guard fires.
 
 #### Examples
 
-Open the `search` room back up to all authenticated users:
+Make the `chat` room private as a fresh setup step:
 
 ```bash
-soliplex-cli room-authz clear example/installation.yaml search
+soliplex-cli room-authz make-private example/installation.yaml chat
 ```
 
-Wipe the ACL on the `chat` room and lock it down completely:
+Re-run safely — the room is already private, so the command is a
+no-op and dumps the existing policy:
 
 ```bash
-soliplex-cli room-authz clear --make-room-private \
+soliplex-cli room-authz make-private example/installation.yaml chat
+```
+
+Flip an explicitly public-by-policy room to private while preserving
+any existing ALLOW ACL entries (so previously-listed users keep
+access and everyone else is now denied):
+
+```bash
+soliplex-cli room-authz make-private --update \
   example/installation.yaml chat
 ```
 
-Clear-and-seed — start from a clean private state, then allow one user
-in:
+Make-private then grant a single user explicit access:
 
 ```bash
-soliplex-cli room-authz clear --make-room-private \
+soliplex-cli room-authz make-private example/installation.yaml chat
+soliplex-cli room-authz add-acl-entry \
+  --allow --email alice@example.com \
   example/installation.yaml chat
-soliplex-cli room-authz add-user example/installation.yaml chat alice@example.com
+```
+
+### `room-authz make-public`
+
+Ensure a room is public. Inverse of `make-private`: a room with no
+`RoomPolicy` row is already public-to-all-authenticated-users, so the
+command is a no-op in that case; a room with an existing policy whose
+`default_allow_deny=ALLOW` is also already public-by-policy, again a
+no-op. The command refuses to silently flip a private room
+(`default_allow_deny=DENY`) to public unless `--update` is passed.
+
+Existing ACL entries are preserved; the command only ever toggles
+`default_allow_deny`.
+
+```bash
+soliplex-cli room-authz make-public [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
+```
+
+#### Options
+
+- `--update` — when an existing `RoomPolicy` row is found with
+  `default_allow_deny=DENY`, flip it in place to `ALLOW`. ACL entries
+  are preserved either way. Without this flag, encountering a `DENY`
+  policy is treated as an error (see Exit Status below).
+
+#### Behavior Notes
+
+- **Non-destructive.** ACL entries are never deleted. After
+  `--update`, any existing `ALLOW` entries become redundant (everyone
+  is now allowed by default) and any existing `DENY` entries continue
+  to block their specific users; if that's not what you want, follow
+  up with [`clear-acl`](#room-authz-clear-acl) and rebuild.
+- **No row needed for "public."** Unlike `make-private`, this command
+  does not create a `RoomPolicy` row in the no-row case — the room
+  is already in the default public state. As a result, the JSON
+  dump may be `null` after a successful run.
+
+#### Exit Status
+
+- `0` on success — already public, or successfully flipped to
+  `ALLOW` under `--update`.
+- `1` when the existing policy has `default_allow_deny=DENY` and
+  `--update` is not passed, or when the RAM-DB guard fires.
+
+#### Examples
+
+Confirm a room is public (no-op when already in the default state):
+
+```bash
+soliplex-cli room-authz make-public example/installation.yaml chat
+```
+
+Flip a previously-private room to public while preserving its ACL
+entries (so any `DENY` entries continue to block their specific
+users):
+
+```bash
+soliplex-cli room-authz make-public --update \
+  example/installation.yaml chat
+```
+
+Open a room back up *and* drop its ACL entries — combine with
+[`clear-acl`](#room-authz-clear-acl):
+
+```bash
+soliplex-cli room-authz make-public --update example/installation.yaml chat
+soliplex-cli room-authz clear-acl example/installation.yaml chat
+```
+
+### `room-authz add-acl-entry`
+
+Add an `ACLEntry` to a room's `RoomPolicy`. The entry's allow/deny
+flag is selected with `--allow` or `--deny`; the entry's
+discriminator (what it matches against the caller's token) is
+selected with one of `--everyone`, `--authenticated`,
+`--preferred-username`, or `--email`.
+
+The room must already have a `RoomPolicy` row — run
+[`make-private`](#room-authz-make-private) or
+[`make-public`](#room-authz-make-public) first to establish the
+policy's `default_allow_deny`. This avoids silently flipping a
+public room to private as a side effect of adding the first entry.
+
+```bash
+soliplex-cli room-authz add-acl-entry [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
+```
+
+#### Options
+
+Exactly one of:
+
+- `--allow` — the entry grants access.
+- `--deny` — the entry denies access.
+
+Exactly one of (the discriminator — what the entry matches on):
+
+- `--everyone` — matches every request, regardless of token. Useful
+  as a catch-all that sets effective behavior independent of the
+  policy's `default_allow_deny`.
+- `--authenticated` — matches any caller with a valid OIDC token,
+  regardless of identity.
+- `--preferred-username TEXT` — matches a caller whose OIDC
+  `preferred_username` claim equals `TEXT`.
+- `--email TEXT` — matches a caller whose OIDC `email` claim equals
+  `TEXT`.
+
+#### Behavior Notes
+
+- **Existing policy required.** If no `RoomPolicy` row exists for the
+  room, the command prints an error and exits with status `1`. Run
+  `make-private` (or `make-public`) first.
+- **Dedup is per-discriminator.** Adding an entry whose discriminator
+  matches an existing entry on the policy deletes the existing entry
+  before inserting the new one. Adding `--allow --email alice@x.y`
+  replaces any prior `email=alice@x.y` entry (whether previously
+  `ALLOW` or `DENY`). Entries keyed by other discriminators
+  (`--preferred-username alice`, `--email bob@x.y`, etc.) are left
+  alone.
+- **First-match-wins, in insertion order.** ACL entries are checked
+  in their creation order at request time; the first one whose
+  discriminator matches the caller wins (see
+  `ACLEntry.check_token`). This means a `--deny --email alice@x.y`
+  added *after* a `--allow --everyone` will still keep Alice out,
+  because the `email` entry matches her token before the catch-all
+  fires — but only if Alice's row was created *before* the
+  `--everyone` row. When ordering matters, build the policy from
+  most-specific to least-specific.
+
+#### Exit Status
+
+- `0` on success.
+- `1` when `--allow`/`--deny` are both passed or both omitted; when
+  no (or more than one) discriminator option is supplied; when no
+  `RoomPolicy` exists for the room; or when the RAM-DB guard fires.
+
+#### Examples
+
+Grant a single user access to a private room:
+
+```bash
+soliplex-cli room-authz add-acl-entry \
+  --allow --email alice@example.com \
+  example/installation.yaml chat
+```
+
+Block a single user on a public-by-policy room:
+
+```bash
+soliplex-cli room-authz add-acl-entry \
+  --deny --email mallory@example.com \
+  example/installation.yaml chat
+```
+
+Open the room to every authenticated user, on top of an existing
+private policy (useful for temporarily widening access without
+flipping `default_allow_deny`):
+
+```bash
+soliplex-cli room-authz add-acl-entry \
+  --allow --authenticated \
+  example/installation.yaml chat
+```
+
+Keyed by `preferred_username` instead of `email`:
+
+```bash
+soliplex-cli room-authz add-acl-entry \
+  --allow --preferred-username alice \
+  example/installation.yaml chat
+```
+
+Catch-all `DENY` for a public-by-policy room, with selective ALLOW
+exceptions added beforehand (because earlier entries win):
+
+```bash
+soliplex-cli room-authz make-public example/installation.yaml chat
+soliplex-cli room-authz add-acl-entry \
+  --allow --email alice@example.com \
+  example/installation.yaml chat
+soliplex-cli room-authz add-acl-entry \
+  --deny --everyone \
+  example/installation.yaml chat
+```
+
+### `room-authz delete-acl-entry`
+
+Delete a single `ACLEntry` from a room's `RoomPolicy`. The entry is
+identified by the same parameter shape as
+[`add-acl-entry`](#room-authz-add-acl-entry): the combination of
+`--allow`/`--deny` and one discriminator option (`--everyone`,
+`--authenticated`, `--preferred-username`, or `--email`).
+
+The room must already have a `RoomPolicy` row with at least one ACL
+entry matching the supplied parameters. If no match is found, the
+command exits with status `1` so the operator can tell that the
+delete was a no-op.
+
+```bash
+soliplex-cli room-authz delete-acl-entry [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
+```
+
+#### Options
+
+Exactly one of:
+
+- `--allow` — match an `ALLOW` entry.
+- `--deny` — match a `DENY` entry.
+
+Exactly one of (the discriminator):
+
+- `--everyone` — match an `everyone` entry.
+- `--authenticated` — match an `authenticated` entry.
+- `--preferred-username TEXT` — match a `preferred_username` entry
+  whose claim value equals `TEXT`.
+- `--email TEXT` — match an `email` entry whose claim value equals
+  `TEXT`.
+
+#### Behavior Notes
+
+- **Exact match on (allow/deny, discriminator).** An entry with the
+  same discriminator but the opposite allow/deny flag is *not* a
+  match. To swap an entry from `DENY` to `ALLOW` for the same
+  discriminator, just call
+  [`add-acl-entry`](#room-authz-add-acl-entry) with the new flag —
+  its per-discriminator dedup will replace the existing row.
+- **Policy preserved.** Only the matching ACL entries are removed;
+  the `RoomPolicy` row remains. The room's `default_allow_deny`
+  is unchanged.
+- **Multiple matches.** If the database somehow contains more than
+  one entry matching the supplied parameters (which the CLI cannot
+  produce on its own, but a seed YAML or direct DB write could),
+  all matches are deleted.
+
+#### Exit Status
+
+- `0` on success — at least one matching entry was deleted.
+- `1` when `--allow`/`--deny` are both passed or both omitted; when
+  no (or more than one) discriminator option is supplied; when no
+  `RoomPolicy` exists for the room; when no entry matches the
+  supplied parameters; or when the RAM-DB guard fires.
+
+#### Examples
+
+Revoke a single user's access:
+
+```bash
+soliplex-cli room-authz delete-acl-entry \
+  --allow --email alice@example.com \
+  example/installation.yaml chat
+```
+
+Remove a `DENY` blocking a specific user, so they fall back to the
+policy's `default_allow_deny`:
+
+```bash
+soliplex-cli room-authz delete-acl-entry \
+  --deny --email mallory@example.com \
+  example/installation.yaml chat
+```
+
+Lift a temporary `--allow --authenticated` catch-all that was added
+to widen access while keeping the policy private:
+
+```bash
+soliplex-cli room-authz delete-acl-entry \
+  --allow --authenticated \
+  example/installation.yaml chat
+```
+
+### `room-authz clear-acl`
+
+Delete every `ACLEntry` attached to a room's `RoomPolicy` while
+leaving the policy itself in place. The room's `default_allow_deny`
+setting is preserved: a private room (`DENY`) stays private and now
+denies *everyone* (no ACL entries left to grant exceptions); a
+public-by-policy room (`ALLOW`) stays public-by-policy.
+
+```bash
+soliplex-cli room-authz clear-acl [OPTIONS] INSTALLATION_CONFIG_PATH ROOM_ID
+```
+
+#### Behavior Notes
+
+- **Policy preserved.** The `RoomPolicy` row is not deleted, only
+  its ACL entries; pair with `make-private` or `make-public` if
+  you also need to change the room's `default_allow_deny`.
+- **No-op on the no-row case.** If no `RoomPolicy` exists for the
+  room, the command makes no changes and dumps `null`. (There are
+  no ACL entries to clear without a parent policy.)
+- **Destructive and unconditional.** There is no per-discriminator
+  filter and no confirmation prompt — every ACL entry on the policy
+  is removed in one call. If you want to revoke a single user, use
+  your database tooling or rebuild the ACL with repeated
+  [`add-acl-entry`](#room-authz-add-acl-entry) calls.
+- **"Lock everyone out, then re-grant" primitive.** Run
+  `clear-acl` on a private room and the policy row stays in place
+  with zero allowed users; follow up with
+  [`add-acl-entry`](#room-authz-add-acl-entry) to re-grant access
+  to a fresh set of users.
+
+#### Examples
+
+Strip every ACL entry from the `chat` room while keeping it
+private (no one can get in until `add-acl-entry` is run again):
+
+```bash
+soliplex-cli room-authz clear-acl example/installation.yaml chat
+```
+
+Reset-and-seed — clear all existing access without changing the
+room's privacy setting, then grant one user:
+
+```bash
+soliplex-cli room-authz clear-acl example/installation.yaml chat
+soliplex-cli room-authz add-acl-entry \
+  --allow --email alice@example.com \
+  example/installation.yaml chat
 ```
 
 ## `ollama`
@@ -1633,8 +1962,6 @@ future major release. New scripts should use the grouped form.
 | `add-admin-user`              | `admin-users add`          |
 | `clear-admin-users`           | `admin-users clear`        |
 | `show-room-authz`             | `room-authz show`          |
-| `add-room-user`               | `room-authz add-user`      |
-| `clear-room-authz`            | `room-authz clear`         |
 | `pull-models`                 | `ollama pull`              |
 
 The `serve --add-admin-user` option on the `serve` subcommand is **not**
