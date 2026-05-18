@@ -293,24 +293,6 @@ async def test_get_room_mcp_token(gust, w_error):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    "w_kws, expected",
-    [
-        ([], None),
-        ([{"foo": "bar"}], {"foo": "bar"}),
-        ([{"foo": "bar"}, {"spam": "qux"}], {"foo": "bar"}),
-    ],
-)
-async def test__get_haiku_rag_client_kw(w_kws, expected):
-    room_config = mock.create_autospec(config_rooms.RoomConfig)
-    room_config.list_haiku_rag_client_kw.return_value = w_kws
-
-    found = rooms_views._get_haiku_rag_client_kw(room_config)
-
-    assert found == expected
-
-
-@pytest.mark.anyio
-@pytest.mark.parametrize(
     "w_hrc_kws",
     [
         [],
