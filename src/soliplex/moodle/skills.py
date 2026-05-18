@@ -2001,7 +2001,11 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             dept["description"] = description
         if not confirmed:
             return json.dumps(
-                {"preview": f"Update department '{idnumber}'", "changes": dept}
+                {
+                    "action": "update_department",
+                    "preview": f"Update department '{idnumber}'",
+                    "changes": dept,
+                }
             )
         updated, warnings = await client.update_departments([dept])
         return json.dumps(
@@ -2031,7 +2035,12 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             confirmed: Set True only after user approval.
         """
         if not confirmed:
-            return json.dumps({"preview": f"Delete department '{idnumber}'"})
+            return json.dumps(
+                {
+                    "action": "delete_department",
+                    "preview": f"Delete department '{idnumber}'",
+                }
+            )
         # Fetch every department, exact-match the idnumber.  Filtering
         # the server-side search by idnumber would be wrong — that
         # search is name-based, and idnumber is often unrelated to
@@ -2085,7 +2094,11 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             pos["globalmanager"] = True
         if not confirmed:
             return json.dumps(
-                {"preview": f"Create position '{name}'", "position": pos}
+                {
+                    "action": "create_position",
+                    "preview": f"Create position '{name}'",
+                    "position": pos,
+                }
             )
         created, warnings = await client.create_positions([pos])
         return json.dumps(
@@ -2134,7 +2147,11 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             pos["globalmanager"] = global_manager
         if not confirmed:
             return json.dumps(
-                {"preview": f"Update position '{idnumber}'", "changes": pos}
+                {
+                    "action": "update_position",
+                    "preview": f"Update position '{idnumber}'",
+                    "changes": pos,
+                }
             )
         updated, warnings = await client.update_positions([pos])
         return json.dumps(
@@ -2163,7 +2180,12 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             confirmed: Set True only after user approval.
         """
         if not confirmed:
-            return json.dumps({"preview": f"Delete position '{idnumber}'"})
+            return json.dumps(
+                {
+                    "action": "delete_position",
+                    "preview": f"Delete position '{idnumber}'",
+                }
+            )
         # Same rationale as delete_department: search the full set
         # then exact-match the idnumber.  The server-side search is
         # name-based.
@@ -2234,7 +2256,12 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
             confirmed: Set True only after user approval.
         """
         if not confirmed:
-            return json.dumps({"preview": f"Delete job id={job_id}"})
+            return json.dumps(
+                {
+                    "action": "delete_job",
+                    "preview": f"Delete job id={job_id}",
+                }
+            )
         result = await client.delete_job(job_id)
         return json.dumps(result)
 
@@ -2319,6 +2346,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         if not confirmed:
             return json.dumps(
                 {
+                    "action": "unassign_manager",
                     "preview": (
                         f"Unassign managers {mid_list} from users {uid_list}"
                     ),
@@ -2667,6 +2695,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
         if not confirmed:
             return json.dumps(
                 {
+                    "action": "delete_certification",
                     "preview": (f"DELETE certification id={certification_id}"),
                 }
             )
@@ -2692,6 +2721,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
         if not confirmed:
             return json.dumps(
                 {
+                    "action": "restore_certification",
                     "preview": (
                         f"Restore certification id={certification_id}"
                     ),
@@ -2721,6 +2751,7 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
         if not confirmed:
             return json.dumps(
                 {
+                    "action": "bulk_deallocate_certification_users",
                     "preview": (
                         f"Deallocate {len(parsed)} certification user(s)"
                     ),
@@ -3035,7 +3066,12 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             confirmed: Set True only after user approval.
         """
         if not confirmed:
-            return json.dumps({"preview": f"Archive program id={program_id}"})
+            return json.dumps(
+                {
+                    "action": "archive_program",
+                    "preview": f"Archive program id={program_id}",
+                }
+            )
         result = await client.archive_program(program_id)
         return json.dumps(result)
 
@@ -3054,7 +3090,12 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             confirmed: Set True only after user approval.
         """
         if not confirmed:
-            return json.dumps({"preview": f"Restore program id={program_id}"})
+            return json.dumps(
+                {
+                    "action": "restore_program",
+                    "preview": f"Restore program id={program_id}",
+                }
+            )
         result = await client.restore_program(program_id)
         return json.dumps(result)
 
@@ -3074,7 +3115,12 @@ def build_programs_skill(client: MoodleClient) -> Skill:
             confirmed: Set True only after user approval.
         """
         if not confirmed:
-            return json.dumps({"preview": f"DELETE program id={program_id}"})
+            return json.dumps(
+                {
+                    "action": "delete_program",
+                    "preview": f"DELETE program id={program_id}",
+                }
+            )
         result = await client.delete_program(program_id)
         return json.dumps(result)
 
@@ -3094,7 +3140,10 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         """
         if not confirmed:
             return json.dumps(
-                {"preview": f"Duplicate program id={program_id}"}
+                {
+                    "action": "duplicate_program",
+                    "preview": f"Duplicate program id={program_id}",
+                }
             )
         dup = await client.duplicate_program(program_id)
         return json.dumps(
@@ -3121,6 +3170,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         if not confirmed:
             return json.dumps(
                 {
+                    "action": "update_program_visibility",
                     "preview": (f"Set program id={program_id} to {label}"),
                 }
             )
@@ -3148,6 +3198,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         if not confirmed:
             return json.dumps(
                 {
+                    "action": "bulk_deallocate_program_users",
                     "preview": (f"Deallocate {len(parsed)} program user(s)"),
                     "allocation_ids": parsed,
                 }
@@ -3176,6 +3227,7 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         if not confirmed:
             return json.dumps(
                 {
+                    "action": "bulk_reset_program_progress",
                     "preview": (
                         f"Reset progress for {len(parsed)} program user(s)"
                     ),
@@ -3848,7 +3900,12 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
             confirmed: Set True only after user approval.
         """
         if not confirmed:
-            return json.dumps({"preview": f"Delete export id={export_id}"})
+            return json.dumps(
+                {
+                    "action": "delete_export",
+                    "preview": f"Delete export id={export_id}",
+                }
+            )
         result = await client.delete_export(export_id)
         return json.dumps(result)
 
@@ -3864,7 +3921,12 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
             confirmed: Set True only after user approval.
         """
         if not confirmed:
-            return json.dumps({"preview": f"Delete import id={import_id}"})
+            return json.dumps(
+                {
+                    "action": "delete_import",
+                    "preview": f"Delete import id={import_id}",
+                }
+            )
         result = await client.delete_import(import_id)
         return json.dumps(result)
 

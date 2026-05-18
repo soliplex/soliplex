@@ -6900,3 +6900,23 @@ async def test_enrol_users_tool_propagates_warnings():
 
     assert result["status"] == "error"
     assert "already enrolled" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_delete_department_preview_includes_action():
+    """Every write-tool preview MUST include an ``action`` field so
+    the router LLM can dispatch the confirmation back to the same
+    tool without having to infer the name from prose.  Regression
+    test for a class of bugs where preview dicts omitted the action
+    key, leaving the router to guess (and sometimes mis-route to a
+    sibling tool like delete_position).
+    """
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_department")
+
+    # No HTTP call needed for preview mode (confirmed=False).
+    result = json.loads(await fn(idnumber="ENG", confirmed=False))
+
+    assert result["action"] == "delete_department"
+    assert "preview" in result
+    assert "ENG" in result["preview"]
