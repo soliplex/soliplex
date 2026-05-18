@@ -11,9 +11,11 @@ from haiku.rag import client as hr_client
 from skills_ref import validator as skill_validator
 from typer import core as typer_core
 
+from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex import models
 from soliplex import secrets
+from soliplex.authz import schema as authz_schema
 from soliplex.cli import cli_util
 from soliplex.cli import types
 from soliplex.config import agui as config_agui
@@ -128,6 +130,7 @@ def audit_all(
     errors |= _audit_environment_section(ctx, installation_path)
     errors |= _audit_oidc_section(ctx, installation_path)
     errors |= _audit_rooms_section(ctx, installation_path)
+    errors |= _audit_room_authz_section(ctx, installation_path)
     errors |= _audit_completions_section(ctx, installation_path)
     errors |= _audit_quizzes_section(ctx, installation_path)
     errors |= _audit_skills_section(ctx, installation_path)
@@ -549,6 +552,109 @@ def _invalid_completions(
             errors.setdefault("completions", {})[compl_config.id] = str(exc)
 
     return errors
+
+
+def _room_authz_groups(the_installation):
+    """Bucket configured rooms by authorization state; collect stale rows."""
+    configured = sorted(the_installation._config.room_configs)
+    dburi = the_installation.authorization_dburi_sync
+
+    if dburi == config_installation.SYNC_MEMORY_ENGINE_URL:
+        return {
+            "default": list(configured),
+            "public": [],
+            "private": [],
+            "stale": [],
+        }
+
+    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
+    with session:
+        policies = {
+            p.room_id: p.default_allow_deny
+            for p in session.query(authz_schema.RoomPolicy)
+        }
+
+    configured_set = set(configured)
+    default, public, private = [], [], []
+    for room_id in configured:
+        if room_id not in policies:
+            default.append(room_id)
+        elif policies[room_id] == authz_package.AllowDeny.ALLOW:
+            public.append(room_id)
+        else:
+            private.append(room_id)
+
+    stale = sorted(rid for rid in policies if rid not in configured_set)
+
+    return {
+        "default": default,
+        "public": public,
+        "private": private,
+        "stale": stale,
+    }
+
+
+def _audit_room_authz_section(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+) -> dict:  # pragma NO COVER UI ONLY
+    """Print the room-authz section (rule header + four buckets)."""
+    quiet = ctx.obj["quiet"]
+    the_installation = _get_installation(ctx, installation_path)
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured rooms by authorization state")
+    tc_line()
+
+    groups = _room_authz_groups(the_installation)
+
+    for label, room_ids in (
+        (
+            "Default (no policy row -- public to authenticated users)",
+            groups["default"],
+        ),
+        ("Public (policy row, default ALLOW)", groups["public"]),
+        ("Private (policy row, default DENY)", groups["private"]),
+    ):
+        tc_print(f"{label}:")
+        if room_ids:
+            for room_id in room_ids:
+                tc_print(f"  - {room_id}")
+        else:
+            tc_print("  (none)")
+        tc_line()
+
+    tc_print("Stale (policy row exists for unconfigured room):")
+    if groups["stale"]:
+        for room_id in groups["stale"]:
+            tc_print(f"  - {room_id}  STALE")
+    else:
+        tc_print("  (none)")
+    tc_line()
+
+    errors: dict = {}
+    if groups["stale"]:
+        errors["room_authz"] = {"stale_rooms": groups["stale"]}
+    return errors
+
+
+@app.command("room-authz")
+def audit_room_authz(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+):  # pragma NO COVER command
+    """List rooms by authorization status.
+
+    Buckets: 'default' (no policy row), 'public' (policy with
+    default_allow_deny=ALLOW), 'private' (policy with
+    default_allow_deny=DENY), 'stale' (policy row exists in the
+    authorization database for a room that isn't configured in the
+    YAML). A non-empty 'stale' bucket is reported as an audit error.
+    """
+    quiet = ctx.obj["quiet"]
+    errors = _audit_room_authz_section(ctx, installation_path)
+    _emit_errors(errors, quiet)
 
 
 def _audit_completions_section(

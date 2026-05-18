@@ -8,8 +8,10 @@ import pytest
 import typer
 import yaml
 
+from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex import secrets
+from soliplex.authz import schema as authz_schema
 from soliplex.cli import audit as cli_audit
 from soliplex.config import installation as config_installation
 from soliplex.config import quizzes as config_quizzes
@@ -183,6 +185,7 @@ def test__audit_callback(ctx, w_quiet):
 @mock.patch("soliplex.cli.audit._audit_skills_section")
 @mock.patch("soliplex.cli.audit._audit_quizzes_section")
 @mock.patch("soliplex.cli.audit._audit_completions_section")
+@mock.patch("soliplex.cli.audit._audit_room_authz_section")
 @mock.patch("soliplex.cli.audit._audit_rooms_section")
 @mock.patch("soliplex.cli.audit._audit_oidc_section")
 @mock.patch("soliplex.cli.audit._audit_environment_section")
@@ -194,6 +197,7 @@ def test_audit_all(
     _audit_environment_section,
     _audit_oidc_section,
     _audit_rooms_section,
+    _audit_room_authz_section,
     _audit_completions_section,
     _audit_quizzes_section,
     _audit_skills_section,
@@ -213,6 +217,7 @@ def test_audit_all(
         _audit_environment_section.return_value = {"environment": None}
         _audit_oidc_section.return_value = {"oidc": None}
         _audit_rooms_section.return_value = {"rooms": None}
+        _audit_room_authz_section.return_value = {"room_authz": None}
         _audit_completions_section.return_value = {"completions": None}
         _audit_quizzes_section.return_value = {"quizzes": None}
         _audit_skills_section.return_value = {"skills": None}
@@ -225,6 +230,7 @@ def test_audit_all(
             "environment": None,
             "oidc": None,
             "rooms": None,
+            "room_authz": None,
             "completions": None,
             "quizzes": None,
             "skills": None,
@@ -237,6 +243,7 @@ def test_audit_all(
         _audit_environment_section.return_value = {}
         _audit_oidc_section.return_value = {}
         _audit_rooms_section.return_value = {}
+        _audit_room_authz_section.return_value = {}
         _audit_completions_section.return_value = {}
         _audit_quizzes_section.return_value = {}
         _audit_skills_section.return_value = {}
@@ -254,6 +261,7 @@ def test_audit_all(
     _audit_environment_section.assert_called_once_with(ctx, installation_path)
     _audit_oidc_section.assert_called_once_with(ctx, installation_path)
     _audit_rooms_section.assert_called_once_with(ctx, installation_path)
+    _audit_room_authz_section.assert_called_once_with(ctx, installation_path)
     _audit_completions_section.assert_called_once_with(ctx, installation_path)
     _audit_quizzes_section.assert_called_once_with(ctx, installation_path)
     _audit_skills_section.assert_called_once_with(ctx, installation_path)
@@ -654,6 +662,130 @@ def test__invalid_room_rag_dbs(
 
 # _audit_rooms_section: ui only
 # audit_rooms: command
+
+
+@pytest.mark.parametrize(
+    "is_ram, configured_rooms, policy_specs, exp_groups",
+    [
+        # RAM DB: all configured rooms land in 'default'; DB
+        # query is not invoked.
+        (
+            True,
+            [],
+            None,
+            {"default": [], "public": [], "private": [], "stale": []},
+        ),
+        (
+            True,
+            ["alpha", "beta"],
+            None,
+            {
+                "default": ["alpha", "beta"],
+                "public": [],
+                "private": [],
+                "stale": [],
+            },
+        ),
+        # Non-RAM, empty configuration + empty DB.
+        (
+            False,
+            [],
+            [],
+            {"default": [], "public": [], "private": [], "stale": []},
+        ),
+        # Non-RAM, configured rooms but no DB rows -> all default.
+        (
+            False,
+            ["alpha", "beta"],
+            [],
+            {
+                "default": ["alpha", "beta"],
+                "public": [],
+                "private": [],
+                "stale": [],
+            },
+        ),
+        # Non-RAM, only DB rows for unconfigured rooms -> all stale.
+        (
+            False,
+            [],
+            [("old", "ALLOW"), ("removed", "DENY")],
+            {
+                "default": [],
+                "public": [],
+                "private": [],
+                "stale": ["old", "removed"],
+            },
+        ),
+        # Non-RAM, mixed: one row in each of the four buckets.
+        (
+            False,
+            ["alpha", "beta", "gamma", "delta"],
+            [
+                ("beta", "ALLOW"),
+                ("gamma", "DENY"),
+                ("ghost", "DENY"),
+            ],
+            {
+                "default": ["alpha", "delta"],
+                "public": ["beta"],
+                "private": ["gamma"],
+                "stale": ["ghost"],
+            },
+        ),
+    ],
+)
+@mock.patch("soliplex.cli.audit.authz_schema.get_session")
+def test__room_authz_groups(
+    get_session,
+    the_installation,
+    is_ram,
+    configured_rooms,
+    policy_specs,
+    exp_groups,
+):
+    the_installation._config.room_configs = {
+        rid: mock.Mock() for rid in configured_rooms
+    }
+
+    if is_ram:
+        the_installation._config.authorization_dburi_sync = (
+            config_installation.SYNC_MEMORY_ENGINE_URL
+        )
+    else:
+        the_installation._config.authorization_dburi_sync = "sqlite:///x.db"
+
+        policy_rows = []
+        for room_id, allow_deny in policy_specs:
+            row = mock.Mock()
+            row.room_id = room_id
+            row.default_allow_deny = (
+                authz_package.AllowDeny.ALLOW
+                if allow_deny == "ALLOW"
+                else authz_package.AllowDeny.DENY
+            )
+            policy_rows.append(row)
+
+        session = mock.MagicMock()
+        session.query.return_value = policy_rows
+        get_session.return_value = session
+
+    found = cli_audit._room_authz_groups(the_installation)
+
+    assert found == exp_groups
+
+    if is_ram:
+        get_session.assert_not_called()
+    else:
+        get_session.assert_called_once_with(
+            engine_url="sqlite:///x.db",
+            init_schema=True,
+        )
+        session.query.assert_called_once_with(authz_schema.RoomPolicy)
+
+
+# _audit_room_authz_section: ui only
+# audit_room_authz: command
 
 
 @pytest.mark.parametrize(

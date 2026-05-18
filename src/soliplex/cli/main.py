@@ -2,21 +2,32 @@ from __future__ import annotations
 
 import json
 import pathlib
+import warnings
 from importlib import metadata as importlib_metadata
 
 import typer
 import yaml
+from authlib import deprecate as authlib_deprecate
 
-from soliplex import secrets
-from soliplex import util
-from soliplex.cli import admin_users
-from soliplex.cli import audit
-from soliplex.cli import cli_util
-from soliplex.cli import ollama
-from soliplex.cli import room_authz
-from soliplex.cli import serve
-from soliplex.cli import types
-from soliplex.config import installation as config_installation
+warnings.filterwarnings(
+    action="ignore",
+    category=authlib_deprecate.AuthlibDeprecationWarning,
+    module="fastmcp",
+)
+
+if True:  # noqa E402
+    # These imports are not "top level" because we install the warning
+    # filter for the 'fastmcp'/'authlib' deprecation first.
+    from soliplex import secrets
+    from soliplex import util
+    from soliplex.cli import admin_users
+    from soliplex.cli import audit
+    from soliplex.cli import cli_util
+    from soliplex.cli import ollama
+    from soliplex.cli import room_authz
+    from soliplex.cli import serve
+    from soliplex.cli import types
+    from soliplex.config import installation as config_installation
 
 the_cli = typer.Typer(
     context_settings={
