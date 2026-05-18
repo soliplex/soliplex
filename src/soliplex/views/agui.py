@@ -103,7 +103,6 @@ async def _check_user_room_agent(
 @util.logfire_span("GET /v1/rooms/{room_id}/agui")
 @router.get("/v1/rooms/{room_id}/agui")
 async def get_room_agui(
-    request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
@@ -152,7 +151,6 @@ async def _get_run_input(
 @util.logfire_span("GET /v1/rooms/{room_id}/agui/{thread_id}")
 @router.get("/v1/rooms/{room_id}/agui/{thread_id}")
 async def get_room_agui_thread_id(
-    request: fastapi.Request,
     room_id: str,
     thread_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
@@ -212,7 +210,6 @@ async def get_room_agui_thread_id(
 @util.logfire_span("GET /v1/rooms/{room_id}/agui/{thread_id}/{run_id}")
 @router.get("/v1/rooms/{room_id}/agui/{thread_id}/{run_id}")
 async def get_room_agui_thread_id_run_id(
-    request: fastapi.Request,
     room_id: str,
     thread_id: pydantic.UUID4,
     run_id: pydantic.UUID4,
@@ -264,7 +261,6 @@ async def get_room_agui_thread_id_run_id(
 @util.logfire_span("POST /v1/rooms/{room_id}/agui")
 @router.post("/v1/rooms/{room_id}/agui")
 async def post_room_agui(
-    request: fastapi.Request,
     room_id: str,
     new_thread_request: models.AGUI_NewThreadRequest,
     the_installation: installation.Installation = depend_the_installation,
@@ -276,8 +272,6 @@ async def post_room_agui(
     """Create a new AGUI thread within the given room
 
     Add the initial AGUI run to the thread.
-
-    Body of request, if passed, must validate to 'models.AGUI_ThreadMetadata'.
     """
     the_logger.debug(loggers.AGUI_POST_ROOM)
 
@@ -353,7 +347,6 @@ async def post_room_agui(
 @util.logfire_span("POST /v1/rooms/{room_id}/agui/{thread_id}")
 @router.post("/v1/rooms/{room_id}/agui/{thread_id}")
 async def post_room_agui_thread_id(
-    request: fastapi.Request,
     room_id: str,
     thread_id: pydantic.UUID4,
     new_run_request: models.AGUI_NewRunRequest,
@@ -363,10 +356,7 @@ async def post_room_agui_thread_id(
     the_user_claims: authn.UserClaims = depend_the_user_claims,
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> models.AGUI_Run:
-    """Create a new AGUI run for a thread within the given room
-
-    Body of request, if passed, must validate to 'models.AGUI_RunMetadata'.
-    """
+    """Create a new AGUI run for a thread within the given room"""
     thread_id = str(thread_id)
     the_logger.debug(loggers.AGUI_POST_ROOM_THREAD)
 
@@ -424,7 +414,6 @@ async def post_room_agui_thread_id(
 @util.logfire_span("POST /v1/rooms/{room_id}/agui/{thread_id}/meta")
 @router.post("/v1/rooms/{room_id}/agui/{thread_id}/meta")
 async def post_room_agui_thread_id_meta(
-    request: fastapi.Request,
     room_id: str,
     thread_id: pydantic.UUID4,
     new_metadata: models.AGUI_ThreadMetadata,
@@ -435,8 +424,6 @@ async def post_room_agui_thread_id_meta(
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> fastapi.Response:
     """Update metadata for a thread within the given room
-
-    Body of request, if passed, must validate to 'models.AGUI_ThreadMetadata'.
 
     If an empty dict is passed, erase any existing metadata.
 
@@ -480,7 +467,6 @@ async def post_room_agui_thread_id_meta(
 @util.logfire_span("DELETE /v1/rooms/{room_id}/agui/{thread_id}")
 @router.delete("/v1/rooms/{room_id}/agui/{thread_id}")
 async def delete_room_agui_thread_id(
-    request: fastapi.Request,
     room_id: str,
     thread_id: pydantic.UUID4,
     the_installation: installation.Installation = depend_the_installation,
@@ -981,7 +967,6 @@ async def post_room_agui_thread_id_run_id(
 @util.logfire_span("POST /v1/rooms/{room_id}/agui/{thread_id}/{run_id}/meta")
 @router.post("/v1/rooms/{room_id}/agui/{thread_id}/{run_id}/meta")
 async def post_room_agui_thread_id_run_id_meta(
-    request: fastapi.Request,
     room_id: str,
     thread_id: pydantic.UUID4,
     run_id: pydantic.UUID4,
@@ -993,8 +978,6 @@ async def post_room_agui_thread_id_run_id_meta(
     the_logger: loggers.LogWrapper = depend_the_logger,
 ) -> fastapi.Response:
     """Update metadata for a thread within the given room
-
-    Body of request, if passed, must validate to 'models.AGUI_ThreadMetadata'.
 
     If an empty dict is passed, erase any existing metadata.
 
@@ -1042,7 +1025,6 @@ async def post_room_agui_thread_id_run_id_meta(
 )
 @router.get("/v1/rooms/{room_id}/agui/{thread_id}/{run_id}/feedback")
 async def get_room_agui_thread_id_run_id_feedback(
-    request: fastapi.Request,
     room_id: str,
     thread_id: pydantic.UUID4,
     run_id: pydantic.UUID4,
@@ -1091,7 +1073,6 @@ async def get_room_agui_thread_id_run_id_feedback(
 )
 @router.post("/v1/rooms/{room_id}/agui/{thread_id}/{run_id}/feedback")
 async def post_room_agui_thread_id_run_id_feedback(
-    request: fastapi.Request,
     room_id: str,
     thread_id: pydantic.UUID4,
     run_id: pydantic.UUID4,
@@ -1141,7 +1122,6 @@ async def post_room_agui_thread_id_run_id_feedback(
 @util.logfire_span("POST /v1/agui/feedback")
 @router.post("/v1/agui/feedback")
 async def post_agui_recent_feedback(
-    request: fastapi.Request,
     query_terms: models.AGUI_FeedbackQueryTerms,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
@@ -1168,7 +1148,6 @@ async def post_agui_recent_feedback(
 @util.logfire_span("POST /v1/agui/feedback/rooms/{room_id}")
 @router.post("/v1/agui/feedback/rooms/{room_id}")
 async def post_agui_recent_room_feedback(
-    request: fastapi.Request,
     room_id: str,
     query_terms: models.AGUI_FeedbackQueryTerms,
     the_installation: installation.Installation = depend_the_installation,
@@ -1197,7 +1176,6 @@ async def post_agui_recent_room_feedback(
 @util.logfire_span("POST /v1/agui/feedback/user/{user_name}")
 @router.post("/v1/agui/feedback/user/{user_name}")
 async def post_agui_recent_user_feedback(
-    request: fastapi.Request,
     user_name: str,
     query_terms: models.AGUI_FeedbackQueryTerms,
     the_installation: installation.Installation = depend_the_installation,
@@ -1226,7 +1204,6 @@ async def post_agui_recent_user_feedback(
 @util.logfire_span("POST /v1/agui/feedback/review")
 @router.post("/v1/agui/feedback/review")
 async def post_agui_review_recent_feedback(
-    request: fastapi.Request,
     review: models.AGUI_RunFeedbackReview,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,
@@ -1254,7 +1231,6 @@ async def post_agui_review_recent_feedback(
 @util.logfire_span("POST /v1/agui/feedback/resolve")
 @router.post("/v1/agui/feedback/resolve")
 async def post_agui_resolve_recent_feedback(
-    request: fastapi.Request,
     resolution: models.AGUI_RunFeedbackReview,
     the_installation: installation.Installation = depend_the_installation,
     the_threads: agui_package.ThreadStorage = depend_the_threads,

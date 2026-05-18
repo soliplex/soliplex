@@ -117,15 +117,12 @@ async def test_get_the_user_claims(auth_fn, the_installation, code, msg):
 @pytest.mark.parametrize("w_claims_map", [{}, {"user_id": "email"}])
 @pytest.mark.parametrize("w_claims", [{}, THE_USER_CLAIMS])
 async def test_get_the_logger(the_installation, w_claims, w_claims_map):
-    request = mock.create_autospec(fastapi.Request)
-
     the_installation._config.logging_claims_map = w_claims_map
 
     the_unauth_logger = mock.create_autospec(loggers.LogWrapper)
     the_unauth_logger.installation = the_installation
 
     found = await views.get_the_logger(
-        request=request,
         the_unauth_logger=the_unauth_logger,
         the_user_claims=w_claims,
     )

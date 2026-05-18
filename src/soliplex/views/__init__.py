@@ -62,7 +62,6 @@ depend_the_user_claims = fastapi.Depends(get_the_user_claims)
 
 
 async def get_the_logger(
-    request: fastapi.Request,
     the_unauth_logger: loggers.LogWrapper = depend_the_unauth_logger,
     the_user_claims: authn_module.UserClaims = depend_the_user_claims,
 ) -> loggers.LogWrapper:

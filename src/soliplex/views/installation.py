@@ -23,7 +23,6 @@ depend_the_logger = views.depend_the_logger
 @util.logfire_span("GET /v1/installation")
 @router.get("/v1/installation")
 async def get_installation(
-    request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
@@ -46,7 +45,6 @@ async def get_installation(
 @util.logfire_span("GET /v1/installation/versions")
 @router.get("/v1/installation/versions")
 async def get_installation_versions(
-    request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
@@ -87,7 +85,6 @@ async def get_installation_versions(
 @util.logfire_span("GET /v1/installation/providers")
 @router.get("/v1/installation/providers")
 async def get_installation_providers(
-    request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
@@ -110,7 +107,6 @@ async def get_installation_providers(
 @util.logfire_span("GET /v1/installation/git_metadata")
 @router.get("/v1/installation/git_metadata")
 async def get_installation_git_metadata(
-    request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,

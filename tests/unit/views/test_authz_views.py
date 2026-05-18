@@ -46,7 +46,6 @@ def test_get_the_authz_logger():
 @pytest.mark.parametrize("w_admin_access", [False, True])
 @pytest.mark.parametrize("w_policy", [None, ROOM_POLICY])
 async def test_get_room_authz(w_policy, w_admin_access):
-    request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_authz_policy.check_admin_access.return_value = w_admin_access
@@ -56,7 +55,6 @@ async def test_get_room_authz(w_policy, w_admin_access):
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
             await authz_views.get_room_authz(
-                request=request,
                 room_id=ROOM_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
@@ -75,7 +73,6 @@ async def test_get_room_authz(w_policy, w_admin_access):
 
     else:
         found = await authz_views.get_room_authz(
-            request=request,
             room_id=ROOM_ID,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
@@ -103,7 +100,6 @@ async def test_get_room_authz(w_policy, w_admin_access):
 @pytest.mark.parametrize("w_admin_access", [False, True])
 @pytest.mark.parametrize("w_existing", [False, True])
 async def test_post_room_authz(w_existing, w_admin_access):
-    request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_authz_policy.check_admin_access.return_value = w_admin_access
@@ -116,7 +112,6 @@ async def test_post_room_authz(w_existing, w_admin_access):
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
             await authz_views.post_room_authz(
-                request=request,
                 room_id=ROOM_ID,
                 room_policy=NEW_ROOM_POLICY,
                 the_installation=the_installation,
@@ -136,7 +131,6 @@ async def test_post_room_authz(w_existing, w_admin_access):
 
     else:
         found = await authz_views.post_room_authz(
-            request=request,
             room_id=ROOM_ID,
             room_policy=NEW_ROOM_POLICY,
             the_installation=the_installation,
@@ -167,7 +161,6 @@ async def test_post_room_authz(w_existing, w_admin_access):
 @pytest.mark.parametrize("w_admin_access", [False, True])
 @pytest.mark.parametrize("w_existing", [False, True])
 async def test_delete_room_authz(w_existing, w_admin_access):
-    request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_authz_policy.check_admin_access.return_value = w_admin_access
@@ -180,7 +173,6 @@ async def test_delete_room_authz(w_existing, w_admin_access):
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
             await authz_views.delete_room_authz(
-                request=request,
                 room_id=ROOM_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
@@ -199,7 +191,6 @@ async def test_delete_room_authz(w_existing, w_admin_access):
 
     else:
         found = await authz_views.delete_room_authz(
-            request=request,
             room_id=ROOM_ID,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
@@ -233,7 +224,6 @@ async def test_get_installation_authz(
     w_admin_user,
     w_admin_access,
 ):
-    request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_room_configs.return_value = {ROOM_ID: object()}
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
@@ -252,7 +242,6 @@ async def test_get_installation_authz(
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
             await authz_views.get_installation_authz(
-                request=request,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
@@ -278,7 +267,6 @@ async def test_get_installation_authz(
         )
 
         found = await authz_views.get_installation_authz(
-            request=request,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
             the_user_claims=THE_USER_CLAIMS,

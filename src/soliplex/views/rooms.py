@@ -26,7 +26,6 @@ depend_the_logger = views.depend_the_logger
 @util.logfire_span("GET /v1/rooms")
 @router.get("/v1/rooms", summary="Get available rooms")
 async def get_rooms(
-    request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
@@ -55,7 +54,6 @@ async def get_rooms(
 @util.logfire_span("GET /v1/rooms/{room_id}")
 @router.get("/v1/rooms/{room_id}")
 async def get_room(
-    request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
@@ -90,7 +88,6 @@ async def get_room(
     response_class=responses.FileResponse,
 )
 async def get_room_bg_image(
-    request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
@@ -130,7 +127,6 @@ async def get_room_bg_image(
 @util.logfire_span("GET /v1/rooms/{room_id}/mcp_token")
 @router.get("/v1/rooms/{room_id}/mcp_token")
 async def get_room_mcp_token(
-    request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
@@ -177,7 +173,6 @@ def _get_haiku_rag_client_kw(room_config: config_rooms.RoomConfig):
 @util.logfire_span("GET /v1/rooms/{room_id}/documents")
 @router.get("/v1/rooms/{room_id}/documents")
 async def get_room_documents(
-    request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
@@ -229,7 +224,6 @@ async def get_room_documents(
 @util.logfire_span("GET /v1/rooms/{room_id}/chunk/{chunk_id}")
 @router.get("/v1/rooms/{room_id}/chunk/{chunk_id}")
 async def get_chunk_visualization(
-    request: fastapi.Request,
     room_id: str,
     chunk_id: str,
     the_installation: installation.Installation = depend_the_installation,
