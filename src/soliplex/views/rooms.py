@@ -13,7 +13,6 @@ from soliplex import mcp_auth
 from soliplex import models
 from soliplex import util
 from soliplex import views
-from soliplex.config import rooms as config_rooms
 
 router = fastapi.APIRouter(tags=["rooms"])
 
