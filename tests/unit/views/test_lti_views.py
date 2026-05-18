@@ -373,6 +373,36 @@ class TestLtiLaunch:
         assert exc.value.status_code == 400
 
     @pytest.mark.anyio
+    @mock.patch("soliplex.lti.validation.validate_id_token")
+    @mock.patch("soliplex.lti.nonce.decode_state")
+    async def test_missing_deployment_claim(self, dec_state, val_tok):
+        """When id_token omits the deployment_id claim entirely,
+        the 400 message must say 'missing deployment_id claim',
+        not the unhelpful 'Invalid deployment_id None for
+        platform ...' that surfaces if the None value is fed
+        straight into the standard mismatch path.
+        """
+        dec_state.return_value = (NONCE, PLATFORM_ID)
+        payload = dict(self.LTI_PAYLOAD)
+        payload.pop(lti_validation.LTI_CLAIM_DEPLOYMENT_ID, None)
+        val_tok.return_value = payload
+
+        request = _make_request(
+            method="POST",
+            form_data={
+                "id_token": "fake-jwt",
+                "state": STATE,
+            },
+        )
+        the_installation = _make_installation()
+
+        with pytest.raises(fastapi.HTTPException) as exc:
+            await lti_views.lti_launch(request, the_installation)
+        assert exc.value.status_code == 400
+        assert "missing deployment_id claim" in exc.value.detail
+        assert "None" not in exc.value.detail
+
+    @pytest.mark.anyio
     @mock.patch("soliplex.lti.session.mint_session_token")
     @mock.patch("soliplex.lti.validation.validate_id_token")
     @mock.patch("soliplex.lti.nonce.decode_state")

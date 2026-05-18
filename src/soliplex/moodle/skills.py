@@ -8,6 +8,7 @@ mechanism changes.
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import json
 import re
@@ -693,26 +694,27 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         enrolled = await client.get_enrolled_users(courseid)
 
         users_capped = enrolled[:MAX_RESULTS]
-        user_results = []
-        completed_count = 0
 
-        for user in users_capped:
+        async def _fetch_status(user):
             try:
-                status = await client.get_course_completion_status(
+                return await client.get_course_completion_status(
                     courseid, user.id
                 )
-                if status.completed:
-                    completed_count += 1
-                user_results.append(
-                    {
-                        "userid": user.id,
-                        "fullname": user.fullname,
-                        "username": user.username,
-                        "completed": status.completed,
-                        "completions": len(status.completions),
-                    }
-                )
             except (MoodleAPIError, httpx.HTTPError):
+                return None
+
+        # Parallelise the per-user round-trips so a 100-user course
+        # is bounded by the slowest single call (~200ms) rather
+        # than 100 sequential calls (~20s, near the client's 30s
+        # timeout).  Result order is preserved by asyncio.gather.
+        statuses = await asyncio.gather(
+            *(_fetch_status(u) for u in users_capped)
+        )
+
+        user_results = []
+        completed_count = 0
+        for user, status in zip(users_capped, statuses, strict=True):
+            if status is None:
                 user_results.append(
                     {
                         "userid": user.id,
@@ -722,6 +724,18 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                         "completions": 0,
                     }
                 )
+                continue
+            if status.completed:
+                completed_count += 1
+            user_results.append(
+                {
+                    "userid": user.id,
+                    "fullname": user.fullname,
+                    "username": user.username,
+                    "completed": status.completed,
+                    "completions": len(status.completions),
+                }
+            )
 
         total = len(users_capped)
         rate = (completed_count / total * 100) if total else 0

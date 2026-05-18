@@ -27,15 +27,21 @@ class UnknownLTIPlatform(KeyError):
 class InvalidLTIDeployment(ValueError):
     def __init__(
         self,
-        deployment_id: str,
+        deployment_id: str | None,
         platform_id: str,
+        reason: str | None = None,
     ):
         self.deployment_id = deployment_id
         self.platform_id = platform_id
-        super().__init__(
-            f"Invalid deployment_id {deployment_id!r}"
-            f" for platform {platform_id!r}"
-        )
+        self.reason = reason
+        if reason:
+            msg = f"{reason} (platform={platform_id!r})"
+        else:
+            msg = (
+                f"Invalid deployment_id {deployment_id!r}"
+                f" for platform {platform_id!r}"
+            )
+        super().__init__(msg)
 
 
 def find_platform(
@@ -60,8 +66,14 @@ def find_platform_by_id(platforms, platform_id):
 
 def check_deployment(
     platform: config_lti.LTIPlatformConfig,
-    deployment_id: str,
+    deployment_id: str | None,
 ) -> None:
+    if deployment_id is None:
+        raise InvalidLTIDeployment(
+            None,
+            platform.id,
+            reason="missing deployment_id claim in id_token",
+        )
     if deployment_id not in platform.deployment_ids:
         raise InvalidLTIDeployment(deployment_id, platform.id)
 
