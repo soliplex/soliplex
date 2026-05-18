@@ -40,7 +40,7 @@ providers:
     base_url: http://localhost:5001
 
   ollama:
-    base_url: http://100.122.115.33:4001
+    base_url: http://bizon:4001
 
   vllm:
     embeddings_base_url: ""
