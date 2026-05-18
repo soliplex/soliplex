@@ -253,7 +253,7 @@ agent_configs:
   - id: "default_chat"
     model_name: "bizon/gemma4-26b"
     provider_type: openai
-    provider_base_url: "http://100.122.115.33:4001"
+    provider_base_url: "http://bizon:4001"
     provider_key: "secret:OLLAMA_API_KEY"
     system_prompt: |
       You are an expert AI assistant specializing in information retrieval.
@@ -265,7 +265,7 @@ agent_configs:
   - id: "alternate_chat"
     model_name: "bizon/gemma4-26b"
     provider_type: openai
-    provider_base_url: "http://100.122.115.33:4001"
+    provider_base_url: "http://bizon:4001"
     provider_key: "secret:OLLAMA_API_KEY"
     system_prompt: |
       You are an expert AI assistant specializing in information retrieval.
@@ -277,7 +277,7 @@ agent_configs:
   - id: "title"
     model_name: "bizon/gemma4-26b"
     provider_type: openai
-    provider_base_url: "http://100.122.115.33:4001"
+    provider_base_url: "http://bizon:4001"
     provider_key: "secret:OLLAMA_API_KEY"
 
 title_agent_config_id: "title"
