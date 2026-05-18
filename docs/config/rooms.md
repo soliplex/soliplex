@@ -223,13 +223,35 @@ uv add 'soliplex[aws]'
 # or in pyproject.toml dependencies, depending on how you install
 ```
 
-Without the extra installed, soliplex does nothing extra and lance
-falls back to its own credential lookup (which reads `os.environ`
-directly).  Note that soliplex's `.env` file values are intentionally
-not propagated into `os.environ`, so a `.env`-based credential setup
-that works for the `haiku-rag` CLI will NOT reach lance unless either
-(a) the `aws` extra is installed, or (b) the credentials are exported
-into the soliplex process environment directly.
+**Bridging credentials from `.env`.**  Soliplex normally keeps
+`.env` values in its own configuration dict and does **not** mutate
+`os.environ` — but lance (and botocore) read AWS credentials from
+`os.environ` directly.  To close that gap, the credential resolver
+copies a fixed set of AWS-related keys from the installation's
+`.env` into `os.environ` (using `setdefault`, so existing process-env
+values always win).  The keys bridged are:
+
+```bash
+AWS_ACCESS_KEY_ID          AWS_SHARED_CREDENTIALS_FILE
+AWS_SECRET_ACCESS_KEY      AWS_CONFIG_FILE
+AWS_SESSION_TOKEN          AWS_ROLE_ARN
+AWS_REGION                 AWS_WEB_IDENTITY_TOKEN_FILE
+AWS_DEFAULT_REGION         AWS_ENDPOINT_URL
+AWS_PROFILE                AWS_ENDPOINT_URL_S3
+```
+
+That means a `.env` like:
+
+```bash
+AWS_ACCESS_KEY_ID=AKIA...
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION=us-east-1
+```
+
+works for soliplex S3 rooms exactly the way it works for the
+`haiku-rag` CLI.  Without the `aws` extra installed, no bridging
+happens and lance falls back to its own credential lookup against
+whatever `os.environ` contained at process start.
 
 To bypass the auto-resolution entirely, set `lancedb.storage_options`
 explicitly in a room-level `haiku.rag.yaml`; soliplex never overwrites

@@ -24,7 +24,7 @@ def _no_aws_creds(monkeypatch):
     """
     monkeypatch.setattr(
         "soliplex.aws_credentials.resolve_aws_storage_options",
-        lambda: {},
+        lambda **_kw: {},
     )
 
 
@@ -354,7 +354,7 @@ def test__rcb_s3_uri_overlays_storage_options_from_botocore(
     """
     monkeypatch.setattr(
         "soliplex.aws_credentials.resolve_aws_storage_options",
-        lambda: _FAKE_CREDS,
+        lambda **_kw: _FAKE_CREDS,
     )
 
     rcb_config = _build_s3_rcb(installation_config, temp_dir)
@@ -400,7 +400,7 @@ def test__rcb_s3_uri_user_storage_options_not_overwritten(
 
     monkeypatch.setattr(
         "soliplex.aws_credentials.resolve_aws_storage_options",
-        lambda: _FAKE_CREDS,
+        lambda **_kw: _FAKE_CREDS,
     )
 
     rcb_config = config_rag._RAGConfigBase(
@@ -424,7 +424,7 @@ def test__rcb_non_s3_uri_does_not_resolve_aws_creds(
     calls = []
     resolver.setattr(
         "soliplex.aws_credentials.resolve_aws_storage_options",
-        lambda: calls.append("called") or {},
+        lambda **_kw: calls.append("called") or {},
     )
 
     try:
@@ -464,7 +464,7 @@ def test__rcb_s3_uri_creds_resolved_per_access(
     iter_seq = iter(sequence)
     monkeypatch.setattr(
         "soliplex.aws_credentials.resolve_aws_storage_options",
-        lambda: next(iter_seq),
+        lambda **_kw: next(iter_seq),
     )
 
     rcb_config = _build_s3_rcb(installation_config, temp_dir)
@@ -474,6 +474,57 @@ def test__rcb_s3_uri_creds_resolved_per_access(
 
     assert first.lancedb.storage_options == sequence[0]
     assert second.lancedb.storage_options == sequence[1]
+
+
+def test__rcb_s3_uri_passes_installation_dotenv_to_resolver(
+    installation_config, temp_dir, monkeypatch
+):
+    """The installation's '.env' dict is forwarded as extra_env so the
+    resolver can bridge AWS_* into os.environ for both botocore and
+    lance to see.
+    """
+    captured: dict = {}
+
+    def _fake_resolve(*, extra_env=None):
+        captured["extra_env"] = extra_env
+        return {"aws_access_key_id": "AK", "aws_secret_access_key": "SK"}
+
+    monkeypatch.setattr(
+        "soliplex.aws_credentials.resolve_aws_storage_options",
+        _fake_resolve,
+    )
+
+    dotenv_values = {
+        "AWS_ACCESS_KEY_ID": "FROM_DOTENV_AK",
+        "AWS_SECRET_ACCESS_KEY": "FROM_DOTENV_SK",
+    }
+    installation_config.from_dotenv = dotenv_values
+
+    rcb_config = _build_s3_rcb(installation_config, temp_dir)
+    _ = rcb_config.haiku_rag_config
+
+    assert captured["extra_env"] == dotenv_values
+
+
+@pytest.mark.parametrize(
+    "from_dotenv_value, expected",
+    [
+        (None, {}),  # installation_config is None
+        ("not-a-dict", {}),  # MagicMock attribute / non-dict
+        ({"AWS_ACCESS_KEY_ID": "AK"}, {"AWS_ACCESS_KEY_ID": "AK"}),
+    ],
+)
+def test__extra_env_for_aws_returns_dict_or_empty(from_dotenv_value, expected):
+    """The helper is defensive: returns a real dict for any caller,
+    even if the installation config has no 'from_dotenv' attribute or
+    it's a MagicMock value.
+    """
+    if from_dotenv_value is None:
+        ic = None
+    else:
+        ic = type("IC", (), {"from_dotenv": from_dotenv_value})()
+
+    assert config_rag._extra_env_for_aws(ic) == expected
 
 
 def test__rcb_haiku_rag_config_preset_object_skipped_for_overlay(

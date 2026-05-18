@@ -1,6 +1,7 @@
 from __future__ import annotations  # forward refs in typing decls
 
 import dataclasses
+import logging
 import pathlib
 import re
 
@@ -10,6 +11,8 @@ from soliplex import aws_credentials
 
 from . import _utils
 from . import exceptions
+
+logger = logging.getLogger(__name__)
 
 
 class RagDbExactlyOneOfStemOrOverride(TypeError):
@@ -42,6 +45,21 @@ def _looks_like_uri(value) -> bool:
     set 'rag_lancedb_override_path' to either a string or a 'pathlib.Path'.
     """
     return bool(_URI_SCHEME_RE.match(str(value)))
+
+
+def _extra_env_for_aws(installation_config) -> dict[str, str]:
+    """Return the installation's '.env' values as a plain dict, or {}.
+
+    Used to feed soliplex-isolated '.env' AWS variables into the AWS
+    credential resolver so they reach botocore (and lance).  Defensive
+    against test fixtures where 'installation_config' is a MagicMock.
+    """
+    if installation_config is None:
+        return {}
+    from_dotenv = getattr(installation_config, "from_dotenv", None)
+    if isinstance(from_dotenv, dict):
+        return from_dotenv
+    return {}
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -133,8 +151,17 @@ class _RAGConfigBase:
             and getattr(lancedb, "uri", "").startswith("s3://")
             and not lancedb.storage_options
         ):
-            resolved = aws_credentials.resolve_aws_storage_options()
+            extra_env = _extra_env_for_aws(self._installation_config)
+            resolved = aws_credentials.resolve_aws_storage_options(
+                extra_env=extra_env,
+            )
             if resolved:
+                logger.info(
+                    "Overlaying AWS storage_options for s3:// LanceDB at %s "
+                    "(keys: %s)",
+                    lancedb.uri,
+                    sorted(resolved),
+                )
                 return base.model_copy(
                     update={
                         "lancedb": lancedb.model_copy(
@@ -142,6 +169,13 @@ class _RAGConfigBase:
                         ),
                     }
                 )
+            logger.warning(
+                "No AWS credentials available for s3:// LanceDB at %s; "
+                "lance will fall back to its own credential chain. "
+                "If creds live in soliplex's .env, ensure the 'aws' extra "
+                "is installed (uv add soliplex[aws]).",
+                lancedb.uri,
+            )
 
         return base
 
