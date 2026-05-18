@@ -779,6 +779,56 @@ async def test_get_course_completion_overview_per_user_error():
     assert result["users"][0]["completions"] == 0
 
 
+@pytest.mark.asyncio
+async def test_get_course_completion_overview_validation_error():
+    """When Moodle returns a structurally malformed completion record
+    for one user (pydantic.ValidationError on model_validate), the
+    overview must keep going and mark that user as completed=None
+    rather than aborting the whole gather() with an unhandled error.
+    """
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_course_completion_overview")
+
+    enrolled_resp = [
+        {"id": 3, "username": "u1", "fullname": "User 1", "roles": []},
+    ]
+    # Missing the required "completionstatus" key -> ValidationError
+    malformed_resp = {"something_unexpected": True}
+
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+
+    call_idx = 0
+
+    def make_response(data):
+        r = mock.MagicMock(spec=httpx.Response)
+        r.status_code = 200
+        r.json.return_value = data
+        r.raise_for_status.return_value = None
+        return r
+
+    async def post_side_effect(*args, **kwargs):
+        nonlocal call_idx
+        responses = [enrolled_resp, malformed_resp]
+        resp = make_response(responses[call_idx])
+        call_idx += 1
+        return resp
+
+    mock_client.post.side_effect = post_side_effect
+
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(2))
+
+    assert result["total_enrolled"] == 1
+    assert result["completed"] == 0
+    assert result["users"][0]["completed"] is None
+    assert result["users"][0]["completions"] == 0
+
+
 # -----------------------------------------------------------------
 # Feature 3: Groups & cohorts tools
 # -----------------------------------------------------------------

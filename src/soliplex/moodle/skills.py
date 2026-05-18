@@ -15,6 +15,7 @@ import re
 import time
 
 import httpx
+import pydantic
 from haiku.skills.models import Skill
 from haiku.skills.models import SkillMetadata
 from haiku.skills.models import SkillSource
@@ -696,11 +697,20 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         users_capped = enrolled[:MAX_RESULTS]
 
         async def _fetch_status(user):
+            # Pydantic ValidationError is included because a single
+            # malformed per-user record from Moodle would otherwise
+            # escape gather() and abort the whole overview.  Treat
+            # any per-user failure as "completed: null" instead of
+            # surfacing a 500 to the agent.
             try:
                 return await client.get_course_completion_status(
                     courseid, user.id
                 )
-            except (MoodleAPIError, httpx.HTTPError):
+            except (
+                MoodleAPIError,
+                httpx.HTTPError,
+                pydantic.ValidationError,
+            ):
                 return None
 
         # Parallelise the per-user round-trips so a 100-user course
