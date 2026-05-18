@@ -563,6 +563,7 @@ async def test_get_chunk_visualization(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("w_search_type", [False, True])
 @pytest.mark.parametrize(
     "w_hrc_kws",
     [
@@ -580,12 +581,19 @@ async def test_get_chunk_visualization(
 async def test_get_search(
     hr_klass,
     w_hrc_kws,
+    w_search_type,
     temp_dir,
     room_configs,
 ):
     QUERY = "test query"
     SEARCH_TYPE = "hybrid"
     ROOM_ID = "foo"
+
+    search_type_kw = {}
+    if w_search_type:
+        exp_search_type = search_type_kw["search_type"] = SEARCH_TYPE
+    else:
+        exp_search_type = "hybrid"
 
     w_hrc_kws = [kws.copy() for kws in w_hrc_kws]
     sources = [kws["source"] for kws in w_hrc_kws]
@@ -627,8 +635,8 @@ async def test_get_search(
         with pytest.raises(fastapi.HTTPException) as exc:
             await rooms_views.get_search(
                 query=QUERY,
-                search_type=SEARCH_TYPE,
                 room_id=ROOM_ID,
+                **search_type_kw,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
@@ -693,5 +701,5 @@ async def test_get_search(
         for hr_entered in hr_entereds.values():
             hr_entered.search.assert_awaited_once_with(
                 query=QUERY,
-                search_type=SEARCH_TYPE,
+                search_type=exp_search_type,
             )

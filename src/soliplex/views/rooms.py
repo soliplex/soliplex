@@ -302,8 +302,8 @@ async def get_chunk_visualization(
 @router.get("/v1/rooms/{room_id}/search")
 async def get_search(
     query: str,
-    search_type: models.SearchType,
     room_id: str,
+    search_type: models.SearchType = "hybrid",
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
