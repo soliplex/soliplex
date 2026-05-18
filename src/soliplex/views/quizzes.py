@@ -18,7 +18,6 @@ depend_the_logger = views.depend_the_logger
 
 @router.get("/v1/rooms/{room_id}/quiz/{quiz_id}")
 async def get_quiz(
-    request: fastapi.Request,
     room_id: str,
     quiz_id: str,
     the_installation: installation.Installation = depend_the_installation,
@@ -59,7 +58,6 @@ async def get_quiz(
 
 @router.post("/v1/rooms/{room_id}/quiz/{quiz_id}/{question_uuid}")
 async def post_quiz_question(
-    request: fastapi.Request,
     room_id: str,
     quiz_id: str,
     question_uuid: str,

@@ -71,15 +71,12 @@ def room_configs(request):
 @pytest.mark.anyio
 @mock.patch("soliplex.models.Room.from_config")
 async def test_get_rooms(fc, room_configs):
-    request = mock.create_autospec(fastapi.Request)
-
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_room_configs.return_value = room_configs
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     found = await rooms_views.get_rooms(
-        request,
         the_installation=the_installation,
         the_authz_policy=the_authz_policy,
         the_user_claims=THE_USER_CLAIMS,
@@ -109,8 +106,6 @@ async def test_get_rooms(fc, room_configs):
 async def test_get_room(fc, room_configs):
     ROOM_ID = "foo"
 
-    request = mock.create_autospec(fastapi.Request)
-
     the_installation = mock.create_autospec(installation.Installation)
 
     if ROOM_ID not in room_configs:
@@ -124,7 +119,6 @@ async def test_get_room(fc, room_configs):
     if ROOM_ID not in room_configs:
         with pytest.raises(fastapi.HTTPException) as exc:
             await rooms_views.get_room(
-                request,
                 ROOM_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
@@ -141,7 +135,6 @@ async def test_get_room(fc, room_configs):
 
     else:
         found = await rooms_views.get_room(
-            request,
             ROOM_ID,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
@@ -169,8 +162,6 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
 
     image_path = temp_dir / IMAGE_FILENAME
 
-    request = mock.create_autospec(fastapi.Request)
-
     the_installation = mock.create_autospec(installation.Installation)
 
     if ROOM_ID not in room_configs:
@@ -190,7 +181,6 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
     if ROOM_ID not in room_configs:
         with pytest.raises(fastapi.HTTPException) as exc:
             await rooms_views.get_room_bg_image(
-                request,
                 room_id=ROOM_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
@@ -206,7 +196,6 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
     else:
         if w_image:
             found = await rooms_views.get_room_bg_image(
-                request,
                 room_id=ROOM_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
@@ -218,7 +207,6 @@ async def test_get_room_bg_image(temp_dir, w_image, room_configs):
         else:
             with pytest.raises(fastapi.HTTPException) as exc:
                 await rooms_views.get_room_bg_image(
-                    request,
                     room_id=ROOM_ID,
                     the_installation=the_installation,
                     the_authz_policy=the_authz_policy,
@@ -249,8 +237,6 @@ async def test_get_room_mcp_token(gust, w_error):
     ROOM_CONFIG = object()
     MCP_TOKEN = gust.return_value = "DEADBEEF"
 
-    request = fastapi.Request(scope={"type": "http"})
-
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
@@ -263,7 +249,6 @@ async def test_get_room_mcp_token(gust, w_error):
     if w_error:
         with pytest.raises(fastapi.HTTPException) as exc:
             await rooms_views.get_room_mcp_token(
-                request,
                 room_id=ROOM_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
@@ -280,7 +265,6 @@ async def test_get_room_mcp_token(gust, w_error):
 
     else:
         found = await rooms_views.get_room_mcp_token(
-            request,
             room_id=ROOM_ID,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
@@ -347,8 +331,6 @@ async def test_get_room_documents(
     hr_inst = hr_klass.return_value
     hr_entered = hr_inst.__aenter__.return_value
 
-    request = mock.create_autospec(fastapi.Request)
-
     the_installation = mock.create_autospec(installation.Installation)
 
     if ROOM_ID not in room_configs:
@@ -369,7 +351,6 @@ async def test_get_room_documents(
     if ROOM_ID not in room_configs:
         with pytest.raises(fastapi.HTTPException) as exc:
             await rooms_views.get_room_documents(
-                request,
                 room_id=ROOM_ID,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
@@ -385,7 +366,6 @@ async def test_get_room_documents(
         )
     else:
         found = await rooms_views.get_room_documents(
-            request,
             room_id=ROOM_ID,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
@@ -447,8 +427,6 @@ async def test_get_chunk_visualization(
     hr_entered = hr_inst.__aenter__.return_value
     chunk_repo = hr_entered.chunk_repository
 
-    request = mock.create_autospec(fastapi.Request)
-
     the_installation = mock.create_autospec(installation.Installation)
 
     if ROOM_ID not in room_configs:
@@ -476,7 +454,6 @@ async def test_get_chunk_visualization(
     if ROOM_ID not in room_configs:
         with pytest.raises(fastapi.HTTPException) as exc:
             await rooms_views.get_chunk_visualization(
-                request,
                 room_id=ROOM_ID,
                 chunk_id=CHUNK_ID,
                 the_installation=the_installation,
@@ -495,7 +472,6 @@ async def test_get_chunk_visualization(
     elif w_hrck is None:
         with pytest.raises(fastapi.HTTPException) as exc:
             await rooms_views.get_chunk_visualization(
-                request,
                 room_id=ROOM_ID,
                 chunk_id=CHUNK_ID,
                 the_installation=the_installation,
@@ -515,7 +491,6 @@ async def test_get_chunk_visualization(
     elif not w_chunk:
         with pytest.raises(fastapi.HTTPException) as exc:
             await rooms_views.get_chunk_visualization(
-                request,
                 room_id=ROOM_ID,
                 chunk_id=CHUNK_ID,
                 the_installation=the_installation,
@@ -532,7 +507,6 @@ async def test_get_chunk_visualization(
 
     else:
         found = await rooms_views.get_chunk_visualization(
-            request,
             room_id=ROOM_ID,
             chunk_id=CHUNK_ID,
             the_installation=the_installation,

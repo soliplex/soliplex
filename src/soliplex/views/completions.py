@@ -24,7 +24,6 @@ depend_the_user_claims = views.depend_the_user_claims
 @util.logfire_span("GET /v1/chat/completions")
 @router.get("/v1/chat/completions", summary="Get available completions")
 async def get_chat_completions(
-    request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
 ) -> models.ConfiguredCompletions:
@@ -45,7 +44,6 @@ async def get_chat_completions(
     summary="Get a completion",
 )
 async def get_chat_completion(
-    request: fastapi.Request,
     completion_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_user_claims: authn.UserClaims = depend_the_user_claims,

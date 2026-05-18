@@ -66,7 +66,6 @@ def test_quiz(qa_question, mc_question):
 @pytest.mark.anyio
 @pytest.mark.parametrize("w_miss", [None, "room", "quiz"])
 async def test_get_quiz(test_quiz, w_miss):
-    request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
@@ -76,7 +75,6 @@ async def test_get_quiz(test_quiz, w_miss):
 
         with pytest.raises(fastapi.HTTPException) as exc:
             await quizzes_views.get_quiz(
-                request=request,
                 room_id=TEST_ROOM_ID,
                 quiz_id=TEST_QUIZ_ID,
                 the_installation=the_installation,
@@ -99,7 +97,6 @@ async def test_get_quiz(test_quiz, w_miss):
 
             with pytest.raises(fastapi.HTTPException) as exc:
                 await quizzes_views.get_quiz(
-                    request=request,
                     room_id=TEST_ROOM_ID,
                     quiz_id=TEST_QUIZ_ID,
                     the_installation=the_installation,
@@ -118,7 +115,6 @@ async def test_get_quiz(test_quiz, w_miss):
             room_config.quiz_map = {TEST_QUIZ_ID: test_quiz}
 
             found = await quizzes_views.get_quiz(
-                request=request,
                 room_id=TEST_ROOM_ID,
                 quiz_id=TEST_QUIZ_ID,
                 the_installation=the_installation,
@@ -143,7 +139,6 @@ async def test_get_quiz(test_quiz, w_miss):
 @pytest.mark.parametrize("w_miss", [None, "room", "quiz", "question"])
 @mock.patch("soliplex.quizzes.check_answer")
 async def test_post_quiz_question(ca, test_quiz, w_miss):
-    request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
@@ -154,7 +149,6 @@ async def test_post_quiz_question(ca, test_quiz, w_miss):
 
         with pytest.raises(fastapi.HTTPException) as exc:
             await quizzes_views.post_quiz_question(
-                request=request,
                 room_id=TEST_ROOM_ID,
                 quiz_id=TEST_QUIZ_ID,
                 question_uuid=QA_QUESTION_UUID,
@@ -179,7 +173,6 @@ async def test_post_quiz_question(ca, test_quiz, w_miss):
 
             with pytest.raises(fastapi.HTTPException) as exc:
                 await quizzes_views.post_quiz_question(
-                    request=request,
                     room_id=TEST_ROOM_ID,
                     quiz_id=TEST_QUIZ_ID,
                     question_uuid=QA_QUESTION_UUID,
@@ -209,7 +202,6 @@ async def test_post_quiz_question(ca, test_quiz, w_miss):
 
                 with pytest.raises(fastapi.HTTPException) as exc:
                     await quizzes_views.post_quiz_question(
-                        request=request,
                         room_id=TEST_ROOM_ID,
                         quiz_id=TEST_QUIZ_ID,
                         question_uuid=QA_QUESTION_UUID,
@@ -228,7 +220,6 @@ async def test_post_quiz_question(ca, test_quiz, w_miss):
 
             else:  # hit
                 found = await quizzes_views.post_quiz_question(
-                    request,
                     room_id=TEST_ROOM_ID,
                     quiz_id=TEST_QUIZ_ID,
                     question_uuid=QA_QUESTION_UUID,

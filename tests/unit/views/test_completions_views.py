@@ -45,13 +45,10 @@ def completion_configs(request):
 @pytest.mark.anyio
 @mock.patch("soliplex.models.Completion.from_config")
 async def test_get_chat_completions(fc, completion_configs):
-    request = mock.create_autospec(fastapi.Request)
-
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.get_completion_configs.return_value = completion_configs
 
     found = await completions_views.get_chat_completions(
-        request,
         the_installation=the_installation,
         the_user_claims=AUTH_USER_CLAIMS,
     )
@@ -76,8 +73,6 @@ async def test_get_chat_completions(fc, completion_configs):
 async def test_get_chat_completion(fc, completion_configs):
     COMPLETION_ID = "foo"
 
-    request = mock.create_autospec(fastapi.Request)
-
     the_installation = mock.create_autospec(installation.Installation)
 
     if COMPLETION_ID not in completion_configs:
@@ -92,7 +87,6 @@ async def test_get_chat_completion(fc, completion_configs):
     if COMPLETION_ID not in completion_configs:
         with pytest.raises(fastapi.HTTPException) as exc:
             await completions_views.get_chat_completion(
-                request,
                 COMPLETION_ID,
                 the_installation=the_installation,
                 the_user_claims=AUTH_USER_CLAIMS,
@@ -103,7 +97,6 @@ async def test_get_chat_completion(fc, completion_configs):
 
     else:
         found = await completions_views.get_chat_completion(
-            request,
             COMPLETION_ID,
             the_installation=the_installation,
             the_user_claims=AUTH_USER_CLAIMS,

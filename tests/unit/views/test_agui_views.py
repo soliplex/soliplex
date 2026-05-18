@@ -287,7 +287,6 @@ async def test_get_room_agui_only(
     room_config = mock.create_autospec(config_rooms.RoomConfig)
     cuir.return_value = room_config
 
-    request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
@@ -307,7 +306,6 @@ async def test_get_room_agui_only(
     the_threads.list_user_threads.return_value = [test_thread]
 
     found = await agui_views.get_room_agui(
-        request,
         room_id=TEST_ROOM_ID,
         the_installation=the_installation,
         the_threads=the_threads,
@@ -416,7 +414,6 @@ async def test_get_room_agui_thread_id_only(
     else:
         test_run.parent_run_id = None
 
-    request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
@@ -428,7 +425,6 @@ async def test_get_room_agui_thread_id_only(
 
     with expectation as expected:
         found = await agui_views.get_room_agui_thread_id(
-            request=request,
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID_UUID,
             the_installation=the_installation,
@@ -552,7 +548,6 @@ async def test_get_room_agui_thread_id_run_id(
         test_thread,
     )
 
-    request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
@@ -564,7 +559,6 @@ async def test_get_room_agui_thread_id_run_id(
 
     with expectation as expected:
         found = await agui_views.get_room_agui_thread_id_run_id(
-            request=request,
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID_UUID,
             run_id=TEST_RUN_ID_UUID,
@@ -662,7 +656,6 @@ async def test_post_room_agui_only(
         exp_meta = None
         new_thread_request = models.AGUI_NewThreadRequest()
 
-    request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
@@ -683,7 +676,6 @@ async def test_post_room_agui_only(
     patched_agui_features[EMPTY_FEATURE_NAME] = EMPTY_FEATURE
 
     found = await agui_views.post_room_agui(
-        request,
         room_id=TEST_ROOM_ID,
         new_thread_request=new_thread_request,
         the_installation=the_installation,
@@ -758,7 +750,6 @@ async def test_post_room_agui_thread_id_only(
     room_config = mock.create_autospec(config_rooms.RoomConfig)
     cuir.return_value = room_config
 
-    request = fastapi.Request(scope={"type": "http"})
     nrr = {}
 
     if w_parent_id:
@@ -804,7 +795,6 @@ async def test_post_room_agui_thread_id_only(
 
     with expectation as expected:
         found = await agui_views.post_room_agui_thread_id(
-            request,
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID_UUID,
             new_run_request=new_run_request,
@@ -874,8 +864,6 @@ async def test_post_room_agui_thread_id_meta(
     room_config = mock.create_autospec(config_rooms.RoomConfig)
     cuir.return_value = room_config
 
-    request = fastapi.Request(scope={"type": "http"})
-
     if w_meta is not None:
         exp_t_meta = w_meta
         r_meta = models.AGUI_ThreadMetadata.model_validate(w_meta)
@@ -891,7 +879,6 @@ async def test_post_room_agui_thread_id_meta(
 
     with expectation as expected:
         found = await agui_views.post_room_agui_thread_id_meta(
-            request,
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID_UUID,
             new_metadata=r_meta,
@@ -944,7 +931,6 @@ async def test_delete_room_agui_thread_id(
     room_config = mock.create_autospec(config_rooms.RoomConfig)
     cuir.return_value = room_config
 
-    request = fastapi.Request(scope={"type": "http"})
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
@@ -953,7 +939,6 @@ async def test_delete_room_agui_thread_id(
 
     with expectation as expected:
         found = await agui_views.delete_room_agui_thread_id(
-            request,
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID_UUID,
             the_installation=the_installation,
@@ -1768,8 +1753,6 @@ async def test_post_room_agui_thread_id_run_id_meta(
     room_config = mock.create_autospec(config_rooms.RoomConfig)
     cuir.return_value = room_config
 
-    request = fastapi.Request(scope={"type": "http"})
-
     if w_meta is not None:
         exp_t_meta = w_meta
         r_meta = models.AGUI_RunMetadata.model_validate(w_meta)
@@ -1785,7 +1768,6 @@ async def test_post_room_agui_thread_id_run_id_meta(
 
     with expectation as expected:
         found = await agui_views.post_room_agui_thread_id_run_id_meta(
-            request,
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID_UUID,
             run_id=TEST_RUN_ID_UUID,
@@ -1841,8 +1823,6 @@ async def test_get_room_agui_thread_id_run_id_feedback(
     room_config = mock.create_autospec(config_rooms.RoomConfig)
     cuir.return_value = room_config
 
-    request = fastapi.Request(scope={"type": "http"})
-
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
@@ -1858,7 +1838,6 @@ async def test_get_room_agui_thread_id_run_id_feedback(
 
     with expectation as expected:
         found = await agui_views.get_room_agui_thread_id_run_id_feedback(
-            request,
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID_UUID,
             run_id=TEST_RUN_ID_UUID,
@@ -1910,8 +1889,6 @@ async def test_post_room_agui_thread_id_run_id_feedback(
     room_config = mock.create_autospec(config_rooms.RoomConfig)
     cuir.return_value = room_config
 
-    request = fastapi.Request(scope={"type": "http"})
-
     r_feedback = models.AGUI_RunFeedback(
         feedback=TEST_RUN_FEEDBACK,
         reason=TEST_RUN_FEEDBACK_REASON,
@@ -1925,7 +1902,6 @@ async def test_post_room_agui_thread_id_run_id_feedback(
 
     with expectation as expected:
         found = await agui_views.post_room_agui_thread_id_run_id_feedback(
-            request,
             room_id=TEST_ROOM_ID,
             thread_id=TEST_THREAD_ID_UUID,
             run_id=TEST_RUN_ID_UUID,
@@ -1984,8 +1960,6 @@ async def test_post_agui_recent_feedback(
         **since_kw,
     )
 
-    request = fastapi.Request(scope={"type": "http"})
-
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
@@ -2005,7 +1979,6 @@ async def test_post_agui_recent_feedback(
 
     with expectation as expected:
         found = await agui_views.post_agui_recent_feedback(
-            request,
             query_terms=query_terms,
             the_installation=the_installation,
             the_threads=the_threads,
@@ -2051,8 +2024,6 @@ async def test_post_agui_recent_room_feedback(
         **since_kw,
     )
 
-    request = fastapi.Request(scope={"type": "http"})
-
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
@@ -2072,7 +2043,6 @@ async def test_post_agui_recent_room_feedback(
 
     with expectation as expected:
         found = await agui_views.post_agui_recent_room_feedback(
-            request,
             room_id=TEST_ROOM_ID,
             query_terms=query_terms,
             the_installation=the_installation,
@@ -2120,8 +2090,6 @@ async def test_post_agui_recent_user_feedback(
         **since_kw,
     )
 
-    request = fastapi.Request(scope={"type": "http"})
-
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
@@ -2141,7 +2109,6 @@ async def test_post_agui_recent_user_feedback(
 
     with expectation as expected:
         found = await agui_views.post_agui_recent_user_feedback(
-            request,
             user_name=USER_NAME,
             query_terms=query_terms,
             the_installation=the_installation,
@@ -2184,8 +2151,6 @@ async def test_post_agui_review_recent_feedback(
     limit_kw,
     since_kw,
 ):
-    request = fastapi.Request(scope={"type": "http"})
-
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
@@ -2217,7 +2182,6 @@ async def test_post_agui_review_recent_feedback(
 
     with expectation as expected:
         found = await agui_views.post_agui_review_recent_feedback(
-            request,
             review=review_payload,
             the_installation=the_installation,
             the_threads=the_threads,
@@ -2261,8 +2225,6 @@ async def test_post_agui_resolve_recent_feedback(
     limit_kw,
     since_kw,
 ):
-    request = fastapi.Request(scope={"type": "http"})
-
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
@@ -2294,7 +2256,6 @@ async def test_post_agui_resolve_recent_feedback(
 
     with expectation as expected:
         found = await agui_views.post_agui_resolve_recent_feedback(
-            request,
             resolution=resolution_payload,
             the_installation=the_installation,
             the_threads=the_threads,

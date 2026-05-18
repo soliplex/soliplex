@@ -29,8 +29,6 @@ THE_USER_CLAIMS = {"email": "admin@example.com"}
 async def test_get_installation(fc, w_admin_access):
     from soliplex import installation
 
-    request = mock.create_autospec(fastapi.Request)
-
     i_config = mock.create_autospec(config_installation.InstallationConfig)
     the_installation = installation.Installation(i_config)
     the_authz_policy = mock.create_autospec(authz.AuthorizationPolicy)
@@ -41,7 +39,6 @@ async def test_get_installation(fc, w_admin_access):
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
             await installation_views.get_installation(
-                request,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
@@ -56,7 +53,6 @@ async def test_get_installation(fc, w_admin_access):
 
     else:
         found = await installation_views.get_installation(
-            request,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
             the_user_claims=THE_USER_CLAIMS,
@@ -77,7 +73,6 @@ async def test_get_installation(fc, w_admin_access):
 async def test_get_installation_versions_w_error(sp):
     sp.check_output.side_effect = ValueError("testing")
 
-    request = mock.create_autospec(fastapi.Request)
     the_installation = object()
     the_authz_policy = mock.create_autospec(authz.AuthorizationPolicy)
     the_authz_policy.check_admin_access.return_value = True
@@ -89,7 +84,6 @@ async def test_get_installation_versions_w_error(sp):
 
     with pytest.raises(fastapi.HTTPException, check=_check) as exc:
         await installation_views.get_installation_versions(
-            request,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
             the_user_claims=THE_USER_CLAIMS,
@@ -129,7 +123,6 @@ async def test_get_installation_versions_wo_error(sp, w_admin_access):
     }
     sp.check_output.return_value = json.dumps(pip_manifest).encode("utf8")
 
-    request = mock.create_autospec(fastapi.Request)
     the_installation = object()
     the_authz_policy = mock.create_autospec(authz.AuthorizationPolicy)
     the_authz_policy.check_admin_access.return_value = w_admin_access
@@ -139,7 +132,6 @@ async def test_get_installation_versions_wo_error(sp, w_admin_access):
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
             await installation_views.get_installation_versions(
-                request,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
@@ -154,7 +146,6 @@ async def test_get_installation_versions_wo_error(sp, w_admin_access):
 
     else:
         found = await installation_views.get_installation_versions(
-            request,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
             the_user_claims=THE_USER_CLAIMS,
@@ -181,7 +172,6 @@ async def test_get_installation_providers(w_admin_access):
         }
     }
 
-    request = mock.create_autospec(fastapi.Request)
     the_installation = mock.create_autospec(installation.Installation)
     the_installation.all_provider_info = PROVIDER_INFO
     the_authz_policy = mock.create_autospec(authz.AuthorizationPolicy)
@@ -192,7 +182,6 @@ async def test_get_installation_providers(w_admin_access):
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
             await installation_views.get_installation_providers(
-                request,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
@@ -207,7 +196,6 @@ async def test_get_installation_providers(w_admin_access):
 
     else:
         found = await installation_views.get_installation_providers(
-            request,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
             the_user_claims=THE_USER_CLAIMS,
@@ -234,7 +222,6 @@ async def test_get_installation_git_metadata(gm_klass, w_admin_access):
     gm.git_branch = GIT_BRANCH
     gm.git_tag = GIT_TAG
 
-    request = mock.create_autospec(fastapi.Request)
     the_installation = mock.create_autospec(installation.Installation)
     the_authz_policy = mock.create_autospec(authz.AuthorizationPolicy)
     the_authz_policy.check_admin_access.return_value = w_admin_access
@@ -244,7 +231,6 @@ async def test_get_installation_git_metadata(gm_klass, w_admin_access):
     if not w_admin_access:
         with pytest.raises(fastapi.HTTPException) as exc:
             await installation_views.get_installation_git_metadata(
-                request,
                 the_installation=the_installation,
                 the_authz_policy=the_authz_policy,
                 the_user_claims=THE_USER_CLAIMS,
@@ -259,7 +245,6 @@ async def test_get_installation_git_metadata(gm_klass, w_admin_access):
 
     else:
         found = await installation_views.get_installation_git_metadata(
-            request,
             the_installation=the_installation,
             the_authz_policy=the_authz_policy,
             the_user_claims=THE_USER_CLAIMS,

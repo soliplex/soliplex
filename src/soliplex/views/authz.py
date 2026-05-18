@@ -33,7 +33,6 @@ depend_the_authz_logger = fastapi.Depends(get_the_authz_logger)
     summary="Get authorization policy for a room",
 )
 async def get_room_authz(
-    request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
@@ -63,7 +62,6 @@ async def get_room_authz(
     summary="Update authorization policy for a room",
 )
 async def post_room_authz(
-    request: fastapi.Request,
     room_id: str,
     room_policy: models.RoomPolicy,
     the_installation: installation.Installation = depend_the_installation,
@@ -95,7 +93,6 @@ async def post_room_authz(
     summary="Delete authorization policy for a room",
 )
 async def delete_room_authz(
-    request: fastapi.Request,
     room_id: str,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
@@ -125,7 +122,6 @@ async def delete_room_authz(
     summary="Get authorization config for installation and its rooms",
 )
 async def get_installation_authz(
-    request: fastapi.Request,
     the_installation: installation.Installation = depend_the_installation,
     the_authz_policy: authz_package.AuthorizationPolicy = depend_the_authz,
     the_user_claims: authn.UserClaims = depend_the_user_claims,
