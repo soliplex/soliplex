@@ -672,6 +672,73 @@ Just the room IDs and names, skipping the RAG detail:
 soliplex-cli audit rooms example/installation.yaml | grep '^- \['
 ```
 
+### `audit room-authz`
+
+Bucket the configured rooms by their authorization state, and surface
+any stale `RoomPolicy` rows left behind in the authorization database
+by past room renames or removals.
+
+```bash
+soliplex-cli audit [OPTIONS] room-authz [INSTALLATION_CONFIG_PATH]
+```
+
+See [Group Options](#group-options) for the available `[OPTIONS]`.
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Output
+
+Four buckets are printed (each a bulleted list of `room_id`s, or
+`(none)` when empty):
+
+- **Default** — configured rooms with no `RoomPolicy` row in the
+  authorization database; public to all authenticated users by
+  default.
+- **Public** — configured rooms with a `RoomPolicy` row whose
+  `default_allow_deny=ALLOW` (public-by-policy).
+- **Private** — configured rooms with a `RoomPolicy` row whose
+  `default_allow_deny=DENY`.
+- **Stale** — `RoomPolicy` rows whose `room_id` is **not** present
+  in the installation YAML. Each entry is suffixed with the literal
+  marker `STALE`. These rows are typically orphaned leftovers from
+  a room rename or removal, and they cannot be inspected or cleaned
+  up through the (non-deprecated) `room-authz` commands, which
+  require a configured `ROOM_ID`. Use
+  [`room-authz show --allow-stale`](#room-authz-show) to inspect a
+  specific stale policy.
+
+When the installation's `authorization_dburi` is the in-memory
+default (`sqlite://`), every configured room falls into the
+**Default** bucket and the other three buckets are empty.
+
+#### Exit Status
+
+- `0` when the **Stale** bucket is empty.
+- `1` when one or more stale rows are detected, regardless of how
+  the configured rooms are distributed across the other three
+  buckets. In `-q` / `--quiet` mode, the stale list is emitted to
+  stdout as JSON of the form
+  `{"room_authz": {"stale_rooms": ["<room_id>", …]}}`.
+
+#### Examples
+
+Inspect the room/authz state of the example installation:
+
+```bash
+soliplex-cli audit room-authz example/installation.yaml
+```
+
+CI-friendly check that no stale policies remain:
+
+```bash
+soliplex-cli audit -q room-authz example/installation.yaml
+```
+
 ### `audit completions`
 
 List the OpenAI-compatible completion endpoints declared in the
