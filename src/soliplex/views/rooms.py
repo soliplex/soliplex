@@ -199,14 +199,19 @@ async def get_room_documents(
         ) from None
 
     document_set = {}
-    hr_client_kw = _get_haiku_rag_client_kw(room_config)
 
-    if hr_client_kw is not None:
+    for hr_client_kw in room_config.list_haiku_rag_client_kw(
+        include_source=True,
+    ):
+        source_tag = hr_client_kw.pop("source")
+        source = models.RAGSource.from_source_tag(source_tag)
+
         async with rag_client.HaikuRAG(**hr_client_kw) as rag:
             results = await rag.list_documents()
 
         for document in results:
             document_set[document.id] = models.RAGDocument(
+                source=source,
                 id=document.id,
                 uri=document.uri,
                 title=document.title,
@@ -328,7 +333,7 @@ async def get_search(
         include_source=True,
     ):
         source_tag = hr_client_kw.pop("source")
-        source = models.SearchSource.from_source_tag(source_tag)
+        source = models.RAGSource.from_source_tag(source_tag)
 
         async with rag_client.HaikuRAG(**hr_client_kw) as rag:
             hits = await rag.search(

@@ -50,11 +50,6 @@ DOCUMENT_KWARGS = {
     "created_at": DOCUMENT_CREATED_AT,
     "updated_at": DOCUMENT_UPDATED_AT,
 }
-DOCUMENT = mock.Mock(
-    spec_set=list(DOCUMENT_KWARGS.keys()),
-    **DOCUMENT_KWARGS,
-)
-RAG_DOCUMENT = models.RAGDocument(**DOCUMENT_KWARGS)
 
 
 @pytest.fixture(scope="module", params=[(), ROOM_IDS])
@@ -315,21 +310,66 @@ async def test__get_haiku_rag_client_kw(w_kws, expected):
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("w_hrck", [None, {"foo": "bar"}])
-@mock.patch("soliplex.views.rooms._get_haiku_rag_client_kw")
+@pytest.mark.parametrize(
+    "w_hrc_kws",
+    [
+        [],
+        [{"source": "agent", "foo": "bar"}],
+        [{"source": "skill:test", "foo": "bar"}],
+        [{"source": "tool:test", "foo": "bar"}],
+        [
+            {"source": "skill:test", "foo": "bar"},
+            {"source": "tool:test", "foo": "bar"},
+        ],
+    ],
+)
 @mock.patch("haiku.rag.client.HaikuRAG")
 async def test_get_room_documents(
     hr_klass,
-    ghrck,
-    w_hrck,
+    w_hrc_kws,
     temp_dir,
     room_configs,
 ):
-    ghrck.return_value = w_hrck
     ROOM_ID = "foo"
 
-    hr_inst = hr_klass.return_value
-    hr_entered = hr_inst.__aenter__.return_value
+    w_hrc_kws = [kws.copy() for kws in w_hrc_kws]
+    sources = [kws["source"] for kws in w_hrc_kws]
+    hr_insts = {source: mock.AsyncMock() for source in sources}
+    hr_entereds = {
+        key: value.__aenter__.return_value for key, value in hr_insts.items()
+    }
+    hr_klass.side_effect = hr_insts.values()
+
+    rag_sources = {}
+
+    for source in sources:
+        if source == "agent":
+            source_type = "agent"
+            name = None
+        else:
+            source_type, name = source.split(":")
+
+        rag_sources[source] = models.RAGSource(
+            source_type=source_type,
+            name=name,
+        )
+
+    document_infos = {
+        source: {
+            "id": f"test-doc-id-{source}",
+            "uri": DOCUMENT_URI,
+            "title": DOCUMENT_TITLE,
+            "metadata": DOCUMENT_METADATA,
+            "created_at": DOCUMENT_CREATED_AT,
+            "updated_at": DOCUMENT_UPDATED_AT,
+        }
+        for source in sources
+    }
+    doc_fields = ["id", "uri", "title", "metadata", "created_at", "updated_at"]
+    documents = {
+        source: mock.Mock(spec_set=doc_fields, **document_infos[source])
+        for source in sources
+    }
 
     the_installation = mock.create_autospec(installation.Installation)
 
@@ -340,13 +380,6 @@ async def test_get_room_documents(
 
     the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
     the_logger = mock.create_autospec(loggers.LogWrapper)
-
-    if ROOM_ID in room_configs:
-        if w_hrck:
-            hr_entered.list_documents.return_value = [DOCUMENT]
-            exp_docs = {DOCUMENT_ID: RAG_DOCUMENT}
-        else:
-            exp_docs = {}
 
     if ROOM_ID not in room_configs:
         with pytest.raises(fastapi.HTTPException) as exc:
@@ -365,6 +398,20 @@ async def test_get_room_documents(
             ROOM_ID,
         )
     else:
+        room_config = room_configs[ROOM_ID]
+        room_config.list_haiku_rag_client_kw.return_value = w_hrc_kws
+
+        for source in sources:
+            hr_entered = hr_entereds[source]
+            hr_entered.list_documents.return_value = [documents[source]]
+
+        exp_rag_docs = {
+            document_info["id"]: models.RAGDocument(
+                source=rag_sources[source], **document_info
+            )
+            for source, document_info in document_infos.items()
+        }
+
         found = await rooms_views.get_room_documents(
             room_id=ROOM_ID,
             the_installation=the_installation,
@@ -375,15 +422,17 @@ async def test_get_room_documents(
 
         assert found == models.RoomRAGDocuments(
             room_id=ROOM_ID,
-            document_set=exp_docs,
+            document_set=exp_rag_docs,
         )
 
-        if w_hrck:
-            hr_entered.list_documents.assert_called_once_with()
-            hr_klass.assert_called_once_with(**w_hrck)
+        if w_hrc_kws:
+            for kw in w_hrc_kws:
+                assert mock.call(**kw) in hr_klass.call_args_list
+
+            for hr_entered in hr_entereds.values():
+                hr_entered.list_documents.assert_awaited_once_with()
         else:
-            hr_entered.list_documents.assert_not_called()
-            hr_klass.list_documents.assert_not_called()
+            hr_klass.assert_not_called()
 
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
@@ -571,29 +620,29 @@ async def test_get_search(
 
     w_hrc_kws = [kws.copy() for kws in w_hrc_kws]
     sources = [kws["source"] for kws in w_hrc_kws]
-
-    search_results = [
-        hr_chunk.SearchResult(
-            content=f"Test content #{i_hrc_kw}",
-            score=float(i_hrc_kw) / 10 + 1,
-            chunk_id=f"test-chunk-{i_hrc_kw}",
-            document_id=f"test-document-id-{i_hrc_kw}",
-            document_uri=(
-                f"https://{hrc_kw['source'].replace(':', '_')}.example.com/"
-                f"documents/document-{i_hrc_kw}"
-            ),
-            document_title=f"Test Document #{i_hrc_kw}",
-            headings=[f"test-heading-{i_hrc_kw}"],
-            page_numbers=[i_hrc_kw],
-            labels=[f"test-label-{i_hrc_kw}"],
-        )
-        for i_hrc_kw, hrc_kw in enumerate(w_hrc_kws)
-    ]
-    hr_insts = {hrc_kws["source"]: mock.AsyncMock() for hrc_kws in w_hrc_kws}
+    hr_insts = {source: mock.AsyncMock() for source in sources}
     hr_entereds = {
         key: value.__aenter__.return_value for key, value in hr_insts.items()
     }
     hr_klass.side_effect = hr_insts.values()
+
+    search_results = [
+        hr_chunk.SearchResult(
+            content=f"Test content #{i_source}",
+            score=float(i_source) / 10 + 1,
+            chunk_id=f"test-chunk-{i_source}",
+            document_id=f"test-document-id-{i_source}",
+            document_uri=(
+                f"https://{source.replace(':', '_')}.example.com/"
+                f"documents/document-{i_source}"
+            ),
+            document_title=f"Test Document #{i_source}",
+            headings=[f"test-heading-{i_source}"],
+            page_numbers=[i_source],
+            labels=[f"test-label-{i_source}"],
+        )
+        for i_source, source in enumerate(sources)
+    ]
 
     the_installation = mock.create_autospec(installation.Installation)
 
