@@ -560,3 +560,138 @@ async def test_get_chunk_visualization(
     the_logger.debug.assert_called_once_with(
         loggers.ROOM_GET_CHUNK_VISUALIZATION,
     )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "w_hrc_kws",
+    [
+        [],
+        [{"source": "agent", "foo": "bar"}],
+        [{"source": "skill:test", "foo": "bar"}],
+        [{"source": "tool:test", "foo": "bar"}],
+        [
+            {"source": "skill:test", "foo": "bar"},
+            {"source": "tool:test", "foo": "bar"},
+        ],
+    ],
+)
+@mock.patch("haiku.rag.client.HaikuRAG")
+async def test_get_search(
+    hr_klass,
+    w_hrc_kws,
+    temp_dir,
+    room_configs,
+):
+    QUERY = "test query"
+    SEARCH_TYPE = "hybrid"
+    ROOM_ID = "foo"
+
+    w_hrc_kws = [kws.copy() for kws in w_hrc_kws]
+    sources = [kws["source"] for kws in w_hrc_kws]
+
+    search_results = [
+        hr_chunk.SearchResult(
+            content=f"Test content #{i_hrc_kw}",
+            score=float(i_hrc_kw) / 10 + 1,
+            chunk_id=f"test-chunk-{i_hrc_kw}",
+            document_id=f"test-document-id-{i_hrc_kw}",
+            document_uri=(
+                f"https://{hrc_kw['source'].replace(':', '_')}.example.com/"
+                f"documents/document-{i_hrc_kw}"
+            ),
+            document_title=f"Test Document #{i_hrc_kw}",
+            headings=[f"test-heading-{i_hrc_kw}"],
+            page_numbers=[i_hrc_kw],
+            labels=[f"test-label-{i_hrc_kw}"],
+        )
+        for i_hrc_kw, hrc_kw in enumerate(w_hrc_kws)
+    ]
+    hr_insts = {hrc_kws["source"]: mock.AsyncMock() for hrc_kws in w_hrc_kws}
+    hr_entereds = {
+        key: value.__aenter__.return_value for key, value in hr_insts.items()
+    }
+    hr_klass.side_effect = hr_insts.values()
+
+    the_installation = mock.create_autospec(installation.Installation)
+
+    if ROOM_ID not in room_configs:
+        the_installation.get_room_config.side_effect = KeyError("testing")
+    else:
+        the_installation.get_room_config.return_value = room_configs[ROOM_ID]
+
+    the_authz_policy = mock.create_autospec(authz_package.AuthorizationPolicy)
+    the_logger = mock.create_autospec(loggers.LogWrapper)
+
+    if ROOM_ID not in room_configs:
+        with pytest.raises(fastapi.HTTPException) as exc:
+            await rooms_views.get_search(
+                query=QUERY,
+                search_type=SEARCH_TYPE,
+                room_id=ROOM_ID,
+                the_installation=the_installation,
+                the_authz_policy=the_authz_policy,
+                the_user_claims=THE_USER_CLAIMS,
+                the_logger=the_logger,
+            )
+
+        assert exc.value.status_code == 404
+        assert exc.value.detail == loggers.ROOM_UNKNOWN_ROOM_ID % ROOM_ID
+        the_logger.exception.assert_called_once_with(
+            loggers.ROOM_UNKNOWN_ROOM_ID,
+            ROOM_ID,
+        )
+
+    else:
+        room_config = room_configs[ROOM_ID]
+        room_config.list_haiku_rag_client_kw.return_value = w_hrc_kws
+
+        for hr_entered, search_result in zip(
+            hr_entereds.values(),
+            search_results,
+            strict=True,
+        ):
+            hr_entered.search.return_value = [search_result]
+
+        found = await rooms_views.get_search(
+            query=QUERY,
+            search_type=SEARCH_TYPE,
+            room_id=ROOM_ID,
+            the_installation=the_installation,
+            the_authz_policy=the_authz_policy,
+            the_user_claims=THE_USER_CLAIMS,
+            the_logger=the_logger,
+        )
+
+        assert found.query == QUERY
+        assert found.search_type == SEARCH_TYPE
+
+        for f_hit, source, exp_result in zip(
+            found.hits,
+            sources,
+            search_results,
+            strict=True,
+        ):
+            if source == "agent":
+                assert f_hit.source.source_type == "agent"
+                assert f_hit.source.name is None
+            else:
+                source_type, name = source.split(":")
+                assert f_hit.source.source_type == source_type
+                assert f_hit.source.name == name
+
+            assert f_hit.content == exp_result.content
+            assert f_hit.score == exp_result.score
+            assert f_hit.chunk_id == exp_result.chunk_id
+            assert f_hit.document_id == exp_result.document_id
+            assert f_hit.document_uri == exp_result.document_uri
+            assert f_hit.document_title == exp_result.document_title
+            assert f_hit.headings == exp_result.headings
+            assert f_hit.page_numbers == exp_result.page_numbers
+            assert f_hit.labels == exp_result.labels
+
+        for hr_entered in hr_entereds.values():
+            hr_entered.search.assert_awaited_once_with(
+                query=QUERY,
+                search_type=SEARCH_TYPE,
+            )

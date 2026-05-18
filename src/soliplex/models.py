@@ -7,6 +7,12 @@ import typing
 
 import pydantic
 from ag_ui import core as agui_core
+
+try:
+    from haiku.rag.client.models import SearchType
+except ImportError:  # haiku-rag-slim <= 0.47
+    SearchType = typing.Literal["vector", "fts", "hybrid"]
+
 from haiku.skills import models as hs_models
 
 from soliplex import agui as agui_package
@@ -876,3 +882,45 @@ class ChatCompletionRequest(pydantic.BaseModel):
     frequency_penalty: float | None = 0.0
     user: str | None = None
     Config: dict[str, str] = {"extra": "allow"}
+
+
+# ----------------------------------------------------------------------------
+#   Search-related models
+# ----------------------------------------------------------------------------
+
+
+SearchSourceType = typing.Literal["agent", "skill", "tool"]
+
+
+class SearchSource(pydantic.BaseModel):
+    source_type: SearchSourceType
+    name: str | None  # "agent" type has no name
+
+    @classmethod
+    def from_source_tag(cls, source_tag: str):
+        if source_tag == "agent":
+            source_type = "agent"
+            name = None
+        else:
+            source_type, name = source_tag.split(":")
+
+        return cls(source_type=source_type, name=name)
+
+
+class SearchHit(pydantic.BaseModel):
+    source: SearchSource
+    content: str
+    score: float
+    chunk_id: str
+    document_id: str
+    document_uri: str
+    document_title: str
+    headings: list[str]
+    page_numbers: list[int]
+    labels: list[str]
+
+
+class SearchResults(pydantic.BaseModel):
+    query: str
+    search_type: SearchType
+    hits: list[SearchHit]

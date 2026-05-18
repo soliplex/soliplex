@@ -1488,3 +1488,17 @@ def test_aguithread_from_thread(
         exp_name, exp_desc = exp_name_desc
         assert found.metadata.name == exp_name
         assert found.metadata.description == exp_desc
+
+
+@pytest.mark.parametrize(
+    "source_tag, expected",
+    [
+        ("agent", models.SearchSource(source_type="agent", name=None)),
+        ("skill:test", models.SearchSource(source_type="skill", name="test")),
+        ("tool:test", models.SearchSource(source_type="tool", name="test")),
+    ],
+)
+def test_search_source_from_source_tag(source_tag, expected):
+    found = models.SearchSource.from_source_tag(source_tag)
+
+    assert found == expected
