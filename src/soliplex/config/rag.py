@@ -6,6 +6,8 @@ import re
 
 from haiku.rag import config as hr_config
 
+from soliplex import aws_credentials
+
 from . import _utils
 from . import exceptions
 
@@ -112,37 +114,75 @@ class _RAGConfigBase:
         directory holds a 'haiku.rag.yaml' file, load it's mapping, and
         treat it as overrides.  When 'rag_lancedb_override_path' is a
         URI, overlay it as 'lancedb.uri' on top of the merged result.
+
+        For ``s3://`` URIs that don't already have ``storage_options``
+        set (by the user, via room ``haiku.rag.yaml``), AWS credentials
+        are resolved fresh from botocore's default chain on every access
+        and overlaid as ``lancedb.storage_options`` — so refreshable
+        credentials (SSO, AssumeRole, EC2/ECS/EKS instance role) stay
+        valid across long-running sessions without restart.
         """
         if self._haiku_rag_config is None:
-            if self._config_path is None:
-                raise exceptions.NoConfigPath()
+            self._haiku_rag_config = self._build_haiku_rag_config_base()
 
-            base_config = self._installation_config.haiku_rag_config
-            hr_config_file = self._config_path.parent / "haiku.rag.yaml"
-            has_room_yaml = hr_config_file.is_file()
-            uri_override = self.rag_lancedb_uri
+        base = self._haiku_rag_config
 
-            if has_room_yaml or uri_override is not None:
-                merged = base_config.model_dump()
-
-                if has_room_yaml:
-                    room_config_yaml = hr_config.load_yaml_config(
-                        hr_config_file
-                    )
-                    merged = merged | room_config_yaml
-
-                if uri_override is not None:
-                    lancedb_section = dict(merged.get("lancedb") or {})
-                    lancedb_section["uri"] = uri_override
-                    merged = merged | {"lancedb": lancedb_section}
-
-                self._haiku_rag_config = hr_config.AppConfig.model_validate(
-                    merged
+        lancedb = getattr(base, "lancedb", None)
+        if (
+            lancedb is not None
+            and getattr(lancedb, "uri", "").startswith("s3://")
+            and not lancedb.storage_options
+        ):
+            resolved = aws_credentials.resolve_aws_storage_options()
+            if resolved:
+                return base.model_copy(
+                    update={
+                        "lancedb": lancedb.model_copy(
+                            update={"storage_options": resolved}
+                        ),
+                    }
                 )
-            else:
-                self._haiku_rag_config = base_config
 
-        return self._haiku_rag_config
+        return base
+
+    def _build_haiku_rag_config_base(self) -> hr_config.AppConfig:
+        """Build the merged haiku.rag config for this room (no creds).
+
+        Merges in this order:
+
+        1. The installation's base ``haiku_rag_config``.
+        2. The room's ``haiku.rag.yaml`` (if present alongside
+           ``room_config.yaml``).
+        3. The ``rag_lancedb_uri`` (if resolvable), overlaid as
+           ``lancedb.uri``.
+
+        Storage credentials are NOT resolved here so this base can be
+        cached for the lifetime of the config object while
+        ``haiku_rag_config`` re-resolves creds per access.
+        """
+        if self._config_path is None:
+            raise exceptions.NoConfigPath()
+
+        base_config = self._installation_config.haiku_rag_config
+        hr_config_file = self._config_path.parent / "haiku.rag.yaml"
+        has_room_yaml = hr_config_file.is_file()
+        uri_override = self.rag_lancedb_uri
+
+        if has_room_yaml or uri_override is not None:
+            merged = base_config.model_dump()
+
+            if has_room_yaml:
+                room_config_yaml = hr_config.load_yaml_config(hr_config_file)
+                merged = merged | room_config_yaml
+
+            if uri_override is not None:
+                lancedb_section = dict(merged.get("lancedb") or {})
+                lancedb_section["uri"] = uri_override
+                merged = merged | {"lancedb": lancedb_section}
+
+            return hr_config.AppConfig.model_validate(merged)
+
+        return base_config
 
     @property
     def rag_lancedb_path(self) -> pathlib.Path | None:

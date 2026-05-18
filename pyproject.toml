@@ -46,6 +46,7 @@ soliplex-tui-serve = "soliplex.tui.serve:the_cli"
 [dependency-groups]
 dev = [
     "anyio >= 4.12.1, < 4.13",
+    "botocore",  # exercise the AWS credential bridge in unit tests
     "coverage >= 7.13.5, < 7.14",
     "pytest >= 9.0.2, < 9.1",
     "pytest-cov >= 7.0.0, < 7.1",
@@ -69,6 +70,16 @@ tui = [
     "textual-serve",
     "textual-fspicker",
     "typer",
+]
+
+[project.optional-dependencies]
+# Resolve AWS credentials via botocore's default provider chain
+# (env vars, ~/.aws/credentials, AWS_PROFILE, SSO cache, EC2/ECS/EKS
+# instance role) so S3-backed LanceDB rooms work without manually
+# exporting AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY into the server
+# process environment.
+aws = [
+    "botocore",
 ]
 
 [tool.pytest.ini_options]

@@ -188,18 +188,63 @@ configuring the RAG database and RAG client:
     - When `RAG_LANCE_DB_PATH` is a URI (e.g. `s3://bucket/lancedbs`,
       `gs://...`, `az://...`, `hdfs://...`, `db://...`), the resulting
       URI `${RAG_LANCE_DB_PATH}/${stem}.lancedb` is routed into
-      `haiku_rag_config.lancedb.uri` (any other object-storage settings
-      — `api_key`, `region`, `storage_options` — must still be
-      configured via a `haiku.rag.yaml`).
+      `haiku_rag_config.lancedb.uri`.  For `s3://` URIs, AWS credentials
+      are auto-resolved at runtime via botocore — see *AWS credentials
+      for S3 URIs* below.  Other object-storage tuning
+      (`storage_options` for endpoint, region overrides, MinIO, etc.)
+      must still be configured via a `haiku.rag.yaml`.
 
   - `rag_lancedb_override_path`: a string, either a fully-qualified
     pathname (including the suffix) of a local LanceDB directory, or a
     URI for remote storage (e.g. `s3://bucket/path.lancedb`,
     `gs://...`, `az://...`, `hdfs://...`, `db://...` for LanceDB
     Cloud).  URI values are routed into `haiku_rag_config.lancedb.uri`
-    so haiku.rag opens the database via object storage; any other
-    object-storage settings (`api_key`, `region`, `storage_options`)
-    must still be configured via a room-level `haiku.rag.yaml`.
+    so haiku.rag opens the database via object storage.  For `s3://`
+    URIs, AWS credentials are auto-resolved at runtime via botocore —
+    see *AWS credentials for S3 URIs* below.  Other object-storage
+    tuning (`storage_options` for endpoint, region overrides, MinIO,
+    etc.) must still be configured via a room-level `haiku.rag.yaml`.
+
+#### AWS credentials for S3 URIs
+
+When a room's LanceDB resolves to an `s3://` URI and no
+`lancedb.storage_options` is set in `haiku.rag.yaml`, soliplex
+resolves AWS credentials on every config access via botocore's default
+provider chain — environment variables, `~/.aws/credentials`,
+`AWS_PROFILE`, SSO cache, and EC2/ECS/EKS instance roles — and overlays
+them as `lancedb.storage_options`.  Refreshable sources (SSO,
+AssumeRole, IMDS) refresh automatically inside botocore as tokens
+expire, so long-running servers don't lose access mid-session.
+
+This requires the optional `aws` extra:
+
+```bash
+uv add 'soliplex[aws]'
+# or in pyproject.toml dependencies, depending on how you install
+```
+
+Without the extra installed, soliplex does nothing extra and lance
+falls back to its own credential lookup (which reads `os.environ`
+directly).  Note that soliplex's `.env` file values are intentionally
+not propagated into `os.environ`, so a `.env`-based credential setup
+that works for the `haiku-rag` CLI will NOT reach lance unless either
+(a) the `aws` extra is installed, or (b) the credentials are exported
+into the soliplex process environment directly.
+
+To bypass the auto-resolution entirely, set `lancedb.storage_options`
+explicitly in a room-level `haiku.rag.yaml`; soliplex never overwrites
+user-supplied storage options:
+
+```yaml
+lancedb:
+  uri: s3://bucket/path.lancedb
+  storage_options:
+    aws_access_key_id: "..."
+    aws_secret_access_key: "..."
+    region: us-east-1
+    # endpoint: https://minio.example.com  # for MinIO / R2 / etc.
+    # allow_http: "true"
+```
 
 - `haiku_rag_config`: a path to the `haiku.rag.yaml` file used to configure
   the RAG client.  If not absolute, this path is resolved relative to
