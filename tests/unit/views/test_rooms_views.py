@@ -444,17 +444,29 @@ async def test_get_room_documents(
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("w_chunk", [False, True])
-@pytest.mark.parametrize("w_hrck", [None, {"foo": "bar"}])
-@mock.patch("soliplex.views.rooms._get_haiku_rag_client_kw")
+@pytest.mark.parametrize("w_image", [False, True])
+@pytest.mark.parametrize("w_chunk_index", [None, 0, -1])
+@pytest.mark.parametrize(
+    "w_hrc_kws",
+    [
+        [],
+        [{"source": "agent", "foo": "bar"}],
+        [{"source": "skill:test", "foo": "bar"}],
+        [{"source": "tool:test", "foo": "bar"}],
+        [
+            {"source": "skill:test", "foo": "bar"},
+            {"source": "tool:test", "foo": "bar"},
+        ],
+    ],
+)
 @mock.patch("haiku.rag.client.HaikuRAG")
 @mock.patch("base64.b64encode")
 async def test_get_chunk_visualization(
     b64enc,
     hr_klass,
-    ghrck,
-    w_hrck,
-    w_chunk,
+    w_hrc_kws,
+    w_chunk_index,
+    w_image,
     temp_dir,
     room_configs,
 ):
@@ -470,11 +482,29 @@ async def test_get_chunk_visualization(
         "deadbeef3456",
     ]
     b64enc.return_value.decode.side_effect = PAGES_B64
-    ghrck.return_value = w_hrck
 
-    hr_inst = hr_klass.return_value
-    hr_entered = hr_inst.__aenter__.return_value
-    chunk_repo = hr_entered.chunk_repository
+    w_hrc_kws = [kws.copy() for kws in w_hrc_kws]
+    sources = [kws["source"] for kws in w_hrc_kws]
+    hr_insts = {source: mock.AsyncMock() for source in sources}
+    hr_entereds = {
+        key: value.__aenter__.return_value for key, value in hr_insts.items()
+    }
+    rags = list(hr_entereds.values())
+    hr_klass.side_effect = hr_insts.values()
+
+    rag_sources = {}
+
+    for source in sources:
+        if source == "agent":
+            source_type = "agent"
+            name = None
+        else:
+            source_type, name = source.split(":")
+
+        rag_sources[source] = models.RAGSource(
+            source_type=source_type,
+            name=name,
+        )
 
     the_installation = mock.create_autospec(installation.Installation)
 
@@ -487,18 +517,22 @@ async def test_get_chunk_visualization(
     the_logger = mock.create_autospec(loggers.LogWrapper)
 
     if ROOM_ID in room_configs:
-        if w_hrck:
-            if w_chunk:
+        if w_hrc_kws:
+            for rag in rags:
+                rag.chunk_repository.get_by_id.return_value = None
+                rag.visualize_chunk.return_value = None
+
+            if w_chunk_index is not None:
                 chunk = hr_chunk.Chunk(
                     chunk_id=CHUNK_ID,
                     document_uri=DOCUMENT_URI,
                     content="waaa",
                 )
-                chunk_repo.get_by_id.return_value = chunk
+                rag_w_chunk = rags[w_chunk_index]
+                rag_w_chunk.chunk_repository.get_by_id.return_value = chunk
 
-                hr_entered.visualize_chunk.return_value = PAGES_PNG
-            else:
-                chunk_repo.get_by_id.return_value = None
+                if w_image:
+                    rag_w_chunk.visualize_chunk.return_value = PAGES_PNG
 
     if ROOM_ID not in room_configs:
         with pytest.raises(fastapi.HTTPException) as exc:
@@ -518,61 +552,84 @@ async def test_get_chunk_visualization(
             ROOM_ID,
         )
 
-    elif w_hrck is None:
-        with pytest.raises(fastapi.HTTPException) as exc:
-            await rooms_views.get_chunk_visualization(
-                room_id=ROOM_ID,
-                chunk_id=CHUNK_ID,
-                the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
-                the_user_claims=THE_USER_CLAIMS,
-                the_logger=the_logger,
-            )
-
-        assert exc.value.status_code == 404
-        assert exc.value.detail == (
-            loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE % CHUNK_ID
-        )
-        the_logger.error.assert_called_once_with(
-            loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE, CHUNK_ID
-        )
-
-    elif not w_chunk:
-        with pytest.raises(fastapi.HTTPException) as exc:
-            await rooms_views.get_chunk_visualization(
-                room_id=ROOM_ID,
-                chunk_id=CHUNK_ID,
-                the_installation=the_installation,
-                the_authz_policy=the_authz_policy,
-                the_user_claims=THE_USER_CLAIMS,
-                the_logger=the_logger,
-            )
-
-        assert exc.value.status_code == 404
-        assert exc.value.detail == (loggers.ROOM_UNKNOWN_CHUNK_ID % CHUNK_ID)
-        the_logger.error.assert_called_once_with(
-            loggers.ROOM_UNKNOWN_CHUNK_ID, CHUNK_ID
-        )
-
     else:
-        found = await rooms_views.get_chunk_visualization(
-            room_id=ROOM_ID,
-            chunk_id=CHUNK_ID,
-            the_installation=the_installation,
-            the_authz_policy=the_authz_policy,
-            the_user_claims=THE_USER_CLAIMS,
-            the_logger=the_logger,
-        )
+        room_config = room_configs[ROOM_ID]
+        room_config.list_haiku_rag_client_kw.return_value = w_hrc_kws
 
-        assert found == models.ChunkVisualization(
-            chunk_id=CHUNK_ID,
-            document_uri=DOCUMENT_URI,
-            images_base_64=PAGES_B64,
-        )
+        if not w_hrc_kws:  # no rag sources
+            with pytest.raises(fastapi.HTTPException) as exc:
+                await rooms_views.get_chunk_visualization(
+                    room_id=ROOM_ID,
+                    chunk_id=CHUNK_ID,
+                    the_installation=the_installation,
+                    the_authz_policy=the_authz_policy,
+                    the_user_claims=THE_USER_CLAIMS,
+                    the_logger=the_logger,
+                )
 
-        hr_entered.visualize_chunk.assert_called_once_with(chunk)
-        chunk_repo.get_by_id.assert_called_once_with(CHUNK_ID)
-        hr_klass.assert_called_once_with(**w_hrck)
+            assert exc.value.status_code == 404
+            assert exc.value.detail == (
+                loggers.ROOM_UNKNOWN_CHUNK_ID % CHUNK_ID
+            )
+            the_logger.error.assert_called_once_with(
+                loggers.ROOM_UNKNOWN_CHUNK_ID, CHUNK_ID
+            )
+
+        elif w_chunk_index is None:
+            with pytest.raises(fastapi.HTTPException) as exc:
+                await rooms_views.get_chunk_visualization(
+                    room_id=ROOM_ID,
+                    chunk_id=CHUNK_ID,
+                    the_installation=the_installation,
+                    the_authz_policy=the_authz_policy,
+                    the_user_claims=THE_USER_CLAIMS,
+                    the_logger=the_logger,
+                )
+
+            assert exc.value.status_code == 404
+            assert exc.value.detail == (
+                loggers.ROOM_UNKNOWN_CHUNK_ID % CHUNK_ID
+            )
+            the_logger.error.assert_called_once_with(
+                loggers.ROOM_UNKNOWN_CHUNK_ID, CHUNK_ID
+            )
+
+        elif not w_image:
+            with pytest.raises(fastapi.HTTPException) as exc:
+                await rooms_views.get_chunk_visualization(
+                    room_id=ROOM_ID,
+                    chunk_id=CHUNK_ID,
+                    the_installation=the_installation,
+                    the_authz_policy=the_authz_policy,
+                    the_user_claims=THE_USER_CLAIMS,
+                    the_logger=the_logger,
+                )
+
+            assert exc.value.status_code == 404
+            assert exc.value.detail == (
+                loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE % CHUNK_ID
+            )
+            the_logger.error.assert_called_once_with(
+                loggers.ROOM_CHUNK_IMAGES_NOT_AVAILALBE, CHUNK_ID
+            )
+
+        else:
+            found = await rooms_views.get_chunk_visualization(
+                room_id=ROOM_ID,
+                chunk_id=CHUNK_ID,
+                the_installation=the_installation,
+                the_authz_policy=the_authz_policy,
+                the_user_claims=THE_USER_CLAIMS,
+                the_logger=the_logger,
+            )
+
+            chunk_source = sources[w_chunk_index]
+            assert found == models.ChunkVisualization(
+                source=rag_sources[chunk_source],
+                chunk_id=CHUNK_ID,
+                document_uri=DOCUMENT_URI,
+                images_base_64=PAGES_B64,
+            )
 
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
