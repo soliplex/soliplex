@@ -7,7 +7,6 @@ import typing
 
 import pydantic
 from ag_ui import core as agui_core
-
 from haiku.rag.store.models import chunk as hr_chunk
 
 try:
