@@ -513,9 +513,13 @@ def _audit_rooms_section(
                             "rag_count", {}
                         ).setdefault(room_config.id, {})
                         room_rag_errors[source] = count_error
+                    db_display = (
+                        cfg.rag_lancedb_uri
+                        if cfg.rag_lancedb_uri is not None
+                        else str(cfg.rag_lancedb_path)
+                    )
                     tc_print(
-                        f"   - {source:20}: "
-                        f"{str(cfg.rag_lancedb_path):30} {count_display}"
+                        f"   - {source:20}: {db_display:30} {count_display}"
                     )
                 tc_print()
         tc_line()

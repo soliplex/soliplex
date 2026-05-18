@@ -179,12 +179,27 @@ configuring the RAG database and RAG client:
 - One of the following (exactly one must be provided):
 
   - `rag_lancedb_stem`: a string, the "base name" (without path or
-    `.lancedb` suffix) of the LanceDB file containing the RAG document
-    data.  This file must exist in the standard location (typically
-    under the `db/rag/` directory; see [rooms](rooms.md) for details).
+    `.lancedb` suffix) of the LanceDB database.  Combined with the
+    `RAG_LANCE_DB_PATH` environment value to form the LanceDB location:
 
-  - `rag_lancedb_override_path`: a string, a fully-qualified pathname,
-    including the suffix, of the LanceDB directory.
+    - When `RAG_LANCE_DB_PATH` is a local directory (the default), the
+      database is at `${RAG_LANCE_DB_PATH}/${stem}.lancedb` and must
+      already exist on disk.
+    - When `RAG_LANCE_DB_PATH` is a URI (e.g. `s3://bucket/lancedbs`,
+      `gs://...`, `az://...`, `hdfs://...`, `db://...`), the resulting
+      URI `${RAG_LANCE_DB_PATH}/${stem}.lancedb` is routed into
+      `haiku_rag_config.lancedb.uri` (any other object-storage settings
+      — `api_key`, `region`, `storage_options` — must still be
+      configured via a `haiku.rag.yaml`).
+
+  - `rag_lancedb_override_path`: a string, either a fully-qualified
+    pathname (including the suffix) of a local LanceDB directory, or a
+    URI for remote storage (e.g. `s3://bucket/path.lancedb`,
+    `gs://...`, `az://...`, `hdfs://...`, `db://...` for LanceDB
+    Cloud).  URI values are routed into `haiku_rag_config.lancedb.uri`
+    so haiku.rag opens the database via object storage; any other
+    object-storage settings (`api_key`, `region`, `storage_options`)
+    must still be configured via a room-level `haiku.rag.yaml`.
 
 - `haiku_rag_config`: a path to the `haiku.rag.yaml` file used to configure
   the RAG client.  If not absolute, this path is resolved relative to

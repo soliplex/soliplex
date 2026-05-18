@@ -154,3 +154,161 @@ def test__rcb_haiku_rag_config(
         else:
             with no_config_path:
                 _ = rcb_config.haiku_rag_config
+
+
+_S3_URI = "s3://enfold-lancedb-test/lancedb/soliplex_docs.lancedb"
+
+
+@pytest.mark.parametrize(
+    "uri",
+    [
+        "s3://bucket/path.lancedb",
+        "gs://bucket/path.lancedb",
+        "az://account/container/path.lancedb",
+        "hdfs://namenode:9000/path.lancedb",
+        "db://my-cloud-db",
+    ],
+)
+def test__rcb_uri_override_skips_local_path_check(
+    installation_config, temp_dir, uri
+):
+    """rag_lancedb_override_path with a URI scheme must not be resolved as
+    a local path; rag_lancedb_path returns None and rag_lancedb_uri
+    surfaces the URI for downstream display / config injection.
+    """
+    room_config_dir = temp_dir / "rooms" / "test"
+    room_config_dir.mkdir(parents=True)
+    config_path = room_config_dir / "room_config.yaml"
+
+    rcb_config = config_rag._RAGConfigBase(
+        rag_lancedb_override_path=uri,
+        _installation_config=installation_config,
+        _config_path=config_path,
+    )
+
+    assert rcb_config.rag_lancedb_uri == uri
+    assert rcb_config.rag_lancedb_path is None
+    assert rcb_config.get_extra_parameters() == {"rag_lancedb_path": uri}
+
+
+def test__rcb_uri_override_injects_lancedb_uri_into_haiku_rag_config(
+    installation_config, temp_dir
+):
+    """When override is a URI, haiku_rag_config.lancedb.uri must equal it,
+    overlaid on top of the installation base config and any room-level
+    haiku.rag.yaml.
+    """
+    installation_config.haiku_rag_config = hr_config_module.AppConfig(
+        environment="from_installation",
+    )
+    room_config_dir = temp_dir / "rooms" / "test"
+    room_config_dir.mkdir(parents=True)
+    config_path = room_config_dir / "room_config.yaml"
+
+    rcb_config = config_rag._RAGConfigBase(
+        rag_lancedb_override_path=_S3_URI,
+        _installation_config=installation_config,
+        _config_path=config_path,
+    )
+
+    hr_config = rcb_config.haiku_rag_config
+    assert hr_config.lancedb.uri == _S3_URI
+    assert hr_config.environment == "from_installation"
+
+
+@pytest.mark.parametrize(
+    "base, expected",
+    [
+        (
+            "s3://bucket/lancedbs",
+            "s3://bucket/lancedbs/docs.lancedb",
+        ),
+        (
+            "s3://bucket/lancedbs/",
+            "s3://bucket/lancedbs/docs.lancedb",
+        ),
+        (
+            "gs://bucket",
+            "gs://bucket/docs.lancedb",
+        ),
+    ],
+)
+def test__rcb_stem_with_uri_rag_lance_db_path(
+    installation_config, temp_dir, base, expected
+):
+    """When RAG_LANCE_DB_PATH is a URI base, stem mode joins onto it
+    instead of resolving as a local path. rag_lancedb_path returns None;
+    rag_lancedb_uri returns the joined URI.
+    """
+    installation_config.get_environment = {
+        "RAG_LANCE_DB_PATH": base,
+    }.get
+    room_config_dir = temp_dir / "rooms" / "test"
+    room_config_dir.mkdir(parents=True)
+    config_path = room_config_dir / "room_config.yaml"
+
+    rcb_config = config_rag._RAGConfigBase(
+        rag_lancedb_stem="docs",
+        _installation_config=installation_config,
+        _config_path=config_path,
+    )
+
+    assert rcb_config.rag_lancedb_uri == expected
+    assert rcb_config.rag_lancedb_path is None
+    assert rcb_config.get_extra_parameters() == {"rag_lancedb_path": expected}
+
+
+def test__rcb_stem_with_uri_injects_lancedb_uri_into_haiku_rag_config(
+    installation_config, temp_dir
+):
+    installation_config.haiku_rag_config = hr_config_module.AppConfig(
+        environment="from_installation",
+    )
+    installation_config.get_environment = {
+        "RAG_LANCE_DB_PATH": "s3://bucket/lancedbs",
+    }.get
+    room_config_dir = temp_dir / "rooms" / "test"
+    room_config_dir.mkdir(parents=True)
+    config_path = room_config_dir / "room_config.yaml"
+
+    rcb_config = config_rag._RAGConfigBase(
+        rag_lancedb_stem="docs",
+        _installation_config=installation_config,
+        _config_path=config_path,
+    )
+
+    hr_config = rcb_config.haiku_rag_config
+    assert hr_config.lancedb.uri == "s3://bucket/lancedbs/docs.lancedb"
+    assert hr_config.environment == "from_installation"
+
+
+def test__rcb_uri_override_wins_over_room_haiku_rag_yaml_lancedb_uri(
+    installation_config, temp_dir
+):
+    installation_config.haiku_rag_config = hr_config_module.AppConfig()
+
+    room_config_dir = temp_dir / "rooms" / "test"
+    room_config_dir.mkdir(parents=True)
+    hr_config_path = room_config_dir / "haiku.rag.yaml"
+    with hr_config_path.open("w") as stream:
+        yaml.safe_dump(
+            {
+                "lancedb": {
+                    "uri": "s3://different-bucket/old.lancedb",
+                    "region": "us-west-2",
+                }
+            },
+            stream,
+        )
+    config_path = room_config_dir / "room_config.yaml"
+
+    rcb_config = config_rag._RAGConfigBase(
+        rag_lancedb_override_path=_S3_URI,
+        _installation_config=installation_config,
+        _config_path=config_path,
+    )
+
+    hr_config = rcb_config.haiku_rag_config
+    assert hr_config.lancedb.uri == _S3_URI
+    # Other lancedb sub-fields from room yaml are preserved.
+    assert hr_config.lancedb.region == "us-west-2"
