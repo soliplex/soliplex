@@ -17,16 +17,19 @@ embeddings:
     name: qwen3-embedding-4b
     provider: ollama
     vector_dim: 2560
+    base_url: http://bizon:4001
 
 qa:
   model:
-    name: bizon/gemma4-26b
+    name: gemma4:31b
     provider: ollama
+    base_url: https://ollama.com
 
 research:
   model:
-    name: bizon/gemma4-26b
+    name: gemma4:31b
     provider: ollama
+    base_url: https://ollama.com
   max_iterations: 2
   max_concurrency: 1
 
@@ -38,9 +41,6 @@ processing:
 providers:
   docling_serve:
     base_url: http://localhost:5001
-
-  ollama:
-    base_url: http://bizon:4001
 
   vllm:
     embeddings_base_url: ""
