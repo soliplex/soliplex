@@ -161,15 +161,6 @@ async def get_room_mcp_token(
     return models.MCPToken(room_id=room_id, mcp_token=mcp_token)
 
 
-def _get_haiku_rag_client_kw(room_config: config_rooms.RoomConfig):
-    hr_client_kws = list(room_config.list_haiku_rag_client_kw())
-
-    if hr_client_kws:
-        return hr_client_kws[0]
-    else:
-        return None
-
-
 @util.logfire_span("GET /v1/rooms/{room_id}/documents")
 @router.get("/v1/rooms/{room_id}/documents")
 async def get_room_documents(
