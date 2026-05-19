@@ -563,11 +563,16 @@ class InstallationConfig:
     def haiku_rag_config(self) -> hr_config.AppConfig:
         """Populate a haiku-rag config object from our environment"""
         config_yaml = hr_config.load_yaml_config(self._haiku_rag_config_file)
-        config = hr_config.AppConfig.model_validate(config_yaml)
         ollama_base_url = self.get_environment("OLLAMA_BASE_URL")
+
         if ollama_base_url is not None:
-            config.providers.ollama.base_url = ollama_base_url
-        return config
+            # Work around `pydantic`'s unwillingness to implement
+            # `__setattr__` properly.
+            providers = config_yaml.setdefault("providers", {})
+            ollama = providers.setdefault("ollama", {})
+            ollama["base_url"] = ollama_base_url
+
+        return hr_config.AppConfig.model_validate(config_yaml)
 
     #
     # Agent configurations not bound to a room or completion.

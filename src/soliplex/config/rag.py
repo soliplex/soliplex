@@ -9,6 +9,16 @@ from . import _utils
 from . import exceptions
 
 
+def _deep_merge(base: dict, override: dict) -> dict:
+    out = dict(base)
+    for k, v in override.items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
 class RagDbExactlyOneOfStemOrOverride(TypeError):
     def __init__(self, _config_path):
         self._config_path = _config_path
@@ -72,11 +82,15 @@ class _RAGConfigBase:
             hr_config_file = self._config_path.parent / "haiku.rag.yaml"
 
             if hr_config_file.is_file():
-                base_config_yaml = base_config.model_dump()
+                base_config_yaml = base_config.model_dump(exclude_unset=True)
                 room_config_yaml = hr_config.load_yaml_config(hr_config_file)
+                merged_config_yaml = _deep_merge(
+                    base_config_yaml,
+                    room_config_yaml,
+                )
 
                 self._haiku_rag_config = hr_config.AppConfig.model_validate(
-                    base_config_yaml | room_config_yaml
+                    merged_config_yaml
                 )
             else:
                 self._haiku_rag_config = base_config

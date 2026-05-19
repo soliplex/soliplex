@@ -1273,6 +1273,12 @@ environment: production
     assert isinstance(hr_config, hr_config_module.AppConfig)
     assert hr_config.providers.ollama.base_url == exp_obu
 
+    # Assert that we work around `pydantic`'s unwillingness to implement
+    # `__setattr__` properly.
+    if w_obu:
+        dumped = hr_config.model_dump(exclude_unset=True)
+        assert dumped["providers"]["ollama"]["base_url"] == exp_obu
+
 
 def test_installationconfig_agent_configs_map_wo_existing():
     agent_configs = [
