@@ -173,7 +173,17 @@ async def _resolve_rule_id(
     except (MoodleAPIError, httpx.HTTPError) as exc:
         return json.dumps({"error": str(exc)})
     needle = rule_name.lower()
-    matches = [r for r in rules if needle in r["name"].lower()]
+    # Bidirectional substring match: tolerant of both partial inputs
+    # ("Cohort Trigger" → "Standalone Cohort Trigger") and superstring
+    # inputs ("Standalone Cohort Trigger rule" → "Standalone Cohort
+    # Trigger") where the LLM appends a noun-class suffix from the
+    # user's phrasing.  Ambiguity is surfaced by the 0/1/many branching
+    # below, so a tighter match is preferred but not required.
+    matches = [
+        r
+        for r in rules
+        if needle in r["name"].lower() or r["name"].lower() in needle
+    ]
     if len(matches) == 1:
         return matches[0]["id"]
     if len(matches) == 0:
@@ -562,6 +572,15 @@ If a course is specified by name (not numeric ID), tell \
 the router you need moodle-courses to resolve it via \
 list_courses first; this skill cannot look up courses by \
 name.
+
+## CRITICAL: never fabricate report data
+When list_reports returns N reports, your response MUST \
+contain exactly those N reports — no inferred names, no \
+invented IDs, no extra rows.  If list_reports returns an \
+empty list, say "no custom reports exist in this Moodle \
+installation" and stop.  The same rule applies to every \
+read tool in this skill: report only what the tool \
+returned, never plausible-looking extras.
 
 """
     + _CONFIRM_INSTRUCTIONS
@@ -1368,20 +1387,25 @@ def build_users_skill(client: MoodleClient) -> Skill:
         lastname: str,
         email: str,
         password: str = "",
-        createpassword: bool = True,
         confirmed: bool = False,
     ) -> str:
         """Create a new Moodle user account. REQUIRES USER CONFIRMATION.
+
+        If no ``password`` is supplied, Moodle auto-generates one and
+        emails it to the user — that is the default behaviour and the
+        caller does not need to pass any flag for it.  The previous
+        ``createpassword`` parameter was removed because the router
+        was observed to send ``createpassword=False`` on the
+        confirmation call, which causes Moodle to reject the create
+        with "must provide a password, or set createpassword".
 
         Args:
             username: Login username.
             firstname: User's first name.
             lastname: User's last name.
             email: User's email address.
-            password: Optional password. If empty, a random
-                password is generated and emailed.
-            createpassword: If True and no password given,
-                Moodle creates and emails a password.
+            password: Optional password. If empty, Moodle generates
+                and emails one automatically.
             confirmed: Set True only after user approval.
         """
         if not confirmed:
@@ -1413,7 +1437,11 @@ def build_users_skill(client: MoodleClient) -> Skill:
         if password:
             user_data["password"] = password
         else:
-            user_data["createpassword"] = 1 if createpassword else 0
+            # Always request Moodle-generated password when none given.
+            # Hard-coded to 1 because Moodle's create_users rejects the
+            # row otherwise — never expose this as an agent-tunable
+            # flag.
+            user_data["createpassword"] = 1
         result = await client.create_users([user_data])
         return json.dumps(
             {

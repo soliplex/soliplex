@@ -6970,3 +6970,81 @@ async def test_delete_department_preview_includes_action():
     assert result["action"] == "delete_department"
     assert "preview" in result
     assert "ENG" in result["preview"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_rule_id_tolerates_appended_suffix():
+    """The rule resolver must match when the LLM passes the user's
+    full noun phrase including a " rule" suffix.  e.g. user says
+    "the Standalone Cohort Trigger rule" and the LLM forwards
+    rule_name="Standalone Cohort Trigger rule" — the actual stored
+    name is "Standalone Cohort Trigger" with no " rule" suffix.
+    Pre-fix the resolver used `needle in name` which failed because
+    the needle was a superstring of the name.  Bidirectional match
+    closes this.
+    """
+    from soliplex.moodle.client import MoodleClient
+    from soliplex.moodle.skills import _resolve_rule_id
+
+    client = MoodleClient(base_url=BASE_URL, token=TOKEN, verify=False)
+    # list_dynamic_rules parses HTML columns from the system report.
+    # cols[0] needs "rule-toggle-{id}", cols[1] needs data-value="{name}".
+    rules_resp = _mock_response(
+        {
+            "data": {
+                "rows": [
+                    {
+                        "columns": [
+                            "<input class='rule-toggle-1' />",
+                            (
+                                '<a data-value="Standalone Cohort '
+                                'Trigger">Standalone Cohort Trigger</a>'
+                            ),
+                            "",
+                            "<ul></ul>",
+                            "<ul></ul>",
+                        ]
+                    },
+                ]
+            }
+        }
+    )
+    with _patch_httpx(rules_resp):
+        result = await _resolve_rule_id(
+            client,
+            rule_name="Standalone Cohort Trigger rule",
+        )
+
+    # Should resolve to the rule id (1), not an error JSON string.
+    assert result == 1
+
+
+def test_reporting_prompt_includes_anti_hallucination_guard():
+    """The reporting skill prompt must explicitly forbid inventing
+    report records.  Without this guard gpt-oss has been observed
+    to fabricate plausible-looking report rows when list_reports
+    returns sparse data.
+    """
+    from soliplex.moodle import skills as moodle_skills
+
+    text = moodle_skills._REPORTING_PROMPT
+    assert "never fabricate" in text.lower()
+    assert "no invented IDs" in text or "no inferred names" in text
+    assert "report only what the tool" in text.lower()
+
+
+def test_router_prompt_includes_tool_arg_precision_section():
+    """The router prompt must teach the LLM to strip user-phrased
+    noun-class suffixes (" rule", " department", " program",
+    " course") before passing names to skills.  Without this,
+    rule-name lookups fail when the user says "the X rule" and
+    the LLM forwards "X rule" instead of "X" as the rule_name arg.
+    """
+    from soliplex.moodle import agent as moodle_agent
+
+    text = moodle_agent.MOODLE_ROUTER_PROMPT
+    assert "Tool argument precision" in text
+    assert " rule" in text
+    assert " department" in text
+    # Concrete example pinned to the actual smoke-test scenario.
+    assert "Test: Enable Rule Verification" in text
