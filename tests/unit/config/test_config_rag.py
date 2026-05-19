@@ -15,6 +15,33 @@ ok_ovr = contextlib.nullcontext("override")
 
 
 @pytest.mark.parametrize(
+    "base, derived, expected",
+    [
+        ({}, {}, {}),
+        ({"foo": "bar"}, {}, {"foo": "bar"}),
+        ({}, {"foo": "bar"}, {"foo": "bar"}),
+        ({"foo": "bar"}, {"foo": "qux"}, {"foo": "qux"}),
+        ({"foo": {"spam": "bar"}}, {}, {"foo": {"spam": "bar"}}),
+        ({}, {"foo": {"spam": "bar"}}, {"foo": {"spam": "bar"}}),
+        (
+            {"foo": {"spam": "flotz"}},
+            {"foo": {"spam": "bar"}},
+            {"foo": {"spam": "bar"}},
+        ),
+        (
+            {"foo": {"qux": "baz", "spam": "flotz"}, "gork": "naff"},
+            {"foo": {"spam": "bar"}},
+            {"foo": {"qux": "baz", "spam": "bar"}, "gork": "naff"},
+        ),
+    ],
+)
+def test__deep_merge(base, derived, expected):
+    found = config_rag._deep_merge(base, derived)
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
     "w_config_path, stem, override, ctor_expectation, rlp_expectation",
     [
         (False, None, None, rdb_exactly_one, None),
@@ -97,11 +124,12 @@ def test__rcb_ctor(
 @pytest.mark.parametrize(
     "w_already, w_config_path, w_hr_yaml",
     [
-        (False, False, None),
-        (False, True, None),
+        (False, False, {}),
+        (False, True, {}),
         (False, True, {"environment": "from_room"}),
-        (True, False, None),
-        (True, True, None),
+        (False, True, {"prompts": {"domain_preamble": "from_room"}}),
+        (True, False, {}),
+        (True, True, {}),
         (True, True, {"environment": "from_room"}),
     ],
 )
@@ -116,6 +144,10 @@ def test__rcb_haiku_rag_config(
 
     installation_config.haiku_rag_config = hr_config_module.AppConfig(
         environment="from_installation",
+        prompts=hr_config_module.PromptsConfig(
+            domain_preamble="from_installation",
+            synthesis="from_installation",
+        ),
     )
     room_config_dir = temp_dir / "rooms" / "test"
     room_config_dir.mkdir(parents=True)
@@ -147,10 +179,18 @@ def test__rcb_haiku_rag_config(
         if w_config_path:
             hr_config = rcb_config.haiku_rag_config
 
-            if w_hr_yaml:
+            if "environment" in w_hr_yaml:
                 assert hr_config.environment == "from_room"
             else:
                 assert hr_config.environment == "from_installation"
+
+            if "prompts" in w_hr_yaml:
+                assert hr_config.prompts.domain_preamble == "from_room"
+            else:
+                assert hr_config.prompts.domain_preamble == "from_installation"
+
+            assert hr_config.prompts.synthesis == "from_installation"
+
         else:
             with no_config_path:
                 _ = rcb_config.haiku_rag_config
