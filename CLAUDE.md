@@ -108,4 +108,4 @@ See `.env.example` for the full reference. Key variables:
 ## Documentation
 
 Detailed configuration and usage docs are in [docs/](docs/) (served via
-MkDocs). Example configurations are in [example/](example/).
+Zensical). Example configurations are in [example/](example/).
