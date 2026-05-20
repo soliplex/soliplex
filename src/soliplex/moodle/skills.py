@@ -123,21 +123,30 @@ def _parse_ids(csv_string: str, param_name: str = "IDs") -> list[int] | str:
         )
 
 
-def _parse_single_id(value: str, param_name: str = "user ID") -> int | str:
-    """Parse a single numeric ID.
+def _parse_job_token(value: str, label: str) -> int | str:
+    """Parse a transient export/import job token.
 
-    Returns int on success, error JSON string on failure.
+    Workplace returns these as integer job ids from
+    ``export_workplace_data`` / ``import_workplace_data``.
+    They have no human-friendly name — they're consumed only
+    by the LLM passing them between tool calls.  Accepts the
+    value as a string for tool-signature consistency with the
+    rest of the surface, validates it parses to an integer.
     """
+    needle = value.strip()
+    if not needle:
+        return json.dumps({"status": "error", "error": f"Empty {label}."})
     try:
-        return int(value.strip())
+        return int(needle)
     except ValueError:
         return json.dumps(
             {
+                "status": "error",
                 "error": (
-                    f"Invalid {param_name}: '{value}'. "
-                    f"Use a numeric user ID, not a username. "
-                    f"Call find_user first to look up the ID."
-                )
+                    f"Invalid {label}: {value!r}.  Pass the job "
+                    f"id from the previous export/import call "
+                    f"verbatim."
+                ),
             }
         )
 
@@ -151,6 +160,924 @@ def _strip_html(value: str | None) -> str:
     if value is None:
         return ""
     return re.sub(r"<[^>]+>", "", value).strip()
+
+
+async def _resolve_user_identifier(
+    client: MoodleClient,
+    identifier: str,
+):
+    """Resolve a human-friendly user identifier to a UserProfile.
+
+    Accepts (in priority order):
+
+      - Numeric Moodle user ID (e.g. ``"8"``)
+      - ``username`` (uniquely indexed on ``m_user`` per
+        ``(mnethostid, username)``)
+      - ``idnumber`` (often EDIPI in military deployments;
+        uniqueness is enforced by Moodle's ``allowduplicatesidnumber``
+        setting, not by the DB schema)
+      - ``email`` (uniqueness is enforced by Moodle's
+        ``allowaccountssameemail`` setting, not by the DB schema)
+      - Full or partial name (substring match on ``firstname`` and
+        ``lastname`` via ``core_user_get_users``)
+
+    Returns the resolved ``UserProfile`` on exactly one match.
+    Returns a JSON error string on zero matches or ambiguous
+    matches; the error includes the candidate list so the caller
+    can disambiguate by username or numeric ID.
+
+    This is the canonical way to accept "any reasonable user
+    identifier" in agent tools.  Internal numeric IDs are not a
+    usable interface for end users — operators identify users by
+    EDIPI, work email, username, or name.
+    """
+    needle = identifier.strip()
+    if not needle:
+        return json.dumps(
+            {"status": "error", "error": "Empty user identifier."}
+        )
+
+    # Exact-match attempts.  Try numeric id first when the input
+    # looks like a digit string; then progressively wider fields.
+    exact_fields: list[str] = []
+    if needle.isdigit():
+        exact_fields.append("id")
+    exact_fields.extend(["username", "idnumber", "email"])
+
+    for field in exact_fields:
+        try:
+            users = await client.get_users_by_field(
+                field=field, values=[needle]
+            )
+        except (MoodleAPIError, httpx.HTTPError):
+            continue
+        if not users:
+            continue
+        if len(users) == 1:
+            return users[0]
+        # Multiple matches are only possible on a field that
+        # Moodle's app-layer uniqueness isn't enforcing.  Surface
+        # candidates so the caller can disambiguate.
+        return json.dumps(
+            {
+                "status": "error",
+                "error": (
+                    f"Multiple users match {field}={needle!r}; "
+                    f"disambiguate by username or numeric ID."
+                ),
+                "matches": [_user_match_summary(u) for u in users],
+            }
+        )
+
+    # Fuzzy name fallback.  Two-token input → firstname AND
+    # lastname; single-token → firstname OR lastname (deduped).
+    parts = needle.split(None, 1)
+    try:
+        if len(parts) == 2:
+            users = await client.search_users(
+                [("firstname", parts[0]), ("lastname", parts[1])]
+            )
+        else:
+            users_fn = await client.search_users([("firstname", needle)])
+            users_ln = await client.search_users([("lastname", needle)])
+            seen: set[int] = set()
+            users = []
+            for u in list(users_fn) + list(users_ln):
+                if u.id in seen:
+                    continue
+                seen.add(u.id)
+                users.append(u)
+    except (MoodleAPIError, httpx.HTTPError):
+        users = []
+
+    if not users:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"No user matches {identifier!r}.",
+            }
+        )
+    if len(users) == 1:
+        return users[0]
+    return json.dumps(
+        {
+            "status": "error",
+            "error": (
+                f"Multiple users match {identifier!r}; "
+                f"disambiguate by username or numeric ID."
+            ),
+            "matches": [_user_match_summary(u) for u in users],
+        }
+    )
+
+
+def _user_match_summary(u) -> dict:
+    """Compact dict for ambiguity responses from the user resolver."""
+    return {
+        "id": u.id,
+        "username": u.username,
+        "fullname": u.fullname,
+        "email": u.email,
+    }
+
+
+async def _resolve_user_identifiers(
+    client: MoodleClient,
+    csv_identifiers: str,
+) -> list | str:
+    """Resolve a comma-separated list of human-friendly user identifiers.
+
+    Each token is run through ``_resolve_user_identifier``.  Empty
+    tokens are ignored.  On any unresolved or ambiguous token the
+    entire batch fails — the caller surfaces the per-token error so
+    the operator can fix it before retrying.
+
+    Returns a list of ``UserProfile`` on success, or a JSON error
+    string on the first failure.
+    """
+    tokens = [t.strip() for t in csv_identifiers.split(",") if t.strip()]
+    if not tokens:
+        return json.dumps({"status": "error", "error": "Empty user list."})
+    resolved: list = []
+    for token in tokens:
+        result = await _resolve_user_identifier(client, token)
+        if isinstance(result, str):
+            return result
+        resolved.append(result)
+    return resolved
+
+
+async def _resolve_course_identifier(
+    client: MoodleClient,
+    identifier: str,
+):
+    """Resolve a human-friendly course identifier to a Course.
+
+    Accepts (in priority order):
+
+      - Numeric Moodle course ID (e.g. ``"3"``)
+      - ``shortname`` (uniquely enforced by Moodle at write time)
+      - ``idnumber`` (operator-managed; uniqueness is conventional,
+        not schema-enforced)
+      - ``fullname`` — case-insensitive substring match against the
+        course list (capped at ``MAX_RESULTS``)
+
+    Returns the resolved ``Course`` on exactly one match.
+    Returns a JSON error string on zero or ambiguous matches.
+
+    Operators identify courses by name, not by internal ID.  The
+    tool layer absorbs the lookup so prompts and previews always
+    read in human terms.
+    """
+    needle = identifier.strip()
+    if not needle:
+        return json.dumps(
+            {"status": "error", "error": "Empty course identifier."}
+        )
+
+    # Exact-match attempts via Moodle's indexed lookup endpoint.
+    exact_fields: list[str] = []
+    if needle.isdigit():
+        exact_fields.append("id")
+    exact_fields.extend(["shortname", "idnumber"])
+
+    for field in exact_fields:
+        try:
+            courses = await client.get_courses_by_field(
+                field=field, value=needle
+            )
+        except (MoodleAPIError, httpx.HTTPError):
+            continue
+        if not courses:
+            continue
+        if len(courses) == 1:
+            return courses[0]
+        return json.dumps(
+            {
+                "status": "error",
+                "error": (
+                    f"Multiple courses match {field}={needle!r}; "
+                    f"disambiguate by shortname or numeric ID."
+                ),
+                "matches": [_course_match_summary(c) for c in courses],
+            }
+        )
+
+    # Fullname fallback — case-insensitive substring against the
+    # course catalogue.  Bidirectional substring (needle in fullname
+    # OR fullname in needle) so trailing words like " course" in the
+    # user's phrasing don't break the lookup.
+    try:
+        courses = await client.get_courses()
+    except (MoodleAPIError, httpx.HTTPError):
+        courses = []
+    lowered = needle.lower()
+    matches = [
+        c
+        for c in courses
+        if lowered in c.fullname.lower() or c.fullname.lower() in lowered
+    ]
+    # Filter out the synthetic "site" course (id=1) unless the
+    # operator clearly meant it.
+    matches = [c for c in matches if c.id != 1 or needle == "1"]
+    if not matches:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"No course matches {identifier!r}.",
+            }
+        )
+    if len(matches) == 1:
+        return matches[0]
+    return json.dumps(
+        {
+            "status": "error",
+            "error": (
+                f"Multiple courses match {identifier!r}; "
+                f"disambiguate by shortname or numeric ID."
+            ),
+            "matches": [_course_match_summary(c) for c in matches],
+        }
+    )
+
+
+def _course_match_summary(c) -> dict:
+    """Compact dict for ambiguity responses from the course resolver."""
+    return {
+        "id": c.id,
+        "shortname": c.shortname,
+        "fullname": c.fullname,
+    }
+
+
+async def _resolve_category_identifier(
+    client: MoodleClient,
+    identifier: str,
+):
+    """Resolve a human-friendly category identifier to a category id.
+
+    Accepts (in priority order):
+
+      - Numeric Moodle category ID (e.g. ``"3"``)
+      - Exact category name (case-insensitive)
+      - Substring of the category name (case-insensitive, bidirectional)
+
+    Returns the resolved integer category id on exactly one match.
+    Returns a JSON error string on zero or ambiguous matches.
+
+    The operator says "category Compliance" or "top-level"; the
+    tool layer absorbs the lookup so prompts never need internal
+    category IDs.
+    """
+    needle = identifier.strip()
+    if not needle:
+        return json.dumps(
+            {"status": "error", "error": "Empty category identifier."}
+        )
+
+    try:
+        cats = await client.get_categories()
+    except (MoodleAPIError, httpx.HTTPError) as exc:
+        return json.dumps(
+            {"status": "error", "error": f"Category lookup failed: {exc}"}
+        )
+
+    if needle.isdigit():
+        cid = int(needle)
+        for c in cats:
+            if c.id == cid:
+                return c.id
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"No category matches id={cid}.",
+            }
+        )
+
+    lowered = needle.lower()
+    exact = [c for c in cats if c.name.lower() == lowered]
+    if len(exact) == 1:
+        return exact[0].id
+    if len(exact) > 1:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": (
+                    f"Multiple categories match name={needle!r}; "
+                    f"disambiguate by numeric ID."
+                ),
+                "matches": [_category_match_summary(c) for c in exact],
+            }
+        )
+
+    matches = [
+        c
+        for c in cats
+        if lowered in c.name.lower() or c.name.lower() in lowered
+    ]
+    if not matches:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"No category matches {identifier!r}.",
+            }
+        )
+    if len(matches) == 1:
+        return matches[0].id
+    return json.dumps(
+        {
+            "status": "error",
+            "error": (
+                f"Multiple categories match {identifier!r}; "
+                f"disambiguate by exact name or numeric ID."
+            ),
+            "matches": [_category_match_summary(c) for c in matches],
+        }
+    )
+
+
+def _category_match_summary(c) -> dict:
+    """Compact dict for ambiguity responses from the category resolver."""
+    return {
+        "id": c.id,
+        "name": c.name,
+        "parent": c.parent,
+    }
+
+
+async def _resolve_cohort_identifier(
+    client: MoodleClient,
+    identifier: str,
+):
+    """Resolve a human-friendly cohort identifier to a Cohort.
+
+    Accepts (in priority order):
+
+      - Numeric Moodle cohort ID (e.g. ``"4"``)
+      - Exact ``idnumber`` match (case-sensitive — Moodle stores
+        idnumbers verbatim)
+      - Exact ``name`` match (case-insensitive)
+      - Bidirectional substring against ``name``
+
+    Returns the resolved ``Cohort`` on exactly one match.
+    Returns a JSON error string on zero or ambiguous matches.
+    """
+    needle = identifier.strip()
+    if not needle:
+        return json.dumps(
+            {"status": "error", "error": "Empty cohort identifier."}
+        )
+
+    try:
+        cohorts = await client.get_cohorts()
+    except (MoodleAPIError, httpx.HTTPError) as exc:
+        return json.dumps(
+            {"status": "error", "error": f"Cohort lookup failed: {exc}"}
+        )
+
+    if needle.isdigit():
+        cid = int(needle)
+        for c in cohorts:
+            if c.id == cid:
+                return c
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"No cohort matches id={cid}.",
+            }
+        )
+
+    by_idnumber = [c for c in cohorts if c.idnumber == needle]
+    if len(by_idnumber) == 1:
+        return by_idnumber[0]
+
+    lowered = needle.lower()
+    exact = [c for c in cohorts if c.name.lower() == lowered]
+    if len(exact) == 1:
+        return exact[0]
+    if len(exact) > 1:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": (
+                    f"Multiple cohorts match name={needle!r}; "
+                    f"disambiguate by idnumber or numeric ID."
+                ),
+                "matches": [_cohort_match_summary(c) for c in exact],
+            }
+        )
+
+    matches = [
+        c
+        for c in cohorts
+        if lowered in c.name.lower() or c.name.lower() in lowered
+    ]
+    if not matches:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"No cohort matches {identifier!r}.",
+            }
+        )
+    if len(matches) == 1:
+        return matches[0]
+    return json.dumps(
+        {
+            "status": "error",
+            "error": (
+                f"Multiple cohorts match {identifier!r}; "
+                f"disambiguate by idnumber or numeric ID."
+            ),
+            "matches": [_cohort_match_summary(c) for c in matches],
+        }
+    )
+
+
+def _cohort_match_summary(c) -> dict:
+    """Compact dict for ambiguity responses from the cohort resolver."""
+    return {
+        "id": c.id,
+        "name": c.name,
+        "idnumber": c.idnumber,
+    }
+
+
+async def _resolve_tenant_identifier(
+    client: MoodleClient,
+    identifier: str,
+):
+    """Resolve a human-friendly tenant identifier to a Tenant.
+
+    Accepts (in priority order):
+
+      - Numeric Moodle tenant ID (e.g. ``"2"``)
+      - Exact ``idnumber`` match (case-sensitive)
+      - Exact ``name`` match (case-insensitive)
+      - Bidirectional substring against ``name``
+
+    Returns the resolved ``Tenant`` on exactly one match.
+    Returns a JSON error string on zero or ambiguous matches.
+    """
+    needle = identifier.strip()
+    if not needle:
+        return json.dumps(
+            {"status": "error", "error": "Empty tenant identifier."}
+        )
+
+    try:
+        tenants = await client.get_tenants()
+    except (MoodleAPIError, httpx.HTTPError) as exc:
+        return json.dumps(
+            {"status": "error", "error": f"Tenant lookup failed: {exc}"}
+        )
+
+    if needle.isdigit():
+        tid = int(needle)
+        for t in tenants:
+            if t.id == tid:
+                return t
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"No tenant matches id={tid}.",
+            }
+        )
+
+    by_idnumber = [t for t in tenants if (t.idnumber or "") == needle]
+    if len(by_idnumber) == 1:
+        return by_idnumber[0]
+
+    lowered = needle.lower()
+    exact = [t for t in tenants if t.name.lower() == lowered]
+    if len(exact) == 1:
+        return exact[0]
+    if len(exact) > 1:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": (
+                    f"Multiple tenants match name={needle!r}; "
+                    f"disambiguate by idnumber or numeric ID."
+                ),
+                "matches": [_tenant_match_summary(t) for t in exact],
+            }
+        )
+
+    matches = [
+        t
+        for t in tenants
+        if lowered in t.name.lower() or t.name.lower() in lowered
+    ]
+    if not matches:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"No tenant matches {identifier!r}.",
+            }
+        )
+    if len(matches) == 1:
+        return matches[0]
+    return json.dumps(
+        {
+            "status": "error",
+            "error": (
+                f"Multiple tenants match {identifier!r}; "
+                f"disambiguate by idnumber or numeric ID."
+            ),
+            "matches": [_tenant_match_summary(t) for t in matches],
+        }
+    )
+
+
+def _tenant_match_summary(t) -> dict:
+    """Compact dict for ambiguity responses from the tenant resolver."""
+    return {
+        "id": t.id,
+        "name": t.name,
+        "idnumber": t.idnumber or "",
+    }
+
+
+async def _resolve_report_identifier(
+    client: MoodleClient,
+    identifier: str,
+):
+    """Resolve a human-friendly report identifier to a Report.
+
+    Accepts (in priority order):
+
+      - Numeric Moodle report ID (e.g. ``"3"``)
+      - Exact ``name`` match (case-insensitive)
+      - Bidirectional substring against ``name``
+
+    Returns the resolved report on exactly one match.
+    Returns a JSON error string on zero or ambiguous matches.
+    """
+    needle = identifier.strip()
+    if not needle:
+        return json.dumps(
+            {"status": "error", "error": "Empty report identifier."}
+        )
+
+    try:
+        reports = await client.list_reports()
+    except (MoodleAPIError, httpx.HTTPError) as exc:
+        return json.dumps(
+            {"status": "error", "error": f"Report lookup failed: {exc}"}
+        )
+
+    if needle.isdigit():
+        rid = int(needle)
+        for r in reports:
+            if r.id == rid:
+                return r
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"No report matches id={rid}.",
+            }
+        )
+
+    lowered = needle.lower()
+    exact = [r for r in reports if r.name.lower() == lowered]
+    if len(exact) == 1:
+        return exact[0]
+    if len(exact) > 1:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": (
+                    f"Multiple reports match name={needle!r}; "
+                    f"disambiguate by numeric ID."
+                ),
+                "matches": [_report_match_summary(r) for r in exact],
+            }
+        )
+
+    matches = [
+        r
+        for r in reports
+        if lowered in r.name.lower() or r.name.lower() in lowered
+    ]
+    if not matches:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"No report matches {identifier!r}.",
+            }
+        )
+    if len(matches) == 1:
+        return matches[0]
+    return json.dumps(
+        {
+            "status": "error",
+            "error": (
+                f"Multiple reports match {identifier!r}; "
+                f"disambiguate by exact name or numeric ID."
+            ),
+            "matches": [_report_match_summary(r) for r in matches],
+        }
+    )
+
+
+def _report_match_summary(r) -> dict:
+    """Compact dict for ambiguity responses from the report resolver."""
+    return {
+        "id": r.id,
+        "name": r.name,
+        "sourcename": r.sourcename,
+    }
+
+
+async def _resolve_department_identifier(
+    client: MoodleClient,
+    identifier: str,
+):
+    """Resolve a human-friendly department identifier to a Department.
+
+    Accepts (in priority order):
+
+      - Numeric Moodle department ID (e.g. ``"3"``)
+      - Exact ``idnumber`` match (case-sensitive)
+      - Exact ``name`` match (case-insensitive)
+      - Bidirectional substring against ``name``
+
+    Returns the resolved Department on exactly one match.
+    Returns a JSON error string on zero or ambiguous matches.
+    """
+    needle = identifier.strip()
+    if not needle:
+        return json.dumps(
+            {"status": "error", "error": "Empty department identifier."}
+        )
+
+    try:
+        depts = await client.get_departments("")
+    except (MoodleAPIError, httpx.HTTPError) as exc:
+        return json.dumps(
+            {"status": "error", "error": f"Department lookup failed: {exc}"}
+        )
+
+    if needle.isdigit():
+        did = int(needle)
+        for d in depts:
+            if d.id == did:
+                return d
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"No department matches id={did}.",
+            }
+        )
+
+    by_idnumber = [d for d in depts if d.idnumber == needle]
+    if len(by_idnumber) == 1:
+        return by_idnumber[0]
+
+    lowered = needle.lower()
+    exact = [d for d in depts if d.name.lower() == lowered]
+    if len(exact) == 1:
+        return exact[0]
+    if len(exact) > 1:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": (
+                    f"Multiple departments match name={needle!r}; "
+                    f"disambiguate by idnumber or numeric ID."
+                ),
+                "matches": [_department_match_summary(d) for d in exact],
+            }
+        )
+
+    matches = [
+        d
+        for d in depts
+        if lowered in d.name.lower() or d.name.lower() in lowered
+    ]
+    if not matches:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"No department matches {identifier!r}.",
+            }
+        )
+    if len(matches) == 1:
+        return matches[0]
+    return json.dumps(
+        {
+            "status": "error",
+            "error": (
+                f"Multiple departments match {identifier!r}; "
+                f"disambiguate by idnumber or numeric ID."
+            ),
+            "matches": [_department_match_summary(d) for d in matches],
+        }
+    )
+
+
+def _department_match_summary(d) -> dict:
+    """Compact dict for ambiguity responses from the department resolver."""
+    return {
+        "id": d.id,
+        "name": d.name,
+        "idnumber": d.idnumber,
+    }
+
+
+async def _resolve_certification_identifier(
+    client: MoodleClient,
+    identifier: str,
+):
+    """Resolve a human-friendly certification identifier.
+
+    Accepts (in priority order):
+
+      - Numeric Moodle certification ID
+      - Exact ``idnumber`` match (case-sensitive)
+      - Exact ``fullname`` match (case-insensitive)
+      - Bidirectional substring against ``fullname``
+
+    Returns the resolved ``Certification`` on exactly one match.
+    Returns a JSON error string on zero or ambiguous matches.
+    """
+    needle = identifier.strip()
+    if not needle:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": "Empty certification identifier.",
+            }
+        )
+
+    try:
+        certs = await client.get_certifications(0)
+    except (MoodleAPIError, httpx.HTTPError) as exc:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"Certification lookup failed: {exc}",
+            }
+        )
+
+    if needle.isdigit():
+        cid = int(needle)
+        for c in certs:
+            if c.id == cid:
+                return c
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"No certification matches id={cid}.",
+            }
+        )
+
+    by_idnumber = [c for c in certs if (c.idnumber or "") == needle]
+    if len(by_idnumber) == 1:
+        return by_idnumber[0]
+
+    lowered = needle.lower()
+    exact = [c for c in certs if c.fullname.lower() == lowered]
+    if len(exact) == 1:
+        return exact[0]
+    if len(exact) > 1:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": (
+                    f"Multiple certifications match name={needle!r}; "
+                    f"disambiguate by idnumber or numeric ID."
+                ),
+                "matches": [_certification_match_summary(c) for c in exact],
+            }
+        )
+
+    matches = [
+        c
+        for c in certs
+        if lowered in c.fullname.lower() or c.fullname.lower() in lowered
+    ]
+    if not matches:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"No certification matches {identifier!r}.",
+            }
+        )
+    if len(matches) == 1:
+        return matches[0]
+    return json.dumps(
+        {
+            "status": "error",
+            "error": (
+                f"Multiple certifications match {identifier!r}; "
+                f"disambiguate by idnumber or numeric ID."
+            ),
+            "matches": [_certification_match_summary(c) for c in matches],
+        }
+    )
+
+
+def _certification_match_summary(c) -> dict:
+    """Compact dict for ambiguity responses from the cert resolver."""
+    return {
+        "id": c.id,
+        "fullname": c.fullname,
+        "idnumber": c.idnumber or "",
+    }
+
+
+async def _resolve_program_identifier(
+    client: MoodleClient,
+    identifier: str,
+):
+    """Resolve a human-friendly program identifier.
+
+    Accepts (in priority order):
+
+      - Numeric Moodle program ID
+      - Exact ``fullname`` match (case-insensitive)
+      - Bidirectional substring against ``fullname``
+
+    Uses ``search_programs`` since there's no ``get_programs``
+    endpoint exposed today; ``search_programs("")`` returns all.
+
+    Returns the resolved ``Program`` on exactly one match.
+    Returns a JSON error string on zero or ambiguous matches.
+    """
+    needle = identifier.strip()
+    if not needle:
+        return json.dumps(
+            {"status": "error", "error": "Empty program identifier."}
+        )
+
+    try:
+        programs = await client.search_programs("")
+    except (MoodleAPIError, httpx.HTTPError) as exc:
+        return json.dumps(
+            {"status": "error", "error": f"Program lookup failed: {exc}"}
+        )
+
+    if needle.isdigit():
+        pid = int(needle)
+        for p in programs:
+            if p.id == pid:
+                return p
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"No program matches id={pid}.",
+            }
+        )
+
+    lowered = needle.lower()
+    exact = [p for p in programs if p.fullname.lower() == lowered]
+    if len(exact) == 1:
+        return exact[0]
+    if len(exact) > 1:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": (
+                    f"Multiple programs match name={needle!r}; "
+                    f"disambiguate by numeric ID."
+                ),
+                "matches": [_program_match_summary(p) for p in exact],
+            }
+        )
+
+    matches = [
+        p
+        for p in programs
+        if lowered in p.fullname.lower() or p.fullname.lower() in lowered
+    ]
+    if not matches:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"No program matches {identifier!r}.",
+            }
+        )
+    if len(matches) == 1:
+        return matches[0]
+    return json.dumps(
+        {
+            "status": "error",
+            "error": (
+                f"Multiple programs match {identifier!r}; "
+                f"disambiguate by exact name or numeric ID."
+            ),
+            "matches": [_program_match_summary(p) for p in matches],
+        }
+    )
+
+
+def _program_match_summary(p) -> dict:
+    """Compact dict for ambiguity responses from the program resolver."""
+    return {
+        "id": p.id,
+        "fullname": p.fullname,
+    }
 
 
 async def _resolve_rule_id(
@@ -291,14 +1218,14 @@ events" with no user specified: call get_upcoming_events() \
 with no arguments — it returns all upcoming events across \
 all courses for the next 30 days.
 
-For "grades for user X" without a specific course: first \
-have the router resolve the name → user ID via moodle-users \
-find_user, then list_courses, then call get_user_grades \
-for each course.
+For "grades for user X" without a specific course: list \
+the courses, then call get_user_grades for each course \
+passing the user's name or username directly — the tool \
+resolves it internally.
 
 For "who hasn't completed course X" / "who has completed \
 course X" / completion overview queries: ALWAYS call \
-get_course_completion_overview(courseid). Do NOT call UTM \
+get_course_completion_overview(course=<name>). Do NOT call UTM \
 or advanced completion reports for this — those use \
 plugin-specific tables and return 0 unless that plugin \
 populated them. The standard Moodle completion API used \
@@ -617,16 +1544,23 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         )
 
     @_moodle_tool
-    async def get_course_contents(courseid: int) -> str:
+    async def get_course_contents(course: str) -> str:
         """Get the sections and activities inside a course.
 
         Args:
-            courseid: The Moodle course ID.
+            course: Identifier for the target course.  Accepts
+                ``shortname``, ``idnumber``, course full name
+                (case-insensitive substring), or numeric Moodle
+                course ID.  Resolved internally — operators
+                identify courses by name, not internal ID.
 
         Returns JSON array of sections, each with nested
         modules showing name, type, and completion tracking.
         """
-        sections = await client.get_course_contents(courseid)
+        resolved = await _resolve_course_identifier(client, course)
+        if isinstance(resolved, str):
+            return resolved
+        sections = await client.get_course_contents(resolved.id)
         return json.dumps(
             [
                 {
@@ -647,17 +1581,23 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         )
 
     @_moodle_tool
-    async def list_enrolled_users(courseid: int) -> str:
+    async def list_enrolled_users(course: str) -> str:
         """List users enrolled in a course.
 
         Args:
-            courseid: The Moodle course ID (from
-                      list_courses).
+            course: Identifier for the target course.  Accepts
+                ``shortname``, ``idnumber``, course full name
+                (case-insensitive substring), or numeric Moodle
+                course ID.  Resolved internally — operators
+                identify courses by name, not internal ID.
 
         Returns JSON with id, username, fullname, and
         roles for each enrolled user.
         """
-        enrolled = await client.get_enrolled_users(courseid)
+        resolved = await _resolve_course_identifier(client, course)
+        if isinstance(resolved, str):
+            return resolved
+        enrolled = await client.get_enrolled_users(resolved.id)
         return json.dumps(
             [
                 {
@@ -672,20 +1612,33 @@ def build_courses_skill(client: MoodleClient) -> Skill:
 
     @_moodle_tool
     async def get_completion_status(
-        courseid: int,
-        userid: int,
+        course: str,
+        user: str,
     ) -> str:
         """Check a user's course completion status.
 
         Args:
-            courseid: The Moodle course ID.
-            userid: The Moodle user ID (from find_user
-                    or list_enrolled_users).
+            course: Identifier for the target course.  Accepts
+                ``shortname``, ``idnumber``, course full name
+                (case-insensitive substring), or numeric Moodle
+                course ID.
+            user: Identifier for the target user.  Accepts
+                ``username``, ``email``, ``idnumber`` (EDIPI in
+                mil deployments), full/partial name, or numeric
+                Moodle user ID.
 
         Returns JSON with completed flag and completion
         criteria details.
         """
-        status = await client.get_course_completion_status(courseid, userid)
+        resolved_course = await _resolve_course_identifier(client, course)
+        if isinstance(resolved_course, str):
+            return resolved_course
+        resolved_user = await _resolve_user_identifier(client, user)
+        if isinstance(resolved_user, str):
+            return resolved_user
+        status = await client.get_course_completion_status(
+            resolved_course.id, resolved_user.id
+        )
         return json.dumps(
             {
                 "completed": status.completed,
@@ -702,15 +1655,22 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         )
 
     @_moodle_tool
-    async def get_course_completion_overview(courseid: int) -> str:
+    async def get_course_completion_overview(course: str) -> str:
         """Get completion status for ALL enrolled users in a course.
 
         Returns a summary with overall rate and per-user
         breakdown.
 
         Args:
-            courseid: The Moodle course ID.
+            course: Identifier for the target course.  Accepts
+                ``shortname``, ``idnumber``, course full name
+                (case-insensitive substring), or numeric Moodle
+                course ID.
         """
+        resolved = await _resolve_course_identifier(client, course)
+        if isinstance(resolved, str):
+            return resolved
+        courseid = resolved.id
         enrolled = await client.get_enrolled_users(courseid)
 
         users_capped = enrolled[:MAX_RESULTS]
@@ -779,13 +1739,19 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         )
 
     @_moodle_tool
-    async def list_course_groups(courseid: int) -> str:
+    async def list_course_groups(course: str) -> str:
         """List groups within a course.
 
         Args:
-            courseid: The Moodle course ID.
+            course: Identifier for the target course.  Accepts
+                ``shortname``, ``idnumber``, course full name
+                (case-insensitive substring), or numeric Moodle
+                course ID.
         """
-        groups = await client.get_course_groups(courseid)
+        resolved = await _resolve_course_identifier(client, course)
+        if isinstance(resolved, str):
+            return resolved
+        groups = await client.get_course_groups(resolved.id)
         return json.dumps(
             [
                 {
@@ -798,21 +1764,107 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         )
 
     @_moodle_tool
-    async def get_group_members(groupid: int) -> str:
+    async def get_group_members(group: str, course: str) -> str:
         """List members of a specific group.
 
+        Groups are scoped to a course; both the group and its
+        containing course are identified by human-friendly
+        names rather than internal IDs.
+
         Args:
-            groupid: The Moodle group ID.
+            group: Group identifier — exact ``name``
+                (case-insensitive), bidirectional substring of the
+                group name, or numeric Moodle group ID.
+            course: Identifier for the course that owns the group.
+                Accepts ``shortname``, ``idnumber``, course full
+                name (case-insensitive substring), or numeric
+                Moodle course ID.  Resolved internally.
         """
-        results = await client.get_group_members([groupid])
+        resolved_course = await _resolve_course_identifier(client, course)
+        if isinstance(resolved_course, str):
+            return resolved_course
+        groups = await client.get_course_groups(resolved_course.id)
+        needle = group.strip()
+        if not needle:
+            return json.dumps(
+                {"status": "error", "error": "Empty group identifier."}
+            )
+        match = None
+        if needle.isdigit():
+            gid = int(needle)
+            for g in groups:
+                if g.id == gid:
+                    match = g
+                    break
+        if match is None:
+            lowered = needle.lower()
+            exact = [g for g in groups if g.name.lower() == lowered]
+            if len(exact) == 1:
+                match = exact[0]
+            elif len(exact) > 1:
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "error": (
+                            f"Multiple groups match name={needle!r} in "
+                            f"{resolved_course.fullname}; disambiguate "
+                            f"by numeric ID."
+                        ),
+                        "matches": [
+                            {"id": g.id, "name": g.name} for g in exact
+                        ],
+                    }
+                )
+            else:
+                fuzzy = [
+                    g
+                    for g in groups
+                    if lowered in g.name.lower() or g.name.lower() in lowered
+                ]
+                if len(fuzzy) == 1:
+                    match = fuzzy[0]
+                elif len(fuzzy) > 1:
+                    return json.dumps(
+                        {
+                            "status": "error",
+                            "error": (
+                                f"Multiple groups match {group!r} in "
+                                f"{resolved_course.fullname}; disambiguate "
+                                f"by exact name or numeric ID."
+                            ),
+                            "matches": [
+                                {"id": g.id, "name": g.name} for g in fuzzy
+                            ],
+                        }
+                    )
+        if match is None:
+            return json.dumps(
+                {
+                    "status": "error",
+                    "error": (
+                        f"No group matches {group!r} in "
+                        f"{resolved_course.fullname}."
+                    ),
+                }
+            )
+        results = await client.get_group_members([match.id])
         if results:
             return json.dumps(
                 {
-                    "groupid": results[0].groupid,
+                    "group": match.name,
+                    "group_id": results[0].groupid,
+                    "course": resolved_course.fullname,
                     "userids": results[0].userids,
                 }
             )
-        return json.dumps({"groupid": groupid, "userids": []})
+        return json.dumps(
+            {
+                "group": match.name,
+                "group_id": match.id,
+                "course": resolved_course.fullname,
+                "userids": [],
+            }
+        )
 
     @_moodle_tool
     async def list_cohorts() -> str:
@@ -830,15 +1882,23 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         )
 
     @_moodle_tool
-    async def get_cohort_members(cohortid: int) -> str:
+    async def get_cohort_members(cohort: str) -> str:
         """List members of a specific cohort.
 
         Returns user details (id, username, fullname,
         email) so callers don't need a separate user lookup.
 
         Args:
-            cohortid: The Moodle cohort ID.
+            cohort: Identifier for the target cohort.  Accepts
+                ``idnumber``, cohort name (case-insensitive
+                substring), or numeric Moodle cohort ID.
+                Resolved internally — operators identify cohorts
+                by name, not internal ID.
         """
+        resolved = await _resolve_cohort_identifier(client, cohort)
+        if isinstance(resolved, str):
+            return resolved
+        cohortid = resolved.id
         results = await client.get_cohort_members([cohortid])
         if not results:
             return json.dumps({"cohortid": cohortid, "members": []})
@@ -867,14 +1927,28 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         )
 
     @_moodle_tool
-    async def get_user_grades(courseid: int, userid: int) -> str:
+    async def get_user_grades(course: str, user: str) -> str:
         """Get a user's grade report for a course.
 
         Args:
-            courseid: The Moodle course ID.
-            userid: The Moodle user ID.
+            course: Identifier for the target course.  Accepts
+                ``shortname``, ``idnumber``, course full name
+                (case-insensitive substring), or numeric Moodle
+                course ID.
+            user: Identifier for the target user.  Accepts
+                ``username``, ``email``, ``idnumber`` (EDIPI in
+                mil deployments), full/partial name, or numeric
+                Moodle user ID.
         """
-        raw = await client.get_user_grades(courseid, userid)
+        resolved_course = await _resolve_course_identifier(client, course)
+        if isinstance(resolved_course, str):
+            return resolved_course
+        resolved_user = await _resolve_user_identifier(client, user)
+        if isinstance(resolved_user, str):
+            return resolved_user
+        raw = await client.get_user_grades(
+            resolved_course.id, resolved_user.id
+        )
         tables = raw.get("tables", [])
         items = []
         for table in tables:
@@ -915,16 +1989,22 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         return json.dumps(items)
 
     @_moodle_tool
-    async def get_assignment_grades(courseid: int) -> str:
+    async def get_assignment_grades(course: str) -> str:
         """Get all grades for assignments in a course.
 
         Looks up course contents first to find assignment
         module IDs, then fetches grades for each.
 
         Args:
-            courseid: The Moodle course ID.
+            course: Identifier for the target course.  Accepts
+                ``shortname``, ``idnumber``, course full name
+                (case-insensitive substring), or numeric Moodle
+                course ID.
         """
-        sections = await client.get_course_contents(courseid)
+        resolved = await _resolve_course_identifier(client, course)
+        if isinstance(resolved, str):
+            return resolved
+        sections = await client.get_course_contents(resolved.id)
 
         assign_ids = []
         for section in sections:
@@ -1023,56 +2103,73 @@ def build_courses_skill(client: MoodleClient) -> Skill:
 
     @_moodle_tool
     async def enrol_users(
-        userids: str,
-        courseid: int,
+        users: str,
+        course: str,
         roleid: int = 5,
         confirmed: bool = False,
     ) -> str:
-        """Enrol users into a course.
-
-        Pass confirmed=True only after the user has reviewed
-        and approved the action.
+        """Enrol users into a course. REQUIRES USER CONFIRMATION.
 
         Args:
-            userids: Comma-separated user IDs.
-            courseid: The Moodle course ID.
+            users: Comma-separated user identifiers.  Each token can
+                be a username, email, ``idnumber`` (EDIPI in mil
+                deployments), numeric Moodle user ID, or full/partial
+                name.  Resolved internally; ambiguous or unresolved
+                tokens fail the whole batch with a candidate list so
+                the operator can disambiguate.
+            course: Identifier for the target course.  Accepts
+                ``shortname``, ``idnumber``, course full name (case-
+                insensitive substring), or numeric Moodle course ID.
+                Resolved internally; never force the operator to look
+                up an internal course ID.
             roleid: Role ID (default 5 = student).
             confirmed: Set True only after user approval.
         """
-        parsed = _parse_ids(userids, "user IDs")
-        if isinstance(parsed, str):
-            return parsed
-        user_list = parsed
+        resolved_users = await _resolve_user_identifiers(client, users)
+        if isinstance(resolved_users, str):
+            return resolved_users
+        resolved_course = await _resolve_course_identifier(client, course)
+        if isinstance(resolved_course, str):
+            return resolved_course
+        course_id = resolved_course.id
+        course_label = (
+            f"{resolved_course.fullname} ({resolved_course.shortname})"
+        )
+        user_labels = [f"{u.fullname} (@{u.username})" for u in resolved_users]
+
         if not confirmed:
             return json.dumps(
                 {
                     "action": "enrol_users",
                     "preview": (
-                        f"Will enrol {len(user_list)} user(s) into "
-                        f"course {courseid} with role {roleid}"
+                        f"Will enrol {len(resolved_users)} user(s) "
+                        f"into {course_label} with role {roleid}"
                     ),
-                    "user_ids": user_list,
-                    "course_id": courseid,
+                    "course": course_label,
+                    "course_id": course_id,
+                    "users": user_labels,
                     "role_id": roleid,
-                    "user_count": len(user_list),
+                    "user_count": len(resolved_users),
                 }
             )
         enrolments = [
-            {"userid": uid, "courseid": courseid, "roleid": roleid}
-            for uid in user_list
+            {"userid": u.id, "courseid": course_id, "roleid": roleid}
+            for u in resolved_users
         ]
         await client.enrol_users(enrolments)
         return json.dumps(
             {
                 "success": True,
-                "enrolled": len(user_list),
+                "enrolled": len(resolved_users),
+                "course": course_label,
+                "users": user_labels,
             }
         )
 
     @_moodle_tool
     async def create_category(
         name: str,
-        parent: int = 0,
+        parent: str = "",
         description: str = "",
         confirmed: bool = False,
     ) -> str:
@@ -1080,20 +2177,31 @@ def build_courses_skill(client: MoodleClient) -> Skill:
 
         Args:
             name: Category name.
-            parent: Parent category ID (0 for top-level).
+            parent: Parent category identifier — exact name or
+                numeric ID.  Leave empty (default) for top-level.
+                Operators name the parent; resolution is internal.
             description: Optional description.
             confirmed: Set True only after user approval.
         """
+        if parent:
+            resolved = await _resolve_category_identifier(client, parent)
+            if isinstance(resolved, str):
+                return resolved
+            parent_id = resolved
+        else:
+            parent_id = 0
         if not confirmed:
             return json.dumps(
                 {
                     "action": "create_category",
                     "preview": (
-                        f"Will create category '{name}' under parent={parent}"
+                        f"Will create category '{name}' under parent_id="
+                        f"{parent_id}"
                     ),
+                    "parent_id": parent_id,
                 }
             )
-        cat_data: dict = {"name": name, "parent": parent}
+        cat_data: dict = {"name": name, "parent": parent_id}
         if description:
             cat_data["description"] = description
         result = await client.create_categories([cat_data])
@@ -1108,7 +2216,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
     async def create_course(
         fullname: str,
         shortname: str,
-        categoryid: int,
+        category: str,
         summary: str = "",
         visible: int = 1,
         format: str = "topics",
@@ -1119,12 +2227,18 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         Args:
             fullname: Full course name.
             shortname: Short identifier (must be unique).
-            categoryid: Category to place the course in.
+            category: Target category identifier — exact name or
+                numeric ID.  Operators name the category; the
+                tool resolves it internally.
             summary: Optional course summary/description.
             visible: 1=visible, 0=hidden (default 1).
             format: Course format (default 'topics').
             confirmed: Set True only after user approval.
         """
+        resolved = await _resolve_category_identifier(client, category)
+        if isinstance(resolved, str):
+            return resolved
+        categoryid = resolved
         if not confirmed:
             return json.dumps(
                 {
@@ -1132,8 +2246,9 @@ def build_courses_skill(client: MoodleClient) -> Skill:
                     "preview": (
                         f"Will create course '{fullname}' "
                         f"(shortname='{shortname}') in "
-                        f"category {categoryid}"
+                        f"category id={categoryid}"
                     ),
+                    "category_id": categoryid,
                 }
             )
         course_data: dict = {
@@ -1157,7 +2272,7 @@ def build_courses_skill(client: MoodleClient) -> Skill:
 
     @_moodle_tool
     async def update_course(
-        courseid: int,
+        course: str,
         fullname: str = "",
         shortname: str = "",
         summary: str = "",
@@ -1169,14 +2284,24 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         Only non-empty/non-default fields are updated.
 
         Args:
-            courseid: Moodle course ID.
+            course: Identifier for the target course.  Accepts
+                ``shortname``, ``idnumber``, course full name (case-
+                insensitive substring), or numeric Moodle course ID.
+                Resolved internally — operators identify courses by
+                name, not internal ID.
             fullname: New full name (leave empty to skip).
             shortname: New short name (leave empty to skip).
             summary: New summary (leave empty to skip).
             visible: 1=visible, 0=hidden, -1=skip.
             confirmed: Set True only after user approval.
         """
-        updates: dict = {"id": courseid}
+        resolved = await _resolve_course_identifier(client, course)
+        if isinstance(resolved, str):
+            return resolved
+        course_id = resolved.id
+        course_label = f"{resolved.fullname} ({resolved.shortname})"
+
+        updates: dict = {"id": course_id}
         if fullname:
             updates["fullname"] = fullname
         if shortname:
@@ -1194,15 +2319,25 @@ def build_courses_skill(client: MoodleClient) -> Skill:
             return json.dumps(
                 {
                     "action": "update_course",
-                    "preview": (f"Will update course {courseid}: {fields}"),
+                    "preview": (f"Will update {course_label} with: {fields}"),
+                    "course": course_label,
+                    "course_id": course_id,
+                    "shortname": resolved.shortname,
+                    "changes": fields,
                 }
             )
         await client.update_courses([updates])
-        return json.dumps({"success": True, "courseid": courseid})
+        return json.dumps(
+            {
+                "success": True,
+                "courseid": course_id,
+                "course": course_label,
+            }
+        )
 
     @_moodle_tool
     async def delete_course(
-        courseid: int,
+        course: str,
         confirmed: bool = False,
     ) -> str:
         """Permanently delete a course. WARNING: This cannot be undone.
@@ -1210,60 +2345,97 @@ def build_courses_skill(client: MoodleClient) -> Skill:
         REQUIRES USER CONFIRMATION.
 
         Args:
-            courseid: Moodle course ID.
+            course: Identifier for the target course.  Accepts
+                ``shortname``, ``idnumber``, course full name (case-
+                insensitive substring), or numeric Moodle course ID.
+                Resolved internally; ambiguous matches return
+                candidates so the caller can disambiguate.
             confirmed: Set True only after user approval.
         """
+        resolved = await _resolve_course_identifier(client, course)
+        if isinstance(resolved, str):
+            return resolved
+        course_id = resolved.id
+        course_label = f"{resolved.fullname} ({resolved.shortname})"
         if not confirmed:
             return json.dumps(
                 {
                     "action": "delete_course",
                     "preview": (
                         f"WARNING: Will PERMANENTLY delete "
-                        f"course {courseid}. This cannot be undone."
+                        f"{course_label}. This cannot be undone."
                     ),
+                    "course": course_label,
+                    "course_id": course_id,
+                    "shortname": resolved.shortname,
                 }
             )
-        result = await client.delete_courses([courseid])
+        result = await client.delete_courses([course_id])
         return json.dumps(
-            {"success": True, "deleted_courseid": courseid, "result": result}
+            {
+                "success": True,
+                "deleted_courseid": course_id,
+                "course": course_label,
+                "result": result,
+            }
         )
 
     @_moodle_tool
     async def duplicate_course(
-        courseid: int,
+        source: str,
         fullname: str,
         shortname: str,
-        categoryid: int,
+        category: str,
         visible: int = 1,
         confirmed: bool = False,
     ) -> str:
         """Copy a course as a template. REQUIRES USER CONFIRMATION.
 
         Args:
-            courseid: Source course ID to duplicate.
+            source: Identifier for the source course to duplicate.
+                Accepts ``shortname``, ``idnumber``, course full
+                name (case-insensitive substring), or numeric Moodle
+                course ID.  Resolved internally.
             fullname: Full name for the new copy.
             shortname: Short name for the new copy (must be unique).
-            categoryid: Category for the new copy.
+            category: Target category identifier — exact name or
+                numeric ID.  Operators name the category; the tool
+                resolves it internally.
             visible: 1=visible, 0=hidden.
             confirmed: Set True only after user approval.
         """
+        resolved = await _resolve_course_identifier(client, source)
+        if isinstance(resolved, str):
+            return resolved
+        source_id = resolved.id
+        source_label = f"{resolved.fullname} ({resolved.shortname})"
+        resolved_cat = await _resolve_category_identifier(client, category)
+        if isinstance(resolved_cat, str):
+            return resolved_cat
+        categoryid = resolved_cat
         if not confirmed:
             return json.dumps(
                 {
                     "action": "duplicate_course",
                     "preview": (
-                        f"Will duplicate course {courseid} as "
+                        f"Will duplicate {source_label} as "
                         f"'{fullname}' (shortname='{shortname}') "
-                        f"in category {categoryid}"
+                        f"in category id={categoryid}"
                     ),
+                    "source": source_label,
+                    "source_id": source_id,
+                    "fullname": fullname,
+                    "shortname": shortname,
+                    "category_id": categoryid,
                 }
             )
         result = await client.duplicate_course(
-            courseid, fullname, shortname, categoryid, visible
+            source_id, fullname, shortname, categoryid, visible
         )
         return json.dumps(
             {
                 "success": True,
+                "source": source_label,
                 "new_course_id": result.id,
                 "shortname": result.shortname,
             }
@@ -1454,7 +2626,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
 
     @_moodle_tool
     async def update_user(
-        userid: str,
+        user: str,
         firstname: str = "",
         lastname: str = "",
         email: str = "",
@@ -1467,11 +2639,18 @@ def build_users_skill(client: MoodleClient) -> Skill:
     ) -> str:
         """Update a user's profile fields. REQUIRES USER CONFIRMATION.
 
-        Only non-empty fields are updated. Pass the user ID and
-        any fields you want to change.
+        Only non-empty fields are updated. Pass the user identifier
+        (username, email, idnumber/EDIPI, numeric ID, or full name)
+        and the fields you want to change.
 
         Args:
-            userid: Moodle user ID.
+            user: Identifier for the target user.  Accepts username,
+                email, ``idnumber`` (often the EDIPI in military
+                deployments), the numeric Moodle user ID, or a full
+                or partial name.  Resolved internally — never force
+                the human to look up an internal numeric ID.  If the
+                identifier matches multiple users the response asks
+                for disambiguation rather than guessing.
             firstname: New first name (leave empty to skip).
             lastname: New last name (leave empty to skip).
             email: New email (leave empty to skip).
@@ -1482,9 +2661,12 @@ def build_users_skill(client: MoodleClient) -> Skill:
             department: Department name (leave empty to skip).
             confirmed: Set True only after user approval.
         """
-        uid = _parse_single_id(userid, "user ID")
-        if isinstance(uid, str):
-            return uid
+        resolved = await _resolve_user_identifier(client, user)
+        if isinstance(resolved, str):
+            return resolved
+        uid = resolved.id
+        user_label = f"{resolved.fullname} (#{uid})"
+
         updates: dict = {"id": uid}
         for field, value in [
             ("firstname", firstname),
@@ -1502,19 +2684,6 @@ def build_users_skill(client: MoodleClient) -> Skill:
             return json.dumps(
                 {"error": "No fields to update. Provide at least one field."}
             )
-        # Look up the user's display name so the preview can show
-        # "Documentation User (#7)" instead of just "#7". Best-effort:
-        # if the lookup fails for any reason we still produce a
-        # usable preview with the bare ID.
-        user_label = f"#{uid}"
-        try:
-            users = await client.get_users_by_field(
-                field="id", values=[str(uid)]
-            )
-            if users:
-                user_label = f"{users[0].fullname} (#{uid})"
-        except Exception:  # noqa: BLE001 - intentionally broad
-            pass
 
         if not confirmed:
             fields = {k: v for k, v in updates.items() if k != "id"}
@@ -1523,6 +2692,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
                 "preview": (f"Will update {user_label} with: {fields}"),
                 "user": user_label,
                 "user_id": uid,
+                "username": resolved.username,
                 "changes": fields,
             }
             for k, v in fields.items():
@@ -1533,7 +2703,7 @@ def build_users_skill(client: MoodleClient) -> Skill:
 
     @_moodle_tool
     async def delete_user(
-        userid: str,
+        user: str,
         confirmed: bool = False,
     ) -> str:
         """Permanently delete a user. WARNING: This cannot be undone.
@@ -1541,48 +2711,80 @@ def build_users_skill(client: MoodleClient) -> Skill:
         REQUIRES USER CONFIRMATION.
 
         Args:
-            userid: Moodle user ID.
+            user: Identifier for the target user.  Accepts username,
+                email, ``idnumber`` (often the EDIPI in military
+                deployments), the numeric Moodle user ID, or a full
+                or partial name.  Resolved internally; ambiguous
+                matches return an error with candidates so the
+                caller can disambiguate.
             confirmed: Set True only after user approval.
         """
-        uid = _parse_single_id(userid, "user ID")
-        if isinstance(uid, str):
-            return uid
+        resolved = await _resolve_user_identifier(client, user)
+        if isinstance(resolved, str):
+            return resolved
+        uid = resolved.id
+        user_label = f"{resolved.fullname} (#{uid})"
         if not confirmed:
             return json.dumps(
                 {
                     "action": "delete_user",
                     "preview": (
                         f"WARNING: Will PERMANENTLY delete "
-                        f"user {uid}. This cannot be undone."
+                        f"{user_label}. This cannot be undone."
                     ),
+                    "user": user_label,
+                    "user_id": uid,
+                    "username": resolved.username,
                 }
             )
         await client.delete_users([uid])
-        return json.dumps({"success": True, "deleted_userid": uid})
+        return json.dumps(
+            {
+                "success": True,
+                "deleted_userid": uid,
+                "user": user_label,
+            }
+        )
 
     @_moodle_tool
     async def unsuspend_user(
-        userid: str,
+        user: str,
         confirmed: bool = False,
     ) -> str:
         """Reactivate a suspended user. REQUIRES USER CONFIRMATION.
 
         Args:
-            userid: Moodle user ID.
+            user: Identifier for the target user.  Accepts username,
+                email, ``idnumber`` (often the EDIPI in military
+                deployments), the numeric Moodle user ID, or a full
+                or partial name.  Resolved internally; ambiguous
+                matches return an error with candidates so the
+                caller can disambiguate.
             confirmed: Set True only after user approval.
         """
-        uid = _parse_single_id(userid, "user ID")
-        if isinstance(uid, str):
-            return uid
+        resolved = await _resolve_user_identifier(client, user)
+        if isinstance(resolved, str):
+            return resolved
+        uid = resolved.id
+        user_label = f"{resolved.fullname} (#{uid})"
         if not confirmed:
             return json.dumps(
                 {
                     "action": "unsuspend_user",
-                    "preview": f"Will unsuspend (reactivate) user {uid}",
+                    "preview": (f"Will unsuspend (reactivate) {user_label}"),
+                    "user": user_label,
+                    "user_id": uid,
+                    "username": resolved.username,
                 }
             )
         await client.update_users([{"id": uid, "suspended": 0}])
-        return json.dumps({"success": True, "unsuspended_userid": uid})
+        return json.dumps(
+            {
+                "success": True,
+                "unsuspended_userid": uid,
+                "user": user_label,
+            }
+        )
 
     @_moodle_tool
     async def send_message(
@@ -1630,8 +2832,8 @@ def build_users_skill(client: MoodleClient) -> Skill:
 
     @_moodle_tool
     async def allocate_users_to_tenant(
-        userids: str,
-        tenantid: int,
+        users: str,
+        tenant: str,
         confirmed: bool = False,
     ) -> str:
         """Assign users to a tenant.
@@ -1640,35 +2842,53 @@ def build_users_skill(client: MoodleClient) -> Skill:
         and approved the action.
 
         Args:
-            userids: Comma-separated user IDs.
-            tenantid: The tenant ID.
+            users: Comma-separated user identifiers.  Each token
+                can be a username, email, ``idnumber`` (EDIPI in
+                mil deployments), full/partial name, or numeric
+                Moodle user ID.  Resolved internally.
+            tenant: Identifier for the target tenant.  Accepts
+                tenant ``name``, ``idnumber``, or numeric Moodle
+                tenant ID.  Resolved internally.
             confirmed: Set True only after user approval.
         """
-        parsed = _parse_ids(userids, "user IDs")
-        if isinstance(parsed, str):
-            return parsed
-        user_list = parsed
+        resolved_users = await _resolve_user_identifiers(client, users)
+        if isinstance(resolved_users, str):
+            return resolved_users
+        resolved_tenant = await _resolve_tenant_identifier(client, tenant)
+        if isinstance(resolved_tenant, str):
+            return resolved_tenant
+        tenantid = resolved_tenant.id
+        tenant_label = (
+            f"{resolved_tenant.name} (id={tenantid})"
+            if resolved_tenant.name
+            else f"tenant id={tenantid}"
+        )
+        user_labels = [f"{u.fullname} (@{u.username})" for u in resolved_users]
         if not confirmed:
             return json.dumps(
                 {
                     "action": "allocate_users_to_tenant",
                     "preview": (
-                        f"Will assign {len(user_list)} user(s) "
-                        f"to tenant {tenantid}"
+                        f"Will assign {len(resolved_users)} user(s) "
+                        f"to {tenant_label}"
                     ),
-                    "user_ids": user_list,
-                    "tenantid": tenantid,
+                    "tenant": tenant_label,
+                    "tenant_id": tenantid,
+                    "users": user_labels,
+                    "user_count": len(resolved_users),
                 }
             )
         allocations = [
-            {"userid": uid, "tenantid": tenantid} for uid in user_list
+            {"userid": u.id, "tenantid": tenantid} for u in resolved_users
         ]
         result = await client.allocate_users_to_tenant(allocations)
         return json.dumps(
             {
                 "success": True,
-                "allocated": len(user_list),
-                "tenantid": tenantid,
+                "allocated": len(resolved_users),
+                "tenant": tenant_label,
+                "tenant_id": tenantid,
+                "users": user_labels,
                 "result": result,
             }
         )
@@ -2255,7 +3475,7 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
 
     @_moodle_tool
     async def assign_job(
-        userid: int,
+        user: str,
         department: str,
         position: str,
         confirmed: bool = False,
@@ -2266,30 +3486,38 @@ def build_organisation_skill(client: MoodleClient) -> Skill:
         and approved the action.
 
         Args:
-            userid: The Moodle user ID.
+            user: User identifier — ``username``, ``email``,
+                ``idnumber``, full/partial name, or numeric ID.
+                Resolved internally.
             department: Department idnumber.
             position: Position idnumber.
             confirmed: Set True only after user approval.
         """
+        resolved = await _resolve_user_identifier(client, user)
+        if isinstance(resolved, str):
+            return resolved
+        user_label = f"{resolved.fullname} (@{resolved.username})"
         if not confirmed:
             return json.dumps(
                 {
                     "action": "assign_job",
                     "preview": (
-                        f"Will assign user {userid} to "
+                        f"Will assign {user_label} to "
                         f"department '{department}' / "
                         f"position '{position}'"
                     ),
-                    "userid": userid,
+                    "user": user_label,
+                    "user_id": resolved.id,
                     "department": department,
                     "position": position,
                 }
             )
-        result = await client.create_job(userid, department, position)
+        result = await client.create_job(resolved.id, department, position)
         return json.dumps(
             {
                 "success": True,
-                "userid": userid,
+                "user": user_label,
+                "user_id": resolved.id,
                 "department": department,
                 "position": position,
                 "result": result,
@@ -2450,13 +3678,23 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
     """Build the moodle-certifications skill (13 tools)."""
 
     @_moodle_tool
-    async def list_certifications(tenantid: int = 0) -> str:
+    async def list_certifications(tenant: str = "") -> str:
         """List all certifications in the system.
 
         Args:
-            tenantid: Optional tenant ID to filter by
-                      (default 0 = all tenants).
+            tenant: Optional tenant identifier to filter by.
+                Accepts tenant ``name`` (case-insensitive substring),
+                ``idnumber``, or numeric Moodle tenant ID.  Leave
+                empty (default) for all tenants.  Resolved
+                internally — operators identify tenants by name.
         """
+        if tenant:
+            resolved = await _resolve_tenant_identifier(client, tenant)
+            if isinstance(resolved, str):
+                return resolved
+            tenantid = resolved.id
+        else:
+            tenantid = 0
         certs = await client.get_certifications(tenantid)
         return json.dumps(
             [
@@ -2490,15 +3728,21 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
         )
 
     @_moodle_tool
-    async def get_certification_allocations(
-        certificationid: int,
-    ) -> str:
+    async def get_certification_allocations(certification: str) -> str:
         """List users allocated to a specific certification.
 
         Args:
-            certificationid: The certification ID.
+            certification: Identifier for the target certification.
+                Accepts ``fullname`` (case-insensitive substring),
+                ``idnumber``, or numeric Moodle certification ID.
+                Resolved internally.
         """
-        allocs = await client.get_certification_allocations(certificationid)
+        resolved = await _resolve_certification_identifier(
+            client, certification
+        )
+        if isinstance(resolved, str):
+            return resolved
+        allocs = await client.get_certification_allocations(resolved.id)
         return json.dumps(
             [
                 {
@@ -2513,13 +3757,20 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
         )
 
     @_moodle_tool
-    async def get_user_certifications(userid: int) -> str:
+    async def get_user_certifications(user: str) -> str:
         """Get all certifications for a specific user.
 
         Args:
-            userid: The Moodle user ID.
+            user: Identifier for the target user.  Accepts
+                ``username``, ``email``, ``idnumber`` (EDIPI in
+                mil deployments), full/partial name, or numeric
+                Moodle user ID.  Resolved internally — operators
+                identify users by name, not internal ID.
         """
-        allocs = await client.get_user_certification_allocations(userid)
+        resolved = await _resolve_user_identifier(client, user)
+        if isinstance(resolved, str):
+            return resolved
+        allocs = await client.get_user_certification_allocations(resolved.id)
         return json.dumps(
             [
                 {
@@ -2534,17 +3785,27 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
 
     @_moodle_tool
     async def get_certification_history(
-        certificationid: int,
-        userid: int,
+        certification: str,
+        user: str,
     ) -> str:
         """Get the audit trail for a user's certification.
 
         Args:
-            certificationid: The certification ID.
-            userid: The Moodle user ID.
+            certification: Certification identifier — ``fullname``
+                substring, ``idnumber``, or numeric ID.
+            user: User identifier — ``username``, ``email``,
+                ``idnumber``, full/partial name, or numeric ID.
         """
+        resolved_cert = await _resolve_certification_identifier(
+            client, certification
+        )
+        if isinstance(resolved_cert, str):
+            return resolved_cert
+        resolved_user = await _resolve_user_identifier(client, user)
+        if isinstance(resolved_user, str):
+            return resolved_user
         entries = await client.get_certification_user_log(
-            certificationid, userid
+            resolved_cert.id, resolved_user.id
         )
         return json.dumps(
             [
@@ -2559,24 +3820,34 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
 
     @_moodle_tool
     async def get_certification_user_details(
-        certificationid: int,
-        userid: int,
+        certification: str,
+        user: str,
     ) -> str:
         """Get detailed user+certification allocation view.
 
         Args:
-            certificationid: The certification ID.
-            userid: The Moodle user ID.
+            certification: Certification identifier — ``fullname``
+                substring, ``idnumber``, or numeric ID.
+            user: User identifier — ``username``, ``email``,
+                ``idnumber``, full/partial name, or numeric ID.
         """
+        resolved_cert = await _resolve_certification_identifier(
+            client, certification
+        )
+        if isinstance(resolved_cert, str):
+            return resolved_cert
+        resolved_user = await _resolve_user_identifier(client, user)
+        if isinstance(resolved_user, str):
+            return resolved_user
         details = await client.get_certification_user_allocation(
-            certificationid, userid
+            resolved_cert.id, resolved_user.id
         )
         return json.dumps(details)
 
     @_moodle_tool
     async def certify_user(
-        userid: str,
-        certificationid: int,
+        user: str,
+        certification: str,
         confirmed: bool = False,
     ) -> str:
         """Mark a user as certified.
@@ -2585,39 +3856,49 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
         and approved the action.
 
         Args:
-            userid: The Moodle user ID (as string).
-            certificationid: The certification ID.
+            user: User identifier — ``username``, ``email``,
+                ``idnumber``, full/partial name, or numeric ID.
+            certification: Certification identifier — ``fullname``
+                substring, ``idnumber``, or numeric ID.
             confirmed: Set True only after user approval.
         """
-        uid = _parse_single_id(userid, "user ID")
-        if isinstance(uid, str):
-            return uid
+        resolved_user = await _resolve_user_identifier(client, user)
+        if isinstance(resolved_user, str):
+            return resolved_user
+        resolved_cert = await _resolve_certification_identifier(
+            client, certification
+        )
+        if isinstance(resolved_cert, str):
+            return resolved_cert
+        user_label = f"{resolved_user.fullname} (@{resolved_user.username})"
+        cert_label = resolved_cert.fullname or f"id={resolved_cert.id}"
         if not confirmed:
             return json.dumps(
                 {
                     "action": "certify_user",
-                    "preview": (
-                        f"Will certify user {uid} for "
-                        f"certification {certificationid}"
-                    ),
-                    "userid": uid,
-                    "certificationid": certificationid,
+                    "preview": (f"Will certify {user_label} for {cert_label}"),
+                    "user": user_label,
+                    "user_id": resolved_user.id,
+                    "certification": cert_label,
+                    "certification_id": resolved_cert.id,
                 }
             )
-        result = await client.certify_user(certificationid, uid)
+        result = await client.certify_user(resolved_cert.id, resolved_user.id)
         return json.dumps(
             {
                 "success": True,
-                "userid": uid,
-                "certificationid": certificationid,
+                "user": user_label,
+                "user_id": resolved_user.id,
+                "certification": cert_label,
+                "certification_id": resolved_cert.id,
                 "result": result,
             }
         )
 
     @_moodle_tool
     async def revoke_certification(
-        userid: str,
-        certificationid: int,
+        user: str,
+        certification: str,
         confirmed: bool = False,
     ) -> str:
         """Revoke a user's certification.
@@ -2626,39 +3907,51 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
         and approved the action.
 
         Args:
-            userid: The Moodle user ID (as string).
-            certificationid: The certification ID.
+            user: User identifier — ``username``, ``email``,
+                ``idnumber``, full/partial name, or numeric ID.
+            certification: Certification identifier — ``fullname``
+                substring, ``idnumber``, or numeric ID.
             confirmed: Set True only after user approval.
         """
-        uid = _parse_single_id(userid, "user ID")
-        if isinstance(uid, str):
-            return uid
+        resolved_user = await _resolve_user_identifier(client, user)
+        if isinstance(resolved_user, str):
+            return resolved_user
+        resolved_cert = await _resolve_certification_identifier(
+            client, certification
+        )
+        if isinstance(resolved_cert, str):
+            return resolved_cert
+        user_label = f"{resolved_user.fullname} (@{resolved_user.username})"
+        cert_label = resolved_cert.fullname or f"id={resolved_cert.id}"
         if not confirmed:
             return json.dumps(
                 {
                     "action": "revoke_certification",
-                    "preview": (
-                        f"Will revoke certification "
-                        f"{certificationid} from user {uid}"
-                    ),
-                    "userid": uid,
-                    "certificationid": certificationid,
+                    "preview": (f"Will revoke {cert_label} from {user_label}"),
+                    "user": user_label,
+                    "user_id": resolved_user.id,
+                    "certification": cert_label,
+                    "certification_id": resolved_cert.id,
                 }
             )
-        result = await client.revoke_certification(certificationid, uid)
+        result = await client.revoke_certification(
+            resolved_cert.id, resolved_user.id
+        )
         return json.dumps(
             {
                 "success": True,
-                "userid": uid,
-                "certificationid": certificationid,
+                "user": user_label,
+                "user_id": resolved_user.id,
+                "certification": cert_label,
+                "certification_id": resolved_cert.id,
                 "result": result,
             }
         )
 
     @_moodle_tool
     async def deallocate_user_from_certification(
-        userid: int,
-        certificationid: int,
+        user: str,
+        certification: str,
         confirmed: bool = False,
     ) -> str:
         """Remove a user from a certification.
@@ -2667,37 +3960,50 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
         and approved the action.
 
         Args:
-            userid: The Moodle user ID.
-            certificationid: The certification ID.
+            user: User identifier — ``username``, ``email``,
+                ``idnumber``, full/partial name, or numeric ID.
+            certification: Certification identifier — ``fullname``
+                substring, ``idnumber``, or numeric ID.
             confirmed: Set True only after user approval.
         """
+        resolved_user = await _resolve_user_identifier(client, user)
+        if isinstance(resolved_user, str):
+            return resolved_user
+        resolved_cert = await _resolve_certification_identifier(
+            client, certification
+        )
+        if isinstance(resolved_cert, str):
+            return resolved_cert
+        user_label = f"{resolved_user.fullname} (@{resolved_user.username})"
+        cert_label = resolved_cert.fullname or f"id={resolved_cert.id}"
         if not confirmed:
             return json.dumps(
                 {
                     "action": "deallocate_user_from_certification",
-                    "preview": (
-                        f"Will remove user {userid} from "
-                        f"certification {certificationid}"
-                    ),
-                    "userid": userid,
-                    "certificationid": certificationid,
+                    "preview": (f"Will remove {user_label} from {cert_label}"),
+                    "user": user_label,
+                    "user_id": resolved_user.id,
+                    "certification": cert_label,
+                    "certification_id": resolved_cert.id,
                 }
             )
         result = await client.deallocate_user_from_certification(
-            certificationid, userid
+            resolved_cert.id, resolved_user.id
         )
         return json.dumps(
             {
                 "success": True,
-                "userid": userid,
-                "certificationid": certificationid,
+                "user": user_label,
+                "user_id": resolved_user.id,
+                "certification": cert_label,
+                "certification_id": resolved_cert.id,
                 "result": result,
             }
         )
 
     @_moodle_tool
     async def archive_certification(
-        certificationid: int,
+        certification: str,
         confirmed: bool = False,
     ) -> str:
         """Archive an entire certification.
@@ -2706,31 +4012,38 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
         and approved the action.
 
         Args:
-            certificationid: The certification ID.
+            certification: Certification identifier — ``fullname``
+                substring, ``idnumber``, or numeric ID.
             confirmed: Set True only after user approval.
         """
+        resolved = await _resolve_certification_identifier(
+            client, certification
+        )
+        if isinstance(resolved, str):
+            return resolved
+        cert_label = resolved.fullname or f"id={resolved.id}"
         if not confirmed:
             return json.dumps(
                 {
                     "action": "archive_certification",
-                    "preview": (
-                        f"Will archive certification {certificationid}"
-                    ),
-                    "certificationid": certificationid,
+                    "preview": f"Will archive {cert_label}",
+                    "certification": cert_label,
+                    "certification_id": resolved.id,
                 }
             )
-        result = await client.archive_certification(certificationid)
+        result = await client.archive_certification(resolved.id)
         return json.dumps(
             {
                 "success": True,
-                "certificationid": certificationid,
+                "certification": cert_label,
+                "certification_id": resolved.id,
                 "result": result,
             }
         )
 
     @_moodle_tool
     async def delete_certification(
-        certification_id: int,
+        certification: str,
         confirmed: bool = False,
     ) -> str:
         """Permanently delete a certification.
@@ -2741,22 +4054,31 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
         cannot be undone.
 
         Args:
-            certification_id: Moodle certification ID.
+            certification: Certification identifier — ``fullname``
+                substring, ``idnumber``, or numeric ID.
             confirmed: Set True only after user approval.
         """
+        resolved = await _resolve_certification_identifier(
+            client, certification
+        )
+        if isinstance(resolved, str):
+            return resolved
+        cert_label = resolved.fullname or f"id={resolved.id}"
         if not confirmed:
             return json.dumps(
                 {
                     "action": "delete_certification",
-                    "preview": (f"DELETE certification id={certification_id}"),
+                    "preview": f"DELETE {cert_label}",
+                    "certification": cert_label,
+                    "certification_id": resolved.id,
                 }
             )
-        result = await client.delete_certification(certification_id)
+        result = await client.delete_certification(resolved.id)
         return json.dumps(result)
 
     @_moodle_tool
     async def restore_certification(
-        certification_id: int,
+        certification: str,
         confirmed: bool = False,
     ) -> str:
         """Restore an archived certification.
@@ -2767,19 +4089,26 @@ def build_certifications_skill(client: MoodleClient) -> Skill:
         active.
 
         Args:
-            certification_id: Moodle certification ID.
+            certification: Certification identifier — ``fullname``
+                substring, ``idnumber``, or numeric ID.
             confirmed: Set True only after user approval.
         """
+        resolved = await _resolve_certification_identifier(
+            client, certification
+        )
+        if isinstance(resolved, str):
+            return resolved
+        cert_label = resolved.fullname or f"id={resolved.id}"
         if not confirmed:
             return json.dumps(
                 {
                     "action": "restore_certification",
-                    "preview": (
-                        f"Restore certification id={certification_id}"
-                    ),
+                    "preview": f"Restore {cert_label}",
+                    "certification": cert_label,
+                    "certification_id": resolved.id,
                 }
             )
-        result = await client.restore_certification(certification_id)
+        result = await client.restore_certification(resolved.id)
         return json.dumps(result)
 
     @_moodle_tool
@@ -2869,13 +4198,19 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         )
 
     @_moodle_tool
-    async def get_user_program_courses(userid: int) -> str:
+    async def get_user_program_courses(user: str) -> str:
         """Get courses in a user's assigned programs with progress.
 
         Args:
-            userid: The Moodle user ID.
+            user: Identifier for the target user.  Accepts
+                ``username``, ``email``, ``idnumber`` (EDIPI in
+                mil deployments), full/partial name, or numeric
+                Moodle user ID.  Resolved internally.
         """
-        courses = await client.get_user_program_courses(userid)
+        resolved = await _resolve_user_identifier(client, user)
+        if isinstance(resolved, str):
+            return resolved
+        courses = await client.get_user_program_courses(resolved.id)
         return json.dumps(
             [
                 {
@@ -2921,15 +4256,24 @@ def build_programs_skill(client: MoodleClient) -> Skill:
 
     @_moodle_tool
     async def get_user_learning_catalogue(
-        userid: int = 0,
+        user: str = "",
         search: str = "",
     ) -> str:
         """Get a user's enrolled items with progress.
 
         Args:
-            userid: The Moodle user ID (0 = current user).
+            user: User identifier — ``username``, ``email``,
+                ``idnumber``, full/partial name, or numeric ID.
+                Leave empty (default) for the current user.
             search: Optional search string.
         """
+        if user:
+            resolved = await _resolve_user_identifier(client, user)
+            if isinstance(resolved, str):
+                return resolved
+            userid = resolved.id
+        else:
+            userid = 0
         items = await client.get_user_catalogue(userid, search)
         return json.dumps(
             [
@@ -2948,16 +4292,29 @@ def build_programs_skill(client: MoodleClient) -> Skill:
 
     @_moodle_tool
     async def get_program_content(
-        programid: int,
-        userid: int = 0,
+        program: str,
+        user: str = "",
     ) -> str:
         """Get the courses inside a program.
 
         Args:
-            programid: The program ID.
-            userid: Optional user ID (0 = current user).
+            program: Program identifier — ``fullname``
+                substring, or numeric Moodle program ID.
+            user: Optional user identifier — ``username``,
+                ``email``, ``idnumber``, full/partial name,
+                or numeric ID.  Leave empty for current user.
         """
-        content = await client.get_program_content(programid, userid)
+        resolved_program = await _resolve_program_identifier(client, program)
+        if isinstance(resolved_program, str):
+            return resolved_program
+        if user:
+            resolved_user = await _resolve_user_identifier(client, user)
+            if isinstance(resolved_user, str):
+                return resolved_user
+            userid = resolved_user.id
+        else:
+            userid = 0
+        content = await client.get_program_content(resolved_program.id, userid)
         return json.dumps(content)
 
     @_moodle_tool
@@ -2978,13 +4335,19 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         )
 
     @_moodle_tool
-    async def get_user_learning_plans(userid: int) -> str:
+    async def get_user_learning_plans(user: str) -> str:
         """Get a user's learning plans.
 
         Args:
-            userid: The Moodle user ID.
+            user: Identifier for the target user.  Accepts
+                ``username``, ``email``, ``idnumber`` (EDIPI in
+                mil deployments), full/partial name, or numeric
+                Moodle user ID.  Resolved internally.
         """
-        plans = await client.get_user_learning_plans(userid)
+        resolved = await _resolve_user_identifier(client, user)
+        if isinstance(resolved, str):
+            return resolved
+        plans = await client.get_user_learning_plans(resolved.id)
         return json.dumps(
             [
                 {
@@ -3000,34 +4363,47 @@ def build_programs_skill(client: MoodleClient) -> Skill:
 
     @_moodle_tool
     async def get_user_competency(
-        userid: int,
+        user: str,
         competencyid: int,
     ) -> str:
         """Get a user's competency summary.
 
         Args:
-            userid: The Moodle user ID.
-            competencyid: The competency ID.
+            user: User identifier — ``username``, ``email``,
+                ``idnumber``, full/partial name, or numeric ID.
+            competencyid: The competency ID (from a competency
+                framework — competencies are deeply nested and
+                lack a stable name surface, so an ID is required
+                here).
         """
+        resolved = await _resolve_user_identifier(client, user)
+        if isinstance(resolved, str):
+            return resolved
         summary = await client.get_user_competency_summary(
-            userid, competencyid
+            resolved.id, competencyid
         )
         return json.dumps(summary)
 
     @_moodle_tool
-    async def get_course_competencies(courseid: int) -> str:
+    async def get_course_competencies(course: str) -> str:
         """Get competencies linked to a course.
 
         Args:
-            courseid: The Moodle course ID.
+            course: Identifier for the target course.  Accepts
+                ``shortname``, ``idnumber``, course full name
+                (case-insensitive substring), or numeric Moodle
+                course ID.
         """
-        competencies = await client.get_course_competencies(courseid)
+        resolved = await _resolve_course_identifier(client, course)
+        if isinstance(resolved, str):
+            return resolved
+        competencies = await client.get_course_competencies(resolved.id)
         return json.dumps(competencies)
 
     @_moodle_tool
     async def allocate_users_to_program(
-        userids: str,
-        programid: int,
+        users: str,
+        program: str,
         confirmed: bool = False,
     ) -> str:
         """Assign users to a learning program.
@@ -3036,40 +4412,55 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         and approved the action.
 
         Args:
-            userids: Comma-separated user IDs.
-            programid: The program ID.
+            users: Comma-separated user identifiers — each token
+                can be a ``username``, ``email``, ``idnumber``,
+                full/partial name, or numeric ID.
+            program: Program identifier — ``fullname`` substring,
+                or numeric Moodle program ID.
             confirmed: Set True only after user approval.
         """
-        parsed = _parse_ids(userids, "user IDs")
-        if isinstance(parsed, str):
-            return parsed
-        user_list = parsed
+        resolved_users = await _resolve_user_identifiers(client, users)
+        if isinstance(resolved_users, str):
+            return resolved_users
+        resolved_program = await _resolve_program_identifier(client, program)
+        if isinstance(resolved_program, str):
+            return resolved_program
+        program_label = (
+            resolved_program.fullname or f"id={resolved_program.id}"
+        )
+        user_ids = [u.id for u in resolved_users]
+        user_labels = [f"{u.fullname} (@{u.username})" for u in resolved_users]
         if not confirmed:
             return json.dumps(
                 {
                     "action": "allocate_users_to_program",
                     "preview": (
-                        f"Will allocate {len(user_list)} user(s) "
-                        f"to program {programid}"
+                        f"Will allocate {len(user_ids)} user(s) "
+                        f"to {program_label}"
                     ),
-                    "user_ids": user_list,
-                    "programid": programid,
+                    "users": user_labels,
+                    "program": program_label,
+                    "program_id": resolved_program.id,
                 }
             )
-        result = await client.allocate_users_to_program(programid, user_list)
+        result = await client.allocate_users_to_program(
+            resolved_program.id, user_ids
+        )
         return json.dumps(
             {
                 "success": True,
-                "allocated": len(user_list),
-                "programid": programid,
+                "allocated": len(user_ids),
+                "users": user_labels,
+                "program": program_label,
+                "program_id": resolved_program.id,
                 "result": result,
             }
         )
 
     @_moodle_tool
     async def deallocate_user_from_program(
-        userid: int,
-        programid: int,
+        user: str,
+        program: str,
         confirmed: bool = False,
     ) -> str:
         """Remove a user from a program.
@@ -3078,34 +4469,52 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         and approved the action.
 
         Args:
-            userid: The Moodle user ID.
-            programid: The program ID.
+            user: User identifier — ``username``, ``email``,
+                ``idnumber``, full/partial name, or numeric ID.
+            program: Program identifier — ``fullname`` substring,
+                or numeric Moodle program ID.
             confirmed: Set True only after user approval.
         """
+        resolved_user = await _resolve_user_identifier(client, user)
+        if isinstance(resolved_user, str):
+            return resolved_user
+        resolved_program = await _resolve_program_identifier(client, program)
+        if isinstance(resolved_program, str):
+            return resolved_program
+        user_label = f"{resolved_user.fullname} (@{resolved_user.username})"
+        program_label = (
+            resolved_program.fullname or f"id={resolved_program.id}"
+        )
         if not confirmed:
             return json.dumps(
                 {
                     "action": "deallocate_user_from_program",
                     "preview": (
-                        f"Will remove user {userid} from program {programid}"
+                        f"Will remove {user_label} from {program_label}"
                     ),
-                    "userid": userid,
-                    "programid": programid,
+                    "user": user_label,
+                    "user_id": resolved_user.id,
+                    "program": program_label,
+                    "program_id": resolved_program.id,
                 }
             )
-        result = await client.deallocate_user_from_program(programid, userid)
+        result = await client.deallocate_user_from_program(
+            resolved_program.id, resolved_user.id
+        )
         return json.dumps(
             {
                 "success": True,
-                "userid": userid,
-                "programid": programid,
+                "user": user_label,
+                "user_id": resolved_user.id,
+                "program": program_label,
+                "program_id": resolved_program.id,
                 "result": result,
             }
         )
 
     @_moodle_tool
     async def archive_program(
-        program_id: int,
+        program: str,
         confirmed: bool = False,
     ) -> str:
         """Archive a program (reversible). REQUIRES USER CONFIRMATION.
@@ -3114,22 +4523,29 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         Archived programs can be restored or permanently deleted.
 
         Args:
-            program_id: Moodle program ID.
+            program: Program identifier — ``fullname`` substring,
+                or numeric Moodle program ID.
             confirmed: Set True only after user approval.
         """
+        resolved = await _resolve_program_identifier(client, program)
+        if isinstance(resolved, str):
+            return resolved
+        program_label = resolved.fullname or f"id={resolved.id}"
         if not confirmed:
             return json.dumps(
                 {
                     "action": "archive_program",
-                    "preview": f"Archive program id={program_id}",
+                    "preview": f"Archive {program_label}",
+                    "program": program_label,
+                    "program_id": resolved.id,
                 }
             )
-        result = await client.archive_program(program_id)
+        result = await client.archive_program(resolved.id)
         return json.dumps(result)
 
     @_moodle_tool
     async def restore_program(
-        program_id: int,
+        program: str,
         confirmed: bool = False,
     ) -> str:
         """Restore an archived program. REQUIRES USER CONFIRMATION.
@@ -3138,22 +4554,29 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         archive_program first if it is currently active.
 
         Args:
-            program_id: Moodle program ID.
+            program: Program identifier — ``fullname`` substring,
+                or numeric Moodle program ID.
             confirmed: Set True only after user approval.
         """
+        resolved = await _resolve_program_identifier(client, program)
+        if isinstance(resolved, str):
+            return resolved
+        program_label = resolved.fullname or f"id={resolved.id}"
         if not confirmed:
             return json.dumps(
                 {
                     "action": "restore_program",
-                    "preview": f"Restore program id={program_id}",
+                    "preview": f"Restore {program_label}",
+                    "program": program_label,
+                    "program_id": resolved.id,
                 }
             )
-        result = await client.restore_program(program_id)
+        result = await client.restore_program(resolved.id)
         return json.dumps(result)
 
     @_moodle_tool
     async def delete_program(
-        program_id: int,
+        program: str,
         confirmed: bool = False,
     ) -> str:
         """Permanently delete a program. REQUIRES USER CONFIRMATION.
@@ -3163,22 +4586,29 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         be undone.
 
         Args:
-            program_id: Moodle program ID.
+            program: Program identifier — ``fullname`` substring,
+                or numeric Moodle program ID.
             confirmed: Set True only after user approval.
         """
+        resolved = await _resolve_program_identifier(client, program)
+        if isinstance(resolved, str):
+            return resolved
+        program_label = resolved.fullname or f"id={resolved.id}"
         if not confirmed:
             return json.dumps(
                 {
                     "action": "delete_program",
-                    "preview": f"DELETE program id={program_id}",
+                    "preview": f"DELETE {program_label}",
+                    "program": program_label,
+                    "program_id": resolved.id,
                 }
             )
-        result = await client.delete_program(program_id)
+        result = await client.delete_program(resolved.id)
         return json.dumps(result)
 
     @_moodle_tool
     async def duplicate_program(
-        program_id: int,
+        program: str,
         confirmed: bool = False,
     ) -> str:
         """Clone a program. REQUIRES USER CONFIRMATION.
@@ -3187,17 +4617,24 @@ def build_programs_skill(client: MoodleClient) -> Skill:
         Returns the new program ID.
 
         Args:
-            program_id: Moodle program ID to duplicate.
+            program: Program identifier — ``fullname`` substring,
+                or numeric Moodle program ID.
             confirmed: Set True only after user approval.
         """
+        resolved = await _resolve_program_identifier(client, program)
+        if isinstance(resolved, str):
+            return resolved
+        program_label = resolved.fullname or f"id={resolved.id}"
         if not confirmed:
             return json.dumps(
                 {
                     "action": "duplicate_program",
-                    "preview": f"Duplicate program id={program_id}",
+                    "preview": f"Duplicate {program_label}",
+                    "program": program_label,
+                    "program_id": resolved.id,
                 }
             )
-        dup = await client.duplicate_program(program_id)
+        dup = await client.duplicate_program(resolved.id)
         return json.dumps(
             {
                 "duplicatedprogramid": dup.duplicatedprogramid,
@@ -3207,26 +4644,33 @@ def build_programs_skill(client: MoodleClient) -> Skill:
 
     @_moodle_tool
     async def update_program_visibility(
-        program_id: int,
+        program: str,
         visible: int,
         confirmed: bool = False,
     ) -> str:
         """Show or hide a program. REQUIRES USER CONFIRMATION.
 
         Args:
-            program_id: Moodle program ID.
+            program: Program identifier — ``fullname`` substring,
+                or numeric Moodle program ID.
             visible: 1 to show, 0 to hide.
             confirmed: Set True only after user approval.
         """
+        resolved = await _resolve_program_identifier(client, program)
+        if isinstance(resolved, str):
+            return resolved
+        program_label = resolved.fullname or f"id={resolved.id}"
         label = "visible" if visible else "hidden"
         if not confirmed:
             return json.dumps(
                 {
                     "action": "update_program_visibility",
-                    "preview": (f"Set program id={program_id} to {label}"),
+                    "preview": f"Set {program_label} to {label}",
+                    "program": program_label,
+                    "program_id": resolved.id,
                 }
             )
-        result = await client.update_program_visibility(program_id, visible)
+        result = await client.update_program_visibility(resolved.id, visible)
         return json.dumps(result)
 
     @_moodle_tool
@@ -3720,7 +5164,7 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
 
     @_moodle_tool
     async def get_report_data(
-        reportid: int,
+        report: str,
         page: int = 0,
         perpage: int = 50,
     ) -> str:
@@ -3728,16 +5172,22 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
 
         Returns JSON with column headers and data rows.
         Each row is a list of cell values aligned with the
-        headers. Use list_reports first to discover report
-        IDs.
+        headers.
 
         Args:
-            reportid: The report ID (from list_reports).
+            report: Identifier for the target report.  Accepts
+                exact report ``name`` (case-insensitive),
+                bidirectional substring of the report name, or
+                numeric Moodle report ID.  Resolved internally —
+                operators identify reports by name.
             page: Page number for pagination (default 0).
             perpage: Rows per page (default 50, max 100).
         """
+        resolved = await _resolve_report_identifier(client, report)
+        if isinstance(resolved, str):
+            return resolved
         details, data = await client.retrieve_report(
-            reportid, page=page, perpage=perpage
+            resolved.id, page=page, perpage=perpage
         )
         return json.dumps(
             {
@@ -3755,8 +5205,8 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
 
     @_moodle_tool
     async def get_utm_report(
-        courseid: int,
-        departmentid: int = 0,
+        course: str,
+        department: str = "",
         completionstatus: int = 0,
     ) -> str:
         """Get UTM completion report for a course.
@@ -3765,12 +5215,31 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
         department, start time, and completion time.
 
         Args:
-            courseid: The Moodle course ID.
-            departmentid: Optional department ID to filter by.
+            course: Identifier for the target course.  Accepts
+                ``shortname``, ``idnumber``, course full name
+                (case-insensitive substring), or numeric Moodle
+                course ID.
+            department: Optional department identifier to filter
+                by.  Accepts department ``name``, ``idnumber``,
+                or numeric Moodle department ID.  Leave empty
+                (default) for all departments.  Resolved
+                internally.
             completionstatus: 0=all, 1=completed, 2=not completed.
         """
+        resolved = await _resolve_course_identifier(client, course)
+        if isinstance(resolved, str):
+            return resolved
+        if department:
+            resolved_dept = await _resolve_department_identifier(
+                client, department
+            )
+            if isinstance(resolved_dept, str):
+                return resolved_dept
+            departmentid = resolved_dept.id
+        else:
+            departmentid = 0
         rows, totalcount = await client.get_utm_report(
-            courseid,
+            resolved.id,
             departmentid=departmentid,
             completionstatus=completionstatus,
         )
@@ -3794,7 +5263,7 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
 
     @_moodle_tool
     async def get_adv_comp_report(
-        courseid: int,
+        course: str,
         completionstatus: int = 0,
     ) -> str:
         """Get Advanced Completion report for a course.
@@ -3803,11 +5272,17 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
         department, start time, and completion time.
 
         Args:
-            courseid: The Moodle course ID.
+            course: Identifier for the target course.  Accepts
+                ``shortname``, ``idnumber``, course full name
+                (case-insensitive substring), or numeric Moodle
+                course ID.
             completionstatus: 0=all, 1=completed, 2=not completed.
         """
+        resolved = await _resolve_course_identifier(client, course)
+        if isinstance(resolved, str):
+            return resolved
         rows, totalcount = await client.get_adv_comp_report(
-            courseid,
+            resolved.id,
             completionstatus=completionstatus,
         )
         return json.dumps(
@@ -3829,13 +5304,18 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
         )
 
     @_moodle_tool
-    async def get_export_status(export_id: int) -> str:
+    async def get_export_status(export_job: str) -> str:
         """Check the progress of a Workplace export job.
 
         Args:
-            export_id: The export job ID.
+            export_job: The export job token returned by
+                ``export_workplace_data``.  Workplace returns a
+                numeric job id; pass it verbatim (as a string).
         """
-        status = await client.get_export_status(export_id)
+        parsed = _parse_job_token(export_job, "export job token")
+        if isinstance(parsed, str):
+            return parsed
+        status = await client.get_export_status(parsed)
         return json.dumps(
             {
                 "status": status.status,
@@ -3847,23 +5327,31 @@ def build_reporting_skill(client: MoodleClient) -> Skill:
         )
 
     @_moodle_tool
-    async def download_export(export_id: int) -> str:
+    async def download_export(export_job: str) -> str:
         """Get download info for a completed Workplace export.
 
         Args:
-            export_id: The export job ID.
+            export_job: The export job token returned by
+                ``export_workplace_data``.  Pass it verbatim.
         """
-        result = await client.get_export_file(export_id)
+        parsed = _parse_job_token(export_job, "export job token")
+        if isinstance(parsed, str):
+            return parsed
+        result = await client.get_export_file(parsed)
         return json.dumps(result)
 
     @_moodle_tool
-    async def get_import_status(import_id: int) -> str:
+    async def get_import_status(import_job: str) -> str:
         """Check the progress of a Workplace import job.
 
         Args:
-            import_id: The import job ID.
+            import_job: The import job token returned by
+                ``import_workplace_data``.  Pass it verbatim.
         """
-        status = await client.get_import_status(import_id)
+        parsed = _parse_job_token(import_job, "import job token")
+        if isinstance(parsed, str):
+            return parsed
+        status = await client.get_import_status(parsed)
         return json.dumps(
             {
                 "status": status.status,

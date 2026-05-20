@@ -114,6 +114,40 @@ async def test_get_courses_empty(client):
     assert courses == []
 
 
+@pytest.mark.asyncio
+async def test_get_courses_by_field(client):
+    resp = _mock_response(
+        {
+            "courses": [
+                {
+                    "id": 2,
+                    "shortname": "safety101",
+                    "fullname": "Safety Fundamentals",
+                    "categoryid": 1,
+                },
+            ],
+            "warnings": [],
+        }
+    )
+    with _patch_httpx(resp):
+        courses = await client.get_courses_by_field(
+            field="shortname", value="safety101"
+        )
+
+    assert len(courses) == 1
+    assert courses[0].id == 2
+    assert courses[0].shortname == "safety101"
+
+
+@pytest.mark.asyncio
+async def test_get_courses_by_field_non_dict_response(client):
+    """A bare-list response from Moodle (defensive)."""
+    resp = _mock_response([])
+    with _patch_httpx(resp):
+        courses = await client.get_courses_by_field(field="id", value="999")
+    assert courses == []
+
+
 # ---------------------------------------------------------------
 # get_users_by_field
 # ---------------------------------------------------------------

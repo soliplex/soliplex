@@ -190,6 +190,28 @@ class MoodleClient:
         courses = [Course.model_validate(c) for c in raw]
         return courses[:MAX_RESULTS]
 
+    async def get_courses_by_field(
+        self,
+        field: str,
+        value: str,
+    ) -> list[Course]:
+        """Look up courses via ``core_course_get_courses_by_field``.
+
+        ``field`` may be one of ``"id"``, ``"shortname"``,
+        ``"idnumber"``, or ``"category"``.  ``value`` is the lookup
+        value as a string (Moodle accepts strings for numeric
+        fields).  Returns the matching courses (possibly empty).
+        """
+        raw = await self._call(
+            "core_course_get_courses_by_field",
+            field=field,
+            value=value,
+        )
+        if not isinstance(raw, dict):
+            return []
+        courses = raw.get("courses", [])
+        return [Course.model_validate(c) for c in courses][:MAX_RESULTS]
+
     # ---------------------------------------------------------------
     # User functions
     # ---------------------------------------------------------------

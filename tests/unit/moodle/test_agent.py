@@ -13,6 +13,66 @@ from pydantic_ai.models.test import TestModel
 from tests.unit.conftest import mock_moodle_response as _mock_response
 from tests.unit.conftest import patch_moodle_httpx as _patch_httpx
 
+
+def _patch_httpx_chain(*responses):
+    """Patch ``httpx.AsyncClient`` so each POST returns the next response.
+
+    For tools that make multiple backend calls — typically a
+    resolver lookup followed by the actual read — pass the
+    sequence of responses (or raised exceptions) in call order.
+    """
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = list(responses)
+    return mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    )
+
+
+# Course-by-ID resolver response used by chained tests.  Reuses
+# the per-test fixtures defined at the bottom of the file —
+# referenced lazily by name to avoid forward-reference issues.
+def _course_id_resp(course):
+    return _mock_response({"courses": [course]})
+
+
+def _cohorts_list_resp(*cohorts):
+    """Response for ``core_cohort_get_cohorts`` used by the cohort resolver."""
+    return _mock_response(list(cohorts))
+
+
+def _categories_list_resp(*categories):
+    """Response for ``core_course_get_categories`` used by the resolver."""
+    return _mock_response(list(categories))
+
+
+def _tenants_list_resp(*tenants):
+    """Response for ``tool_tenant_get_tenants`` used by the resolver."""
+    return _mock_response(list(tenants))
+
+
+def _departments_list_resp(*depts):
+    """Response for ``local_soliplex_list_departments``."""
+    return _mock_response(list(depts))
+
+
+def _reports_list_resp(*reports):
+    """Response for ``core_reportbuilder_list_reports``."""
+    return _mock_response({"reports": list(reports)})
+
+
+def _certs_list_resp(*certs):
+    """Response for ``tool_certification_get_certifications``."""
+    return _mock_response(list(certs))
+
+
+def _programs_list_resp(*programs):
+    """Response for ``tool_program_potential_program_selector``."""
+    return _mock_response(list(programs))
+
+
 # -----------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------
@@ -481,8 +541,8 @@ async def test_list_enrolled_users_tool():
             }
         ]
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(2))
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), resp):
+        result = json.loads(await fn(course="2"))
 
     assert len(result) == 1
     assert result[0]["roles"] == ["student"]
@@ -500,8 +560,8 @@ async def test_list_enrolled_users_tool_error():
             "message": "Bad course",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(9999))
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), resp):
+        result = json.loads(await fn(course="2"))
 
     assert "error" in result
 
@@ -533,8 +593,12 @@ async def test_get_completion_status_tool():
             }
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(2, 5))
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _mock_response([_DOC_USER]),
+        resp,
+    ):
+        result = json.loads(await fn(course="2", user="7"))
 
     assert result["completed"] is True
     assert len(result["completions"]) == 1
@@ -553,8 +617,12 @@ async def test_get_completion_status_tool_error():
             "message": "No permission",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(2, 5))
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _mock_response([_DOC_USER]),
+        resp,
+    ):
+        result = json.loads(await fn(course="2", user="7"))
 
     assert "error" in result
     assert "No permission" in result["error"]
@@ -596,8 +664,8 @@ async def test_get_course_contents_tool():
             }
         ]
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(2))
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), resp):
+        result = json.loads(await fn(course="2"))
 
     assert len(result) == 1
     assert result[0]["name"] == "General"
@@ -617,8 +685,8 @@ async def test_get_course_contents_tool_error():
             "message": "Bad course",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(9999))
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), resp):
+        result = json.loads(await fn(course="2"))
 
     assert "error" in result
 
@@ -670,6 +738,7 @@ async def test_get_course_completion_overview_tool():
     }
 
     responses = [
+        {"courses": [_SAFETY_COURSE]},  # course resolver
         enrolled_resp,
         completion_u1,
         completion_u2,
@@ -701,7 +770,7 @@ async def test_get_course_completion_overview_tool():
         "soliplex.moodle.client.httpx.AsyncClient",
         return_value=mock_client,
     ):
-        result = json.loads(await fn(2))
+        result = json.loads(await fn(course="2"))
 
     assert result["total_enrolled"] == 3
     assert result["completed"] == 2
@@ -722,8 +791,8 @@ async def test_get_course_completion_overview_tool_error():
             "message": "Bad course",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(9999))
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), resp):
+        result = json.loads(await fn(course="2"))
 
     assert "error" in result
 
@@ -760,7 +829,11 @@ async def test_get_course_completion_overview_per_user_error():
 
     async def post_side_effect(*args, **kwargs):
         nonlocal call_idx
-        responses = [enrolled_resp, error_resp]
+        responses = [
+            {"courses": [_SAFETY_COURSE]},  # course resolver
+            enrolled_resp,
+            error_resp,
+        ]
         resp = make_response(responses[call_idx])
         call_idx += 1
         return resp
@@ -771,7 +844,7 @@ async def test_get_course_completion_overview_per_user_error():
         "soliplex.moodle.client.httpx.AsyncClient",
         return_value=mock_client,
     ):
-        result = json.loads(await fn(2))
+        result = json.loads(await fn(course="2"))
 
     assert result["total_enrolled"] == 1
     assert result["completed"] == 0
@@ -810,7 +883,11 @@ async def test_get_course_completion_overview_validation_error():
 
     async def post_side_effect(*args, **kwargs):
         nonlocal call_idx
-        responses = [enrolled_resp, malformed_resp]
+        responses = [
+            {"courses": [_SAFETY_COURSE]},  # course resolver
+            enrolled_resp,
+            malformed_resp,
+        ]
         resp = make_response(responses[call_idx])
         call_idx += 1
         return resp
@@ -821,7 +898,7 @@ async def test_get_course_completion_overview_validation_error():
         "soliplex.moodle.client.httpx.AsyncClient",
         return_value=mock_client,
     ):
-        result = json.loads(await fn(2))
+        result = json.loads(await fn(course="2"))
 
     assert result["total_enrolled"] == 1
     assert result["completed"] == 0
@@ -850,8 +927,8 @@ async def test_list_course_groups_tool():
             {"id": 2, "courseid": 2, "name": "Group B", "description": ""},
         ]
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(2))
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), resp):
+        result = json.loads(await fn(course="2"))
 
     assert len(result) == 2
     assert result[0]["name"] == "Group A"
@@ -862,24 +939,172 @@ async def test_get_group_members_tool():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_group_members")
 
-    resp = _mock_response([{"groupid": 1, "userids": [3, 4, 5]}])
-    with _patch_httpx(resp):
-        result = json.loads(await fn(1))
+    groups_resp = _mock_response(
+        [{"id": 1, "courseid": 2, "name": "Day Shift", "description": ""}]
+    )
+    members_resp = _mock_response([{"groupid": 1, "userids": [3, 4, 5]}])
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        groups_resp,
+        members_resp,
+    ):
+        result = json.loads(await fn(group="Day Shift", course="2"))
 
-    assert result["groupid"] == 1
+    assert result["group"] == "Day Shift"
+    assert result["group_id"] == 1
     assert result["userids"] == [3, 4, 5]
 
 
 @pytest.mark.asyncio
 async def test_get_group_members_tool_empty():
+    """Group exists but has no members — fall back to empty userids."""
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_group_members")
 
-    resp = _mock_response([])
-    with _patch_httpx(resp):
-        result = json.loads(await fn(999))
+    groups_resp = _mock_response(
+        [{"id": 1, "courseid": 2, "name": "Day Shift", "description": ""}]
+    )
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        groups_resp,
+        _mock_response([]),
+    ):
+        result = json.loads(await fn(group="Day Shift", course="2"))
 
-    assert result["groupid"] == 999
+    assert result["group"] == "Day Shift"
+    assert result["userids"] == []
+
+
+@pytest.mark.asyncio
+async def test_get_group_members_tool_numeric_id_not_found():
+    """Digit input that doesn't match any group falls through to no-match."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_group_members")
+
+    groups_resp = _mock_response(
+        [{"id": 1, "courseid": 2, "name": "Day Shift", "description": ""}]
+    )
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), groups_resp):
+        result = json.loads(await fn(group="999", course="2"))
+
+    assert result["status"] == "error"
+    assert "No group matches" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_group_members_tool_unknown_group():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_group_members")
+
+    groups_resp = _mock_response(
+        [{"id": 1, "courseid": 2, "name": "Day Shift", "description": ""}]
+    )
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        groups_resp,
+    ):
+        result = json.loads(await fn(group="Ghost", course="2"))
+
+    assert result["status"] == "error"
+    assert "No group matches" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_group_members_tool_empty_group_identifier():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_group_members")
+
+    groups_resp = _mock_response([])
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), groups_resp):
+        result = json.loads(await fn(group="   ", course="2"))
+
+    assert result["status"] == "error"
+    assert "Empty group identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_group_members_tool_by_numeric_id():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_group_members")
+
+    groups_resp = _mock_response(
+        [{"id": 1, "courseid": 2, "name": "Day Shift", "description": ""}]
+    )
+    members_resp = _mock_response([{"groupid": 1, "userids": [7]}])
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        groups_resp,
+        members_resp,
+    ):
+        result = json.loads(await fn(group="1", course="2"))
+
+    assert result["group_id"] == 1
+    assert result["userids"] == [7]
+
+
+@pytest.mark.asyncio
+async def test_get_group_members_tool_ambiguous_exact():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_group_members")
+
+    groups_resp = _mock_response(
+        [
+            {"id": 1, "courseid": 2, "name": "Day Shift", "description": ""},
+            {"id": 2, "courseid": 2, "name": "Day Shift", "description": ""},
+        ]
+    )
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), groups_resp):
+        result = json.loads(await fn(group="Day Shift", course="2"))
+
+    assert result["status"] == "error"
+    assert "Multiple groups" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_group_members_tool_ambiguous_substring():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_group_members")
+
+    groups_resp = _mock_response(
+        [
+            {
+                "id": 1,
+                "courseid": 2,
+                "name": "Day Shift A",
+                "description": "",
+            },
+            {
+                "id": 2,
+                "courseid": 2,
+                "name": "Day Shift B",
+                "description": "",
+            },
+        ]
+    )
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), groups_resp):
+        result = json.loads(await fn(group="Day", course="2"))
+
+    assert result["status"] == "error"
+    assert "Multiple groups" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_group_members_tool_substring_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_group_members")
+
+    groups_resp = _mock_response(
+        [{"id": 1, "courseid": 2, "name": "Day Shift", "description": ""}]
+    )
+    members_resp = _mock_response([{"groupid": 1, "userids": []}])
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        groups_resp,
+        members_resp,
+    ):
+        result = json.loads(await fn(group="Day", course="2"))
+
+    assert result["group"] == "Day Shift"
     assert result["userids"] == []
 
 
@@ -895,28 +1120,22 @@ async def test_list_course_groups_tool_error():
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(999))
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), resp):
+        result = json.loads(await fn(course="2"))
 
     assert "error" in result
 
 
 @pytest.mark.asyncio
 async def test_get_group_members_tool_error():
+    """Course resolver failure short-circuits before group lookup."""
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_group_members")
 
-    resp = _mock_response(
-        {
-            "exception": "moodle_exception",
-            "errorcode": "err",
-            "message": "fail",
-        }
-    )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(999))
+    result = json.loads(await fn(group="Day Shift", course="   "))
 
-    assert "error" in result
+    assert result["status"] == "error"
+    assert "Empty course identifier" in result["error"]
 
 
 @pytest.mark.asyncio
@@ -960,7 +1179,11 @@ async def test_get_cohort_members_tool():
             "email": "bob@example.com",
         },
     ]
-    responses = [members_resp, users_resp]
+    responses = [
+        [_ENGINEERING_COHORT],  # cohort resolver
+        members_resp,
+        users_resp,
+    ]
 
     mock_client = mock.AsyncMock()
     mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
@@ -987,7 +1210,7 @@ async def test_get_cohort_members_tool():
         "soliplex.moodle.client.httpx.AsyncClient",
         return_value=mock_client,
     ):
-        result = json.loads(await fn(1))
+        result = json.loads(await fn(cohort="1"))
 
     assert result["cohortid"] == 1
     assert len(result["members"]) == 2
@@ -1000,11 +1223,13 @@ async def test_get_cohort_members_tool_empty():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_cohort_members")
 
-    resp = _mock_response([])
-    with _patch_httpx(resp):
-        result = json.loads(await fn(999))
+    with _patch_httpx_chain(
+        _cohorts_list_resp(_ENGINEERING_COHORT),
+        _mock_response([]),
+    ):
+        result = json.loads(await fn(cohort="1"))
 
-    assert result["cohortid"] == 999
+    assert result["cohortid"] == 1
     assert result["members"] == []
 
 
@@ -1014,9 +1239,11 @@ async def test_get_cohort_members_tool_no_userids():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_cohort_members")
 
-    resp = _mock_response([{"cohortid": 1, "userids": []}])
-    with _patch_httpx(resp):
-        result = json.loads(await fn(1))
+    with _patch_httpx_chain(
+        _cohorts_list_resp(_ENGINEERING_COHORT),
+        _mock_response([{"cohortid": 1, "userids": []}]),
+    ):
+        result = json.loads(await fn(cohort="1"))
 
     assert result["cohortid"] == 1
     assert result["members"] == []
@@ -1045,15 +1272,15 @@ async def test_get_cohort_members_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_cohort_members")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(999))
+    with _patch_httpx_chain(_cohorts_list_resp(_ENGINEERING_COHORT), err):
+        result = json.loads(await fn(cohort="1"))
 
     assert "error" in result
 
@@ -1070,7 +1297,11 @@ async def test_get_cohort_members_user_enrichment_error_fallback():
         "errorcode": "err",
         "message": "fail",
     }
-    responses = [members_resp, error_resp]
+    responses = [
+        [_ENGINEERING_COHORT],  # cohort resolver
+        members_resp,
+        error_resp,
+    ]
 
     mock_client = mock.AsyncMock()
     mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
@@ -1097,7 +1328,7 @@ async def test_get_cohort_members_user_enrichment_error_fallback():
         "soliplex.moodle.client.httpx.AsyncClient",
         return_value=mock_client,
     ):
-        result = json.loads(await fn(1))
+        result = json.loads(await fn(cohort="1"))
 
     assert result["cohortid"] == 1
     assert result["members"] == [{"id": 3}, {"id": 4}]
@@ -1135,8 +1366,12 @@ async def test_get_user_grades_tool():
             ]
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(2, 3))
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _mock_response([_ALICE_USER]),
+        resp,
+    ):
+        result = json.loads(await fn(course="2", user="3"))
 
     assert len(result) == 2
     assert result[0]["itemname"] == "Quiz 1"
@@ -1156,8 +1391,12 @@ async def test_get_user_grades_tool_error():
             "message": "No permission",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(2, 3))
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _mock_response([_ALICE_USER]),
+        resp,
+    ):
+        result = json.loads(await fn(course="2", user="3"))
 
     assert "error" in result
 
@@ -1185,8 +1424,12 @@ async def test_get_user_grades_tool_string_cells():
             ]
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(2, 3))
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _mock_response([_ALICE_USER]),
+        resp,
+    ):
+        result = json.loads(await fn(course="2", user="3"))
 
     assert len(result) == 1
     assert result[0]["itemname"] == "Quiz 1"
@@ -1219,8 +1462,12 @@ async def test_get_user_grades_tool_missing_keys():
             ]
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(2, 3))
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _mock_response([_ALICE_USER]),
+        resp,
+    ):
+        result = json.loads(await fn(course="2", user="3"))
 
     assert len(result) == 1
     assert result[0]["itemname"] == "Quiz 1"
@@ -1289,7 +1536,11 @@ async def test_get_assignment_grades_tool():
 
     async def post_side_effect(*args, **kwargs):
         nonlocal call_idx
-        responses = [contents_resp, grades_resp]
+        responses = [
+            {"courses": [_SAFETY_COURSE]},  # course resolver
+            contents_resp,
+            grades_resp,
+        ]
         resp = make_response(responses[call_idx])
         call_idx += 1
         return resp
@@ -1300,7 +1551,7 @@ async def test_get_assignment_grades_tool():
         "soliplex.moodle.client.httpx.AsyncClient",
         return_value=mock_client,
     ):
-        result = json.loads(await fn(2))
+        result = json.loads(await fn(course="2"))
 
     assert len(result) == 1
     assert result[0]["assignmentid"] == 10
@@ -1331,8 +1582,8 @@ async def test_get_assignment_grades_tool_no_assignments():
             }
         ]
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(2))
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), resp):
+        result = json.loads(await fn(course="2"))
 
     assert result["message"] == "No assignments found in this course"
 
@@ -1350,8 +1601,8 @@ async def test_get_assignment_grades_tool_contents_error():
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(999))
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), resp):
+        result = json.loads(await fn(course="2"))
 
     assert "error" in result
 
@@ -1400,7 +1651,11 @@ async def test_get_assignment_grades_tool_grades_error():
 
     async def post_side_effect(*args, **kwargs):
         nonlocal call_idx
-        responses = [contents_resp, error_resp]
+        responses = [
+            {"courses": [_SAFETY_COURSE]},  # course resolver
+            contents_resp,
+            error_resp,
+        ]
         resp = make_response(responses[call_idx])
         call_idx += 1
         return resp
@@ -1411,7 +1666,7 @@ async def test_get_assignment_grades_tool_grades_error():
         "soliplex.moodle.client.httpx.AsyncClient",
         return_value=mock_client,
     ):
-        result = json.loads(await fn(2))
+        result = json.loads(await fn(course="2"))
 
     assert "error" in result
 
@@ -1497,16 +1752,59 @@ async def test_get_upcoming_events_tool_error():
 
 @pytest.mark.asyncio
 async def test_enrol_users_tool_preview():
+    """Preview resolves human-friendly user + course identifiers."""
     skills = _get_skills()
     fn = _get_tool_fn(skills, "enrol_users")
 
-    # No HTTP call needed for preview mode
-    result = json.loads(await fn("3,4", 2, 5, False))
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response([_ALICE_USER]),  # user "alice" via username
+        _mock_response(
+            {"courses": [_CYBER_COURSE]}
+        ),  # course resolver via id-not-numeric → shortname
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(users="alice", course="cyber101"))
 
     assert result["action"] == "enrol_users"
-    assert result["user_ids"] == [3, 4]
-    assert "preview" in result
-    assert "instructions" not in result
+    assert "Cybersecurity Basics" in result["preview"]
+    assert "Alice Johnson" in result["users"][0]
+    assert result["course_id"] == 3
+    assert result["user_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_enrol_users_tool_preview_by_course_name():
+    """Course fullname (substring) resolves through the fallback path."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "enrol_users")
+
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response([_ALICE_USER]),  # alice via username
+        # course resolver: shortname empty, idnumber empty, then
+        # get_courses() returns the catalogue
+        _mock_response({"courses": []}),  # shortname
+        _mock_response({"courses": []}),  # idnumber
+        _mock_response([_SAFETY_COURSE, _CYBER_COURSE]),  # get_courses
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(
+            await fn(users="alice", course="Cybersecurity Basics")
+        )
+
+    assert result["action"] == "enrol_users"
+    assert "Cybersecurity Basics" in result["preview"]
 
 
 @pytest.mark.asyncio
@@ -1514,28 +1812,105 @@ async def test_enrol_users_tool_confirmed():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "enrol_users")
 
-    resp = _mock_response(None)
-    with _patch_httpx(resp):
-        result = json.loads(await fn("3,4", 2, 5, True))
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response([_ALICE_USER]),  # alice via username
+        _mock_response([_DOC_USER]),  # doc_test via username
+        _mock_response({"courses": [_CYBER_COURSE]}),  # course
+        _mock_response(None),  # enrol_users actual call
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(
+            await fn(
+                users="alice,doc_test",
+                course="cyber101",
+                confirmed=True,
+            )
+        )
 
     assert result["success"] is True
     assert result["enrolled"] == 2
 
 
 @pytest.mark.asyncio
-async def test_enrol_users_tool_error():
+async def test_enrol_users_tool_unresolvable_user():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "enrol_users")
 
-    resp = _mock_response(
-        {
-            "exception": "moodle_exception",
-            "errorcode": "nopermissions",
-            "message": "No permission",
-        }
-    )
-    with _patch_httpx(resp):
-        result = json.loads(await fn("3", 2, 5, True))
+    with _patch_httpx(_mock_response([])):
+        result = json.loads(await fn(users="ghost_user", course="cyber101"))
+
+    assert result["status"] == "error"
+    assert "No user matches" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_enrol_users_tool_unresolvable_course():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "enrol_users")
+
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response([_ALICE_USER]),  # alice resolves
+        _mock_response({"courses": []}),  # shortname empty
+        _mock_response({"courses": []}),  # idnumber empty
+        _mock_response([]),  # get_courses empty
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(users="alice", course="Ghost Course"))
+
+    assert result["status"] == "error"
+    assert "No course matches" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_enrol_users_tool_empty_users():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "enrol_users")
+
+    result = json.loads(await fn(users="  ,  ", course="cyber101"))
+
+    assert result["status"] == "error"
+    assert "Empty user list" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_enrol_users_tool_error():
+    """Moodle-side error on the actual enrol_users call surfaces."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "enrol_users")
+
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response([_ALICE_USER]),
+        _mock_response({"courses": [_CYBER_COURSE]}),
+        _mock_response(
+            {
+                "exception": "moodle_exception",
+                "errorcode": "nopermissions",
+                "message": "No permission",
+            }
+        ),
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(
+            await fn(users="alice", course="cyber101", confirmed=True)
+        )
 
     assert "error" in result
 
@@ -1652,8 +2027,8 @@ async def test_get_certification_allocations_tool():
             },
         ]
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(1))
+    with _patch_httpx_chain(_certs_list_resp(_SAFETY_CERT), resp):
+        result = json.loads(await fn(certification="1"))
 
     assert len(result) == 1
     assert result[0]["userfullname"] == "Alice Johnson"
@@ -1664,15 +2039,15 @@ async def test_get_certification_allocations_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_certification_allocations")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(1))
+    with _patch_httpx_chain(_certs_list_resp(_SAFETY_CERT), err):
+        result = json.loads(await fn(certification="1"))
 
     assert "error" in result
 
@@ -1694,8 +2069,8 @@ async def test_get_user_certifications_tool():
             },
         ]
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(3))
+    with _patch_httpx_chain(_mock_response([_ALICE_USER]), resp):
+        result = json.loads(await fn(user="alice"))
 
     assert len(result) == 1
     assert result[0]["certificationfullname"] == "Workplace Safety"
@@ -1706,17 +2081,28 @@ async def test_get_user_certifications_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_user_certifications")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(3))
+    with _patch_httpx_chain(_mock_response([_ALICE_USER]), err):
+        result = json.loads(await fn(user="alice"))
 
     assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_user_certifications_tool_user_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_certifications")
+
+    result = json.loads(await fn(user="   "))
+
+    assert result["status"] == "error"
+    assert "Empty user identifier" in result["error"]
 
 
 @pytest.mark.asyncio
@@ -1730,8 +2116,12 @@ async def test_get_certification_history_tool():
             {"id": 2, "action": "certified", "timecreated": 1700001000},
         ]
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(1, 3))
+    with _patch_httpx_chain(
+        _certs_list_resp(_SAFETY_CERT),
+        _mock_response([_ALICE_USER]),
+        resp,
+    ):
+        result = json.loads(await fn(certification="1", user="alice"))
 
     assert len(result) == 2
     assert result[0]["action"] == "allocated"
@@ -1743,15 +2133,19 @@ async def test_get_certification_history_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_certification_history")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(1, 3))
+    with _patch_httpx_chain(
+        _certs_list_resp(_SAFETY_CERT),
+        _mock_response([_ALICE_USER]),
+        err,
+    ):
+        result = json.loads(await fn(certification="1", user="alice"))
 
     assert "error" in result
 
@@ -1761,13 +2155,16 @@ async def test_certify_user_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "certify_user")
 
-    result = json.loads(await fn("3", 1, False))
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _certs_list_resp(_SAFETY_CERT),
+    ):
+        result = json.loads(await fn(user="alice", certification="1"))
 
     assert result["action"] == "certify_user"
-    assert result["userid"] == 3
-    assert result["certificationid"] == 1
+    assert result["user_id"] == 3
+    assert result["certification_id"] == 1
     assert "preview" in result
-    assert "instructions" not in result
 
 
 @pytest.mark.asyncio
@@ -1776,12 +2173,18 @@ async def test_certify_user_tool_confirmed():
     fn = _get_tool_fn(skills, "certify_user")
 
     resp = _mock_response({"result": True})
-    with _patch_httpx(resp):
-        result = json.loads(await fn("3", 1, True))
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _certs_list_resp(_SAFETY_CERT),
+        resp,
+    ):
+        result = json.loads(
+            await fn(user="alice", certification="1", confirmed=True)
+        )
 
     assert result["success"] is True
-    assert result["userid"] == 3
-    assert result["certificationid"] == 1
+    assert result["user_id"] == 3
+    assert result["certification_id"] == 1
 
 
 @pytest.mark.asyncio
@@ -1789,15 +2192,21 @@ async def test_certify_user_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "certify_user")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn("3", 1, True))
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _certs_list_resp(_SAFETY_CERT),
+        err,
+    ):
+        result = json.loads(
+            await fn(user="alice", certification="1", confirmed=True)
+        )
 
     assert "error" in result
 
@@ -1807,12 +2216,15 @@ async def test_revoke_certification_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "revoke_certification")
 
-    result = json.loads(await fn("3", 1, False))
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _certs_list_resp(_SAFETY_CERT),
+    ):
+        result = json.loads(await fn(user="alice", certification="1"))
 
     assert result["action"] == "revoke_certification"
-    assert result["userid"] == 3
-    assert result["certificationid"] == 1
-    assert "preview" in result
+    assert result["user_id"] == 3
+    assert result["certification_id"] == 1
 
 
 @pytest.mark.asyncio
@@ -1821,11 +2233,17 @@ async def test_revoke_certification_tool_confirmed():
     fn = _get_tool_fn(skills, "revoke_certification")
 
     resp = _mock_response({"result": True})
-    with _patch_httpx(resp):
-        result = json.loads(await fn("3", 1, True))
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _certs_list_resp(_SAFETY_CERT),
+        resp,
+    ):
+        result = json.loads(
+            await fn(user="alice", certification="1", confirmed=True)
+        )
 
     assert result["success"] is True
-    assert result["userid"] == 3
+    assert result["user_id"] == 3
 
 
 @pytest.mark.asyncio
@@ -1833,15 +2251,21 @@ async def test_revoke_certification_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "revoke_certification")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn("3", 1, True))
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _certs_list_resp(_SAFETY_CERT),
+        err,
+    ):
+        result = json.loads(
+            await fn(user="alice", certification="1", confirmed=True)
+        )
 
     assert "error" in result
 
@@ -1908,8 +2332,8 @@ async def test_get_user_program_courses_tool():
             },
         ]
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(3))
+    with _patch_httpx_chain(_mock_response([_ALICE_USER]), resp):
+        result = json.loads(await fn(user="alice"))
 
     assert len(result) == 2
     assert result[0]["completed"] is True
@@ -1921,15 +2345,15 @@ async def test_get_user_program_courses_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_user_program_courses")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(3))
+    with _patch_httpx_chain(_mock_response([_ALICE_USER]), err):
+        result = json.loads(await fn(user="alice"))
 
     assert "error" in result
 
@@ -1939,13 +2363,17 @@ async def test_allocate_users_to_program_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "allocate_users_to_program")
 
-    result = json.loads(await fn("3,4,5", 1, False))
+    second_user = dict(_DOC_USER, id=4, username="bob")
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _mock_response([second_user]),
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+    ):
+        result = json.loads(await fn(users="alice,bob", program="1"))
 
     assert result["action"] == "allocate_users_to_program"
-    assert result["user_ids"] == [3, 4, 5]
-    assert result["programid"] == 1
+    assert result["program_id"] == 1
     assert "preview" in result
-    assert "instructions" not in result
 
 
 @pytest.mark.asyncio
@@ -1953,13 +2381,21 @@ async def test_allocate_users_to_program_tool_confirmed():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "allocate_users_to_program")
 
+    second_user = dict(_DOC_USER, id=4, username="bob")
     resp = _mock_response({"result": []})
-    with _patch_httpx(resp):
-        result = json.loads(await fn("3,4", 1, True))
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _mock_response([second_user]),
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+        resp,
+    ):
+        result = json.loads(
+            await fn(users="alice,bob", program="1", confirmed=True)
+        )
 
     assert result["success"] is True
     assert result["allocated"] == 2
-    assert result["programid"] == 1
+    assert result["program_id"] == 1
 
 
 @pytest.mark.asyncio
@@ -1967,15 +2403,21 @@ async def test_allocate_users_to_program_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "allocate_users_to_program")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn("3", 1, True))
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+        err,
+    ):
+        result = json.loads(
+            await fn(users="alice", program="1", confirmed=True)
+        )
 
     assert "error" in result
 
@@ -2100,8 +2542,8 @@ async def test_get_user_learning_catalogue_tool():
             }
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(3))
+    with _patch_httpx_chain(_mock_response([_ALICE_USER]), resp):
+        result = json.loads(await fn(user="alice"))
 
     assert len(result) == 1
     assert result[0]["fullname"] == "Safety"
@@ -2109,19 +2551,32 @@ async def test_get_user_learning_catalogue_tool():
 
 
 @pytest.mark.asyncio
+async def test_get_user_learning_catalogue_tool_current_user():
+    """Empty ``user`` skips the resolver and queries the current user."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_learning_catalogue")
+
+    resp = _mock_response({"catalogue": {"listitems": []}})
+    with _patch_httpx(resp):
+        result = json.loads(await fn())
+
+    assert result == []
+
+
+@pytest.mark.asyncio
 async def test_get_user_learning_catalogue_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_user_learning_catalogue")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(3))
+    with _patch_httpx_chain(_mock_response([_ALICE_USER]), err):
+        result = json.loads(await fn(user="alice"))
 
     assert "error" in result
 
@@ -2134,11 +2589,31 @@ async def test_get_program_content_tool():
     resp = _mock_response(
         {"sets": [{"name": "Core"}], "courses": [{"id": 2}], "warnings": []}
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(1))
+    with _patch_httpx_chain(
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+        resp,
+    ):
+        result = json.loads(await fn(program="1"))
 
     assert "sets" in result
     assert "courses" in result
+
+
+@pytest.mark.asyncio
+async def test_get_program_content_tool_with_user():
+    """``user`` resolves and is passed to the program-content call."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_program_content")
+
+    resp = _mock_response({"sets": [], "courses": [], "warnings": []})
+    with _patch_httpx_chain(
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+        _mock_response([_ALICE_USER]),
+        resp,
+    ):
+        result = json.loads(await fn(program="1", user="alice"))
+
+    assert "sets" in result
 
 
 @pytest.mark.asyncio
@@ -2146,15 +2621,18 @@ async def test_get_program_content_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_program_content")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(1))
+    with _patch_httpx_chain(
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+        err,
+    ):
+        result = json.loads(await fn(program="1"))
 
     assert "error" in result
 
@@ -2200,11 +2678,14 @@ async def test_deallocate_user_from_program_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "deallocate_user_from_program")
 
-    result = json.loads(await fn(3, 1, False))
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+    ):
+        result = json.loads(await fn(user="alice", program="1"))
 
     assert result["action"] == "deallocate_user_from_program"
     assert "preview" in result
-    assert "instructions" not in result
 
 
 @pytest.mark.asyncio
@@ -2213,8 +2694,14 @@ async def test_deallocate_user_from_program_tool_confirmed():
     fn = _get_tool_fn(skills, "deallocate_user_from_program")
 
     resp = _mock_response(None)
-    with _patch_httpx(resp):
-        result = json.loads(await fn(3, 1, True))
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+        resp,
+    ):
+        result = json.loads(
+            await fn(user="alice", program="1", confirmed=True)
+        )
 
     assert result["success"] is True
 
@@ -2224,15 +2711,21 @@ async def test_deallocate_user_from_program_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "deallocate_user_from_program")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(3, 1, True))
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+        err,
+    ):
+        result = json.loads(
+            await fn(user="alice", program="1", confirmed=True)
+        )
 
     assert "error" in result
 
@@ -2248,8 +2741,12 @@ async def test_get_certification_user_details_tool():
     fn = _get_tool_fn(skills, "get_certification_user_details")
 
     resp = _mock_response({"id": 10, "userid": 3, "status": "certified"})
-    with _patch_httpx(resp):
-        result = json.loads(await fn(1, 3))
+    with _patch_httpx_chain(
+        _certs_list_resp(_SAFETY_CERT),
+        _mock_response([_ALICE_USER]),
+        resp,
+    ):
+        result = json.loads(await fn(certification="1", user="alice"))
 
     assert result["id"] == 10
     assert result["userid"] == 3
@@ -2261,15 +2758,19 @@ async def test_get_certification_user_details_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_certification_user_details")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(1, 3))
+    with _patch_httpx_chain(
+        _certs_list_resp(_SAFETY_CERT),
+        _mock_response([_ALICE_USER]),
+        err,
+    ):
+        result = json.loads(await fn(certification="1", user="alice"))
 
     assert "error" in result
 
@@ -2279,7 +2780,11 @@ async def test_deallocate_user_from_certification_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "deallocate_user_from_certification")
 
-    result = json.loads(await fn(3, 1, False))
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _certs_list_resp(_SAFETY_CERT),
+    ):
+        result = json.loads(await fn(user="alice", certification="1"))
 
     assert result["action"] == "deallocate_user_from_certification"
     assert "preview" in result
@@ -2291,8 +2796,14 @@ async def test_deallocate_user_from_certification_tool_confirmed():
     fn = _get_tool_fn(skills, "deallocate_user_from_certification")
 
     resp = _mock_response(None)
-    with _patch_httpx(resp):
-        result = json.loads(await fn(3, 1, True))
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _certs_list_resp(_SAFETY_CERT),
+        resp,
+    ):
+        result = json.loads(
+            await fn(user="alice", certification="1", confirmed=True)
+        )
 
     assert result["success"] is True
 
@@ -2302,15 +2813,21 @@ async def test_deallocate_user_from_certification_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "deallocate_user_from_certification")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(3, 1, True))
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _certs_list_resp(_SAFETY_CERT),
+        err,
+    ):
+        result = json.loads(
+            await fn(user="alice", certification="1", confirmed=True)
+        )
 
     assert "error" in result
 
@@ -2320,7 +2837,8 @@ async def test_archive_certification_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "archive_certification")
 
-    result = json.loads(await fn(1, False))
+    with _patch_httpx_chain(_certs_list_resp(_SAFETY_CERT)):
+        result = json.loads(await fn(certification="1"))
 
     assert result["action"] == "archive_certification"
     assert "preview" in result
@@ -2332,8 +2850,8 @@ async def test_archive_certification_tool_confirmed():
     fn = _get_tool_fn(skills, "archive_certification")
 
     resp = _mock_response(None)
-    with _patch_httpx(resp):
-        result = json.loads(await fn(1, True))
+    with _patch_httpx_chain(_certs_list_resp(_SAFETY_CERT), resp):
+        result = json.loads(await fn(certification="1", confirmed=True))
 
     assert result["success"] is True
 
@@ -2343,15 +2861,15 @@ async def test_archive_certification_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "archive_certification")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(1, True))
+    with _patch_httpx_chain(_certs_list_resp(_SAFETY_CERT), err):
+        result = json.loads(await fn(certification="1", confirmed=True))
 
     assert "error" in result
 
@@ -2366,12 +2884,20 @@ async def test_allocate_users_to_tenant_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "allocate_users_to_tenant")
 
-    result = json.loads(await fn("3,4", 2, False))
+    second_user = dict(_DOC_USER, id=4, username="bob")
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _mock_response([second_user]),
+        _tenants_list_resp(_DEFAULT_TENANT),
+    ):
+        result = json.loads(
+            await fn(users="alice,bob", tenant="Regional Office")
+        )
 
     assert result["action"] == "allocate_users_to_tenant"
     assert "preview" in result
-    assert result["user_ids"] == [3, 4]
-    assert result["tenantid"] == 2
+    assert result["tenant_id"] == 2
+    assert result["user_count"] == 2
 
 
 @pytest.mark.asyncio
@@ -2379,9 +2905,20 @@ async def test_allocate_users_to_tenant_tool_confirmed():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "allocate_users_to_tenant")
 
-    resp = _mock_response(None)
-    with _patch_httpx(resp):
-        result = json.loads(await fn("3,4", 2, True))
+    second_user = dict(_DOC_USER, id=4, username="bob")
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _mock_response([second_user]),
+        _tenants_list_resp(_DEFAULT_TENANT),
+        _mock_response(None),
+    ):
+        result = json.loads(
+            await fn(
+                users="alice,bob",
+                tenant="Regional Office",
+                confirmed=True,
+            )
+        )
 
     assert result["success"] is True
     assert result["allocated"] == 2
@@ -2392,15 +2929,27 @@ async def test_allocate_users_to_tenant_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "allocate_users_to_tenant")
 
-    resp = _mock_response(
+    second_user = dict(_DOC_USER, id=4, username="bob")
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn("3,4", 2, True))
+    with _patch_httpx_chain(
+        _mock_response([_ALICE_USER]),
+        _mock_response([second_user]),
+        _tenants_list_resp(_DEFAULT_TENANT),
+        err,
+    ):
+        result = json.loads(
+            await fn(
+                users="alice,bob",
+                tenant="Regional Office",
+                confirmed=True,
+            )
+        )
 
     assert "error" in result
 
@@ -2691,9 +3240,13 @@ async def test_assign_job_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "assign_job")
 
-    result = json.loads(await fn(3, "ENG", "MGR", False))
+    with _patch_httpx_chain(_mock_response([_ALICE_USER])):
+        result = json.loads(
+            await fn(user="alice", department="ENG", position="MGR")
+        )
 
     assert result["action"] == "assign_job"
+    assert result["user_id"] == 3
     assert "preview" in result
 
 
@@ -2703,8 +3256,15 @@ async def test_assign_job_tool_confirmed():
     fn = _get_tool_fn(skills, "assign_job")
 
     resp = _mock_response({"id": 1})
-    with _patch_httpx(resp):
-        result = json.loads(await fn(3, "ENG", "MGR", True))
+    with _patch_httpx_chain(_mock_response([_ALICE_USER]), resp):
+        result = json.loads(
+            await fn(
+                user="alice",
+                department="ENG",
+                position="MGR",
+                confirmed=True,
+            )
+        )
 
     assert result["success"] is True
 
@@ -2714,15 +3274,22 @@ async def test_assign_job_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "assign_job")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(3, "ENG", "MGR", True))
+    with _patch_httpx_chain(_mock_response([_ALICE_USER]), err):
+        result = json.loads(
+            await fn(
+                user="alice",
+                department="ENG",
+                position="MGR",
+                confirmed=True,
+            )
+        )
 
     assert "error" in result
 
@@ -2836,8 +3403,8 @@ async def test_get_user_learning_plans_tool():
             ]
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(3))
+    with _patch_httpx_chain(_mock_response([_ALICE_USER]), resp):
+        result = json.loads(await fn(user="alice"))
 
     assert len(result) == 1
     assert result[0]["name"] == "Alice's Plan"
@@ -2848,15 +3415,15 @@ async def test_get_user_learning_plans_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_user_learning_plans")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(3))
+    with _patch_httpx_chain(_mock_response([_ALICE_USER]), err):
+        result = json.loads(await fn(user="alice"))
 
     assert "error" in result
 
@@ -2867,8 +3434,8 @@ async def test_get_user_competency_tool():
     fn = _get_tool_fn(skills, "get_user_competency")
 
     resp = _mock_response({"usercompetency": {"userid": 3, "competencyid": 1}})
-    with _patch_httpx(resp):
-        result = json.loads(await fn(3, 1))
+    with _patch_httpx_chain(_mock_response([_ALICE_USER]), resp):
+        result = json.loads(await fn(user="alice", competencyid=1))
 
     assert "usercompetency" in result
     assert result["usercompetency"]["userid"] == 3
@@ -2879,15 +3446,15 @@ async def test_get_user_competency_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_user_competency")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(3, 1))
+    with _patch_httpx_chain(_mock_response([_ALICE_USER]), err):
+        result = json.loads(await fn(user="alice", competencyid=1))
 
     assert "error" in result
 
@@ -2904,8 +3471,8 @@ async def test_get_course_competencies_tool():
             ]
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(2))
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), resp):
+        result = json.loads(await fn(course="2"))
 
     assert len(result) == 1
     assert result[0]["competency"]["shortname"] == "Communication"
@@ -2923,8 +3490,8 @@ async def test_get_course_competencies_tool_error():
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(2))
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), resp):
+        result = json.loads(await fn(course="2"))
 
     assert "error" in result
 
@@ -2932,30 +3499,6 @@ async def test_get_course_competencies_tool_error():
 # -----------------------------------------------------------------
 # Non-numeric ID validation tests
 # -----------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_enrol_users_tool_non_numeric():
-    skills = _get_skills()
-    fn = _get_tool_fn(skills, "enrol_users")
-
-    result = json.loads(await fn("alice,bob", 2, 5, False))
-
-    assert "error" in result
-    assert "alice" in result["error"]
-    assert "find_user" in result["error"]
-
-
-@pytest.mark.asyncio
-async def test_certify_user_tool_non_numeric():
-    skills = _get_skills()
-    fn = _get_tool_fn(skills, "certify_user")
-
-    result = json.loads(await fn("alice", 1, False))
-
-    assert "error" in result
-    assert "alice" in result["error"]
-    assert "find_user" in result["error"]
 
 
 @pytest.mark.asyncio
@@ -2995,39 +3538,25 @@ async def test_send_message_tool_non_numeric():
 
 
 @pytest.mark.asyncio
-async def test_revoke_certification_tool_non_numeric():
-    skills = _get_skills()
-    fn = _get_tool_fn(skills, "revoke_certification")
-
-    result = json.loads(await fn("alice", 1, False))
-
-    assert "error" in result
-    assert "alice" in result["error"]
-    assert "find_user" in result["error"]
-
-
-@pytest.mark.asyncio
-async def test_allocate_users_to_program_tool_non_numeric():
-    skills = _get_skills()
-    fn = _get_tool_fn(skills, "allocate_users_to_program")
-
-    result = json.loads(await fn("alice", 1, False))
-
-    assert "error" in result
-    assert "alice" in result["error"]
-    assert "find_user" in result["error"]
-
-
-@pytest.mark.asyncio
-async def test_allocate_users_to_tenant_tool_non_numeric():
+async def test_allocate_users_to_tenant_tool_unknown_user():
+    """User names that don't resolve return a clean resolver error."""
     skills = _get_skills()
     fn = _get_tool_fn(skills, "allocate_users_to_tenant")
 
-    result = json.loads(await fn("alice", 1, False))
+    # Resolver tries username/idnumber/email (each returns []), then
+    # firstname + lastname search (each returns {"users": []}).
+    with _patch_httpx_chain(
+        _mock_response([]),
+        _mock_response([]),
+        _mock_response([]),
+        _mock_response({"users": []}),
+        _mock_response({"users": []}),
+    ):
+        result = json.loads(
+            await fn(users="ghost_user", tenant="Regional Office")
+        )
 
-    assert "error" in result
-    assert "alice" in result["error"]
-    assert "find_user" in result["error"]
+    assert result["status"] == "error"
 
 
 @pytest.mark.asyncio
@@ -3189,7 +3718,8 @@ async def test_get_report_data_tool():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_report_data")
 
-    resp = _mock_response(
+    test_report = dict(_COMPLETION_REPORT, id=1, name="Test Report")
+    data_resp = _mock_response(
         {
             "details": {
                 "id": 1,
@@ -3208,8 +3738,8 @@ async def test_get_report_data_tool():
             "warnings": [],
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(reportid=1))
+    with _patch_httpx_chain(_reports_list_resp(test_report), data_resp):
+        result = json.loads(await fn(report="1"))
 
     assert result["headers"] == ["Name", "Email"]
     assert result["rows"][0] == ["Alice", "alice@example.com"]
@@ -3221,7 +3751,8 @@ async def test_get_report_data_tool_strips_none_values():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_report_data")
 
-    resp = _mock_response(
+    test_report = dict(_COMPLETION_REPORT, id=1, name="Test Report")
+    data_resp = _mock_response(
         {
             "details": {
                 "id": 1,
@@ -3238,8 +3769,8 @@ async def test_get_report_data_tool_strips_none_values():
             "warnings": [],
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(reportid=1))
+    with _patch_httpx_chain(_reports_list_resp(test_report), data_resp):
+        result = json.loads(await fn(report="1"))
 
     assert result["rows"][0] == ["", "alice@example.com"]
 
@@ -3249,15 +3780,16 @@ async def test_get_report_data_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "get_report_data")
 
-    resp = _mock_response(
+    test_report = dict(_COMPLETION_REPORT, id=1, name="Test Report")
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(reportid=9999))
+    with _patch_httpx_chain(_reports_list_resp(test_report), err):
+        result = json.loads(await fn(report="1"))
 
     assert "error" in result
 
@@ -3284,8 +3816,8 @@ async def test_get_utm_report_tool():
             "totalcount": 1,
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(courseid=2))
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), resp):
+        result = json.loads(await fn(course="2"))
 
     assert len(result["rows"]) == 1
     assert result["rows"][0]["name"] == "Alice Johnson"
@@ -3304,8 +3836,8 @@ async def test_get_utm_report_tool_error():
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(courseid=2))
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), resp):
+        result = json.loads(await fn(course="2"))
 
     assert "error" in result
 
@@ -3332,8 +3864,8 @@ async def test_get_adv_comp_report_tool():
             "totalcount": 1,
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(courseid=2))
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), resp):
+        result = json.loads(await fn(course="2"))
 
     assert len(result["rows"]) == 1
     assert result["rows"][0]["name"] == "Bob Smith"
@@ -3353,8 +3885,8 @@ async def test_get_adv_comp_report_tool_error():
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(courseid=2))
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE), resp):
+        result = json.loads(await fn(course="2"))
 
     assert "error" in result
 
@@ -4064,10 +4596,11 @@ async def test_archive_program_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "archive_program")
 
-    result = json.loads(await fn(program_id=7))
+    with _patch_httpx_chain(_programs_list_resp(_LEADERSHIP_PROGRAM)):
+        result = json.loads(await fn(program="1"))
 
     assert "preview" in result
-    assert "Archive program" in result["preview"]
+    assert "Archive" in result["preview"]
 
 
 @pytest.mark.asyncio
@@ -4076,8 +4609,11 @@ async def test_archive_program_tool_confirmed():
     fn = _get_tool_fn(skills, "archive_program")
 
     resp = _mock_response(None)
-    with _patch_httpx(resp):
-        result = json.loads(await fn(program_id=7, confirmed=True))
+    with _patch_httpx_chain(
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+        resp,
+    ):
+        result = json.loads(await fn(program="1", confirmed=True))
 
     assert result == {"status": "ok", "result": True}
 
@@ -4087,15 +4623,18 @@ async def test_archive_program_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "archive_program")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(program_id=7, confirmed=True))
+    with _patch_httpx_chain(
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+        err,
+    ):
+        result = json.loads(await fn(program="1", confirmed=True))
 
     assert "error" in result
 
@@ -4105,10 +4644,11 @@ async def test_restore_program_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "restore_program")
 
-    result = json.loads(await fn(program_id=7))
+    with _patch_httpx_chain(_programs_list_resp(_LEADERSHIP_PROGRAM)):
+        result = json.loads(await fn(program="1"))
 
     assert "preview" in result
-    assert "Restore program" in result["preview"]
+    assert "Restore" in result["preview"]
 
 
 @pytest.mark.asyncio
@@ -4117,8 +4657,11 @@ async def test_restore_program_tool_confirmed():
     fn = _get_tool_fn(skills, "restore_program")
 
     resp = _mock_response(None)
-    with _patch_httpx(resp):
-        result = json.loads(await fn(program_id=7, confirmed=True))
+    with _patch_httpx_chain(
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+        resp,
+    ):
+        result = json.loads(await fn(program="1", confirmed=True))
 
     assert result == {"status": "ok", "result": True}
 
@@ -4128,15 +4671,18 @@ async def test_restore_program_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "restore_program")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(program_id=7, confirmed=True))
+    with _patch_httpx_chain(
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+        err,
+    ):
+        result = json.loads(await fn(program="1", confirmed=True))
 
     assert "error" in result
 
@@ -4146,10 +4692,11 @@ async def test_delete_program_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_program")
 
-    result = json.loads(await fn(program_id=7))
+    with _patch_httpx_chain(_programs_list_resp(_LEADERSHIP_PROGRAM)):
+        result = json.loads(await fn(program="1"))
 
     assert "preview" in result
-    assert "DELETE program" in result["preview"]
+    assert "DELETE" in result["preview"]
 
 
 @pytest.mark.asyncio
@@ -4158,8 +4705,11 @@ async def test_delete_program_tool_confirmed():
     fn = _get_tool_fn(skills, "delete_program")
 
     resp = _mock_response(None)
-    with _patch_httpx(resp):
-        result = json.loads(await fn(program_id=7, confirmed=True))
+    with _patch_httpx_chain(
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+        resp,
+    ):
+        result = json.loads(await fn(program="1", confirmed=True))
 
     assert result == {"status": "ok", "result": True}
 
@@ -4169,15 +4719,18 @@ async def test_delete_program_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_program")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(program_id=7, confirmed=True))
+    with _patch_httpx_chain(
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+        err,
+    ):
+        result = json.loads(await fn(program="1", confirmed=True))
 
     assert "error" in result
 
@@ -4187,10 +4740,11 @@ async def test_duplicate_program_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "duplicate_program")
 
-    result = json.loads(await fn(program_id=7))
+    with _patch_httpx_chain(_programs_list_resp(_LEADERSHIP_PROGRAM)):
+        result = json.loads(await fn(program="1"))
 
     assert "preview" in result
-    assert "Duplicate program" in result["preview"]
+    assert "Duplicate" in result["preview"]
 
 
 @pytest.mark.asyncio
@@ -4201,8 +4755,11 @@ async def test_duplicate_program_tool_confirmed():
     resp = _mock_response(
         {"duplicatedprogramid": 99, "redirecturl": "/program/view.php?id=99"}
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(program_id=7, confirmed=True))
+    with _patch_httpx_chain(
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+        resp,
+    ):
+        result = json.loads(await fn(program="1", confirmed=True))
 
     assert result["duplicatedprogramid"] == 99
     assert result["redirecturl"] == "/program/view.php?id=99"
@@ -4213,15 +4770,18 @@ async def test_duplicate_program_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "duplicate_program")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(program_id=7, confirmed=True))
+    with _patch_httpx_chain(
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+        err,
+    ):
+        result = json.loads(await fn(program="1", confirmed=True))
 
     assert "error" in result
 
@@ -4231,7 +4791,8 @@ async def test_update_program_visibility_tool_preview_visible():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "update_program_visibility")
 
-    result = json.loads(await fn(program_id=7, visible=1))
+    with _patch_httpx_chain(_programs_list_resp(_LEADERSHIP_PROGRAM)):
+        result = json.loads(await fn(program="1", visible=1))
 
     assert "preview" in result
     assert "visible" in result["preview"]
@@ -4242,7 +4803,8 @@ async def test_update_program_visibility_tool_preview_hidden():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "update_program_visibility")
 
-    result = json.loads(await fn(program_id=7, visible=0))
+    with _patch_httpx_chain(_programs_list_resp(_LEADERSHIP_PROGRAM)):
+        result = json.loads(await fn(program="1", visible=0))
 
     assert "preview" in result
     assert "hidden" in result["preview"]
@@ -4254,8 +4816,11 @@ async def test_update_program_visibility_tool_confirmed():
     fn = _get_tool_fn(skills, "update_program_visibility")
 
     resp = _mock_response(None)
-    with _patch_httpx(resp):
-        result = json.loads(await fn(program_id=7, visible=1, confirmed=True))
+    with _patch_httpx_chain(
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+        resp,
+    ):
+        result = json.loads(await fn(program="1", visible=1, confirmed=True))
 
     assert result == {"status": "ok", "result": True}
 
@@ -4265,15 +4830,18 @@ async def test_update_program_visibility_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "update_program_visibility")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(program_id=7, visible=1, confirmed=True))
+    with _patch_httpx_chain(
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+        err,
+    ):
+        result = json.loads(await fn(program="1", visible=1, confirmed=True))
 
     assert "error" in result
 
@@ -4387,10 +4955,11 @@ async def test_delete_certification_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_certification")
 
-    result = json.loads(await fn(certification_id=3))
+    with _patch_httpx_chain(_certs_list_resp(_SAFETY_CERT)):
+        result = json.loads(await fn(certification="1"))
 
     assert "preview" in result
-    assert "DELETE certification" in result["preview"]
+    assert "DELETE" in result["preview"]
 
 
 @pytest.mark.asyncio
@@ -4399,8 +4968,8 @@ async def test_delete_certification_tool_confirmed():
     fn = _get_tool_fn(skills, "delete_certification")
 
     resp = _mock_response(None)
-    with _patch_httpx(resp):
-        result = json.loads(await fn(certification_id=3, confirmed=True))
+    with _patch_httpx_chain(_certs_list_resp(_SAFETY_CERT), resp):
+        result = json.loads(await fn(certification="1", confirmed=True))
 
     assert result == {"status": "ok", "result": True}
 
@@ -4410,15 +4979,15 @@ async def test_delete_certification_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_certification")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(certification_id=3, confirmed=True))
+    with _patch_httpx_chain(_certs_list_resp(_SAFETY_CERT), err):
+        result = json.loads(await fn(certification="1", confirmed=True))
 
     assert "error" in result
 
@@ -4428,10 +4997,11 @@ async def test_restore_certification_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "restore_certification")
 
-    result = json.loads(await fn(certification_id=3))
+    with _patch_httpx_chain(_certs_list_resp(_SAFETY_CERT)):
+        result = json.loads(await fn(certification="1"))
 
     assert "preview" in result
-    assert "Restore certification" in result["preview"]
+    assert "Restore" in result["preview"]
 
 
 @pytest.mark.asyncio
@@ -4440,8 +5010,8 @@ async def test_restore_certification_tool_confirmed():
     fn = _get_tool_fn(skills, "restore_certification")
 
     resp = _mock_response(None)
-    with _patch_httpx(resp):
-        result = json.loads(await fn(certification_id=3, confirmed=True))
+    with _patch_httpx_chain(_certs_list_resp(_SAFETY_CERT), resp):
+        result = json.loads(await fn(certification="1", confirmed=True))
 
     assert result == {"status": "ok", "result": True}
 
@@ -4451,15 +5021,15 @@ async def test_restore_certification_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "restore_certification")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(certification_id=3, confirmed=True))
+    with _patch_httpx_chain(_certs_list_resp(_SAFETY_CERT), err):
+        result = json.loads(await fn(certification="1", confirmed=True))
 
     assert "error" in result
 
@@ -5608,73 +6178,157 @@ async def test_create_user_tool_error():
     assert "error" in result
 
 
+# Fixture for the user-resolver tests below.  A "real" user record
+# shaped the way Moodle returns it from core_user_get_users_by_field.
+_DOC_USER = {
+    "id": 7,
+    "username": "doc_test",
+    "firstname": "Documentation",
+    "lastname": "User",
+    "fullname": "Documentation User",
+    "email": "doctest@example.com",
+}
+
+# Second seeded user — used for multi-user enrol_users tests.
+_ALICE_USER = {
+    "id": 3,
+    "username": "alice",
+    "firstname": "Alice",
+    "lastname": "Johnson",
+    "fullname": "Alice Johnson",
+    "email": "alice@example.com",
+}
+
+# Fixture for the course-resolver tests below.  Shape matches what
+# core_course_get_courses_by_field returns inside the "courses" key.
+_SAFETY_COURSE = {
+    "id": 2,
+    "fullname": "Safety Fundamentals",
+    "shortname": "safety101",
+    "categoryid": 1,
+    "visible": 1,
+    "summary": "",
+    "format": "topics",
+}
+_CYBER_COURSE = {
+    "id": 3,
+    "fullname": "Cybersecurity Basics",
+    "shortname": "cyber101",
+    "categoryid": 1,
+    "visible": 1,
+    "summary": "",
+    "format": "topics",
+}
+
+# Cohort fixture for the cohort-resolver tests.
+_ENGINEERING_COHORT = {
+    "id": 1,
+    "name": "Engineering",
+    "idnumber": "ENG-COHORT",
+    "visible": 1,
+}
+
+# Category fixture for the category-resolver tests.
+_TRAINING_CATEGORY = {
+    "id": 1,
+    "name": "Training",
+    "parent": 0,
+    "coursecount": 5,
+    "description": "",
+    "depth": 1,
+    "path": "/1",
+    "visible": 1,
+}
+
+# Tenant fixture for the tenant-resolver tests.
+_DEFAULT_TENANT = {
+    "id": 2,
+    "name": "Regional Office",
+    "sitename": "Regional",
+    "idnumber": "REGIONAL",
+    "isdefault": False,
+}
+
+# Department fixture for the department-resolver tests.
+_ENG_DEPT = {
+    "id": 5,
+    "name": "Engineering",
+    "parentid": 0,
+    "idnumber": "ENG",
+}
+
+# Report fixture for the report-resolver tests.
+_COMPLETION_REPORT = {
+    "id": 2,
+    "name": "Course Completion Overview",
+    "sourcename": "Course participants",
+    "timemodified": 1700000000,
+    "source": "core_course\\reportbuilder\\datasource\\participants",
+}
+
+# Certification fixture for the certification-resolver tests.
+_SAFETY_CERT = {
+    "id": 1,
+    "fullname": "Workplace Safety",
+    "idnumber": "SAFETY-CERT",
+    "description": "",
+    "status": 1,
+    "timecreated": 0,
+    "timemodified": 0,
+}
+
+# Program fixture for the program-resolver tests.
+_LEADERSHIP_PROGRAM = {
+    "id": 1,
+    "fullname": "Leadership Track",
+}
+
+
 @pytest.mark.asyncio
-async def test_update_user_tool_preview():
+async def test_update_user_tool_preview_by_username():
+    """update_user accepts a username and resolves it internally."""
     skills = _get_skills()
     fn = _get_tool_fn(skills, "update_user")
 
-    result = json.loads(await fn(userid="5", department="Engineering"))
-
-    assert result["action"] == "update_user"
-    assert "Engineering" in result["preview"]
-
-
-@pytest.mark.asyncio
-async def test_update_user_tool_preview_no_user_found_fallback():
-    """Preview falls back to '#N' when get_users_by_field is empty."""
-    skills = _get_skills()
-    fn = _get_tool_fn(skills, "update_user")
-
-    resp = _mock_response([])  # empty list — user not found
-    with _patch_httpx(resp):
-        result = json.loads(await fn(userid="99", department="QA"))
-
-    assert result["user"] == "#99"
-    assert "#99" in result["preview"]
-
-
-@pytest.mark.asyncio
-async def test_update_user_tool_preview_includes_fullname():
-    """Preview should resolve userid to fullname for nicer display."""
-    skills = _get_skills()
-    fn = _get_tool_fn(skills, "update_user")
-
-    user_resp = [
-        {
-            "id": 7,
-            "username": "doc_test",
-            "firstname": "Documentation",
-            "lastname": "User",
-            "fullname": "Documentation User",
-            "email": "doctest@example.com",
-        },
-    ]
-
-    mock_client = mock.AsyncMock()
-    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
-
-    def make_response(data):
-        r = mock.MagicMock(spec=httpx.Response)
-        r.status_code = 200
-        r.json.return_value = data
-        r.raise_for_status.return_value = None
-        return r
-
-    mock_client.post.return_value = make_response(user_resp)
-
-    with mock.patch(
-        "soliplex.moodle.client.httpx.AsyncClient",
-        return_value=mock_client,
-    ):
+    with _patch_httpx(_mock_response([_DOC_USER])):
         result = json.loads(
-            await fn(userid="7", department="Quality Assurance")
+            await fn(user="doc_test", department="Engineering")
         )
 
+    assert result["action"] == "update_user"
     assert "Documentation User" in result["preview"]
+    assert "Engineering" in result["preview"]
     assert result["user"] == "Documentation User (#7)"
     assert result["user_id"] == 7
-    assert result["department"] == "Quality Assurance"
+    assert result["username"] == "doc_test"
+    assert result["department"] == "Engineering"
+
+
+@pytest.mark.asyncio
+async def test_update_user_tool_preview_by_numeric_id():
+    """update_user still accepts a numeric ID for power users."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_user")
+
+    with _patch_httpx(_mock_response([_DOC_USER])):
+        result = json.loads(await fn(user="7", department="Quality Assurance"))
+
+    assert result["action"] == "update_user"
+    assert result["user"] == "Documentation User (#7)"
+
+
+@pytest.mark.asyncio
+async def test_update_user_tool_preview_by_email():
+    """update_user accepts an email like a human would type it."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_user")
+
+    with _patch_httpx(_mock_response([_DOC_USER])):
+        result = json.loads(
+            await fn(user="doctest@example.com", department="QA")
+        )
+
+    assert result["user"] == "Documentation User (#7)"
 
 
 @pytest.mark.asyncio
@@ -5682,14 +6336,13 @@ async def test_update_user_tool_confirmed():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "update_user")
 
-    resp = _mock_response(None)
-    with _patch_httpx(resp):
+    with _patch_httpx(_mock_response([_DOC_USER])):
         result = json.loads(
-            await fn(userid="5", department="Engineering", confirmed=True)
+            await fn(user="doc_test", department="Engineering", confirmed=True)
         )
 
     assert result["success"] is True
-    assert result["userid"] == 5
+    assert result["userid"] == 7
 
 
 @pytest.mark.asyncio
@@ -5697,36 +6350,52 @@ async def test_update_user_tool_no_fields():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "update_user")
 
-    result = json.loads(await fn(userid="5"))
+    with _patch_httpx(_mock_response([_DOC_USER])):
+        result = json.loads(await fn(user="doc_test"))
 
     assert "No fields" in result["error"]
 
 
 @pytest.mark.asyncio
-async def test_update_user_tool_bad_id():
+async def test_update_user_tool_user_not_found():
+    """Unknown identifier surfaces an error, never a fake "#N" fallback."""
     skills = _get_skills()
     fn = _get_tool_fn(skills, "update_user")
 
-    result = json.loads(await fn(userid="abc", department="Eng"))
+    with _patch_httpx(_mock_response([])):
+        result = json.loads(await fn(user="ghost_user", department="Eng"))
 
-    assert "error" in result
+    assert result["status"] == "error"
+    assert "No user matches" in result["error"]
 
 
 @pytest.mark.asyncio
 async def test_update_user_tool_error():
+    """Moodle-side error on the actual update_users call surfaces."""
     skills = _get_skills()
     fn = _get_tool_fn(skills, "update_user")
 
-    resp = _mock_response(
-        {
-            "exception": "moodle_exception",
-            "errorcode": "err",
-            "message": "fail",
-        }
-    )
-    with _patch_httpx(resp):
+    # First call (resolver) returns the user; second call (write)
+    # returns a Moodle exception payload.
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response([_DOC_USER]),
+        _mock_response(
+            {
+                "exception": "moodle_exception",
+                "errorcode": "err",
+                "message": "fail",
+            }
+        ),
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
         result = json.loads(
-            await fn(userid="5", department="Eng", confirmed=True)
+            await fn(user="doc_test", department="Eng", confirmed=True)
         )
 
     assert "error" in result
@@ -5737,10 +6406,15 @@ async def test_delete_user_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_user")
 
-    result = json.loads(await fn(userid="5"))
+    with _patch_httpx(_mock_response([_DOC_USER])):
+        result = json.loads(await fn(user="doc_test"))
 
     assert result["action"] == "delete_user"
     assert "WARNING" in result["preview"]
+    assert "Documentation User" in result["preview"]
+    assert result["user"] == "Documentation User (#7)"
+    assert result["user_id"] == 7
+    assert result["username"] == "doc_test"
 
 
 @pytest.mark.asyncio
@@ -5748,22 +6422,24 @@ async def test_delete_user_tool_confirmed():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_user")
 
-    resp = _mock_response(None)
-    with _patch_httpx(resp):
-        result = json.loads(await fn(userid="5", confirmed=True))
+    with _patch_httpx(_mock_response([_DOC_USER])):
+        result = json.loads(await fn(user="doc_test", confirmed=True))
 
     assert result["success"] is True
-    assert result["deleted_userid"] == 5
+    assert result["deleted_userid"] == 7
+    assert result["user"] == "Documentation User (#7)"
 
 
 @pytest.mark.asyncio
-async def test_delete_user_tool_bad_id():
+async def test_delete_user_tool_user_not_found():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_user")
 
-    result = json.loads(await fn(userid="abc"))
+    with _patch_httpx(_mock_response([])):
+        result = json.loads(await fn(user="ghost_user"))
 
-    assert "error" in result
+    assert result["status"] == "error"
+    assert "No user matches" in result["error"]
 
 
 @pytest.mark.asyncio
@@ -5771,15 +6447,24 @@ async def test_delete_user_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_user")
 
-    resp = _mock_response(
-        {
-            "exception": "moodle_exception",
-            "errorcode": "err",
-            "message": "fail",
-        }
-    )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(userid="5", confirmed=True))
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response([_DOC_USER]),
+        _mock_response(
+            {
+                "exception": "moodle_exception",
+                "errorcode": "err",
+                "message": "fail",
+            }
+        ),
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(user="doc_test", confirmed=True))
 
     assert "error" in result
 
@@ -5789,9 +6474,13 @@ async def test_unsuspend_user_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "unsuspend_user")
 
-    result = json.loads(await fn(userid="5"))
+    with _patch_httpx(_mock_response([_DOC_USER])):
+        result = json.loads(await fn(user="doc_test"))
 
     assert result["action"] == "unsuspend_user"
+    assert result["user"] == "Documentation User (#7)"
+    assert result["user_id"] == 7
+    assert result["username"] == "doc_test"
 
 
 @pytest.mark.asyncio
@@ -5799,22 +6488,22 @@ async def test_unsuspend_user_tool_confirmed():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "unsuspend_user")
 
-    resp = _mock_response(None)
-    with _patch_httpx(resp):
-        result = json.loads(await fn(userid="5", confirmed=True))
+    with _patch_httpx(_mock_response([_DOC_USER])):
+        result = json.loads(await fn(user="doc_test", confirmed=True))
 
     assert result["success"] is True
-    assert result["unsuspended_userid"] == 5
+    assert result["unsuspended_userid"] == 7
 
 
 @pytest.mark.asyncio
-async def test_unsuspend_user_tool_bad_id():
+async def test_unsuspend_user_tool_user_not_found():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "unsuspend_user")
 
-    result = json.loads(await fn(userid="abc"))
+    with _patch_httpx(_mock_response([])):
+        result = json.loads(await fn(user="ghost_user"))
 
-    assert "error" in result
+    assert result["status"] == "error"
 
 
 @pytest.mark.asyncio
@@ -5822,17 +6511,262 @@ async def test_unsuspend_user_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "unsuspend_user")
 
-    resp = _mock_response(
-        {
-            "exception": "moodle_exception",
-            "errorcode": "err",
-            "message": "fail",
-        }
-    )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(userid="5", confirmed=True))
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response([_DOC_USER]),
+        _mock_response(
+            {
+                "exception": "moodle_exception",
+                "errorcode": "err",
+                "message": "fail",
+            }
+        ),
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(user="doc_test", confirmed=True))
 
     assert "error" in result
+
+
+# -----------------------------------------------------------------
+# User identifier resolver — exercises the _resolve_user_identifier
+# helper directly through the public tool surface.  Operators
+# identify users by EDIPI / email / username / name — never by
+# internal numeric ID.
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_resolve_user_by_idnumber():
+    """EDIPI / idnumber lookup — the mil deployment's primary key."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_user")
+
+    edipi_user = dict(_DOC_USER, idnumber="1234567890")
+    # username/idnumber/email all hit the same mock response; the
+    # resolver tries id (skipped — not numeric), then username (no
+    # match in our mock data sense, but mock returns user) — so
+    # resolution succeeds on the first non-id field tried.
+    with _patch_httpx(_mock_response([edipi_user])):
+        result = json.loads(await fn(user="1234567890"))
+
+    assert result["action"] == "delete_user"
+
+
+@pytest.mark.asyncio
+async def test_resolve_user_by_full_name():
+    """Two-token full name falls through to search_users."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_user")
+
+    # The resolver tries exact fields first; we make those return
+    # empty, then the name search returns the user.  Using
+    # side_effect on post lets us discriminate by call order:
+    # username (empty), idnumber (empty), email (empty),
+    # search_users (returns user).  search_users wraps results in
+    # ``{"users": [...]}``.
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response([]),  # username
+        _mock_response([]),  # idnumber
+        _mock_response([]),  # email
+        _mock_response({"users": [_DOC_USER]}),  # search_users
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(user="Documentation User"))
+
+    assert result["action"] == "delete_user"
+    assert result["user_id"] == 7
+
+
+@pytest.mark.asyncio
+async def test_resolve_user_by_single_token_name():
+    """Single-token name tries firstname and lastname both."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_user")
+
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response([]),  # username
+        _mock_response([]),  # idnumber
+        _mock_response([]),  # email
+        _mock_response({"users": [_DOC_USER]}),  # firstname search
+        _mock_response({"users": []}),  # lastname search
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(user="Documentation"))
+
+    assert result["action"] == "delete_user"
+    assert result["user_id"] == 7
+
+
+@pytest.mark.asyncio
+async def test_resolve_user_ambiguous_email():
+    """Two users with the same email — resolver surfaces candidates."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_user")
+
+    other_user = dict(
+        _DOC_USER,
+        id=8,
+        username="doc_test_other",
+        fullname="Other User",
+    )
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    # id skipped (not numeric for an email-shape input); username
+    # and idnumber empty; email returns two matches.
+    mock_client.post.side_effect = [
+        _mock_response([]),  # username
+        _mock_response([]),  # idnumber
+        _mock_response([_DOC_USER, other_user]),  # email
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(user="doctest@example.com"))
+
+    assert result["status"] == "error"
+    assert "Multiple users" in result["error"]
+    assert len(result["matches"]) == 2
+    assert {m["id"] for m in result["matches"]} == {7, 8}
+
+
+@pytest.mark.asyncio
+async def test_resolve_user_ambiguous_name():
+    """Two users matching a name search — resolver surfaces candidates."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_user")
+
+    other_user = dict(
+        _DOC_USER,
+        id=8,
+        username="doc_user_other",
+        fullname="Documentation User",
+    )
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response([]),  # username
+        _mock_response([]),  # idnumber
+        _mock_response([]),  # email
+        _mock_response({"users": [_DOC_USER, other_user]}),  # search_users
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(user="Documentation User"))
+
+    assert result["status"] == "error"
+    assert "Multiple users" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_user_empty_identifier():
+    """Whitespace-only identifier is rejected without an HTTP call."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_user")
+
+    result = json.loads(await fn(user="   "))
+
+    assert result["status"] == "error"
+    assert "Empty" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_user_dedupes_single_token_fn_ln_overlap():
+    """A user matching both firstname and lastname appears once."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_user")
+
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    # Same user returned by both firstname and lastname searches —
+    # the resolver should dedupe on id and proceed to a single hit.
+    mock_client.post.side_effect = [
+        _mock_response([]),  # username
+        _mock_response([]),  # idnumber
+        _mock_response([]),  # email
+        _mock_response({"users": [_DOC_USER]}),  # firstname search
+        _mock_response({"users": [_DOC_USER]}),  # lastname search
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(user="Documentation"))
+
+    assert result["action"] == "delete_user"
+    assert result["user_id"] == 7
+
+
+@pytest.mark.asyncio
+async def test_resolve_user_http_error_during_exact_lookups():
+    """Transient httpx errors on exact lookups fall through to name search."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_user")
+
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        httpx.ConnectError("boom"),  # username — transient
+        _mock_response([]),  # idnumber empty
+        _mock_response([]),  # email empty
+        _mock_response({"users": [_DOC_USER]}),  # search_users
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(user="Documentation User"))
+
+    assert result["action"] == "delete_user"
+
+
+@pytest.mark.asyncio
+async def test_resolve_user_http_error_during_name_search():
+    """Transient httpx errors on the name search return 'no match'."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_user")
+
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response([]),  # username
+        _mock_response([]),  # idnumber
+        _mock_response([]),  # email
+        httpx.ConnectError("boom"),  # firstname search fails
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(user="Ghost"))
+
+    assert result["status"] == "error"
+    assert "No user matches" in result["error"]
 
 
 # -----------------------------------------------------------------
@@ -5929,11 +6863,13 @@ async def test_create_course_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "create_course")
 
-    result = json.loads(
-        await fn(fullname="Test Course", shortname="TC01", categoryid=1)
-    )
+    with _patch_httpx_chain(_categories_list_resp(_TRAINING_CATEGORY)):
+        result = json.loads(
+            await fn(fullname="Test Course", shortname="TC01", category="1")
+        )
 
     assert result["action"] == "create_course"
+    assert result["category_id"] == 1
 
 
 @pytest.mark.asyncio
@@ -5941,13 +6877,15 @@ async def test_create_course_tool_confirmed():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "create_course")
 
-    resp = _mock_response([{"id": 10, "shortname": "TC01"}])
-    with _patch_httpx(resp):
+    with _patch_httpx_chain(
+        _categories_list_resp(_TRAINING_CATEGORY),
+        _mock_response([{"id": 10, "shortname": "TC01"}]),
+    ):
         result = json.loads(
             await fn(
                 fullname="Test Course",
                 shortname="TC01",
-                categoryid=1,
+                category="1",
                 summary="A test",
                 confirmed=True,
             )
@@ -5962,16 +6900,16 @@ async def test_create_course_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "create_course")
 
-    resp = _mock_response(
+    err = _mock_response(
         {
             "exception": "moodle_exception",
             "errorcode": "err",
             "message": "fail",
         }
     )
-    with _patch_httpx(resp):
+    with _patch_httpx_chain(_categories_list_resp(_TRAINING_CATEGORY), err):
         result = json.loads(
-            await fn(fullname="T", shortname="T", categoryid=1, confirmed=True)
+            await fn(fullname="T", shortname="T", category="1", confirmed=True)
         )
 
     assert "error" in result
@@ -5979,12 +6917,44 @@ async def test_create_course_tool_error():
 
 @pytest.mark.asyncio
 async def test_update_course_tool_preview():
+    """Preview resolves course identifier to fullname + shortname."""
     skills = _get_skills()
     fn = _get_tool_fn(skills, "update_course")
 
-    result = json.loads(await fn(courseid=2, fullname="New Name"))
+    with _patch_httpx(_mock_response({"courses": [_SAFETY_COURSE]})):
+        result = json.loads(await fn(course="safety101", fullname="New Name"))
 
     assert result["action"] == "update_course"
+    assert "Safety Fundamentals" in result["preview"]
+    assert result["course"] == "Safety Fundamentals (safety101)"
+    assert result["course_id"] == 2
+    assert result["shortname"] == "safety101"
+
+
+@pytest.mark.asyncio
+async def test_update_course_tool_preview_by_fullname():
+    """Course fullname (substring) resolves via get_courses fallback."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_course")
+
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response({"courses": []}),  # shortname empty
+        _mock_response({"courses": []}),  # idnumber empty
+        _mock_response([_SAFETY_COURSE, _CYBER_COURSE]),  # get_courses
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(
+            await fn(course="Safety Fundamentals", fullname="New Name")
+        )
+
+    assert result["action"] == "update_course"
+    assert "Safety Fundamentals" in result["preview"]
 
 
 @pytest.mark.asyncio
@@ -5992,11 +6962,20 @@ async def test_update_course_tool_confirmed():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "update_course")
 
-    resp = _mock_response({"warnings": []})
-    with _patch_httpx(resp):
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response({"courses": [_SAFETY_COURSE]}),
+        _mock_response({"warnings": []}),
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
         result = json.loads(
             await fn(
-                courseid=2,
+                course="safety101",
                 fullname="New",
                 shortname="NEW",
                 summary="Updated",
@@ -6006,6 +6985,7 @@ async def test_update_course_tool_confirmed():
         )
 
     assert result["success"] is True
+    assert result["courseid"] == 2
 
 
 @pytest.mark.asyncio
@@ -6013,9 +6993,33 @@ async def test_update_course_tool_no_fields():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "update_course")
 
-    result = json.loads(await fn(courseid=2))
+    with _patch_httpx(_mock_response({"courses": [_SAFETY_COURSE]})):
+        result = json.loads(await fn(course="safety101"))
 
     assert "No fields" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_update_course_tool_course_not_found():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_course")
+
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response({"courses": []}),  # shortname empty
+        _mock_response({"courses": []}),  # idnumber empty
+        _mock_response([]),  # get_courses empty
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(course="Ghost Course", fullname="X"))
+
+    assert result["status"] == "error"
+    assert "No course matches" in result["error"]
 
 
 @pytest.mark.asyncio
@@ -6023,15 +7027,26 @@ async def test_update_course_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "update_course")
 
-    resp = _mock_response(
-        {
-            "exception": "moodle_exception",
-            "errorcode": "err",
-            "message": "fail",
-        }
-    )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(courseid=2, fullname="X", confirmed=True))
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response({"courses": [_SAFETY_COURSE]}),
+        _mock_response(
+            {
+                "exception": "moodle_exception",
+                "errorcode": "err",
+                "message": "fail",
+            }
+        ),
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(
+            await fn(course="safety101", fullname="X", confirmed=True)
+        )
 
     assert "error" in result
 
@@ -6041,10 +7056,14 @@ async def test_delete_course_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_course")
 
-    result = json.loads(await fn(courseid=4))
+    with _patch_httpx(_mock_response({"courses": [_SAFETY_COURSE]})):
+        result = json.loads(await fn(course="safety101"))
 
     assert result["action"] == "delete_course"
     assert "WARNING" in result["preview"]
+    assert "Safety Fundamentals" in result["preview"]
+    assert result["course"] == "Safety Fundamentals (safety101)"
+    assert result["course_id"] == 2
 
 
 @pytest.mark.asyncio
@@ -6052,12 +7071,44 @@ async def test_delete_course_tool_confirmed():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_course")
 
-    resp = _mock_response({"warnings": []})
-    with _patch_httpx(resp):
-        result = json.loads(await fn(courseid=4, confirmed=True))
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response({"courses": [_SAFETY_COURSE]}),
+        _mock_response({"warnings": []}),
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(course="safety101", confirmed=True))
 
     assert result["success"] is True
-    assert result["deleted_courseid"] == 4
+    assert result["deleted_courseid"] == 2
+    assert result["course"] == "Safety Fundamentals (safety101)"
+
+
+@pytest.mark.asyncio
+async def test_delete_course_tool_course_not_found():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_course")
+
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response({"courses": []}),
+        _mock_response({"courses": []}),
+        _mock_response([]),
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(course="Ghost Course"))
+
+    assert result["status"] == "error"
 
 
 @pytest.mark.asyncio
@@ -6065,15 +7116,24 @@ async def test_delete_course_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "delete_course")
 
-    resp = _mock_response(
-        {
-            "exception": "moodle_exception",
-            "errorcode": "err",
-            "message": "fail",
-        }
-    )
-    with _patch_httpx(resp):
-        result = json.loads(await fn(courseid=4, confirmed=True))
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response({"courses": [_SAFETY_COURSE]}),
+        _mock_response(
+            {
+                "exception": "moodle_exception",
+                "errorcode": "err",
+                "message": "fail",
+            }
+        ),
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(course="safety101", confirmed=True))
 
     assert "error" in result
 
@@ -6083,11 +7143,24 @@ async def test_duplicate_course_tool_preview():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "duplicate_course")
 
-    result = json.loads(
-        await fn(courseid=2, fullname="Copy", shortname="CP", categoryid=1)
-    )
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _categories_list_resp(_TRAINING_CATEGORY),
+    ):
+        result = json.loads(
+            await fn(
+                source="safety101",
+                fullname="Copy",
+                shortname="CP",
+                category="1",
+            )
+        )
 
     assert result["action"] == "duplicate_course"
+    assert "Safety Fundamentals" in result["preview"]
+    assert result["source"] == "Safety Fundamentals (safety101)"
+    assert result["source_id"] == 2
+    assert result["category_id"] == 1
 
 
 @pytest.mark.asyncio
@@ -6095,14 +7168,17 @@ async def test_duplicate_course_tool_confirmed():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "duplicate_course")
 
-    resp = _mock_response({"id": 20, "shortname": "CP"})
-    with _patch_httpx(resp):
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _categories_list_resp(_TRAINING_CATEGORY),
+        _mock_response({"id": 20, "shortname": "CP"}),
+    ):
         result = json.loads(
             await fn(
-                courseid=2,
+                source="safety101",
                 fullname="Copy",
                 shortname="CP",
-                categoryid=1,
+                category="1",
                 confirmed=True,
             )
         )
@@ -6112,29 +7188,1655 @@ async def test_duplicate_course_tool_confirmed():
 
 
 @pytest.mark.asyncio
+async def test_duplicate_course_tool_source_not_found():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "duplicate_course")
+
+    with _patch_httpx_chain(
+        _mock_response({"courses": []}),
+        _mock_response({"courses": []}),
+        _mock_response([]),
+    ):
+        result = json.loads(
+            await fn(
+                source="Ghost",
+                fullname="Copy",
+                shortname="CP",
+                category="1",
+            )
+        )
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
 async def test_duplicate_course_tool_error():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "duplicate_course")
 
-    resp = _mock_response(
-        {
-            "exception": "moodle_exception",
-            "errorcode": "err",
-            "message": "fail",
-        }
-    )
-    with _patch_httpx(resp):
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _categories_list_resp(_TRAINING_CATEGORY),
+        _mock_response(
+            {
+                "exception": "moodle_exception",
+                "errorcode": "err",
+                "message": "fail",
+            }
+        ),
+    ):
         result = json.loads(
             await fn(
-                courseid=2,
+                source="safety101",
                 fullname="Copy",
                 shortname="CP",
-                categoryid=1,
+                category="1",
                 confirmed=True,
             )
         )
 
     assert "error" in result
+
+
+# -----------------------------------------------------------------
+# Course identifier resolver — covers the remaining branches of
+# _resolve_course_identifier (ambiguous matches, idnumber lookup,
+# transient HTTP errors).  Driven through delete_course since it's
+# the smallest tool that exercises the resolver.
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_resolve_course_by_numeric_id():
+    """A digit-string input still works for power users / chained calls."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_course")
+
+    with _patch_httpx(_mock_response({"courses": [_SAFETY_COURSE]})):
+        result = json.loads(await fn(course="2"))
+
+    assert result["action"] == "delete_course"
+    assert result["course_id"] == 2
+
+
+@pytest.mark.asyncio
+async def test_resolve_course_by_idnumber():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_course")
+
+    course = dict(_SAFETY_COURSE, idnumber="SAFETY-2024")
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response({"courses": []}),  # shortname empty
+        _mock_response({"courses": [course]}),  # idnumber hits
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(course="SAFETY-2024"))
+
+    assert result["action"] == "delete_course"
+    assert result["course_id"] == 2
+
+
+@pytest.mark.asyncio
+async def test_resolve_course_ambiguous_fullname():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_course")
+
+    course_a = dict(_SAFETY_COURSE, id=2, fullname="Cybersecurity 101")
+    course_b = dict(_SAFETY_COURSE, id=3, fullname="Cybersecurity 201")
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response({"courses": []}),  # shortname
+        _mock_response({"courses": []}),  # idnumber
+        _mock_response([course_a, course_b]),  # get_courses
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(course="Cybersecurity"))
+
+    assert result["status"] == "error"
+    assert "Multiple courses" in result["error"]
+    assert len(result["matches"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_resolve_course_ambiguous_shortname():
+    """``get_courses_by_field`` shouldn't return multiple shortnames in
+    practice (Moodle enforces uniqueness), but the resolver still
+    handles it gracefully."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_course")
+
+    a = dict(_SAFETY_COURSE, id=2)
+    b = dict(_SAFETY_COURSE, id=3, fullname="Other Safety")
+    with _patch_httpx(_mock_response({"courses": [a, b]})):
+        result = json.loads(await fn(course="safety101"))
+
+    assert result["status"] == "error"
+    assert "Multiple courses" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_course_filters_site_course():
+    """Course id=1 (site) is filtered out unless explicitly requested."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_course")
+
+    site = dict(_SAFETY_COURSE, id=1, fullname="Moodle Sandbox")
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response({"courses": []}),
+        _mock_response({"courses": []}),
+        _mock_response([site, _SAFETY_COURSE]),
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(course="Sandbox"))
+
+    # "Sandbox" only matches the site course; that gets filtered →
+    # no real course matches.
+    assert result["status"] == "error"
+    assert "No course matches" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_course_empty_identifier():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_course")
+
+    result = json.loads(await fn(course="   "))
+
+    assert result["status"] == "error"
+    assert "Empty course identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_course_http_error_on_exact_lookups():
+    """Transient httpx errors on exact lookups fall through to get_courses."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_course")
+
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        httpx.ConnectError("boom"),  # shortname transient
+        _mock_response({"courses": []}),  # idnumber empty
+        _mock_response([_SAFETY_COURSE]),  # get_courses succeeds
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(course="Safety Fundamentals"))
+
+    assert result["action"] == "delete_course"
+
+
+@pytest.mark.asyncio
+async def test_resolve_course_http_error_on_get_courses():
+    """Transient error during get_courses fallback returns no-match."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_course")
+
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response({"courses": []}),
+        _mock_response({"courses": []}),
+        httpx.ConnectError("boom"),
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
+        result = json.loads(await fn(course="Ghost"))
+
+    assert result["status"] == "error"
+    assert "No course matches" in result["error"]
+
+
+# -----------------------------------------------------------------
+# Category identifier resolver — covers numeric not-found, exact,
+# substring, ambiguous, and HTTP-error branches.  Driven through
+# create_course since it's the smallest tool that exercises the
+# resolver and produces a previewable payload.
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_resolve_category_empty_identifier():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_course")
+
+    result = json.loads(await fn(fullname="X", shortname="X", category="   "))
+
+    assert result["status"] == "error"
+    assert "Empty category identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_category_numeric_not_found():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_course")
+
+    with _patch_httpx_chain(_categories_list_resp(_TRAINING_CATEGORY)):
+        result = json.loads(
+            await fn(fullname="X", shortname="X", category="99")
+        )
+
+    assert result["status"] == "error"
+    assert "No category matches id=99" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_category_exact_name_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_course")
+
+    with _patch_httpx_chain(_categories_list_resp(_TRAINING_CATEGORY)):
+        result = json.loads(
+            await fn(fullname="X", shortname="X", category="training")
+        )
+
+    assert result["action"] == "create_course"
+    assert result["category_id"] == 1
+
+
+@pytest.mark.asyncio
+async def test_resolve_category_ambiguous_exact():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_course")
+
+    cat_a = dict(_TRAINING_CATEGORY, id=1)
+    cat_b = dict(_TRAINING_CATEGORY, id=2)
+    with _patch_httpx_chain(_categories_list_resp(cat_a, cat_b)):
+        result = json.loads(
+            await fn(fullname="X", shortname="X", category="Training")
+        )
+
+    assert result["status"] == "error"
+    assert "Multiple categories" in result["error"]
+    assert len(result["matches"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_resolve_category_substring_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_course")
+
+    with _patch_httpx_chain(_categories_list_resp(_TRAINING_CATEGORY)):
+        result = json.loads(
+            await fn(fullname="X", shortname="X", category="Train")
+        )
+
+    assert result["action"] == "create_course"
+    assert result["category_id"] == 1
+
+
+@pytest.mark.asyncio
+async def test_resolve_category_no_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_course")
+
+    with _patch_httpx_chain(_categories_list_resp(_TRAINING_CATEGORY)):
+        result = json.loads(
+            await fn(fullname="X", shortname="X", category="Ghost")
+        )
+
+    assert result["status"] == "error"
+    assert "No category matches" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_category_ambiguous_substring():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_course")
+
+    cat_a = dict(_TRAINING_CATEGORY, id=1, name="Compliance Training")
+    cat_b = dict(_TRAINING_CATEGORY, id=2, name="Safety Training")
+    with _patch_httpx_chain(_categories_list_resp(cat_a, cat_b)):
+        result = json.loads(
+            await fn(fullname="X", shortname="X", category="Training")
+        )
+
+    assert result["status"] == "error"
+    assert "Multiple categories" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_category_http_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_course")
+
+    with _patch_httpx_chain(httpx.ConnectError("boom")):
+        result = json.loads(
+            await fn(fullname="X", shortname="X", category="Training")
+        )
+
+    assert result["status"] == "error"
+    assert "Category lookup failed" in result["error"]
+
+
+# -----------------------------------------------------------------
+# Cohort identifier resolver — drives the remaining branches via
+# get_cohort_members.
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_resolve_cohort_empty_identifier():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_cohort_members")
+
+    result = json.loads(await fn(cohort="   "))
+
+    assert result["status"] == "error"
+    assert "Empty cohort identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_cohort_numeric_not_found():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_cohort_members")
+
+    with _patch_httpx_chain(_cohorts_list_resp(_ENGINEERING_COHORT)):
+        result = json.loads(await fn(cohort="99"))
+
+    assert result["status"] == "error"
+    assert "No cohort matches id=99" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_cohort_by_idnumber():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_cohort_members")
+
+    with _patch_httpx_chain(
+        _cohorts_list_resp(_ENGINEERING_COHORT),
+        _mock_response([{"cohortid": 1, "userids": []}]),
+    ):
+        result = json.loads(await fn(cohort="ENG-COHORT"))
+
+    assert result["cohortid"] == 1
+
+
+@pytest.mark.asyncio
+async def test_resolve_cohort_ambiguous_exact():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_cohort_members")
+
+    a = dict(_ENGINEERING_COHORT, id=1, idnumber="A")
+    b = dict(_ENGINEERING_COHORT, id=2, idnumber="B")
+    with _patch_httpx_chain(_cohorts_list_resp(a, b)):
+        result = json.loads(await fn(cohort="Engineering"))
+
+    assert result["status"] == "error"
+    assert "Multiple cohorts" in result["error"]
+    assert len(result["matches"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_resolve_cohort_substring_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_cohort_members")
+
+    with _patch_httpx_chain(
+        _cohorts_list_resp(_ENGINEERING_COHORT),
+        _mock_response([{"cohortid": 1, "userids": []}]),
+    ):
+        result = json.loads(await fn(cohort="Engin"))
+
+    assert result["cohortid"] == 1
+
+
+@pytest.mark.asyncio
+async def test_resolve_cohort_no_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_cohort_members")
+
+    with _patch_httpx_chain(_cohorts_list_resp(_ENGINEERING_COHORT)):
+        result = json.loads(await fn(cohort="Ghost"))
+
+    assert result["status"] == "error"
+    assert "No cohort matches" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_cohort_ambiguous_substring():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_cohort_members")
+
+    a = dict(
+        _ENGINEERING_COHORT, id=1, name="Senior Engineering", idnumber="A"
+    )
+    b = dict(
+        _ENGINEERING_COHORT, id=2, name="Junior Engineering", idnumber="B"
+    )
+    with _patch_httpx_chain(_cohorts_list_resp(a, b)):
+        result = json.loads(await fn(cohort="Engineering"))
+
+    assert result["status"] == "error"
+    assert "Multiple cohorts" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_cohort_http_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_cohort_members")
+
+    with _patch_httpx_chain(httpx.ConnectError("boom")):
+        result = json.loads(await fn(cohort="Engineering"))
+
+    assert result["status"] == "error"
+    assert "Cohort lookup failed" in result["error"]
+
+
+# -----------------------------------------------------------------
+# Resolver-error propagation — for each refactored read tool, an
+# empty identifier short-circuits in the resolver and the error is
+# surfaced to the caller verbatim.  Drives the resolver-error
+# branch ("return resolved") in each tool body.
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tool_name,extra_kwargs",
+    [
+        ("get_course_contents", {}),
+        ("list_enrolled_users", {}),
+        ("get_course_completion_overview", {}),
+        ("list_course_groups", {}),
+        ("get_assignment_grades", {}),
+        ("get_course_competencies", {}),
+        ("get_utm_report", {}),
+        ("get_adv_comp_report", {}),
+    ],
+)
+async def test_course_read_tool_resolver_error_propagation(
+    tool_name, extra_kwargs
+):
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, tool_name)
+
+    result = json.loads(await fn(course="   ", **extra_kwargs))
+
+    assert result["status"] == "error"
+    assert "Empty course identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_completion_status_course_resolver_error():
+    """Course-resolver error short-circuits before the user resolver."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_completion_status")
+
+    result = json.loads(await fn(course="   ", user="alice"))
+
+    assert result["status"] == "error"
+    assert "Empty course identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_completion_status_user_resolver_error():
+    """User-resolver error short-circuits after a valid course resolves."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_completion_status")
+
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE)):
+        result = json.loads(await fn(course="2", user="   "))
+
+    assert result["status"] == "error"
+    assert "Empty user identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_user_grades_course_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_grades")
+
+    result = json.loads(await fn(course="   ", user="alice"))
+
+    assert result["status"] == "error"
+    assert "Empty course identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_user_grades_user_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_grades")
+
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE)):
+        result = json.loads(await fn(course="2", user="   "))
+
+    assert result["status"] == "error"
+    assert "Empty user identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_create_category_parent_resolver_error():
+    """A bad ``parent`` identifier short-circuits before write."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_category")
+
+    with _patch_httpx_chain(_categories_list_resp(_TRAINING_CATEGORY)):
+        result = json.loads(await fn(name="X", parent="Ghost"))
+
+    assert result["status"] == "error"
+    assert "No category matches" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_create_category_top_level_no_parent_lookup():
+    """``parent=""`` skips the resolver and uses parent_id=0."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_category")
+
+    result = json.loads(await fn(name="Top Level"))
+
+    assert result["action"] == "create_category"
+    assert result["parent_id"] == 0
+
+
+@pytest.mark.asyncio
+async def test_create_category_with_named_parent():
+    """``parent`` name resolves to its category id."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "create_category")
+
+    with _patch_httpx_chain(_categories_list_resp(_TRAINING_CATEGORY)):
+        result = json.loads(await fn(name="Child", parent="Training"))
+
+    assert result["action"] == "create_category"
+    assert result["parent_id"] == 1
+
+
+@pytest.mark.asyncio
+async def test_duplicate_course_category_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "duplicate_course")
+
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _categories_list_resp(_TRAINING_CATEGORY),
+    ):
+        result = json.loads(
+            await fn(
+                source="safety101",
+                fullname="Copy",
+                shortname="CP",
+                category="Ghost",
+            )
+        )
+
+    assert result["status"] == "error"
+    assert "No category matches" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_cohort_exact_name_match():
+    """Cohort name exact match (case-insensitive)."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_cohort_members")
+
+    with _patch_httpx_chain(
+        _cohorts_list_resp(_ENGINEERING_COHORT),
+        _mock_response([{"cohortid": 1, "userids": []}]),
+    ):
+        result = json.loads(await fn(cohort="engineering"))
+
+    assert result["cohortid"] == 1
+
+
+# -----------------------------------------------------------------
+# Tenant / report / department resolver branches — drive every
+# resolver-error path via existing tools that exercise each.
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_certifications_default_no_tenant_lookup():
+    """Empty ``tenant`` skips the resolver and uses tenantid=0."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_certifications")
+
+    with _patch_httpx_chain(_mock_response([])):
+        result = json.loads(await fn())
+
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_list_certifications_tenant_resolver_propagates_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_certifications")
+
+    result = json.loads(await fn(tenant="   "))
+
+    assert result["status"] == "error"
+    assert "Empty tenant identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_tenant_empty_identifier():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "allocate_users_to_tenant")
+
+    with _patch_httpx_chain(_mock_response([_ALICE_USER])):
+        result = json.loads(await fn(users="alice", tenant="   "))
+
+    assert result["status"] == "error"
+    assert "Empty tenant identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_tenant_numeric_not_found():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_certifications")
+
+    with _patch_httpx_chain(_tenants_list_resp(_DEFAULT_TENANT)):
+        result = json.loads(await fn(tenant="99"))
+
+    assert result["status"] == "error"
+    assert "No tenant matches id=99" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_tenant_numeric_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_certifications")
+
+    with _patch_httpx_chain(
+        _tenants_list_resp(_DEFAULT_TENANT),
+        _mock_response([]),
+    ):
+        result = json.loads(await fn(tenant="2"))
+
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_resolve_tenant_by_idnumber():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_certifications")
+
+    with _patch_httpx_chain(
+        _tenants_list_resp(_DEFAULT_TENANT),
+        _mock_response([]),
+    ):
+        result = json.loads(await fn(tenant="REGIONAL"))
+
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_resolve_tenant_exact_name():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_certifications")
+
+    with _patch_httpx_chain(
+        _tenants_list_resp(_DEFAULT_TENANT),
+        _mock_response([]),
+    ):
+        result = json.loads(await fn(tenant="regional office"))
+
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_resolve_tenant_ambiguous_exact():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_certifications")
+
+    a = dict(_DEFAULT_TENANT, id=1, idnumber="A")
+    b = dict(_DEFAULT_TENANT, id=2, idnumber="B")
+    with _patch_httpx_chain(_tenants_list_resp(a, b)):
+        result = json.loads(await fn(tenant="Regional Office"))
+
+    assert result["status"] == "error"
+    assert "Multiple tenants" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_tenant_ambiguous_substring():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_certifications")
+
+    a = dict(_DEFAULT_TENANT, id=1, name="Regional North", idnumber="A")
+    b = dict(_DEFAULT_TENANT, id=2, name="Regional South", idnumber="B")
+    with _patch_httpx_chain(_tenants_list_resp(a, b)):
+        result = json.loads(await fn(tenant="Regional"))
+
+    assert result["status"] == "error"
+    assert "Multiple tenants" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_tenant_substring_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_certifications")
+
+    with _patch_httpx_chain(
+        _tenants_list_resp(_DEFAULT_TENANT),
+        _mock_response([]),
+    ):
+        result = json.loads(await fn(tenant="Regional"))
+
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_resolve_tenant_no_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_certifications")
+
+    with _patch_httpx_chain(_tenants_list_resp(_DEFAULT_TENANT)):
+        result = json.loads(await fn(tenant="Ghost"))
+
+    assert result["status"] == "error"
+    assert "No tenant matches" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_tenant_http_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "list_certifications")
+
+    with _patch_httpx_chain(httpx.ConnectError("boom")):
+        result = json.loads(await fn(tenant="Regional Office"))
+
+    assert result["status"] == "error"
+    assert "Tenant lookup failed" in result["error"]
+
+
+# -- Report resolver branches --
+
+
+@pytest.mark.asyncio
+async def test_resolve_report_empty_identifier():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_report_data")
+
+    result = json.loads(await fn(report="   "))
+
+    assert result["status"] == "error"
+    assert "Empty report identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_report_numeric_not_found():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_report_data")
+
+    with _patch_httpx_chain(_reports_list_resp(_COMPLETION_REPORT)):
+        result = json.loads(await fn(report="99"))
+
+    assert result["status"] == "error"
+    assert "No report matches id=99" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_report_exact_name():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_report_data")
+
+    data_resp = _mock_response(
+        {
+            "details": {
+                "id": 2,
+                "name": "Course Completion Overview",
+                "source": "...",
+                "sourcename": "Participants",
+                "type": 0,
+            },
+            "data": {"headers": [], "rows": [], "totalrowcount": 0},
+            "warnings": [],
+        }
+    )
+    with _patch_httpx_chain(
+        _reports_list_resp(_COMPLETION_REPORT),
+        data_resp,
+    ):
+        result = json.loads(await fn(report="course completion overview"))
+
+    assert result["report_name"] == "Course Completion Overview"
+
+
+@pytest.mark.asyncio
+async def test_resolve_report_ambiguous_exact():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_report_data")
+
+    a = dict(_COMPLETION_REPORT, id=1)
+    b = dict(_COMPLETION_REPORT, id=2)
+    with _patch_httpx_chain(_reports_list_resp(a, b)):
+        result = json.loads(await fn(report="Course Completion Overview"))
+
+    assert result["status"] == "error"
+    assert "Multiple reports" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_report_ambiguous_substring():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_report_data")
+
+    a = dict(_COMPLETION_REPORT, id=1, name="Course A Overview")
+    b = dict(_COMPLETION_REPORT, id=2, name="Course B Overview")
+    with _patch_httpx_chain(_reports_list_resp(a, b)):
+        result = json.loads(await fn(report="Course"))
+
+    assert result["status"] == "error"
+    assert "Multiple reports" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_report_substring_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_report_data")
+
+    data_resp = _mock_response(
+        {
+            "details": {
+                "id": 2,
+                "name": "Course Completion Overview",
+                "source": "...",
+                "sourcename": "Participants",
+                "type": 0,
+            },
+            "data": {"headers": [], "rows": [], "totalrowcount": 0},
+            "warnings": [],
+        }
+    )
+    with _patch_httpx_chain(
+        _reports_list_resp(_COMPLETION_REPORT),
+        data_resp,
+    ):
+        result = json.loads(await fn(report="Completion"))
+
+    assert result["report_name"] == "Course Completion Overview"
+
+
+@pytest.mark.asyncio
+async def test_resolve_report_no_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_report_data")
+
+    with _patch_httpx_chain(_reports_list_resp(_COMPLETION_REPORT)):
+        result = json.loads(await fn(report="Ghost"))
+
+    assert result["status"] == "error"
+    assert "No report matches" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_report_http_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_report_data")
+
+    with _patch_httpx_chain(httpx.ConnectError("boom")):
+        result = json.loads(await fn(report="Completion"))
+
+    assert result["status"] == "error"
+    assert "Report lookup failed" in result["error"]
+
+
+# -- Department resolver branches (via get_utm_report) --
+
+
+@pytest.mark.asyncio
+async def test_resolve_department_empty_identifier():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_utm_report")
+
+    with _patch_httpx_chain(_course_id_resp(_SAFETY_COURSE)):
+        result = json.loads(await fn(course="2", department="   "))
+
+    assert result["status"] == "error"
+    assert "Empty department identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_department_numeric_not_found():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_utm_report")
+
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _departments_list_resp(_ENG_DEPT),
+    ):
+        result = json.loads(await fn(course="2", department="99"))
+
+    assert result["status"] == "error"
+    assert "No department matches id=99" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_department_numeric_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_utm_report")
+
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _departments_list_resp(_ENG_DEPT),
+        _mock_response({"rows": [], "totalcount": 0}),
+    ):
+        result = json.loads(await fn(course="2", department="5"))
+
+    assert result["total_rows"] == 0
+
+
+@pytest.mark.asyncio
+async def test_resolve_department_by_idnumber():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_utm_report")
+
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _departments_list_resp(_ENG_DEPT),
+        _mock_response({"rows": [], "totalcount": 0}),
+    ):
+        result = json.loads(await fn(course="2", department="ENG"))
+
+    assert result["total_rows"] == 0
+
+
+@pytest.mark.asyncio
+async def test_resolve_department_exact_name():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_utm_report")
+
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _departments_list_resp(_ENG_DEPT),
+        _mock_response({"rows": [], "totalcount": 0}),
+    ):
+        result = json.loads(await fn(course="2", department="engineering"))
+
+    assert result["total_rows"] == 0
+
+
+@pytest.mark.asyncio
+async def test_resolve_department_ambiguous_exact():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_utm_report")
+
+    a = dict(_ENG_DEPT, id=1, idnumber="A")
+    b = dict(_ENG_DEPT, id=2, idnumber="B")
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _departments_list_resp(a, b),
+    ):
+        result = json.loads(await fn(course="2", department="Engineering"))
+
+    assert result["status"] == "error"
+    assert "Multiple departments" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_department_ambiguous_substring():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_utm_report")
+
+    a = dict(_ENG_DEPT, id=1, name="Engineering East", idnumber="A")
+    b = dict(_ENG_DEPT, id=2, name="Engineering West", idnumber="B")
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _departments_list_resp(a, b),
+    ):
+        result = json.loads(await fn(course="2", department="Engineering"))
+
+    assert result["status"] == "error"
+    assert "Multiple departments" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_department_no_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_utm_report")
+
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _departments_list_resp(_ENG_DEPT),
+    ):
+        result = json.loads(await fn(course="2", department="Ghost"))
+
+    assert result["status"] == "error"
+    assert "No department matches" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_department_substring_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_utm_report")
+
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        _departments_list_resp(_ENG_DEPT),
+        _mock_response({"rows": [], "totalcount": 0}),
+    ):
+        result = json.loads(await fn(course="2", department="Engin"))
+
+    assert result["total_rows"] == 0
+
+
+@pytest.mark.asyncio
+async def test_resolve_department_http_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_utm_report")
+
+    with _patch_httpx_chain(
+        _course_id_resp(_SAFETY_COURSE),
+        httpx.ConnectError("boom"),
+    ):
+        result = json.loads(await fn(course="2", department="Engineering"))
+
+    assert result["status"] == "error"
+    assert "Department lookup failed" in result["error"]
+
+
+# -- Job-token parser branches --
+
+
+@pytest.mark.asyncio
+async def test_export_status_empty_token():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_export_status")
+
+    result = json.loads(await fn(export_job="   "))
+
+    assert result["status"] == "error"
+    assert "Empty export job token" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_export_status_invalid_token():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_export_status")
+
+    result = json.loads(await fn(export_job="not-an-id"))
+
+    assert result["status"] == "error"
+    assert "Invalid export job token" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_download_export_invalid_token():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "download_export")
+
+    result = json.loads(await fn(export_job="not-an-id"))
+
+    assert result["status"] == "error"
+    assert "Invalid export job token" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_import_status_invalid_token():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_import_status")
+
+    result = json.loads(await fn(import_job="not-an-id"))
+
+    assert result["status"] == "error"
+    assert "Invalid import job token" in result["error"]
+
+
+# -- User-resolver error propagation for remaining tools --
+
+
+@pytest.mark.asyncio
+async def test_get_user_program_courses_user_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_program_courses")
+
+    result = json.loads(await fn(user="   "))
+
+    assert result["status"] == "error"
+    assert "Empty user identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_user_learning_plans_user_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_learning_plans")
+
+    result = json.loads(await fn(user="   "))
+
+    assert result["status"] == "error"
+    assert "Empty user identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_allocate_users_to_tenant_tenant_resolver_error():
+    """Tenant-resolver error short-circuits after users resolve."""
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "allocate_users_to_tenant")
+
+    with _patch_httpx_chain(_mock_response([_ALICE_USER])):
+        result = json.loads(await fn(users="alice", tenant="   "))
+
+    assert result["status"] == "error"
+    assert "Empty tenant identifier" in result["error"]
+
+
+# -----------------------------------------------------------------
+# Certification / program resolver branches.
+# -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_resolve_certification_empty_identifier():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_allocations")
+
+    result = json.loads(await fn(certification="   "))
+
+    assert result["status"] == "error"
+    assert "Empty certification identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_certification_http_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_allocations")
+
+    with _patch_httpx_chain(httpx.ConnectError("boom")):
+        result = json.loads(await fn(certification="Workplace Safety"))
+
+    assert result["status"] == "error"
+    assert "Certification lookup failed" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_certification_numeric_not_found():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_allocations")
+
+    with _patch_httpx_chain(_certs_list_resp(_SAFETY_CERT)):
+        result = json.loads(await fn(certification="99"))
+
+    assert result["status"] == "error"
+    assert "No certification matches id=99" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_certification_by_idnumber():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_allocations")
+
+    with _patch_httpx_chain(
+        _certs_list_resp(_SAFETY_CERT),
+        _mock_response([]),
+    ):
+        result = json.loads(await fn(certification="SAFETY-CERT"))
+
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_resolve_certification_exact_name():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_allocations")
+
+    with _patch_httpx_chain(
+        _certs_list_resp(_SAFETY_CERT),
+        _mock_response([]),
+    ):
+        result = json.loads(await fn(certification="workplace safety"))
+
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_resolve_certification_ambiguous_exact():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_allocations")
+
+    a = dict(_SAFETY_CERT, id=1, idnumber="A")
+    b = dict(_SAFETY_CERT, id=2, idnumber="B")
+    with _patch_httpx_chain(_certs_list_resp(a, b)):
+        result = json.loads(await fn(certification="Workplace Safety"))
+
+    assert result["status"] == "error"
+    assert "Multiple certifications" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_certification_ambiguous_substring():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_allocations")
+
+    a = dict(_SAFETY_CERT, id=1, fullname="Lab Safety", idnumber="A")
+    b = dict(_SAFETY_CERT, id=2, fullname="Field Safety", idnumber="B")
+    with _patch_httpx_chain(_certs_list_resp(a, b)):
+        result = json.loads(await fn(certification="Safety"))
+
+    assert result["status"] == "error"
+    assert "Multiple certifications" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_certification_substring_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_allocations")
+
+    with _patch_httpx_chain(
+        _certs_list_resp(_SAFETY_CERT),
+        _mock_response([]),
+    ):
+        result = json.loads(await fn(certification="Safety"))
+
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_resolve_certification_no_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_allocations")
+
+    with _patch_httpx_chain(_certs_list_resp(_SAFETY_CERT)):
+        result = json.loads(await fn(certification="Ghost"))
+
+    assert result["status"] == "error"
+    assert "No certification matches" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_program_empty_identifier():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_program")
+
+    result = json.loads(await fn(program="   "))
+
+    assert result["status"] == "error"
+    assert "Empty program identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_program_http_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_program")
+
+    with _patch_httpx_chain(httpx.ConnectError("boom")):
+        result = json.loads(await fn(program="Leadership"))
+
+    assert result["status"] == "error"
+    assert "Program lookup failed" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_program_numeric_not_found():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_program")
+
+    with _patch_httpx_chain(_programs_list_resp(_LEADERSHIP_PROGRAM)):
+        result = json.loads(await fn(program="99"))
+
+    assert result["status"] == "error"
+    assert "No program matches id=99" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_program_exact_name():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_program")
+
+    with _patch_httpx_chain(
+        _programs_list_resp(_LEADERSHIP_PROGRAM),
+    ):
+        result = json.loads(await fn(program="leadership track"))
+
+    assert result["action"] == "archive_program"
+
+
+@pytest.mark.asyncio
+async def test_resolve_program_ambiguous_exact():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_program")
+
+    a = dict(_LEADERSHIP_PROGRAM, id=1)
+    b = dict(_LEADERSHIP_PROGRAM, id=2)
+    with _patch_httpx_chain(_programs_list_resp(a, b)):
+        result = json.loads(await fn(program="Leadership Track"))
+
+    assert result["status"] == "error"
+    assert "Multiple programs" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_program_ambiguous_substring():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_program")
+
+    a = dict(_LEADERSHIP_PROGRAM, id=1, fullname="Leadership Foundations")
+    b = dict(_LEADERSHIP_PROGRAM, id=2, fullname="Leadership Advanced")
+    with _patch_httpx_chain(_programs_list_resp(a, b)):
+        result = json.loads(await fn(program="Leadership"))
+
+    assert result["status"] == "error"
+    assert "Multiple programs" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_program_substring_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_program")
+
+    with _patch_httpx_chain(_programs_list_resp(_LEADERSHIP_PROGRAM)):
+        result = json.loads(await fn(program="Leadership"))
+
+    assert result["action"] == "archive_program"
+
+
+@pytest.mark.asyncio
+async def test_resolve_program_no_match():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_program")
+
+    with _patch_httpx_chain(_programs_list_resp(_LEADERSHIP_PROGRAM)):
+        result = json.loads(await fn(program="Ghost"))
+
+    assert result["status"] == "error"
+    assert "No program matches" in result["error"]
+
+
+# Resolver-error propagation for all newly refactored write tools
+
+
+@pytest.mark.asyncio
+async def test_certify_user_user_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "certify_user")
+
+    result = json.loads(await fn(user="   ", certification="Safety"))
+
+    assert result["status"] == "error"
+    assert "Empty user identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_certify_user_cert_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "certify_user")
+
+    with _patch_httpx_chain(_mock_response([_ALICE_USER])):
+        result = json.loads(await fn(user="alice", certification="   "))
+
+    assert result["status"] == "error"
+    assert "Empty certification identifier" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_revoke_certification_user_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "revoke_certification")
+
+    result = json.loads(await fn(user="   ", certification="Safety"))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_revoke_certification_cert_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "revoke_certification")
+
+    with _patch_httpx_chain(_mock_response([_ALICE_USER])):
+        result = json.loads(await fn(user="alice", certification="   "))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_deallocate_user_from_certification_user_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "deallocate_user_from_certification")
+
+    result = json.loads(await fn(user="   ", certification="Safety"))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_deallocate_user_from_certification_cert_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "deallocate_user_from_certification")
+
+    with _patch_httpx_chain(_mock_response([_ALICE_USER])):
+        result = json.loads(await fn(user="alice", certification="   "))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_archive_certification_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "archive_certification")
+
+    result = json.loads(await fn(certification="   "))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_delete_certification_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_certification")
+
+    result = json.loads(await fn(certification="   "))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_restore_certification_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "restore_certification")
+
+    result = json.loads(await fn(certification="   "))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_get_certification_allocations_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_allocations")
+
+    result = json.loads(await fn(certification="   "))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_get_certification_history_cert_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_history")
+
+    result = json.loads(await fn(certification="   ", user="alice"))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_get_certification_history_user_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_history")
+
+    with _patch_httpx_chain(_certs_list_resp(_SAFETY_CERT)):
+        result = json.loads(await fn(certification="1", user="   "))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_get_certification_user_details_cert_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_user_details")
+
+    result = json.loads(await fn(certification="   ", user="alice"))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_get_certification_user_details_user_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_certification_user_details")
+
+    with _patch_httpx_chain(_certs_list_resp(_SAFETY_CERT)):
+        result = json.loads(await fn(certification="1", user="   "))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_allocate_users_to_program_user_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "allocate_users_to_program")
+
+    result = json.loads(await fn(users="   ", program="1"))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_allocate_users_to_program_program_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "allocate_users_to_program")
+
+    with _patch_httpx_chain(_mock_response([_ALICE_USER])):
+        result = json.loads(await fn(users="alice", program="   "))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_deallocate_user_from_program_user_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "deallocate_user_from_program")
+
+    result = json.loads(await fn(user="   ", program="1"))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_deallocate_user_from_program_program_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "deallocate_user_from_program")
+
+    with _patch_httpx_chain(_mock_response([_ALICE_USER])):
+        result = json.loads(await fn(user="alice", program="   "))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_restore_program_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "restore_program")
+
+    result = json.loads(await fn(program="   "))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_delete_program_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "delete_program")
+
+    result = json.loads(await fn(program="   "))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_duplicate_program_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "duplicate_program")
+
+    result = json.loads(await fn(program="   "))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_update_program_visibility_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "update_program_visibility")
+
+    result = json.loads(await fn(program="   ", visible=1))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_get_program_content_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_program_content")
+
+    result = json.loads(await fn(program="   "))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_get_program_content_user_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_program_content")
+
+    with _patch_httpx_chain(_programs_list_resp(_LEADERSHIP_PROGRAM)):
+        result = json.loads(await fn(program="1", user="   "))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_assign_job_user_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "assign_job")
+
+    result = json.loads(await fn(user="   ", department="ENG", position="MGR"))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_get_user_competency_user_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_competency")
+
+    result = json.loads(await fn(user="   ", competencyid=1))
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_get_user_learning_catalogue_user_resolver_error():
+    skills = _get_skills()
+    fn = _get_tool_fn(skills, "get_user_learning_catalogue")
+
+    result = json.loads(await fn(user="   "))
+
+    assert result["status"] == "error"
 
 
 # -----------------------------------------------------------------
@@ -6205,7 +8907,7 @@ async def test_get_export_status_tool():
         {"status": 2, "statusmessage": "Done", "progress": 100}
     )
     with _patch_httpx(resp):
-        result = json.loads(await fn(export_id=1))
+        result = json.loads(await fn(export_job="1"))
 
     assert result["status"] == 2
 
@@ -6223,7 +8925,7 @@ async def test_get_export_status_tool_error():
         }
     )
     with _patch_httpx(resp):
-        result = json.loads(await fn(export_id=1))
+        result = json.loads(await fn(export_job="1"))
 
     assert "error" in result
 
@@ -6235,7 +8937,7 @@ async def test_download_export_tool():
 
     resp = _mock_response({"fileurl": "http://moodle.test/file.zip"})
     with _patch_httpx(resp):
-        result = json.loads(await fn(export_id=1))
+        result = json.loads(await fn(export_job="1"))
 
     assert "fileurl" in result
 
@@ -6253,7 +8955,7 @@ async def test_download_export_tool_error():
         }
     )
     with _patch_httpx(resp):
-        result = json.loads(await fn(export_id=1))
+        result = json.loads(await fn(export_job="1"))
 
     assert "error" in result
 
@@ -6308,7 +9010,7 @@ async def test_get_import_status_tool():
         {"status": 2, "statusmessage": "Done", "progress": 100}
     )
     with _patch_httpx(resp):
-        result = json.loads(await fn(import_id=1))
+        result = json.loads(await fn(import_job="1"))
 
     assert result["status"] == 2
 
@@ -6326,7 +9028,7 @@ async def test_get_import_status_tool_error():
         }
     )
     with _patch_httpx(resp):
-        result = json.loads(await fn(import_id=1))
+        result = json.loads(await fn(import_job="1"))
 
     assert "error" in result
 
@@ -6899,20 +9601,29 @@ async def test_update_course_tool_propagates_warnings():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "update_course")
 
-    resp = _mock_response(
-        {
-            "warnings": [
-                {
-                    "item": "shortname",
-                    "warningcode": "shortnametaken",
-                    "message": "Shortname is already in use",
-                }
-            ]
-        }
-    )
-    with _patch_httpx(resp):
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response({"courses": [_SAFETY_COURSE]}),
+        _mock_response(
+            {
+                "warnings": [
+                    {
+                        "item": "shortname",
+                        "warningcode": "shortnametaken",
+                        "message": "Shortname is already in use",
+                    }
+                ]
+            }
+        ),
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
         result = json.loads(
-            await fn(courseid=5, shortname="DUP", confirmed=True)
+            await fn(course="safety101", shortname="DUP", confirmed=True)
         )
 
     assert result["status"] == "error"
@@ -6928,22 +9639,32 @@ async def test_enrol_users_tool_propagates_warnings():
     skills = _get_skills()
     fn = _get_tool_fn(skills, "enrol_users")
 
-    resp = _mock_response(
-        {
-            "warnings": [
-                {
-                    "item": "3",
-                    "warningcode": "alreadyenroled",
-                    "message": "User is already enrolled",
-                }
-            ]
-        }
-    )
-    with _patch_httpx(resp):
+    mock_client = mock.AsyncMock()
+    mock_client.__aenter__ = mock.AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = mock.AsyncMock(return_value=False)
+    mock_client.post.side_effect = [
+        _mock_response([_ALICE_USER]),
+        _mock_response({"courses": [_CYBER_COURSE]}),
+        _mock_response(
+            {
+                "warnings": [
+                    {
+                        "item": "3",
+                        "warningcode": "alreadyenroled",
+                        "message": "User is already enrolled",
+                    }
+                ]
+            }
+        ),
+    ]
+    with mock.patch(
+        "soliplex.moodle.client.httpx.AsyncClient",
+        return_value=mock_client,
+    ):
         result = json.loads(
             await fn(
-                userids="3",
-                courseid=2,
+                users="alice",
+                course="cyber101",
                 confirmed=True,
             )
         )
