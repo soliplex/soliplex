@@ -39,12 +39,16 @@ def joker_agent_factory(
     provider_base_url = installation_config.get_environment("OLLAMA_BASE_URL")
     provider_kw = {
         "base_url": f"{provider_base_url}/v1",
+        "api_key": installation_config.get_secret("secret:OLLAMA_CLOUD_API_KEY"),
     }
     provider = ollama_providers.OllamaProvider(**provider_kw)
+    model_name = installation_config.get_environment(
+        "OLLAMA_MODEL", "gemma4:31b"
+    )
 
     joke_selection_agent = pydantic_ai.Agent(
         model=openai_models.OpenAIChatModel(
-            model_name="gpt-oss:latest",
+            model_name=model_name,
             provider=provider,
         ),
         system_prompt=JOKER_AGENT_PROMPT,
@@ -52,7 +56,7 @@ def joker_agent_factory(
 
     joke_generation_agent = pydantic_ai.Agent(
         model=openai_models.OpenAIChatModel(
-            model_name="gpt-oss:latest",
+            model_name=model_name,
             provider=provider,
         ),
         output_type=list[str],
