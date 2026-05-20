@@ -246,7 +246,9 @@ async def get_chunk_visualization(
         ) from None
 
     images = None
-    for hr_client_kw in room_config.list_haiku_rag_client_kw():
+    for hr_client_kw in room_config.list_haiku_rag_client_kw(
+        include_source=True,
+    ):
         source_tag = hr_client_kw.pop("source")
         source = models.RAGSource.from_source_tag(source_tag)
 

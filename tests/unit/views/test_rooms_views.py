@@ -536,7 +536,10 @@ async def test_get_chunk_visualization(
 
     else:
         room_config = room_configs[ROOM_ID]
-        room_config.list_haiku_rag_client_kw.return_value = w_hrc_kws
+        room_config.list_haiku_rag_client_kw = mock.Mock(
+            spec_set=(),
+            return_value=w_hrc_kws,
+        )
 
         if not w_hrc_kws:  # no rag sources
             with pytest.raises(fastapi.HTTPException) as exc:
@@ -612,6 +615,10 @@ async def test_get_chunk_visualization(
                 document_uri=DOCUMENT_URI,
                 images_base_64=PAGES_B64,
             )
+
+        room_config.list_haiku_rag_client_kw.assert_called_once_with(
+            include_source=True,
+        )
 
     the_installation.get_room_config.assert_awaited_once_with(
         room_id=ROOM_ID,
