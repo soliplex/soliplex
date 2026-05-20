@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import dataclasses
 import random
 import typing
@@ -108,42 +107,6 @@ async def faux_tool(
 
 
 @dataclasses.dataclass
-class FauxAgentRun:
-    prompt: str
-    _faux_agent: FauxAgent
-
-    def new_messages(self):
-        return [
-            ai_messages.ModelRequest(
-                parts=[
-                    ai_messages.UserPromptPart(
-                        content=self.prompt,
-                    )
-                ],
-            ),
-            ai_messages.ModelResponse(
-                parts=[
-                    ai_messages.TextPart(
-                        content="I don't know",
-                    ),
-                ],
-            ),
-        ]
-
-    async def stream_responses(self):
-        yield (
-            ai_messages.ModelResponse(
-                parts=[
-                    ai_messages.TextPart(
-                        content="I don't know",
-                    ),
-                ],
-            ),
-            True,
-        )
-
-
-@dataclasses.dataclass
 class FauxAgent:
     agent_config: config_agents.FactoryAgentConfig
     tool_configs: config_tools.ToolConfigMap = None
@@ -151,23 +114,6 @@ class FauxAgent:
     skill_toolset_config: agents.SkillToolsetConfig | None = None
 
     output_type = None
-
-    async def run(
-        self,
-        prompt: str,
-        message_history: MessageHistory | None = None,
-        deps: ai_tools.AgentDepsT = None,
-    ):
-        return FauxAgentRun(prompt, self)
-
-    @contextlib.asynccontextmanager
-    async def run_stream(
-        self,
-        prompt,
-        message_history: MessageHistory | None = None,
-        deps: ai_tools.AgentDepsT = None,
-    ):
-        yield FauxAgentRun(prompt, self)
 
     async def _run_stream_events(
         self,
