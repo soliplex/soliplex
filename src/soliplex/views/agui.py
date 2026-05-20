@@ -526,7 +526,6 @@ async def capture_usage_after_stream(
         async with sqla_asyncio.AsyncSession(bind=sqla_engine) as session:
             the_threads = agui_persistence.ThreadStorage(session)
 
-            usage = usage()
             await the_threads.save_run_usage(
                 user_name=user_name,
                 room_id=room_id,

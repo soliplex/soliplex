@@ -987,7 +987,7 @@ async def test_capture_usage_after_stream(a_session, t_storage, w_usage):
     )
     if w_usage:
         result = mock.Mock(spec_set=["usage"])
-        result.usage.return_value = usage
+        result.usage = usage
     else:
         result = object()
 
