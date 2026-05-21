@@ -122,7 +122,7 @@ def get_default_agent_from_configs(
         instructions=instructions,
         capabilities=agent_config.capabilities,
         deps_type=AgentDependencies,
-        tool_retries=agent_config.retries,
+        retries=agent_config.retries,
     )
 
 

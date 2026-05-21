@@ -211,7 +211,7 @@ def test_get_default_agent_from_configs(
 
     assert akc_kw["instructions"] == exp_instructions
     assert akc_kw["capabilities"] == exp_capabilities
-    assert akc_kw["tool_retries"] == exp_retries
+    assert akc_kw["retries"] == exp_retries
 
     if w_room_skills:
         build_system_prompt.assert_called_once_with(
