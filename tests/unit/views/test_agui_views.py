@@ -1573,9 +1573,11 @@ async def test_post_room_agui_thread_id_run_id_streaming(
         assert ias_kwargs["title_agent_config"] is exp_title_config
         assert ias_kwargs["messages"] is exp_adapter.run_input.messages
 
-        # Verify run_stream_kwargs contains deps and on_complete
+        # Verify run_stream_kwargs contains deps, conversation_id,
+        # and on_complete
         rsk = ias_kwargs["run_stream_kwargs"]
         assert rsk["deps"] is exp_deps
+        assert rsk["conversation_id"] == TEST_THREAD_ID_STR
         capture = rsk["on_complete"]
         assert isinstance(capture, functools.partial)
         assert capture.func is cuas
