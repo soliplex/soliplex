@@ -56,21 +56,6 @@ qa:
     name: gpt-oss:latest
     provider: ollama
 
-research:
-  model:
-    name: gpt-oss:latest
-    provider: ollama
-  max_iterations: 2
-  max_concurrency: 1
-
-
-#
-# Omit this section to accept the defaults.
-#research:
-# model:
-#   name: ''
-#   provider: ''
-
 processing:
   chunk_size: 256
   converter: docling-serve  # Use remote conversion
@@ -101,4 +86,3 @@ providers:
     embeddings_base_url: ""
     rerank_base_url: ""
     qa_base_url: ""
-    research_base_url: ""

@@ -8,12 +8,6 @@ import typing
 import pydantic
 from ag_ui import core as agui_core
 from haiku.rag.store.models import chunk as hr_chunk
-
-try:
-    SearchType = hr_chunk.SearchType
-except AttributeError:  # haiku-rag-slim <= 0.47
-    SearchType = typing.Literal["vector", "fts", "hybrid"]
-
 from haiku.skills import models as hs_models
 
 from soliplex import agui as agui_package
@@ -28,6 +22,8 @@ from soliplex.config import rooms as config_rooms
 from soliplex.config import secrets as config_secrets
 from soliplex.config import skills as config_skills
 from soliplex.config import tools as config_tools
+
+SearchType = hr_chunk.SearchType
 
 KW_ONLY = pydantic.Field(kw_only=True)
 KW_ONLY_NONE = pydantic.Field(kw_only=True, default=None)

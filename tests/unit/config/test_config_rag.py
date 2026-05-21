@@ -146,7 +146,6 @@ def test__rcb_haiku_rag_config(
         environment="from_installation",
         prompts=hr_config_module.PromptsConfig(
             domain_preamble="from_installation",
-            synthesis="from_installation",
         ),
     )
     room_config_dir = temp_dir / "rooms" / "test"
@@ -188,8 +187,6 @@ def test__rcb_haiku_rag_config(
                 assert hr_config.prompts.domain_preamble == "from_room"
             else:
                 assert hr_config.prompts.domain_preamble == "from_installation"
-
-            assert hr_config.prompts.synthesis == "from_installation"
 
         else:
             with no_config_path:

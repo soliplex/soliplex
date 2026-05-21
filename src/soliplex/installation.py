@@ -160,7 +160,7 @@ class Installation:
         hr = self.haiku_rag_config
         found: ProviderInfoMap = {}
 
-        for section in (hr.embeddings, hr.qa, hr.reranking, hr.research):
+        for section in (hr.embeddings, hr.qa, hr.reranking):
             if section and section.model:
                 provider_type = section.model.provider
                 type_info = found.setdefault(provider_type, {})
