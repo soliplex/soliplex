@@ -1,111 +1,82 @@
 import typing
 
-from mcp import types as mcp_types
+from fastmcp.client import transports as fastmcp_transports
 from pydantic_ai import mcp as ai_mcp
+from pydantic_ai import toolsets as ai_toolsets
 
 
-def _filter_tools(offered_tools, allowed_tools):
-    if allowed_tools:
-        tools = [tool for tool in offered_tools if tool.name in allowed_tools]
+def _allowed_tools_filter(
+    allowed_tools: typing.Sequence[str] | None,
+) -> typing.Callable | None:
+    """Filter predicate for ``AbstractToolset.filtered``, or ``None``.
 
-    else:
-        tools = offered_tools
+    A ``None`` or empty allow-list means "expose every tool the server
+    offers."
+    """
+    if not allowed_tools:
+        return None
 
-    return tools
+    allowed = set(allowed_tools)
 
+    def _filter(ctx, tool_def):
+        return tool_def.name in allowed
 
-class Stdio_MCP_Client_Toolset(ai_mcp.MCPServerStdio):
-    def __init__(
-        self,
-        command: str,
-        args: list[str],
-        env: dict[str, str],
-        allowed_tools: list[str] = None,
-    ):  # pragma: NO COVER
-        super().__init__(command=command, args=args, env=env)
-        self._allowed_tools = allowed_tools or ()
-
-    @property
-    def _params(self):
-        return {
-            "command": self.command,
-            "args": self.args,
-            "env": self.env,
-            "allowed_tools": self.allowed_tools,
-        }
-
-    @property
-    def allowed_tools(self) -> list[str] | None:  # pragma: NO COVER
-        return list(self._allowed_tools)
-
-    async def list_tools(self) -> list[mcp_types.Tool]:  # pragma: NO COVER
-        """Retrieve tools that are currently active on the server.
-
-        Filter the tools offered by the server using our list of allowed
-        tools.
-
-        Note:
-        - We don't cache tools as they might change.
-        - We also don't subscribe to the server to avoid complexity.
-        """
-        offered_tools = await super().list_tools()
-        return _filter_tools(offered_tools, self.allowed_tools)
+    return _filter
 
 
-class _Remote_MCP_Client_Toolset:
-    """Mixin for URL-based MCP client toolsets (HTTP and SSE)."""
-
-    def __init__(
-        self,
-        url: str,
-        headers: dict[str, typing.Any],
-        allowed_tools: list[str] = None,
-    ):  # pragma: NO COVER
-        super().__init__(url=url, headers=headers)
-        self._allowed_tools = allowed_tools or ()
-
-    @property
-    def _params(self):
-        return {
-            "url": self.url,
-            "headers": self.headers,
-            "allowed_tools": self.allowed_tools,
-        }
-
-    @property
-    def allowed_tools(self) -> list[str] | None:  # pragma: NO COVER
-        return list(self._allowed_tools)
-
-    async def list_tools(self) -> list[mcp_types.Tool]:  # pragma: NO COVER
-        """Retrieve tools that are currently active on the server.
-
-        Filter the tools offered by the server using our list of allowed
-        tools.
-
-        Note:
-        - We don't cache tools as they might change.
-        - We also don't subscribe to the server to avoid complexity.
-        """
-        offered_tools = await super().list_tools()
-        return _filter_tools(offered_tools, self.allowed_tools)
+def _apply_allow_list(
+    toolset: ai_toolsets.AbstractToolset,
+    allowed_tools: typing.Sequence[str] | None,
+) -> ai_toolsets.AbstractToolset:
+    filter_func = _allowed_tools_filter(allowed_tools)
+    if filter_func is None:
+        return toolset
+    return toolset.filtered(filter_func)
 
 
-class HTTP_MCP_Client_Toolset(
-    _Remote_MCP_Client_Toolset,
-    ai_mcp.MCPServerStreamableHTTP,
-):
-    pass
+def stdio_toolset(
+    *,
+    command: str,
+    args: list[str],
+    env: dict[str, str],
+    allowed_tools: list[str] = None,
+) -> ai_toolsets.AbstractToolset:  # pragma: NO COVER
+    transport = fastmcp_transports.StdioTransport(
+        command=command,
+        args=args,
+        env=env,
+    )
+    return _apply_allow_list(ai_mcp.MCPToolset(transport), allowed_tools)
 
 
-class SSE_MCP_Client_Toolset(
-    _Remote_MCP_Client_Toolset,
-    ai_mcp.MCPServerSSE,
-):
-    pass
+def http_toolset(
+    *,
+    url: str,
+    headers: dict[str, str],
+    allowed_tools: list[str] = None,
+) -> ai_toolsets.AbstractToolset:  # pragma: NO COVER
+    transport = fastmcp_transports.StreamableHttpTransport(
+        url=url,
+        headers=headers,
+    )
+    return _apply_allow_list(ai_mcp.MCPToolset(transport), allowed_tools)
 
 
-TOOLSET_CLASS_BY_KIND = {
-    "stdio": Stdio_MCP_Client_Toolset,
-    "http": HTTP_MCP_Client_Toolset,
-    "sse": SSE_MCP_Client_Toolset,
+def sse_toolset(
+    *,
+    url: str,
+    headers: dict[str, str],
+    allowed_tools: list[str] = None,
+) -> ai_toolsets.AbstractToolset:  # pragma: NO COVER
+    transport = fastmcp_transports.SSETransport(
+        url=url,
+        headers=headers,
+    )
+    return _apply_allow_list(ai_mcp.MCPToolset(transport), allowed_tools)
+
+
+TOOLSET_FACTORY_BY_KIND = {
+    "stdio": stdio_toolset,
+    "http": http_toolset,
+    "sse": sse_toolset,
 }

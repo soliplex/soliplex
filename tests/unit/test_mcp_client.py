@@ -1,32 +1,53 @@
+from unittest import mock
+
 import pytest
 
 from soliplex import mcp_client
 
 
-class _Tool:
+class _ToolDef:
     def __init__(self, name):
         self.name = name
 
 
-@pytest.fixture
-def offered_tools():
-    return [_Tool(f"tool_{i_tool}") for i_tool in range(10)]
+@pytest.mark.parametrize(
+    "allowed_tools",
+    [None, []],
+)
+def test__allowed_tools_filter_empty(allowed_tools):
+    assert mcp_client._allowed_tools_filter(allowed_tools) is None
+
+
+def test__allowed_tools_filter_predicate():
+    f = mcp_client._allowed_tools_filter(["tool_a", "tool_c"])
+
+    ctx = mock.sentinel.ctx
+    assert f(ctx, _ToolDef("tool_a")) is True
+    assert f(ctx, _ToolDef("tool_b")) is False
+    assert f(ctx, _ToolDef("tool_c")) is True
 
 
 @pytest.mark.parametrize(
-    "w_allowed, expected_indexes",
-    [
-        (None, list(range(10))),
-        ([], list(range(10))),
-        (["tool_1"], [1]),
-        (["tool_3", "tool_5", "tool_9"], [3, 5, 9]),
-    ],
+    "allowed_tools",
+    [None, []],
 )
-def test__filter_tools(offered_tools, w_allowed, expected_indexes):
-    found = mcp_client._filter_tools(offered_tools, w_allowed)
+def test__apply_allow_list_passthrough(allowed_tools):
+    toolset = mock.Mock()
+    found = mcp_client._apply_allow_list(toolset, allowed_tools)
 
-    assert len(found) == len(expected_indexes)
-    f_names = set([f_tool.name for f_tool in found])
-    e_names = set([f"tool_{e_index}" for e_index in expected_indexes])
+    assert found is toolset
+    toolset.filtered.assert_not_called()
 
-    assert f_names == e_names
+
+def test__apply_allow_list_wraps():
+    toolset = mock.Mock()
+    allowed = ["tool_a"]
+
+    found = mcp_client._apply_allow_list(toolset, allowed)
+
+    assert found is toolset.filtered.return_value
+    toolset.filtered.assert_called_once()
+    (filter_func,) = toolset.filtered.call_args.args
+    ctx = mock.sentinel.ctx
+    assert filter_func(ctx, _ToolDef("tool_a")) is True
+    assert filter_func(ctx, _ToolDef("tool_b")) is False

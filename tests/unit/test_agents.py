@@ -27,27 +27,35 @@ STDIO_MCTC = config_tools.Stdio_MCP_ClientToolsetConfig(
     command="cat",
     args=["-"],
 )
-STDIO_TOOL = mcp_client.Stdio_MCP_Client_Toolset(
-    command="cat",
-    args=["-"],
-    env={},
-)
+STDIO_TOOL = mock.sentinel.stdio_toolset
 
 HTTP_MCTC = config_tools.HTTP_MCP_ClientToolsetConfig(
     url="https://example.com/mcp",
 )
-HTTP_TOOL = mcp_client.HTTP_MCP_Client_Toolset(
-    url="https://example.com/mcp",
-    headers={},
-)
+HTTP_TOOL = mock.sentinel.http_toolset
 
 SSE_MCTC = config_tools.SSE_MCP_ClientToolsetConfig(
     url="https://example.com/sse",
 )
-SSE_TOOL = mcp_client.SSE_MCP_Client_Toolset(
-    url="https://example.com/sse",
-    headers={},
-)
+SSE_TOOL = mock.sentinel.sse_toolset
+
+_MCP_TOOLSET_BY_KIND = {
+    "stdio": STDIO_TOOL,
+    "http": HTTP_TOOL,
+    "sse": SSE_TOOL,
+}
+
+
+def _fake_mcp_toolset_factory(kind):
+    def factory(**_kw):
+        return _MCP_TOOLSET_BY_KIND[kind]
+
+    return factory
+
+
+_FAKE_TOOLSET_FACTORY_BY_KIND = {
+    kind: _fake_mcp_toolset_factory(kind) for kind in _MCP_TOOLSET_BY_KIND
+}
 
 
 def test_tool():
@@ -124,9 +132,14 @@ def test_make_ai_tool(w_aitp, exp_aitp):
     ],
 )
 def test_make_mcp_client_toolset(mcp_toolset_config, expected):
-    found = agents.make_mcp_client_toolset(mcp_toolset_config)
+    with mock.patch.object(
+        mcp_client,
+        "TOOLSET_FACTORY_BY_KIND",
+        _FAKE_TOOLSET_FACTORY_BY_KIND,
+    ):
+        found = agents.make_mcp_client_toolset(mcp_toolset_config)
 
-    assert found == expected
+    assert found is expected
 
 
 @pytest.mark.parametrize("w_capabilities", [False, True])
@@ -139,6 +152,11 @@ def test_make_mcp_client_toolset(mcp_toolset_config, expected):
     ],
 )
 @pytest.mark.parametrize("w_model_settings", [None, MODEL_SETTINGS])
+@mock.patch.object(
+    mcp_client,
+    "TOOLSET_FACTORY_BY_KIND",
+    _FAKE_TOOLSET_FACTORY_BY_KIND,
+)
 @mock.patch("soliplex.config.agents.get_model_from_config")
 @mock.patch("haiku.skills.prompts.build_system_prompt")
 @mock.patch("pydantic_ai.Agent")
@@ -226,12 +244,7 @@ def test_get_default_agent_from_configs(
     for akc_tool, exp_tool in zip(akc_kw["tools"], exp_tools, strict=True):
         assert akc_tool.function is exp_tool.function
 
-    for akc_toolset, exp_toolset in zip(
-        akc_kw["toolsets"],
-        exp_toolsets,
-        strict=True,
-    ):
-        assert akc_toolset._params == exp_toolset._params
+    assert akc_kw["toolsets"] == exp_toolsets
 
     assert akc_kw["deps_type"] is agents.AgentDependencies
 
