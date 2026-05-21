@@ -22,7 +22,7 @@ class TestClaimsFromLtiPayload:
             ],
             LTI_CLAIM_RESOURCE_LINK: {
                 "id": "link-456",
-                "title": "AMIA Chat",
+                "title": "Soliplex Chat",
             },
         }
 
