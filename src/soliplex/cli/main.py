@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import code
 import json
 import pathlib
+import sys
 from importlib import metadata as importlib_metadata
 
 import typer
@@ -136,6 +138,24 @@ def agui_feature_schemas(
     }
 
     print(json.dumps(feature_schemas))
+
+
+BANNER = f"""\
+Python {sys.version} on {sys.platform}
+(Soliplex CLI shell)
+'the_intstallation' is available for querying.
+"""
+EXITMSG = "Now exiting Soliplex CLI shell"
+
+
+@misc_app.command("shell")
+def shell(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+):
+    """Python REPL w/ installation configuration available"""
+    the_installation = cli_util.get_installation(installation_path)
+    code.interact(local=locals(), banner=BANNER, exitmsg=EXITMSG)
 
 
 the_cli.add_typer(misc_app)
