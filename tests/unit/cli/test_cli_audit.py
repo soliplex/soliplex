@@ -1273,9 +1273,7 @@ def test__missing_ollama_models_compares_available_to_required(
     w_responses,
     exp_errors,
 ):
-    type(the_installation).all_provider_info = mock.PropertyMock(
-        return_value=w_provider_info,
-    )
+    the_installation._all_provider_info = w_provider_info
 
     instances = {}
     for url, response in w_responses.items():
@@ -1304,9 +1302,9 @@ def test__missing_ollama_models_reports_unreachable_server(
     rest_api_cls,
     the_installation,
 ):
-    type(the_installation).all_provider_info = mock.PropertyMock(
-        return_value={"ollama": {"http://a.example.com": {"llama3"}}},
-    )
+    the_installation._all_provider_info = {
+        "ollama": {"http://a.example.com": {"llama3"}}
+    }
 
     instance = mock.Mock()
     instance.get_available_models.side_effect = requests.ConnectionError(

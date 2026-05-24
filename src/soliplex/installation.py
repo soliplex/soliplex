@@ -170,26 +170,31 @@ class Installation:
 
         return found
 
+    _all_provider_info: ProviderInfoMap | None = None
+
     @property
     def all_provider_info(self) -> ProviderInfoMap:
-        found = self.agent_provider_info
+        if self._all_provider_info is None:
+            found = self.agent_provider_info
 
-        for provider_type, hr_info in self.haiku_rag_provider_info.items():
-            ac_info = found.setdefault(provider_type, {})
+            for provider_type, hr_info in self.haiku_rag_provider_info.items():
+                ac_info = found.setdefault(provider_type, {})
 
-            for hr_url, hr_models in hr_info.items():
-                ac_models = ac_info.get(hr_url, set())
-                ac_info[hr_url] = ac_models | hr_models
+                for hr_url, hr_models in hr_info.items():
+                    ac_models = ac_info.get(hr_url, set())
+                    ac_info[hr_url] = ac_models | hr_models
 
-        ollama_url_info = found.get(config_agents.LLMProviderType.OLLAMA)
+            ollama_url_info = found.get(config_agents.LLMProviderType.OLLAMA)
 
-        if ollama_url_info is not None:
-            no_url_models = ollama_url_info.pop(None, set())
-            base_url = self.get_environment("OLLAMA_BASE_URL")
-            base_url_models = ollama_url_info.get(base_url, set())
-            ollama_url_info[base_url] = base_url_models | no_url_models
+            if ollama_url_info is not None:
+                no_url_models = ollama_url_info.pop(None, set())
+                base_url = self.get_environment("OLLAMA_BASE_URL")
+                base_url_models = ollama_url_info.get(base_url, set())
+                ollama_url_info[base_url] = base_url_models | no_url_models
 
-        return found
+            self._all_provider_info = found
+
+        return self._all_provider_info
 
     @property
     def rooms_upload_path(self) -> pathlib.Path | None:
