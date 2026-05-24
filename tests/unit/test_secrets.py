@@ -194,22 +194,35 @@ def test_get_env_var_secret_w_installation_config(
 
 
 @pytest.mark.parametrize(
-    "file_path, expectation, expected",
+    "file_path, expectation, content, expected",
     [
         (
             str(pathlib.Path("/path/to/nowhere").resolve()),
             FilePathNotFound,
             ERROR_MISS,
+            None,
         ),
-        ("./nonesuch", FilePathNotFound, ERROR_MISS),
-        ("./secret_file", NoRaise, SECRET_VALUE),
+        ("./nonesuch", FilePathNotFound, ERROR_MISS, None),
+        ("./secret_file", NoRaise, SECRET_VALUE, SECRET_VALUE),
+        ("./secret_file", NoRaise, f"{SECRET_VALUE} ", SECRET_VALUE),
+        ("./secret_file", NoRaise, f"{SECRET_VALUE}\n", SECRET_VALUE),
+        ("./secret_file", NoRaise, f"\n {SECRET_VALUE}\n", SECRET_VALUE),
     ],
 )
-def test_get_file_path_secret(temp_dir, file_path, expectation, expected):
+def test_get_file_path_secret(
+    temp_dir,
+    file_path,
+    expectation,
+    content,
+    expected,
+):
+    if expected is None:
+        expected = content
+
     if file_path.startswith("."):
         write_file_path = temp_dir / file_path
         if expected is not ERROR_MISS:
-            write_file_path.write_text(expected)
+            write_file_path.write_text(content)
 
     source = config_secrets.FilePathSecretSource(
         secret_name=SECRET_NAME,
