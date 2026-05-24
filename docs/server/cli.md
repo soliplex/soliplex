@@ -242,6 +242,11 @@ below for output details and JSON-error shapes.
 9. **Python logging** — if a `logging_config_file` is configured, it
    parses as YAML and the logging headers / claims maps are printed.
 10. **Logfire** — the Logfire config (if any) is printed for review.
+11. **Ollama** — for each Ollama server URL referenced by the
+    installation, the available-models list is fetched and compared
+    against the models the installation requires. Unreachable servers
+    and missing models are flagged. (See [`audit ollama`](#audit-ollama)
+    for the full output and JSON shape.)
 
 #### Exit Status
 
@@ -1065,6 +1070,84 @@ Logfire:
 soliplex-cli audit logfire example/minimal.yaml
 ```
 
+### `audit ollama`
+
+For each Ollama server URL referenced by the installation, fetch the
+list of models currently available on the server (via the `/api/tags`
+endpoint) and compare it against the set of model names the
+installation requires for that URL. Models named by the installation
+but absent from the server are reported as needing to be pulled.
+
+```bash
+soliplex-cli audit [OPTIONS] ollama [INSTALLATION_CONFIG_PATH]
+```
+
+See [Group Options](#group-options) for the available `[OPTIONS]`.
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Output
+
+A `Configured Ollama URLs` rule is printed, followed by one entry per
+URL referenced by the installation:
+
+```text
+- <url>
+  OK | MISSING: <comma-separated model names> | ERROR: <reason>
+```
+
+When models are missing, the line directly below the `MISSING:` entry
+points to the `ollama pull` command:
+
+```text
+  Run 'soliplex-cli ollama pull' to pull missing models.
+```
+
+If the installation references no Ollama URLs, a single
+`No Ollama URLs referenced by the installation.` line is printed and
+the command exits cleanly.
+
+#### Exit Status
+
+- `0` — every required Ollama model is available on its server (or the
+  installation references no Ollama URLs).
+- `1` — at least one server is unreachable, **or** at least one
+  required model is missing from a reachable server.
+
+When the group's `-q` / `--quiet` flag is in effect, a `1` exit is
+accompanied by a single JSON document on stdout under the `ollama` key:
+
+```json
+{
+  "ollama": {
+    "http://a.example.com": {"missing_models": ["mistral", "phi3"]},
+    "http://b.example.com": {"unreachable": "('Connection refused',)"}
+  }
+}
+```
+
+A URL appears under `ollama` only when something went wrong on it;
+reachable servers with no missing models are omitted from the JSON.
+
+#### Examples
+
+Audit Ollama availability for an installation:
+
+```bash
+soliplex-cli audit ollama example/installation.yaml
+```
+
+Drive the audit from automation, capturing missing-models JSON:
+
+```bash
+soliplex-cli audit -q ollama example/installation.yaml
+```
+
 ## `admin-users`
 
 The `admin-users` group manages the installation's admin-user table.
@@ -1760,6 +1843,16 @@ referenced by the installation. Currently a single subcommand,
 This group replaces the deprecated flat `pull-models` command; see
 [Deprecated Command Names](#deprecated-command-names).
 
+### Group Options
+
+- `-q` / `--quiet` — suppress human-readable console output and emit
+  any errors as a single JSON document on stdout. The command still
+  exits non-zero on failure (see each subcommand's
+  [Exit Status](#exit-status)). Useful for piping into `jq` or for
+  driving the command from automation. Belongs to the group, so it
+  must appear before the subcommand name (e.g.
+  `soliplex-cli ollama -q pull example/installation.yaml`).
+
 ### `ollama pull`
 
 Scan the installation for every Ollama model referenced by its agents,
@@ -1782,11 +1875,14 @@ soliplex-cli ollama pull [OPTIONS] [INSTALLATION_CONFIG_PATH]
 
 #### Options
 
-- `-u URL` / `--ollama-url URL` — restrict the scan to a single Ollama
-  base URL. If omitted, the command pulls models on *every* Ollama URL
-  referenced by the installation (installations may point different
-  rooms at different Ollama instances). Defaults to the
-  `OLLAMA_BASE_URL` value in the installation's resolved environment.
+- `-u URL` / `--ollama-url URL` — restrict the scan to one or more
+  Ollama base URLs referenced by the installation. Repeatable: pass the
+  flag once per URL (e.g. `-u http://a.example.com -u
+  http://b.example.com`). If omitted, the command pulls models on
+  *every* Ollama URL referenced by the installation (installations may
+  point different rooms at different Ollama instances). Each supplied
+  URL must already be referenced by the installation — see
+  [Behavior Notes](#behavior-notes).
 - `-n` / `--dry-run` — scan the installation and print the model list
   per URL without actually pulling. Useful for verifying what *would*
   happen before committing to potentially slow downloads.
@@ -1797,12 +1893,13 @@ For each Ollama URL in scope, the command:
 
 1. Reports the URL and the count of distinct models the installation
    references at it.
-2. Lists the model names in sorted order.
-3. Unless `--dry-run` is set, pulls each model via Ollama's REST API
-   (`stream=False` — each pull blocks until complete, so no per-chunk
-   progress is shown) and prints the final status line returned by
-   Ollama for each model.
-4. Prints a summary in the form
+2. Iterates the model names in sorted order, printing
+   `Pulling: <model_name>` for each. Unless `--dry-run` is set, the
+   model is then pulled via Ollama's REST API (`stream=False` — each
+   pull blocks until complete, so no per-chunk progress is shown) and
+   the final status line returned by Ollama is printed below the
+   `Pulling:` line.
+3. Unless `--dry-run` is set, prints a summary in the form
    `Pulled <success_count>/<total> model(s) successfully`.
 
 If a URL has no models referenced by the installation, a
@@ -1817,21 +1914,38 @@ pulled for that URL.
 - **Per-model errors are reported inline.** Network failures
   (`requests.RequestException`) and missing-status responses are shown
   in red alongside the model name and counted against the success
-  total, but do not abort the overall command. Other models on the
-  same URL will still be pulled.
-- **`--ollama-url` filters, it doesn't inject.** If you pass a URL that
-  the installation doesn't reference, the scan finds an empty model
-  set for it and reports "No Ollama models for URL" — the command
-  won't pull arbitrary models to arbitrary servers.
+  total, but do not abort the per-URL loop. Other models on the same
+  URL will still be pulled. The command does exit non-zero at the end
+  if any pull failed — see [Exit Status](#exit-status).
+- **`--ollama-url` is validated against the installation.** Each
+  supplied URL must already appear among the Ollama URLs the
+  installation references. If any supplied URL is unknown, the command
+  prints the list of configured Ollama URLs (or notes that there are
+  none) and exits non-zero without pulling anything. The flag filters
+  the existing set; it does not inject a new destination.
 - **Non-Ollama providers are ignored.** Models bound to OpenAI, Gemini,
   or any other non-Ollama provider are not considered here; this
   command deals strictly with the local-model case.
 
 #### Exit Status
 
-- Always `0`, even when some pulls failed. Check the printed summary
-  (`Pulled X/N …`) to detect partial failure. Use `audit all` if you
-  need a non-zero exit for configuration problems before pulling.
+- `0` — every requested pull succeeded, `--dry-run` was specified, or
+  the in-scope URLs referenced no Ollama models.
+- `1` — at least one individual model pull failed, **or** one or more
+  `--ollama-url` values were not referenced by the installation.
+
+When the group's `-q` / `--quiet` flag is in effect, a `1` exit is
+accompanied by a single JSON document on stdout. The document is a
+mapping whose keys identify the failure mode:
+
+- `unknown_ollama_urls`: list of URLs supplied via `--ollama-url` that
+  the installation does not reference.
+- `pulls`: mapping of Ollama URL → mapping of model name → error
+  message, populated when individual pulls fail.
+
+The two keys are mutually exclusive in practice: the unknown-URLs
+check fires before any pulls are attempted, so a run that fails on
+unknown URLs reports `unknown_ollama_urls` and skips the pull loop.
 
 #### Examples
 
@@ -1853,6 +1967,22 @@ installation references multiple Ollama URLs):
 ```bash
 soliplex-cli ollama pull example/installation.yaml \
   --ollama-url http://ollama.internal:11434
+```
+
+Restrict the scan to several specific Ollama instances by repeating
+`--ollama-url`:
+
+```bash
+soliplex-cli ollama pull example/installation.yaml \
+  --ollama-url http://ollama-a.internal:11434 \
+  --ollama-url http://ollama-b.internal:11434
+```
+
+Drive the command from automation, suppressing the rule-decorated
+output and capturing any errors as JSON:
+
+```bash
+soliplex-cli ollama -q pull example/installation.yaml
 ```
 
 ## `config`

@@ -454,7 +454,20 @@ def test_installation_haiku_rag_provider_info(hr_config_w_providers):
     assert found == expected
 
 
-def test_installation_all_provider_info(
+def test_installation_all_provider_info_w_already():
+    i_config = mock.create_autospec(
+        config_installation.InstallationConfig,
+    )
+    already = object()
+    the_installation = installation.Installation(i_config)
+    the_installation._all_provider_info = already
+
+    found = the_installation.all_provider_info
+
+    assert found is already
+
+
+def test_installation_all_provider_info_wo_already(
     standalone_agents,
     rooms_with_agents,
     completions_with_agents,
