@@ -1782,11 +1782,14 @@ soliplex-cli ollama pull [OPTIONS] [INSTALLATION_CONFIG_PATH]
 
 #### Options
 
-- `-u URL` / `--ollama-url URL` — restrict the scan to a single Ollama
-  base URL. If omitted, the command pulls models on *every* Ollama URL
-  referenced by the installation (installations may point different
-  rooms at different Ollama instances). Defaults to the
-  `OLLAMA_BASE_URL` value in the installation's resolved environment.
+- `-u URL` / `--ollama-url URL` — restrict the scan to one or more
+  Ollama base URLs referenced by the installation. Repeatable: pass the
+  flag once per URL (e.g. `-u http://a.example.com -u
+  http://b.example.com`). If omitted, the command pulls models on
+  *every* Ollama URL referenced by the installation (installations may
+  point different rooms at different Ollama instances). Each supplied
+  URL must already be referenced by the installation — see
+  [Behavior Notes](#behavior-notes).
 - `-n` / `--dry-run` — scan the installation and print the model list
   per URL without actually pulling. Useful for verifying what *would*
   happen before committing to potentially slow downloads.
@@ -1797,12 +1800,13 @@ For each Ollama URL in scope, the command:
 
 1. Reports the URL and the count of distinct models the installation
    references at it.
-2. Lists the model names in sorted order.
-3. Unless `--dry-run` is set, pulls each model via Ollama's REST API
-   (`stream=False` — each pull blocks until complete, so no per-chunk
-   progress is shown) and prints the final status line returned by
-   Ollama for each model.
-4. Prints a summary in the form
+2. Iterates the model names in sorted order, printing
+   `Pulling: <model_name>` for each. Unless `--dry-run` is set, the
+   model is then pulled via Ollama's REST API (`stream=False` — each
+   pull blocks until complete, so no per-chunk progress is shown) and
+   the final status line returned by Ollama is printed below the
+   `Pulling:` line.
+3. Unless `--dry-run` is set, prints a summary in the form
    `Pulled <success_count>/<total> model(s) successfully`.
 
 If a URL has no models referenced by the installation, a
@@ -1817,21 +1821,25 @@ pulled for that URL.
 - **Per-model errors are reported inline.** Network failures
   (`requests.RequestException`) and missing-status responses are shown
   in red alongside the model name and counted against the success
-  total, but do not abort the overall command. Other models on the
-  same URL will still be pulled.
-- **`--ollama-url` filters, it doesn't inject.** If you pass a URL that
-  the installation doesn't reference, the scan finds an empty model
-  set for it and reports "No Ollama models for URL" — the command
-  won't pull arbitrary models to arbitrary servers.
+  total, but do not abort the per-URL loop. Other models on the same
+  URL will still be pulled. The command does exit non-zero at the end
+  if any pull failed — see [Exit Status](#exit-status).
+- **`--ollama-url` is validated against the installation.** Each
+  supplied URL must already appear among the Ollama URLs the
+  installation references. If any supplied URL is unknown, the command
+  prints the list of configured Ollama URLs (or notes that there are
+  none) and exits non-zero without pulling anything. The flag filters
+  the existing set; it does not inject a new destination.
 - **Non-Ollama providers are ignored.** Models bound to OpenAI, Gemini,
   or any other non-Ollama provider are not considered here; this
   command deals strictly with the local-model case.
 
 #### Exit Status
 
-- Always `0`, even when some pulls failed. Check the printed summary
-  (`Pulled X/N …`) to detect partial failure. Use `audit all` if you
-  need a non-zero exit for configuration problems before pulling.
+- `0` — every requested pull succeeded, `--dry-run` was specified, or
+  the in-scope URLs referenced no Ollama models.
+- `1` — at least one individual model pull failed, **or** one or more
+  `--ollama-url` values were not referenced by the installation.
 
 #### Examples
 
@@ -1853,6 +1861,15 @@ installation references multiple Ollama URLs):
 ```bash
 soliplex-cli ollama pull example/installation.yaml \
   --ollama-url http://ollama.internal:11434
+```
+
+Restrict the scan to several specific Ollama instances by repeating
+`--ollama-url`:
+
+```bash
+soliplex-cli ollama pull example/installation.yaml \
+  --ollama-url http://ollama-a.internal:11434 \
+  --ollama-url http://ollama-b.internal:11434
 ```
 
 ## `config`
