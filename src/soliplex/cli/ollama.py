@@ -91,7 +91,7 @@ def pull_models(
         "--dry-run",
         help="Show which models would be pulled without actually pulling them",
     ),
-):
+):  # pragma NO COVER command
     """Pull Ollama models referenced in the installation configuration"""
 
     def on_status(msg, is_error=False):
