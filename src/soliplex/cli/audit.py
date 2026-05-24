@@ -5,6 +5,7 @@ import pathlib
 import sys
 import warnings
 
+import requests
 import typer
 import yaml
 from haiku.rag import client as hr_client
@@ -14,6 +15,7 @@ from typer import core as typer_core
 from soliplex import authz as authz_package
 from soliplex import installation
 from soliplex import models
+from soliplex import ollama
 from soliplex import secrets
 from soliplex.authz import schema as authz_schema
 from soliplex.cli import cli_util
@@ -136,6 +138,7 @@ def audit_all(
     errors |= _audit_skills_section(ctx, installation_path)
     errors |= _audit_logging_section(ctx, installation_path)
     errors |= _audit_logfire_section(ctx, installation_path)
+    errors |= _audit_ollama_section(ctx, installation_path)
 
     _emit_errors(errors, quiet)
 
@@ -994,4 +997,91 @@ def audit_logfire(
     """Show the Logfire config defined in the installation"""
     quiet = ctx.obj["quiet"]
     errors = _audit_logfire_section(ctx, installation_path)
+    _emit_errors(errors, quiet)
+
+
+def _missing_ollama_models(
+    the_installation: installation.Installation,
+) -> dict:
+    """Return per-URL info about Ollama models missing from each server.
+
+    Each value is either ``{"unreachable": str}`` (the server refused
+    the connection or returned an HTTP error) or
+    ``{"missing_models": [str, ...]}`` (the server is reachable but is
+    missing one or more models the installation references).
+    """
+    ollama_url_models = the_installation.all_provider_info.get("ollama", {})
+    per_url: dict[str, dict] = {}
+
+    for url, required in ollama_url_models.items():
+        if not required:
+            continue
+
+        rest_api = ollama.REST_API(url)
+
+        try:
+            response = rest_api.get_available_models()
+        except requests.RequestException as exc:
+            per_url[url] = {"unreachable": str(exc.args)}
+            continue
+
+        available = {entry["name"] for entry in response.get("models", ())}
+        missing = sorted(required - available)
+        if missing:
+            per_url[url] = {"missing_models": missing}
+
+    if per_url:
+        return {"ollama": per_url}
+    return {}
+
+
+def _audit_ollama_section(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+) -> dict:  # pragma NO COVER UI ONLY
+    """Print the Ollama section (rule header + per-URL availability check)."""
+    quiet = ctx.obj["quiet"]
+    the_installation = _get_installation(ctx, installation_path)
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
+
+    tc_line()
+    tc_rule("Configured Ollama URLs")
+    tc_line()
+
+    ollama_url_models = the_installation.all_provider_info.get("ollama", {})
+    errors = _missing_ollama_models(the_installation)
+    per_url = errors.get("ollama", {})
+
+    if not ollama_url_models:
+        tc_print("No Ollama URLs referenced by the installation.")
+        tc_line()
+        return errors
+
+    for url in sorted(ollama_url_models):
+        tc_print(f"- {url}")
+        url_errors = per_url.get(url, {})
+        unreachable = url_errors.get("unreachable")
+        missing = url_errors.get("missing_models")
+        if unreachable is not None:
+            tc_print(f"  ERROR: {unreachable}")
+        elif missing:
+            tc_print(f"  MISSING: {', '.join(missing)}")
+            tc_print(
+                "  Run 'soliplex-cli ollama pull' to pull missing models.",
+            )
+        else:
+            tc_print("  OK")
+        tc_line()
+
+    return errors
+
+
+@app.command("ollama")
+def audit_ollama(
+    ctx: typer.Context,
+    installation_path: types.installation_path_type,
+):  # pragma NO COVER command
+    """Compare configured Ollama models against each server's available set"""
+    quiet = ctx.obj["quiet"]
+    errors = _audit_ollama_section(ctx, installation_path)
     _emit_errors(errors, quiet)

@@ -5,6 +5,7 @@ import pathlib
 from unittest import mock
 
 import pytest
+import requests
 import typer
 import yaml
 
@@ -180,6 +181,7 @@ def test__audit_callback(ctx, w_quiet):
 @pytest.mark.parametrize("w_errors", [False, True])
 @pytest.mark.parametrize("w_quiet", [False, True])
 @mock.patch("soliplex.cli.audit._emit_errors")
+@mock.patch("soliplex.cli.audit._audit_ollama_section")
 @mock.patch("soliplex.cli.audit._audit_logfire_section")
 @mock.patch("soliplex.cli.audit._audit_logging_section")
 @mock.patch("soliplex.cli.audit._audit_skills_section")
@@ -203,6 +205,7 @@ def test_audit_all(
     _audit_skills_section,
     _audit_logging_section,
     _audit_logfire_section,
+    _audit_ollama_section,
     _emit_errors,
     ctx,
     installation_path,
@@ -223,6 +226,7 @@ def test_audit_all(
         _audit_skills_section.return_value = {"skills": None}
         _audit_logging_section.return_value = {"logging": None}
         _audit_logfire_section.return_value = {"logfire": None}
+        _audit_ollama_section.return_value = {"ollama": None}
 
         expected = {
             "installation": None,
@@ -236,6 +240,7 @@ def test_audit_all(
             "skills": None,
             "logging": None,
             "logfire": None,
+            "ollama": None,
         }
     else:
         _audit_installation_section.return_value = {}
@@ -249,6 +254,7 @@ def test_audit_all(
         _audit_skills_section.return_value = {}
         _audit_logging_section.return_value = {}
         _audit_logfire_section.return_value = {}
+        _audit_ollama_section.return_value = {}
 
         expected = {}
 
@@ -267,6 +273,7 @@ def test_audit_all(
     _audit_skills_section.assert_called_once_with(ctx, installation_path)
     _audit_logging_section.assert_called_once_with(ctx, installation_path)
     _audit_logfire_section.assert_called_once_with(ctx, installation_path)
+    _audit_ollama_section.assert_called_once_with(ctx, installation_path)
 
 
 @pytest.mark.parametrize("w_error", [False, True])
@@ -1185,3 +1192,136 @@ def test__invalid_logging(
 
 # _audit_logfire_section: ui only
 # audit_logfire: command
+
+
+@pytest.mark.parametrize(
+    "w_provider_info, w_responses, exp_errors",
+    [
+        # No Ollama URLs configured -> no errors.
+        ({}, {}, {}),
+        # URL present but no models referenced -> skipped, no errors.
+        (
+            {"ollama": {"http://a.example.com": set()}},
+            {},
+            {},
+        ),
+        # All required models are available -> no errors.
+        (
+            {"ollama": {"http://a.example.com": {"llama3", "mistral"}}},
+            {
+                "http://a.example.com": {
+                    "models": [{"name": "llama3"}, {"name": "mistral"}],
+                },
+            },
+            {},
+        ),
+        # Some required models are missing -> sorted list reported.
+        (
+            {
+                "ollama": {
+                    "http://a.example.com": {"llama3", "mistral", "phi3"},
+                },
+            },
+            {
+                "http://a.example.com": {"models": [{"name": "llama3"}]},
+            },
+            {
+                "ollama": {
+                    "http://a.example.com": {
+                        "missing_models": ["mistral", "phi3"],
+                    },
+                },
+            },
+        ),
+        # Server returns an empty 'models' list -> everything is missing.
+        (
+            {"ollama": {"http://a.example.com": {"llama3"}}},
+            {"http://a.example.com": {"models": []}},
+            {
+                "ollama": {
+                    "http://a.example.com": {"missing_models": ["llama3"]},
+                },
+            },
+        ),
+        # Multiple URLs: a mix of OK and missing.
+        (
+            {
+                "ollama": {
+                    "http://a.example.com": {"llama3"},
+                    "http://b.example.com": {"mistral"},
+                },
+            },
+            {
+                "http://a.example.com": {
+                    "models": [{"name": "llama3"}],
+                },
+                "http://b.example.com": {"models": []},
+            },
+            {
+                "ollama": {
+                    "http://b.example.com": {"missing_models": ["mistral"]},
+                },
+            },
+        ),
+    ],
+)
+@mock.patch("soliplex.cli.audit.ollama.REST_API")
+def test__missing_ollama_models_compares_available_to_required(
+    rest_api_cls,
+    the_installation,
+    w_provider_info,
+    w_responses,
+    exp_errors,
+):
+    type(the_installation).all_provider_info = mock.PropertyMock(
+        return_value=w_provider_info,
+    )
+
+    instances = {}
+    for url, response in w_responses.items():
+        instance = mock.Mock()
+        instance.get_available_models.return_value = response
+        instances[url] = instance
+
+    rest_api_cls.side_effect = lambda url: instances[url]
+
+    found = cli_audit._missing_ollama_models(the_installation)
+
+    assert found == exp_errors
+
+    # Only URLs with a required-model set should have triggered an
+    # 'all_models' call.
+    expected_calls = [
+        mock.call(url)
+        for url, models in w_provider_info.get("ollama", {}).items()
+        if models
+    ]
+    assert rest_api_cls.call_args_list == expected_calls
+
+
+@mock.patch("soliplex.cli.audit.ollama.REST_API")
+def test__missing_ollama_models_reports_unreachable_server(
+    rest_api_cls,
+    the_installation,
+):
+    type(the_installation).all_provider_info = mock.PropertyMock(
+        return_value={"ollama": {"http://a.example.com": {"llama3"}}},
+    )
+
+    instance = mock.Mock()
+    instance.get_available_models.side_effect = requests.ConnectionError(
+        "refused",
+    )
+    rest_api_cls.return_value = instance
+
+    found = cli_audit._missing_ollama_models(the_installation)
+
+    assert found == {
+        "ollama": {
+            "http://a.example.com": {"unreachable": "('refused',)"},
+        },
+    }
+
+
+# _audit_ollama_section: ui only
+# audit_ollama: command

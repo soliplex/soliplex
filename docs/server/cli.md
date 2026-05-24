@@ -242,6 +242,11 @@ below for output details and JSON-error shapes.
 9. **Python logging** — if a `logging_config_file` is configured, it
    parses as YAML and the logging headers / claims maps are printed.
 10. **Logfire** — the Logfire config (if any) is printed for review.
+11. **Ollama** — for each Ollama server URL referenced by the
+    installation, the available-models list is fetched and compared
+    against the models the installation requires. Unreachable servers
+    and missing models are flagged. (See [`audit ollama`](#audit-ollama)
+    for the full output and JSON shape.)
 
 #### Exit Status
 
@@ -1063,6 +1068,84 @@ Logfire:
 
 ```bash
 soliplex-cli audit logfire example/minimal.yaml
+```
+
+### `audit ollama`
+
+For each Ollama server URL referenced by the installation, fetch the
+list of models currently available on the server (via the `/api/tags`
+endpoint) and compare it against the set of model names the
+installation requires for that URL. Models named by the installation
+but absent from the server are reported as needing to be pulled.
+
+```bash
+soliplex-cli audit [OPTIONS] ollama [INSTALLATION_CONFIG_PATH]
+```
+
+See [Group Options](#group-options) for the available `[OPTIONS]`.
+
+#### Positional Argument
+
+- `INSTALLATION_CONFIG_PATH` — path to the installation configuration.
+  May be a YAML file, or a directory containing an `installation.yaml`.
+  If omitted, falls back to the `SOLIPLEX_INSTALLATION_PATH` environment
+  variable.
+
+#### Output
+
+A `Configured Ollama URLs` rule is printed, followed by one entry per
+URL referenced by the installation:
+
+```text
+- <url>
+  OK | MISSING: <comma-separated model names> | ERROR: <reason>
+```
+
+When models are missing, the line directly below the `MISSING:` entry
+points to the `ollama pull` command:
+
+```text
+  Run 'soliplex-cli ollama pull' to pull missing models.
+```
+
+If the installation references no Ollama URLs, a single
+`No Ollama URLs referenced by the installation.` line is printed and
+the command exits cleanly.
+
+#### Exit Status
+
+- `0` — every required Ollama model is available on its server (or the
+  installation references no Ollama URLs).
+- `1` — at least one server is unreachable, **or** at least one
+  required model is missing from a reachable server.
+
+When the group's `-q` / `--quiet` flag is in effect, a `1` exit is
+accompanied by a single JSON document on stdout under the `ollama` key:
+
+```json
+{
+  "ollama": {
+    "http://a.example.com": {"missing_models": ["mistral", "phi3"]},
+    "http://b.example.com": {"unreachable": "('Connection refused',)"}
+  }
+}
+```
+
+A URL appears under `ollama` only when something went wrong on it;
+reachable servers with no missing models are omitted from the JSON.
+
+#### Examples
+
+Audit Ollama availability for an installation:
+
+```bash
+soliplex-cli audit ollama example/installation.yaml
+```
+
+Drive the audit from automation, capturing missing-models JSON:
+
+```bash
+soliplex-cli audit -q ollama example/installation.yaml
 ```
 
 ## `admin-users`
