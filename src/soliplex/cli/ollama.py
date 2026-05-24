@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+
 import requests
 import typer
 
@@ -7,11 +9,59 @@ from soliplex import ollama
 from soliplex.cli import cli_util
 from soliplex.cli import types
 
+OLLAMA_HELP = "List / manage Ollama models for the installation"
+
+the_console = cli_util.the_console
+
+
+_QUIET_OPTION = typer.Option(
+    False,
+    "-q",
+    "--quiet",
+    help="Show only errors (as JSON)",
+)
+
+
+def _noop(*args, **kwargs):  # pragma: NO COVER
+    return None
+
+
+def _quiet_console_funcs(quiet):
+    """Return ``(line, rule, print, print_exception)`` callables.
+
+    When ``quiet`` is true the returned callables are no-ops, suppressing
+    human-focused output.
+    """
+    if quiet:
+        return _noop, _noop, _noop, _noop
+    return (
+        the_console.line,
+        the_console.rule,
+        the_console.print,
+        the_console.print_exception,
+    )
+
+
+def _emit_errors(errors, quiet):
+    """Emit a JSON error report (in quiet mode) and exit ``1`` if any."""
+    if errors:
+        if quiet:
+            the_console.print_json(data=errors)
+        sys.exit(1)
+
+
 app = typer.Typer(
     name="ollama",
-    help="List / manage Ollama models for the installation",
+    help=OLLAMA_HELP,
 )
-the_console = cli_util.the_console
+
+
+@app.callback()
+def _ollama_callback(
+    ctx: typer.Context,
+    quiet: bool = _QUIET_OPTION,
+):
+    ctx.obj = {"quiet": quiet}
 
 
 ollama_url_option: list[str] = typer.Option(
@@ -93,19 +143,25 @@ def pull_models(
     ),
 ):  # pragma NO COVER command
     """Pull Ollama models referenced in the installation configuration"""
+    quiet = ctx.obj["quiet"]
+    tc_line, tc_rule, tc_print, _ = _quiet_console_funcs(quiet)
 
     def on_status(msg, is_error=False):
         style = "red" if is_error else None
-        the_console.print(f"  {msg}", style=style)
+        tc_print(f"  {msg}", style=style)
 
-    the_console.line()
-    the_console.rule("Scanning for Ollama models")
-    the_console.line()
+    errors: dict = {}
+
+    tc_line()
+    tc_rule("Scanning for Ollama models")
+    tc_line()
 
     the_installation = cli_util.get_installation(installation_path)
     the_installation.resolve_environment()
     all_provider_info = the_installation.all_provider_info
     all_ollama_url_models = all_provider_info["ollama"]
+
+    ollama_url_models = None
 
     try:
         ollama_url_models = _filter_ollama_url_models(
@@ -113,60 +169,58 @@ def pull_models(
             ollama_urls,
         )
     except UnknownOllamaURLs as exc:
-        the_console.rule(str(exc))
+        errors["unknown_ollama_urls"] = exc.unknown_urls
+        tc_rule(str(exc))
         configured = sorted(all_ollama_url_models)
         if configured:
-            the_console.print(
-                f"Configured Ollama URLs: {', '.join(configured)}",
-            )
+            tc_print(f"Configured Ollama URLs: {', '.join(configured)}")
         else:
-            the_console.print(
-                "The installation references no Ollama URLs.",
-            )
-        raise typer.Exit(1) from exc
+            tc_print("The installation references no Ollama URLs.")
 
-    any_failures = False
+    if ollama_url_models is not None:
+        for url, model_names in ollama_url_models.items():
+            if not model_names:
+                tc_rule(f"No Ollama models for URL: {url}")
+                tc_line()
+                continue
 
-    for url, model_names in ollama_url_models.items():
-        if not model_names:
-            the_console.rule(f"No Ollama models for URL: {url}")
-            the_console.line()
-
-        else:
             rest_api = ollama.REST_API(url)
 
-            the_console.rule(f"Pulling Ollama models for URL: {url}")
-            the_console.line()
-            the_console.print(
-                f"Found {len(model_names)} unique Ollama model(s)"
-            )
-            the_console.line()
+            tc_rule(f"Pulling Ollama models for URL: {url}")
+            tc_line()
+            tc_print(f"Found {len(model_names)} unique Ollama model(s)")
+            tc_line()
 
             success_count = 0
 
             for model_name in sorted(model_names):
-                the_console.print(f"\nPulling: {model_name}")
+                tc_print(f"\nPulling: {model_name}")
 
                 if not dry_run:
                     try:
                         status_text = _pull_one_model(rest_api, model_name)
                     except requests.RequestException as exc:
-                        on_status(str(exc.args), True)
-                        any_failures = True
+                        msg = str(exc.args)
+                        on_status(msg, True)
+                        errors.setdefault("pulls", {}).setdefault(url, {})[
+                            model_name
+                        ] = msg
                     except NoStatusReturned as exc:
-                        on_status(str(exc), True)
-                        any_failures = True
+                        msg = str(exc)
+                        on_status(msg, True)
+                        errors.setdefault("pulls", {}).setdefault(url, {})[
+                            model_name
+                        ] = msg
                     else:
                         on_status(status_text, False)
                         success_count += 1
 
-            the_console.line()
+            tc_line()
             if not dry_run:
-                the_console.rule(
+                tc_rule(
                     f"Pulled {success_count}/{len(model_names)} model(s) "
                     "successfully"
                 )
-            the_console.line()
+            tc_line()
 
-    if any_failures:
-        raise typer.Exit(1)
+    _emit_errors(errors, quiet)

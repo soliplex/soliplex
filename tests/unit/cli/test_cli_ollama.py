@@ -14,6 +14,57 @@ def ctx():
     return mock.create_autospec(typer.Context, obj={})
 
 
+@pytest.mark.parametrize("w_quiet", [False, True])
+@mock.patch("soliplex.cli.ollama.the_console")
+def test__quiet_console_funcs(the_console, w_quiet):
+    found = cli_ollama._quiet_console_funcs(w_quiet)
+
+    (f_line, f_rule, f_print, f_print_exception) = found
+
+    if w_quiet:
+        assert f_line is cli_ollama._noop
+        assert f_rule is cli_ollama._noop
+        assert f_print is cli_ollama._noop
+        assert f_print_exception is cli_ollama._noop
+    else:
+        assert f_line is the_console.line
+        assert f_rule is the_console.rule
+        assert f_print is the_console.print
+        assert f_print_exception is the_console.print_exception
+
+
+@pytest.mark.parametrize("w_quiet", [False, True])
+@pytest.mark.parametrize("w_errors", [{}, {"foo": "bar"}])
+@mock.patch("soliplex.cli.ollama.the_console")
+@mock.patch("sys.exit")
+def test__emit_errors(
+    sys_exit,
+    the_console,
+    w_errors,
+    w_quiet,
+):
+    cli_ollama._emit_errors(w_errors, w_quiet)
+
+    if w_errors and w_quiet:
+        the_console.print_json.assert_called_once_with(data=w_errors)
+    else:
+        the_console.print_json.assert_not_called()
+
+    if w_errors:
+        sys_exit.assert_called_once_with(1)
+    else:
+        sys_exit.assert_not_called()
+
+
+@pytest.mark.parametrize("w_quiet", [False, True])
+def test__ollama_callback(ctx, w_quiet):
+    w_quiet_kw = {"quiet": w_quiet}
+
+    cli_ollama._ollama_callback(ctx, **w_quiet_kw)
+
+    assert ctx.obj == {"quiet": w_quiet}
+
+
 @pytest.mark.parametrize(
     "w_unknown_urls, exp_message",
     [

@@ -1760,6 +1760,16 @@ referenced by the installation. Currently a single subcommand,
 This group replaces the deprecated flat `pull-models` command; see
 [Deprecated Command Names](#deprecated-command-names).
 
+### Group Options
+
+- `-q` / `--quiet` — suppress human-readable console output and emit
+  any errors as a single JSON document on stdout. The command still
+  exits non-zero on failure (see each subcommand's
+  [Exit Status](#exit-status)). Useful for piping into `jq` or for
+  driving the command from automation. Belongs to the group, so it
+  must appear before the subcommand name (e.g.
+  `soliplex-cli ollama -q pull example/installation.yaml`).
+
 ### `ollama pull`
 
 Scan the installation for every Ollama model referenced by its agents,
@@ -1841,6 +1851,19 @@ pulled for that URL.
 - `1` — at least one individual model pull failed, **or** one or more
   `--ollama-url` values were not referenced by the installation.
 
+When the group's `-q` / `--quiet` flag is in effect, a `1` exit is
+accompanied by a single JSON document on stdout. The document is a
+mapping whose keys identify the failure mode:
+
+- `unknown_ollama_urls`: list of URLs supplied via `--ollama-url` that
+  the installation does not reference.
+- `pulls`: mapping of Ollama URL → mapping of model name → error
+  message, populated when individual pulls fail.
+
+The two keys are mutually exclusive in practice: the unknown-URLs
+check fires before any pulls are attempted, so a run that fails on
+unknown URLs reports `unknown_ollama_urls` and skips the pull loop.
+
 #### Examples
 
 Preview which models would be pulled, without pulling anything:
@@ -1870,6 +1893,13 @@ Restrict the scan to several specific Ollama instances by repeating
 soliplex-cli ollama pull example/installation.yaml \
   --ollama-url http://ollama-a.internal:11434 \
   --ollama-url http://ollama-b.internal:11434
+```
+
+Drive the command from automation, suppressing the rule-decorated
+output and capturing any errors as JSON:
+
+```bash
+soliplex-cli ollama -q pull example/installation.yaml
 ```
 
 ## `config`
