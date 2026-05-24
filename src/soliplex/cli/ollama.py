@@ -39,6 +39,30 @@ class UnknownOllamaURLs(Exception):
         )
 
 
+class NoStatusReturned(KeyError):
+    """Raised when an Ollama 'pull' response is missing the 'status' field."""
+
+    def __init__(self, result):
+        self.result = result
+        super().__init__(
+            f"No status returned in result: keys were {', '.join(result)}"
+        )
+
+
+def _pull_one_model(rest_api, model_name):
+    """Pull a single model via the Ollama REST API.
+
+    Returns the status text on success. Raises 'requests.RequestException'
+    on network errors and 'NoStatusReturned' when the response has no
+    'status' field.
+    """
+    result = rest_api.pull_model(model_name, stream=False)
+    try:
+        return result["status"]
+    except KeyError:
+        raise NoStatusReturned(result) from None
+
+
 def _filter_ollama_url_models(ollama_url_models, ollama_urls):
     """Restrict 'ollama_url_models' to 'ollama_urls' if any are supplied.
 
@@ -101,6 +125,8 @@ def pull_models(
             )
         raise typer.Exit(1) from exc
 
+    any_failures = False
+
     for url, model_names in ollama_url_models.items():
         if not model_names:
             the_console.rule(f"No Ollama models for URL: {url}")
@@ -116,29 +142,31 @@ def pull_models(
             )
             the_console.line()
 
+            success_count = 0
+
             for model_name in sorted(model_names):
-                the_console.print(f"  - {model_name}")
+                the_console.print(f"\nPulling: {model_name}")
 
-            if not dry_run:
-                success_count = 0
-
-                for model_name in sorted(model_names):
-                    the_console.print(f"\nPulling: {model_name}")
-
+                if not dry_run:
                     try:
-                        result = rest_api.pull_model(model_name, stream=False)
-                        status_text = result["status"]
+                        status_text = _pull_one_model(rest_api, model_name)
                     except requests.RequestException as exc:
                         on_status(str(exc.args), True)
-                    except KeyError:
-                        on_status("No status returned", True)
+                        any_failures = True
+                    except NoStatusReturned as exc:
+                        on_status(str(exc), True)
+                        any_failures = True
                     else:
                         on_status(status_text, False)
                         success_count += 1
 
-                the_console.line()
+            the_console.line()
+            if not dry_run:
                 the_console.rule(
                     f"Pulled {success_count}/{len(model_names)} model(s) "
                     "successfully"
                 )
-                the_console.line()
+            the_console.line()
+
+    if any_failures:
+        raise typer.Exit(1)
