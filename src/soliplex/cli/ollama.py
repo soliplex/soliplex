@@ -14,19 +14,53 @@ app = typer.Typer(
 the_console = cli_util.the_console
 
 
+ollama_url_option: list[str] = typer.Option(
+    [],
+    "-u",
+    "--ollama-url",
+    help=(
+        "Restrict the pull to one or more Ollama API base URLs "
+        "referenced by the installation (repeatable; defaults to "
+        "scanning every Ollama URL the installation references)"
+    ),
+)
+
+
+class UnknownOllamaURLs(Exception):
+    """Raised when '--ollama-url' names URLs the installation does not
+    reference.
+    """
+
+    def __init__(self, unknown_urls):
+        self.unknown_urls = list(unknown_urls)
+        super().__init__(
+            "URL(s) not referenced by installation: "
+            f"{', '.join(self.unknown_urls)}"
+        )
+
+
+def _filter_ollama_url_models(ollama_url_models, ollama_urls):
+    """Restrict 'ollama_url_models' to 'ollama_urls' if any are supplied.
+
+    Raises 'UnknownOllamaURLs' if any of 'ollama_urls' is not referenced
+    by the installation.
+    """
+    if not ollama_urls:
+        return ollama_url_models
+
+    unknown = [url for url in ollama_urls if url not in ollama_url_models]
+
+    if unknown:
+        raise UnknownOllamaURLs(unknown)
+
+    return {url: ollama_url_models[url] for url in ollama_urls}
+
+
 @app.command("pull")
 def pull_models(
     ctx: typer.Context,
     installation_path: types.installation_path_type,
-    ollama_url: str = typer.Option(
-        None,
-        "-u",
-        "--ollama-url",
-        help=(
-            "Ollama API base URL (defaults to 'OLLAMA_BASE_URL' from "
-            "installation enviroment)"
-        ),
-    ),
+    ollama_urls: list[str] = ollama_url_option,
     dry_run: bool = typer.Option(
         False,
         "-n",
@@ -47,12 +81,25 @@ def pull_models(
     the_installation = cli_util.get_installation(installation_path)
     the_installation.resolve_environment()
     all_provider_info = the_installation.all_provider_info
-    ollama_url_models = all_provider_info["ollama"]
+    all_ollama_url_models = all_provider_info["ollama"]
 
-    if ollama_url is not None:
-        ollama_url_models = {
-            ollama_url: ollama_url_models.get(ollama_url, set())
-        }
+    try:
+        ollama_url_models = _filter_ollama_url_models(
+            all_ollama_url_models,
+            ollama_urls,
+        )
+    except UnknownOllamaURLs as exc:
+        the_console.rule(str(exc))
+        configured = sorted(all_ollama_url_models)
+        if configured:
+            the_console.print(
+                f"Configured Ollama URLs: {', '.join(configured)}",
+            )
+        else:
+            the_console.print(
+                "The installation references no Ollama URLs.",
+            )
+        raise typer.Exit(1) from exc
 
     for url, model_names in ollama_url_models.items():
         if not model_names:
