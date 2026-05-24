@@ -90,7 +90,8 @@ def get_file_path_secret(source: config_secrets.FilePathSecretSource):
         file_path = source._config_path.parent / source.file_path
 
     try:
-        return file_path.read_text()
+        # Strip leading / trailing whitespace
+        return file_path.read_text().strip()
     except OSError as exc:
         raise SecretFilePathNotFound(
             source.secret_name,
