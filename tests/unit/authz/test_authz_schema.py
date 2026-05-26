@@ -292,6 +292,43 @@ def test_aclentry_check_token_w_authenticated(
     [
         (None, False),
         ({}, False),
+        ({"foo": "bar"}, False),
+        ({"foo": "baz"}, True),
+        ({"foo": "baloonz"}, True),
+    ],
+)
+@pytest.mark.parametrize(
+    "allow_deny",
+    [
+        authz_package.AllowDeny.ALLOW,
+        authz_package.AllowDeny.DENY,
+    ],
+)
+def test_aclentry_check_token_w_jsonpath(
+    the_room_policy,
+    allow_deny,
+    token,
+    matched,
+):
+    entry = authz_schema.ACLEntry(
+        room_policy=the_room_policy,
+        allow_deny=allow_deny,
+        json_path="$[?match($.foo, 'b.*z')]",
+    )
+
+    found = entry.check_token(token)
+
+    if matched:
+        assert found is allow_deny
+    else:
+        assert found is None
+
+
+@pytest.mark.parametrize(
+    "token, matched",
+    [
+        (None, False),
+        ({}, False),
         ({"preferred_username": "miss"}, False),
         ({"preferred_username": "hit"}, True),
     ],
