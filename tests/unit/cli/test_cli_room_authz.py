@@ -4,9 +4,11 @@ from unittest import mock
 
 import pytest
 import typer
+import yaml
 
 from soliplex import authz as authz_package
 from soliplex import installation
+from soliplex import models
 from soliplex.cli import room_authz as cli_room_authz
 from soliplex.config import installation as config_installation
 
@@ -297,6 +299,141 @@ def test__room_policy_as_jsonable(w_dumped, exp_jsonable):
     found = cli_room_authz._room_policy_as_jsonable(policy)
 
     assert found == exp_jsonable
+
+
+@pytest.mark.parametrize(
+    "w_dumped, exp_loaded",
+    [
+        # No policy row -> dumps as 'null'.
+        (None, None),
+        # Populated policy: round-trips to the JSON-serializable shape,
+        # with 'AllowDeny' values emitted as their member names.
+        (
+            {
+                "room_id": "chat",
+                "default_allow_deny": authz_package.AllowDeny.ALLOW,
+                "acl_entries": [
+                    {
+                        "allow_deny": authz_package.AllowDeny.ALLOW,
+                        "everyone": False,
+                        "authenticated": False,
+                        "preferred_username": None,
+                        "email": None,
+                        "json_path": '$[?$.email == "alice@example.com"]',
+                    },
+                ],
+            },
+            {
+                "room_id": "chat",
+                "default_allow_deny": "ALLOW",
+                "acl_entries": [
+                    {
+                        "allow_deny": "ALLOW",
+                        "everyone": False,
+                        "authenticated": False,
+                        "preferred_username": None,
+                        "email": None,
+                        "json_path": '$[?$.email == "alice@example.com"]',
+                    },
+                ],
+            },
+        ),
+    ],
+)
+def test__room_policy_as_yaml(w_dumped, exp_loaded):
+    if w_dumped is None:
+        policy = None
+    else:
+        policy = mock.Mock()
+        policy.as_model.model_dump.return_value = w_dumped
+
+    found = cli_room_authz._room_policy_as_yaml(policy)
+
+    assert yaml.safe_load(found) == exp_loaded
+
+
+@pytest.mark.parametrize(
+    "jsonable, expected",
+    [
+        # A 'null' document -> no policy.
+        (None, None),
+        # Empty policy: default-DENY, no ACL entries.
+        (
+            {
+                "room_id": "chat",
+                "default_allow_deny": "DENY",
+                "acl_entries": [],
+            },
+            models.RoomPolicy(
+                room_id="chat",
+                default_allow_deny=authz_package.AllowDeny.DENY,
+                acl_entries=[],
+            ),
+        ),
+        # Populated policy: 'AllowDeny' member names are converted back
+        # to enum members; each entry keeps its single discriminator.
+        (
+            {
+                "room_id": "chat",
+                "default_allow_deny": "ALLOW",
+                "acl_entries": [
+                    {
+                        "allow_deny": "ALLOW",
+                        "everyone": False,
+                        "authenticated": False,
+                        "preferred_username": None,
+                        "email": "alice@example.com",
+                        "json_path": None,
+                    },
+                    {
+                        "allow_deny": "DENY",
+                        "everyone": True,
+                        "authenticated": False,
+                        "preferred_username": None,
+                        "email": None,
+                        "json_path": None,
+                    },
+                ],
+            },
+            models.RoomPolicy(
+                room_id="chat",
+                default_allow_deny=authz_package.AllowDeny.ALLOW,
+                acl_entries=[
+                    models.ACLEntry(
+                        allow_deny=authz_package.AllowDeny.ALLOW,
+                        email="alice@example.com",
+                    ),
+                    models.ACLEntry(
+                        allow_deny=authz_package.AllowDeny.DENY,
+                        everyone=True,
+                    ),
+                ],
+            ),
+        ),
+    ],
+)
+def test__room_policy_from_jsonable(jsonable, expected):
+    assert cli_room_authz._room_policy_from_jsonable(jsonable) == expected
+
+
+@pytest.mark.parametrize(
+    "room_id, model, expected",
+    [
+        # Explicit room_id wins, even when the model carries one.
+        ("chat", None, "chat"),
+        (
+            "chat",
+            models.RoomPolicy(room_id="search"),
+            "chat",
+        ),
+        # No explicit room_id -> fall back to the model's room_id.
+        (None, models.RoomPolicy(room_id="search"), "search"),
+        # Neither available -> None.
+        (None, None, None),
+    ],
+)
+def test__effective_room_id(room_id, model, expected):
+    assert cli_room_authz._effective_room_id(room_id, model) == expected
 
 
 # _human_dump_room_policy: ui only

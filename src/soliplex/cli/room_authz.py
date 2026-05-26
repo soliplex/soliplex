@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import json
+import pathlib
+import sys
+import typing
 
 import typer
+import yaml
 
 from soliplex import authz as authz_package
+from soliplex import models
 from soliplex.authz import schema as authz_schema
 from soliplex.cli import cli_util
 from soliplex.cli import types
@@ -151,6 +156,50 @@ def _room_policy_as_jsonable(policy):
     return to_dump
 
 
+def _room_policy_as_yaml(policy) -> str:
+    """Render a RoomPolicy (or None) as a YAML document.
+
+    Uses the same JSON-serializable shape as the JSON dump, so the
+    'AllowDeny' values are emitted as their member names.
+    """
+    to_dump = _room_policy_as_jsonable(policy)
+    return yaml.safe_dump(to_dump, sort_keys=False, default_flow_style=False)
+
+
+def _room_policy_from_jsonable(data) -> models.RoomPolicy | None:
+    """Build a 'models.RoomPolicy' from the JSON-serializable shape.
+
+    Inverse of '_room_policy_as_jsonable': 'AllowDeny' member names are
+    converted back to enum members. Returns None for a 'null' document.
+    """
+    if data is None:
+        return None
+    acl_entries = []
+    for entry in data.get("acl_entries", ()):
+        entry = dict(entry)
+        entry["allow_deny"] = authz_package.AllowDeny[entry["allow_deny"]]
+        acl_entries.append(models.ACLEntry(**entry))
+    return models.RoomPolicy(
+        room_id=data["room_id"],
+        default_allow_deny=authz_package.AllowDeny[data["default_allow_deny"]],
+        acl_entries=acl_entries,
+    )
+
+
+def _effective_room_id(room_id, model) -> str | None:
+    """Resolve the target room id for 'from-yaml'.
+
+    Prefers the explicit 'room_id' argument; otherwise falls back to
+    the 'room_id' recorded in the parsed model. Returns None when
+    neither is available (e.g. a 'null' import with no explicit room).
+    """
+    if room_id is not None:
+        return room_id
+    if model is not None:
+        return model.room_id
+    return None
+
+
 def _dump_room_policy(session, room_id):  # pragma NO COVER UI ONLY
     with session:
         policy = (
@@ -192,6 +241,147 @@ def show_room_authz(
     session = authz_schema.get_session(engine_url=dburi, init_schema=True)
 
     _dump(ctx, session, room_id)
+
+
+@app.command("as-yaml")
+def room_authz_as_yaml(
+    installation_path: types.installation_path_type,
+    room_id: str,
+    output: typing.Annotated[
+        pathlib.Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help=(
+                "Write the YAML to this file path. If omitted, the YAML "
+                "is written to standard output with no other decoration."
+            ),
+        ),
+    ] = None,
+    allow_stale: bool = typer.Option(
+        False,
+        "--allow-stale",
+        help=(
+            "Skip the configured-room check, so a policy left behind "
+            "by a removed or renamed room can still be dumped."
+        ),
+    ),
+):  # pragma NO COVER command
+    """Dump a room's RoomPolicy and ACL entries as YAML.
+
+    With '--output', the YAML is written to the given file path;
+    otherwise it is written to standard output with no console or rule
+    decoration, suitable for piping or redirection.
+
+    A room with no RoomPolicy row dumps as 'null'.
+    """
+    the_installation = cli_util.get_installation(installation_path)
+    dburi = the_installation.authorization_dburi_sync
+
+    cli_util._check_ram_dburi(dburi, "room-authz as-yaml")
+    if not allow_stale:
+        _check_room_id(the_installation, room_id)
+
+    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
+
+    with session:
+        policy = (
+            session.query(
+                authz_schema.RoomPolicy,
+            )
+            .where(
+                authz_schema.RoomPolicy.room_id == room_id,
+            )
+            .first()
+        )
+        yaml_text = _room_policy_as_yaml(policy)
+
+    if output is not None:
+        output.write_text(yaml_text)
+    else:
+        print(yaml_text, end="")
+
+
+@app.command("from-yaml")
+def room_authz_from_yaml(
+    installation_path: types.installation_path_type,
+    room_id: typing.Annotated[
+        str | None,
+        typer.Argument(
+            help=(
+                "Target room. If omitted, the 'room_id' recorded in the "
+                "input YAML is used."
+            ),
+        ),
+    ] = None,
+    input_: typing.Annotated[
+        pathlib.Path | None,
+        typer.Option(
+            "--input",
+            "-i",
+            help=(
+                "Read the YAML from this file path. If omitted, the YAML "
+                "is read from standard input."
+            ),
+        ),
+    ] = None,
+):  # pragma NO COVER command
+    """Load a room's RoomPolicy and ACL entries from YAML.
+
+    The YAML uses the same shape produced by 'room-authz as-yaml'.
+    With '--input', the YAML is read from the given file path;
+    otherwise it is read from standard input.
+
+    If ROOM_ID is given it is authoritative: the policy is written for
+    ROOM_ID regardless of the 'room_id' recorded in the YAML. If
+    omitted, the YAML's own 'room_id' is used. Either way, any existing
+    policy for the target room is replaced, and a 'null' document
+    removes the target room's policy entirely.
+    """
+    the_installation = cli_util.get_installation(installation_path)
+    dburi = the_installation.authorization_dburi_sync
+
+    cli_util._check_ram_dburi(dburi, "room-authz from-yaml")
+
+    if input_ is not None:
+        yaml_text = input_.read_text()
+    else:
+        yaml_text = sys.stdin.read()
+
+    model = _room_policy_from_jsonable(yaml.safe_load(yaml_text))
+
+    room_id = _effective_room_id(room_id, model)
+    if room_id is None:
+        the_console.rule("No room id")
+        the_console.print(
+            "Pass ROOM_ID, or supply a non-null policy whose 'room_id' "
+            "names the target room.",
+        )
+        raise typer.Exit(1)
+
+    _check_room_id(the_installation, room_id)
+
+    session = authz_schema.get_session(engine_url=dburi, init_schema=True)
+
+    with session:
+        existing = (
+            session.query(
+                authz_schema.RoomPolicy,
+            )
+            .where(
+                authz_schema.RoomPolicy.room_id == room_id,
+            )
+            .first()
+        )
+        if existing is not None:
+            session.delete(existing)
+            session.commit()
+
+        if model is not None:
+            new_policy = authz_schema.RoomPolicy.from_model(model)
+            new_policy.room_id = room_id
+            session.add(new_policy)
+            session.commit()
 
 
 @app.command("make-private")
